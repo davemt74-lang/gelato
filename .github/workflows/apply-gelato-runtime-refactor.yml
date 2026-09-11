@@ -1,0 +1,43 @@
+name: Apply Gelato runtime refactor
+
+on:
+  push:
+    branches:
+      - gelato-menu-sync
+    paths:
+      - scripts/apply-gelato-runtime-refactor.py
+      - .github/workflows/apply-gelato-runtime-refactor.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: gelato-menu-sync
+          fetch-depth: 0
+
+      - name: Apply runtime refactor
+        run: python3 scripts/apply-gelato-runtime-refactor.py
+
+      - name: Remove one-time patch machinery
+        shell: bash
+        run: |
+          rm -f scripts/apply-gelato-runtime-refactor.py
+          rm -f .github/workflows/apply-gelato-runtime-refactor.yml
+
+      - name: Commit refactored runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "Refactor training runtime for live Gelato menu"
+          git push origin HEAD:gelato-menu-sync
