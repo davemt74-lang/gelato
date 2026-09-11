@@ -2,6 +2,8 @@
 
 This project is a restaurant menu-training, employee-development, hiring, and administration workspace built with PHP 8.2+, MySQL/MariaDB, HTML, CSS, and browser JavaScript. The training menu is database-backed and imports directly from the same public REST menu source used by Gelato Spot.
 
+The application shell may use generic **Restaurant Workspace** wording, while restaurant-facing brand defaults, public pages, admin branding, and agent identity use **Gelato Spot**. Legacy Fatso branding is not part of the current install.
+
 ## Included
 
 - Database-backed menu study guides, quizzes, flashcards, guided agent training, kitchen verification, certifications, and mistake review

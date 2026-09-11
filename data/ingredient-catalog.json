@@ -174,7 +174,7 @@
         {
           "sectionId": "pizza",
           "sectionName": "Pizza",
-          "itemName": "Fatso's Skinny"
+          "itemName": "Skinny"
         },
         {
           "sectionId": "pizza",
@@ -498,7 +498,7 @@
         {
           "sectionId": "sandwiches",
           "sectionName": "Oven Baked Sandwiches",
-          "itemName": "Fatso's Sausage Sandwich"
+          "itemName": "Sausage Sandwich"
         },
         {
           "sectionId": "sandwiches",
@@ -747,7 +747,7 @@
         {
           "sectionId": "pizza",
           "sectionName": "Pizza",
-          "itemName": "Fatso's Skinny"
+          "itemName": "Skinny"
         }
       ],
       "allergens": {
@@ -950,7 +950,7 @@
         {
           "sectionId": "sandwiches",
           "sectionName": "Oven Baked Sandwiches",
-          "itemName": "Fatso's Sausage Sandwich"
+          "itemName": "Sausage Sandwich"
         }
       ],
       "allergens": {
@@ -992,7 +992,7 @@
         {
           "sectionId": "pizza",
           "sectionName": "Pizza",
-          "itemName": "Fatso's Skinny"
+          "itemName": "Skinny"
         },
         {
           "sectionId": "pizza",
@@ -1243,7 +1243,7 @@
         {
           "sectionId": "sandwiches",
           "sectionName": "Oven Baked Sandwiches",
-          "itemName": "Fatso's Sausage Sandwich"
+          "itemName": "Sausage Sandwich"
         },
         {
           "sectionId": "sandwiches",
@@ -1607,7 +1607,7 @@
         {
           "sectionId": "sandwiches",
           "sectionName": "Oven Baked Sandwiches",
-          "itemName": "Fatso's Sausage Sandwich"
+          "itemName": "Sausage Sandwich"
         },
         {
           "sectionId": "sandwiches",
@@ -1783,7 +1783,7 @@
         {
           "sectionId": "pizza",
           "sectionName": "Pizza",
-          "itemName": "Fatso's Skinny"
+          "itemName": "Skinny"
         },
         {
           "sectionId": "pizza",
@@ -1863,7 +1863,7 @@
         {
           "sectionId": "sandwiches",
           "sectionName": "Oven Baked Sandwiches",
-          "itemName": "Fatso's Sausage Sandwich"
+          "itemName": "Sausage Sandwich"
         }
       ],
       "allergens": {
@@ -2488,7 +2488,7 @@
         {
           "sectionId": "pizza",
           "sectionName": "Pizza",
-          "itemName": "Fatso's Skinny"
+          "itemName": "Skinny"
         },
         {
           "sectionId": "pizza",
@@ -2623,7 +2623,7 @@
         {
           "sectionId": "sandwiches",
           "sectionName": "Oven Baked Sandwiches",
-          "itemName": "Fatso's Sausage Sandwich"
+          "itemName": "Sausage Sandwich"
         },
         {
           "sectionId": "sandwiches",
@@ -2787,7 +2787,7 @@
         {
           "sectionId": "sandwiches",
           "sectionName": "Oven Baked Sandwiches",
-          "itemName": "Fatso's Sausage Sandwich"
+          "itemName": "Sausage Sandwich"
         }
       ],
       "allergens": {
@@ -3052,7 +3052,7 @@
         {
           "sectionId": "pizza",
           "sectionName": "Pizza",
-          "itemName": "Fatso's Skinny"
+          "itemName": "Skinny"
         },
         {
           "sectionId": "pizza",

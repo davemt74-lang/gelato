@@ -162,7 +162,7 @@ function public_agent_http_json(string $url, array $headers, array $payload): ar
         CURLOPT_TIMEOUT => 30,
         CURLOPT_SSL_VERIFYPEER => true,
         CURLOPT_SSL_VERIFYHOST => 2,
-        CURLOPT_USERAGENT => 'Fatso-Public-Agent/1.0',
+        CURLOPT_USERAGENT => 'GelatoSpot-Public-Agent/1.0',
     ]);
     $body = curl_exec($handle);
     $status = (int)curl_getinfo($handle, CURLINFO_RESPONSE_CODE);

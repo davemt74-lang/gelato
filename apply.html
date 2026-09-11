@@ -45,7 +45,7 @@
   const write = (key, value) => localStorage.setItem(key, JSON.stringify(value));
   const esc = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
   const mediaTools = window.RestaurantFormMedia;
-  const brand = read('restaurant-brand-v1', {restaurantName:'Fatso’s Restaurant',logoText:'FR',primary:'#d94a2b',secondary:'#ff835f',dark:'#171b1a'});
+  const brand = read('restaurant-brand-v1', {restaurantName:'Gelato Spot',logoText:'GS',primary:'#d94a2b',secondary:'#ff835f',dark:'#171b1a'});
   const jobs = (await window.RestaurantPublicJobs.load()).filter(job => window.RestaurantPublicJobs.isActive(job));
   const jobOptions = jobs.map(job => ({value:String(job.id), label:job.title}));
   const mediaDefaults = [
