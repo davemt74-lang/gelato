@@ -8,6 +8,7 @@ This project is a restaurant menu-training, employee-development, hiring, and ad
 - Owner-facing `admin-menu-import.php` page for importing the current Gelato Spot menu
 - CLI REST importer with dry-run support and idempotent database upserts
 - Gelato Spot REST menu integration with a built-in default endpoint; no API key is required
+- Price normalization that preserves compact live ranges such as `$13-15`
 - Optional Gelato Spot MCP endpoint for later read-only agent-facing restaurant knowledge
 - Grouped flashcard sets generated from Mistake Review
 - Employee, Manager, and Super Admin roles with editable permissions
