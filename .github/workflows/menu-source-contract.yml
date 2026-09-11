@@ -1,0 +1,101 @@
+name: Menu source contract
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/menu-source-contract.yml'
+      - 'scripts/**'
+      - 'includes/**'
+      - 'database/**'
+      - 'config-example.php'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Fetch live Gelato menu sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --max-time 30 \
+            https://gelato.spot/api/v1/menu -o /tmp/gelato-menu.json
+          curl --fail --silent --show-error --location --max-time 30 \
+            https://gelato.spot/menu/ -o /tmp/gelato-menu.html
+
+          echo "REST bytes: $(wc -c < /tmp/gelato-menu.json)"
+          echo "HTML bytes: $(wc -c < /tmp/gelato-menu.html)"
+
+      - name: Inspect REST contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path('/tmp/gelato-menu.json').read_text())
+          print('top-level type:', type(data).__name__)
+          if isinstance(data, dict):
+              print('top-level keys:', sorted(data.keys()))
+
+          def summarize(value, path='$', depth=0):
+              if depth > 4:
+                  return
+              if isinstance(value, dict):
+                  for key, child in value.items():
+                      child_path = f'{path}.{key}'
+                      if isinstance(child, list):
+                          print(f'{child_path}: list[{len(child)}]')
+                          if child:
+                              first = child[0]
+                              if isinstance(first, dict):
+                                  print(f'{child_path}[0] keys:', sorted(first.keys()))
+                              summarize(first, child_path + '[0]', depth + 1)
+                      elif isinstance(child, dict):
+                          print(f'{child_path}: object keys={sorted(child.keys())}')
+                          summarize(child, child_path, depth + 1)
+              elif isinstance(value, list) and value:
+                  summarize(value[0], path + '[0]', depth + 1)
+
+          summarize(data)
+          PY
+
+      - name: Inspect online menu inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from html.parser import HTMLParser
+          from urllib.parse import urlparse
+          from pathlib import Path
+          import re
+
+          html = Path('/tmp/gelato-menu.html').read_text(errors='replace')
+
+          class Parser(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.links=[]
+              def handle_starttag(self, tag, attrs):
+                  if tag.lower() != 'a':
+                      return
+                  href=dict(attrs).get('href','')
+                  if href:
+                      self.links.append(href)
+
+          p=Parser(); p.feed(html)
+          item_paths=set()
+          for href in p.links:
+              path=urlparse(href).path
+              if re.fullmatch(r'/menu/[^/]+/[^/]+/?', path):
+                  item_paths.add(path.rstrip('/'))
+          print('online detail item links:', len(item_paths))
+          for path in sorted(item_paths)[:10]:
+              print('sample:', path)
+          PY
