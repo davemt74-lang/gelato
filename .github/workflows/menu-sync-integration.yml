@@ -85,6 +85,21 @@ jobs:
           ];
           PHP
 
+      - name: Read bundled snapshot inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_ENV"
+          import json
+          d=json.load(open('data/gelato-menu-scan.json',encoding='utf-8'))
+          sections=d.get('sections') or []
+          items=sum(len(section.get('items') or []) for section in sections)
+          if len(sections) < 1 or items < 1:
+              raise SystemExit('Bundled menu snapshot is empty')
+          print(f'EXPECTED_MENU_SECTIONS={len(sections)}')
+          print(f'EXPECTED_MENU_ITEMS={items}')
+          PY
+
       - name: Install fresh database
         shell: bash
         run: |
@@ -99,7 +114,7 @@ jobs:
           set -euo pipefail
           php scripts/sync-gelato-menu.php --dry-run > /tmp/manual-dry-run.json
           cat /tmp/manual-dry-run.json
-          php -r '$d=json_decode(file_get_contents("/tmp/manual-dry-run.json"),true,512,JSON_THROW_ON_ERROR); if(empty($d["ok"])||($d["sourceMode"]??"")!=="manual-file"||($d["sections"]??0)!==9||($d["items"]??0)!==79){fwrite(STDERR,"Unexpected manual snapshot summary\n");exit(1);}'
+          php -r '$d=json_decode(file_get_contents("/tmp/manual-dry-run.json"),true,512,JSON_THROW_ON_ERROR);$es=(int)getenv("EXPECTED_MENU_SECTIONS");$ei=(int)getenv("EXPECTED_MENU_ITEMS");if(empty($d["ok"])||($d["sourceMode"]??"")!=="manual-file"||($d["sections"]??0)!==$es||($d["items"]??0)!==$ei){fwrite(STDERR,"Unexpected manual snapshot summary\n");exit(1);}'
 
       - name: Import bundled menu into fresh database
         shell: bash
@@ -107,14 +122,16 @@ jobs:
           set -euo pipefail
           php scripts/sync-gelato-menu.php --organization-id=1 > /tmp/manual-sync.json
           cat /tmp/manual-sync.json
-          test "$(mysql -N -h 127.0.0.1 -uroot -prootpass restaurant_training -e "SELECT COUNT(*) FROM menu_sections WHERE organization_id=1 AND status='active';")" = "9"
-          test "$(mysql -N -h 127.0.0.1 -uroot -prootpass restaurant_training -e "SELECT COUNT(*) FROM menu_items WHERE organization_id=1 AND is_active=1;")" = "79"
+          DB_SECTIONS=$(mysql -N -h 127.0.0.1 -uroot -prootpass restaurant_training -e "SELECT COUNT(*) FROM menu_sections WHERE organization_id=1 AND status='active';")
+          DB_ITEMS=$(mysql -N -h 127.0.0.1 -uroot -prootpass restaurant_training -e "SELECT COUNT(*) FROM menu_items WHERE organization_id=1 AND is_active=1;")
+          test "$DB_SECTIONS" = "$EXPECTED_MENU_SECTIONS"
+          test "$DB_ITEMS" = "$EXPECTED_MENU_ITEMS"
 
       - name: Verify projected training menu
         shell: bash
         run: |
           set -euo pipefail
-          php -r 'require "includes/bootstrap.php";require "includes/menu-sync.php";$s=menu_database_sections(app_pdo(),1);$items=array_sum(array_map(fn($x)=>count($x["items"]??[]),$s));if(count($s)!==9||$items!==79){fwrite(STDERR,"Database projection mismatch\n");exit(1);}echo "Projected ".count($s)." sections / $items items\n";'
+          php -r 'require "includes/bootstrap.php";require "includes/menu-sync.php";$s=menu_database_sections(app_pdo(),1);$items=array_sum(array_map(fn($x)=>count($x["items"]??[]),$s));$es=(int)getenv("EXPECTED_MENU_SECTIONS");$ei=(int)getenv("EXPECTED_MENU_ITEMS");if(count($s)!==$es||$items!==$ei){fwrite(STDERR,"Database projection mismatch\n");exit(1);}echo "Projected ".count($s)." sections / $items items\n";'
 
       - name: Verify repeated import is idempotent
         shell: bash
@@ -127,5 +144,5 @@ jobs:
           AFTER_ITEMS=$(mysql -N -h 127.0.0.1 -uroot -prootpass restaurant_training -e "SELECT COUNT(*) FROM menu_items WHERE organization_id=1;")
           test "$BEFORE_SECTIONS" = "$AFTER_SECTIONS"
           test "$BEFORE_ITEMS" = "$AFTER_ITEMS"
-          test "$AFTER_SECTIONS" = "9"
-          test "$AFTER_ITEMS" = "79"
+          test "$AFTER_SECTIONS" = "$EXPECTED_MENU_SECTIONS"
+          test "$AFTER_ITEMS" = "$EXPECTED_MENU_ITEMS"
