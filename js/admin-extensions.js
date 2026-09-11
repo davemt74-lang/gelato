@@ -460,7 +460,7 @@
         $('brandStorageNotice').textContent = 'Logo and cover images are stored in the server upload directory and linked through the database. Keep uploads/ when deploying updates.';
       } else {
         setBrandForm(Auth.read('restaurant-brand-v1', {
-          restaurantName:'Fatso’s Restaurant', legalName:'', email:'', phone:'', description:'Restaurant training and careers.', logoText:'FR', address:'', primary:'#d94a2b', secondary:'#ff835f', dark:'#171b1a', logoUrl:null, coverUrl:null
+          restaurantName:'Gelato Spot', legalName:'', email:'', phone:'', description:'Restaurant training and careers.', logoText:'GS', address:'', primary:'#d94a2b', secondary:'#ff835f', dark:'#171b1a', logoUrl:null, coverUrl:null
         }));
       }
     } catch (error) {
