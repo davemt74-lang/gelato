@@ -19,7 +19,7 @@ jobs:
           ref: gelato-branding-cleanup
           fetch-depth: 0
 
-      - name: Replace visible legacy branding
+      - name: Replace Fatso branding only
         shell: bash
         run: |
           set -euo pipefail
@@ -27,11 +27,6 @@ jobs:
           from pathlib import Path
 
           replacements = {
-              'index.html': [
-                  ('<meta name="description" content="Local-first restaurant training workspace with menu knowledge, positions, allergens, flashcards, daily training, kitchen verification, certifications, and quizzes." />', '<meta name="description" content="Gelato Spot training workspace with live menu knowledge, positions, allergens, flashcards, daily training, kitchen verification, certifications, and quizzes." />'),
-                  ('<title>Restaurant Agentic Training Workspace</title>', '<title>Gelato Spot Training Workspace</title>'),
-                  ('<div class="brand"><div class="logo">✦</div><div><h1>Restaurant Workspace</h1><p>Local menu knowledge agent</p></div></div>', '<div class="brand"><div class="logo">GS</div><div><h1>Gelato Spot</h1><p>Menu training &amp; knowledge</p></div></div>'),
-              ],
               'jobs.html': [
                   ("restaurantName:'Fatso’s Restaurant'", "restaurantName:'Gelato Spot'"),
                   ("logoText:'FR'", "logoText:'GS'"),
@@ -56,28 +51,24 @@ jobs:
               'api/public-agent.php': [
                   ("Fatso-Public-Agent/1.0", "GelatoSpot-Public-Agent/1.0"),
               ],
-              'config-example.php': [
-                  ("'name' => 'Restaurant Training Workspace'", "'name' => 'Gelato Spot Training Workspace'"),
-              ],
           }
 
           for filename, pairs in replacements.items():
               path = Path(filename)
               text = path.read_text(encoding='utf-8')
               for old, new in pairs:
-                  count = text.count(old)
-                  if count < 1:
-                      raise SystemExit(f'Expected branding text not found in {filename}: {old[:80]!r}')
+                  if old not in text:
+                      raise SystemExit(f'Expected Fatso branding not found in {filename}: {old!r}')
                   text = text.replace(old, new)
               path.write_text(text, encoding='utf-8')
           PY
 
-      - name: Remove unreferenced Fatso-era artifacts
+      - name: Remove obsolete Fatso-era artifacts
         shell: bash
         run: |
           set -euo pipefail
           for target in index-pre-agent.html agent-workspace-v2.html data/ingredient-catalog.json; do
-            refs=$(grep -RIl --exclude-dir=.git --exclude="$(basename "$target")" -- "$target" . || true)
+            refs=$(grep -RIl --exclude-dir=.git --exclude-dir=.github --exclude="$(basename "$target")" -- "$target" . || true)
             if [ -n "$refs" ]; then
               echo "Refusing to remove referenced legacy artifact $target"
               echo "$refs"
@@ -86,25 +77,25 @@ jobs:
           done
           rm -f index-pre-agent.html agent-workspace-v2.html data/ingredient-catalog.json
 
-      - name: Verify Gelato identity and reject Fatso branding
+      - name: Verify no Fatso branding remains
         shell: bash
         run: |
           set -euo pipefail
-          grep -q '<title>Gelato Spot Training Workspace</title>' index.html
-          grep -q '<h1>Gelato Spot</h1>' index.html
-          grep -q 'Menu training &amp; knowledge' index.html
-          if grep -RniE --exclude-dir=.git --exclude='*.sql' --exclude='.github/workflows/apply-gelato-branding.yml' --exclude='.github/workflows/inspect-branding.yml' 'Fatso|Fatso.s|Fatso’s' .; then
-            echo 'Legacy Fatso branding remains in active repository files.'
+          if grep -RniE --exclude-dir=.git --exclude-dir=.github --exclude='*.sql' 'Fatso|Fatso.s|Fatso’s' .; then
+            echo 'Legacy Fatso branding remains in repository files.'
             exit 1
           fi
-          echo 'Gelato branding gate passed.'
+          grep -q "restaurantName:'Gelato Spot'" jobs.html
+          grep -q "restaurantName:'Gelato Spot'" landing.html
+          grep -q "restaurantName:'Gelato Spot'" apply.html
+          grep -q "GelatoSpot-Public-Agent/1.0" api/public-agent.php
+          echo 'Fatso branding cleanup gate passed.'
 
       - name: Syntax check touched runtime files
         shell: bash
         run: |
           set -euo pipefail
           php -l api/public-agent.php
-          php -l config-example.php
 
       - name: Remove one-time workflows and commit
         shell: bash
