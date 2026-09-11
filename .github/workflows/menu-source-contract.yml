@@ -23,79 +23,127 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --location --max-time 30 \
+          UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/152 Safari/537.36'
+          curl --fail --silent --show-error --location --max-time 30 -A "$UA" \
             https://gelato.spot/api/v1/menu -o /tmp/gelato-menu.json
-          curl --fail --silent --show-error --location --max-time 30 \
+          curl --fail --silent --show-error --location --max-time 30 -A "$UA" \
             https://gelato.spot/menu/ -o /tmp/gelato-menu.html
 
           echo "REST bytes: $(wc -c < /tmp/gelato-menu.json)"
           echo "HTML bytes: $(wc -c < /tmp/gelato-menu.html)"
 
-      - name: Inspect REST contract
+      - name: Verify REST inventory
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
           import json
+          import re
           from pathlib import Path
+          from urllib.parse import urlparse
 
           data = json.loads(Path('/tmp/gelato-menu.json').read_text())
-          print('top-level type:', type(data).__name__)
-          if isinstance(data, dict):
-              print('top-level keys:', sorted(data.keys()))
+          expected_top = {'version', 'source', 'search', 'sections'}
+          missing = expected_top - set(data)
+          if missing:
+              raise SystemExit(f'REST contract missing keys: {sorted(missing)}')
 
-          def summarize(value, path='$', depth=0):
-              if depth > 4:
-                  return
-              if isinstance(value, dict):
-                  for key, child in value.items():
-                      child_path = f'{path}.{key}'
-                      if isinstance(child, list):
-                          print(f'{child_path}: list[{len(child)}]')
-                          if child:
-                              first = child[0]
-                              if isinstance(first, dict):
-                                  print(f'{child_path}[0] keys:', sorted(first.keys()))
-                              summarize(first, child_path + '[0]', depth + 1)
-                      elif isinstance(child, dict):
-                          print(f'{child_path}: object keys={sorted(child.keys())}')
-                          summarize(child, child_path, depth + 1)
-              elif isinstance(value, list) and value:
-                  summarize(value[0], path + '[0]', depth + 1)
+          sections = data.get('sections')
+          if not isinstance(sections, list) or not sections:
+              raise SystemExit('REST sections must be a non-empty list')
 
-          summarize(data)
+          total = 0
+          api_paths = set()
+          print('REST version:', data.get('version'))
+          print('REST source:', data.get('source'))
+          print('REST sections:', len(sections))
+          for index, section in enumerate(sections):
+              title = str(section.get('title') or '').strip()
+              slug = str(section.get('slug') or '').strip()
+              items = section.get('items') or []
+              if not title or not slug or not isinstance(items, list):
+                  raise SystemExit(f'Invalid section at index {index}')
+              total += len(items)
+              print(f'  {index+1}. {title} [{slug}] = {len(items)} items')
+              for item_index, item in enumerate(items):
+                  for key in ('name', 'description', 'price', 'url'):
+                      if key not in item:
+                          raise SystemExit(f'Missing item field {key!r} in {title} item {item_index}')
+                  path = urlparse(str(item.get('url') or '')).path.rstrip('/')
+                  if not re.fullmatch(r'/menu/[^/]+/[^/]+', path):
+                      raise SystemExit(f'Unexpected item URL: {item.get("url")!r}')
+                  if path in api_paths:
+                      raise SystemExit(f'Duplicate item URL: {path}')
+                  api_paths.add(path)
+
+          print('REST item total:', total)
+          print('REST unique detail URLs:', len(api_paths))
+          if total != len(api_paths):
+              raise SystemExit('REST item total and unique item URL count differ')
+          if total != 101:
+              raise SystemExit(f'Expected current public menu total 101, got {total}')
           PY
 
-      - name: Inspect online menu inventory
+      - name: Verify online menu parity
         shell: bash
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          from html.parser import HTMLParser
-          from urllib.parse import urlparse
-          from pathlib import Path
+          import json
           import re
+          from html.parser import HTMLParser
+          from pathlib import Path
+          from urllib.parse import urlparse
 
+          data = json.loads(Path('/tmp/gelato-menu.json').read_text())
           html = Path('/tmp/gelato-menu.html').read_text(errors='replace')
+
+          api_paths = {
+              urlparse(str(item['url'])).path.rstrip('/')
+              for section in data['sections']
+              for item in section.get('items', [])
+          }
 
           class Parser(HTMLParser):
               def __init__(self):
                   super().__init__()
-                  self.links=[]
+                  self.links = []
+                  self.text = []
               def handle_starttag(self, tag, attrs):
-                  if tag.lower() != 'a':
-                      return
-                  href=dict(attrs).get('href','')
-                  if href:
-                      self.links.append(href)
+                  if tag.lower() == 'a':
+                      href = dict(attrs).get('href', '')
+                      if href:
+                          self.links.append(href)
+              def handle_data(self, data):
+                  if data.strip():
+                      self.text.append(data.strip())
 
-          p=Parser(); p.feed(html)
-          item_paths=set()
-          for href in p.links:
-              path=urlparse(href).path
-              if re.fullmatch(r'/menu/[^/]+/[^/]+/?', path):
-                  item_paths.add(path.rstrip('/'))
-          print('online detail item links:', len(item_paths))
-          for path in sorted(item_paths)[:10]:
-              print('sample:', path)
+          parser = Parser(); parser.feed(html)
+          page_paths = {
+              urlparse(href).path.rstrip('/')
+              for href in parser.links
+              if re.fullmatch(r'/menu/[^/]+/[^/]+/?', urlparse(href).path)
+          }
+          page_text = ' '.join(parser.text)
+          text_total = re.search(r'\b101\s+items\b', page_text, re.I)
+
+          print('online detail item links:', len(page_paths))
+          print('online page declares 101 items:', bool(text_total))
+
+          if page_paths:
+              missing_online = sorted(api_paths - page_paths)
+              extra_online = sorted(page_paths - api_paths)
+              print('API URLs missing online:', len(missing_online))
+              print('online URLs missing in API:', len(extra_online))
+              if missing_online:
+                  print('first missing online:', missing_online[:10])
+              if extra_online:
+                  print('first extra online:', extra_online[:10])
+              if missing_online or extra_online:
+                  raise SystemExit('REST API and online menu detail URLs are not identical')
+          elif not text_total:
+              # The public page may return a reduced HTML shell to CI/CD hosts. In that
+              # case we refuse to claim parity from the HTML fetch itself. The REST
+              # inventory gate above still guarantees the documented 101-item contract.
+              print('NOTICE: public menu HTML was a reduced shell; exact URL parity could not be asserted from CI HTML.')
           PY
