@@ -61,21 +61,24 @@ jobs:
                       raise SystemExit(f'Expected Fatso branding not found in {filename}: {old!r}')
                   text = text.replace(old, new)
               path.write_text(text, encoding='utf-8')
-          PY
 
-      - name: Remove obsolete Fatso-era artifacts
-        shell: bash
-        run: |
-          set -euo pipefail
-          for target in index-pre-agent.html agent-workspace-v2.html data/ingredient-catalog.json; do
-            refs=$(grep -RIl --exclude-dir=.git --exclude-dir=.github --exclude="$(basename "$target")" -- "$target" . || true)
-            if [ -n "$refs" ]; then
-              echo "Refusing to remove referenced legacy artifact $target"
-              echo "$refs"
-              exit 1
-            fi
-          done
-          rm -f index-pre-agent.html agent-workspace-v2.html data/ingredient-catalog.json
+          # Keep generic "Restaurant Workspace" wording intact. For older helper
+          # files/catalogs that still carry the prior restaurant name, remove only
+          # the Fatso brand while preserving their structure for any build tooling.
+          for filename in ['index-pre-agent.html', 'agent-workspace-v2.html', 'data/ingredient-catalog.json']:
+              path = Path(filename)
+              text = path.read_text(encoding='utf-8')
+              text = text.replace("Fatso's Sausage Sandwich", 'Sausage Sandwich')
+              text = text.replace("Fatso's Skinny", 'Skinny')
+              text = text.replace("Fatso's tuna recipe", 'house tuna recipe')
+              text = text.replace("Fatso's French dip", 'house French dip')
+              text = text.replace("Fatso’s Restaurant", 'Gelato Spot')
+              text = text.replace("Fatso's Restaurant", 'Gelato Spot')
+              text = text.replace("Fatso’s", "Gelato Spot's")
+              text = text.replace("Fatso's", "Gelato Spot's")
+              text = text.replace('Fatso', 'Gelato Spot')
+              path.write_text(text, encoding='utf-8')
+          PY
 
       - name: Verify no Fatso branding remains
         shell: bash
@@ -85,17 +88,19 @@ jobs:
             echo 'Legacy Fatso branding remains in repository files.'
             exit 1
           fi
+          grep -q 'Restaurant Workspace' index.html
           grep -q "restaurantName:'Gelato Spot'" jobs.html
           grep -q "restaurantName:'Gelato Spot'" landing.html
           grep -q "restaurantName:'Gelato Spot'" apply.html
           grep -q "GelatoSpot-Public-Agent/1.0" api/public-agent.php
-          echo 'Fatso branding cleanup gate passed.'
+          echo 'Fatso branding cleanup gate passed; generic Restaurant Workspace preserved.'
 
       - name: Syntax check touched runtime files
         shell: bash
         run: |
           set -euo pipefail
           php -l api/public-agent.php
+          python3 -m json.tool data/ingredient-catalog.json >/dev/null
 
       - name: Remove one-time workflows and commit
         shell: bash
