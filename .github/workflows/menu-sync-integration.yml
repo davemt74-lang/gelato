@@ -1,0 +1,148 @@
+name: Menu sync integration
+
+on:
+  pull_request:
+    paths:
+      - 'admin-menu-import.php'
+      - 'api/menu.php'
+      - 'api/menu-knowledge.php'
+      - 'includes/menu-sync.php'
+      - 'scripts/sync-gelato-menu.php'
+      - 'database/**'
+      - 'config-example.php'
+      - '.github/workflows/menu-sync-integration.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  fresh-install-rest-import:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: rootpass
+          MYSQL_DATABASE: restaurant_training
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -prootpass"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql,curl,mbstring,intl,sodium
+          coverage: none
+
+      - name: Syntax checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -l includes/menu-sync.php
+          php -l scripts/sync-gelato-menu.php
+          php -l api/menu.php
+          php -l api/menu-knowledge.php
+          php -l admin-menu-import.php
+          php -l config-example.php
+
+      - name: Create isolated CI config
+        shell: bash
+        run: |
+          cat > config.php <<'PHP'
+          <?php
+          return [
+              'app' => [
+                  'name' => 'Gelato Spot CI',
+                  'url' => 'https://training.example.test',
+                  'timezone' => 'America/Phoenix',
+                  'debug' => false,
+              ],
+              'database' => [
+                  'host' => '127.0.0.1',
+                  'port' => 3306,
+                  'name' => 'restaurant_training',
+                  'username' => 'root',
+                  'password' => 'rootpass',
+                  'charset' => 'utf8mb4',
+              ],
+              'security' => [
+                  'session_name' => 'gelato_ci_session',
+                  'session_lifetime_seconds' => 28800,
+                  'cookie_secure' => true,
+                  'cookie_samesite' => 'Lax',
+              ],
+          ];
+          PHP
+
+      - name: Read current live inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 3 --retry-delay 2 \
+            https://gelato.spot/api/v1/menu -o /tmp/live-menu.json
+          python3 - <<'PY' >> "$GITHUB_ENV"
+          import json
+          d=json.load(open('/tmp/live-menu.json',encoding='utf-8'))
+          sections=d.get('sections') or []
+          items=sum(len(section.get('items') or []) for section in sections)
+          if len(sections) < 8 or items < 75:
+              raise SystemExit(f'Unexpected live menu size: {len(sections)} sections / {items} items')
+          print(f'EXPECTED_MENU_SECTIONS={len(sections)}')
+          print(f'EXPECTED_MENU_ITEMS={items}')
+          PY
+
+      - name: Install fresh database
+        shell: bash
+        run: |
+          set -euo pipefail
+          mysql -h 127.0.0.1 -uroot -prootpass restaurant_training < database/install.sql
+          mysql -h 127.0.0.1 -uroot -prootpass restaurant_training \
+            -e "INSERT INTO organizations (name, legal_name, status, timezone) VALUES ('Gelato Spot CI', 'Gelato Spot CI', 'active', 'America/Phoenix');"
+
+      - name: Dry-run live REST import
+        shell: bash
+        run: |
+          set -euo pipefail
+          php scripts/sync-gelato-menu.php --dry-run > /tmp/live-dry-run.json
+          cat /tmp/live-dry-run.json
+          php -r '$d=json_decode(file_get_contents("/tmp/live-dry-run.json"),true,512,JSON_THROW_ON_ERROR);$es=(int)getenv("EXPECTED_MENU_SECTIONS");$ei=(int)getenv("EXPECTED_MENU_ITEMS");if(empty($d["ok"])||($d["sourceMode"]??"")!=="live-rest"||($d["sections"]??0)!==$es||($d["items"]??0)!==$ei){fwrite(STDERR,"Unexpected REST dry-run summary\n");exit(1);}'
+
+      - name: Import live REST menu into fresh database
+        shell: bash
+        run: |
+          set -euo pipefail
+          php scripts/sync-gelato-menu.php --organization-id=1 > /tmp/live-sync.json
+          cat /tmp/live-sync.json
+          DB_SECTIONS=$(mysql -N -h 127.0.0.1 -uroot -prootpass restaurant_training -e "SELECT COUNT(*) FROM menu_sections WHERE organization_id=1 AND status='active';")
+          DB_ITEMS=$(mysql -N -h 127.0.0.1 -uroot -prootpass restaurant_training -e "SELECT COUNT(*) FROM menu_items WHERE organization_id=1 AND is_active=1;")
+          test "$DB_SECTIONS" = "$EXPECTED_MENU_SECTIONS"
+          test "$DB_ITEMS" = "$EXPECTED_MENU_ITEMS"
+
+      - name: Verify projected training menu
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -r 'require "includes/bootstrap.php";require "includes/menu-sync.php";$s=menu_database_sections(app_pdo(),1);$items=array_sum(array_map(fn($x)=>count($x["items"]??[]),$s));$es=(int)getenv("EXPECTED_MENU_SECTIONS");$ei=(int)getenv("EXPECTED_MENU_ITEMS");if(count($s)!==$es||$items!==$ei){fwrite(STDERR,"Database projection mismatch\n");exit(1);}echo "Projected ".count($s)." sections / $items items\n";'
+
+      - name: Verify repeated live import is idempotent
+        shell: bash
+        run: |
+          set -euo pipefail
+          BEFORE_SECTIONS=$(mysql -N -h 127.0.0.1 -uroot -prootpass restaurant_training -e "SELECT COUNT(*) FROM menu_sections WHERE organization_id=1;")
+          BEFORE_ITEMS=$(mysql -N -h 127.0.0.1 -uroot -prootpass restaurant_training -e "SELECT COUNT(*) FROM menu_items WHERE organization_id=1;")
+          php scripts/sync-gelato-menu.php --organization-id=1 >/tmp/live-repeat.json
+          AFTER_SECTIONS=$(mysql -N -h 127.0.0.1 -uroot -prootpass restaurant_training -e "SELECT COUNT(*) FROM menu_sections WHERE organization_id=1;")
+          AFTER_ITEMS=$(mysql -N -h 127.0.0.1 -uroot -prootpass restaurant_training -e "SELECT COUNT(*) FROM menu_items WHERE organization_id=1;")
+          test "$BEFORE_SECTIONS" = "$AFTER_SECTIONS"
+          test "$BEFORE_ITEMS" = "$AFTER_ITEMS"
+          test "$AFTER_SECTIONS" = "$EXPECTED_MENU_SECTIONS"
+          test "$AFTER_ITEMS" = "$EXPECTED_MENU_ITEMS"

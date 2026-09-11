@@ -1,0 +1,132 @@
+name: Menu source contract
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/menu-source-contract.yml'
+      - 'scripts/**'
+      - 'includes/**'
+      - 'database/**'
+      - 'config-example.php'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Fetch live Gelato menu sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/152 Safari/537.36'
+          curl --fail --silent --show-error --location --max-time 30 -A "$UA" \
+            https://gelato.spot/api/v1/menu -o /tmp/gelato-menu.json
+          curl --fail --silent --show-error --location --max-time 30 -A "$UA" \
+            https://gelato.spot/menu/ -o /tmp/gelato-menu.html
+          bundle=$(python3 - <<'PY'
+          import re
+          from pathlib import Path
+          html=Path('/tmp/gelato-menu.html').read_text(errors='replace')
+          m=re.search(r'<script[^>]+src=["\']([^"\']+)',html,re.I)
+          print(m.group(1) if m else '')
+          PY
+          )
+          test -n "$bundle"
+          curl --fail --silent --show-error --location --max-time 30 -A "$UA" \
+            "https://gelato.spot${bundle}" -o /tmp/gelato-app.js
+          for path in sitemap.xml sitemap_index.xml; do
+            curl --fail --silent --show-error --location --max-time 30 -A "$UA" \
+              "https://gelato.spot/$path" -o "/tmp/$path"
+          done
+          echo "REST bytes: $(wc -c < /tmp/gelato-menu.json)"
+          echo "HTML bytes: $(wc -c < /tmp/gelato-menu.html)"
+          echo "JS bytes: $(wc -c < /tmp/gelato-app.js)"
+
+      - name: Inspect live menu page data source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          html=Path('/tmp/gelato-menu.html').read_text(errors='replace')
+          js=Path('/tmp/gelato-app.js').read_text(errors='replace')
+          refs=sorted(set(re.findall(r'["\']([^"\']*api/v1/[^"\']+)["\']',js)))
+          print('HTML references /api/v1/menu:', '/api/v1/menu' in html)
+          print('JS references /api/v1/menu:', '/api/v1/menu' in js)
+          print('JS API references:')
+          for ref in refs[:50]: print(' ',ref)
+          print('JS contains menu endpoint token:', bool(re.search(r'api/v1/menu',js)))
+          PY
+
+      - name: Inspect REST inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from collections import Counter
+          from pathlib import Path
+          from urllib.parse import urlparse
+          data=json.loads(Path('/tmp/gelato-menu.json').read_text())
+          print('REST version:', data.get('version'))
+          print('REST source:', data.get('source'))
+          total=0
+          paths=Counter()
+          for section in data['sections']:
+              items=section.get('items',[])
+              total+=len(items)
+              print(section['title'], section['slug'], len(items))
+              for item in items:
+                  paths[urlparse(item['url']).path.rstrip('/')]+=1
+          print('REST total:',total)
+          print('REST unique detail URLs:',len(paths))
+          print('REST shared detail URLs:',sum(1 for v in paths.values() if v>1))
+          PY
+
+      - name: Compare sitemap inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,re,xml.etree.ElementTree as ET
+          from collections import Counter
+          from pathlib import Path
+          from urllib.parse import urlparse
+          data=json.loads(Path('/tmp/gelato-menu.json').read_text())
+          api={urlparse(item['url']).path.rstrip('/') for s in data['sections'] for item in s.get('items',[])}
+          urls=set()
+          for name in ('sitemap.xml','sitemap_index.xml'):
+              try: root=ET.fromstring(Path('/tmp/'+name).read_bytes())
+              except Exception: continue
+              for elem in root.iter():
+                  if elem.tag.rsplit('}',1)[-1]=='loc' and elem.text:
+                      urls.add(elem.text.strip())
+          menu={urlparse(u).path.rstrip('/') for u in urls if re.fullmatch(r'/menu/[^/]+/[^/]+/?',urlparse(u).path)}
+          counts=Counter(p.split('/')[2] for p in menu)
+          print('sitemap menu URLs:',len(menu))
+          print('sitemap counts:',dict(sorted(counts.items())))
+          print('sitemap URLs not in REST:')
+          for p in sorted(menu-api): print(' ',p)
+          PY
+
+      - name: Enforce live-source rule
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,re
+          from pathlib import Path
+          data=json.loads(Path('/tmp/gelato-menu.json').read_text())
+          js=Path('/tmp/gelato-app.js').read_text(errors='replace')
+          total=sum(len(s.get('items',[])) for s in data['sections'])
+          if re.search(r'api/v1/menu',js):
+              print(f'PASS: live /menu/ application bundle consumes the REST menu source; current REST inventory={total}.')
+          else:
+              raise SystemExit('Cannot prove live /menu/ consumes /api/v1/menu; do not import yet.')
+          PY
