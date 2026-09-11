@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Submit a resume for current and future restaurant opportunities.">
+  <title>Submit Your Resume</title>
+  <link rel="stylesheet" href="css/public.css">
+</head>
+<body class="form-page">
+  <header class="public-header">
+    <a class="public-brand" href="landing.html"><span class="public-logo" id="applyLogo">FR</span><span><strong id="applyBrand">Restaurant</strong><span>Resume submission</span></span></a>
+    <nav class="public-nav">
+      <a href="jobs.html">Jobs</a><a class="primary" href="apply.html">Submit Resume</a>
+      <div class="guest-profile-wrap" data-public-account-menu>
+        <button class="guest-profile-button" type="button" data-guest-menu-button aria-haspopup="true" aria-expanded="false"><span class="guest-avatar">G</span><span class="guest-profile-copy"><strong>Guest</strong><span>Not signed in</span></span><span class="guest-chevron">⌄</span></button>
+        <div class="guest-profile-menu hidden" data-guest-menu>
+          <div class="guest-menu-head"><span class="guest-avatar">G</span><div><strong>Logged-out account</strong><span>Sign in to access training</span></div></div>
+          <div class="guest-menu-list">
+            <a class="primary" href="login.php">↪ Sign in</a>
+            <a href="forgot-password.php">? Forgot password</a>
+            <div class="guest-menu-divider"></div>
+            <a href="landing.html">⌂ Public landing page</a>
+            <a href="jobs.html">⌂ Available jobs</a>
+            <a href="apply.html">▤ Submit a resume</a>
+          </div>
+        </div>
+      </div>
+    </nav>
+  </header>
+  <section class="form-hero"><div class="form-hero-inner"><p class="eyebrow">Restaurant opportunities</p><h1>Submit your resume.</h1><p>Tell us which position interests you and share the experience, availability, and information needed for an initial review.</p></div></section>
+  <main class="application-wrap">
+    <section class="application-card" id="applicationCard">
+      <form id="resumeForm"><div class="application-grid" id="publicFormFields"></div><div class="button-row"><p class="privacy-note">This local-first prototype stores application records and selected media only in this browser. Video and photos are kept in private browser storage and do not leave the device.</p><button class="submit-button" style="width:auto;padding:0 24px" type="submit">Submit resume</button></div><div class="form-message hidden" id="submissionMessage"></div></form>
+    </section>
+  </main>
+<script src="js/public-jobs.js?v=20260804-jobs1"></script>
+<script src="js/form-media-storage.js?v=20260804-media1"></script>
+<script>
+(async () => {
+  const read = (key, fallback) => {
+    try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); }
+    catch { return fallback; }
+  };
+  const write = (key, value) => localStorage.setItem(key, JSON.stringify(value));
+  const esc = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
+  const mediaTools = window.RestaurantFormMedia;
+  const brand = read('restaurant-brand-v1', {restaurantName:'Fatso’s Restaurant',logoText:'FR',primary:'#d94a2b',secondary:'#ff835f',dark:'#171b1a'});
+  const jobs = (await window.RestaurantPublicJobs.load()).filter(job => window.RestaurantPublicJobs.isActive(job));
+  const jobOptions = jobs.map(job => ({value:String(job.id), label:job.title}));
+  const mediaDefaults = [
+    {id:'f-video',type:'video',label:'Short introduction video (30 seconds maximum)',required:false,system:false},
+    {id:'f-photos',type:'photos',label:'Photos (up to 5)',required:false,system:false}
+  ];
+  const defaultFields = [
+    {id:'f-first',type:'text',label:'First name',required:true},
+    {id:'f-last',type:'text',label:'Last name',required:true},
+    {id:'f-email',type:'email',label:'Email address',required:true},
+    {id:'f-phone',type:'phone',label:'Phone number',required:true},
+    {id:'f-position',type:'select',label:'Position of interest — active job posting',required:true,options:jobOptions},
+    {id:'f-availability',type:'textarea',label:'Availability',required:true},
+    {id:'f-experience',type:'textarea',label:'Relevant experience',required:true},
+    {id:'f-resume',type:'file',label:'Resume file',required:false},
+    ...mediaDefaults,
+    {id:'f-consent',type:'consent',label:'I confirm the information provided is accurate.',required:true}
+  ];
+  const formDef = read('restaurant-resume-form-v1', {fields:defaultFields,status:'published'});
+  const normalizedFields = Array.isArray(formDef.fields) ? formDef.fields.map(field => ({...field})) : defaultFields.map(field => ({...field}));
+  mediaDefaults.forEach(mediaField => {
+    if (!normalizedFields.some(field => field.type === mediaField.type)) normalizedFields.push({...mediaField});
+  });
+  if (!Array.isArray(formDef.fields) || normalizedFields.length !== formDef.fields.length) {
+    write('restaurant-resume-form-v1', {...formDef, fields:normalizedFields});
+  }
+  const fields = normalizedFields.map(field => field.id === 'f-position'
+    ? {...field, type:'select', label:'Position of interest — active job posting', required:true, options:jobOptions}
+    : field
+  );
+
+  document.documentElement.style.setProperty('--brand-primary', brand.primary);
+  document.documentElement.style.setProperty('--brand-secondary', brand.secondary);
+  document.documentElement.style.setProperty('--brand-dark', brand.dark);
+  document.getElementById('applyLogo').textContent = brand.logoText || 'FR';
+  document.getElementById('applyBrand').textContent = brand.restaurantName;
+  document.title = `Submit Resume · ${brand.restaurantName}`;
+
+  const slug = id => `field_${id.replace(/[^a-z0-9]/gi, '_')}`;
+  const valueForId = (formData, id) => formData.get(slug(id)) || '';
+  const message = document.getElementById('submissionMessage');
+  const submitButton = document.querySelector('#resumeForm button[type="submit"]');
+
+  function setMessage(text = '', bad = true) {
+    if (!text) {
+      message.className = 'form-message hidden';
+      message.textContent = '';
+      return;
+    }
+    message.className = `form-message ${bad ? 'bad' : 'good'}`;
+    message.textContent = text;
+  }
+
+  function mediaSummaryId(field) {
+    return `${slug(field.id)}_summary`;
+  }
+
+  function renderField(field) {
+    const name = slug(field.id);
+    const required = field.required ? ' required' : '';
+    const mark = field.required ? ' <span style="color:var(--bad)">*</span>' : '';
+    const cls = ['textarea','file','video','photos','consent','checkboxes','radio'].includes(field.type) ? 'wide' : '';
+
+    if (field.type === 'textarea') {
+      return `<div class="field-wrap ${cls}"><label for="${name}">${esc(field.label)}${mark}</label><textarea class="field" id="${name}" name="${name}"${required}></textarea></div>`;
+    }
+    if (field.type === 'select') {
+      const options = field.options || [];
+      const positionField = field.id === 'f-position';
+      const placeholder = positionField ? 'Select an active job posting' : 'Choose an option';
+      const disabled = positionField && !options.length ? ' disabled' : '';
+      return `<div class="field-wrap ${cls}"><label for="${name}">${esc(field.label)}${mark}</label><select class="field" id="${name}" name="${name}"${required}${disabled}><option value="">${esc(placeholder)}</option>${options.map(option => {const item = typeof option === 'object' ? option : {value:option,label:option};return `<option value="${esc(item.value)}">${esc(item.label)}</option>`;}).join('')}</select></div>`;
+    }
+    if (field.type === 'radio' || field.type === 'checkboxes') {
+      return `<fieldset class="field-wrap ${cls}" style="border:0;padding:0;margin:0"><label>${esc(field.label)}${mark}</label><div class="choice-group">${(field.options || []).map((option,index) => `<label class="choice-option"><input type="${field.type === 'radio' ? 'radio' : 'checkbox'}" name="${name}${field.type === 'checkboxes' ? '[]' : ''}" value="${esc(option)}" ${field.required && index === 0 ? 'required' : ''}><span>${esc(option)}</span></label>`).join('')}</div></fieldset>`;
+    }
+    if (field.type === 'consent') {
+      return `<div class="field-wrap field-consent"><label class="choice-option"><input type="checkbox" id="${name}" name="${name}" value="Yes"${required}><span>${esc(field.label)}${mark}</span></label></div>`;
+    }
+    if (field.type === 'video') {
+      return `<div class="field-wrap wide"><label for="${name}">${esc(field.label)}${mark}</label><input class="field" id="${name}" name="${name}" type="file" accept="video/mp4,video/webm,video/quicktime,.m4v"${required}><small class="privacy-note" id="${mediaSummaryId(field)}">One MP4, WebM, MOV, or M4V video · maximum duration 30 seconds</small></div>`;
+    }
+    if (field.type === 'photos') {
+      return `<div class="field-wrap wide"><label for="${name}">${esc(field.label)}${mark}</label><input class="field" id="${name}" name="${name}" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple${required}><small class="privacy-note" id="${mediaSummaryId(field)}">Select up to five JPEG, PNG, WebP, HEIC, or HEIF photos</small></div>`;
+    }
+    const type = field.type === 'phone' ? 'tel' : field.type === 'file' ? 'file' : field.type === 'date' ? 'date' : field.type === 'email' ? 'email' : 'text';
+    return `<div class="field-wrap ${cls}"><label for="${name}">${esc(field.label)}${mark}</label><input class="field" id="${name}" name="${name}" type="${type}" ${type === 'file' ? 'accept=".pdf,.doc,.docx"' : ''}${required}></div>`;
+  }
+
+  document.getElementById('publicFormFields').innerHTML = fields.map(renderField).join('');
+
+  const positionSelect = document.getElementById(slug('f-position'));
+  const requested = new URLSearchParams(location.search).get('job');
+  if (requested && jobs.some(job => String(job.id) === String(requested)) && positionSelect) {
+    positionSelect.value = requested;
+  }
+
+  if (!jobs.length) {
+    setMessage('There are no active job postings accepting applications right now.');
+    submitButton.disabled = true;
+  }
+
+  fields.filter(field => field.type === 'video').forEach(field => {
+    const input = document.getElementById(slug(field.id));
+    const summary = document.getElementById(mediaSummaryId(field));
+    if (!input) return;
+    input.addEventListener('change', async () => {
+      input.dataset.duration = '';
+      const file = input.files?.[0];
+      if (!file) {
+        summary.textContent = 'One MP4, WebM, MOV, or M4V video · maximum duration 30 seconds';
+        return;
+      }
+      try {
+        if (!mediaTools) throw new Error('Private local media storage is unavailable.');
+        summary.textContent = 'Checking video duration…';
+        const result = await mediaTools.validateVideo(file, 30);
+        input.dataset.duration = String(result.duration);
+        summary.textContent = `${file.name} · ${result.duration.toFixed(1)} seconds · ${mediaTools.formatBytes(file.size)}`;
+        setMessage();
+      } catch (error) {
+        input.value = '';
+        summary.textContent = 'One MP4, WebM, MOV, or M4V video · maximum duration 30 seconds';
+        setMessage(error.message || 'The video could not be accepted.');
+      }
+    });
+  });
+
+  fields.filter(field => field.type === 'photos').forEach(field => {
+    const input = document.getElementById(slug(field.id));
+    const summary = document.getElementById(mediaSummaryId(field));
+    if (!input) return;
+    input.addEventListener('change', () => {
+      try {
+        if (!mediaTools) throw new Error('Private local media storage is unavailable.');
+        const photos = mediaTools.validatePhotos(input.files, 5);
+        summary.textContent = photos.length
+          ? `${photos.length} photo${photos.length === 1 ? '' : 's'} selected · ${photos.map(file => file.name).join(', ')}`
+          : 'Select up to five JPEG, PNG, WebP, HEIC, or HEIF photos';
+        setMessage();
+      } catch (error) {
+        input.value = '';
+        summary.textContent = 'Select up to five JPEG, PNG, WebP, HEIC, or HEIF photos';
+        setMessage(error.message || 'The photos could not be accepted.');
+      }
+    });
+  });
+
+  document.getElementById('resumeForm').addEventListener('submit', async event => {
+    event.preventDefault();
+    setMessage();
+    submitButton.disabled = true;
+    submitButton.textContent = 'Submitting…';
+
+    try {
+      const fd = new FormData(event.currentTarget);
+      const answers = {};
+      fields.forEach(field => {
+        const key = slug(field.id);
+        if (field.type === 'checkboxes') answers[field.label] = fd.getAll(`${key}[]`).join(', ');
+        else if (!['file','video','photos'].includes(field.type)) answers[field.label] = fd.get(key) || '';
+      });
+
+      const fileField = fields.find(field => field.type === 'file');
+      const fileInput = fileField ? document.getElementById(slug(fileField.id)) : null;
+      const file = fileInput?.files?.[0];
+      const videoField = fields.find(field => field.type === 'video');
+      const videoInput = videoField ? document.getElementById(slug(videoField.id)) : null;
+      const videoFile = videoInput?.files?.[0] || null;
+      const photosField = fields.find(field => field.type === 'photos');
+      const photosInput = photosField ? document.getElementById(slug(photosField.id)) : null;
+      const photoFiles = mediaTools ? mediaTools.validatePhotos(photosInput?.files || [], 5) : Array.from(photosInput?.files || []);
+
+      const firstName = valueForId(fd, 'f-first');
+      const lastName = valueForId(fd, 'f-last');
+      const email = valueForId(fd, 'f-email');
+      const phone = valueForId(fd, 'f-phone');
+      const jobId = valueForId(fd, 'f-position');
+      const job = jobs.find(item => String(item.id) === String(jobId));
+      const availability = valueForId(fd, 'f-availability');
+      const experience = valueForId(fd, 'f-experience');
+
+      if (!firstName || !lastName || !email) throw new Error('Please complete the required contact fields.');
+      if (!job) throw new Error('Please select an active job posting.');
+      if (videoField?.required && !videoFile) throw new Error('Please select the required video.');
+      if (photosField?.required && !photoFiles.length) throw new Error('Please select at least one required photo.');
+
+      let videoDuration = 0;
+      if (videoFile) {
+        if (!mediaTools) throw new Error('Private local media storage is unavailable.');
+        const cachedDuration = Number(videoInput.dataset.duration || 0);
+        if (cachedDuration > 0 && cachedDuration <= 30.05) videoDuration = cachedDuration;
+        else videoDuration = (await mediaTools.validateVideo(videoFile, 30)).duration;
+      }
+
+      const resumeId = `resume-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`;
+      if ((videoFile || photoFiles.length) && !mediaTools) {
+        throw new Error('This browser cannot store the selected media privately.');
+      }
+      if (videoFile || photoFiles.length) {
+        await mediaTools.saveResumeMedia(resumeId, {
+          video: videoFile ? {file:videoFile, duration:videoDuration} : null,
+          photos: photoFiles,
+        });
+      }
+
+      const media = {
+        storage:'indexeddb',
+        video: videoFile ? {
+          name:videoFile.name,
+          type:videoFile.type,
+          size:videoFile.size,
+          duration:videoDuration,
+        } : null,
+        photos: photoFiles.map(photo => ({
+          name:photo.name,
+          type:photo.type,
+          size:photo.size,
+        })),
+      };
+
+      const submissions = read('restaurant-resumes-v1', []);
+      submissions.unshift({
+        id:resumeId,
+        jobId:job.id,
+        firstName,
+        lastName,
+        email,
+        phone,
+        position:job.title,
+        availability,
+        experience,
+        status:'new',
+        submittedAt:new Date().toISOString(),
+        fileName:file?.name || '',
+        fileSize:file?.size || 0,
+        fileType:file?.type || '',
+        media,
+        source:'Public resume form',
+        notes:[],
+        reviewer:null,
+        answers:Object.fromEntries(Object.entries(answers).filter(([key]) => ![
+          'First name','Last name','Email address','Phone number',
+          'Position of interest — active job posting','Availability',
+          'Relevant experience','Resume file',
+          'Short introduction video (30 seconds maximum)','Photos (up to 5)'
+        ].includes(key)))
+      });
+      write('restaurant-resumes-v1', submissions);
+      document.getElementById('applicationCard').innerHTML = `<div class="success-card"><div class="success-icon">✓</div><p class="eyebrow">Submission received</p><h2 style="margin:9px 0;font-size:34px;letter-spacing:-.04em">Thank you, ${esc(firstName)}.</h2><p style="max-width:600px;margin:0 auto;color:var(--muted);line-height:1.6">Your application for <strong>${esc(job.title)}</strong> was added to the review queue.${videoFile || photoFiles.length ? ' Your media was stored privately in this browser.' : ''}</p><div style="display:flex;justify-content:center;gap:9px;flex-wrap:wrap;margin-top:22px"><a class="button" style="color:#fff;background:var(--brand-primary)" href="jobs.html">View jobs</a><a class="button" style="border-color:var(--line)" href="apply.html">Submit another resume</a></div></div>`;
+    } catch (error) {
+      setMessage(error.message || 'The application could not be submitted.');
+      submitButton.disabled = !jobs.length;
+      submitButton.textContent = 'Submit resume';
+    }
+  });
+})();
+</script>
+<script>
+(async () => {
+  try {
+    const response = await fetch('api/public-brand.php', {headers:{Accept:'application/json'}, cache:'no-store'});
+    const data = await response.json();
+    if (!response.ok || !data.brand) return;
+    const brand = data.brand;
+    document.documentElement.style.setProperty('--brand-primary', brand.primary || '#d94a2b');
+    document.documentElement.style.setProperty('--brand-secondary', brand.secondary || '#ff835f');
+    document.documentElement.style.setProperty('--brand-dark', brand.dark || '#171b1a');
+    const logo = document.getElementById('applyLogo');
+    if (brand.logoUrl) logo.innerHTML = `<img src="${brand.logoUrl}" alt="${brand.restaurantName || 'Restaurant'} logo">`;
+    else logo.textContent = brand.logoText || 'FR';
+    document.getElementById('applyBrand').textContent = brand.restaurantName || 'Restaurant';
+    document.title = `Submit Resume · ${brand.restaurantName || 'Restaurant'}`;
+    const hero = document.querySelector('.form-hero');
+    if (hero && brand.coverUrl) {
+      hero.classList.add('has-cover-image');
+      hero.style.backgroundImage = `linear-gradient(110deg, rgba(23,27,26,.92), rgba(23,27,26,.60)), url("${brand.coverUrl.replaceAll('"','%22')}")`;
+    }
+  } catch {}
+})();
+</script>
+<script src="js/public-account-menu.js"></script>
+</body>
+</html>

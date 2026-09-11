@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="description" content="Local-first restaurant menu knowledge, position training, ingredient, allergen, and quiz workspace." />
+  <title>Restaurant Agentic Training Workspace</title>
+  <style>
+    :root{
+      --bg:#f4f3ef;--panel:#fff;--panel2:#f8f7f3;--ink:#171815;--muted:#6b6e68;--line:#dddcd5;
+      --accent:#d94a2b;--accent2:#ff835f;--accent-soft:#fff0eb;--dark:#171b1a;--dark2:#242a28;
+      --good:#157347;--good-soft:#eaf7ef;--warn:#9a6200;--warn-soft:#fff6dd;--bad:#a62a24;--bad-soft:#fff0ef;
+      --blue:#315f9b;--blue-soft:#edf4ff;--shadow:0 18px 48px rgba(25,26,22,.09);--radius:20px;
+    }
+    *{box-sizing:border-box}html,body{height:100%}body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:hidden}
+    button,input,select,textarea{font:inherit}button{cursor:pointer}.hidden{display:none!important}
+    .app{display:grid;grid-template-columns:244px minmax(0,1fr);height:100vh}
+    .sidebar{display:flex;flex-direction:column;min-height:0;padding:20px 14px 14px;color:#fff;background:linear-gradient(180deg,#111514,#202622);border-right:1px solid rgba(255,255,255,.06)}
+    .brand{display:flex;gap:11px;align-items:center;padding:4px 8px 18px}.logo{width:43px;height:43px;display:grid;place-items:center;border-radius:14px;background:linear-gradient(145deg,#ff8a63,#d84626);box-shadow:0 10px 28px rgba(217,74,43,.28);font-size:21px}.brand h1{font-size:15px;line-height:1.15;margin:0}.brand p{margin:3px 0 0;color:rgba(255,255,255,.52);font-size:11px}
+    .role-card{margin:0 4px 16px;padding:13px;border:1px solid rgba(255,255,255,.1);border-radius:15px;background:rgba(255,255,255,.055)}.role-card small{display:block;color:rgba(255,255,255,.5);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.1em}.role-card strong{display:block;margin-top:6px;font-size:14px}.role-card button{margin-top:9px;padding:0;border:0;color:#ffbda9;background:none;font-size:11px;font-weight:800}
+    .nav{display:grid;gap:5px;overflow:auto}.nav-btn{width:100%;display:flex;align-items:center;gap:10px;padding:11px 12px;border:1px solid transparent;border-radius:12px;color:rgba(255,255,255,.66);background:transparent;text-align:left;font-weight:700;font-size:13px}.nav-btn:hover,.nav-btn.active{color:#fff;border-color:rgba(255,255,255,.09);background:rgba(255,255,255,.075)}.nav-ico{width:24px;text-align:center;font-size:16px}
+    .side-foot{margin-top:auto;padding:14px 9px 3px;color:rgba(255,255,255,.4);font-size:10px;line-height:1.5}.status-dot{display:inline-block;width:7px;height:7px;margin-right:6px;border-radius:99px;background:#5bd08b;box-shadow:0 0 0 4px rgba(91,208,139,.12)}
+    .main{min-width:0;min-height:0;display:flex;flex-direction:column}.topbar{height:64px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:0 22px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.88);backdrop-filter:blur(14px)}.top-title{display:flex;align-items:center;gap:12px;min-width:0}.top-title h2{margin:0;font-size:16px;white-space:nowrap}.top-title span{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.top-actions{display:flex;gap:8px;align-items:center}.badge{display:inline-flex;align-items:center;gap:6px;padding:7px 10px;border:1px solid var(--line);border-radius:999px;background:#fff;color:var(--muted);font-size:11px;font-weight:800}.mobile-menu{display:none}
+    .content{position:relative;min-height:0;flex:1;overflow:hidden}.page{display:none;height:100%;overflow:auto}.page.active{display:block}.standard-page{padding:26px clamp(18px,3vw,38px) 60px}.page-head{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;margin-bottom:20px}.eyebrow{margin:0;color:var(--accent);font-size:10px;font-weight:900;letter-spacing:.14em;text-transform:uppercase}.page-head h3{margin:7px 0 0;font-size:clamp(28px,4vw,44px);letter-spacing:-.045em;line-height:1}.page-head p:not(.eyebrow){max-width:760px;margin:10px 0 0;color:var(--muted);line-height:1.55}.head-actions{display:flex;gap:8px;flex-wrap:wrap}
+    .btn{min-height:40px;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:9px 13px;border:1px solid transparent;border-radius:11px;font-weight:800;font-size:12px;transition:.18s}.btn:hover{transform:translateY(-1px)}.btn-primary{color:#fff;background:var(--accent)}.btn-dark{color:#fff;background:var(--dark)}.btn-light{color:var(--ink);border-color:var(--line);background:#fff}.btn-soft{color:#a43820;background:var(--accent-soft)}.btn-danger{color:var(--bad);background:var(--bad-soft)}.btn:disabled{cursor:not-allowed;opacity:.55;transform:none}
+    .card{padding:19px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);box-shadow:0 8px 28px rgba(25,26,22,.045)}.card h4{margin:0 0 6px;font-size:16px}.muted{color:var(--muted);line-height:1.5}.tiny{font-size:11px}.field{width:100%;min-height:42px;padding:10px 12px;border:1px solid var(--line);border-radius:11px;color:var(--ink);background:#fff;outline:none}.field:focus{border-color:rgba(217,74,43,.5);box-shadow:0 0 0 4px rgba(217,74,43,.1)}
+    .workspace-page{padding:0;overflow:hidden}.workspace{height:100%;display:grid;grid-template-rows:minmax(0,1fr) auto}.workspace-grid{min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 315px}.chat-canvas{min-height:0;overflow:auto;padding:25px clamp(18px,3vw,40px) 32px;scroll-behavior:smooth}.chat-inner{max-width:940px;margin:0 auto}.agent-hero{display:grid;grid-template-columns:1fr auto;gap:18px;align-items:center;margin-bottom:24px;padding:24px;border:1px solid var(--line);border-radius:24px;background:linear-gradient(135deg,#fff 0%,#fff5f1 100%);box-shadow:var(--shadow)}.agent-hero h3{margin:7px 0 10px;font-size:clamp(29px,4vw,46px);letter-spacing:-.05em;line-height:1}.agent-hero p{max-width:670px;margin:0;color:var(--muted);line-height:1.55}.agent-orb{width:92px;height:92px;display:grid;place-items:center;border-radius:28px;color:#fff;background:radial-gradient(circle at 30% 25%,#ffae91,#db4b2b 58%,#812b1c);box-shadow:0 20px 45px rgba(217,74,43,.28);font-size:34px}
+    .quick-prompts{display:flex;flex-wrap:wrap;gap:8px;margin-top:15px}.prompt-chip{padding:8px 10px;border:1px solid #ead5ce;border-radius:999px;color:#8c3a25;background:#fff;font-size:11px;font-weight:800}.prompt-chip:hover{background:var(--accent-soft)}
+    .messages{display:grid;gap:17px}.message{display:grid;grid-template-columns:32px minmax(0,1fr);gap:11px;align-items:start}.message.user{grid-template-columns:minmax(0,1fr) 32px}.message.user .bubble{grid-column:1;justify-self:end;color:#fff;background:var(--dark);border-color:var(--dark)}.message.user .avatar{grid-column:2;grid-row:1;background:#303936}.avatar{width:32px;height:32px;display:grid;place-items:center;border-radius:10px;color:#fff;background:var(--accent);font-size:13px;font-weight:900}.bubble{max-width:790px;padding:14px 15px;border:1px solid var(--line);border-radius:16px;background:#fff;box-shadow:0 6px 20px rgba(25,26,22,.04);line-height:1.55;font-size:13px}.bubble h4{margin:0 0 8px;font-size:14px}.bubble p{margin:0 0 8px}.bubble p:last-child{margin-bottom:0}.bubble ul{margin:7px 0;padding-left:18px}.bubble li{margin:4px 0}.source-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.source-chip{padding:5px 8px;border:1px solid #d8e1eb;border-radius:999px;color:#315f9b;background:#f3f7fc;font-size:10px;font-weight:800}.agent-note{margin-top:10px;padding:10px 11px;border-radius:10px;color:#6a4d00;background:var(--warn-soft);font-size:11px;line-height:1.45}
+    .context-panel{min-height:0;overflow:auto;padding:18px;border-left:1px solid var(--line);background:#f7f6f2}.context-panel h4{margin:0;font-size:13px}.context-block{margin-bottom:12px;padding:14px;border:1px solid var(--line);border-radius:15px;background:#fff}.context-block p{margin:7px 0 0;color:var(--muted);font-size:11px;line-height:1.45}.context-list{display:grid;gap:7px;margin-top:10px}.context-row{display:flex;justify-content:space-between;gap:10px;font-size:11px}.context-row span{color:var(--muted)}.bar{height:7px;margin-top:8px;border-radius:999px;overflow:hidden;background:#eceae4}.bar>i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--accent),#f0a34b)}
+    .composer{padding:13px 18px 15px;border-top:1px solid var(--line);background:rgba(255,255,255,.94);backdrop-filter:blur(18px)}.composer-inner{max-width:1050px;margin:0 auto}.composer-box{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:9px;align-items:end;padding:8px;border:1px solid #d4d4ce;border-radius:18px;background:#fff;box-shadow:0 10px 34px rgba(25,26,22,.09)}.composer textarea{min-height:42px;max-height:120px;resize:none;padding:11px 5px;border:0;outline:0;background:transparent;line-height:1.4}.icon-btn{width:40px;height:40px;border:0;border-radius:12px;background:#f2f1ed;color:#555}.send-btn{width:42px;height:42px;border:0;border-radius:13px;color:#fff;background:var(--accent);font-size:17px}.composer-meta{display:flex;justify-content:space-between;gap:12px;margin-top:6px;color:var(--muted);font-size:9px}
+    .toolbar{display:grid;grid-template-columns:minmax(220px,1fr) auto;gap:10px;margin-bottom:16px}.filter-panel{margin-bottom:17px;padding:15px;border:1px solid var(--line);border-radius:16px;background:#fff}.filter-head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:11px}.filter-head h4{margin:0;font-size:13px}.chips{display:flex;flex-wrap:wrap;gap:7px}.check-chip{position:relative}.check-chip input{position:absolute;opacity:0;pointer-events:none}.check-chip span{display:inline-flex;align-items:center;gap:6px;padding:8px 10px;border:1px solid var(--line);border-radius:999px;color:var(--muted);background:#fff;font-size:11px;font-weight:800}.check-chip input:checked+span{color:#9a3822;border-color:#f0b5a5;background:var(--accent-soft)}
+    .section-block{margin-top:25px}.section-block:first-child{margin-top:0}.section-block-head{display:flex;justify-content:space-between;align-items:end;gap:15px;margin-bottom:11px}.section-block-head h4{margin:0;font-size:22px;letter-spacing:-.03em}.section-block-head p{max-width:690px;margin:5px 0 0;color:var(--muted);font-size:12px}.menu-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.menu-card{padding:16px;border:1px solid var(--line);border-radius:16px;background:#fff}.menu-card-top{display:flex;justify-content:space-between;gap:10px}.menu-card h5{margin:0;font-size:14px}.menu-card .desc{margin:9px 0;color:var(--muted);font-size:11px;line-height:1.5}.tag-row{display:flex;flex-wrap:wrap;gap:5px}.tag{display:inline-flex;padding:5px 7px;border-radius:999px;background:#f1f0ec;color:#60625d;font-size:9px;font-weight:800}.price-list{display:grid;gap:5px;margin-top:11px;padding-top:10px;border-top:1px solid #eceae5}.price-row{display:flex;justify-content:space-between;gap:10px;font-size:10px}.price-row strong{font-size:11px}
+    .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}.stat{padding:14px;border:1px solid var(--line);border-radius:15px;background:#fff}.stat small{display:block;color:var(--muted);font-size:9px;font-weight:900;text-transform:uppercase;letter-spacing:.08em}.stat strong{display:block;margin-top:5px;font-size:24px;letter-spacing:-.04em}
+    .ingredient-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px}.ingredient-card{padding:15px;border:1px solid var(--line);border-radius:15px;background:#fff}.ingredient-card h5{margin:0;font-size:13px;text-transform:capitalize}.ingredient-meta{display:flex;justify-content:space-between;gap:8px;margin-top:5px;color:var(--muted);font-size:10px}.usage-list{display:grid;gap:5px;margin-top:10px}.usage-link{padding:7px 8px;border:0;border-radius:9px;color:#315f9b;background:var(--blue-soft);text-align:left;font-size:10px;font-weight:750}.allergen-badges{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}.allergen-direct{color:#8e2e28;background:var(--bad-soft)}.allergen-verify{color:#7a5600;background:var(--warn-soft)}.allergen-clear{color:#27724e;background:var(--good-soft)}
+    .warning{display:flex;gap:12px;margin-bottom:17px;padding:16px;border:1px solid #ead39d;border-radius:16px;background:var(--warn-soft)}.warning strong{display:block;margin-bottom:4px;font-size:13px}.warning p{margin:0;color:#705600;font-size:11px;line-height:1.5}.warning-icon{font-size:22px}.allergen-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:18px}.allergen-card{padding:14px;border:1px solid var(--line);border-radius:15px;background:#fff}.allergen-card h5{margin:0;font-size:13px}.allergen-card p{margin:6px 0 0;color:var(--muted);font-size:10px;line-height:1.45}.profile-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}.profile-card{padding:16px;border:1px solid var(--line);border-radius:16px;background:#fff}.profile-card h5{margin:0}.profile-card .section-name{margin-top:4px;color:var(--muted);font-size:10px}.profile-lists{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.profile-col{padding:10px;border-radius:12px;background:#f7f6f2}.profile-col strong{display:block;font-size:10px}.profile-col ul{margin:7px 0 0;padding-left:15px;color:var(--muted);font-size:9px;line-height:1.5}
+    .position-layout{display:grid;grid-template-columns:340px minmax(0,1fr);gap:14px}.position-list{display:grid;gap:8px}.position-btn{display:grid;grid-template-columns:36px 1fr;gap:10px;align-items:center;padding:11px;border:1px solid var(--line);border-radius:13px;background:#fff;text-align:left}.position-btn.active{border-color:#f0ad99;background:var(--accent-soft)}.position-icon{width:36px;height:36px;display:grid;place-items:center;border-radius:11px;color:#fff;background:var(--dark)}.position-btn strong{display:block;font-size:12px}.position-btn small{display:block;margin-top:3px;color:var(--muted);font-size:9px}.position-detail{padding:22px}.position-detail h4{font-size:26px;letter-spacing:-.04em}.mastery-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:17px 0}.mastery{padding:10px;border-radius:12px;background:#f4f3ef}.mastery small{display:block;color:var(--muted);font-size:8px;text-transform:uppercase;font-weight:900}.mastery strong{display:block;margin-top:5px;font-size:18px}.two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px}.plain-list{margin:8px 0 0;padding-left:18px;color:var(--muted);font-size:11px;line-height:1.6}
+    .quiz-layout{display:grid;grid-template-columns:315px minmax(0,1fr);gap:14px}.quiz-setup{align-self:start}.quiz-setup label{display:block;margin:13px 0 6px;font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.07em}.quiz-stage{min-height:440px}.quiz-empty{height:100%;min-height:410px;display:grid;place-items:center;text-align:center;color:var(--muted)}.quiz-question-head{display:flex;justify-content:space-between;gap:12px}.quiz-question-head small{color:var(--muted)}.quiz-question{margin:17px 0 6px;font-size:24px;letter-spacing:-.035em;line-height:1.22}.quiz-help{color:var(--muted);font-size:11px}.choices{display:grid;gap:8px;margin-top:17px}.choice{position:relative}.choice input{position:absolute;opacity:0}.choice label{display:flex;gap:10px;align-items:flex-start;padding:12px;border:1px solid var(--line);border-radius:13px;background:#fff;font-size:12px;line-height:1.4}.choice-box{flex:0 0 auto;width:19px;height:19px;display:grid;place-items:center;border:1px solid #b9bbb5;border-radius:6px;background:#fff;font-size:11px}.choice input:checked+label{border-color:#7896bc;background:var(--blue-soft)}.choice input:checked+label .choice-box:after{content:'✓';color:var(--blue);font-weight:900}.choice.correct label{border-color:#84c5a2;background:var(--good-soft)}.choice.wrong label{border-color:#e6a5a1;background:var(--bad-soft)}.choice.missed label{border-color:#e5c568;background:var(--warn-soft)}.feedback{margin-top:14px;padding:13px;border-radius:13px;font-size:11px;line-height:1.5}.feedback.good{color:#155e3d;background:var(--good-soft)}.feedback.bad{color:#7c322b;background:var(--bad-soft)}.quiz-actions{display:flex;justify-content:space-between;gap:10px;margin-top:16px}.score-banner{padding:22px;border-radius:18px;color:#fff;background:linear-gradient(135deg,#1b211f,#39443f)}.score-banner strong{display:block;font-size:48px;letter-spacing:-.06em}.breakdown{display:grid;gap:7px;margin-top:14px}.breakdown-row{display:grid;grid-template-columns:1fr auto;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);font-size:11px}
+    .progress-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.history{display:grid;gap:8px;margin-top:14px}.history-row{display:grid;grid-template-columns:1fr auto auto;gap:12px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fff;font-size:11px}.empty{padding:34px;border:1px dashed #c9c8c1;border-radius:16px;color:var(--muted);text-align:center;font-size:12px}
+    @media(max-width:1100px){.workspace-grid{grid-template-columns:minmax(0,1fr) 270px}.menu-grid,.ingredient-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.position-layout{grid-template-columns:290px minmax(0,1fr)}.mastery-grid{grid-template-columns:repeat(3,1fr)}}
+    @media(max-width:840px){body{overflow:auto}.app{display:block;height:auto;min-height:100vh}.sidebar{position:fixed;z-index:30;inset:0 auto 0 0;width:244px;transform:translateX(-102%);transition:.22s}.sidebar.open{transform:none}.main{min-height:100vh}.topbar{position:sticky;top:0;z-index:20}.mobile-menu{display:inline-grid}.content{overflow:visible}.page{height:auto;min-height:calc(100vh - 64px)}.workspace-page{height:calc(100vh - 64px);min-height:600px}.workspace-grid{grid-template-columns:1fr}.context-panel{display:none}.agent-hero{grid-template-columns:1fr}.agent-orb{display:none}.position-layout,.quiz-layout{grid-template-columns:1fr}.position-list{grid-template-columns:repeat(2,1fr)}.allergen-summary{grid-template-columns:repeat(2,1fr)}}
+    @media(max-width:610px){.top-title span,.top-actions .badge{display:none}.standard-page{padding:20px 13px 50px}.page-head{display:block}.head-actions{margin-top:13px}.menu-grid,.ingredient-grid,.allergen-summary,.profile-grid,.stats,.progress-grid{grid-template-columns:1fr}.toolbar{grid-template-columns:1fr}.position-list{grid-template-columns:1fr}.mastery-grid{grid-template-columns:repeat(2,1fr)}.two-col,.profile-lists{grid-template-columns:1fr}.workspace-page{height:calc(100vh - 64px)}.chat-canvas{padding:15px 12px 25px}.agent-hero{padding:18px}.composer{padding:9px}.composer-meta{display:none}}
+  </style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand"><div class="logo">✦</div><div><h1>Restaurant Workspace</h1><p>Local menu knowledge agent</p></div></div>
+    <div class="role-card"><small>Active position</small><strong id="sidebarRole">Server</strong><button data-nav="positions">Change training position →</button></div>
+    <nav class="nav">
+      <button class="nav-btn active" data-nav="workspace"><span class="nav-ico">◈</span>Agent Workspace</button>
+      <button class="nav-btn" data-nav="menu"><span class="nav-ico">▤</span>Menu Knowledge</button>
+      <button class="nav-btn" data-nav="ingredients"><span class="nav-ico">◌</span>Ingredients</button>
+      <button class="nav-btn" data-nav="allergens"><span class="nav-ico">⚠</span>Allergens & Tags</button>
+      <button class="nav-btn" data-nav="positions"><span class="nav-ico">◎</span>Positions</button>
+      <button class="nav-btn" data-nav="quiz"><span class="nav-ico">✓</span>Learning Quiz</button>
+      <button class="nav-btn" data-nav="progress"><span class="nav-ico">↗</span>Progress</button>
+    </nav>
+    <div class="side-foot"><span class="status-dot"></span>Local agent online<br>No LLM API · No backend · Browser storage only</div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="top-title"><button class="icon-btn mobile-menu" id="mobileMenu">☰</button><h2 id="topPageTitle">Agent Workspace</h2><span id="topPageSubtitle">Ask grounded questions about the complete menu.</span></div>
+      <div class="top-actions"><span class="badge">56 menu records</span><span class="badge">Local knowledge only</span></div>
+    </header>
+
+    <div class="content">
+      <section class="page workspace-page active" id="page-workspace">
+        <div class="workspace">
+          <div class="workspace-grid">
+            <div class="chat-canvas" id="chatCanvas">
+              <div class="chat-inner">
+                <div class="agent-hero" id="agentHero">
+                  <div><p class="eyebrow">System agent · deterministic knowledge engine</p><h3>Train, search, compare, and verify the menu.</h3><p>The agent answers from the structured restaurant menu, ingredient catalog, position maps, and conservative allergen tags. It will not invent missing recipes or promise an item is allergy-safe.</p>
+                    <div class="quick-prompts">
+                      <button class="prompt-chip">Train me as a server</button><button class="prompt-chip">Which pizzas have pineapple?</button><button class="prompt-chip">Show sandwich ingredients</button><button class="prompt-chip">Allergens in Great White</button><button class="prompt-chip">What has no red sauce?</button>
+                    </div>
+                  </div><div class="agent-orb">AI</div>
+                </div>
+                <div class="messages" id="messages"></div>
+              </div>
+            </div>
+            <aside class="context-panel">
+              <div class="context-block"><h4>Training context</h4><div class="context-list"><div class="context-row"><span>Position</span><strong id="contextRole">Server</strong></div><div class="context-row"><span>Required sections</span><strong id="contextSections">10</strong></div><div class="context-row"><span>Menu records</span><strong>56</strong></div><div class="context-row"><span>Agent mode</span><strong>Local rules</strong></div></div></div>
+              <div class="context-block"><h4>Position readiness</h4><p>Initial readiness is based on local quiz history for the active position.</p><div class="bar"><i id="readinessBar" style="width:0%"></i></div><div class="context-row" style="margin-top:7px"><span>Current</span><strong id="readinessText">0%</strong></div></div>
+              <div class="context-block"><h4>Knowledge boundaries</h4><p>Recipes, supplier labels, cross-contact controls, substitutions, cook times, and restaurant policies still require management documentation.</p></div>
+              <div class="context-block"><h4>Try asking</h4><div class="context-list"><button class="usage-link prompt-chip">Price of Carnivore</button><button class="usage-link prompt-chip">Which items contain tuna?</button><button class="usage-link prompt-chip">Compare Hawaiian and Luau</button><button class="usage-link prompt-chip">What should a pizza cook know?</button></div></div>
+            </aside>
+          </div>
+          <div class="composer"><div class="composer-inner"><div class="composer-box"><button class="icon-btn" id="clearChat" title="Clear conversation">↺</button><textarea id="chatInput" rows="1" placeholder="Ask about menu items, ingredients, prices, positions, or allergens..."></textarea><button class="send-btn" id="sendChat" title="Send">➤</button></div><div class="composer-meta"><span>Answers are grounded in the local menu knowledge base.</span><span>Enter to send · Shift+Enter for a new line</span></div></div></div>
+        </div>
+      </section>
+
+      <section class="page standard-page" id="page-menu">
+        <div class="page-head"><div><p class="eyebrow">Complete menu reference</p><h3>Menu Knowledge</h3><p>Search descriptions, ingredients, prices, sizes, service details, and preparation notes. Select any combination of sections for role-specific training.</p></div><div class="head-actions"><button class="btn btn-light" id="menuSelectRole">Use position sections</button><button class="btn btn-light" onclick="window.print()">Print guide</button></div></div>
+        <div class="filter-panel"><div class="filter-head"><h4>Training sections</h4><div><button class="btn btn-soft" id="menuAll">Select all</button> <button class="btn btn-light" id="menuNone">Clear</button></div></div><div class="chips" id="menuSectionChips"></div></div>
+        <div class="toolbar"><input class="field" id="menuSearch" placeholder="Search item, ingredient, size, price, or preparation note..." /><select class="field" id="menuSort"><option value="menu">Menu order</option><option value="name">Item name</option><option value="price-low">Lowest price</option></select></div>
+        <div id="menuResults"></div>
+      </section>
+
+      <section class="page standard-page" id="page-ingredients">
+        <div class="page-head"><div><p class="eyebrow">Reverse menu index</p><h3>Complete Ingredient Catalog</h3><p>See where every listed ingredient appears. Combine category filters with search to isolate pizza ingredients, sandwich ingredients, sauces, cheeses, meats, produce, and more.</p></div><div class="head-actions"><button class="btn btn-light" id="ingredientReset">Reset filters</button></div></div>
+        <div class="stats"><div class="stat"><small>Unique ingredients</small><strong id="ingredientTotal">0</strong></div><div class="stat"><small>Visible ingredients</small><strong id="ingredientVisible">0</strong></div><div class="stat"><small>Menu uses</small><strong id="ingredientUses">0</strong></div><div class="stat"><small>Selected categories</small><strong id="ingredientCategories">10</strong></div></div>
+        <div class="filter-panel"><div class="filter-head"><h4>Filter ingredients by menu category</h4><span class="tiny muted">Choose one or several</span></div><div class="chips" id="ingredientSectionChips"></div></div>
+        <div class="toolbar"><input class="field" id="ingredientSearch" placeholder="Search ingredients, such as cheese, pineapple, chicken, sauce..." /><select class="field" id="ingredientSort"><option value="name">Alphabetical</option><option value="uses">Most menu uses</option><option value="sections">Most categories</option></select></div>
+        <div class="ingredient-grid" id="ingredientResults"></div>
+      </section>
+
+      <section class="page standard-page" id="page-allergens">
+        <div class="page-head"><div><p class="eyebrow">Safety-aware knowledge tags</p><h3>Allergens & Menu Tags</h3><p>Ingredient-derived allergen indicators are separated from items that still require recipe, label, and cross-contact verification.</p></div></div>
+        <div class="warning"><div class="warning-icon">⚠</div><div><strong>Training reference—not an allergy-safety guarantee.</strong><p>Never tell a guest an item is safe based only on this screen. Verify current recipes, packaging labels, preparation methods, substitutions, and shared-equipment controls with a manager.</p></div></div>
+        <div class="allergen-summary" id="allergenSummary"></div>
+        <div class="filter-panel"><div class="filter-head"><h4>Filter menu allergen profiles</h4><span class="tiny muted">Direct indicators and verification flags</span></div><div class="chips" id="allergenSectionChips"></div></div>
+        <div class="toolbar"><input class="field" id="allergenSearch" placeholder="Search item or ingredient..." /><select class="field" id="allergenFilter"><option value="all">All allergen profiles</option><option value="direct">Has direct ingredient indicators</option><option value="verify">Requires verification</option><option value="none">No named major allergen detected</option></select></div>
+        <div class="profile-grid" id="allergenResults"></div>
+      </section>
+
+      <section class="page standard-page" id="page-positions">
+        <div class="page-head"><div><p class="eyebrow">Role-based learning paths</p><h3>Positions & Knowledge Mapping</h3><p>Every restaurant position has a recommended menu scope, mastery targets, priority knowledge, and practice scenarios.</p></div></div>
+        <div class="position-layout"><div class="position-list" id="positionList"></div><div class="card position-detail" id="positionDetail"></div></div>
+      </section>
+
+      <section class="page standard-page" id="page-quiz">
+        <div class="page-head"><div><p class="eyebrow">Multi-select learning quiz</p><h3>Test Menu Knowledge</h3><p>Select any training sections. Each question may have one or several correct answers. Submitted answers lock, score immediately, and reveal missed correct choices.</p></div></div>
+        <div class="quiz-layout">
+          <div class="card quiz-setup"><h4>Quiz setup</h4><p class="muted tiny">Choose the categories and question focus.</p><label>Training sections</label><div class="chips" id="quizSectionChips"></div><label for="quizCount">Question count</label><select class="field" id="quizCount"><option>10</option><option>15</option><option>20</option><option>25</option></select><label for="quizFocus">Question focus</label><select class="field" id="quizFocus"><option value="balanced">Balanced</option><option value="ingredients">Ingredients</option><option value="prices">Prices and sizes</option><option value="details">Service details</option><option value="allergens">Allergen awareness</option></select><button class="btn btn-primary" id="startQuiz" style="width:100%;margin-top:15px">Start learning quiz</button></div>
+          <div class="card quiz-stage" id="quizStage"><div class="quiz-empty"><div><div style="font-size:42px">✓</div><h4>Choose sections and begin</h4><p>The quiz will use checkbox answers and show corrections after each submission.</p></div></div></div>
+        </div>
+      </section>
+
+      <section class="page standard-page" id="page-progress">
+        <div class="page-head"><div><p class="eyebrow">Local training history</p><h3>Progress & Readiness</h3><p>Scores are saved only in this browser. A future backend can replace this storage without changing the knowledge interface.</p></div><div class="head-actions"><button class="btn btn-danger" id="resetProgress">Reset local progress</button></div></div>
+        <div class="progress-grid"><div class="stat"><small>Quiz attempts</small><strong id="progressAttempts">0</strong></div><div class="stat"><small>Best score</small><strong id="progressBest">0%</strong></div><div class="stat"><small>Average score</small><strong id="progressAverage">0%</strong></div></div>
+        <div class="card" style="margin-top:14px"><h4>Recent quiz results</h4><div class="history" id="progressHistory"></div></div>
+      </section>
+    </div>
+  </main>
+</div>
+<script src="data/menu-knowledge.js"></script>
+<script src="data/positions.js"></script>
+<script src="data/allergen-rules.js"></script>
+<script>
+(() => {
+  'use strict';
+  const storage={
+    get(key,fallback=null){try{const value=window.localStorage.getItem(key);return value===null?fallback:value;}catch{return fallback;}},
+    set(key,value){try{window.storage.set(key,value);}catch{}},
+    remove(key){try{window.storage.remove(key);}catch{}}
+  };
+  const sections = window.MENU_SECTIONS || [];
+  const positions = window.RESTAURANT_POSITIONS || [];
+  const allergenKB = window.ALLERGEN_KNOWLEDGE || {majorAllergens:[],directRules:[],verifyRules:[],alwaysVerify:[]};
+  const sectionMap = new Map(sections.map(s => [s.id, s]));
+  const allItems = sections.flatMap((section, sectionIndex) => section.items.map((item, itemIndex) => ({...item, sectionId:section.id, sectionName:section.name, sectionIcon:section.icon, sectionIndex, itemIndex, key:section.id+'::'+item.name})));
+  const state = {
+    page:'workspace',
+    activePosition: storage.get('restaurant-active-position') || 'server',
+    menuSections: new Set(JSON.parse(storage.get('restaurant-menu-sections') || '[]')),
+    ingredientSections: new Set(sections.map(s=>s.id)),
+    allergenSections: new Set(sections.map(s=>s.id)),
+    quizSections: new Set(JSON.parse(storage.get('restaurant-quiz-sections') || '[]')),
+    quiz:null,
+    history: JSON.parse(storage.get('restaurant-quiz-history') || '[]')
+  };
+  if (!positions.some(p=>p.id===state.activePosition)) state.activePosition='server';
+  if (!state.menuSections.size) sections.forEach(s=>state.menuSections.add(s.id));
+  if (!state.quizSections.size) sections.forEach(s=>state.quizSections.add(s.id));
+
+  const $ = id => document.getElementById(id);
+  const esc = value => String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  const money = n => '$' + Number(n).toFixed(2);
+  const shuffle = arr => [...arr].sort(()=>Math.random()-.5);
+  const unique = arr => [...new Set(arr.filter(Boolean))];
+  const currentPosition = () => positions.find(p=>p.id===state.activePosition) || positions[0];
+
+  const canonicalAliases = new Map(Object.entries({
+    'mozzarella cheese':'mozzarella','pure mozzarella cheese':'mozzarella','melted mozzarella':'mozzarella',
+    'aged provolone':'provolone','provolone cheese':'provolone','melted provolone':'provolone',
+    'extra sharp cheddar':'cheddar','sharp cheddar cheese':'cheddar','melted cheddar cheese':'cheddar','extra cheddar':'cheddar','cheddar cheese':'cheddar',
+    'swiss':'swiss cheese','grated parmesan':'parmesan','parmesan cheese':'parmesan',
+    'fresh mushrooms':'mushrooms','fresh mushroom':'mushrooms','mushroom':'mushrooms',
+    'fresh onions':'onions','fresh onion':'onions','onion':'onions','sweet onion':'sweet onions',
+    'green pepper':'green peppers','black olive':'black olives','tomato':'tomatoes','diced tomatoes':'tomatoes','vine ripened tomatoes':'tomatoes','vine-ripened tomatoes':'tomatoes',
+    'fresh broccoli':'broccoli','jalapeños':'jalapenos','fresh jalapeños':'jalapenos','fresh jalapenos':'jalapenos','breaded jalapeños':'jalapeno poppers',
+    'real bacon bits':'bacon bits','crispy bacon':'bacon','white meat chicken':'chicken','grilled chicken':'chicken','lean ham':'ham','tender sliced turkey':'turkey',
+    'thinly sliced roast beef':'roast beef','tender, lean roast beef':'roast beef','razor thin sliced extra lean roast beef':'roast beef',
+    'house-made ranch':'ranch','house made ranch':'ranch','2 oz house-made ranch':'ranch','2 oz house made ranch':'ranch','wings ranch':'ranch',
+    '2 oz house-made pizza sauce':'pizza sauce','2 oz house made pizza sauce':'pizza sauce','side of sauce':'pizza sauce',
+    'medium buffalo':'medium buffalo sauce','hot buffalo':'hot buffalo sauce','honey bbq':'honey bbq sauce',
+    '4 wings':'wings','3 jalapeno poppers':'jalapeno poppers','3 mozzarella sticks':'mozzarella sticks','2 potato skins':'potato skins',
+    'hot chocolate chip cookie':'chocolate chip cookie','fresh flour tortilla':'flour tortilla','italian bun':'Italian bun','fresh baked roll':'Italian roll',
+    'romaine lettuce':'romaine','crispy romaine lettuce':'romaine','fresh crisp lettuce':'lettuce','crispy fresh lettuce':'lettuce',
+    'assorted seasonal fresh vegetables':'seasonal vegetables','four kinds of cheese':'four-cheese blend','12-inch gluten-free crust':'gluten-free crust','fresh-baked roll':'italian roll','white-meat chicken':'chicken','skillet':''
+  }));
+
+  function normalizeIngredient(raw){
+    let v=String(raw||'').trim().replace(/[.;]+$/,'').replace(/\s+/g,' ');
+    let lower=v.toLowerCase();
+    if (canonicalAliases.has(lower)) return String(canonicalAliases.get(lower)).toLowerCase();
+    v=v.replace(/^\d+\s+(?:oz\.?\s+)?/i,'');
+    lower=v.toLowerCase();
+    if (canonicalAliases.has(lower)) return String(canonicalAliases.get(lower)).toLowerCase();
+    return lower;
+  }
+  function splitIngredient(raw){
+    const v=String(raw||'').trim();
+    if (/^ranch or pizza sauce$/i.test(v)) return ['ranch','pizza sauce'];
+    return [v];
+  }
+  function itemIngredients(item){
+    const raw=[...(item.ingredients||[]),...(item.optionList||[])];
+    if(item.sectionId==='sandwiches'){
+      raw.push('chips');
+      if(!['Chicken Caesar Wrap','French Connection'].includes(item.name)) raw.push('Italian bun');
+    }
+    if(item.sectionId==='salads' && ['Chef Salad',"Fatty's Jumbo Garden Salad","Roy's Side Salad"].includes(item.name)) raw.push('ranch','Italian dressing');
+    if(item.sectionId==='salads' && item.name==='Chef Salad') raw.push('chicken on request','tuna on request');
+    return unique(raw.flatMap(splitIngredient).map(normalizeIngredient).filter(Boolean));
+  }
+  function allergenProfileFor(itemOrIngredient, sectionId=''){
+    const isItem=typeof itemOrIngredient==='object';
+    const ingredients=isItem ? itemIngredients(itemOrIngredient) : [normalizeIngredient(itemOrIngredient)];
+    const directText=ingredients.join(' ').toLowerCase();
+    const verifyText=(directText+' '+(isItem?`${itemOrIngredient.name} ${itemOrIngredient.description||''} ${sectionId}`:'')).toLowerCase();
+    const direct=[]; const verify=[];
+    allergenKB.directRules.forEach(rule=>{ if(rule.patterns.some(p=>directText.includes(p.toLowerCase()))) direct.push(rule.allergen); });
+    allergenKB.verifyRules.forEach(rule=>{ if(rule.patterns.some(p=>verifyText.includes(p.toLowerCase()))) verify.push(rule.allergen); });
+    if (isItem && sectionId==='sandwiches') { if(!direct.includes('wheat')) verify.push('wheat'); verify.push('sesame','egg','soy'); }
+    if (isItem && sectionId==='pizza') { if(!direct.includes('wheat')) verify.push('wheat'); verify.push('soy'); }
+    if (isItem && sectionId==='calzones') { if(!direct.includes('wheat')) verify.push('wheat'); verify.push('egg','soy'); }
+    if (isItem && sectionId==='dessert') verify.push('egg','soy','wheat');
+    if (isItem && itemOrIngredient.name==='Gluten-Free Crust') verify.push('wheat');
+    return {direct:unique(direct),verify:unique(verify).filter(a=>!direct.includes(a))};
+  }
+  const allergenName=id => allergenKB.majorAllergens.find(a=>a.id===id)?.name || id;
+
+  function buildIngredientCatalog(){
+    const map=new Map();
+    allItems.forEach(item=>{
+      itemIngredients(item).forEach(name=>{
+        if(!map.has(name)) map.set(name,{name,variants:new Set(),uses:[],sections:new Set(),allergens:allergenProfileFor(name)});
+        const entry=map.get(name); entry.uses.push(item); entry.sections.add(item.sectionId);
+      });
+      [...(item.ingredients||[]),...(item.optionList||[])].forEach(raw=>{
+        splitIngredient(raw).forEach(part=>{ const name=normalizeIngredient(part); if(name&&map.has(name)) map.get(name).variants.add(String(part).trim()); });
+      });
+    });
+    return [...map.values()].map(e=>({...e,variants:[...e.variants],sections:[...e.sections]}));
+  }
+  const ingredientCatalog=buildIngredientCatalog();
+
+  const pageInfo={
+    workspace:['Agent Workspace','Ask grounded questions about the complete menu.'],menu:['Menu Knowledge','Search the complete menu and choose training sections.'],ingredients:['Ingredients','Filter the complete ingredient catalog by menu category.'],allergens:['Allergens & Tags','Review direct indicators and verification-required risks.'],positions:['Positions','Map menu knowledge to restaurant roles.'],quiz:['Learning Quiz','Multi-select training with immediate correction.'],progress:['Progress','Review locally saved quiz attempts and readiness.']
+  };
+  function navigate(page){
+    state.page=page;
+    document.querySelectorAll('.page').forEach(el=>el.classList.toggle('active',el.id===`page-${page}`));
+    document.querySelectorAll('.nav-btn').forEach(btn=>btn.classList.toggle('active',btn.dataset.nav===page));
+    $('topPageTitle').textContent=pageInfo[page][0]; $('topPageSubtitle').textContent=pageInfo[page][1];
+    $('sidebar').classList.remove('open');
+    if(page==='progress') renderProgress();
+  }
+  document.querySelectorAll('[data-nav]').forEach(btn=>btn.addEventListener('click',()=>navigate(btn.dataset.nav)));
+  $('mobileMenu').addEventListener('click',()=>$('sidebar').classList.toggle('open'));
+
+  function createSectionChips(containerId, set, onChange){
+    const container=$(containerId); container.innerHTML='';
+    sections.forEach(s=>{
+      const label=document.createElement('label'); label.className='check-chip';
+      label.innerHTML=`<input type="checkbox" value="${esc(s.id)}" ${set.has(s.id)?'checked':''}><span>${esc(s.icon)} ${esc(s.name)}</span>`;
+      label.querySelector('input').addEventListener('change',e=>{e.target.checked?set.add(s.id):set.delete(s.id);onChange();});
+      container.appendChild(label);
+    });
+  }
+
+  function renderRoleContext(){
+    const p=currentPosition(); $('sidebarRole').textContent=p.name; $('contextRole').textContent=p.name; $('contextSections').textContent=p.sections.length;
+    const roleScores=state.history.filter(h=>h.positionId===p.id); const ready=roleScores.length?Math.round(roleScores.reduce((a,b)=>a+b.percent,0)/roleScores.length):0;
+    $('readinessBar').style.width=ready+'%'; $('readinessText').textContent=ready+'%';
+  }
+
+  function renderMenu(){
+    const query=$('menuSearch').value.trim().toLowerCase(); const sort=$('menuSort').value;
+    const target=$('menuResults'); target.innerHTML='';
+    let selected=sections.filter(s=>state.menuSections.has(s.id));
+    selected.forEach(section=>{
+      let items=allItems.filter(i=>i.sectionId===section.id).filter(item=>{
+        const hay=[item.name,item.description,...(item.ingredients||[]),...(item.facts||[]),...(item.tags||[]),...(item.prices||[]).flatMap(p=>[p.label,p.price])].join(' ').toLowerCase();
+        return !query||hay.includes(query);
+      });
+      if(sort==='name') items.sort((a,b)=>a.name.localeCompare(b.name));
+      if(sort==='price-low') items.sort((a,b)=>Math.min(...a.prices.map(p=>p.price))-Math.min(...b.prices.map(p=>p.price)));
+      if(!items.length) return;
+      const block=document.createElement('div'); block.className='section-block';
+      block.innerHTML=`<div class="section-block-head"><div><h4>${esc(section.icon)} ${esc(section.name)}</h4><p>${esc(section.intro||'')}</p></div><span class="badge">${items.length} item${items.length===1?'':'s'}</span></div><div class="menu-grid"></div>`;
+      const grid=block.querySelector('.menu-grid');
+      items.forEach(item=>{
+        const ing=itemIngredients(item); const profile=allergenProfileFor(item,item.sectionId);
+        const card=document.createElement('article');card.className='menu-card';
+        card.innerHTML=`<div class="menu-card-top"><h5>${esc(item.name)}</h5><button class="btn btn-soft ask-item" data-item="${esc(item.key)}">Ask agent</button></div><p class="desc">${esc(item.description||'')}</p><div class="tag-row">${ing.slice(0,8).map(x=>`<span class="tag">${esc(x)}</span>`).join('')}${ing.length>8?`<span class="tag">+${ing.length-8} more</span>`:''}</div><div class="allergen-badges">${profile.direct.map(a=>`<span class="tag allergen-direct">${esc(allergenName(a))}</span>`).join('')}${profile.verify.length?`<span class="tag allergen-verify">${profile.verify.length} verify</span>`:''}</div><div class="price-list">${(item.prices||[]).map(p=>`<div class="price-row"><span>${esc(p.label)}</span><strong>${money(p.price)}</strong></div>`).join('')}</div>`;
+        grid.appendChild(card);
+      });
+      target.appendChild(block);
+    });
+    if(!target.children.length) target.innerHTML='<div class="empty">No menu items match the selected sections and search.</div>';
+    target.querySelectorAll('.ask-item').forEach(btn=>btn.addEventListener('click',()=>{const item=allItems.find(i=>i.key===btn.dataset.item);navigate('workspace');sendMessage(`Tell me about ${item.name}`);}));
+    storage.set('restaurant-menu-sections',JSON.stringify([...state.menuSections]));
+  }
+
+  function renderIngredients(){
+    const q=$('ingredientSearch').value.trim().toLowerCase(); const sort=$('ingredientSort').value;
+    let list=ingredientCatalog.filter(e=>e.sections.some(s=>state.ingredientSections.has(s))).filter(e=>!q||e.name.includes(q)||e.variants.some(v=>v.toLowerCase().includes(q))||e.uses.some(i=>i.name.toLowerCase().includes(q)));
+    if(sort==='name') list.sort((a,b)=>a.name.localeCompare(b.name));
+    if(sort==='uses') list.sort((a,b)=>b.uses.length-a.uses.length||a.name.localeCompare(b.name));
+    if(sort==='sections') list.sort((a,b)=>b.sections.length-a.sections.length||a.name.localeCompare(b.name));
+    $('ingredientTotal').textContent=ingredientCatalog.length; $('ingredientVisible').textContent=list.length; $('ingredientUses').textContent=list.reduce((n,e)=>n+e.uses.filter(i=>state.ingredientSections.has(i.sectionId)).length,0); $('ingredientCategories').textContent=state.ingredientSections.size;
+    const target=$('ingredientResults'); target.innerHTML='';
+    list.forEach(entry=>{
+      const uses=entry.uses.filter(i=>state.ingredientSections.has(i.sectionId)); const profile=entry.allergens;
+      const card=document.createElement('article');card.className='ingredient-card';
+      card.innerHTML=`<h5>${esc(entry.name)}</h5><div class="ingredient-meta"><span>${uses.length} menu use${uses.length===1?'':'s'}</span><span>${unique(uses.map(i=>i.sectionId)).length} categor${unique(uses.map(i=>i.sectionId)).length===1?'y':'ies'}</span></div><div class="allergen-badges">${profile.direct.map(a=>`<span class="tag allergen-direct">${esc(allergenName(a))}</span>`).join('')}${profile.verify.map(a=>`<span class="tag allergen-verify">Verify ${esc(allergenName(a))}</span>`).join('')}${!profile.direct.length&&!profile.verify.length?'<span class="tag allergen-clear">No named major allergen</span>':''}</div><div class="usage-list">${uses.slice(0,8).map(i=>`<button class="usage-link" data-item="${esc(i.key)}">${esc(i.sectionName)} · ${esc(i.name)}</button>`).join('')}${uses.length>8?`<div class="tiny muted">+${uses.length-8} additional uses</div>`:''}</div>`;
+      target.appendChild(card);
+    });
+    if(!list.length) target.innerHTML='<div class="empty">No ingredients match this category and search combination.</div>';
+    target.querySelectorAll('.usage-link[data-item]').forEach(btn=>btn.addEventListener('click',()=>{const item=allItems.find(i=>i.key===btn.dataset.item);navigate('workspace');sendMessage(`What are the ingredients in ${item.name}?`);}));
+  }
+
+  function renderAllergens(){
+    $('allergenSummary').innerHTML=allergenKB.majorAllergens.map(a=>`<article class="allergen-card"><h5>${esc(a.name)}</h5><p>${esc(a.note)}</p></article>`).join('');
+    const q=$('allergenSearch').value.trim().toLowerCase(); const filter=$('allergenFilter').value;
+    let list=allItems.filter(i=>state.allergenSections.has(i.sectionId)).filter(i=>!q||[i.name,i.description,...itemIngredients(i)].join(' ').toLowerCase().includes(q));
+    list=list.filter(i=>{const p=allergenProfileFor(i,i.sectionId);return filter==='all'||(filter==='direct'&&p.direct.length)||(filter==='verify'&&p.verify.length)||(filter==='none'&&!p.direct.length);});
+    const target=$('allergenResults'); target.innerHTML='';
+    list.forEach(item=>{
+      const p=allergenProfileFor(item,item.sectionId); const direct=p.direct.length?p.direct.map(allergenName):['No direct named major allergen detected']; const verify=p.verify.length?p.verify.map(allergenName):['General recipe and cross-contact verification'];
+      const card=document.createElement('article');card.className='profile-card';
+      card.innerHTML=`<h5>${esc(item.name)}</h5><div class="section-name">${esc(item.sectionName)}</div><div class="allergen-badges">${p.direct.map(a=>`<span class="tag allergen-direct">Indicator: ${esc(allergenName(a))}</span>`).join('')}${p.verify.map(a=>`<span class="tag allergen-verify">Verify: ${esc(allergenName(a))}</span>`).join('')}${!p.direct.length?'<span class="tag allergen-clear">No direct named indicator</span>':''}</div><div class="profile-lists"><div class="profile-col"><strong>Ingredient indicators</strong><ul>${direct.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div><div class="profile-col"><strong>Still verify</strong><ul>${verify.map(x=>`<li>${esc(x)}</li>`).join('')}<li>Shared equipment and substitutions</li></ul></div></div>`;
+      target.appendChild(card);
+    });
+    if(!list.length) target.innerHTML='<div class="empty">No menu profiles match these filters.</div>';
+  }
+
+  function renderPositions(){
+    const list=$('positionList'); list.innerHTML='';
+    positions.forEach(p=>{const btn=document.createElement('button');btn.className='position-btn'+(p.id===state.activePosition?' active':'');btn.innerHTML=`<span class="position-icon">${esc(p.icon)}</span><span><strong>${esc(p.name)}</strong><small>${p.sections.length} menu sections</small></span>`;btn.addEventListener('click',()=>{state.activePosition=p.id;storage.set('restaurant-active-position',p.id);renderRoleContext();renderPositions();});list.appendChild(btn);});
+    const p=currentPosition();
+    $('positionDetail').innerHTML=`<p class="eyebrow">Active training position</p><h4>${esc(p.icon)} ${esc(p.name)}</h4><p class="muted">${esc(p.summary)}</p><div class="mastery-grid">${Object.entries(p.mastery).map(([k,v])=>`<div class="mastery"><small>${esc(k)}</small><strong>${v}%</strong></div>`).join('')}</div><div class="two-col"><div><h4 style="font-size:14px">Required knowledge</h4><ul class="plain-list">${p.priorities.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div><div><h4 style="font-size:14px">Practice scenarios</h4><ul class="plain-list">${p.scenarios.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div></div><div style="margin-top:17px"><h4 style="font-size:14px">Mapped menu sections</h4><div class="chips" style="margin-top:9px">${p.sections.map(id=>`<span class="tag">${esc(sectionMap.get(id)?.name||id)}</span>`).join('')}</div></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:18px"><button class="btn btn-primary" id="applyRoleSections">Use these sections</button><button class="btn btn-dark" id="trainRoleAgent">Train me in Agent Workspace</button></div>`;
+    $('applyRoleSections').addEventListener('click',()=>{state.menuSections=new Set(p.sections);state.quizSections=new Set(p.sections);createAllChips();renderMenu();navigate('menu');});
+    $('trainRoleAgent').addEventListener('click',()=>{navigate('workspace');sendMessage(`Train me as a ${p.name}`);});
+  }
+
+  function matchItem(query){
+    const q=query.toLowerCase().replace(/[?.,!]/g,' ').replace(/\s+/g,' ').trim();
+    return allItems.find(i=>q.includes(i.name.toLowerCase())) || allItems.filter(i=>i.name.length>3&&q.includes(i.name.toLowerCase().replace(/^the /,''))).sort((a,b)=>b.name.length-a.name.length)[0] || null;
+  }
+  function matchPosition(query){const q=query.toLowerCase();return positions.find(p=>q.includes(p.name.toLowerCase())||q.includes(p.id.replace(/-/g,' ')))||null;}
+  function matchSection(query){
+    const q=query.toLowerCase();
+    return sections.find(s=>q.includes(s.name.toLowerCase())||q.includes(s.id.replace(/-/g,' '))||(s.id==='sandwiches'&&q.includes('sandwich'))||(s.id==='pizza'&&q.includes('pizza'))||(s.id==='wings'&&q.includes('wing'))||(s.id==='salads'&&q.includes('salad'))||(s.id==='munchies'&&(q.includes('munchie')||q.includes('appetizer')))||(s.id==='calzones'&&q.includes('calzone'))||(s.id==='dessert'&&q.includes('dessert')))||null;
+  }
+  function matchIngredient(query){const q=query.toLowerCase();return ingredientCatalog.filter(e=>q.includes(e.name)).sort((a,b)=>b.name.length-a.name.length)[0]||null;}
+  function itemSource(item){return `<div class="source-row"><span class="source-chip">${esc(item.sectionName)} → ${esc(item.name)}</span></div>`;}
+  function itemAnswer(item,mode='full'){
+    const p=allergenProfileFor(item,item.sectionId); const ing=itemIngredients(item);
+    const prices=(item.prices||[]).map(x=>`${x.label}: ${money(x.price)}`).join(' · ');
+    let html=`<h4>${esc(item.name)}</h4><p>${esc(item.description||'')}</p>`;
+    if(mode!=='price') html+=`<p><strong>Listed ingredients:</strong> ${esc(ing.join(', '))}.</p>`;
+    html+=`<p><strong>Prices:</strong> ${esc(prices||'No price supplied')}.</p>`;
+    if((item.facts||[]).length) html+=`<p><strong>Training notes:</strong> ${esc(item.facts.join(' · '))}.</p>`;
+    if(p.direct.length||p.verify.length) html+=`<p><strong>Allergen tags:</strong> ${p.direct.map(a=>'indicator—'+allergenName(a)).concat(p.verify.map(a=>'verify—'+allergenName(a))).map(esc).join(' · ')}.</p><div class="agent-note">Allergen tags are not a safety guarantee. Verify current recipes, labels, substitutions, and cross-contact controls.</div>`;
+    return html+itemSource(item);
+  }
+  function agentResponse(query){
+    const q=query.trim(); const lower=q.toLowerCase(); const item=matchItem(q); const pos=matchPosition(q); const ingredient=matchIngredient(q);
+    if(!q) return '<p>Type a menu, ingredient, price, position, or allergen question.</p>';
+    if(/^(hi|hello|hey)\b/.test(lower)) return '<h4>Local menu agent ready</h4><p>I can search the complete menu, compare items, list ingredients by category, explain position requirements, generate training prompts, and flag allergen information that still needs verification.</p>';
+    if(/help|what can you do|capabilit/.test(lower)) return '<h4>Available local commands</h4><ul><li>Ask for an item, price, size, ingredient list, or preparation note.</li><li>Ask which items contain an ingredient.</li><li>Ask for pizza or sandwich ingredients.</li><li>Ask about allergen indicators and verification flags.</li><li>Ask to train for any mapped restaurant position.</li></ul>';
+    if(/train me|what should .* know|position/.test(lower) && pos){
+      return `<h4>${esc(pos.name)} training map</h4><p>${esc(pos.summary)}</p><p><strong>Required menu sections:</strong> ${pos.sections.map(id=>sectionMap.get(id)?.name||id).map(esc).join(', ')}.</p><p><strong>Priority knowledge:</strong> ${pos.priorities.map(esc).join(' · ')}.</p><p><strong>Practice scenarios:</strong> ${pos.scenarios.map(esc).join(' · ')}.</p><div class="source-row"><span class="source-chip">Position map → ${esc(pos.name)}</span></div>`;
+    }
+    if(/compare/.test(lower)){
+      const matches=allItems.filter(i=>lower.includes(i.name.toLowerCase())).slice(0,2);
+      if(matches.length===2) return `<h4>${esc(matches[0].name)} vs. ${esc(matches[1].name)}</h4><p><strong>${esc(matches[0].name)}:</strong> ${esc(matches[0].description)}</p><p><strong>${esc(matches[1].name)}:</strong> ${esc(matches[1].description)}</p><p><strong>Starting prices:</strong> ${money(Math.min(...matches[0].prices.map(p=>p.price)))} vs. ${money(Math.min(...matches[1].prices.map(p=>p.price)))}.</p>${itemSource(matches[0])}${itemSource(matches[1])}`;
+    }
+    if(/allergen|allergy|dairy|milk|wheat|gluten|egg|fish|soy|sesame|peanut|nut|shellfish/.test(lower)){
+      if(item){
+        const p=allergenProfileFor(item,item.sectionId);
+        return `<h4>Allergen training profile: ${esc(item.name)}</h4><p><strong>Direct menu indicators:</strong> ${p.direct.length?p.direct.map(allergenName).map(esc).join(', '):'No major allergen is directly named in the supplied item ingredients'}.</p><p><strong>Still requires verification:</strong> ${p.verify.length?p.verify.map(allergenName).map(esc).join(', '):'Recipes, labels, substitutions, and cross-contact controls'}.</p><div class="agent-note">Do not promise this item is allergy-safe. Escalate to a manager and verify current recipes, supplier labels, and shared equipment.</div>${itemSource(item)}`;
+      }
+      if(ingredient){const p=ingredient.allergens;return `<h4>Ingredient tag: ${esc(ingredient.name)}</h4><p><strong>Direct indicators:</strong> ${p.direct.length?p.direct.map(allergenName).map(esc).join(', '):'None identified from the ingredient name'}.</p><p><strong>Verify:</strong> ${p.verify.length?p.verify.map(allergenName).map(esc).join(', '):'Recipe, label, and cross-contact information'}.</p><p>Used by ${ingredient.uses.length} menu record${ingredient.uses.length===1?'':'s'}.</p><div class="agent-note">Ingredient naming alone is not enough to confirm allergy safety.</div>`;}
+      return `<h4>Allergen knowledge boundary</h4><p>The workspace tracks the nine U.S. major allergen categories and separates direct menu indicators from ingredients that need recipe or supplier-label verification.</p><ul>${allergenKB.alwaysVerify.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`;
+    }
+    if(item && /price|cost|how much/.test(lower)) return itemAnswer(item,'price');
+    if(item && /ingredient|what is in|what's in|made with|contain/.test(lower)) return itemAnswer(item,'ingredients');
+    if(item) return itemAnswer(item);
+    const requestedSection=matchSection(lower);
+    if(/ingredient/.test(lower)&&requestedSection){
+      const list=ingredientCatalog.filter(e=>e.sections.includes(requestedSection.id));
+      return `<h4>${esc(requestedSection.name)} ingredients</h4><p>${esc(list.map(e=>e.name).sort().join(', '))}.</p><p><strong>${list.length}</strong> unique listed ingredients and options appear in this category.</p><div class="source-row"><span class="source-chip">Ingredient catalog → ${esc(requestedSection.name)}</span></div>`;
+    }
+    if(/no red sauce/.test(lower)){const hits=allItems.filter(i=>[i.description,...(i.facts||[])].join(' ').toLowerCase().includes('no red sauce'));return `<h4>Items explicitly marked no red sauce</h4><ul>${hits.map(i=>`<li><strong>${esc(i.name)}</strong> — ${esc(i.description)}</li>`).join('')}</ul>${hits.map(itemSource).join('')}`;}
+    if(/no cheese/.test(lower)){const hits=allItems.filter(i=>[i.description,...(i.facts||[])].join(' ').toLowerCase().includes('no cheese'));return `<h4>Item explicitly marked no cheese</h4><ul>${hits.map(i=>`<li><strong>${esc(i.name)}</strong> — ${esc(i.description)}</li>`).join('')}</ul>${hits.map(itemSource).join('')}`;}
+    if(ingredient || /which|what|show|list/.test(lower)){
+      const ing=ingredient || ingredientCatalog.filter(e=>lower.includes(e.name.split(' ').pop())).sort((a,b)=>b.name.length-a.name.length)[0];
+      if(ing){let hits=ing.uses; if(requestedSection) hits=hits.filter(i=>i.sectionId===requestedSection.id);return `<h4>Menu items using ${esc(ing.name)}</h4><ul>${hits.map(i=>`<li><strong>${esc(i.name)}</strong> <span class="muted">(${esc(i.sectionName)})</span></li>`).join('')||'<li>No matching items in that category.</li>'}</ul><p>${hits.length} matching menu record${hits.length===1?'':'s'}.</p><div class="source-row"><span class="source-chip">Ingredient index → ${esc(ing.name)}</span></div>`;}
+    }
+    const keyword=lower.replace(/which|what|show|list|items|menu|have|has|with|contain|contains|the|are|is|do|does|please|me/g,' ').replace(/\s+/g,' ').trim();
+    if(keyword.length>2){const hits=allItems.filter(i=>[i.name,i.description,...itemIngredients(i),...(i.facts||[])].join(' ').toLowerCase().includes(keyword));if(hits.length)return `<h4>Knowledge search: ${esc(keyword)}</h4><ul>${hits.slice(0,15).map(i=>`<li><strong>${esc(i.name)}</strong> — ${esc(i.sectionName)}</li>`).join('')}</ul>${hits.length>15?`<p>Showing 15 of ${hits.length} matches.</p>`:''}`;}
+    return '<h4>No grounded answer found</h4><p>I could not match that question to the current menu, ingredient catalog, allergen rules, or position map.</p><p>Try an exact item name, a category such as Pizza or Oven Baked Sandwiches, an ingredient, or a position.</p>';
+  }
+
+  function appendMessage(role,html){
+    const row=document.createElement('div'); row.className='message '+role;
+    if(role==='user') row.innerHTML=`<div class="bubble">${html}</div><div class="avatar">You</div>`; else row.innerHTML=`<div class="avatar">A</div><div class="bubble">${html}</div>`;
+    $('messages').appendChild(row); $('chatCanvas').scrollTop=$('chatCanvas').scrollHeight;
+  }
+  function sendMessage(text){const q=(text??$('chatInput').value).trim();if(!q)return;$('agentHero').classList.add('hidden');appendMessage('user',`<p>${esc(q)}</p>`);$('chatInput').value='';setTimeout(()=>appendMessage('agent',agentResponse(q)),80);}
+  $('sendChat').addEventListener('click',()=>sendMessage()); $('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}});
+  document.querySelectorAll('.prompt-chip').forEach(btn=>btn.addEventListener('click',()=>sendMessage(btn.textContent.trim())));
+  $('clearChat').addEventListener('click',()=>{$('messages').innerHTML='';$('agentHero').classList.remove('hidden');});
+
+  function quizPool(selected,focus){
+    const items=allItems.filter(i=>selected.has(i.sectionId)); const pool=[]; const allIngredientNames=ingredientCatalog.filter(e=>e.sections.some(s=>selected.has(s))).map(e=>e.name);
+    items.forEach(item=>{
+      const ingredients=itemIngredients(item);
+      if((focus==='balanced'||focus==='ingredients')&&ingredients.length){
+        const correct=shuffle(ingredients).slice(0,Math.min(5,ingredients.length)); const wrong=shuffle(allIngredientNames.filter(x=>!ingredients.includes(x))).slice(0,Math.max(2,6-correct.length));
+        pool.push({sectionId:item.sectionId,type:'ingredients',prompt:`Select every listed ingredient or component of ${item.name}.`,correct,options:shuffle(unique([...correct,...wrong])),explain:`${item.name}: ${ingredients.join(', ')}.`});
+      }
+      if((focus==='balanced'||focus==='prices')&&(item.prices||[]).length){
+        const correctPrice=item.prices[Math.floor(Math.random()*item.prices.length)]; const correct=[`${correctPrice.label} — ${money(correctPrice.price)}`];
+        const distractors=shuffle(items.flatMap(i=>i.prices||[]).map(p=>`${p.label} — ${money(p.price)}`).filter(x=>!correct.includes(x))).slice(0,4);
+        pool.push({sectionId:item.sectionId,type:'prices',prompt:`Select the correct price entry for ${item.name}.`,correct,options:shuffle([...correct,...distractors]),explain:`${item.name}, ${correctPrice.label}: ${money(correctPrice.price)}.`});
+      }
+      if((focus==='balanced'||focus==='details')&&(item.facts||[]).length){
+        const correct=shuffle(item.facts).slice(0,Math.min(3,item.facts.length)); const factBank=items.flatMap(i=>i.facts||[]).filter(x=>!correct.includes(x));
+        pool.push({sectionId:item.sectionId,type:'details',prompt:`Select every correct service or preparation detail for ${item.name}.`,correct,options:shuffle(unique([...correct,...shuffle(factBank).slice(0,Math.max(2,6-correct.length))])),explain:`${item.name}: ${(item.facts||[]).join(' · ')}.`});
+      }
+      if(focus==='allergens'){
+        const p=allergenProfileFor(item,item.sectionId); const correct=unique([...p.direct,...p.verify]).map(allergenName); if(correct.length){const other=allergenKB.majorAllergens.map(a=>a.name).filter(x=>!correct.includes(x));pool.push({sectionId:item.sectionId,type:'allergens',prompt:`Select every allergen category tagged as an indicator or verification need for ${item.name}.`,correct,options:shuffle([...correct,...shuffle(other).slice(0,Math.max(2,6-correct.length))]),explain:`Direct indicators: ${p.direct.map(allergenName).join(', ')||'none'}. Verify: ${p.verify.map(allergenName).join(', ')||'general recipe and cross-contact controls'}. These tags never guarantee safety.`});}
+      }
+    });
+    if(focus==='balanced'||focus==='ingredients'){
+      ingredientCatalog.filter(e=>e.uses.filter(i=>selected.has(i.sectionId)).length>0&&e.uses.filter(i=>selected.has(i.sectionId)).length<=5).forEach(entry=>{
+        const eligible=items; const correct=entry.uses.filter(i=>selected.has(i.sectionId)).map(i=>i.name); const wrong=shuffle(eligible.map(i=>i.name).filter(x=>!correct.includes(x))).slice(0,Math.max(2,6-correct.length));
+        if(correct.length) pool.push({sectionId:entry.uses.find(i=>selected.has(i.sectionId)).sectionId,type:'reverse',prompt:`Select every menu item that lists ${entry.name}.`,correct,options:shuffle(unique([...correct,...wrong])),explain:`${entry.name} appears in: ${correct.join(', ')}.`});
+      });
+    }
+    return shuffle(pool);
+  }
+  function startQuiz(){
+    if(!state.quizSections.size){alert('Select at least one training section.');return;}
+    const count=Number($('quizCount').value); const focus=$('quizFocus').value; const questions=quizPool(state.quizSections,focus).slice(0,count);
+    if(!questions.length){alert('No questions are available for that combination.');return;}
+    state.quiz={questions,index:0,correct:0,answered:false,answers:[],sectionStats:{},focus,positionId:state.activePosition}; renderQuizQuestion();
+  }
+  function renderQuizQuestion(){
+    const qz=state.quiz; const q=qz.questions[qz.index]; const stage=$('quizStage');
+    stage.innerHTML=`<div class="quiz-question-head"><small>Question ${qz.index+1} of ${qz.questions.length}</small><span class="badge">Score ${qz.correct}/${qz.index}</span></div><h4 class="quiz-question">${esc(q.prompt)}</h4><div class="quiz-help">Select all correct options, then submit. Extra selections make the answer incorrect.</div><div class="choices">${q.options.map((opt,i)=>`<div class="choice" data-option="${esc(opt)}"><input type="checkbox" id="qopt-${i}"><label for="qopt-${i}"><span class="choice-box"></span><span>${esc(opt)}</span></label></div>`).join('')}</div><div id="quizFeedback"></div><div class="quiz-actions"><button class="btn btn-light" id="quitQuiz">End quiz</button><button class="btn btn-primary" id="submitQuizAnswer">Submit answer</button><button class="btn btn-dark hidden" id="nextQuizQuestion">${qz.index===qz.questions.length-1?'View results':'Next question'}</button></div>`;
+    $('quitQuiz').addEventListener('click',()=>{state.quiz=null;$('quizStage').innerHTML='<div class="quiz-empty"><div><h4>Quiz ended</h4><p>Start another quiz when ready.</p></div></div>';});
+    $('submitQuizAnswer').addEventListener('click',submitQuizAnswer); $('nextQuizQuestion').addEventListener('click',()=>{if(qz.index===qz.questions.length-1)finishQuiz();else{qz.index++;qz.answered=false;renderQuizQuestion();}});
+  }
+  function submitQuizAnswer(){
+    const qz=state.quiz;if(qz.answered)return; const q=qz.questions[qz.index]; const choices=[...$('quizStage').querySelectorAll('.choice')]; const selected=choices.filter(c=>c.querySelector('input').checked).map(c=>c.dataset.option); if(!selected.length){$('quizFeedback').innerHTML='<div class="feedback bad">Select at least one option before submitting.</div>';return;}
+    const correct=[...q.correct].sort(); const chosen=[...selected].sort(); const isCorrect=correct.length===chosen.length&&correct.every((v,i)=>v===chosen[i]); qz.answered=true;if(isCorrect)qz.correct++;
+    qz.sectionStats[q.sectionId] ||= {correct:0,total:0}; qz.sectionStats[q.sectionId].total++; if(isCorrect)qz.sectionStats[q.sectionId].correct++;
+    qz.answers.push({prompt:q.prompt,selected,correct:q.correct,isCorrect,explain:q.explain,sectionId:q.sectionId});
+    choices.forEach(c=>{const val=c.dataset.option;const input=c.querySelector('input');input.disabled=true;if(q.correct.includes(val)&&selected.includes(val))c.classList.add('correct');else if(selected.includes(val))c.classList.add('wrong');else if(q.correct.includes(val))c.classList.add('missed');});
+    $('quizFeedback').innerHTML=`<div class="feedback ${isCorrect?'good':'bad'}"><strong>${isCorrect?'Correct.':'Not quite.'}</strong> ${esc(q.explain)}</div>`;
+    $('submitQuizAnswer').classList.add('hidden');$('nextQuizQuestion').classList.remove('hidden');
+  }
+  function finishQuiz(){
+    const qz=state.quiz; const percent=Math.round(qz.correct/qz.questions.length*100); const result={date:new Date().toISOString(),percent,correct:qz.correct,total:qz.questions.length,positionId:qz.positionId,positionName:positions.find(p=>p.id===qz.positionId)?.name||qz.positionId,sections:[...state.quizSections],focus:qz.focus,sectionStats:qz.sectionStats};
+    state.history.unshift(result);state.history=state.history.slice(0,30);storage.set('restaurant-quiz-history',JSON.stringify(state.history));renderRoleContext();
+    $('quizStage').innerHTML=`<div class="score-banner"><small>Final score</small><strong>${percent}%</strong><span>${qz.correct} of ${qz.questions.length} correct · ${percent>=80?'Passed':'Review and retry'}</span></div><div class="breakdown">${Object.entries(qz.sectionStats).map(([id,s])=>`<div class="breakdown-row"><span>${esc(sectionMap.get(id)?.name||id)}</span><strong>${Math.round(s.correct/s.total*100)}% (${s.correct}/${s.total})</strong></div>`).join('')}</div><div style="margin-top:16px"><button class="btn btn-primary" id="restartQuiz">Start another quiz</button> <button class="btn btn-light" id="viewProgress">View progress</button></div>`;
+    $('restartQuiz').addEventListener('click',startQuiz);$('viewProgress').addEventListener('click',()=>navigate('progress'));state.quiz=null;
+  }
+
+  function renderProgress(){
+    const h=state.history; const best=h.length?Math.max(...h.map(x=>x.percent)):0; const avg=h.length?Math.round(h.reduce((a,b)=>a+b.percent,0)/h.length):0;
+    $('progressAttempts').textContent=h.length;$('progressBest').textContent=best+'%';$('progressAverage').textContent=avg+'%';
+    $('progressHistory').innerHTML=h.length?h.map(x=>`<div class="history-row"><span><strong>${esc(x.positionName)}</strong><br><span class="muted">${new Date(x.date).toLocaleString()} · ${x.sections.length} sections · ${esc(x.focus)}</span></span><strong>${x.correct}/${x.total}</strong><strong>${x.percent}%</strong></div>`).join(''):'<div class="empty">No quiz attempts saved yet.</div>';
+  }
+
+  function createAllChips(){
+    createSectionChips('menuSectionChips',state.menuSections,renderMenu);
+    createSectionChips('ingredientSectionChips',state.ingredientSections,renderIngredients);
+    createSectionChips('allergenSectionChips',state.allergenSections,renderAllergens);
+    createSectionChips('quizSectionChips',state.quizSections,()=>storage.set('restaurant-quiz-sections',JSON.stringify([...state.quizSections])));
+  }
+  $('menuSearch').addEventListener('input',renderMenu);$('menuSort').addEventListener('change',renderMenu);
+  $('menuAll').addEventListener('click',()=>{sections.forEach(s=>state.menuSections.add(s.id));createAllChips();renderMenu();});
+  $('menuNone').addEventListener('click',()=>{state.menuSections.clear();createAllChips();renderMenu();});
+  $('menuSelectRole').addEventListener('click',()=>{state.menuSections=new Set(currentPosition().sections);createAllChips();renderMenu();});
+  $('ingredientSearch').addEventListener('input',renderIngredients);$('ingredientSort').addEventListener('change',renderIngredients);
+  $('ingredientReset').addEventListener('click',()=>{state.ingredientSections=new Set(sections.map(s=>s.id));$('ingredientSearch').value='';createAllChips();renderIngredients();});
+  $('allergenSearch').addEventListener('input',renderAllergens);$('allergenFilter').addEventListener('change',renderAllergens);
+  $('startQuiz').addEventListener('click',startQuiz);
+  $('resetProgress').addEventListener('click',()=>{if(confirm('Delete all locally saved quiz history?')){state.history=[];storage.remove('restaurant-quiz-history');renderProgress();renderRoleContext();}});
+
+  createAllChips();renderRoleContext();renderMenu();renderIngredients();renderAllergens();renderPositions();renderProgress();
+  appendMessage('agent','<h4>Workspace initialized</h4><p>I have loaded the complete menu, ingredient reverse index, ten menu categories, twelve restaurant positions, pricing records, and conservative allergen tags.</p><p>Ask a question or use a suggested prompt.</p>');
+})();
+</script>
+</body>
+</html>
