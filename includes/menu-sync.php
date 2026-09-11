@@ -120,6 +120,25 @@ function menu_parse_price_entries(string $raw): array
         return [];
     }
 
+    // The public menu commonly publishes compact ranges such as "$13-15".
+    // Preserve both values instead of losing the upper end of the range.
+    if (preg_match('/^\$\s*([0-9]+(?:\.[0-9]{1,2})?)\s*[-–—]\s*\$?\s*([0-9]+(?:\.[0-9]{1,2})?)$/u', $raw, $range)) {
+        return [
+            [
+                'label' => 'Lower listed price',
+                'size_code' => 'lower-listed-price',
+                'amount' => round((float)$range[1], 2),
+                'sort_order' => 0,
+            ],
+            [
+                'label' => 'Higher listed price',
+                'size_code' => 'higher-listed-price',
+                'amount' => round((float)$range[2], 2),
+                'sort_order' => 1,
+            ],
+        ];
+    }
+
     $segments = preg_split('/\s*[|·•;]\s*|\s+\/\s+(?=\$|[A-Za-z])/', $raw) ?: [$raw];
     $prices = [];
     $ordinal = 0;
