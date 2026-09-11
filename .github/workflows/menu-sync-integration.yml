@@ -8,7 +8,6 @@ on:
       - 'api/menu-knowledge.php'
       - 'includes/menu-sync.php'
       - 'scripts/sync-gelato-menu.php'
-      - 'data/gelato-menu-scan.json'
       - 'database/**'
       - 'config-example.php'
       - '.github/workflows/menu-sync-integration.yml'
@@ -17,7 +16,7 @@ permissions:
   contents: read
 
 jobs:
-  fresh-install-manual-import:
+  fresh-install-rest-import:
     runs-on: ubuntu-latest
     services:
       mysql:
@@ -54,7 +53,6 @@ jobs:
           php -l api/menu-knowledge.php
           php -l admin-menu-import.php
           php -l config-example.php
-          python3 -m json.tool data/gelato-menu-scan.json >/dev/null
 
       - name: Create isolated CI config
         shell: bash
@@ -85,17 +83,19 @@ jobs:
           ];
           PHP
 
-      - name: Read bundled snapshot inventory
+      - name: Read current live inventory
         shell: bash
         run: |
           set -euo pipefail
+          curl --fail --silent --show-error --location --retry 3 --retry-delay 2 \
+            https://gelato.spot/api/v1/menu -o /tmp/live-menu.json
           python3 - <<'PY' >> "$GITHUB_ENV"
           import json
-          d=json.load(open('data/gelato-menu-scan.json',encoding='utf-8'))
+          d=json.load(open('/tmp/live-menu.json',encoding='utf-8'))
           sections=d.get('sections') or []
           items=sum(len(section.get('items') or []) for section in sections)
-          if len(sections) < 1 or items < 1:
-              raise SystemExit('Bundled menu snapshot is empty')
+          if len(sections) < 8 or items < 75:
+              raise SystemExit(f'Unexpected live menu size: {len(sections)} sections / {items} items')
           print(f'EXPECTED_MENU_SECTIONS={len(sections)}')
           print(f'EXPECTED_MENU_ITEMS={items}')
           PY
@@ -108,20 +108,20 @@ jobs:
           mysql -h 127.0.0.1 -uroot -prootpass restaurant_training \
             -e "INSERT INTO organizations (name, legal_name, status, timezone) VALUES ('Gelato Spot CI', 'Gelato Spot CI', 'active', 'America/Phoenix');"
 
-      - name: Validate bundled scanned menu without writing
+      - name: Dry-run live REST import
         shell: bash
         run: |
           set -euo pipefail
-          php scripts/sync-gelato-menu.php --dry-run > /tmp/manual-dry-run.json
-          cat /tmp/manual-dry-run.json
-          php -r '$d=json_decode(file_get_contents("/tmp/manual-dry-run.json"),true,512,JSON_THROW_ON_ERROR);$es=(int)getenv("EXPECTED_MENU_SECTIONS");$ei=(int)getenv("EXPECTED_MENU_ITEMS");if(empty($d["ok"])||($d["sourceMode"]??"")!=="manual-file"||($d["sections"]??0)!==$es||($d["items"]??0)!==$ei){fwrite(STDERR,"Unexpected manual snapshot summary\n");exit(1);}'
+          php scripts/sync-gelato-menu.php --dry-run > /tmp/live-dry-run.json
+          cat /tmp/live-dry-run.json
+          php -r '$d=json_decode(file_get_contents("/tmp/live-dry-run.json"),true,512,JSON_THROW_ON_ERROR);$es=(int)getenv("EXPECTED_MENU_SECTIONS");$ei=(int)getenv("EXPECTED_MENU_ITEMS");if(empty($d["ok"])||($d["sourceMode"]??"")!=="live-rest"||($d["sections"]??0)!==$es||($d["items"]??0)!==$ei){fwrite(STDERR,"Unexpected REST dry-run summary\n");exit(1);}'
 
-      - name: Import bundled menu into fresh database
+      - name: Import live REST menu into fresh database
         shell: bash
         run: |
           set -euo pipefail
-          php scripts/sync-gelato-menu.php --organization-id=1 > /tmp/manual-sync.json
-          cat /tmp/manual-sync.json
+          php scripts/sync-gelato-menu.php --organization-id=1 > /tmp/live-sync.json
+          cat /tmp/live-sync.json
           DB_SECTIONS=$(mysql -N -h 127.0.0.1 -uroot -prootpass restaurant_training -e "SELECT COUNT(*) FROM menu_sections WHERE organization_id=1 AND status='active';")
           DB_ITEMS=$(mysql -N -h 127.0.0.1 -uroot -prootpass restaurant_training -e "SELECT COUNT(*) FROM menu_items WHERE organization_id=1 AND is_active=1;")
           test "$DB_SECTIONS" = "$EXPECTED_MENU_SECTIONS"
@@ -133,13 +133,13 @@ jobs:
           set -euo pipefail
           php -r 'require "includes/bootstrap.php";require "includes/menu-sync.php";$s=menu_database_sections(app_pdo(),1);$items=array_sum(array_map(fn($x)=>count($x["items"]??[]),$s));$es=(int)getenv("EXPECTED_MENU_SECTIONS");$ei=(int)getenv("EXPECTED_MENU_ITEMS");if(count($s)!==$es||$items!==$ei){fwrite(STDERR,"Database projection mismatch\n");exit(1);}echo "Projected ".count($s)." sections / $items items\n";'
 
-      - name: Verify repeated import is idempotent
+      - name: Verify repeated live import is idempotent
         shell: bash
         run: |
           set -euo pipefail
           BEFORE_SECTIONS=$(mysql -N -h 127.0.0.1 -uroot -prootpass restaurant_training -e "SELECT COUNT(*) FROM menu_sections WHERE organization_id=1;")
           BEFORE_ITEMS=$(mysql -N -h 127.0.0.1 -uroot -prootpass restaurant_training -e "SELECT COUNT(*) FROM menu_items WHERE organization_id=1;")
-          php scripts/sync-gelato-menu.php --organization-id=1 >/tmp/manual-repeat.json
+          php scripts/sync-gelato-menu.php --organization-id=1 >/tmp/live-repeat.json
           AFTER_SECTIONS=$(mysql -N -h 127.0.0.1 -uroot -prootpass restaurant_training -e "SELECT COUNT(*) FROM menu_sections WHERE organization_id=1;")
           AFTER_ITEMS=$(mysql -N -h 127.0.0.1 -uroot -prootpass restaurant_training -e "SELECT COUNT(*) FROM menu_items WHERE organization_id=1;")
           test "$BEFORE_SECTIONS" = "$AFTER_SECTIONS"
