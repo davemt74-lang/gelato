@@ -4,7 +4,11 @@ require __DIR__ . '/../includes/bootstrap.php';
 require __DIR__ . '/../includes/menu-sync.php';
 
 try {
-    $user = app_require_auth();
+    $user = app_current_user();
+    if (!$user) {
+        app_json_response(['ok' => false, 'message' => 'Authentication required.'], 401);
+    }
+
     $pdo = app_pdo();
     $organizationId = (int)$user['organization_id'];
     $sections = menu_database_sections($pdo, $organizationId);
@@ -20,5 +24,6 @@ try {
         ],
     ]);
 } catch (Throwable $exception) {
-    app_json_response(['ok' => false, 'message' => $exception->getMessage()], 500);
+    error_log('Menu API error: ' . $exception->getMessage());
+    app_json_response(['ok' => false, 'message' => 'Menu data is temporarily unavailable.'], 500);
 }
