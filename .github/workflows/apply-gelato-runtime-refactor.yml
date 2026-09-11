@@ -22,6 +22,25 @@ jobs:
           ref: gelato-menu-sync
           fetch-depth: 0
 
+      - name: Refresh legacy agent sample prompts
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('index.html')
+          text = path.read_text(encoding='utf-8')
+          replacements = {
+            'Show sandwich ingredients': 'Show panini ingredients',
+            'Allergens in Great White': 'Allergens in Nutella',
+            'What has no red sauce?': 'Show wood-fired pizzas',
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f'Missing expected legacy sample prompt: {old}')
+              text = text.replace(old, new, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+
       - name: Apply runtime refactor
         shell: bash
         run: |
