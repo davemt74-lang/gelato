@@ -1,0 +1,24 @@
+name: Inspect Gelato branding
+
+on:
+  push:
+    branches: [gelato-branding-cleanup]
+    paths:
+      - '.github/workflows/inspect-branding.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show legacy and generic branding references
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '--- index/header branding candidates ---'
+          grep -nE -i 'Fatso|Restaurant Agentic Training Workspace|Restaurant Training Workspace|Training Workspace|brand>|class="brand"|top-title|sidebar' index.html | head -n 120 || true
+          echo '--- repository-wide Fatso references ---'
+          grep -RniE --exclude-dir=.git --exclude='*.sql' 'Fatso|Fatso.s|Fatso’s' . | head -n 200 || true
