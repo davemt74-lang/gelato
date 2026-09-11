@@ -29,7 +29,7 @@ try {
     echo 'window.MENU_NOTES=' . json_encode($notes, $flags) . ";\n";
     echo 'window.MENU_SOURCE_META=' . json_encode($meta, $flags) . ";\n";
 } catch (Throwable $exception) {
+    error_log('Menu knowledge endpoint error: ' . $exception->getMessage());
     http_response_code(500);
-    $message = json_encode($exception->getMessage(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
-    echo "window.MENU_SECTIONS=[];window.MENU_NOTES=[];window.MENU_SOURCE_META={ok:false,message:{$message}};\n";
+    echo "window.MENU_SECTIONS=[];window.MENU_NOTES=[];window.MENU_SOURCE_META={ok:false,message:'Menu data is temporarily unavailable.'};\n";
 }
