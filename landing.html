@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Restaurant careers, training, and resume submissions.">
+  <title>Restaurant Careers</title>
+  <link rel="stylesheet" href="css/public.css">
+</head>
+<body>
+  <header class="public-header">
+    <a class="public-brand" href="landing.html"><span class="public-logo" id="publicLogo">FR</span><span><strong id="publicBrand">Restaurant</strong><span id="publicTagline">Careers and training</span></span></a>
+    <nav class="public-nav">
+      <a href="jobs.html">Jobs</a><a class="primary" href="apply.html">Submit Resume</a>
+      <div class="guest-profile-wrap" data-public-account-menu>
+        <button class="guest-profile-button" type="button" data-guest-menu-button aria-haspopup="true" aria-expanded="false"><span class="guest-avatar">G</span><span class="guest-profile-copy"><strong>Guest</strong><span>Not signed in</span></span><span class="guest-chevron">⌄</span></button>
+        <div class="guest-profile-menu hidden" data-guest-menu>
+          <div class="guest-menu-head"><span class="guest-avatar">G</span><div><strong>Logged-out account</strong><span>Sign in to access training</span></div></div>
+          <div class="guest-menu-list">
+            <a class="primary" href="login.php">↪ Sign in</a>
+            <a href="forgot-password.php">? Forgot password</a>
+            <div class="guest-menu-divider"></div>
+            <a href="landing.html">⌂ Public landing page</a>
+            <a href="jobs.html">⌂ Available jobs</a>
+            <a href="apply.html">▤ Submit a resume</a>
+          </div>
+        </div>
+      </div>
+    </nav>
+  </header>
+  <main id="landingContent"></main>
+  <footer class="public-footer"><div class="footer-grid"><div><strong id="footerBrand">Restaurant</strong><br><span id="footerContact"></span></div><div><a href="apply.html">Submit Resume</a><a href="login.php">Employee Login</a></div></div></footer>
+<script src="js/public-jobs.js?v=20260804-jobs1"></script>
+<script>
+(() => {
+  const read=(key,fallback)=>{try{return JSON.parse(localStorage.getItem(key)||JSON.stringify(fallback))}catch{return fallback}};
+  const esc=value=>String(value??'').replace(/[&<>'"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
+  const brand=read('restaurant-brand-v1',{restaurantName:'Fatso’s Restaurant',email:'careers@restaurant.example',phone:'(602) 555-0100',description:'Made-to-order food, complete menu training, and local restaurant careers.',logoText:'FR',address:'Phoenix, Arizona',primary:'#d94a2b',secondary:'#ff835f',dark:'#171b1a'});
+  const landing=read('restaurant-landing-v1',{sections:[{id:'hero',type:'hero',title:'Great food starts with a well-trained team.',text:'Learn our menu, build restaurant skills, and explore current opportunities.',buttonText:'Submit Your Resume',buttonHref:'apply.html',visible:true},{id:'culture',type:'content',title:'Work with a team that takes pride in every order.',text:'We make food to order, support continuous training, and give every position a clear path to mastery.',visible:true},{id:'training',type:'content',title:'Training built around the real menu.',text:'Employees use guided study, flashcards, daily quizzes, kitchen verification, and position certifications.',buttonText:'Employee Login',buttonHref:'login.php',visible:true},{id:'jobs',type:'content',title:'Current opportunities',text:'We accept resumes for servers, cooks, cashiers, delivery drivers, managers, and future openings.',buttonText:'Apply Now',buttonHref:'apply.html',visible:true}]});
+  document.documentElement.style.setProperty('--brand-primary',brand.primary);document.documentElement.style.setProperty('--brand-secondary',brand.secondary);document.documentElement.style.setProperty('--brand-dark',brand.dark);document.getElementById('publicLogo').textContent=brand.logoText||'FR';document.getElementById('publicBrand').textContent=brand.restaurantName;document.getElementById('publicTagline').textContent=brand.description;document.getElementById('footerBrand').textContent=brand.restaurantName;document.getElementById('footerContact').textContent=[brand.email,brand.phone,brand.address].filter(Boolean).join(' · ');document.title=`${brand.restaurantName} Careers`;
+  const visible=(landing.sections||[]).filter(section=>section.visible!==false),hero=visible.find(section=>section.type==='hero')||visible[0];
+  const heroHtml=hero?`<section class="public-hero"><div class="public-hero-inner"><p class="eyebrow">${esc(brand.restaurantName)} careers</p><h1>${esc(hero.title)}</h1><p>${esc(hero.text)}</p><div class="hero-actions">${hero.buttonText?`<a class="button primary" href="${esc(hero.buttonHref||'apply.html')}">${esc(hero.buttonText)}</a>`:''}<a class="button secondary" href="login.php">Employee Login</a></div></div></section>`:'';
+  const bodyHtml=`<div class="public-main">${visible.filter(section=>!hero||section.id!==hero.id).map((section,index)=>`<section class="public-section"><div class="section-index">0${index+1}</div><div><h2>${esc(section.title)}</h2><p>${esc(section.text)}</p>${section.buttonText?`<a class="button" href="${esc(section.buttonHref||'#')}">${esc(section.buttonText)}</a>`:''}</div></section>`).join('')}</div>`;
+  document.getElementById('landingContent').innerHTML=heroHtml+bodyHtml+`<section class="jobs-shell"><p class="eyebrow">Now hiring</p><h2 style="font-size:36px;margin:8px 0 18px">Available jobs</h2><div class="job-grid" id="landingJobs"></div><div style="margin-top:18px"><a class="button primary" href="jobs.html">View all jobs</a></div></section>`;
+  (async()=>{let jobs=await window.RestaurantPublicJobs.load();const target=document.getElementById('landingJobs');target.innerHTML=jobs.length?jobs.slice(0,4).map(job=>`<article class="job-card"><div class="job-meta"><span class="job-chip">${esc(job.department)}</span><span class="job-chip">${esc(job.employmentType)}</span></div><h2>${esc(job.title)}</h2><p>${esc(job.summary)}</p><footer><span>${esc(job.location)}</span><a class="button" href="job.php?id=${encodeURIComponent(job.id)}">View job</a></footer></article>`).join(''):'<div class="job-empty">No jobs are currently published.</div>';})();
+})();
+</script>
+<script>
+(async () => {
+  try {
+    const response = await fetch('api/public-brand.php', {headers:{Accept:'application/json'}, cache:'no-store'});
+    const data = await response.json();
+    if (!response.ok || !data.brand) return;
+    const brand = data.brand;
+    document.documentElement.style.setProperty('--brand-primary', brand.primary || '#d94a2b');
+    document.documentElement.style.setProperty('--brand-secondary', brand.secondary || '#ff835f');
+    document.documentElement.style.setProperty('--brand-dark', brand.dark || '#171b1a');
+    const logo = document.getElementById('publicLogo');
+    if (brand.logoUrl) logo.innerHTML = `<img src="${brand.logoUrl}" alt="${brand.restaurantName || 'Restaurant'} logo">`;
+    else logo.textContent = brand.logoText || 'FR';
+    document.getElementById('publicBrand').textContent = brand.restaurantName || 'Restaurant';
+    document.getElementById('publicTagline').textContent = brand.description || 'Careers and training';
+    document.getElementById('footerBrand').textContent = brand.restaurantName || 'Restaurant';
+    document.getElementById('footerContact').textContent = [brand.email, brand.phone, brand.address].filter(Boolean).join(' · ');
+    document.title = `${brand.restaurantName || 'Restaurant'} Careers`;
+    const hero = document.querySelector('.public-hero');
+    if (hero && brand.coverUrl) {
+      hero.classList.add('has-cover-image');
+      hero.style.backgroundImage = `linear-gradient(110deg, rgba(23,27,26,.92), rgba(23,27,26,.54)), url("${brand.coverUrl.replaceAll('"','%22')}")`;
+    }
+  } catch {}
+})();
+</script>
+<script src="js/public-account-menu.js"></script>
+</body>
+</html>

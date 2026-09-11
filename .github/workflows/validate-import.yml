@@ -1,0 +1,64 @@
+name: Validate imported site
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+
+      - name: PHP syntax check
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -d '' files < <(find . -type f -name '*.php' -print0)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No PHP files found."
+            exit 1
+          fi
+          for file in "${files[@]}"; do
+            php -l "$file"
+          done
+
+      - name: Reject private/runtime artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          forbidden=0
+          for path in config.php .env storage/keys/application.key error_log api/error_log; do
+            if [ -e "$path" ]; then
+              echo "Forbidden tracked/runtime file: $path"
+              forbidden=1
+            fi
+          done
+          while IFS= read -r path; do
+            [ -z "$path" ] && continue
+            echo "Forbidden key/log artifact: $path"
+            forbidden=1
+          done < <(find . -type f \( -name '*.key' -o -name 'error_log' -o -name '*.log' \) -print)
+          exit "$forbidden"
+
+      - name: Reject nested archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          archives="$(find . -type f -name '*.zip' -print)"
+          if [ -n "$archives" ]; then
+            echo "Unexpected nested ZIP archives:"
+            echo "$archives"
+            exit 1
+          fi

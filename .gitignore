@@ -1,0 +1,8 @@
+/config.php
+/storage/private/*
+!/storage/private/.gitkeep
+/storage/keys/*
+*.key
+*.log
+error_log
+.env
