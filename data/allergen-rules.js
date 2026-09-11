@@ -1,38 +1,42 @@
-/*
-  Conservative allergen-tagging rules for training and lookup.
-  These tags are not a substitute for recipes, supplier labels, or manager confirmation.
-*/
+/* Conservative allergen lookup rules for the current Gelato Spot menu.
+   These are training indicators only, never a safety guarantee. */
 window.ALLERGEN_KNOWLEDGE = {
   majorAllergens: [
-    { id: 'milk', name: 'Milk', note: 'Cheese, cream cheese, sour cream, and ice cream are direct menu indicators.' },
-    { id: 'egg', name: 'Egg', note: 'Mayonnaise is a strong indicator. Dressings, breading, and baked goods require recipe verification.' },
-    { id: 'fish', name: 'Fish', note: 'Tuna is a direct menu indicator. Caesar dressing may contain anchovy and requires recipe verification.' },
-    { id: 'shellfish', name: 'Crustacean shellfish', note: 'No shellfish ingredient is named on the supplied menu. Cross-contact remains unverified.' },
-    { id: 'tree-nuts', name: 'Tree nuts', note: 'No tree nut ingredient is named on the supplied menu. Cross-contact remains unverified.' },
-    { id: 'peanuts', name: 'Peanuts', note: 'No peanut ingredient is named on the supplied menu. Cross-contact remains unverified.' },
-    { id: 'wheat', name: 'Wheat', note: 'Crusts, buns, breading, crackers, croutons, pretzels, tortillas, and cookies are indicators.' },
-    { id: 'soy', name: 'Soy', note: 'Processed meats, sauces, dressings, breads, and cheese products may contain soy; labels must be checked.' },
-    { id: 'sesame', name: 'Sesame', note: 'Buns, breads, crackers, dressings, and sauces may contain sesame; labels must be checked.' }
+    {id:'milk',name:'Milk',note:'Cheese, dairy, cream, butter, milk, and gelato names are direct or likely indicators; verify recipes and cross-contact.'},
+    {id:'egg',name:'Egg',note:'Egg and mayonnaise are direct indicators; dressings, breads, pasta, gelato, and baked goods require verification.'},
+    {id:'fish',name:'Fish',note:'Verify recipes and labels when fish or fish-derived ingredients may be present.'},
+    {id:'shellfish',name:'Crustacean shellfish',note:'Verify current recipes, suppliers, substitutions, and shared preparation areas.'},
+    {id:'tree-nuts',name:'Tree nuts',note:'Almond, pecan, and nut-branded flavors are direct indicators; pesto, spreads, and gelato require verification.'},
+    {id:'peanuts',name:'Peanuts',note:'Peanut and peanut-butter names are direct indicators; verify gelato cross-contact and supplier labels.'},
+    {id:'wheat',name:'Wheat',note:'Pizza dough, bread, panini, pasta, croutons, cookies, cakes, brownies, and similar baked items are indicators.'},
+    {id:'soy',name:'Soy',note:'Sauces, processed foods, chocolate, baked goods, breads, and gelato may contain soy; verify labels.'},
+    {id:'sesame',name:'Sesame',note:'Bread, buns, sauces, dressings, and garnishes may contain sesame; verify labels.'}
   ],
   directRules: [
-    { allergen: 'milk', patterns: ['mozzarella','cheddar','provolone','swiss cheese','swiss','parmesan','cream cheese','sour cream','pepper jack','four kinds of cheese','cheese','vanilla ice cream','ice cream'] },
-    { allergen: 'fish', patterns: ['tuna'] },
-    { allergen: 'wheat', patterns: ['pizza crust','whole-wheat crust','whole wheat crust','pretzel','crackers','croutons','italian bun','fresh baked roll','flour tortilla','breaded jalapeños','breaded jalapenos','chocolate chip cookie','calzone'] },
-    { allergen: 'egg', patterns: ['mayo','mayonnaise'] }
+    {allergen:'milk',patterns:['milk','cream','gelato','mozzarella','parmesan','cheese','butter','affogato','latte']},
+    {allergen:'egg',patterns:['egg','mayonnaise','mayo']},
+    {allergen:'tree-nuts',patterns:['almond','pecan','tree nut']},
+    {allergen:'peanuts',patterns:['peanut','peanut butter']},
+    {allergen:'wheat',patterns:['pizza','crust','dough','bread','panini','pasta','spaghetti','rigatoni','crouton','cookie','cake','brownie','biscoff']},
+    {allergen:'soy',patterns:['soy']},
+    {allergen:'sesame',patterns:['sesame']},
+    {allergen:'fish',patterns:['anchovy','tuna','salmon','fish']},
+    {allergen:'shellfish',patterns:['shrimp','crab','lobster','crustacean']}
   ],
   verifyRules: [
-    { allergen: 'milk', patterns: ['ranch','caesar dressing','italian dressing','peppercorn dressing','poppy seed sauce','pizza sauce','wing sauce','honey bbq','teriyaki','buffalo','cookie','breaded','sausage','pepperoni','salami','bacon bits','meatballs'] },
-    { allergen: 'egg', patterns: ['ranch','caesar dressing','italian dressing','peppercorn dressing','poppy seed sauce','breaded','croutons','pretzel','crackers','pizza crust','bun','roll','tortilla','cookie','calzone'] },
-    { allergen: 'fish', patterns: ['caesar dressing'] },
-    { allergen: 'wheat', patterns: ['mozzarella sticks','jalapeno poppers','jalapeño poppers','pizza','bun','roll','tortilla','cookie','crust','breaded','crackers','croutons','pretzel','calzone'] },
-    { allergen: 'soy', patterns: ['sausage','pepperoni','salami','ham','turkey','chicken','hamburger','roast beef','bacon','meatballs','ranch','dressing','sauce','cheese','crust','bun','roll','tortilla','cookie','crackers','croutons','pretzel','breaded'] },
-    { allergen: 'sesame', patterns: ['bun','roll','crackers','croutons','pretzel','tortilla','dressing','sauce'] }
+    {allergen:'milk',patterns:['gelato','chocolate','caramel','dressing','sauce','pesto','meatball','bread','pizza','panini','pasta','coffee']},
+    {allergen:'egg',patterns:['gelato','dressing','aioli','bread','panini','pasta','cookie','cake','brownie','biscoff']},
+    {allergen:'fish',patterns:['caesar','dressing']},
+    {allergen:'tree-nuts',patterns:['pesto','nutella','gelato','dessert','cookie','cake']},
+    {allergen:'peanuts',patterns:['gelato','dessert','chocolate','candy']},
+    {allergen:'wheat',patterns:['pizza','panini','pasta','bread','crouton','dessert','cookie','cake','brownie','biscoff']},
+    {allergen:'soy',patterns:['chocolate','sauce','dressing','bread','pizza','panini','pasta','gelato','dessert']},
+    {allergen:'sesame',patterns:['bread','panini','dressing','sauce','garnish']}
   ],
   alwaysVerify: [
-    'Shared ovens, prep surfaces, utensils, fryers, cutting tools, pans, and storage areas are not documented.',
-    'House-made sauce, dressing, dough, bread, cookie, meat, and breading recipes are not yet supplied.',
-    'Supplier labels and ingredient substitutions can change.',
-    'A gluten-free crust does not establish a gluten-free finished pizza or eliminate cross-contact.',
-    'Employees must escalate allergy questions to a manager and verify current recipes and labels.'
+    'Menu names and descriptions do not establish complete ingredient or cross-contact information.',
+    'Supplier labels, recipes, and substitutions can change.',
+    'Shared ovens, prep surfaces, utensils, equipment, and storage areas require current restaurant verification.',
+    'Employees must escalate allergy questions and verify current recipes and labels before making safety statements.'
   ]
 };

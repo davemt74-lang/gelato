@@ -86,13 +86,6 @@
 
   function itemIngredients(item) {
     const ingredients = [...(item.ingredients || []), ...(item.optionList || [])];
-    if (item.sectionId === 'sandwiches') {
-      ingredients.push('chips');
-      if (!['Chicken Caesar Wrap', 'French Connection'].includes(item.name)) ingredients.push('Italian bun');
-    }
-    if (item.sectionId === 'salads' && ['Chef Salad', "Fatty's Jumbo Garden Salad", "Roy's Side Salad"].includes(item.name)) {
-      ingredients.push('ranch', 'Italian dressing');
-    }
     return unique(ingredients.flatMap(splitIngredient).map(normalizeIngredient).filter(Boolean));
   }
 
@@ -228,45 +221,40 @@
     sortFlashcards
   };
 
-  const KITCHEN_SCENARIOS = [
-    {
-      id: 'wings-missing-carrots', item: 'Fresh Baked Wings', ticket: ['12 wings', 'Medium Buffalo', 'Ranch', 'Celery'],
-      issues: ['Missing carrots'], explanation: 'Fresh Baked Wings are served with ranch, celery, and carrots.'
-    },
-    {
-      id: 'sandwich-missing-chips', item: 'Fat Boy Special', ticket: ['Fat Boy Special', 'Ham and turkey', 'Provolone and Swiss', 'Italian bun'],
-      issues: ['Missing chips'], explanation: 'Oven-baked sandwiches are served with a side of chips.'
-    },
-    {
-      id: 'french-substitution', item: 'French Connection', ticket: ['French Connection', 'No pepperoni', 'Add ham', 'Pizza sauce', 'Mozzarella'],
-      issues: ['Invalid substitution'], explanation: 'French Connection is explicitly listed with no substitutions.'
-    },
-    {
-      id: 'great-white-red-sauce', item: 'Great White', ticket: ['14-inch Great White', 'Red sauce', 'Mozzarella', 'Cheddar', 'Provolone', 'Garlic'],
-      issues: ['Red sauce should not be included'], explanation: 'Great White is explicitly listed as having no red sauce.'
-    },
-    {
-      id: 'skinny-cheese', item: "Fatso's Skinny", ticket: ['16-inch Fatso’s Skinny', 'Extra pizza sauce', 'Vegetables', 'Mozzarella'],
-      issues: ['Cheese should not be included'], explanation: "Fatso's Skinny is explicitly listed as no cheese."
-    },
-    {
-      id: 'potato-one-dip', item: 'Potato Skins', ticket: ['Potato Skins', 'Cheddar', 'Bacon bits', 'Ranch'],
-      issues: ['Missing second dip choice'], explanation: 'Potato Skins are served with a choice of two: salsa, sour cream, or ranch.'
-    },
-    {
-      id: 'combo-count', item: 'Belly Buster Combo', ticket: ['3 wings', '3 poppers', '3 mozzarella sticks', '2 potato skins', 'Ranch', 'Pizza sauce'],
-      issues: ['Wing count should be four'], explanation: 'Belly Buster Combo includes four wings.'
-    },
-    {
-      id: 'caesar-wrap-hot', item: 'Chicken Caesar Wrap', ticket: ['Chicken Caesar Wrap', 'Heat in oven', 'Romaine', 'Chicken', 'Caesar dressing'],
-      issues: ['Wrap should be served cold'], explanation: 'Chicken Caesar Wrap is explicitly listed as served cold.'
-    },
-    {
-      id: 'correct-hawaiian', item: 'Hawaiian', ticket: ['12-inch Hawaiian', 'Mozzarella', 'Lean ham', 'Pineapple'],
-      issues: ['No issues'], explanation: 'This ticket matches the listed Hawaiian build.'
-    }
-  ];
-  const KITCHEN_ISSUE_OPTIONS = unique(KITCHEN_SCENARIOS.flatMap(scenario => scenario.issues).concat(['Wrong size', 'Missing ranch', 'Wrong sauce', 'No issues']));
+  function buildKitchenScenarios() {
+    const candidates = allItems.filter(item => itemIngredients(item).length >= 2).slice(0, 14);
+    const scenarios = [];
+    candidates.forEach((item, index) => {
+      const components = itemIngredients(item).slice(0, 5);
+      if (index % 2 === 0 && components.length >= 2) {
+        const missing = components[0];
+        scenarios.push({
+          id: `live-${index}-missing`,
+          item: item.name,
+          ticket: [item.name, ...components.slice(1)],
+          issues: [`Missing ${missing}`],
+          explanation: `${item.name} includes ${missing} in the current menu description.`
+        });
+      } else {
+        scenarios.push({
+          id: `live-${index}-correct`,
+          item: item.name,
+          ticket: [item.name, ...components],
+          issues: ['No issues'],
+          explanation: `This ticket matches the current listed components for ${item.name}.`
+        });
+      }
+    });
+    return scenarios.length ? scenarios : [{
+      id: 'live-menu-no-components',
+      item: 'Menu verification',
+      ticket: ['Use the current menu description'],
+      issues: ['No issues'],
+      explanation: 'No structured component data is available for a kitchen verification scenario yet.'
+    }];
+  }
+  const KITCHEN_SCENARIOS = buildKitchenScenarios();
+  const KITCHEN_ISSUE_OPTIONS = unique(KITCHEN_SCENARIOS.flatMap(scenario => scenario.issues).concat(['Wrong item', 'Wrong size', 'Wrong sauce', 'No issues']));
 
   function startKitchenSession() {
     const count = Number($('kitchenCount')?.value || 5);
