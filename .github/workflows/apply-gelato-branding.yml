@@ -1,0 +1,118 @@
+name: Apply Gelato branding cleanup
+
+on:
+  push:
+    branches: [gelato-branding-cleanup]
+    paths:
+      - '.github/workflows/apply-gelato-branding.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: gelato-branding-cleanup
+          fetch-depth: 0
+
+      - name: Replace visible legacy branding
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          replacements = {
+              'index.html': [
+                  ('<meta name="description" content="Local-first restaurant training workspace with menu knowledge, positions, allergens, flashcards, daily training, kitchen verification, certifications, and quizzes." />', '<meta name="description" content="Gelato Spot training workspace with live menu knowledge, positions, allergens, flashcards, daily training, kitchen verification, certifications, and quizzes." />'),
+                  ('<title>Restaurant Agentic Training Workspace</title>', '<title>Gelato Spot Training Workspace</title>'),
+                  ('<div class="brand"><div class="logo">✦</div><div><h1>Restaurant Workspace</h1><p>Local menu knowledge agent</p></div></div>', '<div class="brand"><div class="logo">GS</div><div><h1>Gelato Spot</h1><p>Menu training &amp; knowledge</p></div></div>'),
+              ],
+              'jobs.html': [
+                  ("restaurantName:'Fatso’s Restaurant'", "restaurantName:'Gelato Spot'"),
+                  ("logoText:'FR'", "logoText:'GS'"),
+              ],
+              'landing.html': [
+                  ("restaurantName:'Fatso’s Restaurant'", "restaurantName:'Gelato Spot'"),
+                  ("logoText:'FR'", "logoText:'GS'"),
+              ],
+              'apply.html': [
+                  ("restaurantName:'Fatso’s Restaurant'", "restaurantName:'Gelato Spot'"),
+                  ("logoText:'FR'", "logoText:'GS'"),
+              ],
+              'js/admin-extensions.js': [
+                  ("restaurantName:'Fatso’s Restaurant'", "restaurantName:'Gelato Spot'"),
+                  ("logoText:'FR'", "logoText:'GS'"),
+              ],
+              'js/admin-console.js': [
+                  ("restaurantName:'Fatso’s Restaurant'", "restaurantName:'Gelato Spot'"),
+                  ("legalName:'Fatso’s Restaurant LLC'", "legalName:'Gelato Spot'"),
+                  ("logoText:'FR'", "logoText:'GS'"),
+              ],
+              'api/public-agent.php': [
+                  ("Fatso-Public-Agent/1.0", "GelatoSpot-Public-Agent/1.0"),
+              ],
+              'config-example.php': [
+                  ("'name' => 'Restaurant Training Workspace'", "'name' => 'Gelato Spot Training Workspace'"),
+              ],
+          }
+
+          for filename, pairs in replacements.items():
+              path = Path(filename)
+              text = path.read_text(encoding='utf-8')
+              for old, new in pairs:
+                  count = text.count(old)
+                  if count < 1:
+                      raise SystemExit(f'Expected branding text not found in {filename}: {old[:80]!r}')
+                  text = text.replace(old, new)
+              path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Remove unreferenced Fatso-era artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          for target in index-pre-agent.html agent-workspace-v2.html data/ingredient-catalog.json; do
+            refs=$(grep -RIl --exclude-dir=.git --exclude="$(basename "$target")" -- "$target" . || true)
+            if [ -n "$refs" ]; then
+              echo "Refusing to remove referenced legacy artifact $target"
+              echo "$refs"
+              exit 1
+            fi
+          done
+          rm -f index-pre-agent.html agent-workspace-v2.html data/ingredient-catalog.json
+
+      - name: Verify Gelato identity and reject Fatso branding
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q '<title>Gelato Spot Training Workspace</title>' index.html
+          grep -q '<h1>Gelato Spot</h1>' index.html
+          grep -q 'Menu training &amp; knowledge' index.html
+          if grep -RniE --exclude-dir=.git --exclude='*.sql' --exclude='.github/workflows/apply-gelato-branding.yml' --exclude='.github/workflows/inspect-branding.yml' 'Fatso|Fatso.s|Fatso’s' .; then
+            echo 'Legacy Fatso branding remains in active repository files.'
+            exit 1
+          fi
+          echo 'Gelato branding gate passed.'
+
+      - name: Syntax check touched runtime files
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -l api/public-agent.php
+          php -l config-example.php
+
+      - name: Remove one-time workflows and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/apply-gelato-branding.yml .github/workflows/inspect-branding.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Replace Fatso branding with Gelato Spot"
+          git push origin HEAD:gelato-branding-cleanup
