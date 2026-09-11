@@ -1,0 +1,71 @@
+name: Build clean Gelato deploy artifact
+
+on:
+  push:
+    branches: [deploy-artifact-20260910]
+    paths:
+      - '.github/workflows/build-deploy-artifact.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out verified main
+        uses: actions/checkout@v4
+        with:
+          ref: 7f2c17fd6126d12e5ff54d2b210e88cd1f115eea
+
+      - name: Build production package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/gelato-deploy"
+          rsync -a ./ "$RUNNER_TEMP/gelato-deploy/" \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='config.php' \
+            --exclude='*.log' \
+            --exclude='*.zip'
+
+          test -f "$RUNNER_TEMP/gelato-deploy/config-example.php"
+          test -f "$RUNNER_TEMP/gelato-deploy/database/install.sql"
+          test -f "$RUNNER_TEMP/gelato-deploy/setup-first-user.php"
+          test -f "$RUNNER_TEMP/gelato-deploy/admin-menu-import.php"
+          test -f "$RUNNER_TEMP/gelato-deploy/storage/.htaccess"
+          test -f "$RUNNER_TEMP/gelato-deploy/uploads/.htaccess"
+
+          if find "$RUNNER_TEMP/gelato-deploy" -type f \( -name 'config.php' -o -name '*.key' -o -name '*.pem' -o -name '*.log' -o -name '*.zip' \) | grep -q .; then
+            echo 'Unsafe runtime/private artifact found in deploy staging.'
+            find "$RUNNER_TEMP/gelato-deploy" -type f \( -name 'config.php' -o -name '*.key' -o -name '*.pem' -o -name '*.log' -o -name '*.zip' \)
+            exit 1
+          fi
+
+          printf 'Gelato production deploy\nSource commit: 7f2c17fd6126d12e5ff54d2b210e88cd1f115eea\n' > "$RUNNER_TEMP/gelato-deploy/DEPLOY-BUILD.txt"
+          (cd "$RUNNER_TEMP/gelato-deploy" && zip -qr "$GITHUB_WORKSPACE/gelato-deploy.zip" .)
+
+      - name: Verify ZIP contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          unzip -t gelato-deploy.zip >/dev/null
+          unzip -Z1 gelato-deploy.zip | grep -qx 'setup-first-user.php'
+          unzip -Z1 gelato-deploy.zip | grep -qx 'database/install.sql'
+          unzip -Z1 gelato-deploy.zip | grep -qx 'config-example.php'
+          if unzip -Z1 gelato-deploy.zip | grep -E '(^|/)config\.php$|\.github/|\.git/|\.key$|\.pem$|\.log$|\.zip$'; then
+            echo 'Deploy ZIP contains excluded material.'
+            exit 1
+          fi
+          sha256sum gelato-deploy.zip | tee gelato-deploy.zip.sha256
+
+      - name: Upload deploy artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gelato-deploy
+          path: |
+            gelato-deploy.zip
+            gelato-deploy.zip.sha256
+          if-no-files-found: error
+          retention-days: 14
