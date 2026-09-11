@@ -1,0 +1,158 @@
+{
+  "version": "manual-scan-2026-09-10",
+  "source": "manual-scan:https://gelatospot.com/menu/",
+  "notes": "Bundled install-safe snapshot created from the scanned public Gelato Spot menu. Live REST/MCP sync is optional and may add rotating/seasonal items such as individual gelato flavors.",
+  "sections": [
+    {
+      "title": "Appetizers",
+      "slug": "appetizers",
+      "note": "Scanned from the public Gelato Spot menu.",
+      "status": "active",
+      "items": [
+        {"name":"Roasted Meatballs","description":"Mozzarella, parmesan cheese, fresh basil, and garlic bread.","price":"$11","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Garlic Bread","description":"Covered in parmesan and mozzarella cheeses.","price":"$10","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Caprese Salad","description":"Marinated roasted tomatoes, tomato jam, arugula, warm bread with extra virgin olive oil, balsamic, and sea salt.","price":"$13","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Bruschetta","description":"Ripe tomatoes, fresh basil, extra virgin olive oil, and aged balsamic.","price":"$13","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Roasted Cauliflower","description":"Golden raisins, pesto vinaigrette, radishes, and parmesan cheese.","price":"$13","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Trio","description":"Marinara parmesan dip, pesto dip, olive oil with balsamic glaze, and focaccia wedges.","price":"$13","tags":[],"featured":false,"url":"","imageUrl":""}
+      ]
+    },
+    {
+      "title": "Panini",
+      "slug": "panini",
+      "note": "Panini pricing on the scanned menu is lunch 11AM–5PM $13 and dinner 5PM–close $15. All panini come with chips.",
+      "status": "active",
+      "items": [
+        {"name":"Chicken Louie Sandwich","description":"Grilled chicken breast, fresh tomato, smoked bacon, avocado, Louie dressing, and gorgonzola crumbles; provolone or mozzarella may be substituted.","price":"Lunch $13 | Dinner $15","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Sausage & Peppers","description":"Hot Italian sausage, scratch marinara, provolone, roasted red peppers, and wood-fired onions.","price":"Lunch $13 | Dinner $15","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Turkey & Bacon","description":"Turkey, bacon bits, romaine, tomatoes, red onions, avocado, provolone cheese, and mayo.","price":"Lunch $13 | Dinner $15","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Veggie Panini","description":"Roasted eggplant, wood-fired onions and zucchini, roasted red peppers, fresh tomatoes, provolone, fresh mozzarella, and basil.","price":"Lunch $13 | Dinner $15","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Grinder","description":"Italian ham, hot soppressata, melted provolone, Gaeta olives, tomato, romaine, chile pepper oil, and oregano.","price":"Lunch $13 | Dinner $15","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Meat Ball","description":"Meatball, marinara sauce, provolone cheese, and oregano.","price":"Lunch $13 | Dinner $15","tags":[],"featured":false,"url":"","imageUrl":""}
+      ]
+    },
+    {
+      "title": "Wood Fired Pizza",
+      "slug": "wood-fired-pizza",
+      "note": "Scanned menu pricing: 10\" lunch pizza 11AM–5PM $13; 12\" dinner pizza all day $15; gluten-free dough +$4 on 12\" pizza.",
+      "status": "active",
+      "items": [
+        {"name":"Margherita","description":"Crushed tomatoes, fresh mozzarella, and fresh basil.","price":"10-inch $13 | 12-inch $15","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Cheese","description":"Crushed tomatoes, fresh mozzarella, provolone cheese, and shaved parmesan.","price":"10-inch $13 | 12-inch $15","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Pepperoni","description":"Crushed tomatoes, fresh mozzarella, spicy pepperoni, and parmesan.","price":"10-inch $13 | 12-inch $15","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"American","description":"Crushed tomatoes, fresh mozzarella, spicy pepperoni, hot Italian sausage, and parmesan.","price":"10-inch $13 | 12-inch $15","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Testarossa","description":"Crushed tomatoes, fresh mozzarella, spicy pepperoni, roasted red peppers, wood-fired onions, Gaeta olives, crushed garlic, and oregano.","price":"10-inch $13 | 12-inch $15","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Veggie (White/Red)","description":"Crushed tomatoes, fresh mozzarella, roasted eggplant, roasted red peppers, fresh mushrooms, wood-fired onions, and fresh basil.","price":"10-inch $13 | 12-inch $15","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Pig & Pineapple","description":"Italian ham, fresh golden pineapple, fresh basil, and parmesan.","price":"10-inch $13 | 12-inch $15","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Capricossa","description":"Italian ham, Gaeta olives, fresh mushrooms, marinated artichokes, and fresh basil.","price":"10-inch $13 | 12-inch $15","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Honey Basil","description":"Fresh mozzarella, gorgonzola, basil, parmesan, and honey drizzle.","price":"10-inch $13 | 12-inch $15","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"BBQ Chicken","description":"Homemade chipotle BBQ, grilled chicken, fresh mozzarella, caramelized onions, and bacon.","price":"10-inch $13 | 12-inch $15","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Meat Ball","description":"Marinara sauce, fresh mozzarella, sliced meatballs, parmesan cheese, and oregano.","price":"10-inch $13 | 12-inch $15","tags":[],"featured":false,"url":"","imageUrl":""}
+      ]
+    },
+    {
+      "title": "Salads and Pasta",
+      "slug": "salads-and-pasta",
+      "note": "Scanned menu lists homemade Balsamic Vinaigrette, Champagne Vinaigrette, Louie Dressing, Aioli dressing, and Caesar dressing.",
+      "status": "active",
+      "items": [
+        {"name":"Roasted Veggie Kale Salad","description":"Kale, roasted red peppers, roasted eggplant, grilled zucchini, tomatoes, roasted corn, balsamic vinaigrette, and a wedge of bread.","price":"Lunch $13 | Dinner $15","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Focaccia Chicken Caesar","description":"Mixed greens, grilled chicken breast, shaved parmesan, homemade Caesar dressing, and cherry tomatoes served on focaccia bread (pizza pie).","price":"Lunch $13 | Dinner $15","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Focaccia Chop Salad","description":"Mixed greens, cucumbers, carrots, avocado, roasted corn, tomatoes, shaved parmesan, and champagne vinaigrette served on focaccia bread (pizza pie). Add chicken +$2.","price":"Lunch $13 | Dinner $15","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Louie Wedge Salad","description":"Iceberg wedge with Louie dressing, chicken, tomatoes, cucumbers, avocado, bacon bits, champagne vinaigrette, and hardboiled egg.","price":"Lunch $13 | Dinner $15","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"House Salad or Caesar Salad","description":"","price":"$5","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Spaghetti & Meatballs","description":"Rustic wood fire-roasted tomato in a pink sauce.","price":"$11-$16","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Rigatoni Bolognese","description":"Topped with fresh ricotta.","price":"$11-$16","tags":[],"featured":false,"url":"","imageUrl":""}
+      ]
+    },
+    {
+      "title": "Gelato",
+      "slug": "gelato",
+      "note": "Manual snapshot captures the stable gelato formats, party packs, mousse cakes, and toppings. Individual flavors rotate and can be refreshed later from the live Gelato Spot REST/MCP sources.",
+      "status": "active",
+      "items": [
+        {"name":"One Flavor Gelato","description":"","price":"$4.50","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Two Flavor Gelato","description":"","price":"$5.50","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Three Flavor Gelato","description":"","price":"$6.50","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Gelato Shake or Root Beer Float","description":"Add 2 shots of espresso for $1.","price":"$7.50","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Affogato","description":"Gelato plus espresso.","price":"$6.50","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Party Pack 500g","description":"Two flavors; serves 4-5.","price":"$19.50","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Party Pack 750g","description":"Two flavors; serves 6-8.","price":"$27.50","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Party Pack 1,000g","description":"Three flavors; serves 10-12.","price":"$31.50","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Mousse Cake — Coconut Macaroon / Italian Wedding Cookies / Brownie Sundae","description":"","price":"$4.25","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Mousse Cake — Chocolate Indulgence / Tiramisu / Red Velvet","description":"","price":"$5","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Gelato Toppings","description":"Rainbow sprinkles, chocolate sprinkles, chocolate chips, gummy bears, Oreo cookies, roasted almond, M&M's, and bubble gum.","price":"$0.60 each","tags":[],"featured":false,"url":"","imageUrl":""}
+      ]
+    },
+    {
+      "title": "Beverages",
+      "slug": "beverages",
+      "note": "Scanned soft drinks, juice, tea, and water.",
+      "status": "active",
+      "items": [
+        {"name":"Bottled Alkaline Molly Water .5L","description":"","price":"$2","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Bottled Alkaline Molly Water 1L","description":"","price":"$3","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Perrier Sparkling Water","description":"","price":"$2.50","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Carbonated Drinks","description":"Coke, Diet Coke, Sprite, Dr. Pepper, Root Beer, Minute Maid Lemonade.","price":"$2.50","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Juice","description":"Apple juice, orange juice, cranberry juice.","price":"$3","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Iced Tea","description":"Pomegranate Green Tea or Black Tea.","price":"$2.50","tags":[],"featured":false,"url":"","imageUrl":""}
+      ]
+    },
+    {
+      "title": "Beer, Wine, and Cocktails",
+      "slug": "beer-wine-and-cocktails",
+      "note": "Alcohol items are included as menu training data only.",
+      "status": "active",
+      "items": [
+        {"name":"Bottled Beer","description":"Modelo Especial, Huss Scottsdale Blond, Papago Orange Blonde, Peroni, San Tan Moon Juice.","price":"$5","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Red Wine","description":"Angeline Pinot Noir, Donna Paula Malbec, Hope's End Red Blend, Three Thieves Cabernet Sauvignon.","price":"Glass $8.50 | Bottle $34","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"White Wine","description":"Pinot Grigio, Pomelo, Seaglass Sauvignon Blanc, Charles & Charles Riesling.","price":"Glass $8.50 | Bottle $34","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Mixed Drinks / Cocktails","description":"Vodka Moscow Mule, Rum Shaken Daiquiri, Tequila Paloma, Gin & Tonic, Whiskey Old Fashioned.","price":"$9","tags":[],"featured":false,"url":"","imageUrl":""}
+      ]
+    },
+    {
+      "title": "Coffee",
+      "slug": "coffee",
+      "note": "Scanned coffee menu. Some modifiers may be temporarily unavailable; verify current availability.",
+      "status": "active",
+      "items": [
+        {"name":"Frozen Frappe","description":"","price":"$6.50","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Espresso","description":"2 shots. Add one shot of Baileys or Kahlua +$5.","price":"$3","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Americano (Hot or Iced)","description":"Extra 2 shots +$2.","price":"$4.50","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Café Latte (Hot or Iced)","description":"Extra 2 shots +$2.","price":"$4.50","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Chai Tea Latte (Hot or Iced)","description":"Large +$0.50.","price":"$4.50","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Cappuccino","description":"","price":"$4.50","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Macchiato","description":"","price":"$4.50","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Hot Chocolate","description":"","price":"$4.50","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Add a Flavor","description":"Vanilla, caramel, hazelnut (sugar-free available), chocolate syrup, white chocolate, caramel syrup.","price":"$0.55","tags":[],"featured":false,"url":"","imageUrl":""},
+        {"name":"Add Almond Milk","description":"","price":"$0.60","tags":[],"featured":false,"url":"","imageUrl":""}
+      ]
+    },
+    {
+      "title": "Happy Hour",
+      "slug": "happy-hour",
+      "note": "Monday through Friday, 3PM–6PM on the scanned menu.",
+      "status": "active",
+      "items": [
+        {"name":"Margarita Pizza","description":"Happy hour food item.","price":"$9","tags":["happy-hour","food"],"featured":false,"url":"","imageUrl":""},
+        {"name":"Pepperoni Pizza","description":"Happy hour food item.","price":"$9","tags":["happy-hour","food"],"featured":false,"url":"","imageUrl":""},
+        {"name":"Bruschetta Chicken Caesar Salad","description":"Happy hour food item.","price":"$8","tags":["happy-hour","food"],"featured":false,"url":"","imageUrl":""},
+        {"name":"Chicken Caesar Salad","description":"Happy hour food item.","price":"$8","tags":["happy-hour","food"],"featured":false,"url":"","imageUrl":""},
+        {"name":"Meatball Appetizer","description":"Happy hour food item.","price":"$6","tags":["happy-hour","food"],"featured":false,"url":"","imageUrl":""},
+        {"name":"Garlic Bread","description":"Happy hour food item.","price":"$5","tags":["happy-hour","food"],"featured":false,"url":"","imageUrl":""},
+        {"name":"Roasted Cauliflower","description":"Happy hour food item.","price":"$7","tags":["happy-hour","food"],"featured":false,"url":"","imageUrl":""},
+        {"name":"Today's Soup","description":"Happy hour food item.","price":"$5","tags":["happy-hour","food"],"featured":false,"url":"","imageUrl":""},
+        {"name":"Spaghetti & Meatballs","description":"Happy hour food item; half portion.","price":"$8","tags":["happy-hour","food"],"featured":false,"url":"","imageUrl":""},
+        {"name":"Capellini Alla Primavera","description":"Happy hour food item; half portion.","price":"$6","tags":["happy-hour","food"],"featured":false,"url":"","imageUrl":""},
+        {"name":"Bottle Beer","description":"Happy hour drink item.","price":"$4","tags":["happy-hour","drink"],"featured":false,"url":"","imageUrl":""},
+        {"name":"House Wine","description":"Happy hour drink item.","price":"$4","tags":["happy-hour","drink"],"featured":false,"url":"","imageUrl":""},
+        {"name":"Classic Mule","description":"Happy hour drink item.","price":"$5","tags":["happy-hour","drink"],"featured":false,"url":"","imageUrl":""},
+        {"name":"Old Fashioned","description":"Happy hour drink item.","price":"$5","tags":["happy-hour","drink"],"featured":false,"url":"","imageUrl":""},
+        {"name":"Whiskey Cocktail","description":"Happy hour drink item.","price":"$5","tags":["happy-hour","drink"],"featured":false,"url":"","imageUrl":""},
+        {"name":"Daiquiri","description":"Happy hour drink item.","price":"$5","tags":["happy-hour","drink"],"featured":false,"url":"","imageUrl":""},
+        {"name":"Paloma","description":"Happy hour drink item.","price":"$5","tags":["happy-hour","drink"],"featured":false,"url":"","imageUrl":""},
+        {"name":"Traditional Gin & Tonic","description":"Happy hour drink item.","price":"$5","tags":["happy-hour","drink"],"featured":false,"url":"","imageUrl":""}
+      ]
+    }
+  ]
+}
