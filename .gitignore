@@ -1,0 +1,5 @@
+/config.php
+/storage/private/*
+!/storage/private/.gitkeep
+*.log
+.env

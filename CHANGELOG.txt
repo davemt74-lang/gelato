@@ -1,0 +1,204 @@
+2026-08-03 — Notifications, resume pages, and unified mistake review
+- Repaired the Notifications page and header dropdown layout across desktop and mobile.
+- Positioned the Owner System Agent composer flush with the bottom edge and removed the blank gap below it.
+- Resume submissions now open on unique full-width resume.php pages with no workspace sidebar and a Back to Resume Submissions control.
+- Added a unified mistake ledger for Agent Workspace, Flashcards, Learning Quiz, Daily Training, and Kitchen Tickets.
+- Every mistake now records its source module, training context, menu section, position, submitted answer, correct answer, and explanation.
+
+2026-08-03 — Owner System Agent proactive chat
+- Added the floating owner-agent chat composer to the owner dashboard.
+- Added persistent private owner-agent conversation history.
+- Added proactive next-action recommendations for resumes, overdue training, low quiz scores, certifications, notifications, invitations, and account setup.
+- Added one-click owner action prompts and guided navigation to the relevant administrative workspace.
+- Kept the owner conversation on the page's single scrollbar with a transparent sticky composer background.
+
+2026-08-03 — Admin media, LLM keys, permissions, and notifications
+- Added persistent logo and public cover-image uploads to Brand Settings.
+- Added server-side image validation for PNG, JPG, and WebP uploads.
+- Added public brand loading so the landing page and resume page display the saved logo, cover image, colors, identity, and contact details.
+- Added owner-controlled Anthropic Claude Developer API and OpenAI / ChatGPT API key management.
+- API keys are encrypted with PHP Sodium, stored outside browser storage, and only the final four characters are displayed after saving.
+- Added editable account-type permission grants while keeping the Super Admin owner role protected.
+- Added a visual notification bell, unread badge, recent-activity dropdown, Notifications page, filters, mark-read controls, and a Notifications link in the user menu.
+- Database-backed account, role, brand, LLM, resume, and security activity now creates notifications for the acting employee and authorized administrators.
+- Quiz, daily training, flashcard, kitchen-verification, and certification completion can sync into the notification and audit system when the PHP workspace is active.
+- Added database/20260803_brand_images_llm_keys.sql for installations created before this update.
+
+2026-08-03 — Order Simulator removed
+- Removed the Order Simulator page and sidebar navigation.
+- Removed order scenarios from dashboard activity, progress resets, and certification requirements.
+- Certification readiness now uses five active requirements.
+
+PROFILE DROPDOWN STACKING FIX
+
+Fixed:
+- Raised the authenticated top header above the dashboard content stacking context.
+- Raised the profile wrapper and dropdown above cards, sticky panels, and page content.
+- Added explicit header overflow handling so the dropdown is never clipped.
+- Added a stylesheet cache-busting version to ensure deployed browsers load the corrected CSS.
+
+Deployment:
+- Replace css/admin.css and index.html, or deploy the complete updated package.
+- Existing config.php remains excluded from the package.
+
+--- PREVIOUS UPDATE ---
+
+DASHBOARD, PROGRESS REVIEW, AND MENU NOTES UPDATE
+
+Added:
+- New Dashboard as the default application landing page.
+- Dashboard statistics for flashcards viewed, mastered and due cards, quizzes completed, best and average quiz scores, daily sessions and streaks, order and kitchen passes, open review items, and local position certificates.
+- Expanded Progress Review panel with six active-position certification requirements and percentage-based readiness.
+- Weak quiz-section analysis based on cumulative section scoring.
+- Review queue with open, reviewed, and total counts; source breakdown; and the newest unresolved mistakes.
+- Recent training activity combining quizzes, daily training, order scenarios, kitchen verification, flashcards, and certifications.
+- Readiness overview for all 12 restaurant positions.
+- Dedicated Menu Notes page with 18 operational notes and filters for note type, menu section, and text search.
+- Important concept highlights for no-cheese and no-red-sauce pizzas, size differences, whole-wheat behavior, wing inclusions, sandwich exceptions, varying dip charges, calzone limits, crust restrictions, premium meat pricing, and allergen escalation.
+
+Changed:
+- Removed the separate Progress link from the sidebar. Progress review data now lives directly on the Dashboard.
+- Dashboard and Menu Notes retain the compact fixed sidebar with no internal scrollbar.
+
+Validation completed:
+- Inline and advanced JavaScript syntax checks
+- Duplicate HTML identifier and missing navigation-target checks
+- Dashboard initialization and KPI rendering
+- Six-requirement readiness rendering
+- Twelve-position overview rendering
+- Menu Notes search and filter interaction
+- Sidebar visibility checks at 1000, 720, 650, and 600 pixel viewport heights
+- Zero browser console or runtime errors in the tested dashboard and menu-notes flows
+
+--- PREVIOUS UPDATE ---
+
+FLASHCARD WORKSPACE REPAIR AND SEPARATION
+
+Changed:
+- Replaced the split builder/study columns with a full-width Flashcard Deck Builder page.
+- Moved the active card session into a separate focused Flashcard Study page.
+- Added a Deck settings return action and a Resume current deck action.
+- Kept section selection, card-type selection, deck size, order, naming, presets, and custom-card creation on one setup page.
+- Preserved spaced repetition, due-card study, confidence marking, saved presets, and custom cards.
+
+Fixed:
+- Corrected the collapsed flashcard rendering caused by the inner card element behaving as an inline element.
+- Flashcard front and back faces now render at 760 × 380 pixels on the tested desktop viewport and scale responsively.
+- The study session now fills the focused study panel, keeping navigation controls at the bottom instead of leaving a detached blank region.
+- Flashcard keyboard controls now run only in the dedicated study interface.
+
+Validation completed:
+- Inline and advanced JavaScript syntax checks
+- Duplicate HTML identifier check
+- Builder-to-study navigation test
+- Full-size front, inner, and face geometry checks
+- Card flip, confidence marking, exit, and resume-flow checks
+- Zero browser console or runtime errors in the tested flashcard flow
+
+--- PREVIOUS UPDATE ---
+
+ADVANCED TRAINING WORKSPACE UPDATE
+
+Added:
+- Customer Order Simulator with six realistic scenarios
+- Size-aware menu pricing and running order totals
+- Standard pizza topping, premium sausage/chicken, whole-wheat, gluten-free, and calzone topping charges
+- Exact scenario validation with expected totals and position-based result history
+- Position Certification Paths across all 12 restaurant roles
+- Six certification requirements: quiz, flashcards, daily training, order simulation, kitchen verification, and mistake review
+- Local certificate issuance after completing a path
+- Spaced-repetition scheduling for flashcards
+- Due-card and low-mastery study ordering
+- Daily Training with eight deterministic position-based questions, daily best score, and streak tracking
+- Kitchen Ticket Verification with recipe, side, sauce, count, substitution, and preparation checks
+- Mistake Review Center shared by the formal quiz, daily training, order simulation, and kitchen verification
+- Flashcard creation from individual mistakes or the complete open-mistake queue
+- Ingredient detail profiles for all 95 canonical ingredients/options
+- Ingredient usage groups, allergen indicators, verification tags, menu wording, and position relevance
+- Advanced progress summary for daily, order, kitchen, and certification activity
+
+Maintained:
+- Full-canvas local agent workspace
+- Single page scrollbar with sticky right context sidebar
+- Sticky footer chat composer
+- Complete menu knowledge and category-filtered ingredient catalog
+- Conservative allergen safety boundaries
+- Configurable flashcard decks and multi-select formal learning quiz
+- No backend, no LLM API, and no network requirement
+
+Validation completed:
+- JavaScript syntax checks
+- Duplicate HTML identifier check
+- Navigation initialization for all 13 pages
+- Full browser interaction smoke test using Chromium DevTools Protocol
+- Successful 100% order scenario validation at $38.50
+- Daily and kitchen answer locking and feedback
+- Ingredient modal verification for mozzarella with 23 menu uses
+- Formal quiz-to-mistake-review integration
+- Spaced-repetition schedule behavior
+- Zero captured browser runtime errors in the tested flows
+
+Sidebar navigation compactness update
+- Reduced sidebar menu row height, line height, icon spacing, and surrounding chrome.
+- Removed the sidebar navigation scrollbar.
+- Added an extra compact desktop treatment for shorter browser windows.
+- Kept all navigation destinations visible in one fixed sidebar.
+
+ADMIN, AUTHENTICATION, HIRING, AND PUBLIC SITE PASS
+---------------------------------------------------
+- Added credential-based local prototype login with Super Admin, Manager, and Employee accounts.
+- Added protected store-owner / Super Admin role and permission-aware admin navigation.
+- Added Training and Admin sidebar modes without nested sidebar scrolling.
+- Added upper-right profile picture placeholder, account dropdown, profile settings, public-page links, and logout.
+- Added Owner System Agent with deterministic training, certification, overdue-work, and new-resume insights.
+- Added user-account administration, role assignment, status management, and custom account-type creation.
+- Added account permission catalog and role-based visibility.
+- Added public resume form, resume submission queue, internal notes, status workflow, and employee conversion.
+- Added resume form builder with reusable field types and publishing.
+- Added public landing-page builder and live preview.
+- Added Super Admin brand settings used by login, public landing, resume form, and workspace.
+- Added MySQL 8 / MariaDB 10.11 schema and baseline permission/allergen seed data.
+- Added local-server launch scripts for reliable same-origin browser storage across the multi-page prototype.
+
+2026-08-03 - Database Installation and First Owner
+- Added canonical database/install.sql for fresh installations.
+- Added config-example.php; config.php remains environment-owned and excluded from packages.
+- Added setup-first-user.php with one-time owner lock and no separate setup secret.
+- Added database-backed login.php, logout.php, and authenticated index.php bridge.
+- Added first-run creation for organization, location, roles, permissions, positions, branding, resume form, public page, owner agent, and audit event.
+- Updated public login links and local PHP launchers.
+- Removed the duplicate browser-only login page; login.php is the single sign-in route.
+2026-08-03
+- Removed the extra first-owner setup secret and form field.
+- First-owner setup now relies on config.php, an installed schema, CSRF protection, and the absence of any active Super Admin.
+- Updated installation documentation and deployment package.
+
+
+2026-08-03 - Logged-out account and password recovery
+- Added Guest profile dropdown to public, resume, and login views.
+- Added secure database-backed forgot-password request flow.
+- Added single-use, expiring reset-password flow.
+- Added password reset success notice on login.
+- Added optional mail sender configuration without requiring changes to existing config.php files.
+
+2026-08-03 — Guided Agent Training
+- Expanded Agent Workspace from passive menu search into a proactive role-based trainer.
+- "Train me in Agent Workspace" now starts a continuous question, answer, correction, and next-question loop.
+- Added guided position, quick drill, ingredient, price, exception, allergen, and service-detail training modes.
+- Added persistent recommended-next-action card in the sticky context sidebar.
+- Added a + button in the sticky chat composer with 12 one-click training activities.
+- Added hint, repeat, skip, stop-training, scoring, answer explanation, and session-summary behavior.
+- Added local guided-agent training history to Dashboard recent activity.
+
+
+2026-08-04 — Jobs Module and Mistake Review Flashcard Sets
+-----------------------------------------------------------
+- Added grouped Mistake Review flashcard sets that appear directly on the Flashcards page.
+- Added one-click study and delete actions for each generated Mistake Review set.
+- Preserved the source module, menu section, correct answer, and explanation on generated cards.
+- Added an Admin > Jobs module with create, edit, publish, pause, search, status filtering, and permission controls.
+- Added public jobs.html list and unique job.php detail pages.
+- Added published jobs to the public landing page.
+- Added published-job selection and URL preselection to the public resume form.
+- Added database-backed public/admin Jobs APIs and database/20260804_jobs_module.sql for existing installs.
+- Added starter Server and Pizza Cook openings for fresh installations.
