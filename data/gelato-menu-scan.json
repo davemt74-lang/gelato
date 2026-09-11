@@ -1,158 +1,1092 @@
 {
-  "version": "manual-scan-2026-09-10",
-  "source": "manual-scan:https://gelatospot.com/menu/",
-  "notes": "Bundled install-safe snapshot created from the scanned public Gelato Spot menu. Live REST/MCP sync is optional and may add rotating/seasonal items such as individual gelato flavors.",
+  "version": "1.0.0",
+  "source": "database",
+  "search": null,
   "sections": [
     {
       "title": "Appetizers",
       "slug": "appetizers",
-      "note": "Scanned from the public Gelato Spot menu.",
-      "status": "active",
+      "note": "",
+      "status": "",
       "items": [
-        {"name":"Roasted Meatballs","description":"Mozzarella, parmesan cheese, fresh basil, and garlic bread.","price":"$11","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Garlic Bread","description":"Covered in parmesan and mozzarella cheeses.","price":"$10","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Caprese Salad","description":"Marinated roasted tomatoes, tomato jam, arugula, warm bread with extra virgin olive oil, balsamic, and sea salt.","price":"$13","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Bruschetta","description":"Ripe tomatoes, fresh basil, extra virgin olive oil, and aged balsamic.","price":"$13","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Roasted Cauliflower","description":"Golden raisins, pesto vinaigrette, radishes, and parmesan cheese.","price":"$13","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Trio","description":"Marinara parmesan dip, pesto dip, olive oil with balsamic glaze, and focaccia wedges.","price":"$13","tags":[],"featured":false,"url":"","imageUrl":""}
+        {
+          "name": "Roasted Meatballs",
+          "description": "Mozzarella, parmesan cheese, fresh basil, and garlic bread.",
+          "price": "$11",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/appetizers/roasted-meatballs/"
+        },
+        {
+          "name": "Garlic Bread",
+          "description": "Covered in parmesan and mozzarella cheeses.",
+          "price": "$10",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/appetizers/garlic-bread/"
+        },
+        {
+          "name": "Caprese Salad",
+          "description": "Marinated roasted tomatoes, tomato jam, arugula, warm bread with extra virgin olive oil, balsamic, and sea salt.",
+          "price": "$13",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/appetizers/caprese-salad/"
+        },
+        {
+          "name": "Bruschetta",
+          "description": "Ripe tomatoes, fresh basil, extra virgin olive oil, and aged balsamic.",
+          "price": "$13",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/appetizers/bruschetta/"
+        },
+        {
+          "name": "Roasted Cauliflower",
+          "description": "Golden raisins, pesto vinaigrette, radishes, and parmesan cheese.",
+          "price": "$13",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/appetizers/roasted-cauliflower/"
+        },
+        {
+          "name": "Trio",
+          "description": "Marinara parmesan dip, pesto dip, olive oil with balsamic glaze, and focaccia wedges.",
+          "price": "$13",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/appetizers/trio/"
+        }
       ]
     },
     {
       "title": "Panini",
       "slug": "panini",
-      "note": "Panini pricing on the scanned menu is lunch 11AM–5PM $13 and dinner 5PM–close $15. All panini come with chips.",
-      "status": "active",
+      "note": "All paninis come with a bag of chips. Lunch from 11:30AM to 5PM is $13. Dinner from 5PM to close is $15.",
+      "status": "",
       "items": [
-        {"name":"Chicken Louie Sandwich","description":"Grilled chicken breast, fresh tomato, smoked bacon, avocado, Louie dressing, and gorgonzola crumbles; provolone or mozzarella may be substituted.","price":"Lunch $13 | Dinner $15","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Sausage & Peppers","description":"Hot Italian sausage, scratch marinara, provolone, roasted red peppers, and wood-fired onions.","price":"Lunch $13 | Dinner $15","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Turkey & Bacon","description":"Turkey, bacon bits, romaine, tomatoes, red onions, avocado, provolone cheese, and mayo.","price":"Lunch $13 | Dinner $15","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Veggie Panini","description":"Roasted eggplant, wood-fired onions and zucchini, roasted red peppers, fresh tomatoes, provolone, fresh mozzarella, and basil.","price":"Lunch $13 | Dinner $15","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Grinder","description":"Italian ham, hot soppressata, melted provolone, Gaeta olives, tomato, romaine, chile pepper oil, and oregano.","price":"Lunch $13 | Dinner $15","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Meat Ball","description":"Meatball, marinara sauce, provolone cheese, and oregano.","price":"Lunch $13 | Dinner $15","tags":[],"featured":false,"url":"","imageUrl":""}
+        {
+          "name": "Chicken Louie Sandwich",
+          "description": "Grilled chicken breast, fresh tomato, smoked bacon, avocado, Louie dressing, and gorgonzola crumbles.",
+          "price": "$13-15",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "https://gelato.spot/api/assets/admin/menu-items/bgt08714-1782613067822-3935b957.webp",
+          "url": "https://gelato.spot/menu/panini/chicken-louie-sandwich/"
+        },
+        {
+          "name": "Sausage and Peppers",
+          "description": "Hot Italian sausage, scratch marinara, provolone, roasted red peppers, and wood-fired onions.",
+          "price": "$13-15",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/panini/sausage-and-peppers/"
+        },
+        {
+          "name": "Turkey and Bacon",
+          "description": "Turkey, bacon bits, romaine, tomatoes, red onions, avocado, provolone cheese, and mayo.",
+          "price": "$13-15",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/panini/turkey-and-bacon/"
+        },
+        {
+          "name": "Veggie Panini",
+          "description": "Roasted eggplant, wood-fired onions and zucchini, roasted red peppers, fresh tomatoes, provolone, fresh mozzarella, and basil.",
+          "price": "$13-15",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/panini/veggie-panini/"
+        },
+        {
+          "name": "Grinder",
+          "description": "Italian ham, hot soppressata, melted provolone, gaeta olives, tomato, romaine, chile pepper oil, and oregano.",
+          "price": "$13-15",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/panini/grinder/"
+        },
+        {
+          "name": "Meatball",
+          "description": "Meatball, marinara sauce, provolone cheese, and oregano.",
+          "price": "$13-15",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/panini/meatball/"
+        }
       ]
     },
     {
       "title": "Wood Fired Pizza",
       "slug": "wood-fired-pizza",
-      "note": "Scanned menu pricing: 10\" lunch pizza 11AM–5PM $13; 12\" dinner pizza all day $15; gluten-free dough +$4 on 12\" pizza.",
-      "status": "active",
+      "note": "Neapolitan-style crusts with crushed tomatoes and fresh mozzarella. 10\" lunch pizzas are $13 from 11:30AM to 5PM. 12\" pizzas are $15 and available all night. Gluten-free dough is available on 12\" pizza for $4.",
+      "status": "",
       "items": [
-        {"name":"Margherita","description":"Crushed tomatoes, fresh mozzarella, and fresh basil.","price":"10-inch $13 | 12-inch $15","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Cheese","description":"Crushed tomatoes, fresh mozzarella, provolone cheese, and shaved parmesan.","price":"10-inch $13 | 12-inch $15","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Pepperoni","description":"Crushed tomatoes, fresh mozzarella, spicy pepperoni, and parmesan.","price":"10-inch $13 | 12-inch $15","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"American","description":"Crushed tomatoes, fresh mozzarella, spicy pepperoni, hot Italian sausage, and parmesan.","price":"10-inch $13 | 12-inch $15","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Testarossa","description":"Crushed tomatoes, fresh mozzarella, spicy pepperoni, roasted red peppers, wood-fired onions, Gaeta olives, crushed garlic, and oregano.","price":"10-inch $13 | 12-inch $15","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Veggie (White/Red)","description":"Crushed tomatoes, fresh mozzarella, roasted eggplant, roasted red peppers, fresh mushrooms, wood-fired onions, and fresh basil.","price":"10-inch $13 | 12-inch $15","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Pig & Pineapple","description":"Italian ham, fresh golden pineapple, fresh basil, and parmesan.","price":"10-inch $13 | 12-inch $15","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Capricossa","description":"Italian ham, Gaeta olives, fresh mushrooms, marinated artichokes, and fresh basil.","price":"10-inch $13 | 12-inch $15","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Honey Basil","description":"Fresh mozzarella, gorgonzola, basil, parmesan, and honey drizzle.","price":"10-inch $13 | 12-inch $15","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"BBQ Chicken","description":"Homemade chipotle BBQ, grilled chicken, fresh mozzarella, caramelized onions, and bacon.","price":"10-inch $13 | 12-inch $15","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Meat Ball","description":"Marinara sauce, fresh mozzarella, sliced meatballs, parmesan cheese, and oregano.","price":"10-inch $13 | 12-inch $15","tags":[],"featured":false,"url":"","imageUrl":""}
+        {
+          "name": "Margherita",
+          "description": "Crushed tomatoes, fresh mozzarella, and fresh basil.",
+          "price": "$13-15",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/wood-fired-pizza/margherita/"
+        },
+        {
+          "name": "Cheese",
+          "description": "Crushed tomatoes, fresh mozzarella, provolone cheese, and shaved parmesan.",
+          "price": "$13-15",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/wood-fired-pizza/cheese/"
+        },
+        {
+          "name": "Pepperoni",
+          "description": "Crushed tomatoes, fresh mozzarella, spicy pepperoni, and parmesan.",
+          "price": "$13-15",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "https://gelato.spot/api/assets/admin/menu-items/photo-2026-06-27-19-41-15-1782614501458-e56e1673.webp",
+          "url": "https://gelato.spot/menu/wood-fired-pizza/pepperoni/"
+        },
+        {
+          "name": "American",
+          "description": "Crushed tomatoes, fresh mozzarella, spicy pepperoni, hot Italian sausage, and parmesan.",
+          "price": "$13-15",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "https://gelato.spot/api/assets/admin/menu-items/dsc06782-edit-1782612871956-7da1a6c4.webp",
+          "url": "https://gelato.spot/menu/wood-fired-pizza/american/"
+        },
+        {
+          "name": "Testarossa",
+          "description": "Crushed tomatoes, fresh mozzarella, spicy pepperoni, roasted red peppers, wood-fired onions, gaeta olives, crushed garlic, and oregano.",
+          "price": "$13-15",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/wood-fired-pizza/testarossa/"
+        },
+        {
+          "name": "Veggie",
+          "description": "Red or white pizza with fresh mozzarella, roasted eggplant, roasted red peppers, fresh mushrooms, wood-fired onions, and fresh basil.",
+          "price": "$13-15",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/wood-fired-pizza/veggie/"
+        },
+        {
+          "name": "Pig and Pineapple",
+          "description": "Italian ham, fresh golden pineapple, fresh basil, and parmesan.",
+          "price": "$13-15",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/wood-fired-pizza/pig-and-pineapple/"
+        },
+        {
+          "name": "Capricossa",
+          "description": "Italian ham, gaeta olives, fresh mushrooms, marinated artichokes, and fresh basil.",
+          "price": "$13-15",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/wood-fired-pizza/capricossa/"
+        },
+        {
+          "name": "Honey Basil",
+          "description": "Fresh mozzarella, gorgonzola, basil, parmesan, and honey drizzle.",
+          "price": "$13-15",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/wood-fired-pizza/honey-basil/"
+        },
+        {
+          "name": "BBQ Chicken",
+          "description": "Homemade chipotle BBQ, grilled chicken, fresh mozzarella, caramelized onions, and bacon.",
+          "price": "$13-15",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/wood-fired-pizza/bbq-chicken/"
+        },
+        {
+          "name": "Meatball",
+          "description": "Marinara sauce, fresh mozzarella, sliced meatballs, parmesan cheese, and oregano.",
+          "price": "$13-15",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/wood-fired-pizza/meatball/"
+        }
       ]
     },
     {
       "title": "Salads and Pasta",
       "slug": "salads-and-pasta",
-      "note": "Scanned menu lists homemade Balsamic Vinaigrette, Champagne Vinaigrette, Louie Dressing, Aioli dressing, and Caesar dressing.",
-      "status": "active",
+      "note": "House-made dressings include balsamic vinaigrette, champagne vinaigrette, Louie dressing, aioli dressing, and Caesar dressing.",
+      "status": "",
       "items": [
-        {"name":"Roasted Veggie Kale Salad","description":"Kale, roasted red peppers, roasted eggplant, grilled zucchini, tomatoes, roasted corn, balsamic vinaigrette, and a wedge of bread.","price":"Lunch $13 | Dinner $15","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Focaccia Chicken Caesar","description":"Mixed greens, grilled chicken breast, shaved parmesan, homemade Caesar dressing, and cherry tomatoes served on focaccia bread (pizza pie).","price":"Lunch $13 | Dinner $15","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Focaccia Chop Salad","description":"Mixed greens, cucumbers, carrots, avocado, roasted corn, tomatoes, shaved parmesan, and champagne vinaigrette served on focaccia bread (pizza pie). Add chicken +$2.","price":"Lunch $13 | Dinner $15","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Louie Wedge Salad","description":"Iceberg wedge with Louie dressing, chicken, tomatoes, cucumbers, avocado, bacon bits, champagne vinaigrette, and hardboiled egg.","price":"Lunch $13 | Dinner $15","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"House Salad or Caesar Salad","description":"","price":"$5","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Spaghetti & Meatballs","description":"Rustic wood fire-roasted tomato in a pink sauce.","price":"$11-$16","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Rigatoni Bolognese","description":"Topped with fresh ricotta.","price":"$11-$16","tags":[],"featured":false,"url":"","imageUrl":""}
+        {
+          "name": "Roasted Veggie Kale Salad",
+          "description": "Kale, roasted red peppers, roasted eggplant, grilled zucchini, tomatoes, roasted corn, balsamic vinaigrette, and bread.",
+          "price": "$13-15",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/salads-and-pasta/roasted-veggie-kale-salad/"
+        },
+        {
+          "name": "Focaccia Chicken Caesar",
+          "description": "Mixed greens, grilled chicken breast, shaved parmesan, Caesar dressing, and cherry tomatoes on focaccia.",
+          "price": "$13-15",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/salads-and-pasta/focaccia-chicken-caesar/"
+        },
+        {
+          "name": "Focaccia Chop Salad",
+          "description": "Mixed greens, cucumbers, carrots, avocado, roasted corn, tomatoes, shaved parmesan, and champagne vinaigrette on focaccia. Add chicken for $2.",
+          "price": "$13-15",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/salads-and-pasta/focaccia-chop-salad/"
+        },
+        {
+          "name": "Louie Wedge Salad",
+          "description": "Iceberg wedge with Louie dressing, chicken, tomatoes, cucumbers, avocado, bacon bits, champagne vinaigrette, and hardboiled egg.",
+          "price": "$13-15",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/salads-and-pasta/louie-wedge-salad/"
+        },
+        {
+          "name": "House Salad or Caesar Salad",
+          "description": "A simple side salad option.",
+          "price": "$5",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/salads-and-pasta/house-salad-or-caesar-salad/"
+        },
+        {
+          "name": "Spaghetti and Meatballs",
+          "description": "Rustic wood fire-roasted tomato in a pink sauce.",
+          "price": "$11-16",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/salads-and-pasta/spaghetti-and-meatballs/"
+        },
+        {
+          "name": "Rigatoni Bolognese",
+          "description": "Topped with fresh ricotta.",
+          "price": "$11-16",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/salads-and-pasta/rigatoni-bolognese/"
+        }
       ]
     },
     {
       "title": "Gelato",
       "slug": "gelato",
-      "note": "Manual snapshot captures the stable gelato formats, party packs, mousse cakes, and toppings. Individual flavors rotate and can be refreshed later from the live Gelato Spot REST/MCP sources.",
-      "status": "active",
+      "note": "Come in to see the constantly evolving variety of gelato flavors.",
+      "status": "",
       "items": [
-        {"name":"One Flavor Gelato","description":"","price":"$4.50","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Two Flavor Gelato","description":"","price":"$5.50","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Three Flavor Gelato","description":"","price":"$6.50","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Gelato Shake or Root Beer Float","description":"Add 2 shots of espresso for $1.","price":"$7.50","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Affogato","description":"Gelato plus espresso.","price":"$6.50","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Party Pack 500g","description":"Two flavors; serves 4-5.","price":"$19.50","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Party Pack 750g","description":"Two flavors; serves 6-8.","price":"$27.50","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Party Pack 1,000g","description":"Three flavors; serves 10-12.","price":"$31.50","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Mousse Cake — Coconut Macaroon / Italian Wedding Cookies / Brownie Sundae","description":"","price":"$4.25","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Mousse Cake — Chocolate Indulgence / Tiramisu / Red Velvet","description":"","price":"$5","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Gelato Toppings","description":"Rainbow sprinkles, chocolate sprinkles, chocolate chips, gummy bears, Oreo cookies, roasted almond, M&M's, and bubble gum.","price":"$0.60 each","tags":[],"featured":false,"url":"","imageUrl":""}
+        {
+          "name": "One Flavor Gelato",
+          "description": "",
+          "price": "$4.50",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/gelato/one-flavor-gelato/"
+        },
+        {
+          "name": "Two Flavor Gelato",
+          "description": "",
+          "price": "$5.50",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/gelato/two-flavor-gelato/"
+        },
+        {
+          "name": "Three Flavor Gelato",
+          "description": "",
+          "price": "$6.50",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/gelato/three-flavor-gelato/"
+        },
+        {
+          "name": "Cookies and Cream",
+          "description": "Sweet cream gelato folded with chocolate cookie pieces.",
+          "price": "",
+          "tags": [
+            "classic",
+            "cookie",
+            "chocolate",
+            "sweet cream"
+          ],
+          "featured": false,
+          "imageUrl": "https://gelato.spot/api/assets/optimized/cookies-and-cream-gelato.webp",
+          "url": "https://gelato.spot/menu/gelato/cookies-and-cream/"
+        },
+        {
+          "name": "Gelato Shake or Root Beer Float",
+          "description": "Add two shots of espresso for $1.",
+          "price": "$7.50",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/gelato/gelato-shake-or-root-beer-float/"
+        },
+        {
+          "name": "Affogato",
+          "description": "Gelato with espresso.",
+          "price": "$6.50",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/gelato/affogato/"
+        },
+        {
+          "name": "Vegan Chocolate",
+          "description": "Rich dairy-free chocolate gelato with a smooth cocoa finish.",
+          "price": "",
+          "tags": [
+            "vegan",
+            "chocolate",
+            "dairy-free",
+            "cocoa"
+          ],
+          "featured": false,
+          "imageUrl": "https://gelato.spot/api/assets/admin/flavors/photo-2026-06-27-20-20-52-1782617168978-e50ad2b8.webp",
+          "url": "https://gelato.spot/menu/gelato/vegan-chocolate/"
+        },
+        {
+          "name": "Party Pack 500g",
+          "description": "Two flavors, serves 4 to 5.",
+          "price": "$19.50",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/gelato/party-pack-500g/"
+        },
+        {
+          "name": "Strawberry",
+          "description": "Bright strawberry gelato with a fresh fruit finish.",
+          "price": "",
+          "tags": [
+            "fruit",
+            "strawberry",
+            "classic",
+            "refreshing"
+          ],
+          "featured": false,
+          "imageUrl": "https://gelato.spot/api/assets/admin/flavors/bgt08703-1782612331264-51015ffc.webp",
+          "url": "https://gelato.spot/menu/gelato/strawberry/"
+        },
+        {
+          "name": "Lemon",
+          "description": "Tart lemon gelato with a clean, refreshing citrus finish.",
+          "price": "",
+          "tags": [
+            "fruit",
+            "citrus",
+            "lemon",
+            "refreshing"
+          ],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/gelato/lemon/"
+        },
+        {
+          "name": "Party Pack 750g",
+          "description": "Two flavors, serves 6 to 8.",
+          "price": "$27.50",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/gelato/party-pack-750g/"
+        },
+        {
+          "name": "Mango",
+          "description": "Sunny mango gelato with ripe tropical fruit flavor.",
+          "price": "",
+          "tags": [
+            "fruit",
+            "mango",
+            "tropical",
+            "refreshing"
+          ],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/gelato/mango/"
+        },
+        {
+          "name": "Party Pack 1,000g",
+          "description": "Three flavors, serves 10 to 12.",
+          "price": "$31.50",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/gelato/party-pack-1-000g/"
+        },
+        {
+          "name": "Butter Pecan",
+          "description": "Buttery gelato with toasted pecans and a warm caramel note.",
+          "price": "",
+          "tags": [
+            "nutty",
+            "pecan",
+            "caramel",
+            "classic"
+          ],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/gelato/butter-pecan/"
+        },
+        {
+          "name": "Raspberry",
+          "description": "Sweet-tart raspberry gelato with a bright berry finish.",
+          "price": "",
+          "tags": [
+            "fruit",
+            "raspberry",
+            "berry",
+            "refreshing"
+          ],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/gelato/raspberry/"
+        },
+        {
+          "name": "Toppings",
+          "description": "Rainbow sprinkles, chocolate sprinkles, chocolate chips, gummy bears, Oreo cookies, roasted almond, M&M's, and bubble gum.",
+          "price": "$0.60 each",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/gelato/toppings/"
+        },
+        {
+          "name": "Nutella",
+          "description": "Creamy chocolate hazelnut gelato inspired by Nutella.",
+          "price": "",
+          "tags": [
+            "chocolate",
+            "hazelnut",
+            "nutty",
+            "rich"
+          ],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/gelato/nutella/"
+        },
+        {
+          "name": "Vanilla Bean",
+          "description": "Smooth vanilla gelato flecked with real vanilla bean.",
+          "price": "",
+          "tags": [
+            "classic",
+            "vanilla",
+            "vanilla bean",
+            "creamy"
+          ],
+          "featured": false,
+          "imageUrl": "https://gelato.spot/api/assets/admin/flavors/bgt08705-1782612913541-66515f4a.webp",
+          "url": "https://gelato.spot/menu/gelato/vanilla-bean/"
+        },
+        {
+          "name": "Banana Pudding",
+          "description": "Creamy banana gelato with nostalgic pudding-shop flavor.",
+          "price": "",
+          "tags": [
+            "banana",
+            "dessert",
+            "creamy",
+            "comfort"
+          ],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/gelato/banana-pudding/"
+        },
+        {
+          "name": "Almond Snickers",
+          "description": "Chocolate caramel gelato with almond crunch and candy-bar richness.",
+          "price": "",
+          "tags": [
+            "chocolate",
+            "almond",
+            "caramel",
+            "nutty"
+          ],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/gelato/almond-snickers/"
+        },
+        {
+          "name": "Coconut",
+          "description": "Creamy coconut gelato with a mellow tropical finish.",
+          "price": "",
+          "tags": [
+            "coconut",
+            "tropical",
+            "creamy",
+            "classic"
+          ],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/gelato/coconut/"
+        },
+        {
+          "name": "Mint Chocolate Chip",
+          "description": "Cool mint gelato with crisp chocolate chips in every bite.",
+          "price": "",
+          "tags": [
+            "mint",
+            "chocolate",
+            "classic",
+            "refreshing"
+          ],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/gelato/mint-chocolate-chip/"
+        },
+        {
+          "name": "Roasted Almond",
+          "description": "Toasty almond gelato with a rich roasted nut finish.",
+          "price": "",
+          "tags": [
+            "almond",
+            "nutty",
+            "roasted",
+            "classic"
+          ],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/gelato/roasted-almond/"
+        },
+        {
+          "name": "Biscoff",
+          "description": "Cookie butter gelato with warm spice and caramelized cookie flavor.",
+          "price": "",
+          "tags": [
+            "cookie butter",
+            "biscoff",
+            "spiced",
+            "cookie"
+          ],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/gelato/biscoff/"
+        },
+        {
+          "name": "Cake Batter",
+          "description": "Sweet cake batter gelato with a creamy bakery-style finish.",
+          "price": "",
+          "tags": [
+            "cake",
+            "dessert",
+            "sweet",
+            "kid favorite"
+          ],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/gelato/cake-batter/"
+        },
+        {
+          "name": "Peanut Butter",
+          "description": "Creamy peanut butter gelato with a salty-sweet finish.",
+          "price": "",
+          "tags": [
+            "peanut butter",
+            "nutty",
+            "salty-sweet",
+            "classic"
+          ],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/gelato/peanut-butter/"
+        },
+        {
+          "name": "Caramel Fudge Brownie",
+          "description": "Caramel gelato with fudgy brownie pieces and chocolate ribbons.",
+          "price": "",
+          "tags": [
+            "caramel",
+            "brownie",
+            "chocolate",
+            "rich"
+          ],
+          "featured": false,
+          "imageUrl": "https://gelato.spot/api/assets/admin/flavors/bgt08708-1782612970401-1e42a25c.webp",
+          "url": "https://gelato.spot/menu/gelato/caramel-fudge-brownie/"
+        },
+        {
+          "name": "Chocolate",
+          "description": "Classic chocolate gelato with a deep cocoa flavor.",
+          "price": "",
+          "tags": [
+            "classic",
+            "chocolate",
+            "cocoa",
+            "rich"
+          ],
+          "featured": false,
+          "imageUrl": "https://gelato.spot/api/assets/admin/flavors/bgt08706-1782612947806-0adbde3e.webp",
+          "url": "https://gelato.spot/menu/gelato/chocolate/"
+        },
+        {
+          "name": "Vanilla Latte",
+          "description": "Vanilla gelato with smooth espresso and coffeehouse flavor.",
+          "price": "",
+          "tags": [
+            "coffee",
+            "espresso",
+            "vanilla",
+            "latte"
+          ],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/gelato/vanilla-latte/"
+        },
+        {
+          "name": "Stracciatella",
+          "description": "Sweet milk gelato threaded with delicate chocolate flakes.",
+          "price": "",
+          "tags": [
+            "classic",
+            "chocolate",
+            "italian",
+            "stracciatella"
+          ],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/gelato/stracciatella/"
+        },
+        {
+          "name": "Cotton Candy",
+          "description": "Playful cotton candy gelato with a light spun-sugar sweetness.",
+          "price": "",
+          "tags": [
+            "kid favorite",
+            "cotton candy",
+            "sweet",
+            "colorful"
+          ],
+          "featured": false,
+          "imageUrl": "https://gelato.spot/api/assets/admin/flavors/bgt07723-edit-1782613098558-6f3f8d91.webp",
+          "url": "https://gelato.spot/menu/gelato/cotton-candy/"
+        },
+        {
+          "name": "Sea Salt Caramel",
+          "description": "Caramel gelato balanced with a clean sea salt finish.",
+          "price": "",
+          "tags": [
+            "caramel",
+            "sea salt",
+            "salty-sweet",
+            "classic"
+          ],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/gelato/sea-salt-caramel/"
+        },
+        {
+          "name": "Bubble Gum",
+          "description": "Bright bubble gum gelato with a nostalgic candy-shop flavor.",
+          "price": "",
+          "tags": [
+            "kid favorite",
+            "bubble gum",
+            "candy",
+            "sweet"
+          ],
+          "featured": false,
+          "imageUrl": "https://gelato.spot/api/assets/admin/flavors/bgt07746-1782613124991-d786c93d.webp",
+          "url": "https://gelato.spot/menu/gelato/bubble-gum/"
+        }
       ]
     },
     {
       "title": "Beverages",
       "slug": "beverages",
-      "note": "Scanned soft drinks, juice, tea, and water.",
-      "status": "active",
+      "note": "",
+      "status": "",
       "items": [
-        {"name":"Bottled Alkaline Molly Water .5L","description":"","price":"$2","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Bottled Alkaline Molly Water 1L","description":"","price":"$3","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Perrier Sparkling Water","description":"","price":"$2.50","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Carbonated Drinks","description":"Coke, Diet Coke, Sprite, Dr. Pepper, Root Beer, Minute Maid Lemonade.","price":"$2.50","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Juice","description":"Apple juice, orange juice, cranberry juice.","price":"$3","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Iced Tea","description":"Pomegranate Green Tea or Black Tea.","price":"$2.50","tags":[],"featured":false,"url":"","imageUrl":""}
+        {
+          "name": "Bottled Alkaline Molly Water .5L",
+          "description": "",
+          "price": "$2",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/beverages/bottled-alkaline-molly-water-5l/"
+        },
+        {
+          "name": "Bottled Alkaline Molly Water 1L",
+          "description": "",
+          "price": "$3",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/beverages/bottled-alkaline-molly-water-1l/"
+        },
+        {
+          "name": "Perrier Sparkling Water",
+          "description": "",
+          "price": "$2.50",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/beverages/perrier-sparkling-water/"
+        },
+        {
+          "name": "Carbonated Drinks",
+          "description": "Coke, Diet Coke, Sprite, Dr. Pepper, Root Beer, and Minute Maid Lemonade.",
+          "price": "$2.50",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/beverages/carbonated-drinks/"
+        },
+        {
+          "name": "Apple Juice",
+          "description": "",
+          "price": "$3",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/beverages/apple-juice/"
+        },
+        {
+          "name": "Iced Tea",
+          "description": "Pomegranate green tea and black tea.",
+          "price": "$2.50",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/beverages/iced-tea/"
+        }
       ]
     },
     {
       "title": "Beer, Wine, and Cocktails",
       "slug": "beer-wine-and-cocktails",
-      "note": "Alcohol items are included as menu training data only.",
-      "status": "active",
+      "note": "",
+      "status": "",
       "items": [
-        {"name":"Bottled Beer","description":"Modelo Especial, Huss Scottsdale Blond, Papago Orange Blonde, Peroni, San Tan Moon Juice.","price":"$5","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Red Wine","description":"Angeline Pinot Noir, Donna Paula Malbec, Hope's End Red Blend, Three Thieves Cabernet Sauvignon.","price":"Glass $8.50 | Bottle $34","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"White Wine","description":"Pinot Grigio, Pomelo, Seaglass Sauvignon Blanc, Charles & Charles Riesling.","price":"Glass $8.50 | Bottle $34","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Mixed Drinks / Cocktails","description":"Vodka Moscow Mule, Rum Shaken Daiquiri, Tequila Paloma, Gin & Tonic, Whiskey Old Fashioned.","price":"$9","tags":[],"featured":false,"url":"","imageUrl":""}
+        {
+          "name": "Bottled Beer",
+          "description": "Modelo Especial, Huss Scottsdale Blonde, Papago Orange Blonde, Peroni, and SanTan Moon Juice.",
+          "price": "$5",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/beer-wine-and-cocktails/bottled-beer/"
+        },
+        {
+          "name": "Red Wine",
+          "description": "Angeline Pinot Noir, Dona Paula Malbec, Hope's End Red Blend, and Three Thieves Cabernet Sauvignon.",
+          "price": "$8.50 glass | $34 bottle",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/beer-wine-and-cocktails/red-wine/"
+        },
+        {
+          "name": "White Wine",
+          "description": "Pinot Grigio, Pomelo Chardonnay, and Seaglass Sauvignon Blanc.",
+          "price": "$8.50 glass | $34 bottle",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/beer-wine-and-cocktails/white-wine/"
+        },
+        {
+          "name": "Mixed Drinks and Cocktails",
+          "description": "Moscow Mule, shaken daiquiri, Paloma, classic gin and tonic, and old fashioned.",
+          "price": "$9",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/beer-wine-and-cocktails/mixed-drinks-and-cocktails/"
+        }
       ]
     },
     {
       "title": "Coffee",
       "slug": "coffee",
-      "note": "Scanned coffee menu. Some modifiers may be temporarily unavailable; verify current availability.",
-      "status": "active",
+      "note": "",
+      "status": "Coffee Machine Temporarily Down",
       "items": [
-        {"name":"Frozen Frappe","description":"","price":"$6.50","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Espresso","description":"2 shots. Add one shot of Baileys or Kahlua +$5.","price":"$3","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Americano (Hot or Iced)","description":"Extra 2 shots +$2.","price":"$4.50","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Café Latte (Hot or Iced)","description":"Extra 2 shots +$2.","price":"$4.50","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Chai Tea Latte (Hot or Iced)","description":"Large +$0.50.","price":"$4.50","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Cappuccino","description":"","price":"$4.50","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Macchiato","description":"","price":"$4.50","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Hot Chocolate","description":"","price":"$4.50","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Add a Flavor","description":"Vanilla, caramel, hazelnut (sugar-free available), chocolate syrup, white chocolate, caramel syrup.","price":"$0.55","tags":[],"featured":false,"url":"","imageUrl":""},
-        {"name":"Add Almond Milk","description":"","price":"$0.60","tags":[],"featured":false,"url":"","imageUrl":""}
+        {
+          "name": "Frozen Frappe",
+          "description": "",
+          "price": "$6.50",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/coffee/frozen-frappe/"
+        },
+        {
+          "name": "Espresso",
+          "description": "Two shots. Add Baileys or Kahlua for $5.",
+          "price": "$3",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/coffee/espresso/"
+        },
+        {
+          "name": "Americano",
+          "description": "Hot or iced. Add two extra shots for $2.",
+          "price": "$4.50",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/coffee/americano/"
+        },
+        {
+          "name": "Cafe Latte",
+          "description": "Hot or iced. Add two extra shots for $2.",
+          "price": "$4.50",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/coffee/cafe-latte/"
+        },
+        {
+          "name": "Chai Tea Latte",
+          "description": "Hot or iced. Large is $0.50 more.",
+          "price": "$4.50",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/coffee/chai-tea-latte/"
+        },
+        {
+          "name": "Cappuccino",
+          "description": "",
+          "price": "$4.50",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/coffee/cappuccino/"
+        },
+        {
+          "name": "Macchiato",
+          "description": "",
+          "price": "$4.50",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/coffee/macchiato/"
+        },
+        {
+          "name": "Hot Chocolate",
+          "description": "",
+          "price": "$4.50",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/coffee/hot-chocolate/"
+        },
+        {
+          "name": "Add a Flavor",
+          "description": "Vanilla, caramel, hazelnut, chocolate syrup, white chocolate, and caramel syrup. Sugar-free options available.",
+          "price": "$0.55",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/coffee/add-a-flavor/"
+        },
+        {
+          "name": "Add Almond Milk",
+          "description": "",
+          "price": "$0.60",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/coffee/add-almond-milk/"
+        }
       ]
     },
     {
       "title": "Happy Hour",
       "slug": "happy-hour",
-      "note": "Monday through Friday, 3PM–6PM on the scanned menu.",
-      "status": "active",
+      "note": "Tuesday through Friday, 3PM to 6PM.",
+      "status": "",
       "items": [
-        {"name":"Margarita Pizza","description":"Happy hour food item.","price":"$9","tags":["happy-hour","food"],"featured":false,"url":"","imageUrl":""},
-        {"name":"Pepperoni Pizza","description":"Happy hour food item.","price":"$9","tags":["happy-hour","food"],"featured":false,"url":"","imageUrl":""},
-        {"name":"Bruschetta Chicken Caesar Salad","description":"Happy hour food item.","price":"$8","tags":["happy-hour","food"],"featured":false,"url":"","imageUrl":""},
-        {"name":"Chicken Caesar Salad","description":"Happy hour food item.","price":"$8","tags":["happy-hour","food"],"featured":false,"url":"","imageUrl":""},
-        {"name":"Meatball Appetizer","description":"Happy hour food item.","price":"$6","tags":["happy-hour","food"],"featured":false,"url":"","imageUrl":""},
-        {"name":"Garlic Bread","description":"Happy hour food item.","price":"$5","tags":["happy-hour","food"],"featured":false,"url":"","imageUrl":""},
-        {"name":"Roasted Cauliflower","description":"Happy hour food item.","price":"$7","tags":["happy-hour","food"],"featured":false,"url":"","imageUrl":""},
-        {"name":"Today's Soup","description":"Happy hour food item.","price":"$5","tags":["happy-hour","food"],"featured":false,"url":"","imageUrl":""},
-        {"name":"Spaghetti & Meatballs","description":"Happy hour food item; half portion.","price":"$8","tags":["happy-hour","food"],"featured":false,"url":"","imageUrl":""},
-        {"name":"Capellini Alla Primavera","description":"Happy hour food item; half portion.","price":"$6","tags":["happy-hour","food"],"featured":false,"url":"","imageUrl":""},
-        {"name":"Bottle Beer","description":"Happy hour drink item.","price":"$4","tags":["happy-hour","drink"],"featured":false,"url":"","imageUrl":""},
-        {"name":"House Wine","description":"Happy hour drink item.","price":"$4","tags":["happy-hour","drink"],"featured":false,"url":"","imageUrl":""},
-        {"name":"Classic Mule","description":"Happy hour drink item.","price":"$5","tags":["happy-hour","drink"],"featured":false,"url":"","imageUrl":""},
-        {"name":"Old Fashioned","description":"Happy hour drink item.","price":"$5","tags":["happy-hour","drink"],"featured":false,"url":"","imageUrl":""},
-        {"name":"Whiskey Cocktail","description":"Happy hour drink item.","price":"$5","tags":["happy-hour","drink"],"featured":false,"url":"","imageUrl":""},
-        {"name":"Daiquiri","description":"Happy hour drink item.","price":"$5","tags":["happy-hour","drink"],"featured":false,"url":"","imageUrl":""},
-        {"name":"Paloma","description":"Happy hour drink item.","price":"$5","tags":["happy-hour","drink"],"featured":false,"url":"","imageUrl":""},
-        {"name":"Traditional Gin & Tonic","description":"Happy hour drink item.","price":"$5","tags":["happy-hour","drink"],"featured":false,"url":"","imageUrl":""}
+        {
+          "name": "Margherita",
+          "description": "Crushed tomatoes, fresh mozzarella, and fresh basil. Lunch sized 10\" pizza.",
+          "price": "$9",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/wood-fired-pizza/margherita/"
+        },
+        {
+          "name": "Pepperoni",
+          "description": "Crushed tomatoes, fresh mozzarella, spicy pepperoni, and parmesan. Lunch sized 10\" pizza.",
+          "price": "$9",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "https://gelato.spot/api/assets/admin/menu-items/photo-2026-06-27-19-41-15-1782614501458-e56e1673.webp",
+          "url": "https://gelato.spot/menu/wood-fired-pizza/pepperoni/"
+        },
+        {
+          "name": "Bruschetta Chicken Caesar Salad",
+          "description": "",
+          "price": "$8",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/happy-hour/bruschetta-chicken-caesar-salad/"
+        },
+        {
+          "name": "Chicken Caesar Salad",
+          "description": "",
+          "price": "$8",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/happy-hour/chicken-caesar-salad/"
+        },
+        {
+          "name": "Roasted Meatballs",
+          "description": "Mozzarella, parmesan cheese, fresh basil, and garlic bread.",
+          "price": "$6",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/appetizers/roasted-meatballs/"
+        },
+        {
+          "name": "Garlic Bread",
+          "description": "Covered in parmesan and mozzarella cheeses.",
+          "price": "$5",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/appetizers/garlic-bread/"
+        },
+        {
+          "name": "Roasted Cauliflower",
+          "description": "Golden raisins, pesto vinaigrette, radishes, and parmesan cheese.",
+          "price": "$7",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/appetizers/roasted-cauliflower/"
+        },
+        {
+          "name": "Spaghetti and Meatballs",
+          "description": "Rustic wood fire-roasted tomato in a pink sauce. Half portion during Happy Hour.",
+          "price": "$8",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/salads-and-pasta/spaghetti-and-meatballs/"
+        },
+        {
+          "name": "Bottle Beer",
+          "description": "",
+          "price": "$4",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/happy-hour/bottle-beer/"
+        },
+        {
+          "name": "House Wine",
+          "description": "",
+          "price": "$4",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/happy-hour/house-wine/"
+        },
+        {
+          "name": "Classic Mule",
+          "description": "",
+          "price": "$5",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/happy-hour/classic-mule/"
+        },
+        {
+          "name": "Old Fashioned",
+          "description": "",
+          "price": "$5",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/happy-hour/old-fashioned/"
+        },
+        {
+          "name": "Whiskey Cocktail",
+          "description": "",
+          "price": "$5",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/happy-hour/whiskey-cocktail/"
+        },
+        {
+          "name": "Daiquiri",
+          "description": "",
+          "price": "$5",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/happy-hour/daiquiri/"
+        },
+        {
+          "name": "Paloma",
+          "description": "",
+          "price": "$5",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/happy-hour/paloma/"
+        },
+        {
+          "name": "Traditional Gin and Tonic",
+          "description": "",
+          "price": "$5",
+          "tags": [],
+          "featured": false,
+          "imageUrl": "",
+          "url": "https://gelato.spot/menu/happy-hour/traditional-gin-and-tonic/"
+        }
       ]
     }
-  ]
+  ],
+  "snapshotCapturedAt": "2026-09-11T00:56:20.998165Z",
+  "snapshotPurpose": "Bundled install-safe menu import; live REST/MCP are optional after deployment."
 }
