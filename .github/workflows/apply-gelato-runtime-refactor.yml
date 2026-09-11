@@ -23,7 +23,14 @@ jobs:
           fetch-depth: 0
 
       - name: Apply runtime refactor
-        run: python3 scripts/apply-gelato-runtime-refactor.py
+        shell: bash
+        run: |
+          set -o pipefail
+          if ! python3 scripts/apply-gelato-runtime-refactor.py; then
+            echo "Legacy context still present after attempted refactor:"
+            grep -n -C 3 -E "Great White|Fatso|Belly Buster|French Connection|Fresh Baked Wings|Fat Boy Special" index.html js/advanced-training.js || true
+            exit 1
+          fi
 
       - name: Remove one-time patch machinery
         shell: bash
