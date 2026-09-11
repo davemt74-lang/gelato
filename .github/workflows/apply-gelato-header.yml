@@ -1,0 +1,55 @@
+name: Apply Gelato header branding
+
+on:
+  push:
+    branches: [gelato-header-brand]
+    paths:
+      - '.github/workflows/apply-gelato-header.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: gelato-header-brand
+          fetch-depth: 0
+
+      - name: Update header logo only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path=Path('index.html')
+          text=path.read_text(encoding='utf-8')
+          old='<div class="brand"><div class="logo">✦</div><div><h1>Restaurant Workspace</h1><p>Local menu knowledge agent</p></div></div>'
+          new='<div class="brand"><div class="logo">G</div><div><h1>Gelato</h1><p>Local menu knowledge agent</p></div></div>'
+          if old not in text:
+              raise SystemExit('Expected Restaurant Workspace header not found')
+          path.write_text(text.replace(old,new,1),encoding='utf-8')
+          PY
+
+      - name: Verify scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q '<div class="logo">G</div><div><h1>Gelato</h1>' index.html
+          grep -q '<title>Restaurant Agentic Training Workspace</title>' index.html
+          grep -q 'Local menu knowledge agent' index.html
+          git diff -- index.html
+
+      - name: Commit header change
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/apply-gelato-header.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html .github/workflows/apply-gelato-header.yml
+          git commit -m "Brand workspace header as Gelato"
+          git push origin HEAD:gelato-header-brand
