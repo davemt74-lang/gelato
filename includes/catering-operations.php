@@ -55,11 +55,23 @@ function catering_operation_requirements(PDO $pdo, int $organizationId, int $ope
     return $statement->fetchAll();
 }
 
+function catering_operations_numeric_quantity(string $value): ?float
+{
+    $value=trim($value);
+    if(is_numeric($value))return (float)$value;
+    if(preg_match('/^(\d+)\/(\d+)$/',$value,$m) && (int)$m[2]!==0)return (float)$m[1]/(float)$m[2];
+    return null;
+}
+
 function catering_operations_parse_ingredient(mixed $ingredient): ?array
 {
     if (is_string($ingredient)) {
         $text=trim($ingredient);if($text==='')return null;
-        if(preg_match('/^([0-9]+(?:\.[0-9]+)?)\s+([A-Za-z][A-Za-z .-]{0,30})\s+(.+)$/u',$text,$m))return ['name'=>trim($m[3]),'quantity'=>(float)$m[1],'unit'=>trim($m[2])];
+        $quantityPattern='(?:\d+(?:\.\d+)?|\d+\/\d+)';
+        $unitPattern='(?:tsp|tbsp|teaspoons?|tablespoons?|cups?|fl\s*oz|ounces?|oz|pounds?|lbs?|lb|kilograms?|kg|grams?|g|milliliters?|ml|liters?|l|gallons?|gal|quarts?|qt|pints?|pt|each|ea)';
+        if(preg_match('/^('.$quantityPattern.')\s+('.$unitPattern.')\s+(.+)$/iu',$text,$m)){
+            return ['name'=>trim($m[3]),'quantity'=>catering_operations_numeric_quantity($m[1]),'unit'=>trim($m[2])];
+        }
         return ['name'=>$text,'quantity'=>null,'unit'=>''];
     }
     if (!is_array($ingredient)) return null;
@@ -68,8 +80,10 @@ function catering_operations_parse_ingredient(mixed $ingredient): ?array
     $unit=trim((string)($ingredient['unit']??$ingredient['measure']??''));
     if($name==='' && isset($ingredient[0]) && is_string($ingredient[0])) return catering_operations_parse_ingredient($ingredient[0]);
     if($name==='')return null;
-    if(is_string($quantity) && !is_numeric($quantity)){
-        if(preg_match('/([0-9]+(?:\.[0-9]+)?)/',$quantity,$m))$quantity=(float)$m[1];else $quantity=null;
+    if(is_string($quantity)){
+        $parsedQuantity=catering_operations_numeric_quantity($quantity);
+        if($parsedQuantity===null && preg_match('/((?:\d+(?:\.\d+)?|\d+\/\d+))/',$quantity,$m))$parsedQuantity=catering_operations_numeric_quantity($m[1]);
+        $quantity=$parsedQuantity;
     }
     $quantity=is_numeric($quantity)?(float)$quantity:null;
     return ['name'=>$name,'quantity'=>$quantity,'unit'=>$unit];
@@ -94,7 +108,6 @@ function catering_operations_rebuild_requirements(PDO $pdo, int $organizationId,
 function catering_operations_readiness(PDO $pdo, int $organizationId, int $operationId, bool $persist = true): array
 {
     $op=$pdo->prepare('SELECT * FROM restaurant_operations WHERE id=? AND organization_id=? AND archived_at IS NULL LIMIT 1');$op->execute([$operationId,$organizationId]);$operation=$op->fetch();if(!$operation)return ['percent'=>0,'issues'=>['Operation not found.']];
-    $menu=(int)$pdo->query('SELECT 1')->fetchColumn();
     $stmt=$pdo->prepare('SELECT COUNT(*) FROM restaurant_operation_menu_items WHERE organization_id=? AND operation_id=?');$stmt->execute([$organizationId,$operationId]);$menuCount=(int)$stmt->fetchColumn();
     $stmt=$pdo->prepare("SELECT COUNT(*) total,SUM(status='done') done_count,SUM(status IN ('open','in_progress','blocked') AND due_at IS NOT NULL AND due_at<NOW()) overdue_count,SUM(status IN ('open','in_progress','blocked') AND priority IN ('critical','high') AND assigned_to IS NULL) unassigned_critical FROM restaurant_operation_tasks WHERE organization_id=? AND operation_id=? AND status<>'cancelled'");$stmt->execute([$organizationId,$operationId]);$tasks=$stmt->fetch()?:[];
     $stmt=$pdo->prepare("SELECT COUNT(*) total,SUM(status='ready') ready_count,SUM(status='unavailable') unavailable_count FROM restaurant_operation_requirements WHERE organization_id=? AND operation_id=?");$stmt->execute([$organizationId,$operationId]);$req=$stmt->fetch()?:[];
@@ -144,6 +157,12 @@ function catering_operations_find(PDO $pdo, int $organizationId, string $query, 
 function catering_operations_agent_answer(PDO $pdo, int $organizationId, string $message): array
 {
     $rows=catering_operations_find($pdo,$organizationId,$message,12);
+    if(!$rows){
+        $stop=['what','which','where','when','who','how','the','our','for','are','is','catering','catered','event','events','operations','operational','readiness','ready','prep','production','ingredient','ingredients','requirement','requirements','staff','staffing','shift','shifts','task','tasks','pack','load','setup','shortage','execution','execute','need','needs','missing','attention'];
+        $tokens=preg_split('/[^\pL\pN_-]+/u',mb_strtolower($message,'UTF-8'),-1,PREG_SPLIT_NO_EMPTY)?:[];$matched=[];
+        foreach($tokens as $token){if(mb_strlen($token,'UTF-8')<3||in_array($token,$stop,true))continue;foreach(catering_operations_find($pdo,$organizationId,$token,12) as $row)$matched[(string)$row['public_id']]=$row;}
+        $rows=array_values($matched);
+    }
     if(!$rows && preg_match('/\b(readiness|ready|operations|prep|production|ingredient|staff|staffing|task|pack|load|setup|shortage)\b/i',$message))$rows=catering_operations_find($pdo,$organizationId,'',12);
     if(!$rows)return ['skill'=>'catering.operations','answer'=>'No catering operations records match that request yet. Move an event into menu planning or a later catering stage to create its operations record.','data'=>[],'sources'=>[]];
     if(count($rows)===1){$text=catering_operations_context($pdo,$organizationId,$rows[0]);return ['skill'=>'catering.operations.context','answer'=>$text,'data'=>$rows[0],'sources'=>[(string)$rows[0]['public_id']]];}
