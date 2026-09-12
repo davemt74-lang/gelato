@@ -101,7 +101,7 @@ function catering_brain_answer(PDO $pdo, int $organizationId, string $message): 
         $days = preg_match('/\b(\d{1,3})\s*days?\b/u', $normalized, $m) ? max(1, min(365, (int)$m[1])) : 30;
         $rows = catering_brain_upcoming($pdo, $organizationId, $days);
         if (!$rows) return ['skill'=>'catering.upcoming','answer'=>"No active catering events are scheduled in the next {$days} days.",'data'=>[],'sources'=>[]];
-        $lines=[];foreach($rows as $row)$lines[]=$row['event_date'].' — '.$row['event_type'].' — '.(($row['company_name']??'')?:$row['contact_name']).' — '.($row['guest_count']?:$row['guest_count'].' guests':'guest count TBD').' — '.$row['pipeline_stage'];
+        $lines=[];foreach($rows as $row)$lines[]=$row['event_date'].' — '.$row['event_type'].' — '.(($row['company_name']??'')?:$row['contact_name']).' — '.($row['guest_count'] ? $row['guest_count'].' guests' : 'guest count TBD').' — '.$row['pipeline_stage'];
         return ['skill'=>'catering.upcoming','answer'=>"Upcoming catering opportunities/events:\n- ".implode("\n- ",$lines),'data'=>$rows,'sources'=>array_column($rows,'public_id')];
     }
     if (preg_match('/\b(pipeline|forecast|weighted|summary|opportunities|stages)\b/u', $normalized)) {
