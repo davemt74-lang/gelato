@@ -36,6 +36,8 @@
     addAdminNav('recipes.view', 'recipes-nav', '▤', 'Recipe Library', 'recipes.php');
     addAdminNav('schedule.view', 'scheduling-nav', '◫', 'Staff Scheduling', 'scheduling.php');
     addAdminNav('schedule.self', 'scheduling-nav', '◫', 'My Schedule', 'scheduling.php');
+    addAdminNav('timeclock.view', 'timeclock-nav', '◷', 'Time Clock + Attendance', 'timeclock.php');
+    addAdminNav('timeclock.self', 'timeclock-nav', '◷', 'My Time + Gelato', 'timeclock.php');
   }
 
   function loadScript(src, marker) {
