@@ -17,17 +17,19 @@ The application shell may use generic **Restaurant Workspace** wording, while re
 - Notifications and proactive employee/owner agent workspaces
 - Resume intake and standalone resume review pages
 - Admin Jobs module, public jobs list, unique job detail pages, and job-linked applications
+- Permission-controlled Floor Planner with real dimensions, seating/revenue analytics, equipment layout, and database-backed saved plans
 - Brand image management and encrypted Claude/OpenAI API-key settings
 - Database-backed authentication, password recovery, and first-owner setup
 
 ## Fresh installation
 
 1. Import `database/install.sql` into an empty MySQL 8+ or MariaDB 10.11+ database.
-2. Rename `config-example.php` to `config.php`, enter the new database credentials, and set the new subdomain URL. For HTTPS deployments, set `security.cookie_secure` to `true`.
-3. Open `setup-first-user.php` and create the first Super Admin/organization.
-4. Sign in and open `admin-menu-import.php`, then choose **Import current Gelato Spot menu**. The REST endpoint is built in and requires no API key or menu-source configuration.
-5. Alternatively, run `php scripts/sync-gelato-menu.php --dry-run`, then `php scripts/sync-gelato-menu.php` from the project directory.
-6. Open the training workspace. Menu knowledge is read from the local database.
+2. Import `database/20260912_floor_planner.sql` to add the Floor Planner layout table and its `floorplans.view` / `floorplans.edit` permissions.
+3. Rename `config-example.php` to `config.php`, enter the new database credentials, and set the new subdomain URL. For HTTPS deployments, set `security.cookie_secure` to `true`.
+4. Open `setup-first-user.php` and create the first Super Admin/organization.
+5. Sign in and open `admin-menu-import.php`, then choose **Import current Gelato Spot menu**. The REST endpoint is built in and requires no API key or menu-source configuration.
+6. Alternatively, run `php scripts/sync-gelato-menu.php --dry-run`, then `php scripts/sync-gelato-menu.php` from the project directory.
+7. Open the training workspace. Menu knowledge is read from the local database. Super Admin automatically has unrestricted Floor Planner access; other account types can be granted Floor Planner permissions from **Account Types & Permissions**.
 
 ## Menu source
 
