@@ -9,6 +9,7 @@ on:
       - 'includes/equipment-brain.php'
       - 'js/equipment-module.js'
       - 'js/floor-planner-module.js'
+      - 'database/20260912_floor_planner.sql'
       - 'database/20260912_equipment_catalog_brain.sql'
       - '.github/workflows/equipment-brain-contract.yml'
   push:
@@ -20,12 +21,26 @@ on:
       - 'includes/equipment-brain.php'
       - 'js/equipment-module.js'
       - 'js/floor-planner-module.js'
+      - 'database/20260912_floor_planner.sql'
       - 'database/20260912_equipment_catalog_brain.sql'
       - '.github/workflows/equipment-brain-contract.yml'
 
 jobs:
   equipment-brain-contract:
     runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
@@ -59,6 +74,7 @@ jobs:
           grep -q "equipment.maintenance_due" api/agent-brain.php
           grep -q "equipment.service_contacts" api/agent-brain.php
           grep -q "knowledge.search" api/agent-brain.php
+          grep -q "askOwnerEquipmentBrain" js/equipment-module.js
           grep -q "equipment.php" js/equipment-module.js
           grep -q "api/agent-brain.php" equipment.php
       - name: Security contract
@@ -69,3 +85,15 @@ jobs:
           grep -q "organization_id" api/agent-brain.php
           grep -q "app_has_permission('equipment.view'" api/agent-brain.php
           grep -q "app_has_permission('agent.equipment_skills'" api/agent-brain.php
+      - name: Install migrations in MariaDB
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_ci < database/install.sql
+          mariadb -h 127.0.0.1 -uroot -proot gelato_ci < database/20260912_floor_planner.sql
+          mariadb -h 127.0.0.1 -uroot -proot gelato_ci < database/20260912_equipment_catalog_brain.sql
+      - name: Verify persisted equipment schema
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_ci' AND table_name IN ('floor_plans','equipment_assets','equipment_service_contacts','equipment_asset_service_contacts','equipment_service_events','agent_knowledge_records');")" = "6"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('floorplans.view','floorplans.edit','equipment.view','equipment.edit','equipment.service','equipment.contacts','agent.equipment_skills');")" = "7"
+          mariadb -N -h 127.0.0.1 -uroot -proot gelato_ci -e "SHOW INDEX FROM agent_knowledge_records WHERE Key_name='ft_agent_knowledge_title_content';" | grep -q ft_agent_knowledge_title_content
