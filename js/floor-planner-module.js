@@ -3,40 +3,43 @@
   const Auth = window.RestaurantAuth;
   if (!Auth) return;
 
-  function installFloorPlannerNav() {
-    if (!Auth.has('floorplans.view')) return;
+  function addAdminNav(permission, marker, icon, label, href) {
+    if (!Auth.has(permission)) return;
     const adminNav = document.querySelector('[data-nav-group="admin"]');
-    if (!adminNav || adminNav.querySelector('[data-floor-planner-nav]')) return;
-
+    if (!adminNav || adminNav.querySelector(`[data-${marker}]`)) return;
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'nav-btn';
-    button.dataset.floorPlannerNav = '1';
-    button.innerHTML = '<span class="nav-ico">▦</span>Floor Planner';
-    button.addEventListener('click', () => { window.location.href = 'floor-planner-ops.php'; });
+    button.dataset[marker.replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = '1';
+    button.innerHTML = `<span class="nav-ico">${icon}</span>${label}`;
+    button.addEventListener('click', () => { window.location.href = href; });
     adminNav.appendChild(button);
-
     const adminMode = document.querySelector('[data-workspace-mode="admin"]');
     if (adminMode) adminMode.hidden = false;
   }
 
-  function loadEquipmentModule() {
-    if (document.querySelector('script[data-equipment-module]')) return;
+  function installOperationsNav() {
+    addAdminNav('floorplans.view', 'floor-planner-nav', '▦', 'Floor Planner', 'floor-planner-ops.php');
+    addAdminNav('equipment.view', 'equipment-nav', '⚙', 'Equipment Catalog', 'equipment.php');
+    addAdminNav('wholesale.view', 'wholesale-nav', '◇', 'Wholesale Pipeline', 'wholesale-pipeline.php');
+    addAdminNav('recipes.view', 'recipes-nav', '▤', 'Recipe Library', 'recipes.php');
+  }
+
+  function loadScript(src, marker) {
+    if (document.querySelector(`script[data-${marker}]`)) return;
     const script = document.createElement('script');
-    script.src = 'js/equipment-module.js';
-    script.dataset.equipmentModule = '1';
+    script.src = src;
+    script.dataset[marker.replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = '1';
     script.defer = true;
     document.head.appendChild(script);
   }
 
   function install() {
-    installFloorPlannerNav();
-    loadEquipmentModule();
+    installOperationsNav();
+    loadScript('js/equipment-module.js', 'equipment-module');
+    loadScript('js/restaurant-agent-bridge.js', 'restaurant-agent-bridge');
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', install, { once: true });
-  } else {
-    install();
-  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, { once: true });
+  else install();
 })();

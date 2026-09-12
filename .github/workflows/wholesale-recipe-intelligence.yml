@@ -1,0 +1,127 @@
+name: Wholesale + Recipe Intelligence Contract
+
+on:
+  pull_request:
+    paths:
+      - 'wholesale.php'
+      - 'wholesale-pipeline.php'
+      - 'recipes.php'
+      - 'recipe-image.php'
+      - 'api/public-wholesale.php'
+      - 'api/wholesale.php'
+      - 'api/recipes.php'
+      - 'api/recipe-image.php'
+      - 'api/agent-brain.php'
+      - 'includes/restaurant-brain.php'
+      - 'includes/recipe-intelligence.php'
+      - 'js/floor-planner-module.js'
+      - 'js/restaurant-agent-bridge.js'
+      - 'js/public-account-menu.js'
+      - 'database/20260912_wholesale_recipe_intelligence.sql'
+      - '.github/workflows/wholesale-recipe-intelligence.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'wholesale.php'
+      - 'wholesale-pipeline.php'
+      - 'recipes.php'
+      - 'recipe-image.php'
+      - 'api/public-wholesale.php'
+      - 'api/wholesale.php'
+      - 'api/recipes.php'
+      - 'api/recipe-image.php'
+      - 'api/agent-brain.php'
+      - 'includes/restaurant-brain.php'
+      - 'includes/recipe-intelligence.php'
+      - 'js/floor-planner-module.js'
+      - 'js/restaurant-agent-bridge.js'
+      - 'js/public-account-menu.js'
+      - 'database/20260912_wholesale_recipe_intelligence.sql'
+      - '.github/workflows/wholesale-recipe-intelligence.yml'
+
+jobs:
+  restaurant-ai-contract:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+
+      - name: PHP syntax
+        run: |
+          php -l wholesale.php
+          php -l wholesale-pipeline.php
+          php -l recipes.php
+          php -l recipe-image.php
+          php -l api/public-wholesale.php
+          php -l api/wholesale.php
+          php -l api/recipes.php
+          php -l api/recipe-image.php
+          php -l api/agent-brain.php
+          php -l includes/restaurant-brain.php
+          php -l includes/recipe-intelligence.php
+          node --check js/floor-planner-module.js
+          node --check js/restaurant-agent-bridge.js
+          node --check js/public-account-menu.js
+
+      - name: Feature contract
+        run: |
+          grep -q "public_wholesale_form" api/public-wholesale.php
+          grep -q "wholesale.manage" api/wholesale.php
+          grep -q "restaurant_brain_sync_wholesale" api/wholesale.php
+          grep -q "recipes.ai_map" api/recipe-image.php
+          grep -q "input_image" includes/recipe-intelligence.php
+          grep -q "web_search" includes/recipe-intelligence.php
+          grep -q "gpt-5.6-luna" includes/recipe-intelligence.php
+          grep -q "recipe.online_mappings" api/agent-brain.php
+          grep -q "wholesale.pipeline" api/agent-brain.php
+          grep -q "Upload + AI Map Online" recipes.php
+          grep -q "Submit wholesale request" wholesale.php
+          grep -q "wholesale-pipeline.php" js/floor-planner-module.js
+          grep -q "api/agent-brain.php" js/restaurant-agent-bridge.js
+          grep -q "schema_migrations" includes/UpgradeService.php
+
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app' => ['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database' => ['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security' => ['session_name'=>'gelato_restaurant_ai_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $service = new UpgradeService(app_pdo(), __DIR__);
+          $service->ensureTrackingTables();
+          $service->bootstrapLegacyHistory(null);
+          $service->applyPending(null);
+          if ($service->pendingMigrations()) exit(1);
+          PHP
+
+      - name: Verify wholesale recipe schema and permissions
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('wholesale_leads','wholesale_lead_activities','recipes','recipe_images');")" = "4"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('wholesale.view','wholesale.manage','wholesale.agent','recipes.view','recipes.edit','recipes.ai_map','recipes.agent');")" = "7"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260912_wholesale_recipe_intelligence';")" = "1"
