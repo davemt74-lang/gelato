@@ -1,0 +1,155 @@
+name: Catering Operations Integration
+
+on:
+  pull_request:
+    paths:
+      - 'catering-operations.php'
+      - 'api/catering-operations.php'
+      - 'api/catering-agent.php'
+      - 'includes/catering-operations.php'
+      - 'js/catering-operations.js'
+      - 'js/catering-module.js'
+      - 'database/20260913_zz_catering_operations_integration.sql'
+      - '.github/workflows/catering-operations-integration.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'catering-operations.php'
+      - 'api/catering-operations.php'
+      - 'api/catering-agent.php'
+      - 'includes/catering-operations.php'
+      - 'js/catering-operations.js'
+      - 'js/catering-module.js'
+      - 'database/20260913_zz_catering_operations_integration.sql'
+      - '.github/workflows/catering-operations-integration.yml'
+
+jobs:
+  catering-operations:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+
+      - name: Syntax checks
+        run: |
+          php -l catering-operations.php
+          php -l api/catering-operations.php
+          php -l api/catering-agent.php
+          php -l includes/catering-operations.php
+          node --check js/catering-operations.js
+          node --check js/catering-module.js
+
+      - name: Operations integration contract
+        run: |
+          grep -q "restaurant_operations" database/20260913_zz_catering_operations_integration.sql
+          grep -q "trg_catering_operations_update" database/20260913_zz_catering_operations_integration.sql
+          grep -q "Lock final menu" database/20260913_zz_catering_operations_integration.sql
+          grep -q "Confirm ingredient requirements" database/20260913_zz_catering_operations_integration.sql
+          grep -q "ON DUPLICATE KEY UPDATE due_at=VALUES(due_at)" database/20260913_zz_catering_operations_integration.sql
+          grep -q "catering_operations_rebuild_requirements" includes/catering-operations.php
+          grep -q "catering_operations_readiness" includes/catering-operations.php
+          grep -q "catering_operations_numeric_quantity" includes/catering-operations.php
+          grep -q "catering.operations.context" api/catering-agent.php
+          grep -q "match_recipes" api/catering-operations.php
+          grep -q "restaurant_operation_staff" api/catering-operations.php
+          grep -q "Catering Operations" catering-operations.php
+          grep -q "Scaled ingredient requirements" js/catering-operations.js
+          grep -q "catering-operations.php" js/catering-module.js
+
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app' => ['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database' => ['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security' => ['session_name'=>'gelato_restaurant_ai_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $service = new UpgradeService(app_pdo(), __DIR__);
+          $service->ensureTrackingTables();
+          $service->bootstrapLegacyHistory(null);
+          $service->applyPending(null);
+          if ($service->pendingMigrations()) exit(1);
+          PHP
+
+      - name: Verify operations schema and triggers
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('restaurant_operations','restaurant_operation_menu_items','restaurant_operation_requirements','restaurant_operation_tasks','restaurant_operation_staff');")" = "5"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_schema='gelato_restaurant_ai_ci' AND trigger_name IN ('trg_catering_operations_insert','trg_catering_operations_update');")" = "2"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260913_zz_catering_operations_integration';")" = "1"
+
+      - name: Verify catering creates and reschedules executable operation
+        run: |
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci <<'SQL'
+          INSERT INTO organizations (name) VALUES ('CI Restaurant');
+          SET @org=LAST_INSERT_ID();
+          INSERT INTO users (email,password_hash,first_name,last_name,display_name,status) VALUES ('ops-ci@example.test','x','Ops','Tester','Ops Tester','active');
+          SET @user=LAST_INSERT_ID();
+          INSERT INTO organization_memberships (organization_id,user_id,status) VALUES (@org,@user,'active');
+          INSERT INTO recipes (organization_id,public_id,name,category,yield_quantity,yield_unit,ingredients_json,instructions_json,status,created_by,updated_by)
+          VALUES (@org,'recipe-ci-vanilla','Vanilla Gelato','Gelato',20,'servings','[{"name":"Milk","quantity":2,"unit":"gal"},{"name":"Sugar","quantity":1,"unit":"lb"}]','[]','active',@user,@user);
+          INSERT INTO catering_leads (organization_id,public_id,contact_name,email,event_type,event_date,start_time,end_time,guest_count,venue_name,menu_interests,pipeline_stage)
+          VALUES (@org,'cater-ci-1','CI Customer','customer@example.test','Corporate Event',DATE_ADD(CURDATE(),INTERVAL 14 DAY),'18:00:00','21:00:00',100,'CI Venue','Vanilla Gelato','new');
+          UPDATE catering_leads SET pipeline_stage='confirmed',probability_percent=100 WHERE organization_id=@org AND public_id='cater-ci-1';
+          SQL
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM restaurant_operations WHERE source_type='catering' AND source_public_id='cater-ci-1' AND status='active';")" = "1"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM restaurant_operation_tasks t INNER JOIN restaurant_operations o ON o.id=t.operation_id WHERE o.source_public_id='cater-ci-1';")" = "8"
+          old_due="$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT t.due_at FROM restaurant_operation_tasks t INNER JOIN restaurant_operations o ON o.id=t.operation_id WHERE o.source_public_id='cater-ci-1' AND t.task_key='service' LIMIT 1;")"
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "UPDATE restaurant_operation_tasks t INNER JOIN restaurant_operations o ON o.id=t.operation_id SET t.status='in_progress' WHERE o.source_public_id='cater-ci-1' AND t.task_key='service'; UPDATE catering_leads SET event_date=DATE_ADD(event_date,INTERVAL 1 DAY) WHERE public_id='cater-ci-1';"
+          new_due="$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT t.due_at FROM restaurant_operation_tasks t INNER JOIN restaurant_operations o ON o.id=t.operation_id WHERE o.source_public_id='cater-ci-1' AND t.task_key='service' LIMIT 1;")"
+          test "$old_due" != "$new_due"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT t.status FROM restaurant_operation_tasks t INNER JOIN restaurant_operations o ON o.id=t.operation_id WHERE o.source_public_id='cater-ci-1' AND t.task_key='service' LIMIT 1;")" = "in_progress"
+
+      - name: Verify recipe scaling tasks staffing and readiness
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/catering-operations.php';
+          $pdo=app_pdo();
+          $parsed=catering_operations_parse_ingredient('1/2 cup Sugar');
+          if(!$parsed || abs((float)$parsed['quantity']-0.5)>0.0001 || $parsed['unit']!=='cup' || $parsed['name']!=='Sugar') exit(6);
+          $org=(int)$pdo->query("SELECT id FROM organizations WHERE name='CI Restaurant' LIMIT 1")->fetchColumn();
+          $user=(int)$pdo->query("SELECT id FROM users WHERE email='ops-ci@example.test' LIMIT 1")->fetchColumn();
+          $recipe=(int)$pdo->query("SELECT id FROM recipes WHERE public_id='recipe-ci-vanilla' LIMIT 1")->fetchColumn();
+          $operation=$pdo->query("SELECT * FROM restaurant_operations WHERE source_public_id='cater-ci-1' LIMIT 1")->fetch();
+          if(!$operation) exit(2);
+          $pdo->prepare("INSERT INTO restaurant_operation_menu_items (organization_id,operation_id,recipe_id,item_name,target_servings,batches,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?)")
+              ->execute([$org,(int)$operation['id'],$recipe,'Vanilla Gelato',100,5,$user,$user]);
+          $count=catering_operations_rebuild_requirements($pdo,$org,(int)$operation['id'],$user);
+          if($count!==2) exit(3);
+          $milk=(float)$pdo->query("SELECT required_quantity FROM restaurant_operation_requirements WHERE ingredient_name='Milk' LIMIT 1")->fetchColumn();
+          $sugar=(float)$pdo->query("SELECT required_quantity FROM restaurant_operation_requirements WHERE ingredient_name='Sugar' LIMIT 1")->fetchColumn();
+          if(abs($milk-10.0)>0.0001 || abs($sugar-5.0)>0.0001) exit(4);
+          $pdo->prepare("UPDATE restaurant_operation_requirements SET status='ready',updated_by=? WHERE operation_id=?")->execute([$user,(int)$operation['id']]);
+          $pdo->prepare("UPDATE restaurant_operation_tasks SET status='done',assigned_to=?,updated_by=? WHERE operation_id=?")->execute([$user,$user,(int)$operation['id']]);
+          $pdo->prepare("INSERT INTO restaurant_operation_staff (organization_id,operation_id,user_id,role_name,shift_start_at,shift_end_at,status,created_by,updated_by) VALUES (?,?,?,?,?,?, 'confirmed',?,?)")
+              ->execute([$org,(int)$operation['id'],$user,'Event Captain',$operation['service_start_at'],$operation['service_end_at'],$user,$user]);
+          $ready=catering_operations_readiness($pdo,$org,(int)$operation['id'],true);
+          if((int)$ready['percent']!==100 || (int)$ready['staffCount']!==1) exit(5);
+          echo "readiness=100 requirements={$count}\n";
+          PHP
