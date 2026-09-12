@@ -13,7 +13,7 @@
     button.className = 'nav-btn';
     button.dataset.floorPlannerNav = '1';
     button.innerHTML = '<span class="nav-ico">▦</span>Floor Planner';
-    button.addEventListener('click', () => { window.location.href = 'floor-planner.php'; });
+    button.addEventListener('click', () => { window.location.href = 'floor-planner-ops.php'; });
     adminNav.appendChild(button);
 
     const adminMode = document.querySelector('[data-workspace-mode="admin"]');
