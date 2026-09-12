@@ -17,6 +17,21 @@ function floor_plan_table_ready(PDO $pdo): bool
     }
 }
 
+function floor_plan_equipment_ready(PDO $pdo): bool
+{
+    try {
+        $statement = $pdo->prepare(
+            "SELECT COUNT(*) FROM information_schema.columns
+             WHERE table_schema = DATABASE() AND table_name = 'equipment_assets'
+               AND column_name IN ('floor_plan_public_id','floor_plan_x_ft','floor_plan_y_ft','floor_plan_rotation_deg')"
+        );
+        $statement->execute();
+        return (int)$statement->fetchColumn() === 4;
+    } catch (Throwable) {
+        return false;
+    }
+}
+
 function floor_plan_summary(array $row): array
 {
     return [
@@ -38,6 +53,42 @@ function floor_plan_payload(array $row): array
     $decoded = json_decode((string)$row['plan_json'], true);
     $payload['data'] = is_array($decoded) ? $decoded : [];
     return $payload;
+}
+
+function floor_plan_linked_equipment(PDO $pdo, int $organizationId, string $publicId): array
+{
+    if (!floor_plan_equipment_ready($pdo)) return [];
+    $statement = $pdo->prepare(
+        "SELECT public_id, name, width_inches, depth_inches, floor_plan_x_ft, floor_plan_y_ft, floor_plan_rotation_deg
+         FROM equipment_assets
+         WHERE organization_id=? AND floor_plan_public_id=? AND archived_at IS NULL AND operational_status<>'retired'
+         ORDER BY name"
+    );
+    $statement->execute([$organizationId, $publicId]);
+    return $statement->fetchAll();
+}
+
+function floor_plan_equipment_bounds_conflicts(PDO $pdo, int $organizationId, string $publicId, float $widthFt, float $depthFt): array
+{
+    $conflicts = [];
+    foreach (floor_plan_linked_equipment($pdo, $organizationId, $publicId) as $asset) {
+        if ($asset['floor_plan_x_ft'] === null || $asset['floor_plan_y_ft'] === null) continue;
+        $x = (float)$asset['floor_plan_x_ft'];
+        $y = (float)$asset['floor_plan_y_ft'];
+        $width = max(0.0, (float)($asset['width_inches'] ?? 0) / 12.0);
+        $depth = max(0.0, (float)($asset['depth_inches'] ?? 0) / 12.0);
+        $rotation = fmod(abs((float)($asset['floor_plan_rotation_deg'] ?? 0)), 180.0);
+        if ($rotation > 45.0 && $rotation < 135.0) {
+            [$width, $depth] = [$depth, $width];
+        }
+        $outside = $x < 0 || $y < 0 || $x > $widthFt || $y > $depthFt;
+        if ($width > 0) $outside = $outside || ($x + $width > $widthFt + 0.001);
+        if ($depth > 0) $outside = $outside || ($y + $depth > $depthFt + 0.001);
+        if ($outside) {
+            $conflicts[] = ['id'=>(string)$asset['public_id'],'name'=>(string)$asset['name']];
+        }
+    }
+    return $conflicts;
 }
 
 if (!floor_plan_table_ready($pdo)) {
@@ -92,6 +143,15 @@ if ($action === 'archive') {
     if ($publicId === '') {
         app_json_response(['ok' => false, 'message' => 'A floor plan id is required.'], 422);
     }
+    $linked = floor_plan_linked_equipment($pdo, $organizationId, $publicId);
+    if ($linked) {
+        $names = array_slice(array_column($linked, 'name'), 0, 5);
+        app_json_response([
+            'ok'=>false,
+            'message'=>'Move or unplace the linked equipment before archiving this floor plan: ' . implode(', ', $names) . (count($linked) > 5 ? '…' : ''),
+            'linkedEquipment'=>count($linked),
+        ], 409);
+    }
     $statement = $pdo->prepare(
         'UPDATE floor_plans SET archived_at = NOW(6), updated_by = ?, updated_at = NOW(6)
          WHERE organization_id = ? AND public_id = ? AND archived_at IS NULL'
@@ -140,6 +200,16 @@ $publicId = preg_replace('/[^a-zA-Z0-9_-]/', '', (string)($plan['id'] ?? ''));
 $isNew = $publicId === '';
 if ($isNew) {
     $publicId = 'floorplan-' . bin2hex(random_bytes(10));
+} else {
+    $conflicts = floor_plan_equipment_bounds_conflicts($pdo, $organizationId, $publicId, $widthFt, $depthFt);
+    if ($conflicts) {
+        $names = array_slice(array_column($conflicts, 'name'), 0, 5);
+        app_json_response([
+            'ok'=>false,
+            'message'=>'The new plan dimensions would place equipment outside the floor-plan boundary: ' . implode(', ', $names) . (count($conflicts) > 5 ? '…' : ''),
+            'equipmentConflicts'=>count($conflicts),
+        ], 409);
+    }
 }
 
 $pdo->beginTransaction();
