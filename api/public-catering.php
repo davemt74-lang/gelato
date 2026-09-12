@@ -54,8 +54,9 @@ if ($companyName !== '' && mb_strlen($companyName,'UTF-8') > 200) $errors[] = 'C
 if ($eventName !== '' && mb_strlen($eventName,'UTF-8') > 220) $errors[] = 'Event name is too long.';
 if ($eventDate === '') $errors[] = 'Select the event date.';
 else {
-    $parsed = DateTimeImmutable::createFromFormat('Y-m-d',$eventDate);
+    $parsed = DateTimeImmutable::createFromFormat('!Y-m-d',$eventDate);
     if (!$parsed || $parsed->format('Y-m-d') !== $eventDate) $errors[] = 'Event date is invalid.';
+    elseif ($parsed < new DateTimeImmutable('today')) $errors[] = 'Event date cannot be in the past.';
 }
 foreach (['eventStartTime'=>$eventStartTime,'eventEndTime'=>$eventEndTime] as $value) {
     if ($value !== '' && !preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/',$value)) $errors[] = 'Event time is invalid.';
