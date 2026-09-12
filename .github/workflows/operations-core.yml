@@ -7,6 +7,7 @@ on:
       - 'api/operations.php'
       - 'api/operations-agent.php'
       - 'api/task-proof.php'
+      - 'api/task-proof-view.php'
       - 'includes/operations-core.php'
       - 'js/operations-core.js'
       - 'js/restaurant-agent-bridge.js'
@@ -20,6 +21,7 @@ on:
       - 'api/operations.php'
       - 'api/operations-agent.php'
       - 'api/task-proof.php'
+      - 'api/task-proof-view.php'
       - 'includes/operations-core.php'
       - 'js/operations-core.js'
       - 'js/restaurant-agent-bridge.js'
@@ -56,6 +58,7 @@ jobs:
           php -l api/operations.php
           php -l api/operations-agent.php
           php -l api/task-proof.php
+          php -l api/task-proof-view.php
           php -l includes/operations-core.php
           node --check js/operations-core.js
           node --check js/restaurant-agent-bridge.js
@@ -76,6 +79,10 @@ jobs:
           grep -q "tasks.prep_add" api/operations-agent.php
           grep -q "tasks.category_create" api/operations-agent.php
           grep -q "local_private" api/task-proof.php
+          grep -q "Task proof access denied" api/task-proof-view.php
+          grep -q "canTasksSelf" operations.php
+          grep -q "canTasksProof" operations.php
+          grep -q "task-proof-view.php" js/operations-core.js
 
       - name: Install and upgrade schema
         run: |
