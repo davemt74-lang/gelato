@@ -54,8 +54,12 @@ if($_SERVER['REQUEST_METHOD']!=='POST'){header('Allow: GET, POST');app_json_resp
 $input=app_json_input();app_verify_request_csrf($input);$action=(string)($input['action']??'');$publicId=trim((string)($input['id']??''));$op=catering_ops_operation($pdo,$organizationId,$publicId);$operationId=(int)$op['id'];
 
 if($action==='operation_update'){
-    $notes=mb_substr(trim((string)($input['notes']??$op['notes']??'')),0,10000,'UTF-8');$status=(string)($input['status']??$op['status']);if(!in_array($status,['planning','active','ready','completed','cancelled'],true))app_json_response(['ok'=>false,'message'=>'Invalid operation status.'],422);
-    $pdo->prepare('UPDATE restaurant_operations SET status=?,notes=?,updated_by=?,updated_at=NOW(6) WHERE id=? AND organization_id=?')->execute([$status,$notes?:null,$userId,$operationId,$organizationId]);catering_ops_after_change($pdo,$organizationId,$operationId,$userId,'catering.operations.updated',$publicId,['status'=>$status]);app_json_response(['ok'=>true,'message'=>'Operations record updated.']);
+    $notes=mb_substr(trim((string)($input['notes']??$op['notes']??'')),0,10000,'UTF-8');
+    $status=(string)$op['status'];
+    if(($op['source_type']??'')!=='catering'){
+        $requested=(string)($input['status']??$status);if(!in_array($requested,['planning','active','ready','completed','cancelled'],true))app_json_response(['ok'=>false,'message'=>'Invalid operation status.'],422);$status=$requested;
+    }
+    $pdo->prepare('UPDATE restaurant_operations SET status=?,notes=?,updated_by=?,updated_at=NOW(6) WHERE id=? AND organization_id=?')->execute([$status,$notes?:null,$userId,$operationId,$organizationId]);catering_ops_after_change($pdo,$organizationId,$operationId,$userId,'catering.operations.updated',$publicId,['status'=>$status,'lifecycleSource'=>(($op['source_type']??'')==='catering'?'catering_pipeline':'operations')]);app_json_response(['ok'=>true,'message'=>'Operations notes updated. Catering lifecycle status follows the catering pipeline.']);
 }
 
 if($action==='menu_save'){
