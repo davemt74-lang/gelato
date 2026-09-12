@@ -1,0 +1,81 @@
+-- Gelato Restaurant AI: catering intake + sales pipeline
+SET NAMES utf8mb4;
+
+CREATE TABLE IF NOT EXISTS catering_leads (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  organization_id BIGINT UNSIGNED NOT NULL,
+  public_id VARCHAR(80) NOT NULL,
+  contact_name VARCHAR(180) NOT NULL,
+  email VARCHAR(254) NOT NULL,
+  phone VARCHAR(50) NULL,
+  company_name VARCHAR(200) NULL,
+  event_name VARCHAR(220) NULL,
+  event_type VARCHAR(100) NULL,
+  event_date DATE NULL,
+  event_start_time TIME NULL,
+  event_end_time TIME NULL,
+  guest_count INT UNSIGNED NULL,
+  venue_name VARCHAR(220) NULL,
+  venue_address VARCHAR(500) NULL,
+  service_style VARCHAR(120) NULL,
+  menu_interests_json JSON NULL,
+  beverage_interest VARCHAR(120) NULL,
+  dietary_needs TEXT NULL,
+  staffing_needs TEXT NULL,
+  rental_needs TEXT NULL,
+  setup_notes TEXT NULL,
+  fulfillment_preference VARCHAR(100) NULL,
+  budget_range VARCHAR(120) NULL,
+  estimated_value DECIMAL(12,2) NULL,
+  probability_percent TINYINT UNSIGNED NOT NULL DEFAULT 10,
+  source VARCHAR(80) NOT NULL DEFAULT 'public_catering_form',
+  pipeline_stage VARCHAR(40) NOT NULL DEFAULT 'new',
+  assigned_to BIGINT UNSIGNED NULL,
+  next_followup_at DATETIME(6) NULL,
+  last_contact_at DATETIME(6) NULL,
+  proposal_sent_at DATETIME(6) NULL,
+  deposit_due_at DATETIME(6) NULL,
+  booked_at DATETIME(6) NULL,
+  completed_at DATETIME(6) NULL,
+  lost_at DATETIME(6) NULL,
+  loss_reason VARCHAR(500) NULL,
+  notes TEXT NULL,
+  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  archived_at DATETIME(6) NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_catering_leads_org_public (organization_id, public_id),
+  KEY idx_catering_pipeline (organization_id, pipeline_stage, archived_at, updated_at),
+  KEY idx_catering_event_date (organization_id, event_date, pipeline_stage, archived_at),
+  KEY idx_catering_assigned (organization_id, assigned_to, next_followup_at),
+  KEY idx_catering_email (organization_id, email),
+  CONSTRAINT fk_catering_leads_org FOREIGN KEY (organization_id) REFERENCES organizations(id),
+  CONSTRAINT fk_catering_leads_assignee FOREIGN KEY (assigned_to) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS catering_lead_activities (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  organization_id BIGINT UNSIGNED NOT NULL,
+  catering_lead_id BIGINT UNSIGNED NOT NULL,
+  activity_type VARCHAR(50) NOT NULL DEFAULT 'note',
+  summary VARCHAR(500) NOT NULL,
+  details TEXT NULL,
+  metadata_json JSON NULL,
+  created_by BIGINT UNSIGNED NULL,
+  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (id),
+  KEY idx_catering_activity_lead (catering_lead_id, created_at),
+  KEY idx_catering_activity_org (organization_id, created_at),
+  CONSTRAINT fk_catering_activity_org FOREIGN KEY (organization_id) REFERENCES organizations(id),
+  CONSTRAINT fk_catering_activity_lead FOREIGN KEY (catering_lead_id) REFERENCES catering_leads(id) ON DELETE CASCADE,
+  CONSTRAINT fk_catering_activity_user FOREIGN KEY (created_by) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO permissions (permission_key, name, description, category) VALUES
+  ('catering.view', 'View catering pipeline', 'View catering inquiries, events, stages, activity, dates, and projected value.', 'Catering'),
+  ('catering.manage', 'Manage catering pipeline', 'Edit catering opportunities, move stages, assign follow-up, and record activity.', 'Catering'),
+  ('catering.agent', 'Use catering Agent skills', 'Allow the private restaurant Agent to search and summarize catering opportunities and upcoming events.', 'Catering')
+ON DUPLICATE KEY UPDATE
+  name = VALUES(name),
+  description = VALUES(description),
+  category = VALUES(category);
