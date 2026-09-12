@@ -3,8 +3,8 @@
   if (!window.RESTAURANT_SERVER_SESSION) return;
   const Auth = window.RestaurantAuth;
   if (!Auth) return;
-  const restaurantIntent = /\b(wholesale|buyer|lead|prospect|foodservice|sample|quote|private label|pipeline|recipe|formula|ingredient|yield|online recipe|recipe image|recipe source|equipment|oven|mixer|freezer|cooler|dish machine|maintenance|repair|warranty|service company|floor\s*plan|layout|located|placement|inventory|stock|par|reorder|shortage|task|tasks|prep|opening|closing|cleaning|assignment|assigned|overdue|task category)\b/i;
-  const operationsIntent = /\b(inventory|stock|par|reorder|shortage|running out|task|tasks|prep|opening|closing|cleaning|assignment|assigned|overdue|task category)\b/i;
+  const restaurantIntent = /\b(wholesale|buyer|lead|prospect|foodservice|sample|quote|private label|pipeline|recipe|formula|ingredient|yield|online recipe|recipe image|recipe source|equipment|oven|mixer|freezer|cooler|dish machine|maintenance|repair|warranty|service company|floor\s*plan|layout|located|placement|inventory|stock|par|reorder|shortage|task|tasks|prep|opening|closing|cleaning|assignment|assigned|overdue|task category|fulfillment|delivery)\b/i;
+  const operationsIntent = /\b(inventory|stock|par|reorder|shortage|running out|task|tasks|prep|opening|closing|cleaning|assignment|assigned|overdue|task category|fulfillment|delivery)\b|\bwholesale\s+(?:order|orders|task|tasks|production|fulfillment)\b/i;
   const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
   const chatKey = 'restaurant-owner-agent-chat-v1';
   let busy = false;
@@ -31,7 +31,7 @@
     const input = document.getElementById('ownerAgentInput'); if (input) input.value = '';
     saveMessage('user', rawText); appendMessage('user', rawText);
     const pending = appendMessage('agent', 'Checking restaurant operations…', true); const guidance = document.getElementById('ownerComposerGuidance');
-    if (guidance) guidance.textContent = isOperations(text) ? 'Gelato is checking tasks, prep and inventory.' : 'Restaurant Agent is checking private business knowledge.';
+    if (guidance) guidance.textContent = isOperations(text) ? 'Gelato is checking tasks, prep, inventory, and fulfillment.' : 'Restaurant Agent is checking private business knowledge.';
     try {
       const endpoint = isOperations(text) ? 'api/operations-agent.php' : 'api/agent-brain.php';
       const response = await fetch(endpoint,{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-Token':window.RESTAURANT_CSRF_TOKEN || ''},body:JSON.stringify({action:'ask',message:text,csrf_token:window.RESTAURANT_CSRF_TOKEN || ''})});
