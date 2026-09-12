@@ -3,6 +3,15 @@
   const Auth = window.RestaurantAuth;
   if (!Auth) return;
 
+  function hydratePermissionCatalog() {
+    if (!Auth.keys?.permissions || !Array.isArray(Auth.permissionCatalog)) return;
+    const stored = Auth.read(Auth.keys.permissions, []);
+    stored.forEach((permission) => {
+      if (!permission?.key || Auth.permissionCatalog.some((item) => item.key === permission.key)) return;
+      Auth.permissionCatalog.push(permission);
+    });
+  }
+
   function addAdminNav(permission, marker, icon, label, href) {
     if (!Auth.has(permission)) return;
     const adminNav = document.querySelector('[data-nav-group="admin"]');
@@ -22,6 +31,7 @@
     addAdminNav('floorplans.view', 'floor-planner-nav', '▦', 'Floor Planner', 'floor-planner-ops.php');
     addAdminNav('equipment.view', 'equipment-nav', '⚙', 'Equipment Catalog', 'equipment.php');
     addAdminNav('wholesale.view', 'wholesale-nav', '◇', 'Wholesale Pipeline', 'wholesale-pipeline.php');
+    addAdminNav('wholesale.view', 'wholesale-accounts-nav', '◎', 'Wholesale Customers', 'wholesale-accounts.php');
     addAdminNav('recipes.view', 'recipes-nav', '▤', 'Recipe Library', 'recipes.php');
   }
 
@@ -33,6 +43,8 @@
     script.defer = true;
     document.head.appendChild(script);
   }
+
+  hydratePermissionCatalog();
 
   function install() {
     installOperationsNav();

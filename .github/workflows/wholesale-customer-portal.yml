@@ -1,0 +1,147 @@
+name: Wholesale Customer Portal Contract
+
+on:
+  pull_request:
+    paths:
+      - 'database/20260912_zz_wholesale_customer_portal.sql'
+      - 'includes/wholesale-portal.php'
+      - 'api/wholesale-accounts.php'
+      - 'api/wholesale-portal.php'
+      - 'api/wholesale-portal-agent.php'
+      - 'wholesale-accounts.php'
+      - 'wholesale-portal.php'
+      - 'wholesale-accept.php'
+      - 'wholesale-login.php'
+      - 'index.php'
+      - 'js/floor-planner-module.js'
+      - '.github/workflows/wholesale-customer-portal.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'database/20260912_zz_wholesale_customer_portal.sql'
+      - 'includes/wholesale-portal.php'
+      - 'api/wholesale-accounts.php'
+      - 'api/wholesale-portal.php'
+      - 'api/wholesale-portal-agent.php'
+      - 'wholesale-accounts.php'
+      - 'wholesale-portal.php'
+      - 'wholesale-accept.php'
+      - 'wholesale-login.php'
+      - 'index.php'
+      - 'js/floor-planner-module.js'
+      - '.github/workflows/wholesale-customer-portal.yml'
+
+jobs:
+  wholesale-customer-portal:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_wholesale_portal_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, sodium
+
+      - name: Syntax
+        run: |
+          php -l includes/wholesale-portal.php
+          php -l api/wholesale-accounts.php
+          php -l api/wholesale-portal.php
+          php -l api/wholesale-portal-agent.php
+          php -l wholesale-accounts.php
+          php -l wholesale-portal.php
+          php -l wholesale-accept.php
+          php -l wholesale-login.php
+          php -l index.php
+          node --check js/floor-planner-module.js
+
+      - name: Security and feature contract
+        run: |
+          grep -q "wholesale_customer" database/20260912_zz_wholesale_customer_portal.sql
+          grep -q "wholesale_portal.view" database/20260912_zz_wholesale_customer_portal.sql
+          grep -q "wholesale_portal.agent" database/20260912_zz_wholesale_customer_portal.sql
+          grep -q "uq_wholesale_orders_source_quote" database/20260912_zz_wholesale_customer_portal.sql
+          grep -q "wholesale_account_users" includes/wholesale-portal.php
+          grep -q "wholesale_portal_require_account" api/wholesale-portal.php
+          grep -q "FOR UPDATE" api/wholesale-portal.php
+          grep -q "wholesale_portal_require_account" api/wholesale-portal-agent.php
+          grep -q "wholesale_agent_rate_limit" api/wholesale-portal-agent.php
+          grep -q "Retry-After" api/wholesale-portal-agent.php
+          grep -q "Never reveal internal restaurant notes" api/wholesale-portal-agent.php
+          grep -q "app_verify_request_csrf" api/wholesale-portal.php
+          grep -q "app_verify_request_csrf" api/wholesale-accounts.php
+          grep -q "app_password_is_valid" wholesale-accept.php
+          grep -q "role_slug.*wholesale_customer" index.php
+          grep -q "Wholesale Customers" js/floor-planner-module.js
+          ! grep -q "wholesale.view.*Wholesale Customer" database/20260912_zz_wholesale_customer_portal.sql
+
+      - name: Install base database and run one-click upgrades
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_wholesale_portal_ci < database/install.sql
+          mariadb -h 127.0.0.1 -uroot -proot gelato_wholesale_portal_ci <<'SQL'
+          INSERT INTO organizations (name,legal_name,status,timezone) VALUES ('CI Restaurant','CI Restaurant','active','America/Phoenix');
+          SET @org_id=LAST_INSERT_ID();
+          INSERT INTO users (email,password_hash,first_name,last_name,display_name,status,email_verified_at) VALUES ('owner@example.test','ci-not-a-login-hash','CI','Owner','CI Owner','active',NOW(6));
+          SET @user_id=LAST_INSERT_ID();
+          INSERT INTO organization_memberships (organization_id,user_id,job_title,status) VALUES (@org_id,@user_id,'Owner','active');
+          SQL
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app' => ['name'=>'Gelato Wholesale Portal CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database' => ['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_wholesale_portal_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security' => ['session_name'=>'gelato_wholesale_portal_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $service = new UpgradeService(app_pdo(), __DIR__);
+          $service->ensureTrackingTables();
+          $service->bootstrapLegacyHistory(null);
+          $service->applyPending(null);
+          if ($service->pendingMigrations()) exit(1);
+          PHP
+
+      - name: Verify portal schema, role and least privilege
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_wholesale_portal_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_wholesale_portal_ci' AND table_name IN ('wholesale_accounts','wholesale_account_users','wholesale_account_locations','wholesale_portal_invites','wholesale_quotes','wholesale_orders','wholesale_customer_requests','wholesale_agent_messages');")" = "8"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_wholesale_portal_ci -e "SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema='gelato_wholesale_portal_ci' AND table_name='wholesale_orders' AND index_name='uq_wholesale_orders_source_quote';")" = "1"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_wholesale_portal_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('wholesale_portal.view','wholesale_portal.agent','wholesale_portal.profile_edit','wholesale_portal.requests','wholesale_portal.quotes','wholesale_portal.orders');")" = "6"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_wholesale_portal_ci -e "SELECT COUNT(*) FROM roles WHERE slug='wholesale_customer';")" = "1"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_wholesale_portal_ci -e "SELECT COUNT(*) FROM role_permissions rp INNER JOIN roles r ON r.id=rp.role_id INNER JOIN permissions p ON p.id=rp.permission_id WHERE r.slug='wholesale_customer' AND p.permission_key LIKE 'wholesale_portal.%';")" = "6"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_wholesale_portal_ci -e "SELECT COUNT(*) FROM role_permissions rp INNER JOIN roles r ON r.id=rp.role_id INNER JOIN permissions p ON p.id=rp.permission_id WHERE r.slug='wholesale_customer' AND p.permission_key IN ('wholesale.view','wholesale.manage','users.view','recipes.view','equipment.view');")" = "0"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_wholesale_portal_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260912_zz_wholesale_customer_portal';")" = "1"
+
+      - name: Verify account conversion and user scoping helpers
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/wholesale-portal.php';
+          $pdo=app_pdo();
+          $org=(int)$pdo->query('SELECT id FROM organizations LIMIT 1')->fetchColumn();
+          $owner=(int)$pdo->query("SELECT u.id FROM users u INNER JOIN organization_memberships om ON om.user_id=u.id WHERE om.organization_id={$org} ORDER BY u.id LIMIT 1")->fetchColumn();
+          $stmt=$pdo->prepare("INSERT INTO wholesale_leads (organization_id,public_id,business_name,contact_name,email,pipeline_stage) VALUES (?,'ci-lead','CI Cafe','Casey Buyer','buyer@example.test','qualified')");
+          $stmt->execute([$org]);
+          $account=wholesale_portal_create_from_lead($pdo,$org,'ci-lead',$owner);
+          if (!$account || $account['business_name']!=='CI Cafe') exit(1);
+          $invite=wholesale_portal_create_invite($pdo,$org,(int)$account['id'],'newbuyer@example.test','New Buyer','buyer',$owner);
+          if (strlen($invite['token']) < 40) exit(1);
+          echo "Portal conversion and invite helpers passed.\n";
+          PHP
