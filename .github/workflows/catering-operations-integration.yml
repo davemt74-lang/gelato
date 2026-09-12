@@ -9,7 +9,7 @@ on:
       - 'includes/catering-operations.php'
       - 'js/catering-operations.js'
       - 'js/catering-module.js'
-      - 'database/20260913_catering_operations_integration.sql'
+      - 'database/20260913_zz_catering_operations_integration.sql'
       - '.github/workflows/catering-operations-integration.yml'
   push:
     branches: [main]
@@ -20,7 +20,7 @@ on:
       - 'includes/catering-operations.php'
       - 'js/catering-operations.js'
       - 'js/catering-module.js'
-      - 'database/20260913_catering_operations_integration.sql'
+      - 'database/20260913_zz_catering_operations_integration.sql'
       - '.github/workflows/catering-operations-integration.yml'
 
 jobs:
@@ -57,10 +57,10 @@ jobs:
 
       - name: Operations integration contract
         run: |
-          grep -q "restaurant_operations" database/20260913_catering_operations_integration.sql
-          grep -q "trg_catering_operations_update" database/20260913_catering_operations_integration.sql
-          grep -q "Lock final menu" database/20260913_catering_operations_integration.sql
-          grep -q "Confirm ingredient requirements" database/20260913_catering_operations_integration.sql
+          grep -q "restaurant_operations" database/20260913_zz_catering_operations_integration.sql
+          grep -q "trg_catering_operations_update" database/20260913_zz_catering_operations_integration.sql
+          grep -q "Lock final menu" database/20260913_zz_catering_operations_integration.sql
+          grep -q "Confirm ingredient requirements" database/20260913_zz_catering_operations_integration.sql
           grep -q "catering_operations_rebuild_requirements" includes/catering-operations.php
           grep -q "catering_operations_readiness" includes/catering-operations.php
           grep -q "catering.operations.context" api/catering-agent.php
@@ -98,7 +98,7 @@ jobs:
         run: |
           test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('restaurant_operations','restaurant_operation_menu_items','restaurant_operation_requirements','restaurant_operation_tasks','restaurant_operation_staff');")" = "5"
           test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_schema='gelato_restaurant_ai_ci' AND trigger_name IN ('trg_catering_operations_insert','trg_catering_operations_update');")" = "2"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260913_catering_operations_integration';")" = "1"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260913_zz_catering_operations_integration';")" = "1"
 
       - name: Verify catering creates executable operation
         run: |
