@@ -140,5 +140,5 @@ if (!is_string($html)) {
     exit('The workspace template could not be loaded.');
 }
 $script = '<script>window.RESTAURANT_SERVER_SESSION=true;window.RESTAURANT_CSRF_TOKEN=' . json_encode(app_csrf_token(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) . ';window.RESTAURANT_CURRENT_USER_ID=' . (int)$user['id'] . ';(function(d){localStorage.setItem("restaurant-admin-users-v1",JSON.stringify(d.users));localStorage.setItem("restaurant-admin-roles-v1",JSON.stringify(d.roles));localStorage.setItem("restaurant-admin-permissions-v1",JSON.stringify(d.permissions));localStorage.setItem("restaurant-jobs-v1",JSON.stringify(d.jobs||[]));localStorage.setItem("restaurant-admin-session-v1",JSON.stringify(d.session));})(' . json_encode($bootstrap, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) . ');</script>';
-$html = str_replace('<script src="js/auth.js"></script>', $script . "\n  <script src=\"js/auth.js\"></script>", $html);
+$html = str_replace('<script src="js/auth.js"></script>', $script . "\n  <script src=\"js/auth.js\"></script>\n  <script src=\"js/floor-planner-module.js\"></script>", $html);
 echo $html;
