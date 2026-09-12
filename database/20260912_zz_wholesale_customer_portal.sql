@@ -161,6 +161,7 @@ CREATE TABLE IF NOT EXISTS wholesale_orders (
   PRIMARY KEY (id),
   UNIQUE KEY uq_wholesale_order_public (organization_id, public_id),
   UNIQUE KEY uq_wholesale_order_number (organization_id, order_number),
+  UNIQUE KEY uq_wholesale_orders_source_quote (source_quote_id),
   KEY idx_wholesale_orders_account (wholesale_account_id, status, updated_at),
   CONSTRAINT fk_wholesale_orders_org FOREIGN KEY (organization_id) REFERENCES organizations(id),
   CONSTRAINT fk_wholesale_orders_account FOREIGN KEY (wholesale_account_id) REFERENCES wholesale_accounts(id) ON DELETE CASCADE,
