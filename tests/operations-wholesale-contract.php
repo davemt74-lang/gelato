@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 require __DIR__ . '/../includes/bootstrap.php';
-require __DIR__ . '/../includes/operations-wholesale.php';
+require __DIR__ . '/../includes/operations-wholesale-agent.php';
 
 $pdo=app_pdo();
 $pdo->exec("INSERT INTO organizations (name) VALUES ('Wholesale Operations CI')");
@@ -39,6 +39,8 @@ $first=operations_task_set_status($pdo,$org,$itemTasks[0]['public_id'],'in_progr
 operations_wholesale_task_status_changed($pdo,$org,$first,'in_progress',$user);
 $status=$pdo->query("SELECT status FROM wholesale_orders WHERE id={$orderId}")->fetchColumn();
 if($status!=='in_production')exit(7);
+$agent=operations_agent_wholesale_answer($pdo,$org,'what wholesale orders are in production?');
+if($agent['skill']!=='wholesale.operations'||count($agent['data'])!==1||$agent['data'][0]['orderNumber']!=='W-CI-001'||$agent['data'][0]['status']!=='in_production')exit(16);
 operations_sync_wholesale_tasks($pdo,$org,$user);
 $statuses=$pdo->query("SELECT status FROM restaurant_tasks WHERE organization_id={$org} AND source_type='wholesale_order_item' ORDER BY source_public_id")->fetchAll(PDO::FETCH_COLUMN);
 if($statuses!==['in_progress','queued']){fwrite(STDERR,'item status preservation failed: '.json_encode($statuses)."\n");exit(8);}
@@ -68,4 +70,4 @@ $verified=operations_task_by_public_id($pdo,$org,$itemTasks[0]['public_id']);
 if(!in_array((string)$verified['status'],['completed','verified'],true))exit(13);
 $terminalGuard=false;try{operations_wholesale_validate_task_transition($pdo,$org,$verified,'in_progress');}catch(InvalidArgumentException){$terminalGuard=true;}if(!$terminalGuard)exit(15);
 
-echo "wholesale_tasks={$after} order_status={$row['status']} delivered_at={$row['delivered_at']} guarded=1\n";
+echo "wholesale_tasks={$after} order_status={$row['status']} delivered_at={$row['delivered_at']} guarded=1 agent=1\n";
