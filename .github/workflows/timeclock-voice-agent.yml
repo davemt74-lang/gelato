@@ -1,0 +1,114 @@
+name: Time Clock + Voice Proactive Agent
+
+on:
+  pull_request:
+    paths:
+      - 'timeclock.php'
+      - 'api/timeclock.php'
+      - 'api/timeclock-agent.php'
+      - 'api/voice-identity.php'
+      - 'api/proactive-agent.php'
+      - 'includes/timeclock-voice-core.php'
+      - 'js/timeclock-voice.js'
+      - 'js/restaurant-agent-bridge.js'
+      - 'js/floor-planner-module.js'
+      - 'database/20260913_zzzzz_timeclock_voice_agent.sql'
+      - 'tests/timeclock-voice-contract.php'
+      - '.github/workflows/timeclock-voice-agent.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'timeclock.php'
+      - 'api/timeclock.php'
+      - 'api/timeclock-agent.php'
+      - 'api/voice-identity.php'
+      - 'api/proactive-agent.php'
+      - 'includes/timeclock-voice-core.php'
+      - 'js/timeclock-voice.js'
+      - 'js/restaurant-agent-bridge.js'
+      - 'js/floor-planner-module.js'
+      - 'database/20260913_zzzzz_timeclock_voice_agent.sql'
+      - 'tests/timeclock-voice-contract.php'
+      - '.github/workflows/timeclock-voice-agent.yml'
+
+jobs:
+  timeclock-voice-agent:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - name: Syntax checks
+        run: |
+          php -l timeclock.php
+          php -l api/timeclock.php
+          php -l api/timeclock-agent.php
+          php -l api/voice-identity.php
+          php -l api/proactive-agent.php
+          php -l includes/timeclock-voice-core.php
+          php -l tests/timeclock-voice-contract.php
+          node --check js/timeclock-voice.js
+          node --check js/restaurant-agent-bridge.js
+          node --check js/floor-planner-module.js
+      - name: Architecture and privacy contract
+        run: |
+          grep -q "CREATE TABLE IF NOT EXISTS time_clock_entries" database/20260913_zzzzz_timeclock_voice_agent.sql
+          grep -q "CREATE TABLE IF NOT EXISTS voice_identity_profiles" database/20260913_zzzzz_timeclock_voice_agent.sql
+          grep -q "CREATE TABLE IF NOT EXISTS proactive_agent_events" database/20260913_zzzzz_timeclock_voice_agent.sql
+          grep -q "voice.self" database/20260913_zzzzz_timeclock_voice_agent.sql
+          grep -q "agent.proactive" database/20260913_zzzzz_timeclock_voice_agent.sql
+          grep -q "recent matching voice check" includes/timeclock-voice-core.php
+          grep -q "does not replace account authentication" includes/timeclock-voice-core.php
+          grep -q "Explicit voice enrollment consent" api/voice-identity.php
+          grep -q "storage/voice-identity" api/voice-identity.php
+          grep -q "voiceprint_json" api/voice-identity.php
+          grep -q "timeclock.clock_in" api/timeclock-agent.php
+          grep -q "attendance.labor" api/timeclock-agent.php
+          grep -q "Listening Mode" timeclock.php
+          grep -q "No covert background recording" timeclock.php
+          grep -q "api/proactive-agent.php" js/timeclock-voice.js
+          grep -q "api/timeclock-agent.php" js/restaurant-agent-bridge.js
+          grep -q "Time Clock" js/floor-planner-module.js
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_restaurant_ai_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php'; require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);$s->ensureTrackingTables();$s->bootstrapLegacyHistory(null);$s->applyPending(null);if($s->pendingMigrations())exit(1);
+          PHP
+      - name: Verify schema and permissions
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('time_clock_entries','time_clock_breaks','attendance_events','voice_identity_profiles','voice_identity_samples','voice_identity_events','proactive_agent_preferences','proactive_agent_events');")" = "8"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('timeclock.self','timeclock.view','timeclock.manage','timeclock.agent','attendance.view','voice.self','voice.manage','voice.agent','agent.proactive');")" = "9"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260913_zzzzz_timeclock_voice_agent';")" = "1"
+      - name: Verify time clock, attendance, voice match and proactive preferences
+        run: php tests/timeclock-voice-contract.php
+      - name: Verify upgrader idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';require 'includes/UpgradeService.php';$s=new UpgradeService(app_pdo(),__DIR__);$s->ensureTrackingTables();$a=$s->applyPending(null);if(count($a)!==0||count($s->pendingMigrations())!==0)exit(1);echo "second-run=clean\n";
+          PHP
