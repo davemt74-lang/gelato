@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require __DIR__ . '/../includes/bootstrap.php';
 require __DIR__ . '/../includes/equipment-brain.php';
+require __DIR__ . '/../includes/floor-equipment-brain.php';
 
 $user = app_require_auth();
 $pdo = app_pdo();
@@ -21,7 +22,8 @@ function brain_asset_search(PDO $pdo, int $organizationId, string $query, int $l
     $like = '%' . $query . '%';
     $statement = $pdo->prepare(
         "SELECT public_id,name,asset_type,purpose,brand,manufacturer,model,serial_number,asset_tag,manufacture_year,
-                operational_status,condition_status,criticality,location_name,next_service_on,last_service_on,maintenance_required
+                operational_status,condition_status,criticality,location_name,next_service_on,last_service_on,maintenance_required,
+                floor_plan_public_id,floor_plan_x_ft,floor_plan_y_ft,floor_plan_rotation_deg
          FROM equipment_assets
          WHERE organization_id=? AND archived_at IS NULL AND
            (?='' OR name LIKE ? OR asset_type LIKE ? OR purpose LIKE ? OR brand LIKE ? OR manufacturer LIKE ? OR model LIKE ? OR serial_number LIKE ? OR asset_tag LIKE ? OR location_name LIKE ?)
@@ -34,6 +36,8 @@ function brain_asset_search(PDO $pdo, int $organizationId, string $query, int $l
         'assetTag'=>(string)($row['asset_tag']??''),'manufactureYear'=>$row['manufacture_year']!==null?(int)$row['manufacture_year']:null,
         'operationalStatus'=>(string)$row['operational_status'],'conditionStatus'=>(string)$row['condition_status'],'criticality'=>(string)$row['criticality'],
         'locationName'=>(string)($row['location_name']??''),'nextServiceOn'=>$row['next_service_on'],'lastServiceOn'=>$row['last_service_on'],'maintenanceRequired'=>(bool)$row['maintenance_required'],
+        'floorPlanId'=>(string)($row['floor_plan_public_id']??''),'xFt'=>$row['floor_plan_x_ft']!==null?(float)$row['floor_plan_x_ft']:null,
+        'yFt'=>$row['floor_plan_y_ft']!==null?(float)$row['floor_plan_y_ft']:null,'rotationDeg'=>(float)($row['floor_plan_rotation_deg']??0),
     ],$statement->fetchAll());
 }
 
@@ -59,17 +63,64 @@ function brain_asset_context(PDO $pdo,int $organizationId,string $publicId): ?ar
 {
     $statement=$pdo->prepare('SELECT * FROM equipment_assets WHERE organization_id=? AND public_id=? AND archived_at IS NULL LIMIT 1');
     $statement->execute([$organizationId,$publicId]);$asset=$statement->fetch();if(!$asset)return null;
+    $knowledge=equipment_brain_asset_text($pdo,$organizationId,$asset);
+    if(!empty($asset['floor_plan_public_id']) && function_exists('floor_equipment_placement_text')){
+        $knowledge.="\n\n".floor_equipment_placement_text($pdo,$organizationId,$asset);
+    }
     return [
-        'id'=>(string)$asset['public_id'],'name'=>(string)$asset['name'],'knowledge'=>equipment_brain_asset_text($pdo,$organizationId,$asset),
+        'id'=>(string)$asset['public_id'],'name'=>(string)$asset['name'],'knowledge'=>$knowledge,
         'contacts'=>equipment_brain_asset_contacts($pdo,$organizationId,(int)$asset['id']),
         'serviceHistory'=>equipment_brain_asset_events($pdo,$organizationId,(int)$asset['id'],20),
     ];
 }
 
+function brain_floor_plan(PDO $pdo,int $organizationId,string $planId=''): array
+{
+    $planId=preg_replace('/[^a-zA-Z0-9_-]/','',$planId)?:'';
+    $assets=floor_equipment_plan_assets($pdo,$organizationId,$planId);
+    $plans=[];
+    foreach($assets as $asset){
+        $pid=$asset['floorPlanId'];
+        if(!isset($plans[$pid])){
+            $plan=floor_equipment_plan_row($pdo,$organizationId,$pid);
+            $plans[$pid]=['id'=>$pid,'name'=>$plan['name']??$pid,'widthFt'=>$plan? (float)$plan['width_ft']:null,'depthFt'=>$plan?(float)$plan['depth_ft']:null,'assets'=>[]];
+        }
+        $plans[$pid]['assets'][]=$asset;
+    }
+    return array_values($plans);
+}
+
+function brain_floor_plan_answer(PDO $pdo,int $organizationId,string $message): ?array
+{
+    $placements=floor_equipment_plan_assets($pdo,$organizationId,'');
+    if(!$placements)return ['skill'=>'equipment.floor_plan','answer'=>'No equipment assets are currently placed on a saved floor plan.','data'=>[],'sources'=>[]];
+    $normalized=mb_strtolower($message,'UTF-8');
+    foreach($placements as $asset){
+        $name=mb_strtolower($asset['name'],'UTF-8');
+        if($name!=='' && str_contains($normalized,$name)){
+            $plan=floor_equipment_plan_row($pdo,$organizationId,$asset['floorPlanId']);
+            $answer=$asset['name'].' is on '.($plan['name']??$asset['floorPlanId']).' at approximately '.number_format((float)$asset['xFt'],1).' ft from the left and '.number_format((float)$asset['yFt'],1).' ft from the top, rotated '.number_format((float)$asset['rotationDeg'],0).'°. Its operational location is '.($asset['locationName']?:'not separately labeled').'.';
+            return ['skill'=>'equipment.floor_plan','answer'=>$answer,'data'=>$asset,'sources'=>[$asset['id']]];
+        }
+    }
+    $groups=brain_floor_plan($pdo,$organizationId,'');
+    $lines=[];$sources=[];
+    foreach($groups as $plan){
+        $names=array_map(static fn(array $asset):string=>$asset['name'].' ['.$asset['operationalStatus'].']',$plan['assets']);
+        $lines[]=$plan['name'].': '.implode(', ',$names);
+        foreach($plan['assets'] as $asset)$sources[]=$asset['id'];
+    }
+    return ['skill'=>'equipment.floor_plan','answer'=>"Equipment currently placed on saved floor plans:\n- ".implode("\n- ",$lines),'data'=>$groups,'sources'=>array_values(array_unique($sources))];
+}
+
 function brain_answer(PDO $pdo,int $organizationId,string $message): array
 {
     $normalized=mb_strtolower(trim($message),'UTF-8');
-    if($normalized==='')return ['skill'=>'none','answer'=>'Ask me about equipment, maintenance, service history, brands, models, locations, or service contacts.','data'=>[],'sources'=>[]];
+    if($normalized==='')return ['skill'=>'none','answer'=>'Ask me about equipment, maintenance, service history, brands, models, locations, floor plans, or service contacts.','data'=>[],'sources'=>[]];
+
+    if(preg_match('/\b(floor\s*plan|layout|where\s+(?:is|are)|located|positioned|placement)\b/u',$normalized)){
+        return brain_floor_plan_answer($pdo,$organizationId,$message);
+    }
 
     if(preg_match('/\b(overdue|due|maintenance|service soon|needs service|preventive)\b/u',$normalized)){
         $days=preg_match('/\b(\d{1,3})\s*days?\b/u',$normalized,$match)?max(0,min(365,(int)$match[1])):30;
@@ -89,7 +140,7 @@ function brain_answer(PDO $pdo,int $organizationId,string $message): array
 
     $assets=brain_asset_search($pdo,$organizationId,$message,12);
     if($assets){
-        if(count($assets)===1){$context=brain_asset_context($pdo,$organizationId,$assets[0]['id']);return ['skill'=>'equipment.asset_context','answer'=>$context?mb_substr($context['knowledge'],0,6000,'UTF-8'):'Equipment record found.','data'=>$context?:$assets[0],'sources'=>[$assets[0]['id']]];}
+        if(count($assets)===1){$context=brain_asset_context($pdo,$organizationId,$assets[0]['id']);return ['skill'=>'equipment.asset_context','answer'=>$context?mb_substr($context['knowledge'],0,7000,'UTF-8'):'Equipment record found.','data'=>$context?:$assets[0],'sources'=>[$assets[0]['id']]];}
         $lines=[];foreach($assets as $asset){$lines[]=$asset['name'].' — '.$asset['assetType'].($asset['brand']?' — '.$asset['brand']:'').($asset['model']?' '.$asset['model']:'').' — '.$asset['operationalStatus'];}
         return ['skill'=>'equipment.search','answer'=>"Matching equipment records:\n- ".implode("\n- ",$lines),'data'=>$assets,'sources'=>array_column($assets,'id')];
     }
@@ -111,6 +162,7 @@ if($_SERVER['REQUEST_METHOD']==='GET'){
     $action=(string)($_GET['action']??'summary');
     if($action==='summary')app_json_response(['ok'=>true,'skill'=>'equipment.summary','summary'=>equipment_brain_summary($pdo,$organizationId),'maintenanceDue'=>equipment_brain_maintenance_due($pdo,$organizationId,30)]);
     if($action==='search')app_json_response(['ok'=>true,'skill'=>'equipment.search','results'=>brain_asset_search($pdo,$organizationId,(string)($_GET['q']??''))]);
+    if($action==='floor_plan')app_json_response(['ok'=>true,'skill'=>'equipment.floor_plan','plans'=>brain_floor_plan($pdo,$organizationId,(string)($_GET['planId']??''))]);
     app_json_response(['ok'=>false,'message'=>'Unsupported agent skill.'],422);
 }
 if($_SERVER['REQUEST_METHOD']!=='POST'){header('Allow: GET, POST');app_json_response(['ok'=>false,'message'=>'Method not allowed.'],405);}
@@ -127,6 +179,7 @@ if($action==='run_skill'){
     elseif($skill==='equipment.maintenance_due')$result=['skill'=>$skill,'data'=>equipment_brain_maintenance_due($pdo,$organizationId,(int)($args['days']??30))];
     elseif($skill==='equipment.service_contacts')$result=['skill'=>$skill,'data'=>brain_service_contacts($pdo,$organizationId,(string)($args['assetId']??''),(string)($args['specialty']??''))];
     elseif($skill==='equipment.asset_context'){$context=brain_asset_context($pdo,$organizationId,(string)($args['assetId']??''));$result=['skill'=>$skill,'data'=>$context];}
+    elseif($skill==='equipment.floor_plan')$result=['skill'=>$skill,'data'=>brain_floor_plan($pdo,$organizationId,(string)($args['planId']??''))];
     elseif($skill==='knowledge.search')$result=['skill'=>$skill,'data'=>equipment_brain_search($pdo,$organizationId,(string)($args['query']??''),(int)($args['limit']??8))];
     else app_json_response(['ok'=>false,'message'=>'Unknown equipment agent skill.'],422);
     app_audit($pdo,$organizationId,(int)$user['id'],'agent.equipment_skill_used','agent_skill',$skill,null,['arguments'=>$args]);
