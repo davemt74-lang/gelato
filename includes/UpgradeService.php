@@ -59,7 +59,6 @@ final class UpgradeService
                 && !str_contains($name, '_sample_')
                 && !str_contains($name, '_seed_');
         }));
-        sort($files, SORT_NATURAL);
         $files = $this->applyKnownDependencyOrder($files);
 
         $out = [];
@@ -83,26 +82,32 @@ final class UpgradeService
     /** @param array<int,string> $files @return array<int,string> */
     private function applyKnownDependencyOrder(array $files): array
     {
-        // The visibility repair grants permissions created by the Knowledge Center
-        // migration. Both share the same date, so filename sorting alone is unsafe.
-        $knowledge = '20260804_public_agent_knowledge_center.sql';
-        $visibility = '20260804_public_agent_admin_visibility_fix.sql';
-        $knowledgePath = null;
-        $visibilityPath = null;
-        foreach ($files as $path) {
-            if (basename($path) === $knowledge) $knowledgePath = $path;
-            if (basename($path) === $visibility) $visibilityPath = $path;
-        }
-        if ($knowledgePath !== null && $visibilityPath !== null) {
-            $files = array_values(array_filter(
-                $files,
-                static fn(string $path): bool => $path !== $visibilityPath
-            ));
-            $knowledgeIndex = array_search($knowledgePath, $files, true);
-            if ($knowledgeIndex !== false) {
-                array_splice($files, $knowledgeIndex + 1, 0, [$visibilityPath]);
+        // Dated migrations are ordered by date first. Some migrations created on
+        // the same day have real dependencies, so they get an explicit same-day
+        // sequence instead of relying on alphabetical filenames.
+        $sameDayPriority = [
+            '20260804_jobs_module.sql' => 10,
+            '20260804_public_agent_knowledge_center.sql' => 20,
+            '20260804_public_agent_admin_visibility_fix.sql' => 30,
+            '20260912_floor_planner.sql' => 10,
+            '20260912_equipment_catalog_brain.sql' => 20,
+            '20260912_canonical_floor_equipment.sql' => 30,
+        ];
+        usort($files, static function (string $a, string $b) use ($sameDayPriority): int {
+            $nameA = basename($a);
+            $nameB = basename($b);
+            $dateA = substr($nameA, 0, 8);
+            $dateB = substr($nameB, 0, 8);
+            if ($dateA !== $dateB) {
+                return strcmp($dateA, $dateB);
             }
-        }
+            $priorityA = $sameDayPriority[$nameA] ?? 1000;
+            $priorityB = $sameDayPriority[$nameB] ?? 1000;
+            if ($priorityA !== $priorityB) {
+                return $priorityA <=> $priorityB;
+            }
+            return strnatcasecmp($nameA, $nameB);
+        });
         return $files;
     }
 
