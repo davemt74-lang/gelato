@@ -1,6 +1,6 @@
 # Gelato Spot Restaurant Training Workspace
 
-This project is a restaurant menu-training, employee-development, hiring, and administration workspace built with PHP 8.2+, MySQL/MariaDB, HTML, CSS, and browser JavaScript. The training menu is database-backed and imports directly from the same public REST menu source used by Gelato Spot.
+This project is a restaurant menu-training, employee-development, hiring, administration, facility-planning, and equipment-operations workspace built with PHP 8.2+, MySQL/MariaDB, HTML, CSS, and browser JavaScript. The training menu is database-backed and imports directly from the same public REST menu source used by Gelato Spot.
 
 The application shell may use generic **Restaurant Workspace** wording, while restaurant-facing brand defaults, public pages, admin branding, and agent identity use **Gelato Spot**. Legacy Fatso branding is not part of the current install.
 
@@ -17,19 +17,36 @@ The application shell may use generic **Restaurant Workspace** wording, while re
 - Notifications and proactive employee/owner agent workspaces
 - Resume intake and standalone resume review pages
 - Admin Jobs module, public jobs list, unique job detail pages, and job-linked applications
-- Permission-controlled Floor Planner with real dimensions, seating/revenue analytics, equipment layout, and database-backed saved plans
 - Brand image management and encrypted Claude/OpenAI API-key settings
 - Database-backed authentication, password recovery, and first-owner setup
+- Permission-controlled, database-backed **Floor Planner** with real dimensions, seating analytics, revenue-per-layout estimates, and restaurant/gelato equipment components
+- Permission-controlled **Equipment Catalog** with purpose, category/type, brand, manufacturer, model, serial/asset tags, age, condition, criticality, location, utility requirements, dimensions, capacity, manuals, warranty, purchase/replacement cost, cleaning/operating/safety notes, and maintenance scheduling
+- Equipment **service contacts** for preferred vendors, warranty providers, emergency service, specialties, account/contract numbers, phone, email, and notes
+- Equipment **service history** with maintenance/repair/inspection records, technicians, parts, cost, downtime, next-service dates, and automatic last/next-service updates
+- Authenticated internal **Equipment Agent Brain** with structured knowledge projection and skills for equipment search, asset context, maintenance-due checks, service-contact lookup, service history, and internal knowledge search
 
 ## Fresh installation
 
 1. Import `database/install.sql` into an empty MySQL 8+ or MariaDB 10.11+ database.
-2. Import `database/20260912_floor_planner.sql` to add the Floor Planner layout table and its `floorplans.view` / `floorplans.edit` permissions.
-3. Rename `config-example.php` to `config.php`, enter the new database credentials, and set the new subdomain URL. For HTTPS deployments, set `security.cookie_secure` to `true`.
-4. Open `setup-first-user.php` and create the first Super Admin/organization.
-5. Sign in and open `admin-menu-import.php`, then choose **Import current Gelato Spot menu**. The REST endpoint is built in and requires no API key or menu-source configuration.
-6. Alternatively, run `php scripts/sync-gelato-menu.php --dry-run`, then `php scripts/sync-gelato-menu.php` from the project directory.
-7. Open the training workspace. Menu knowledge is read from the local database. Super Admin automatically has unrestricted Floor Planner access; other account types can be granted Floor Planner permissions from **Account Types & Permissions**.
+2. Import `database/20260912_floor_planner.sql` to add the Floor Planner layout table and its permissions.
+3. Import `database/20260912_equipment_catalog_brain.sql` to add equipment assets, service contacts/history, the internal Agent Brain knowledge index, and equipment/agent permissions.
+4. Rename `config-example.php` to `config.php`, enter the new database credentials, and set the new subdomain URL. For HTTPS deployments, set `security.cookie_secure` to `true`.
+5. Open `setup-first-user.php` and create the first Super Admin/organization.
+6. Sign in and open `admin-menu-import.php`, then choose **Import current Gelato Spot menu**. The REST endpoint is built in and requires no API key or menu-source configuration.
+7. Alternatively, run `php scripts/sync-gelato-menu.php --dry-run`, then `php scripts/sync-gelato-menu.php` from the project directory.
+8. Open the training workspace. Menu knowledge is read from the local database.
+
+The Floor Planner and Equipment Catalog permissions appear automatically in **Account Types & Permissions** after their migrations are imported. Super Admin remains unrestricted. Non-owner roles need `equipment.view` plus `agent.equipment_skills` before the authenticated agent may retrieve equipment knowledge on their behalf.
+
+## AI knowledge boundaries
+
+The public website assistant and the authenticated internal equipment brain are deliberately separated.
+
+- Public restaurant knowledge continues to use the existing public Knowledge Center and public-agent retrieval path.
+- Equipment records, service contacts, maintenance schedules, costs, serial numbers, warranties, operational notes, and service history are projected into `agent_knowledge_records` with **internal** visibility.
+- Equipment changes, contact changes, and service events refresh the internal knowledge projection automatically, so the agent uses current database records instead of a second manually maintained equipment dataset.
+- The internal agent skill API enforces the signed-in user's equipment and agent permissions before returning equipment knowledge.
+- Equipment skills currently include `equipment.search`, `equipment.asset_context`, `equipment.maintenance_due`, `equipment.service_contacts`, and `knowledge.search`.
 
 ## Menu source
 
