@@ -67,7 +67,9 @@ function operations_wholesale_validate_task_transition(PDO $pdo,int $organizatio
     $sourceType=(string)($task['source_type']??'');
     if(!in_array($sourceType,['wholesale_order_item','wholesale_order_fulfillment'],true))return;
     $order=operations_wholesale_order_for_task($pdo,$organizationId,$task);if(!$order)return;
-    $orderStatus=(string)$order['status'];
+    $orderStatus=(string)$order['status'];$taskStatus=(string)($task['status']??'');
+    if($orderStatus==='delivered'&&in_array($newStatus,['completed','verified'],true)&&in_array($taskStatus,['completed','verified'],true))return;
+    if($orderStatus==='cancelled'&&$newStatus==='cancelled'&&$taskStatus==='cancelled')return;
     if($newStatus==='cancelled')throw new InvalidArgumentException('Cancel wholesale orders from the Wholesale Customers workspace so the whole order stays consistent.');
     if(in_array($orderStatus,['delivered','cancelled'],true))throw new InvalidArgumentException('This wholesale order is '.$orderStatus.' and its Operations tasks are read-only.');
     if($sourceType==='wholesale_order_item'&&in_array($orderStatus,['ready','out_for_delivery'],true)&&!in_array($newStatus,['completed','verified'],true))throw new InvalidArgumentException('Wholesale production is already complete for this order.');
