@@ -59,13 +59,29 @@ function floor_plan_linked_equipment(PDO $pdo, int $organizationId, string $publ
 {
     if (!floor_plan_equipment_ready($pdo)) return [];
     $statement = $pdo->prepare(
-        "SELECT public_id, name, width_inches, depth_inches, floor_plan_x_ft, floor_plan_y_ft, floor_plan_rotation_deg
+        "SELECT public_id, name, asset_type, width_inches, depth_inches, floor_plan_x_ft, floor_plan_y_ft, floor_plan_rotation_deg
          FROM equipment_assets
          WHERE organization_id=? AND floor_plan_public_id=? AND archived_at IS NULL AND operational_status<>'retired'
          ORDER BY name"
     );
     $statement->execute([$organizationId, $publicId]);
     return $statement->fetchAll();
+}
+
+function floor_plan_equipment_default_footprint(string $assetType): array
+{
+    return match ($assetType) {
+        'oven' => [60.0, 48.0],
+        'mixer' => [30.0, 36.0],
+        'refrigeration' => [72.0, 34.0],
+        'gelato_machine' => [36.0, 30.0],
+        'dishwasher' => [30.0, 30.0],
+        'sink' => [36.0, 24.0],
+        'utensil', 'smallware' => [18.0, 18.0],
+        'bar_equipment' => [36.0, 24.0],
+        'pos' => [24.0, 18.0],
+        default => [36.0, 30.0],
+    };
 }
 
 function floor_plan_equipment_bounds_conflicts(PDO $pdo, int $organizationId, string $publicId, float $widthFt, float $depthFt): array
@@ -75,15 +91,15 @@ function floor_plan_equipment_bounds_conflicts(PDO $pdo, int $organizationId, st
         if ($asset['floor_plan_x_ft'] === null || $asset['floor_plan_y_ft'] === null) continue;
         $x = (float)$asset['floor_plan_x_ft'];
         $y = (float)$asset['floor_plan_y_ft'];
-        $width = max(0.0, (float)($asset['width_inches'] ?? 0) / 12.0);
-        $depth = max(0.0, (float)($asset['depth_inches'] ?? 0) / 12.0);
-        $rotation = fmod(abs((float)($asset['floor_plan_rotation_deg'] ?? 0)), 180.0);
-        if ($rotation > 45.0 && $rotation < 135.0) {
-            [$width, $depth] = [$depth, $width];
-        }
-        $outside = $x < 0 || $y < 0 || $x > $widthFt || $y > $depthFt;
-        if ($width > 0) $outside = $outside || ($x + $width > $widthFt + 0.001);
-        if ($depth > 0) $outside = $outside || ($y + $depth > $depthFt + 0.001);
+        [$defaultWidthInches, $defaultDepthInches] = floor_plan_equipment_default_footprint((string)($asset['asset_type'] ?? 'other'));
+        $equipmentWidthFt = ((float)($asset['width_inches'] ?? $defaultWidthInches)) / 12.0;
+        $equipmentDepthFt = ((float)($asset['depth_inches'] ?? $defaultDepthInches)) / 12.0;
+        $angle = deg2rad(fmod((float)($asset['floor_plan_rotation_deg'] ?? 0), 360.0));
+        $boundWidthFt = abs($equipmentWidthFt * cos($angle)) + abs($equipmentDepthFt * sin($angle));
+        $boundDepthFt = abs($equipmentWidthFt * sin($angle)) + abs($equipmentDepthFt * cos($angle));
+        $outside = $x < 0 || $y < 0
+            || $x + $boundWidthFt > $widthFt + 0.001
+            || $y + $boundDepthFt > $depthFt + 0.001;
         if ($outside) {
             $conflicts[] = ['id'=>(string)$asset['public_id'],'name'=>(string)$asset['name']];
         }
