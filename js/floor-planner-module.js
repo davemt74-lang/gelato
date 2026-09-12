@@ -32,6 +32,7 @@
     addAdminNav('equipment.view', 'equipment-nav', '⚙', 'Equipment Catalog', 'equipment.php');
     addAdminNav('wholesale.view', 'wholesale-nav', '◇', 'Wholesale Pipeline', 'wholesale-pipeline.php');
     addAdminNav('wholesale.view', 'wholesale-accounts-nav', '◎', 'Wholesale Customers', 'wholesale-accounts.php');
+    addAdminNav('catering.view', 'catering-nav', '◈', 'Catering Pipeline', 'catering-pipeline.php');
     addAdminNav('recipes.view', 'recipes-nav', '▤', 'Recipe Library', 'recipes.php');
   }
 
@@ -49,6 +50,7 @@
   function install() {
     installOperationsNav();
     loadScript('js/equipment-module.js', 'equipment-module');
+    loadScript('js/catering-module.js', 'catering-module');
     loadScript('js/restaurant-agent-bridge.js', 'restaurant-agent-bridge');
   }
 

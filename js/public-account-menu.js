@@ -1,21 +1,29 @@
 (() => {
   const menus = document.querySelectorAll('[data-public-account-menu]');
 
-  function installWholesaleLinks() {
+  function installServiceLinks() {
+    const services = [
+      { href: 'wholesale.php', label: 'Wholesale Gelato', menuLabel: '◇ Wholesale Gelato' },
+      { href: 'catering.php', label: 'Catering', menuLabel: '◈ Catering' },
+    ];
     document.querySelectorAll('.public-nav').forEach((nav) => {
-      if (nav.querySelector('a[href="wholesale.php"]')) return;
       const account = nav.querySelector('[data-public-account-menu]');
-      const link = document.createElement('a');
-      link.href = 'wholesale.php';
-      link.textContent = 'Wholesale Gelato';
-      if (account) nav.insertBefore(link, account); else nav.appendChild(link);
+      services.forEach((service) => {
+        if (nav.querySelector(`a[href="${service.href}"]`)) return;
+        const link = document.createElement('a');
+        link.href = service.href;
+        link.textContent = service.label;
+        if (account) nav.insertBefore(link, account); else nav.appendChild(link);
+      });
     });
     document.querySelectorAll('.guest-menu-list').forEach((list) => {
-      if (list.querySelector('a[href="wholesale.php"]')) return;
-      const link = document.createElement('a');
-      link.href = 'wholesale.php';
-      link.textContent = '◇ Wholesale Gelato';
-      list.appendChild(link);
+      services.forEach((service) => {
+        if (list.querySelector(`a[href="${service.href}"]`)) return;
+        const link = document.createElement('a');
+        link.href = service.href;
+        link.textContent = service.menuLabel;
+        list.appendChild(link);
+      });
     });
   }
 
@@ -62,6 +70,6 @@
     });
   }
 
-  installWholesaleLinks();
+  installServiceLinks();
   loadPublicAgent();
 })();
