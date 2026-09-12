@@ -12,6 +12,7 @@ on:
       - 'api/wholesale-portal.php'
       - 'includes/operations-core.php'
       - 'includes/operations-wholesale.php'
+      - 'includes/operations-wholesale-agent.php'
       - 'js/operations-core.js'
       - 'js/restaurant-agent-bridge.js'
       - 'database/20260913_zzz_operations_core.sql'
@@ -30,6 +31,7 @@ on:
       - 'api/wholesale-portal.php'
       - 'includes/operations-core.php'
       - 'includes/operations-wholesale.php'
+      - 'includes/operations-wholesale-agent.php'
       - 'js/operations-core.js'
       - 'js/restaurant-agent-bridge.js'
       - 'database/20260913_zzz_operations_core.sql'
@@ -71,6 +73,7 @@ jobs:
           php -l api/wholesale-portal.php
           php -l includes/operations-core.php
           php -l includes/operations-wholesale.php
+          php -l includes/operations-wholesale-agent.php
           php -l tests/operations-wholesale-contract.php
           node --check js/operations-core.js
           node --check js/restaurant-agent-bridge.js
@@ -86,9 +89,13 @@ jobs:
           grep -q "ingredient-catalog.json" includes/operations-core.php
           grep -q "operations_sync_catering_tasks" includes/operations-core.php
           grep -q "operations_sync_wholesale_tasks" includes/operations-wholesale.php
+          grep -q "operations_wholesale_validate_task_transition" includes/operations-wholesale.php
+          grep -q "operations_agent_wholesale_answer" includes/operations-wholesale-agent.php
           grep -q "wholesale_order_item" includes/operations-wholesale.php
           grep -q "wholesale_order_fulfillment" includes/operations-wholesale.php
           grep -q "operations_wholesale_task_status_changed" api/operations.php
+          grep -q "wholesale_customer" api/operations.php
+          grep -q "wholesale_customer" api/operations-agent.php
           grep -q "operations_sync_wholesale_tasks" api/wholesale-accounts.php
           grep -q "operations_sync_wholesale_tasks" api/wholesale-portal.php
           grep -q "original_transcript" database/20260913_zzz_operations_core.sql
@@ -97,6 +104,7 @@ jobs:
           grep -q "wholesale\\s+" js/restaurant-agent-bridge.js
           grep -q "tasks.prep_add" api/operations-agent.php
           grep -q "tasks.category_create" api/operations-agent.php
+          grep -q "wholesale.operations" includes/operations-wholesale-agent.php
           grep -q "local_private" api/task-proof.php
           grep -q "Task proof access denied" api/task-proof-view.php
           grep -q "canTasksSelf" operations.php
