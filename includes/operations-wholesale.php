@@ -54,6 +54,30 @@ function operations_wholesale_task_status(string $orderStatus, string $kind): st
     };
 }
 
+function operations_wholesale_order_for_task(PDO $pdo,int $organizationId,array $task): ?array
+{
+    if(!in_array((string)($task['source_type']??''),['wholesale_order_item','wholesale_order_fulfillment'],true))return null;
+    if(!preg_match('/^wholesale-order-(\d+)-(?:item-\d+|fulfillment)$/',(string)($task['source_public_id']??''),$match))return null;
+    $statement=$pdo->prepare('SELECT * FROM wholesale_orders WHERE id=? AND organization_id=? LIMIT 1');
+    $statement->execute([(int)$match[1],$organizationId]);$row=$statement->fetch();return $row?:null;
+}
+
+function operations_wholesale_validate_task_transition(PDO $pdo,int $organizationId,array $task,string $newStatus): void
+{
+    $sourceType=(string)($task['source_type']??'');
+    if(!in_array($sourceType,['wholesale_order_item','wholesale_order_fulfillment'],true))return;
+    $order=operations_wholesale_order_for_task($pdo,$organizationId,$task);if(!$order)return;
+    $orderStatus=(string)$order['status'];
+    if($newStatus==='cancelled')throw new InvalidArgumentException('Cancel wholesale orders from the Wholesale Customers workspace so the whole order stays consistent.');
+    if(in_array($orderStatus,['delivered','cancelled'],true))throw new InvalidArgumentException('This wholesale order is '.$orderStatus.' and its Operations tasks are read-only.');
+    if($sourceType==='wholesale_order_item'&&in_array($orderStatus,['ready','out_for_delivery'],true)&&!in_array($newStatus,['completed','verified'],true))throw new InvalidArgumentException('Wholesale production is already complete for this order.');
+    if($sourceType==='wholesale_order_fulfillment'&&in_array($newStatus,['in_progress','completed','verified'],true)){
+        $counts=$pdo->prepare("SELECT COUNT(*) total,SUM(status IN ('completed','verified')) complete_count FROM restaurant_tasks WHERE organization_id=? AND source_type='wholesale_order_item' AND source_public_id LIKE ? AND archived_at IS NULL");
+        $counts->execute([$organizationId,'wholesale-order-'.(int)$order['id'].'-item-%']);$row=$counts->fetch()?:[];
+        if((int)($row['total']??0)>0&&(int)($row['complete_count']??0)!==(int)$row['total'])throw new InvalidArgumentException('Complete all wholesale production items before starting fulfillment.');
+    }
+}
+
 function operations_sync_wholesale_tasks(PDO $pdo, int $organizationId, ?int $userId=null): int
 {
     if (!operations_wholesale_ready($pdo)) return 0;
@@ -114,12 +138,10 @@ function operations_wholesale_task_status_changed(PDO $pdo, int $organizationId,
 {
     $sourceType = (string)($task['source_type'] ?? '');
     if (!in_array($sourceType, ['wholesale_order_item','wholesale_order_fulfillment'], true)) return null;
-    if (!preg_match('/^wholesale-order-(\d+)-(?:item-\d+|fulfillment)$/', (string)($task['source_public_id'] ?? ''), $match)) return null;
-    $orderId = (int)$match[1];
-    $statement = $pdo->prepare('SELECT * FROM wholesale_orders WHERE id=? AND organization_id=? LIMIT 1');
-    $statement->execute([$orderId,$organizationId]);
-    $order = $statement->fetch();
-    if (!$order || in_array((string)$order['status'], ['delivered','cancelled'], true)) return $order['status'] ?? null;
+    operations_wholesale_validate_task_transition($pdo,$organizationId,$task,$newStatus);
+    $order=operations_wholesale_order_for_task($pdo,$organizationId,$task);
+    if(!$order)return null;
+    $orderId=(int)$order['id'];
 
     $next = (string)$order['status'];
     if ($sourceType === 'wholesale_order_item') {
