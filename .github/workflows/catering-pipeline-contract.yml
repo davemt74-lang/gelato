@@ -12,6 +12,7 @@ on:
       - 'js/catering-module.js'
       - 'js/floor-planner-module.js'
       - 'js/restaurant-agent-bridge.js'
+      - 'js/public-account-menu.js'
       - 'database/20260913_catering_pipeline.sql'
       - '.github/workflows/catering-pipeline-contract.yml'
   push:
@@ -26,6 +27,7 @@ on:
       - 'js/catering-module.js'
       - 'js/floor-planner-module.js'
       - 'js/restaurant-agent-bridge.js'
+      - 'js/public-account-menu.js'
       - 'database/20260913_catering_pipeline.sql'
       - '.github/workflows/catering-pipeline-contract.yml'
 
@@ -63,6 +65,7 @@ jobs:
           node --check js/catering-module.js
           node --check js/floor-planner-module.js
           node --check js/restaurant-agent-bridge.js
+          node --check js/public-account-menu.js
 
       - name: Catering feature contract
         run: |
@@ -79,6 +82,7 @@ jobs:
           grep -q "catering-pipeline.php" js/catering-module.js
           grep -q "catering-module.js" js/floor-planner-module.js
           grep -q "catering" js/restaurant-agent-bridge.js
+          grep -q "catering.php" js/public-account-menu.js
 
       - name: Install and upgrade schema
         run: |
