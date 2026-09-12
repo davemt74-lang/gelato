@@ -2,9 +2,11 @@
 declare(strict_types=1);
 require __DIR__ . '/../includes/bootstrap.php';
 require __DIR__ . '/../includes/operations-core.php';
+require_once __DIR__ . '/../includes/operations-wholesale.php';
 
 $user=app_require_auth();$pdo=app_pdo();$organizationId=(int)$user['organization_id'];$userId=(int)$user['id'];
 if(!operations_core_ready($pdo))app_json_response(['ok'=>false,'message'=>'Operations Core migration is not installed. Run upgrade.php.'],503);
+operations_sync_wholesale_tasks($pdo,$organizationId,$userId);
 
 function ops_can(array $user,string $permission):bool{return app_has_permission($permission,$user);}
 function ops_require(array $user,string $permission):void{if(!ops_can($user,$permission))app_json_response(['ok'=>false,'message'=>'Permission required: '.$permission],403);}
@@ -58,10 +60,10 @@ if($action==='task_status'){
     $task=operations_task_by_public_id($pdo,$organizationId,$id);if(!$task)app_json_response(['ok'=>false,'message'=>'Task not found.'],404);
     if($status==='verified'&&!$canManage)app_json_response(['ok'=>false,'message'=>'Manager verification permission required.'],403);if($status==='verified'&&!in_array($task['status'],['completed','verified'],true))app_json_response(['ok'=>false,'message'=>'Complete the task before manager verification.'],422);
     if(in_array($status,['completed','verified'],true)&&(int)$task['requires_photo']===1){$stmt=$pdo->prepare('SELECT COUNT(*) FROM restaurant_task_proofs WHERE organization_id=? AND task_id=?');$stmt->execute([$organizationId,(int)$task['id']]);if((int)$stmt->fetchColumn()===0)app_json_response(['ok'=>false,'message'=>'Photo proof is required before completing this task.'],422);}
-    operations_task_set_status($pdo,$organizationId,$id,$status,$userId);app_audit($pdo,$organizationId,$userId,'tasks.status_changed','restaurant_task',$id,null,['status'=>$status]);app_json_response(['ok'=>true,'message'=>'Task status updated.']);
+    $updatedTask=operations_task_set_status($pdo,$organizationId,$id,$status,$userId);operations_wholesale_task_status_changed($pdo,$organizationId,$task,$status,$userId);app_audit($pdo,$organizationId,$userId,'tasks.status_changed','restaurant_task',$id,null,['status'=>$status]);app_json_response(['ok'=>true,'task'=>$updatedTask,'message'=>'Task status updated.']);
 }
 if($action==='task_timer'){
-    $id=trim((string)($input['id']??''));$canManage=ops_can($user,'tasks.manage');$canSelf=ops_can($user,'tasks.self')&&ops_task_assigned($pdo,$organizationId,$id,$userId);if(!$canManage&&!$canSelf)app_json_response(['ok'=>false,'message'=>'You can only track time on tasks assigned to you.'],403);$start=(string)($input['mode']??'start')==='start';$task=operations_task_timer($pdo,$organizationId,$id,$userId,$start);app_json_response(['ok'=>true,'task'=>$task,'message'=>$start?'Task timer started.':'Task timer stopped.']);
+    $id=trim((string)($input['id']??''));$canManage=ops_can($user,'tasks.manage');$canSelf=ops_can($user,'tasks.self')&&ops_task_assigned($pdo,$organizationId,$id,$userId);if(!$canManage&&!$canSelf)app_json_response(['ok'=>false,'message'=>'You can only track time on tasks assigned to you.'],403);$start=(string)($input['mode']??'start')==='start';$task=operations_task_timer($pdo,$organizationId,$id,$userId,$start);if($start)operations_wholesale_task_status_changed($pdo,$organizationId,$task,(string)($task['status']??'in_progress'),$userId);app_json_response(['ok'=>true,'task'=>$task,'message'=>$start?'Task timer started.':'Task timer stopped.']);
 }
 if($action==='task_delete'){
     ops_require($user,'tasks.manage');$id=trim((string)($input['id']??''));$task=operations_task_by_public_id($pdo,$organizationId,$id);if(!$task)app_json_response(['ok'=>false,'message'=>'Task not found.'],404);if($task['source_type'])app_json_response(['ok'=>false,'message'=>'Source-linked tasks cannot be deleted; cancel them instead.'],422);$pdo->prepare('UPDATE restaurant_tasks SET archived_at=NOW(6),status="cancelled",updated_by=?,updated_at=NOW(6) WHERE id=? AND organization_id=?')->execute([$userId,(int)$task['id'],$organizationId]);operations_task_event($pdo,$organizationId,(int)$task['id'],'archived','Task archived',$userId);app_audit($pdo,$organizationId,$userId,'tasks.archived','restaurant_task',$id);app_json_response(['ok'=>true,'message'=>'Task archived.']);
