@@ -3,7 +3,7 @@
   if (!window.RESTAURANT_SERVER_SESSION) return;
   const Auth = window.RestaurantAuth;
   if (!Auth) return;
-  const intent = /\b(wholesale|buyer|lead|prospect|foodservice|sample|quote|private label|pipeline|recipe|formula|ingredient|yield|online recipe|recipe image|recipe source|equipment|oven|mixer|freezer|cooler|dish machine|maintenance|repair|warranty|service company|floor\s*plan|layout|located|placement)\b/i;
+  const intent = /\b(wholesale|buyer|lead|prospect|foodservice|sample|quote|private label|pipeline|catering|catered|event|party|wedding|corporate lunch|guest count|venue|tasting|proposal|deposit|booked event|recipe|formula|ingredient|yield|online recipe|recipe image|recipe source|equipment|oven|mixer|freezer|cooler|dish machine|maintenance|repair|warranty|service company|floor\s*plan|layout|located|placement)\b/i;
   const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
   const chatKey = 'restaurant-owner-agent-chat-v1';
   let busy = false;
@@ -40,7 +40,7 @@
     saveMessage('user', text); appendMessage('user', text);
     const pending = appendMessage('agent', 'Checking the private restaurant knowledge base…', true);
     const guidance = document.getElementById('ownerComposerGuidance');
-    if (guidance) guidance.textContent = 'Restaurant Agent is checking wholesale, recipes, equipment, and operations knowledge.';
+    if (guidance) guidance.textContent = 'Restaurant Agent is checking catering, wholesale, recipes, equipment, and operations knowledge.';
     try {
       const response = await fetch('api/agent-brain.php', {
         method:'POST', cache:'no-store', headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-Token':window.RESTAURANT_CSRF_TOKEN || ''},
@@ -74,5 +74,5 @@
     if (event.target?.id === 'ownerAgentInput' && event.key === 'Enter' && !event.shiftKey) maybeSubmit(event);
   }, true);
   const input = document.getElementById('ownerAgentInput');
-  if (input) input.placeholder = 'Ask about wholesale leads, recipes, equipment, maintenance, hiring, training, or operations…';
+  if (input) input.placeholder = 'Ask about catering events, wholesale leads, recipes, equipment, maintenance, hiring, training, or operations…';
 })();
