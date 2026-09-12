@@ -72,9 +72,13 @@ jobs:
           grep -q "wholesale_customer" database/20260912_zz_wholesale_customer_portal.sql
           grep -q "wholesale_portal.view" database/20260912_zz_wholesale_customer_portal.sql
           grep -q "wholesale_portal.agent" database/20260912_zz_wholesale_customer_portal.sql
+          grep -q "uq_wholesale_orders_source_quote" database/20260912_zz_wholesale_customer_portal.sql
           grep -q "wholesale_account_users" includes/wholesale-portal.php
           grep -q "wholesale_portal_require_account" api/wholesale-portal.php
+          grep -q "FOR UPDATE" api/wholesale-portal.php
           grep -q "wholesale_portal_require_account" api/wholesale-portal-agent.php
+          grep -q "wholesale_agent_rate_limit" api/wholesale-portal-agent.php
+          grep -q "Retry-After" api/wholesale-portal-agent.php
           grep -q "Never reveal internal restaurant notes" api/wholesale-portal-agent.php
           grep -q "app_verify_request_csrf" api/wholesale-portal.php
           grep -q "app_verify_request_csrf" api/wholesale-accounts.php
@@ -117,6 +121,7 @@ jobs:
       - name: Verify portal schema, role and least privilege
         run: |
           test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_wholesale_portal_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_wholesale_portal_ci' AND table_name IN ('wholesale_accounts','wholesale_account_users','wholesale_account_locations','wholesale_portal_invites','wholesale_quotes','wholesale_orders','wholesale_customer_requests','wholesale_agent_messages');")" = "8"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_wholesale_portal_ci -e "SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema='gelato_wholesale_portal_ci' AND table_name='wholesale_orders' AND index_name='uq_wholesale_orders_source_quote';")" = "1"
           test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_wholesale_portal_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('wholesale_portal.view','wholesale_portal.agent','wholesale_portal.profile_edit','wholesale_portal.requests','wholesale_portal.quotes','wholesale_portal.orders');")" = "6"
           test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_wholesale_portal_ci -e "SELECT COUNT(*) FROM roles WHERE slug='wholesale_customer';")" = "1"
           test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_wholesale_portal_ci -e "SELECT COUNT(*) FROM role_permissions rp INNER JOIN roles r ON r.id=rp.role_id INNER JOIN permissions p ON p.id=rp.permission_id WHERE r.slug='wholesale_customer' AND p.permission_key LIKE 'wholesale_portal.%';")" = "6"
