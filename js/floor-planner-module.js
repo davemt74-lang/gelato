@@ -1,9 +1,10 @@
 (() => {
   'use strict';
   const Auth = window.RestaurantAuth;
-  if (!Auth || !Auth.has('floorplans.view')) return;
+  if (!Auth) return;
 
   function installFloorPlannerNav() {
+    if (!Auth.has('floorplans.view')) return;
     const adminNav = document.querySelector('[data-nav-group="admin"]');
     if (!adminNav || adminNav.querySelector('[data-floor-planner-nav]')) return;
 
@@ -19,9 +20,23 @@
     if (adminMode) adminMode.hidden = false;
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', installFloorPlannerNav, { once: true });
-  } else {
+  function loadEquipmentModule() {
+    if (document.querySelector('script[data-equipment-module]')) return;
+    const script = document.createElement('script');
+    script.src = 'js/equipment-module.js';
+    script.dataset.equipmentModule = '1';
+    script.defer = true;
+    document.head.appendChild(script);
+  }
+
+  function install() {
     installFloorPlannerNav();
+    loadEquipmentModule();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', install, { once: true });
+  } else {
+    install();
   }
 })();
