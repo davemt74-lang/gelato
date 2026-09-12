@@ -1,6 +1,9 @@
 -- Gelato Restaurant AI: time clock, attendance, opt-in voice identity and proactive employee Agent
 SET NAMES utf8mb4;
 
+-- The schedule foreign keys are added by the dated follow-up migration after
+-- all 20260913 feature migrations. This keeps fresh installs deterministic even
+-- when same-day filenames sort differently across environments.
 CREATE TABLE IF NOT EXISTS time_clock_entries (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   organization_id BIGINT UNSIGNED NOT NULL,
@@ -26,7 +29,6 @@ CREATE TABLE IF NOT EXISTS time_clock_entries (
   KEY idx_time_clock_shift (organization_id,schedule_shift_id),
   CONSTRAINT fk_time_clock_org FOREIGN KEY (organization_id) REFERENCES organizations(id),
   CONSTRAINT fk_time_clock_user FOREIGN KEY (user_id) REFERENCES users(id),
-  CONSTRAINT fk_time_clock_shift FOREIGN KEY (schedule_shift_id) REFERENCES schedule_shifts(id),
   CONSTRAINT fk_time_clock_corrector FOREIGN KEY (corrected_by) REFERENCES users(id),
   CONSTRAINT fk_time_clock_creator FOREIGN KEY (created_by) REFERENCES users(id),
   CONSTRAINT fk_time_clock_updater FOREIGN KEY (updated_by) REFERENCES users(id)
@@ -66,7 +68,6 @@ CREATE TABLE IF NOT EXISTS attendance_events (
   KEY idx_attendance_type (organization_id,event_type,created_at),
   CONSTRAINT fk_attendance_org FOREIGN KEY (organization_id) REFERENCES organizations(id),
   CONSTRAINT fk_attendance_user FOREIGN KEY (user_id) REFERENCES users(id),
-  CONSTRAINT fk_attendance_shift FOREIGN KEY (schedule_shift_id) REFERENCES schedule_shifts(id),
   CONSTRAINT fk_attendance_clock FOREIGN KEY (time_clock_entry_id) REFERENCES time_clock_entries(id),
   CONSTRAINT fk_attendance_actor FOREIGN KEY (actor_user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -184,7 +185,7 @@ INSERT INTO permissions (permission_key,name,description,category) VALUES
  ('timeclock.view','View time clock','View restaurant time-clock and attendance status.','Time Clock'),
  ('timeclock.manage','Manage time clock','Correct time entries and manage attendance records with an audit reason.','Time Clock'),
  ('timeclock.agent','Use time-clock Agent skills','Allow Restaurant AI to read time-clock status and perform permitted self actions.','Time Clock'),
- ('attendance.view','View attendance intelligence','View late, no-show, overtime and scheduled-versus-actual labor intelligence.','Time Clock'),
+ ('attendance.view','View attendance intelligence','View late, no-show, configured-hour and scheduled-versus-actual labor intelligence.','Time Clock'),
  ('voice.self','Manage own voice profile','Opt in, enroll, re-record, verify, disable or delete your own voice profile.','Voice Agent'),
  ('voice.manage','Manage voice enrollment status','View employee voice-enrollment status and organization voice settings without exposing raw voiceprints.','Voice Agent'),
  ('voice.agent','Use voice-personalized Agent','Allow the Restaurant AI to personalize voice conversations after an opt-in voice match.','Voice Agent'),
