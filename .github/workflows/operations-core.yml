@@ -101,7 +101,7 @@ jobs:
           grep -q "original_transcript" database/20260913_zzz_operations_core.sql
           grep -q "SpeechRecognition" js/operations-core.js
           grep -q "api/operations-agent.php" js/restaurant-agent-bridge.js
-          grep -q "wholesale\\s+" js/restaurant-agent-bridge.js
+          grep -Fq "wholesale\\s+" js/restaurant-agent-bridge.js
           grep -q "tasks.prep_add" api/operations-agent.php
           grep -q "tasks.category_create" api/operations-agent.php
           grep -q "wholesale.operations" includes/operations-wholesale-agent.php
