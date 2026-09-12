@@ -1,0 +1,135 @@
+name: Catering Pipeline + Agent Contract
+
+on:
+  pull_request:
+    paths:
+      - 'catering.php'
+      - 'catering-pipeline.php'
+      - 'api/public-catering.php'
+      - 'api/catering.php'
+      - 'api/agent-brain.php'
+      - 'includes/catering-brain.php'
+      - 'js/catering-module.js'
+      - 'js/floor-planner-module.js'
+      - 'js/restaurant-agent-bridge.js'
+      - 'database/20260913_catering_pipeline.sql'
+      - '.github/workflows/catering-pipeline-contract.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'catering.php'
+      - 'catering-pipeline.php'
+      - 'api/public-catering.php'
+      - 'api/catering.php'
+      - 'api/agent-brain.php'
+      - 'includes/catering-brain.php'
+      - 'js/catering-module.js'
+      - 'js/floor-planner-module.js'
+      - 'js/restaurant-agent-bridge.js'
+      - 'database/20260913_catering_pipeline.sql'
+      - '.github/workflows/catering-pipeline-contract.yml'
+
+jobs:
+  catering-contract:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+
+      - name: PHP and JavaScript syntax
+        run: |
+          php -l catering.php
+          php -l catering-pipeline.php
+          php -l api/public-catering.php
+          php -l api/catering.php
+          php -l api/agent-brain.php
+          php -l includes/catering-brain.php
+          node --check js/catering-module.js
+          node --check js/floor-planner-module.js
+          node --check js/restaurant-agent-bridge.js
+
+      - name: Catering feature contract
+        run: |
+          grep -q "public_catering_form" api/public-catering.php
+          grep -q "catering.manage" api/catering.php
+          grep -q "restaurant_brain_sync_catering" api/catering.php
+          grep -q "restaurant_brain_sync_catering" api/public-catering.php
+          grep -q "catering.agent" api/agent-brain.php
+          grep -q "catering.pipeline" api/agent-brain.php
+          grep -q "catering.upcoming" api/agent-brain.php
+          grep -q "brain_scoped_knowledge_search" api/agent-brain.php
+          grep -q "Submit catering request" catering.php
+          grep -q "Catering pipeline" catering-pipeline.php
+          grep -q "catering-pipeline.php" js/catering-module.js
+          grep -q "catering-module.js" js/floor-planner-module.js
+          grep -q "catering" js/restaurant-agent-bridge.js
+
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app' => ['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database' => ['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security' => ['session_name'=>'gelato_restaurant_ai_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $service = new UpgradeService(app_pdo(), __DIR__);
+          $service->ensureTrackingTables();
+          $service->bootstrapLegacyHistory(null);
+          $service->applyPending(null);
+          if ($service->pendingMigrations()) exit(1);
+          PHP
+
+      - name: Verify catering schema and permissions
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('catering_leads','catering_lead_activities');")" = "2"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('catering.view','catering.manage','catering.agent');")" = "3"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260913_catering_pipeline';")" = "1"
+
+      - name: Verify catering knowledge projection
+        run: |
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci <<'SQL'
+          INSERT INTO catering_leads
+            (organization_id,public_id,contact_name,email,company_name,event_name,event_type,event_date,guest_count,menu_interests_json,pipeline_stage,estimated_value,probability_percent)
+          SELECT id,'catering-ci-test','CI Buyer','ci@example.test','CI Company','CI Event','Corporate meeting / lunch',DATE_ADD(CURDATE(),INTERVAL 14 DAY),80,JSON_ARRAY('Pizza','Gelato'),'qualified',2500,25
+          FROM organizations ORDER BY id LIMIT 1;
+          SQL
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/restaurant-brain.php';
+          require 'includes/catering-brain.php';
+          $pdo=app_pdo();
+          $orgId=(int)$pdo->query('SELECT id FROM organizations ORDER BY id LIMIT 1')->fetchColumn();
+          $leadId=(int)$pdo->query("SELECT id FROM catering_leads WHERE public_id='catering-ci-test' LIMIT 1")->fetchColumn();
+          restaurant_brain_sync_catering($pdo,$orgId,$leadId,null);
+          $st=$pdo->prepare("SELECT COUNT(*) FROM agent_knowledge_records WHERE organization_id=? AND source_type='catering_lead' AND source_public_id='catering-ci-test' AND visibility='internal'");
+          $st->execute([$orgId]);
+          if((int)$st->fetchColumn()!==1)exit(1);
+          $upcoming=restaurant_brain_catering_upcoming($pdo,$orgId,30);
+          if(count($upcoming)!==1)exit(1);
+          PHP
