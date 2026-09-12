@@ -49,6 +49,7 @@
   function install() {
     installOperationsNav();
     loadScript('js/equipment-module.js', 'equipment-module');
+    loadScript('js/catering-module.js', 'catering-module');
     loadScript('js/restaurant-agent-bridge.js', 'restaurant-agent-bridge');
   }
 
