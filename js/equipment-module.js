@@ -22,7 +22,7 @@
   }
 
   function isEquipmentQuestion(value) {
-    return /\b(equipment|oven|mixer|freezer|refrigerat|walk[- ]?in|dishwasher|dish machine|gelato machine|gelato case|blast freezer|batch freezer|maintenance|repair|technician|warranty|serial number|asset tag|model number|service contact|service company|replacement cost|spare parts|consumables|filter|belt)\b/i.test(String(value || ''));
+    return /\b(equipment|oven|mixer|freezer|refrigerat|walk[- ]?in|dishwasher|dish machine|gelato machine|gelato case|blast freezer|batch freezer|maintenance|repair|technician|warranty|serial number|asset tag|model number|service contact|service company|replacement cost|spare parts|consumables|filter|belt|floor plan|layout|where is|where are|located|placement|positioned)\b/i.test(String(value || ''));
   }
 
   function addOwnerChatMessage(role, text) {
@@ -101,7 +101,7 @@
       card.dataset.equipmentBrainCard = '1';
       card.style.marginTop = '14px';
       card.innerHTML = `
-        <div class="admin-card-head"><div><p class="eyebrow">Internal agent skill</p><h4>Equipment Brain</h4><p>Structured equipment, maintenance, service history, and service-contact knowledge is available directly in this Owner Agent conversation.</p></div><button class="btn btn-light" type="button" data-open-equipment>Open Equipment Catalog</button></div>
+        <div class="admin-card-head"><div><p class="eyebrow">Internal agent skill</p><h4>Equipment Brain</h4><p>Structured equipment, floor placement, maintenance, service history, and service-contact knowledge is available directly in this Owner Agent conversation.</p></div><div style="display:flex;gap:7px"><button class="btn btn-light" type="button" data-open-floor>Floor Planner</button><button class="btn btn-light" type="button" data-open-equipment>Equipment Catalog</button></div></div>
         <div class="admin-kpis" style="margin-top:12px">
           <article><small>Equipment assets</small><strong>${esc(s.assets || 0)}</strong></article>
           <article><small>Maintenance overdue</small><strong>${esc(s.overdueMaintenance || 0)}</strong></article>
@@ -109,6 +109,7 @@
           <article><small>Out of service</small><strong>${esc(s.outOfService || 0)}</strong></article>
         </div>
         <div class="quick-prompts" style="margin-top:12px">
+          <button class="prompt-chip" type="button" data-equipment-question="What equipment is on our floor plan?">Floor-plan equipment</button>
           <button class="prompt-chip" type="button" data-equipment-question="What equipment maintenance is due in the next 30 days?">Maintenance due</button>
           <button class="prompt-chip" type="button" data-equipment-question="Which equipment is out of service?">Out of service</button>
           <button class="prompt-chip" type="button" data-equipment-question="Who are our equipment service contacts?">Service contacts</button>
@@ -117,6 +118,7 @@
       if (dialogue) dialogue.insertAdjacentElement('beforebegin', card);
       else ownerPage.appendChild(card);
       card.querySelector('[data-open-equipment]')?.addEventListener('click', () => { window.location.href = 'equipment.php'; });
+      card.querySelector('[data-open-floor]')?.addEventListener('click', () => { window.location.href = 'floor-planner-ops.php'; });
       card.querySelectorAll('[data-equipment-question]').forEach(button => button.addEventListener('click', () => askOwnerEquipmentBrain(button.dataset.equipmentQuestion)));
     } catch (_) {
       // Equipment migration may not be installed yet; the main workspace remains usable.
