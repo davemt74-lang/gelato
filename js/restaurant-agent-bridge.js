@@ -5,7 +5,7 @@
   if (!Auth) return;
   const restaurantIntent = /\b(wholesale|buyer|lead|prospect|foodservice|sample|quote|private label|pipeline|recipe|formula|ingredient|yield|online recipe|recipe image|recipe source|equipment|oven|mixer|freezer|cooler|dish machine|maintenance|repair|warranty|service company|floor\s*plan|layout|located|placement|inventory|stock|par|reorder|shortage|task|tasks|prep|opening|closing|cleaning|assignment|assigned|overdue|task category)\b/i;
   const operationsIntent = /\b(inventory|stock|par|reorder|shortage|running out|task|tasks|prep|opening|closing|cleaning|assignment|assigned|overdue|task category)\b/i;
-  const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[ch]));
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
   const chatKey = 'restaurant-owner-agent-chat-v1';
   let busy = false;
 
