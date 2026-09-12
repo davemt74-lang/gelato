@@ -3,6 +3,15 @@
   const Auth = window.RestaurantAuth;
   if (!Auth) return;
 
+  function hydratePermissionCatalog() {
+    if (!Auth.keys?.permissions || !Array.isArray(Auth.permissionCatalog)) return;
+    const stored = Auth.read(Auth.keys.permissions, []);
+    stored.forEach((permission) => {
+      if (!permission?.key || Auth.permissionCatalog.some((item) => item.key === permission.key)) return;
+      Auth.permissionCatalog.push(permission);
+    });
+  }
+
   function addAdminNav(permission, marker, icon, label, href) {
     if (!Auth.has(permission)) return;
     const adminNav = document.querySelector('[data-nav-group="admin"]');
@@ -36,6 +45,7 @@
   }
 
   function install() {
+    hydratePermissionCatalog();
     installOperationsNav();
     loadScript('js/equipment-module.js', 'equipment-module');
     loadScript('js/restaurant-agent-bridge.js', 'restaurant-agent-bridge');
