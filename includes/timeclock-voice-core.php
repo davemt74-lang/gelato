@@ -3,7 +3,7 @@ declare(strict_types=1);
 require_once __DIR__.'/scheduling-core.php';
 
 function tv_ready(PDO $pdo): bool {
-    try{return (bool)$pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('time_clock_entries','voice_identity_profiles','proactive_agent_events')")->fetchColumn()>=3;}catch(Throwable){return false;}
+    try{return (int)$pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('time_clock_entries','voice_identity_profiles','proactive_agent_events')")->fetchColumn()>=3;}catch(Throwable){return false;}
 }
 function tv_public_id(string $prefix): string{return $prefix.'-'.bin2hex(random_bytes(8));}
 function tv_open_clock(PDO $pdo,int $org,int $userId): ?array {
