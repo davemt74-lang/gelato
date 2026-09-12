@@ -9,6 +9,12 @@ function wholesale_agent_credential(PDO $pdo,int $organizationId):?array
 {
     $statement=$pdo->prepare("SELECT provider,encrypted_key,nonce,encryption_method,status FROM llm_api_credentials WHERE organization_id=? AND provider IN ('openai','anthropic') AND status='configured' ORDER BY FIELD(provider,'openai','anthropic') LIMIT 1");$statement->execute([$organizationId]);$row=$statement->fetch();return $row?:null;
 }
+function wholesale_agent_rate_limit(int $organizationId,int $accountId,int $userId):void
+{
+    app_boot_session();$key='wholesale_agent_rate_'.$organizationId.'_'.$accountId.'_'.$userId;$now=time();$cutoff=$now-600;$requests=array_values(array_filter((array)($_SESSION[$key]??[]),static fn($t):bool=>(int)$t>=$cutoff));
+    if(count($requests)>=30){header('Retry-After: 60');app_json_response(['ok'=>false,'message'=>'Wholesale AI usage is temporarily limited. Please wait a moment and try again.'],429);}
+    $requests[]=$now;$_SESSION[$key]=$requests;
+}
 function wholesale_agent_http(string $url,array $headers,array $payload):array
 {
     if(!function_exists('curl_init'))throw new RuntimeException('PHP cURL is required for the wholesale Agent.');$h=curl_init($url);if($h===false)throw new RuntimeException('Could not initialize the AI provider request.');curl_setopt_array($h,[CURLOPT_POST=>true,CURLOPT_RETURNTRANSFER=>true,CURLOPT_HTTPHEADER=>$headers,CURLOPT_POSTFIELDS=>json_encode($payload,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR),CURLOPT_CONNECTTIMEOUT=>8,CURLOPT_TIMEOUT=>45,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2,CURLOPT_USERAGENT=>'Gelato-Wholesale-Portal-Agent/1.0']);$body=curl_exec($h);$status=(int)curl_getinfo($h,CURLINFO_RESPONSE_CODE);$error=curl_error($h);curl_close($h);if(!is_string($body))throw new RuntimeException($error?:'AI provider returned no response.');$data=json_decode($body,true);if(!is_array($data)||$status<200||$status>=300)throw new RuntimeException('The AI provider could not complete this request.');return $data;
@@ -42,7 +48,7 @@ function wholesale_agent_fast_answer(PDO $pdo,int $organizationId,int $accountId
 if($_SERVER['REQUEST_METHOD']==='GET'){
     $statement=$pdo->prepare("SELECT message_role,content,skill,created_at FROM wholesale_agent_messages WHERE organization_id=? AND wholesale_account_id=? AND user_id=? ORDER BY id DESC LIMIT 40");$statement->execute([$organizationId,$accountId,(int)$user['id']]);$history=array_reverse($statement->fetchAll());app_json_response(['ok'=>true,'history'=>$history,'ready'=>(bool)wholesale_agent_credential($pdo,$organizationId),'businessName'=>$account['business_name']]);
 }
-if($_SERVER['REQUEST_METHOD']!=='POST'){header('Allow: GET, POST');app_json_response(['ok'=>false,'message'=>'Method not allowed.'],405);}$input=app_json_input();app_verify_request_csrf($input);$message=trim((string)($input['message']??''));if($message===''||mb_strlen($message,'UTF-8')>1600)app_json_response(['ok'=>false,'message'=>'Enter a message no longer than 1,600 characters.'],422);
+if($_SERVER['REQUEST_METHOD']!=='POST'){header('Allow: GET, POST');app_json_response(['ok'=>false,'message'=>'Method not allowed.'],405);}$input=app_json_input();app_verify_request_csrf($input);wholesale_agent_rate_limit($organizationId,$accountId,(int)$user['id']);$message=trim((string)($input['message']??''));if($message===''||mb_strlen($message,'UTF-8')>1600)app_json_response(['ok'=>false,'message'=>'Enter a message no longer than 1,600 characters.'],422);
 $insert=$pdo->prepare("INSERT INTO wholesale_agent_messages (organization_id,wholesale_account_id,user_id,message_role,content,skill) VALUES (?,?,?,'user',?,NULL)");$insert->execute([$organizationId,$accountId,(int)$user['id'],$message]);
 $fast=wholesale_agent_fast_answer($pdo,$organizationId,$accountId,$message);$skill=$fast['skill']??'wholesale_portal.agent';$reply=$fast['reply']??'';
 if($reply===''){
