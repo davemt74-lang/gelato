@@ -225,7 +225,9 @@ INSERT INTO permissions (permission_key,name,description,category) VALUES
 ON DUPLICATE KEY UPDATE name=VALUES(name),description=VALUES(description),category=VALUES(category);
 
 INSERT IGNORE INTO task_categories (organization_id,public_id,name,slug,description,icon,sort_order)
-SELECT id,CONCAT('cat-',slug),name,slug,description,icon,sort_order FROM organizations CROSS JOIN (
+SELECT o.id,CONCAT('cat-',d.slug),d.name,d.slug,d.description,d.icon,d.sort_order
+FROM organizations o
+CROSS JOIN (
  SELECT 'prep' slug,'Prep' name,'Food and product preparation' description,'prep' icon,10 sort_order UNION ALL
  SELECT 'opening','Opening','Opening shift tasks','open',20 UNION ALL
  SELECT 'closing','Closing','Closing shift tasks','close',30 UNION ALL
@@ -238,4 +240,4 @@ SELECT id,CONCAT('cat-',slug),name,slug,description,icon,sort_order FROM organiz
  SELECT 'manager','Manager','Manager and administrative tasks','manager',100 UNION ALL
  SELECT 'delivery','Delivery','Delivery, loading and logistics','delivery',110 UNION ALL
  SELECT 'general','General','General restaurant tasks','task',120
-) defaults;
+) d;
