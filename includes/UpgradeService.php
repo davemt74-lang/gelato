@@ -4,9 +4,9 @@ declare(strict_types=1);
 /**
  * One-click, forward-only database migration runner for Gelato.
  *
- * Dated production migrations live in /database as YYYYMMDD_name.sql. Optional
- * demo/seed files are deliberately excluded. Applied migrations are immutable:
- * a checksum mismatch is surfaced and blocks another upgrade run.
+ * Production migrations live in /database as YYYYMMDD_name.sql. Demo/sample/
+ * seed files are deliberately excluded. Applied migrations are immutable and
+ * tracked by SHA-256 checksum.
  */
 final class UpgradeService
 {
@@ -60,6 +60,7 @@ final class UpgradeService
                 && !str_contains($name, '_seed_');
         }));
         sort($files, SORT_NATURAL);
+        $files = $this->applyKnownDependencyOrder($files);
 
         $out = [];
         foreach ($files as $path) {
@@ -68,9 +69,8 @@ final class UpgradeService
             if (!is_string($raw)) {
                 throw new RuntimeException('Could not read migration ' . $filename . '.');
             }
-            $key = preg_replace('/\.sql$/i', '', $filename) ?: $filename;
             $out[] = [
-                'key' => $key,
+                'key' => preg_replace('/\.sql$/i', '', $filename) ?: $filename,
                 'filename' => $filename,
                 'path' => $path,
                 'checksum' => hash('sha256', $raw),
@@ -78,6 +78,32 @@ final class UpgradeService
             ];
         }
         return $out;
+    }
+
+    /** @param array<int,string> $files @return array<int,string> */
+    private function applyKnownDependencyOrder(array $files): array
+    {
+        // The visibility repair grants permissions created by the Knowledge Center
+        // migration. Both share the same date, so filename sorting alone is unsafe.
+        $knowledge = '20260804_public_agent_knowledge_center.sql';
+        $visibility = '20260804_public_agent_admin_visibility_fix.sql';
+        $knowledgePath = null;
+        $visibilityPath = null;
+        foreach ($files as $path) {
+            if (basename($path) === $knowledge) $knowledgePath = $path;
+            if (basename($path) === $visibility) $visibilityPath = $path;
+        }
+        if ($knowledgePath !== null && $visibilityPath !== null) {
+            $files = array_values(array_filter(
+                $files,
+                static fn(string $path): bool => $path !== $visibilityPath
+            ));
+            $knowledgeIndex = array_search($knowledgePath, $files, true);
+            if ($knowledgeIndex !== false) {
+                array_splice($files, $knowledgeIndex + 1, 0, [$visibilityPath]);
+            }
+        }
+        return $files;
     }
 
     /** @return array<string,array<string,mixed>> */
@@ -95,9 +121,9 @@ final class UpgradeService
     }
 
     /**
-     * Existing Gelato installs predate schema_migrations. Detect completed
-     * historical work from durable schema signatures and record it without
-     * replaying its DDL.
+     * Older Gelato installations predate schema_migrations. Reliable schema
+     * signatures let us recognize already-installed historical migrations
+     * without replaying their DDL. Unknown/future migrations are never guessed.
      */
     public function bootstrapLegacyHistory(?int $userId = null): int
     {
@@ -110,14 +136,15 @@ final class UpgradeService
         );
         $marked = 0;
         foreach ($this->migrations() as $migration) {
-            if (isset($applied[$migration['key']])) {
+            $key = (string)$migration['key'];
+            if (isset($applied[$key]) || !$this->hasKnownSignature($key)) {
                 continue;
             }
-            if (!$this->migrationAlreadyPresent((string)$migration['key'])) {
+            if (!$this->migrationAlreadyPresent($key)) {
                 continue;
             }
             $insert->execute([
-                $migration['key'], $migration['filename'], $migration['checksum'], 0, 0, $userId,
+                $key, $migration['filename'], $migration['checksum'], 0, 0, $userId,
             ]);
             if ($insert->rowCount() > 0) {
                 $marked++;
@@ -155,15 +182,21 @@ final class UpgradeService
 
     public function currentVersion(): string
     {
-        $rows = $this->migrationStatus();
-        $applied = array_values(array_filter($rows, static fn(array $row): bool => $row['status'] === 'applied'));
-        return $applied ? (string)end($applied)['key'] : 'base install';
+        $applied = array_values(array_filter(
+            $this->migrationStatus(),
+            static fn(array $row): bool => $row['status'] === 'applied'
+        ));
+        if (!$applied) return 'base install';
+        $last = end($applied);
+        return (string)$last['key'];
     }
 
     public function targetVersion(): string
     {
         $migrations = $this->migrations();
-        return $migrations ? (string)end($migrations)['key'] : 'base install';
+        if (!$migrations) return 'base install';
+        $last = end($migrations);
+        return (string)$last['key'];
     }
 
     /** @return array<int,array<string,mixed>> */
@@ -210,16 +243,17 @@ final class UpgradeService
         if (!is_string($raw)) {
             throw new RuntimeException('Could not read ' . $migration['filename'] . '.');
         }
+        $key = (string)$migration['key'];
 
         $run = $this->pdo->prepare(
             "INSERT INTO upgrade_runs (migration_key,filename,status,run_by) VALUES (?,?,'running',?)"
         );
-        $run->execute([$migration['key'], $migration['filename'], $userId]);
+        $run->execute([$key, $migration['filename'], $userId]);
         $runId = (int)$this->pdo->lastInsertId();
         $started = microtime(true);
 
         try {
-            if ($this->isUnsafePartialMigration((string)$migration['key'])) {
+            if ($this->isUnsafePartialMigration($key)) {
                 throw new RuntimeException(
                     'This migration appears partially applied. Resolve the partial schema before continuing so the upgrader does not guess at DDL state.'
                 );
@@ -228,7 +262,10 @@ final class UpgradeService
             $statements = self::executeSqlScript($this->pdo, $raw, true);
             $ms = max(0, (int)round((microtime(true) - $started) * 1000));
 
-            if (!$this->migrationAlreadyPresent((string)$migration['key'])) {
+            // Current historical migrations have explicit postconditions. Future
+            // migrations remain extensible: a successful SQL script is recorded even
+            // before a dedicated legacy-adoption signature is added here.
+            if ($this->hasKnownSignature($key) && !$this->migrationAlreadyPresent($key)) {
                 throw new RuntimeException('Migration finished without its expected schema signature.');
             }
 
@@ -238,14 +275,14 @@ final class UpgradeService
                  VALUES (?,?,?,?,?,0,?,NOW(6))'
             );
             $record->execute([
-                $migration['key'], $migration['filename'], $migration['checksum'], $statements, $ms, $userId,
+                $key, $migration['filename'], $migration['checksum'], $statements, $ms, $userId,
             ]);
             $this->pdo->prepare(
                 "UPDATE upgrade_runs SET status='success',statement_count=?,execution_ms=?,completed_at=NOW(6) WHERE id=?"
             )->execute([$statements, $ms, $runId]);
 
             return [
-                'key' => $migration['key'],
+                'key' => $key,
                 'filename' => $migration['filename'],
                 'statements' => $statements,
                 'execution_ms' => $ms,
@@ -291,9 +328,8 @@ final class UpgradeService
         $escape = false;
         $blockComment = false;
         $count = 0;
-        $lines = explode("\n", $sql);
 
-        foreach ($lines as $line) {
+        foreach (explode("\n", $sql) as $line) {
             if ($quote === null && !$blockComment && trim($statement) === ''
                 && preg_match('/^\s*DELIMITER\s+(\S+)\s*$/i', $line, $match)) {
                 $delimiter = $match[1];
@@ -301,11 +337,11 @@ final class UpgradeService
             }
 
             $lineComment = false;
-            $lineWithNewline = $line . "\n";
-            $length = strlen($lineWithNewline);
+            $line .= "\n";
+            $length = strlen($line);
             for ($i = 0; $i < $length; $i++) {
-                $ch = $lineWithNewline[$i];
-                $next = $i + 1 < $length ? $lineWithNewline[$i + 1] : '';
+                $ch = $line[$i];
+                $next = $i + 1 < $length ? $line[$i + 1] : '';
 
                 if ($lineComment) {
                     if ($ch === "\n") {
@@ -323,7 +359,7 @@ final class UpgradeService
                 }
 
                 if ($quote === null) {
-                    if ($ch === '-' && $next === '-' && ($i + 2 >= $length || ctype_space($lineWithNewline[$i + 2]))) {
+                    if ($ch === '-' && $next === '-' && ($i + 2 >= $length || ctype_space($line[$i + 2]))) {
                         $lineComment = true;
                         $i++;
                         continue;
@@ -342,7 +378,7 @@ final class UpgradeService
                         $statement .= $ch;
                         continue;
                     }
-                    if ($delimiter !== '' && substr($lineWithNewline, $i, strlen($delimiter)) === $delimiter) {
+                    if ($delimiter !== '' && substr($line, $i, strlen($delimiter)) === $delimiter) {
                         $trimmed = trim($statement);
                         if ($trimmed !== '') {
                             self::executeStatement($pdo, $trimmed, $allowAlreadyAppliedDdl);
@@ -358,9 +394,7 @@ final class UpgradeService
 
                 $statement .= $ch;
                 if ($quote === '`') {
-                    if ($ch === '`') {
-                        $quote = null;
-                    }
+                    if ($ch === '`') $quote = null;
                     continue;
                 }
                 if ($escape) {
@@ -410,6 +444,19 @@ final class UpgradeService
         }
         $driverCode = isset($error->errorInfo[1]) ? (int)$error->errorInfo[1] : 0;
         return in_array($driverCode, [1050, 1060, 1061, 1826], true);
+    }
+
+    private function hasKnownSignature(string $key): bool
+    {
+        return in_array($key, [
+            '20260803_brand_images_llm_keys',
+            '20260804_public_agent_knowledge_center',
+            '20260804_public_agent_admin_visibility_fix',
+            '20260804_jobs_module',
+            '20260912_floor_planner',
+            '20260912_equipment_catalog_brain',
+            '20260912_canonical_floor_equipment',
+        ], true);
     }
 
     private function migrationAlreadyPresent(string $key): bool
@@ -528,16 +575,15 @@ final class UpgradeService
             return false;
         }
         $ownerCount = (int)$this->pdo->query('SELECT COUNT(*) FROM roles WHERE is_owner_role=1')->fetchColumn();
-        if ($ownerCount === 0) {
-            return false;
-        }
+        if ($ownerCount === 0) return false;
         $placeholders = implode(',', array_fill(0, count($permissions), '?'));
-        $sql = "SELECT COUNT(DISTINCT CONCAT(r.id, ':', p.permission_key))
-                FROM roles r
-                JOIN role_permissions rp ON rp.role_id=r.id
-                JOIN permissions p ON p.id=rp.permission_id
-                WHERE r.is_owner_role=1 AND p.permission_key IN ($placeholders)";
-        $statement = $this->pdo->prepare($sql);
+        $statement = $this->pdo->prepare(
+            "SELECT COUNT(DISTINCT CONCAT(r.id, ':', p.permission_key))
+             FROM roles r
+             JOIN role_permissions rp ON rp.role_id=r.id
+             JOIN permissions p ON p.id=rp.permission_id
+             WHERE r.is_owner_role=1 AND p.permission_key IN ($placeholders)"
+        );
         $statement->execute($permissions);
         return (int)$statement->fetchColumn() === $ownerCount * count($permissions);
     }
