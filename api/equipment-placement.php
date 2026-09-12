@@ -113,6 +113,13 @@ function placement_sync_brain(PDO $pdo, int $organizationId, int $assetId, strin
     floor_equipment_brain_sync_placement($pdo, $organizationId, $assetPublicId, $userId);
 }
 
+function placement_write_guard(PDO $pdo, bool $enabled): void
+{
+    $pdo->exec($enabled
+        ? 'SET @gelato_allow_floor_placement = 1'
+        : 'SET @gelato_allow_floor_placement = NULL');
+}
+
 if (!placement_table_ready($pdo)) {
     app_json_response(['ok'=>false,'message'=>'Canonical floor-plan equipment migration is not installed. Import database/20260912_canonical_floor_equipment.sql first.'],503);
 }
@@ -149,6 +156,7 @@ if ($assetPublicId === '') app_json_response(['ok'=>false,'message'=>'An equipme
 
 try {
     $pdo->beginTransaction();
+    placement_write_guard($pdo, true);
     $asset = placement_asset_row($pdo, $organizationId, $assetPublicId, true);
     if (!$asset) throw new DomainException('Equipment asset not found.');
 
@@ -204,8 +212,10 @@ try {
         'rotationDeg'=>$asset['floor_plan_rotation_deg']??0,'widthInches'=>$asset['width_inches']??null,'depthInches'=>$asset['depth_inches']??null,
     ],$auditNew);
     $pdo->commit();
+    placement_write_guard($pdo, false);
 } catch (Throwable $error) {
     if ($pdo->inTransaction()) $pdo->rollBack();
+    try { placement_write_guard($pdo, false); } catch (Throwable) {}
     $status=$error instanceof DomainException?404:($error instanceof InvalidArgumentException?422:500);
     app_json_response(['ok'=>false,'message'=>$status===500?'The equipment placement could not be saved.':$error->getMessage()],$status);
 }
