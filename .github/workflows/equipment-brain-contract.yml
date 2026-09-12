@@ -1,0 +1,71 @@
+name: Equipment Catalog + Agent Brain Contract
+
+on:
+  pull_request:
+    paths:
+      - 'equipment.php'
+      - 'api/equipment.php'
+      - 'api/agent-brain.php'
+      - 'includes/equipment-brain.php'
+      - 'js/equipment-module.js'
+      - 'js/floor-planner-module.js'
+      - 'database/20260912_equipment_catalog_brain.sql'
+      - '.github/workflows/equipment-brain-contract.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'equipment.php'
+      - 'api/equipment.php'
+      - 'api/agent-brain.php'
+      - 'includes/equipment-brain.php'
+      - 'js/equipment-module.js'
+      - 'js/floor-planner-module.js'
+      - 'database/20260912_equipment_catalog_brain.sql'
+      - '.github/workflows/equipment-brain-contract.yml'
+
+jobs:
+  equipment-brain-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+      - name: PHP syntax
+        run: |
+          php -l equipment.php
+          php -l api/equipment.php
+          php -l api/agent-brain.php
+          php -l includes/equipment-brain.php
+      - name: JavaScript syntax
+        run: |
+          node --check js/equipment-module.js
+          node --check js/floor-planner-module.js
+      - name: Equipment schema and permission contract
+        run: |
+          grep -q "CREATE TABLE IF NOT EXISTS equipment_assets" database/20260912_equipment_catalog_brain.sql
+          grep -q "CREATE TABLE IF NOT EXISTS equipment_service_contacts" database/20260912_equipment_catalog_brain.sql
+          grep -q "CREATE TABLE IF NOT EXISTS equipment_service_events" database/20260912_equipment_catalog_brain.sql
+          grep -q "CREATE TABLE IF NOT EXISTS agent_knowledge_records" database/20260912_equipment_catalog_brain.sql
+          grep -q "equipment.view" database/20260912_equipment_catalog_brain.sql
+          grep -q "equipment.edit" database/20260912_equipment_catalog_brain.sql
+          grep -q "equipment.service" database/20260912_equipment_catalog_brain.sql
+          grep -q "equipment.contacts" database/20260912_equipment_catalog_brain.sql
+          grep -q "agent.equipment_skills" database/20260912_equipment_catalog_brain.sql
+      - name: Agent integration contract
+        run: |
+          grep -q "equipment_brain_sync_asset" api/equipment.php
+          grep -q "equipment_brain_search" api/agent-brain.php
+          grep -q "equipment.maintenance_due" api/agent-brain.php
+          grep -q "equipment.service_contacts" api/agent-brain.php
+          grep -q "knowledge.search" api/agent-brain.php
+          grep -q "equipment.php" js/equipment-module.js
+          grep -q "api/agent-brain.php" equipment.php
+      - name: Security contract
+        run: |
+          grep -q "app_verify_request_csrf" api/equipment.php
+          grep -q "app_verify_request_csrf" api/agent-brain.php
+          grep -q "organization_id" api/equipment.php
+          grep -q "organization_id" api/agent-brain.php
+          grep -q "app_has_permission('equipment.view'" api/agent-brain.php
+          grep -q "app_has_permission('agent.equipment_skills'" api/agent-brain.php
