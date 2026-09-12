@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require __DIR__ . '/../includes/bootstrap.php';
 require __DIR__ . '/../includes/restaurant-brain.php';
+require __DIR__ . '/../includes/catering-brain.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Allow: POST');
@@ -56,7 +57,7 @@ else {
     $parsed = DateTimeImmutable::createFromFormat('Y-m-d',$eventDate);
     if (!$parsed || $parsed->format('Y-m-d') !== $eventDate) $errors[] = 'Event date is invalid.';
 }
-foreach (['eventStartTime'=>$eventStartTime,'eventEndTime'=>$eventEndTime] as $label=>$value) {
+foreach (['eventStartTime'=>$eventStartTime,'eventEndTime'=>$eventEndTime] as $value) {
     if ($value !== '' && !preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/',$value)) $errors[] = 'Event time is invalid.';
 }
 if ($guestCount !== null && ($guestCount < 1 || $guestCount > 100000)) $errors[] = 'Guest count must be between 1 and 100,000.';
