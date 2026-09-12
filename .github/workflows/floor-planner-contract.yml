@@ -1,0 +1,47 @@
+name: Floor Planner Contract
+
+on:
+  pull_request:
+    paths:
+      - 'floor-planner.php'
+      - 'api/floor-plans.php'
+      - 'js/floor-planner-module.js'
+      - 'database/20260912_floor_planner.sql'
+      - 'index.php'
+      - '.github/workflows/floor-planner-contract.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'floor-planner.php'
+      - 'api/floor-plans.php'
+      - 'js/floor-planner-module.js'
+      - 'database/20260912_floor_planner.sql'
+      - 'index.php'
+      - '.github/workflows/floor-planner-contract.yml'
+
+jobs:
+  floor-planner-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+      - name: PHP syntax
+        run: |
+          php -l floor-planner.php
+          php -l api/floor-plans.php
+          php -l index.php
+      - name: JavaScript syntax
+        run: node --check js/floor-planner-module.js
+      - name: Permission and persistence contract
+        run: |
+          grep -q "floorplans.view" database/20260912_floor_planner.sql
+          grep -q "floorplans.edit" database/20260912_floor_planner.sql
+          grep -q "CREATE TABLE IF NOT EXISTS floor_plans" database/20260912_floor_planner.sql
+          grep -q "app_has_permission('floorplans.view'" api/floor-plans.php
+          grep -q "app_has_permission('floorplans.edit'" api/floor-plans.php
+          grep -q "app_verify_request_csrf" api/floor-plans.php
+          grep -q "organization_id = ?" api/floor-plans.php
+          grep -q "api/floor-plans.php" floor-planner.php
+          grep -q "floor-planner-module.js" index.php
