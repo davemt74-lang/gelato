@@ -1,0 +1,205 @@
+name: Operations Core Inventory + Tasks
+
+on:
+  pull_request:
+    paths:
+      - 'operations.php'
+      - 'api/operations.php'
+      - 'api/operations-agent.php'
+      - 'api/task-proof.php'
+      - 'api/task-proof-view.php'
+      - 'api/wholesale-accounts.php'
+      - 'api/wholesale-portal.php'
+      - 'includes/operations-core.php'
+      - 'includes/operations-wholesale.php'
+      - 'includes/operations-wholesale-agent.php'
+      - 'js/operations-core.js'
+      - 'js/restaurant-agent-bridge.js'
+      - 'database/20260913_zzz_operations_core.sql'
+      - 'data/ingredient-catalog.json'
+      - 'tests/operations-wholesale-contract.php'
+      - '.github/workflows/operations-core.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'operations.php'
+      - 'api/operations.php'
+      - 'api/operations-agent.php'
+      - 'api/task-proof.php'
+      - 'api/task-proof-view.php'
+      - 'api/wholesale-accounts.php'
+      - 'api/wholesale-portal.php'
+      - 'includes/operations-core.php'
+      - 'includes/operations-wholesale.php'
+      - 'includes/operations-wholesale-agent.php'
+      - 'js/operations-core.js'
+      - 'js/restaurant-agent-bridge.js'
+      - 'database/20260913_zzz_operations_core.sql'
+      - 'data/ingredient-catalog.json'
+      - 'tests/operations-wholesale-contract.php'
+      - '.github/workflows/operations-core.yml'
+
+jobs:
+  operations-core:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+
+      - name: Syntax checks
+        run: |
+          php -l operations.php
+          php -l api/operations.php
+          php -l api/operations-agent.php
+          php -l api/task-proof.php
+          php -l api/task-proof-view.php
+          php -l api/wholesale-accounts.php
+          php -l api/wholesale-portal.php
+          php -l includes/operations-core.php
+          php -l includes/operations-wholesale.php
+          php -l includes/operations-wholesale-agent.php
+          php -l tests/operations-wholesale-contract.php
+          node --check js/operations-core.js
+          node --check js/restaurant-agent-bridge.js
+
+      - name: Operations architecture contract
+        run: |
+          grep -q "CREATE TABLE IF NOT EXISTS inventory_items" database/20260913_zzz_operations_core.sql
+          grep -q "CREATE TABLE IF NOT EXISTS restaurant_tasks" database/20260913_zzz_operations_core.sql
+          grep -q "restaurant_task_time_entries" database/20260913_zzz_operations_core.sql
+          grep -q "restaurant_task_proofs" database/20260913_zzz_operations_core.sql
+          grep -q "task_categories" database/20260913_zzz_operations_core.sql
+          grep -q "operations_sync_inventory_sources" includes/operations-core.php
+          grep -q "ingredient-catalog.json" includes/operations-core.php
+          grep -q "operations_sync_catering_tasks" includes/operations-core.php
+          grep -q "operations_sync_wholesale_tasks" includes/operations-wholesale.php
+          grep -q "operations_wholesale_validate_task_transition" includes/operations-wholesale.php
+          grep -q "operations_agent_wholesale_answer" includes/operations-wholesale-agent.php
+          grep -q "wholesale_order_item" includes/operations-wholesale.php
+          grep -q "wholesale_order_fulfillment" includes/operations-wholesale.php
+          grep -q "operations_wholesale_task_status_changed" api/operations.php
+          grep -q "wholesale_customer" api/operations.php
+          grep -q "wholesale_customer" api/operations-agent.php
+          grep -q "operations_sync_wholesale_tasks" api/wholesale-accounts.php
+          grep -q "operations_sync_wholesale_tasks" api/wholesale-portal.php
+          grep -q "original_transcript" database/20260913_zzz_operations_core.sql
+          grep -q "SpeechRecognition" js/operations-core.js
+          grep -q "api/operations-agent.php" js/restaurant-agent-bridge.js
+          grep -Fq "wholesale\\s+" js/restaurant-agent-bridge.js
+          grep -q "tasks.prep_add" api/operations-agent.php
+          grep -q "tasks.category_create" api/operations-agent.php
+          grep -q "wholesale.operations" includes/operations-wholesale-agent.php
+          grep -q "local_private" api/task-proof.php
+          grep -q "Task proof access denied" api/task-proof-view.php
+          grep -q "canTasksSelf" operations.php
+          grep -q "canTasksProof" operations.php
+          grep -q "task-proof-view.php" js/operations-core.js
+          ! grep -q "Unit price" includes/operations-wholesale.php
+          ! grep -q "Private margin" includes/operations-wholesale.php
+
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app' => ['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database' => ['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security' => ['session_name'=>'gelato_restaurant_ai_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $service=new UpgradeService(app_pdo(),__DIR__);
+          $service->ensureTrackingTables();
+          $service->bootstrapLegacyHistory(null);
+          $service->applyPending(null);
+          if($service->pendingMigrations()) exit(1);
+          PHP
+
+      - name: Verify Operations Core schema
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('inventory_items','inventory_item_sources','inventory_transactions','task_categories','restaurant_tasks','restaurant_task_assignments','restaurant_task_time_entries','restaurant_task_events','restaurant_task_proofs');")" = "9"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260913_zzz_operations_core';")" = "1"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('inventory.view','inventory.manage','inventory.agent','tasks.view','tasks.manage','tasks.self','tasks.proof','tasks.agent');")" = "8"
+
+      - name: Verify menu inventory, universal prep tasks, timing and catering sync
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/operations-core.php';
+          $pdo=app_pdo();
+          $pdo->exec("INSERT INTO organizations (name) VALUES ('Operations CI Restaurant')");
+          $org=(int)$pdo->lastInsertId();
+          $pdo->exec("INSERT INTO users (email,password_hash,first_name,last_name,display_name,status) VALUES ('ops-core@example.test','x','Anthony','Tester','Anthony Tester','active')");
+          $user=(int)$pdo->lastInsertId();
+          $stmt=$pdo->prepare("INSERT INTO organization_memberships (organization_id,user_id,status) VALUES (?,?,'active')");$stmt->execute([$org,$user]);
+          operations_ensure_default_categories($pdo,$org,$user);
+          if(count(array_filter(operations_task_list($pdo,$org),fn($x)=>true))!==0) exit(2);
+
+          $recipe=$pdo->prepare("INSERT INTO recipes (organization_id,public_id,name,category,yield_quantity,yield_unit,ingredients_json,instructions_json,status,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?, 'active',?,?)");
+          $recipe->execute([$org,'recipe-ci-dough','CI Dough','Pizza',20,'servings',json_encode([['name'=>'Flour','quantity'=>10,'unit'=>'lb'],['name'=>'Whole Milk','quantity'=>2,'unit'=>'qt']]),'[]',$user,$user]);
+          $sync=operations_sync_inventory_sources($pdo,$org,$user);
+          $count=(int)$pdo->query("SELECT COUNT(*) FROM inventory_items WHERE organization_id={$org}")->fetchColumn();
+          if($count<95) exit(3);
+          $milk=$pdo->prepare("SELECT * FROM inventory_items WHERE organization_id=? AND normalized_key='milk' LIMIT 1");$milk->execute([$org]);$milkRow=$milk->fetch();if(!$milkRow)exit(4);
+          $source=$pdo->prepare("SELECT COUNT(*) FROM inventory_item_sources WHERE organization_id=? AND inventory_item_id=? AND source_type='recipe' AND source_public_id='recipe:recipe-ci-dough'");$source->execute([$org,(int)$milkRow['id']]);if((int)$source->fetchColumn()!==1)exit(5);
+          $pdo->prepare("UPDATE inventory_items SET base_unit='qt',par_level=10,reorder_point=5,on_hand_quantity=2 WHERE id=?")->execute([(int)$milkRow['id']]);
+          if(!operations_inventory_list($pdo,$org,'',true,20))exit(6);
+
+          $category=operations_create_category($pdo,$org,'Patio Closing',$user,'Close and reset patio.');if($category['slug']!=='patio-closing')exit(7);
+          $task=operations_create_task($pdo,$org,['title'=>'Prep 24 dough balls','category'=>'prep','quantity'=>24,'unit'=>'balls','assigneeIds'=>[$user],'requiresPhoto'=>true,'transcript'=>'Hey Gelato, add 24 dough balls to prep list and assign Anthony.'],$user);
+          $detail=operations_task_detail($pdo,$org,$task['public_id']);if(!$detail||count($detail['assignments'])!==1||$detail['original_transcript']==='')exit(8);
+          operations_task_timer($pdo,$org,$task['public_id'],$user,true);
+          usleep(200000);
+          operations_task_timer($pdo,$org,$task['public_id'],$user,false);
+          operations_task_set_status($pdo,$org,$task['public_id'],'completed',$user);
+          $detail=operations_task_detail($pdo,$org,$task['public_id']);if($detail['status']!=='completed'||count($detail['events'])<4||empty($detail['timeEntries'][0]['ended_at']))exit(9);
+
+          $lead=$pdo->prepare("INSERT INTO catering_leads (organization_id,public_id,contact_name,email,event_type,event_date,start_time,end_time,guest_count,pipeline_stage) VALUES (?,?,?,?,?,DATE_ADD(CURDATE(),INTERVAL 7 DAY),'18:00:00','21:00:00',50,'new')");
+          $lead->execute([$org,'cater-ops-core','CI Customer','cater@example.test','Party']);
+          $pdo->prepare("UPDATE catering_leads SET pipeline_stage='confirmed' WHERE organization_id=? AND public_id='cater-ops-core'")->execute([$org]);
+          $mirrored=operations_sync_catering_tasks($pdo,$org,$user);if($mirrored<8)exit(10);
+          $universal=$pdo->prepare("SELECT * FROM restaurant_tasks WHERE organization_id=? AND source_type='catering_operation_task' LIMIT 1");$universal->execute([$org]);$u=$universal->fetch();if(!$u)exit(11);
+          operations_task_set_status($pdo,$org,$u['public_id'],'completed',$user);
+          if(!preg_match('/catering-task-(\d+)/',$u['source_public_id'],$m))exit(12);
+          $sourceStatus=$pdo->prepare('SELECT status FROM restaurant_operation_tasks WHERE id=? AND organization_id=?');$sourceStatus->execute([(int)$m[1],$org]);if($sourceStatus->fetchColumn()!=='done')exit(13);
+          echo "inventory={$count} menuRefs={$sync['menuReferences']} recipeRefs={$sync['recipeReferences']} cateringTasks={$mirrored}\n";
+          PHP
+
+      - name: Verify wholesale order Operations lifecycle
+        run: php tests/operations-wholesale-contract.php
+
+      - name: Verify upgrader stays idempotent
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $service=new UpgradeService(app_pdo(),__DIR__);
+          $service->ensureTrackingTables();
+          $applied=$service->applyPending(null);
+          if(count($applied)!==0 || count($service->pendingMigrations())!==0) exit(1);
+          echo "second-run=clean\n";
+          PHP

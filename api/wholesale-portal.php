@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require __DIR__ . '/../includes/bootstrap.php';
 require __DIR__ . '/../includes/wholesale-portal.php';
+require_once __DIR__ . '/../includes/operations-wholesale.php';
 
 $user=app_require_permission('wholesale_portal.view');$pdo=app_pdo();$organizationId=(int)$user['organization_id'];$account=wholesale_portal_require_account($pdo,$user);$accountId=(int)$account['id'];
 
@@ -55,6 +56,6 @@ if($action==='accept_quote'){
         $pdo->commit();
     }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
     if(!empty($account['wholesale_lead_id'])){$activity=$pdo->prepare("INSERT INTO wholesale_lead_activities (organization_id,wholesale_lead_id,activity_type,summary,details,created_by) VALUES (?,?,'quote','Customer accepted wholesale quote',?,?)");$activity->execute([$organizationId,(int)$account['wholesale_lead_id'],$quote['quote_number'].' accepted; order '.$orderNumber.' created.',(int)$user['id']]);}
-    wholesale_portal_sync_account_knowledge($pdo,$organizationId,$accountId,(int)$user['id']);app_audit($pdo,$organizationId,(int)$user['id'],'wholesale.quote_accepted','wholesale_quote',$quoteId,null,['orderNumber'=>$orderNumber]);app_json_response(['ok'=>true,'message'=>'Quote accepted. Your order request has been created.','orderNumber'=>$orderNumber]);
+    wholesale_portal_sync_account_knowledge($pdo,$organizationId,$accountId,(int)$user['id']);if(operations_wholesale_ready($pdo))operations_sync_wholesale_tasks($pdo,$organizationId,(int)$user['id']);app_audit($pdo,$organizationId,(int)$user['id'],'wholesale.quote_accepted','wholesale_quote',$quoteId,null,['orderNumber'=>$orderNumber]);app_json_response(['ok'=>true,'message'=>'Quote accepted. Your order request has been created and added to Operations.','orderNumber'=>$orderNumber]);
 }
 app_json_response(['ok'=>false,'message'=>'Unsupported wholesale portal action.'],422);

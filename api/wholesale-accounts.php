@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require __DIR__ . '/../includes/bootstrap.php';
 require __DIR__ . '/../includes/wholesale-portal.php';
+require_once __DIR__ . '/../includes/operations-wholesale.php';
 
 $user = app_require_permission($_SERVER['REQUEST_METHOD']==='GET' ? 'wholesale.view' : 'wholesale.manage');
 $pdo = app_pdo();
@@ -105,8 +106,9 @@ if($action==='order'){
     $insert=$pdo->prepare("INSERT INTO wholesale_orders (organization_id,wholesale_account_id,public_id,order_number,status,items_json,subtotal,delivery_fee,tax_total,total,fulfillment_type,requested_for,promised_for,customer_notes,internal_notes,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
     $insert->execute([$organizationId,$accountId,$publicId,$number,$status,json_encode($items,JSON_THROW_ON_ERROR),$subtotal,$delivery,$tax,$total,mb_substr(trim((string)($input['fulfillmentType']??'')),0,40,'UTF-8')?:null,trim((string)($input['requestedFor']??''))?:null,trim((string)($input['promisedFor']??''))?:null,mb_substr(trim((string)($input['customerNotes']??'')),0,10000,'UTF-8')?:null,mb_substr(trim((string)($input['internalNotes']??'')),0,10000,'UTF-8')?:null,(int)$user['id'],(int)$user['id']]);
     wholesale_portal_sync_account_knowledge($pdo,$organizationId,$accountId,(int)$user['id']);
+    if(operations_wholesale_ready($pdo))operations_sync_wholesale_tasks($pdo,$organizationId,(int)$user['id']);
     app_audit($pdo,$organizationId,(int)$user['id'],'wholesale.order_created','wholesale_order',$publicId,null,['accountId'=>$accountIdPublic,'orderNumber'=>$number,'total'=>$total]);
-    app_json_response(['ok'=>true,'message'=>'Wholesale order created.','orderNumber'=>$number]);
+    app_json_response(['ok'=>true,'message'=>'Wholesale order created and added to Operations.','orderNumber'=>$number]);
 }
 
 if($action==='request_status'){
