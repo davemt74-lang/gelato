@@ -130,10 +130,14 @@ jobs:
           $pdo=app_pdo();
           $orgId=(int)$pdo->query('SELECT id FROM organizations ORDER BY id LIMIT 1')->fetchColumn();
           $leadId=(int)$pdo->query("SELECT id FROM catering_leads WHERE public_id='catering-ci-test' LIMIT 1")->fetchColumn();
+          if($orgId<1 || $leadId<1){fwrite(STDERR,"Catering fixture was not created. org={$orgId} lead={$leadId}\n");exit(1);}
           restaurant_brain_sync_catering($pdo,$orgId,$leadId,null);
           $st=$pdo->prepare("SELECT COUNT(*) FROM agent_knowledge_records WHERE organization_id=? AND source_type='catering_lead' AND source_public_id='catering-ci-test' AND visibility='internal'");
           $st->execute([$orgId]);
-          if((int)$st->fetchColumn()!==1)exit(1);
+          $knowledgeCount=(int)$st->fetchColumn();
+          if($knowledgeCount!==1){fwrite(STDERR,"Expected one catering knowledge record; found {$knowledgeCount}.\n");exit(1);}
           $upcoming=restaurant_brain_catering_upcoming($pdo,$orgId,30);
-          if(count($upcoming)!==1)exit(1);
+          $upcomingIds=array_map(static fn(array $row):string=>(string)$row['public_id'],$upcoming);
+          if(!in_array('catering-ci-test',$upcomingIds,true)){fwrite(STDERR,'Expected fixture in upcoming catering results; got '.json_encode($upcomingIds)."\n");exit(1);}
+          echo "Catering knowledge projection and upcoming-event query verified.\n";
           PHP
