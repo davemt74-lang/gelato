@@ -180,22 +180,30 @@ BEGIN
   END IF;
 
   IF NEW.pipeline_stage IN ('contracted','deposit_paid','confirmed') THEN
-    INSERT IGNORE INTO restaurant_operation_tasks (organization_id,operation_id,task_key,category,title,due_at,priority,sort_order)
-      SELECT o.organization_id,o.id,'menu_lock','menu','Lock final menu',DATE_SUB(o.service_start_at,INTERVAL 7 DAY),'high',10 FROM restaurant_operations o WHERE o.organization_id=NEW.organization_id AND o.source_type='catering' AND o.source_public_id=NEW.public_id;
-    INSERT IGNORE INTO restaurant_operation_tasks (organization_id,operation_id,task_key,category,title,due_at,priority,sort_order)
-      SELECT o.organization_id,o.id,'ingredients','inventory','Confirm ingredient requirements',DATE_SUB(o.service_start_at,INTERVAL 5 DAY),'high',20 FROM restaurant_operations o WHERE o.organization_id=NEW.organization_id AND o.source_type='catering' AND o.source_public_id=NEW.public_id;
-    INSERT IGNORE INTO restaurant_operation_tasks (organization_id,operation_id,task_key,category,title,due_at,priority,sort_order)
-      SELECT o.organization_id,o.id,'prep_plan','prep','Finalize prep and production plan',DATE_SUB(o.service_start_at,INTERVAL 3 DAY),'high',30 FROM restaurant_operations o WHERE o.organization_id=NEW.organization_id AND o.source_type='catering' AND o.source_public_id=NEW.public_id;
-    INSERT IGNORE INTO restaurant_operation_tasks (organization_id,operation_id,task_key,category,title,due_at,priority,sort_order)
-      SELECT o.organization_id,o.id,'production','prep','Complete production',DATE_SUB(o.service_start_at,INTERVAL 1 DAY),'critical',40 FROM restaurant_operations o WHERE o.organization_id=NEW.organization_id AND o.source_type='catering' AND o.source_public_id=NEW.public_id;
-    INSERT IGNORE INTO restaurant_operation_tasks (organization_id,operation_id,task_key,category,title,due_at,priority,sort_order)
-      SELECT o.organization_id,o.id,'pack_load','logistics','Pack and load event order',DATE_SUB(o.service_start_at,INTERVAL 4 HOUR),'critical',50 FROM restaurant_operations o WHERE o.organization_id=NEW.organization_id AND o.source_type='catering' AND o.source_public_id=NEW.public_id;
-    INSERT IGNORE INTO restaurant_operation_tasks (organization_id,operation_id,task_key,category,title,due_at,priority,sort_order)
-      SELECT o.organization_id,o.id,'setup','service','Event setup',DATE_SUB(o.service_start_at,INTERVAL 1 HOUR),'critical',60 FROM restaurant_operations o WHERE o.organization_id=NEW.organization_id AND o.source_type='catering' AND o.source_public_id=NEW.public_id;
-    INSERT IGNORE INTO restaurant_operation_tasks (organization_id,operation_id,task_key,category,title,due_at,priority,sort_order)
-      SELECT o.organization_id,o.id,'service','service','Catering service',o.service_start_at,'critical',70 FROM restaurant_operations o WHERE o.organization_id=NEW.organization_id AND o.source_type='catering' AND o.source_public_id=NEW.public_id;
-    INSERT IGNORE INTO restaurant_operation_tasks (organization_id,operation_id,task_key,category,title,due_at,priority,sort_order)
-      SELECT o.organization_id,o.id,'breakdown','service','Breakdown and return',COALESCE(o.service_end_at,DATE_ADD(o.service_start_at,INTERVAL 3 HOUR)),'normal',80 FROM restaurant_operations o WHERE o.organization_id=NEW.organization_id AND o.source_type='catering' AND o.source_public_id=NEW.public_id;
+    INSERT INTO restaurant_operation_tasks (organization_id,operation_id,task_key,category,title,due_at,priority,sort_order)
+      SELECT o.organization_id,o.id,'menu_lock','menu','Lock final menu',DATE_SUB(o.service_start_at,INTERVAL 7 DAY),'high',10 FROM restaurant_operations o WHERE o.organization_id=NEW.organization_id AND o.source_type='catering' AND o.source_public_id=NEW.public_id
+      ON DUPLICATE KEY UPDATE due_at=VALUES(due_at),priority=VALUES(priority),sort_order=VALUES(sort_order),updated_at=NOW(6);
+    INSERT INTO restaurant_operation_tasks (organization_id,operation_id,task_key,category,title,due_at,priority,sort_order)
+      SELECT o.organization_id,o.id,'ingredients','inventory','Confirm ingredient requirements',DATE_SUB(o.service_start_at,INTERVAL 5 DAY),'high',20 FROM restaurant_operations o WHERE o.organization_id=NEW.organization_id AND o.source_type='catering' AND o.source_public_id=NEW.public_id
+      ON DUPLICATE KEY UPDATE due_at=VALUES(due_at),priority=VALUES(priority),sort_order=VALUES(sort_order),updated_at=NOW(6);
+    INSERT INTO restaurant_operation_tasks (organization_id,operation_id,task_key,category,title,due_at,priority,sort_order)
+      SELECT o.organization_id,o.id,'prep_plan','prep','Finalize prep and production plan',DATE_SUB(o.service_start_at,INTERVAL 3 DAY),'high',30 FROM restaurant_operations o WHERE o.organization_id=NEW.organization_id AND o.source_type='catering' AND o.source_public_id=NEW.public_id
+      ON DUPLICATE KEY UPDATE due_at=VALUES(due_at),priority=VALUES(priority),sort_order=VALUES(sort_order),updated_at=NOW(6);
+    INSERT INTO restaurant_operation_tasks (organization_id,operation_id,task_key,category,title,due_at,priority,sort_order)
+      SELECT o.organization_id,o.id,'production','prep','Complete production',DATE_SUB(o.service_start_at,INTERVAL 1 DAY),'critical',40 FROM restaurant_operations o WHERE o.organization_id=NEW.organization_id AND o.source_type='catering' AND o.source_public_id=NEW.public_id
+      ON DUPLICATE KEY UPDATE due_at=VALUES(due_at),priority=VALUES(priority),sort_order=VALUES(sort_order),updated_at=NOW(6);
+    INSERT INTO restaurant_operation_tasks (organization_id,operation_id,task_key,category,title,due_at,priority,sort_order)
+      SELECT o.organization_id,o.id,'pack_load','logistics','Pack and load event order',DATE_SUB(o.service_start_at,INTERVAL 4 HOUR),'critical',50 FROM restaurant_operations o WHERE o.organization_id=NEW.organization_id AND o.source_type='catering' AND o.source_public_id=NEW.public_id
+      ON DUPLICATE KEY UPDATE due_at=VALUES(due_at),priority=VALUES(priority),sort_order=VALUES(sort_order),updated_at=NOW(6);
+    INSERT INTO restaurant_operation_tasks (organization_id,operation_id,task_key,category,title,due_at,priority,sort_order)
+      SELECT o.organization_id,o.id,'setup','service','Event setup',DATE_SUB(o.service_start_at,INTERVAL 1 HOUR),'critical',60 FROM restaurant_operations o WHERE o.organization_id=NEW.organization_id AND o.source_type='catering' AND o.source_public_id=NEW.public_id
+      ON DUPLICATE KEY UPDATE due_at=VALUES(due_at),priority=VALUES(priority),sort_order=VALUES(sort_order),updated_at=NOW(6);
+    INSERT INTO restaurant_operation_tasks (organization_id,operation_id,task_key,category,title,due_at,priority,sort_order)
+      SELECT o.organization_id,o.id,'service','service','Catering service',o.service_start_at,'critical',70 FROM restaurant_operations o WHERE o.organization_id=NEW.organization_id AND o.source_type='catering' AND o.source_public_id=NEW.public_id
+      ON DUPLICATE KEY UPDATE due_at=VALUES(due_at),priority=VALUES(priority),sort_order=VALUES(sort_order),updated_at=NOW(6);
+    INSERT INTO restaurant_operation_tasks (organization_id,operation_id,task_key,category,title,due_at,priority,sort_order)
+      SELECT o.organization_id,o.id,'breakdown','service','Breakdown and return',COALESCE(o.service_end_at,DATE_ADD(o.service_start_at,INTERVAL 3 HOUR)),'normal',80 FROM restaurant_operations o WHERE o.organization_id=NEW.organization_id AND o.source_type='catering' AND o.source_public_id=NEW.public_id
+      ON DUPLICATE KEY UPDATE due_at=VALUES(due_at),priority=VALUES(priority),sort_order=VALUES(sort_order),updated_at=NOW(6);
   END IF;
 END//
 DELIMITER ;
