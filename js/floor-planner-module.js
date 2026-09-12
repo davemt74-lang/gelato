@@ -44,8 +44,9 @@
     document.head.appendChild(script);
   }
 
+  hydratePermissionCatalog();
+
   function install() {
-    hydratePermissionCatalog();
     installOperationsNav();
     loadScript('js/equipment-module.js', 'equipment-module');
     loadScript('js/restaurant-agent-bridge.js', 'restaurant-agent-bridge');
