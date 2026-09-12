@@ -7,9 +7,8 @@ $user=app_require_permission('wholesale_portal.view');$pdo=app_pdo();$organizati
 
 if($_SERVER['REQUEST_METHOD']==='GET'){
     $context=wholesale_portal_customer_safe_context($pdo,$organizationId,$accountId);
-    $leadStage=null;$nextFollowup=null;
-    if(!empty($account['wholesale_lead_id'])){$lead=$pdo->prepare('SELECT pipeline_stage,next_followup_at FROM wholesale_leads WHERE id=? AND organization_id=? AND archived_at IS NULL LIMIT 1');$lead->execute([(int)$account['wholesale_lead_id'],$organizationId]);$row=$lead->fetch();if($row){$leadStage=$row['pipeline_stage'];$nextFollowup=$row['next_followup_at'];}}
-    $context['portal']=['user'=>['displayName'=>$user['display_name'],'email'=>$user['email'],'accountRole'=>$account['account_role']],'relationship'=>['stage'=>$leadStage,'nextFollowupAt'=>$nextFollowup]];
+    if(isset($context['account'])) unset($context['account']['id'],$context['account']['organization_id']);
+    $context['portal']=['user'=>['displayName'=>$user['display_name'],'email'=>$user['email'],'accountRole'=>$account['account_role']]];
     app_json_response(['ok'=>true]+$context);
 }
 if($_SERVER['REQUEST_METHOD']!=='POST'){header('Allow: GET, POST');app_json_response(['ok'=>false,'message'=>'Method not allowed.'],405);}
