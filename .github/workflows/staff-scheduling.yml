@@ -76,6 +76,9 @@ jobs:
           grep -q "restaurant_tasks" includes/scheduling-core.php
           grep -q "Wholesale Customer" includes/scheduling-core.php
           grep -q "wholesale_customer" includes/scheduling-core.php
+          grep -q "sched_employee_week_visible" api/scheduling.php
+          grep -q "hourly_labor_cost.*scheduling_notes" api/scheduling.php
+          grep -q "Shift requests are available after the schedule is published" api/scheduling.php
           grep -q "schedule.shift_create" api/scheduling-agent.php
           grep -q "schedule.coverage" api/scheduling-agent.php
           grep -q "schedule.workload" api/scheduling-agent.php
