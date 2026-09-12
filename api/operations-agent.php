@@ -19,8 +19,11 @@ function ops_agent_extract_assignees(PDO $pdo,int $organizationId,string &$text)
 {
     if(!preg_match('/\b(?:assign(?:ed)?\s+(?:this\s+|them\s+|it\s+)?to|tag)\s+(.+)$/iu',$text,$m))return [];
     $clause=trim($m[1]);$ids=[];
-    foreach(ops_agent_users($pdo,$organizationId) as $row){$names=array_unique(array_filter([(string)$row['display_name'],(string)$row['first_name'],trim((string)$row['first_name'].' '.(string)$row['last_name'])]));foreach($names as $name){if($name!==''&&preg_match('/\b'.preg_quote($name,'/').'\b/iu',$clause)){$ids[]=(int)$row['id'];break;}}}
-    if($ids)$text=trim(substr($text,0,(int)$m[0][1]));
+    foreach(ops_agent_users($pdo,$organizationId) as $row){
+        $names=array_unique(array_filter([(string)$row['display_name'],(string)$row['first_name'],trim((string)$row['first_name'].' '.(string)$row['last_name'])]));
+        foreach($names as $name){if($name!==''&&preg_match('/\b'.preg_quote($name,'/').'\b/iu',$clause)){$ids[]=(int)$row['id'];break;}}
+    }
+    if($ids)$text=trim((string)(preg_replace('/\s*\b(?:assign(?:ed)?\s+(?:this\s+|them\s+|it\s+)?to|tag)\s+.+$/iu','',$text)??$text));
     return array_values(array_unique($ids));
 }
 function ops_agent_task_create(PDO $pdo,int $organizationId,int $userId,string $title,string $category,string $transcript,array $assigneeIds=[]):array
