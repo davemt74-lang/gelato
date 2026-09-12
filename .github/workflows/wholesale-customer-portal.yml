@@ -88,6 +88,13 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq mariadb-client
           mariadb -h 127.0.0.1 -uroot -proot gelato_wholesale_portal_ci < database/install.sql
+          mariadb -h 127.0.0.1 -uroot -proot gelato_wholesale_portal_ci <<'SQL'
+          INSERT INTO organizations (name,legal_name,status,timezone) VALUES ('CI Restaurant','CI Restaurant','active','America/Phoenix');
+          SET @org_id=LAST_INSERT_ID();
+          INSERT INTO users (email,password_hash,first_name,last_name,display_name,status,email_verified_at) VALUES ('owner@example.test','ci-not-a-login-hash','CI','Owner','CI Owner','active',NOW(6));
+          SET @user_id=LAST_INSERT_ID();
+          INSERT INTO organization_memberships (organization_id,user_id,job_title,status) VALUES (@org_id,@user_id,'Owner','active');
+          SQL
           cat > config.php <<'PHP'
           <?php
           return [
