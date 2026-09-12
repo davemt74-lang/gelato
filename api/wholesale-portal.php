@@ -40,11 +40,21 @@ if($action==='request'){
 
 if($action==='accept_quote'){
     if(!app_has_permission('wholesale_portal.quotes',$user))app_json_response(['ok'=>false,'message'=>'You do not have permission to accept quotes.'],403);
-    $quoteId=trim((string)($input['quoteId']??''));$statement=$pdo->prepare("SELECT * FROM wholesale_quotes WHERE organization_id=? AND wholesale_account_id=? AND public_id=? AND status='sent' LIMIT 1");$statement->execute([$organizationId,$accountId,$quoteId]);$quote=$statement->fetch();if(!$quote)app_json_response(['ok'=>false,'message'=>'This quote is unavailable or is no longer awaiting acceptance.'],409);
-    if($quote['valid_until']&&strtotime((string)$quote['valid_until'])<strtotime(date('Y-m-d')))app_json_response(['ok'=>false,'message'=>'This quote has expired. Contact the wholesale team for an updated quote.'],409);
+    $quoteId=trim((string)($input['quoteId']??''));if($quoteId==='')app_json_response(['ok'=>false,'message'=>'Quote ID is required.'],422);
     $pdo->beginTransaction();
-    try{$pdo->prepare("UPDATE wholesale_quotes SET status='accepted',accepted_at=NOW(6),updated_by=?,updated_at=NOW(6) WHERE id=? AND organization_id=?")->execute([(int)$user['id'],(int)$quote['id'],$organizationId]);$orderPublic=wholesale_portal_public_id('worder');$orderNumber='W-'.date('ymd').'-'.strtoupper(substr(bin2hex(random_bytes(4)),0,6));$insert=$pdo->prepare("INSERT INTO wholesale_orders (organization_id,wholesale_account_id,source_quote_id,public_id,order_number,status,items_json,subtotal,delivery_fee,tax_total,total,fulfillment_type,customer_notes,created_by,updated_by) VALUES (?,?,?,?,?,'requested',?,?,?,?,?,?,?,?,?)");$insert->execute([$organizationId,$accountId,(int)$quote['id'],$orderPublic,$orderNumber,$quote['items_json'],$quote['subtotal'],$quote['delivery_fee'],$quote['tax_total'],$quote['total'],$account['preferred_fulfillment'],'Created automatically when customer accepted '.$quote['quote_number'].'.',(int)$user['id'],(int)$user['id']]);$pdo->commit();}
-    catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
+    try{
+        $statement=$pdo->prepare("SELECT * FROM wholesale_quotes WHERE organization_id=? AND wholesale_account_id=? AND public_id=? LIMIT 1 FOR UPDATE");
+        $statement->execute([$organizationId,$accountId,$quoteId]);$quote=$statement->fetch();
+        if(!$quote||$quote['status']!=='sent'){if($pdo->inTransaction())$pdo->rollBack();app_json_response(['ok'=>false,'message'=>'This quote is unavailable or is no longer awaiting acceptance.'],409);}
+        if($quote['valid_until']&&strtotime((string)$quote['valid_until'])<strtotime(date('Y-m-d'))){if($pdo->inTransaction())$pdo->rollBack();app_json_response(['ok'=>false,'message'=>'This quote has expired. Contact the wholesale team for an updated quote.'],409);}
+        $existing=$pdo->prepare('SELECT order_number FROM wholesale_orders WHERE source_quote_id=? LIMIT 1 FOR UPDATE');$existing->execute([(int)$quote['id']]);$existingOrder=$existing->fetchColumn();
+        if($existingOrder){if($pdo->inTransaction())$pdo->rollBack();app_json_response(['ok'=>false,'message'=>'This quote has already created order '.$existingOrder.'.'],409);}
+        $pdo->prepare("UPDATE wholesale_quotes SET status='accepted',accepted_at=NOW(6),updated_by=?,updated_at=NOW(6) WHERE id=? AND organization_id=? AND status='sent'")->execute([(int)$user['id'],(int)$quote['id'],$organizationId]);
+        $orderPublic=wholesale_portal_public_id('worder');$orderNumber='W-'.date('ymd').'-'.strtoupper(substr(bin2hex(random_bytes(4)),0,6));
+        $insert=$pdo->prepare("INSERT INTO wholesale_orders (organization_id,wholesale_account_id,source_quote_id,public_id,order_number,status,items_json,subtotal,delivery_fee,tax_total,total,fulfillment_type,customer_notes,created_by,updated_by) VALUES (?,?,?,?,?,'requested',?,?,?,?,?,?,?,?,?)");
+        $insert->execute([$organizationId,$accountId,(int)$quote['id'],$orderPublic,$orderNumber,$quote['items_json'],$quote['subtotal'],$quote['delivery_fee'],$quote['tax_total'],$quote['total'],$account['preferred_fulfillment'],'Created automatically when customer accepted '.$quote['quote_number'].'.',(int)$user['id'],(int)$user['id']]);
+        $pdo->commit();
+    }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
     if(!empty($account['wholesale_lead_id'])){$activity=$pdo->prepare("INSERT INTO wholesale_lead_activities (organization_id,wholesale_lead_id,activity_type,summary,details,created_by) VALUES (?,?,'quote','Customer accepted wholesale quote',?,?)");$activity->execute([$organizationId,(int)$account['wholesale_lead_id'],$quote['quote_number'].' accepted; order '.$orderNumber.' created.',(int)$user['id']]);}
     wholesale_portal_sync_account_knowledge($pdo,$organizationId,$accountId,(int)$user['id']);app_audit($pdo,$organizationId,(int)$user['id'],'wholesale.quote_accepted','wholesale_quote',$quoteId,null,['orderNumber'=>$orderNumber]);app_json_response(['ok'=>true,'message'=>'Quote accepted. Your order request has been created.','orderNumber'=>$orderNumber]);
 }
