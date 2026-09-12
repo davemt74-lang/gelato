@@ -1,0 +1,57 @@
+name: Canonical Planner UI
+
+on:
+  pull_request:
+    paths:
+      - 'floor-planner-ops.php'
+      - 'js/floor-planner-ops.js'
+      - 'api/equipment-placement.php'
+      - 'api/floor-plans.php'
+      - '.github/workflows/canonical-planner-ui.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'floor-planner-ops.php'
+      - 'js/floor-planner-ops.js'
+      - 'api/equipment-placement.php'
+      - 'api/floor-plans.php'
+      - '.github/workflows/canonical-planner-ui.yml'
+
+jobs:
+  planner-ui-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+      - name: Syntax
+        run: |
+          php -l floor-planner-ops.php
+          node --check js/floor-planner-ops.js
+      - name: Preserve planning analytics
+        run: |
+          grep -q 'id="diningSeats"' floor-planner-ops.php
+          grep -q 'id="barSeats"' floor-planner-ops.php
+          grep -q 'id="patioSeats"' floor-planner-ops.php
+          grep -q 'id="dailyRevenue"' floor-planner-ops.php
+          grep -q 'revenue:revenueSettings()' js/floor-planner-ops.js
+          grep -q 'loadRevenue(plan.data' js/floor-planner-ops.js
+          grep -q 'tableSpacing' js/floor-planner-ops.js
+          grep -q 'aisleWidth' js/floor-planner-ops.js
+      - name: Legacy layout compatibility
+        run: |
+          grep -q 'item.xPx ?? item.x' js/floor-planner-ops.js
+          grep -q 'item.wPx ?? item.w' js/floor-planner-ops.js
+          grep -q 'item.r ?? item.rot' js/floor-planner-ops.js
+          grep -q 'item.seatZone ?? item.zone' js/floor-planner-ops.js
+          grep -q 'legacy equipment block' js/floor-planner-ops.js
+      - name: Canonical equipment interaction
+        run: |
+          grep -q 'application/x-equipment-asset' js/floor-planner-ops.js
+          grep -q 'api/equipment-placement.php' js/floor-planner-ops.js
+          grep -q "action:'resize'" js/floor-planner-ops.js
+          grep -q "action:'unplace'" js/floor-planner-ops.js
+          grep -q "action:'lock'" js/floor-planner-ops.js
+          grep -q 'equipment-detail.php' js/floor-planner-ops.js
+          grep -q 'api/agent-brain.php' js/floor-planner-ops.js
