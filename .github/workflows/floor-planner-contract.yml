@@ -4,8 +4,11 @@ on:
   pull_request:
     paths:
       - 'floor-planner.php'
+      - 'floor-planner-ops.php'
       - 'api/floor-plans.php'
+      - 'api/equipment-placement.php'
       - 'js/floor-planner-module.js'
+      - 'js/floor-planner-ops.js'
       - 'database/20260912_floor_planner.sql'
       - 'index.php'
       - '.github/workflows/floor-planner-contract.yml'
@@ -13,8 +16,11 @@ on:
     branches: [main]
     paths:
       - 'floor-planner.php'
+      - 'floor-planner-ops.php'
       - 'api/floor-plans.php'
+      - 'api/equipment-placement.php'
       - 'js/floor-planner-module.js'
+      - 'js/floor-planner-ops.js'
       - 'database/20260912_floor_planner.sql'
       - 'index.php'
       - '.github/workflows/floor-planner-contract.yml'
@@ -30,10 +36,14 @@ jobs:
       - name: PHP syntax
         run: |
           php -l floor-planner.php
+          php -l floor-planner-ops.php
           php -l api/floor-plans.php
+          php -l api/equipment-placement.php
           php -l index.php
       - name: JavaScript syntax
-        run: node --check js/floor-planner-module.js
+        run: |
+          node --check js/floor-planner-module.js
+          node --check js/floor-planner-ops.js
       - name: Permission and persistence contract
         run: |
           grep -q "floorplans.view" database/20260912_floor_planner.sql
@@ -43,5 +53,7 @@ jobs:
           grep -q "app_has_permission('floorplans.edit'" api/floor-plans.php
           grep -q "app_verify_request_csrf" api/floor-plans.php
           grep -q "organization_id = ?" api/floor-plans.php
-          grep -q "api/floor-plans.php" floor-planner.php
+          grep -q "floor-planner-ops.php" floor-planner.php
+          grep -q "api/floor-plans.php" js/floor-planner-ops.js
+          grep -q "api/equipment-placement.php" js/floor-planner-ops.js
           grep -q "floor-planner-module.js" index.php
