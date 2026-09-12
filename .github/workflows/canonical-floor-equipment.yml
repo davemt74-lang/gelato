@@ -11,6 +11,7 @@ on:
       - 'api/agent-brain.php'
       - 'includes/floor-equipment-brain.php'
       - 'js/floor-planner-module.js'
+      - 'js/floor-planner-ops.js'
       - 'js/equipment-module.js'
       - 'database/20260912_canonical_floor_equipment.sql'
       - 'README.md'
@@ -26,6 +27,7 @@ on:
       - 'api/agent-brain.php'
       - 'includes/floor-equipment-brain.php'
       - 'js/floor-planner-module.js'
+      - 'js/floor-planner-ops.js'
       - 'js/equipment-module.js'
       - 'database/20260912_canonical_floor_equipment.sql'
       - 'README.md'
@@ -66,21 +68,18 @@ jobs:
       - name: JavaScript syntax
         run: |
           node --check js/floor-planner-module.js
+          node --check js/floor-planner-ops.js
           node --check js/equipment-module.js
           python3 - <<'PY'
           import pathlib, re
-          for source, target in [
-              ('floor-planner-ops.php', '/tmp/floor-planner-ops.js'),
-              ('equipment-detail.php', '/tmp/equipment-detail.js'),
-          ]:
-              text = pathlib.Path(source).read_text()
-              blocks = re.findall(r'<script>(.*?)</script>', text, flags=re.S)
-              if not blocks:
-                  raise SystemExit(f'No inline script found in {source}')
-              script = re.sub(r'<\?=.*?\?>', 'true', blocks[-1], flags=re.S)
-              pathlib.Path(target).write_text(script)
+          source='equipment-detail.php'
+          text=pathlib.Path(source).read_text()
+          blocks=re.findall(r'<script>(.*?)</script>', text, flags=re.S)
+          if not blocks:
+              raise SystemExit(f'No inline script found in {source}')
+          script=re.sub(r'<\?=.*?\?>', 'true', blocks[-1], flags=re.S)
+          pathlib.Path('/tmp/equipment-detail.js').write_text(script)
           PY
-          node --check /tmp/floor-planner-ops.js
           node --check /tmp/equipment-detail.js
 
       - name: Canonical model contract
@@ -90,9 +89,9 @@ jobs:
           grep -q "trg_equipment_assets_canonical_update" database/20260912_canonical_floor_equipment.sql
           grep -q "trg_floor_plans_canonical_archive" database/20260912_canonical_floor_equipment.sql
           grep -q "@gelato_allow_floor_placement" database/20260912_canonical_floor_equipment.sql
-          grep -q "api/equipment-placement.php" floor-planner-ops.php
-          grep -q "canonicalEquipment:true" floor-planner-ops.php
-          grep -q "equipment-detail.php" floor-planner-ops.php
+          grep -q "api/equipment-placement.php" js/floor-planner-ops.js
+          grep -q "canonicalEquipment:true" js/floor-planner-ops.js
+          grep -q "equipment-detail.php" js/floor-planner-ops.js
           grep -q "floor-planner-ops.php" floor-planner.php
           grep -q "floor-planner-ops.php" js/floor-planner-module.js
           grep -q "floor_plan_equipment_bounds_conflicts" api/floor-plans.php
