@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require __DIR__ . '/../includes/bootstrap.php';
 require __DIR__ . '/../includes/restaurant-brain.php';
+require __DIR__ . '/../includes/catering-brain.php';
 
 $user = app_require_permission($_SERVER['REQUEST_METHOD'] === 'GET' ? 'catering.view' : 'catering.manage');
 $pdo = app_pdo();
