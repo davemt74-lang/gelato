@@ -1,0 +1,121 @@
+name: One-Click Upgrade Contract
+
+on:
+  pull_request:
+    paths:
+      - 'upgrade.php'
+      - 'includes/UpgradeService.php'
+      - 'database/*.sql'
+      - '.github/workflows/upgrade-contract.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'upgrade.php'
+      - 'includes/UpgradeService.php'
+      - 'database/*.sql'
+      - '.github/workflows/upgrade-contract.yml'
+
+jobs:
+  upgrade-contract:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_upgrade_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring
+
+      - name: PHP syntax
+        run: |
+          php -l upgrade.php
+          php -l includes/UpgradeService.php
+
+      - name: Upgrade security and behavior contract
+        run: |
+          grep -q "is_owner_role" upgrade.php
+          grep -q "app_verify_csrf" upgrade.php
+          grep -q "Run Gelato Upgrade" upgrade.php
+          grep -q "schema_migrations" includes/UpgradeService.php
+          grep -q "upgrade_runs" includes/UpgradeService.php
+          grep -q "GET_LOCK" includes/UpgradeService.php
+          grep -q "checksum_changed" includes/UpgradeService.php
+          grep -q "DELIMITER" includes/UpgradeService.php
+          grep -q "_demo_" includes/UpgradeService.php
+          grep -q "20260912_canonical_floor_equipment" includes/UpgradeService.php
+
+      - name: Install MariaDB client and base schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_upgrade_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app' => ['name'=>'Gelato Upgrade CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database' => ['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_upgrade_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security' => ['session_name'=>'gelato_upgrade_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+
+      - name: Run one-click upgrader from base install
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $service = new UpgradeService(app_pdo(), __DIR__);
+          $service->ensureTrackingTables();
+          $service->bootstrapLegacyHistory(null);
+          $results = $service->applyPending(null);
+          echo 'Applied: ' . count($results) . PHP_EOL;
+          $pending = $service->pendingMigrations();
+          if ($pending) {
+              fwrite(STDERR, 'Pending migrations remain: ' . implode(', ', array_column($pending, 'filename')) . PHP_EOL);
+              exit(1);
+          }
+          foreach ($service->migrationStatus() as $row) {
+              if (!empty($row['checksum_changed'])) {
+                  fwrite(STDERR, 'Checksum drift: ' . $row['filename'] . PHP_EOL);
+                  exit(1);
+              }
+          }
+          PHP
+
+      - name: Verify upgraded schema
+        run: |
+          expected=$(find database -maxdepth 1 -type f -regextype posix-extended -regex '.*/[0-9]{8}_.*\.sql' ! -iname '*_demo_*' ! -iname '*_sample_*' ! -iname '*_seed_*' | wc -l | tr -d ' ')
+          tracked=$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_upgrade_ci -e "SELECT COUNT(*) FROM schema_migrations")
+          test "$tracked" = "$expected"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_upgrade_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_upgrade_ci' AND table_name IN ('floor_plans','equipment_assets','equipment_service_contacts','equipment_service_events','agent_knowledge_records');")" = "5"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_upgrade_ci -e "SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_schema='gelato_upgrade_ci' AND trigger_name IN ('trg_equipment_assets_canonical_insert','trg_equipment_assets_canonical_update','trg_floor_plans_canonical_archive');")" = "3"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_upgrade_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('floorplans.view','floorplans.edit','equipment.view','equipment.edit','equipment.service','equipment.contacts','agent.equipment_skills');")" = "7"
+
+      - name: Verify second run is idempotent
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $service = new UpgradeService(app_pdo(), __DIR__);
+          $results = $service->applyPending(null);
+          if (count($results) !== 0) {
+              fwrite(STDERR, 'Second run unexpectedly applied migrations.' . PHP_EOL);
+              exit(1);
+          }
+          echo "Second run: database already current.\n";
+          PHP
