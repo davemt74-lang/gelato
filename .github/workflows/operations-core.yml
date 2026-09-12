@@ -8,11 +8,15 @@ on:
       - 'api/operations-agent.php'
       - 'api/task-proof.php'
       - 'api/task-proof-view.php'
+      - 'api/wholesale-accounts.php'
+      - 'api/wholesale-portal.php'
       - 'includes/operations-core.php'
+      - 'includes/operations-wholesale.php'
       - 'js/operations-core.js'
       - 'js/restaurant-agent-bridge.js'
       - 'database/20260913_zzz_operations_core.sql'
       - 'data/ingredient-catalog.json'
+      - 'tests/operations-wholesale-contract.php'
       - '.github/workflows/operations-core.yml'
   push:
     branches: [main]
@@ -22,11 +26,15 @@ on:
       - 'api/operations-agent.php'
       - 'api/task-proof.php'
       - 'api/task-proof-view.php'
+      - 'api/wholesale-accounts.php'
+      - 'api/wholesale-portal.php'
       - 'includes/operations-core.php'
+      - 'includes/operations-wholesale.php'
       - 'js/operations-core.js'
       - 'js/restaurant-agent-bridge.js'
       - 'database/20260913_zzz_operations_core.sql'
       - 'data/ingredient-catalog.json'
+      - 'tests/operations-wholesale-contract.php'
       - '.github/workflows/operations-core.yml'
 
 jobs:
@@ -59,7 +67,11 @@ jobs:
           php -l api/operations-agent.php
           php -l api/task-proof.php
           php -l api/task-proof-view.php
+          php -l api/wholesale-accounts.php
+          php -l api/wholesale-portal.php
           php -l includes/operations-core.php
+          php -l includes/operations-wholesale.php
+          php -l tests/operations-wholesale-contract.php
           node --check js/operations-core.js
           node --check js/restaurant-agent-bridge.js
 
@@ -73,9 +85,16 @@ jobs:
           grep -q "operations_sync_inventory_sources" includes/operations-core.php
           grep -q "ingredient-catalog.json" includes/operations-core.php
           grep -q "operations_sync_catering_tasks" includes/operations-core.php
+          grep -q "operations_sync_wholesale_tasks" includes/operations-wholesale.php
+          grep -q "wholesale_order_item" includes/operations-wholesale.php
+          grep -q "wholesale_order_fulfillment" includes/operations-wholesale.php
+          grep -q "operations_wholesale_task_status_changed" api/operations.php
+          grep -q "operations_sync_wholesale_tasks" api/wholesale-accounts.php
+          grep -q "operations_sync_wholesale_tasks" api/wholesale-portal.php
           grep -q "original_transcript" database/20260913_zzz_operations_core.sql
           grep -q "SpeechRecognition" js/operations-core.js
           grep -q "api/operations-agent.php" js/restaurant-agent-bridge.js
+          grep -q "wholesale\\s+" js/restaurant-agent-bridge.js
           grep -q "tasks.prep_add" api/operations-agent.php
           grep -q "tasks.category_create" api/operations-agent.php
           grep -q "local_private" api/task-proof.php
@@ -83,6 +102,8 @@ jobs:
           grep -q "canTasksSelf" operations.php
           grep -q "canTasksProof" operations.php
           grep -q "task-proof-view.php" js/operations-core.js
+          ! grep -q "Unit price" includes/operations-wholesale.php
+          ! grep -q "Private margin" includes/operations-wholesale.php
 
       - name: Install and upgrade schema
         run: |
@@ -158,6 +179,9 @@ jobs:
           $sourceStatus=$pdo->prepare('SELECT status FROM restaurant_operation_tasks WHERE id=? AND organization_id=?');$sourceStatus->execute([(int)$m[1],$org]);if($sourceStatus->fetchColumn()!=='done')exit(13);
           echo "inventory={$count} menuRefs={$sync['menuReferences']} recipeRefs={$sync['recipeReferences']} cateringTasks={$mirrored}\n";
           PHP
+
+      - name: Verify wholesale order Operations lifecycle
+        run: php tests/operations-wholesale-contract.php
 
       - name: Verify upgrader stays idempotent
         run: |
