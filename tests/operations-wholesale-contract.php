@@ -33,6 +33,7 @@ if(count($itemTasks)!==2||$itemTasks[0]['category_slug']!=='wholesale'||!str_con
 if(str_contains((string)$itemTasks[0]['description'],'$48')||str_contains((string)$itemTasks[0]['description'],'Private margin'))exit(5);
 $fulfillment=$pdo->query("SELECT t.*,c.slug category_slug FROM restaurant_tasks t LEFT JOIN task_categories c ON c.id=t.category_id WHERE t.organization_id={$org} AND t.source_type='wholesale_order_fulfillment' LIMIT 1")->fetch();
 if(!$fulfillment||$fulfillment['category_slug']!=='delivery'||$fulfillment['status']!=='queued')exit(6);
+$guarded=false;try{operations_wholesale_validate_task_transition($pdo,$org,$fulfillment,'in_progress');}catch(InvalidArgumentException){$guarded=true;}if(!$guarded)exit(14);
 
 $first=operations_task_set_status($pdo,$org,$itemTasks[0]['public_id'],'in_progress',$user);
 operations_wholesale_task_status_changed($pdo,$org,$first,'in_progress',$user);
@@ -50,6 +51,7 @@ $status=$pdo->query("SELECT status FROM wholesale_orders WHERE id={$orderId}")->
 if($status!=='ready')exit(9);
 
 $fulfillment=operations_task_by_public_id($pdo,$org,$fulfillment['public_id']);
+operations_wholesale_validate_task_transition($pdo,$org,$fulfillment,'in_progress');
 $fulfillment=operations_task_set_status($pdo,$org,$fulfillment['public_id'],'in_progress',$user);
 operations_wholesale_task_status_changed($pdo,$org,$fulfillment,'in_progress',$user);
 $status=$pdo->query("SELECT status FROM wholesale_orders WHERE id={$orderId}")->fetchColumn();
@@ -64,5 +66,6 @@ $after=(int)$pdo->query("SELECT COUNT(*) FROM restaurant_tasks WHERE organizatio
 if($after!==3)exit(12);
 $verified=operations_task_by_public_id($pdo,$org,$itemTasks[0]['public_id']);
 if(!in_array((string)$verified['status'],['completed','verified'],true))exit(13);
+$terminalGuard=false;try{operations_wholesale_validate_task_transition($pdo,$org,$verified,'in_progress');}catch(InvalidArgumentException){$terminalGuard=true;}if(!$terminalGuard)exit(15);
 
-echo "wholesale_tasks={$after} order_status={$row['status']} delivered_at={$row['delivered_at']}\n";
+echo "wholesale_tasks={$after} order_status={$row['status']} delivered_at={$row['delivered_at']} guarded=1\n";
