@@ -1,0 +1,144 @@
+name: Canonical Floor Equipment
+
+on:
+  pull_request:
+    paths:
+      - 'floor-planner.php'
+      - 'floor-planner-ops.php'
+      - 'equipment-detail.php'
+      - 'api/equipment-placement.php'
+      - 'api/agent-brain.php'
+      - 'includes/floor-equipment-brain.php'
+      - 'js/floor-planner-module.js'
+      - 'js/equipment-module.js'
+      - 'database/20260912_canonical_floor_equipment.sql'
+      - 'README.md'
+      - '.github/workflows/canonical-floor-equipment.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'floor-planner.php'
+      - 'floor-planner-ops.php'
+      - 'equipment-detail.php'
+      - 'api/equipment-placement.php'
+      - 'api/agent-brain.php'
+      - 'includes/floor-equipment-brain.php'
+      - 'js/floor-planner-module.js'
+      - 'js/equipment-module.js'
+      - 'database/20260912_canonical_floor_equipment.sql'
+      - 'README.md'
+      - '.github/workflows/canonical-floor-equipment.yml'
+
+jobs:
+  canonical-floor-equipment:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+
+      - name: PHP syntax
+        run: |
+          php -l floor-planner.php
+          php -l floor-planner-ops.php
+          php -l equipment-detail.php
+          php -l api/equipment-placement.php
+          php -l api/agent-brain.php
+          php -l includes/floor-equipment-brain.php
+
+      - name: JavaScript syntax
+        run: |
+          node --check js/floor-planner-module.js
+          node --check js/equipment-module.js
+          python3 - <<'PY'
+          import pathlib, re
+          for source, target in [
+              ('floor-planner-ops.php', '/tmp/floor-planner-ops.js'),
+              ('equipment-detail.php', '/tmp/equipment-detail.js'),
+          ]:
+              text = pathlib.Path(source).read_text()
+              blocks = re.findall(r'<script>(.*?)</script>', text, flags=re.S)
+              if not blocks:
+                  raise SystemExit(f'No inline script found in {source}')
+              script = re.sub(r'<\?=.*?\?>', 'true', blocks[-1], flags=re.S)
+              pathlib.Path(target).write_text(script)
+          PY
+          node --check /tmp/floor-planner-ops.js
+          node --check /tmp/equipment-detail.js
+
+      - name: Canonical model contract
+        run: |
+          grep -q "floor_plan_x_ft" database/20260912_canonical_floor_equipment.sql
+          grep -q "floor_plan_rotation_deg" database/20260912_canonical_floor_equipment.sql
+          grep -q "trg_equipment_assets_canonical_update" database/20260912_canonical_floor_equipment.sql
+          grep -q "@gelato_allow_floor_placement" database/20260912_canonical_floor_equipment.sql
+          grep -q "api/equipment-placement.php" floor-planner-ops.php
+          grep -q "canonicalEquipment:true" floor-planner-ops.php
+          grep -q "equipment-detail.php" floor-planner-ops.php
+          grep -q "floor-planner-ops.php" floor-planner.php
+          grep -q "floor-planner-ops.php" js/floor-planner-module.js
+
+      - name: Permission and security contract
+        run: |
+          grep -q "placement_require(\$user, 'floorplans.view')" api/equipment-placement.php
+          grep -q "placement_require(\$user, 'floorplans.edit')" api/equipment-placement.php
+          grep -q "placement_require(\$user, 'equipment.view')" api/equipment-placement.php
+          grep -q "placement_require(\$user, 'equipment.edit')" api/equipment-placement.php
+          grep -q "app_verify_request_csrf" api/equipment-placement.php
+          grep -q "organization_id" api/equipment-placement.php
+          grep -q "placement_write_guard" api/equipment-placement.php
+          grep -q "equipment_brain_sync_asset" api/equipment-placement.php
+          grep -q "floor_equipment_brain_sync_placement" api/equipment-placement.php
+
+      - name: Agent floor-plan skill contract
+        run: |
+          grep -q "equipment.floor_plan" api/agent-brain.php
+          grep -q "brain_floor_plan_answer" api/agent-brain.php
+          grep -q "floor_equipment_plan_assets" api/agent-brain.php
+          grep -q "source_type, source_public_id" includes/floor-equipment-brain.php
+          grep -q "floor_plan_placement" includes/floor-equipment-brain.php
+          grep -q "floor plan|layout" js/equipment-module.js
+
+      - name: Install canonical migrations in MariaDB
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_ci < database/install.sql
+          mariadb -h 127.0.0.1 -uroot -proot gelato_ci < database/20260912_floor_planner.sql
+          mariadb -h 127.0.0.1 -uroot -proot gelato_ci < database/20260912_equipment_catalog_brain.sql
+          mariadb -h 127.0.0.1 -uroot -proot gelato_ci < database/20260912_canonical_floor_equipment.sql
+
+      - name: Verify placement schema and database guard
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_ci' AND table_name='equipment_assets' AND column_name IN ('floor_plan_x_ft','floor_plan_y_ft','floor_plan_rotation_deg','floor_plan_z_index','floor_plan_locked','floor_plan_placed_at');")" = "6"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_ci -e "SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_schema='gelato_ci' AND trigger_name IN ('trg_equipment_assets_canonical_insert','trg_equipment_assets_canonical_update');")" = "2"
+          mariadb -N -h 127.0.0.1 -uroot -proot gelato_ci <<'SQL'
+          SET FOREIGN_KEY_CHECKS=0;
+          INSERT INTO equipment_assets (organization_id, public_id, name, floor_plan_public_id, floor_plan_component_id, floor_plan_x_ft, floor_plan_y_ft)
+          VALUES (999999, 'ci-canonical-asset', 'CI Canonical Oven', 'should-be-blocked', 'fake-component', 12.5, 8.25);
+          SELECT IF(floor_plan_public_id IS NULL AND floor_plan_x_ft IS NULL, 'insert_guard_ok', 'insert_guard_failed')
+          FROM equipment_assets WHERE public_id='ci-canonical-asset';
+          SET @gelato_allow_floor_placement=1;
+          UPDATE equipment_assets SET floor_plan_public_id='plan-ci', floor_plan_component_id='asset:ci-canonical-asset', floor_plan_x_ft=12.5, floor_plan_y_ft=8.25, floor_plan_rotation_deg=90 WHERE public_id='ci-canonical-asset';
+          SET @gelato_allow_floor_placement=NULL;
+          UPDATE equipment_assets SET floor_plan_public_id='blocked-change', floor_plan_x_ft=1 WHERE public_id='ci-canonical-asset';
+          SELECT IF(floor_plan_public_id='plan-ci' AND floor_plan_x_ft=12.500 AND floor_plan_y_ft=8.250 AND floor_plan_rotation_deg=90.00, 'update_guard_ok', 'update_guard_failed')
+          FROM equipment_assets WHERE public_id='ci-canonical-asset';
+          DELETE FROM equipment_assets WHERE public_id='ci-canonical-asset';
+          SET FOREIGN_KEY_CHECKS=1;
+          SQL
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_ci -e "SET FOREIGN_KEY_CHECKS=0; INSERT INTO equipment_assets (organization_id, public_id, name, floor_plan_public_id, floor_plan_x_ft) VALUES (999999, 'ci-guard-check', 'Guard Check', 'blocked', 5); SELECT IF(floor_plan_public_id IS NULL AND floor_plan_x_ft IS NULL, 'ok', 'bad') FROM equipment_assets WHERE public_id='ci-guard-check'; DELETE FROM equipment_assets WHERE public_id='ci-guard-check'; SET FOREIGN_KEY_CHECKS=1;" | tail -n 1)" = "ok"
