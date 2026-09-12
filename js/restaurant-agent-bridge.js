@@ -3,13 +3,15 @@
   if (!window.RESTAURANT_SERVER_SESSION) return;
   const Auth = window.RestaurantAuth;
   if (!Auth) return;
-  const restaurantIntent = /\b(wholesale|buyer|lead|prospect|foodservice|sample|quote|private label|pipeline|recipe|formula|ingredient|yield|online recipe|recipe image|recipe source|equipment|oven|mixer|freezer|cooler|dish machine|maintenance|repair|warranty|service company|floor\s*plan|layout|located|placement|inventory|stock|par|reorder|shortage|task|tasks|prep|opening|closing|cleaning|assignment|assigned|overdue|task category|fulfillment|delivery)\b/i;
+  const restaurantIntent = /\b(wholesale|buyer|lead|prospect|foodservice|sample|quote|private label|pipeline|recipe|formula|ingredient|yield|online recipe|recipe image|recipe source|equipment|oven|mixer|freezer|cooler|dish machine|maintenance|repair|warranty|service company|floor\s*plan|layout|located|placement|inventory|stock|par|reorder|shortage|task|tasks|prep|opening|closing|cleaning|assignment|assigned|overdue|task category|fulfillment|delivery|schedule|scheduled|shift|shifts|availability|available|time off|swap|coverage|labor hours|staffing|short staffed|short-staffed|who works|working friday|working monday|working tuesday|working wednesday|working thursday|working saturday|working sunday)\b/i;
+  const scheduleIntent = /\b(schedule|scheduled|shift|shifts|availability|available|time off|swap|coverage|labor hours|staffing|short staffed|short-staffed|who works|who is working|working\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))\b/i;
   const operationsIntent = /\b(inventory|stock|par|reorder|shortage|running out|task|tasks|prep|opening|closing|cleaning|assignment|assigned|overdue|task category|fulfillment|delivery)\b|\bwholesale\s+(?:order|orders|task|tasks|production|fulfillment)\b/i;
   const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
   const chatKey = 'restaurant-owner-agent-chat-v1';
   let busy = false;
 
   function shouldHandle(text) { return restaurantIntent.test(text); }
+  function isScheduling(text) { return scheduleIntent.test(text); }
   function isOperations(text) { return operationsIntent.test(text); }
   function cleanWakePhrase(text) { return String(text || '').trim().replace(/^hey\s+gelato[,\s]*/i, ''); }
   function now() { return new Date().toISOString(); }
@@ -31,9 +33,9 @@
     const input = document.getElementById('ownerAgentInput'); if (input) input.value = '';
     saveMessage('user', rawText); appendMessage('user', rawText);
     const pending = appendMessage('agent', 'Checking restaurant operations…', true); const guidance = document.getElementById('ownerComposerGuidance');
-    if (guidance) guidance.textContent = isOperations(text) ? 'Gelato is checking tasks, prep, inventory, and fulfillment.' : 'Restaurant Agent is checking private business knowledge.';
+    if (guidance) guidance.textContent = isScheduling(text) ? 'Gelato is checking staff schedules, availability, coverage, and workload.' : (isOperations(text) ? 'Gelato is checking tasks, prep, inventory, and fulfillment.' : 'Restaurant Agent is checking private business knowledge.');
     try {
-      const endpoint = isOperations(text) ? 'api/operations-agent.php' : 'api/agent-brain.php';
+      const endpoint = isScheduling(text) ? 'api/scheduling-agent.php' : (isOperations(text) ? 'api/operations-agent.php' : 'api/agent-brain.php');
       const response = await fetch(endpoint,{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-Token':window.RESTAURANT_CSRF_TOKEN || ''},body:JSON.stringify({action:'ask',message:text,csrf_token:window.RESTAURANT_CSRF_TOKEN || ''})});
       const data = await response.json(); if (!response.ok || !data.ok) throw new Error(data.message || 'The Restaurant Agent could not complete that request.');
       if (pending) pending.remove(); saveMessage('agent', data.answer || data.reply || 'Done.'); appendMessage('agent', data.answer || data.reply || 'Done.');
@@ -52,9 +54,10 @@
     const send=document.getElementById('ownerAgentSend');if(send&&send.parentNode)send.parentNode.insertBefore(button,send);else input.parentNode?.appendChild(button);
     button.addEventListener('click',()=>{const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){const guidance=document.getElementById('ownerComposerGuidance');if(guidance)guidance.textContent='Voice recognition is not available in this browser.';return;}const rec=new SR();rec.lang='en-US';rec.interimResults=false;rec.continuous=false;button.textContent='●';rec.onresult=e=>{const text=[...e.results].map(r=>r[0].transcript).join(' ');input.value=text;if(shouldHandle(text))submit(text);};rec.onerror=e=>{const guidance=document.getElementById('ownerComposerGuidance');if(guidance)guidance.textContent='Voice recognition error: '+e.error;};rec.onend=()=>button.textContent='🎙';rec.start();});
     const opsLink=document.createElement('a');opsLink.href='operations.php';opsLink.textContent='Operations';opsLink.style.cssText='font-size:10px;font-weight:800;margin-left:8px;color:inherit;text-decoration:none';send?.parentNode?.appendChild(opsLink);
+    if (Auth.has('schedule.view') || Auth.has('schedule.self')) { const schedulingLink=document.createElement('a');schedulingLink.href='scheduling.php';schedulingLink.textContent='Scheduling';schedulingLink.style.cssText=opsLink.style.cssText;send?.parentNode?.appendChild(schedulingLink); }
   }
   document.addEventListener('click', event => { if (event.target.closest('#ownerAgentSend')) maybeSubmit(event); }, true);
   document.addEventListener('keydown', event => { if (event.target?.id === 'ownerAgentInput' && event.key === 'Enter' && !event.shiftKey) maybeSubmit(event); }, true);
-  const input = document.getElementById('ownerAgentInput'); if (input) input.placeholder = 'Ask or say: Hey Gelato, add to prep list… check inventory… assign tasks…';
+  const input = document.getElementById('ownerAgentInput'); if (input) input.placeholder = 'Ask or say: Hey Gelato… schedule Anthony Friday 4–10, show coverage gaps, add to prep list…';
   installVoice();
 })();
