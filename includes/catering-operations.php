@@ -55,6 +55,12 @@ function catering_operation_requirements(PDO $pdo, int $organizationId, int $ope
     return $statement->fetchAll();
 }
 
+function catering_operations_yield_is_servings(?string $unit): bool
+{
+    $unit=mb_strtolower(trim((string)$unit),'UTF-8');
+    return in_array($unit,['serving','servings','portion','portions','each','ea','piece','pieces'],true);
+}
+
 function catering_operations_numeric_quantity(string $value): ?float
 {
     $value=trim($value);
@@ -91,18 +97,45 @@ function catering_operations_parse_ingredient(mixed $ingredient): ?array
 
 function catering_operations_rebuild_requirements(PDO $pdo, int $organizationId, int $operationId, ?int $userId): int
 {
-    $items=$pdo->prepare("SELECT m.*,r.ingredients_json,r.yield_quantity FROM restaurant_operation_menu_items m LEFT JOIN recipes r ON r.id=m.recipe_id WHERE m.organization_id=? AND m.operation_id=? ORDER BY m.id");
+    $items=$pdo->prepare("SELECT m.*,r.ingredients_json,r.yield_quantity,r.yield_unit FROM restaurant_operation_menu_items m LEFT JOIN recipes r ON r.id=m.recipe_id WHERE m.organization_id=? AND m.operation_id=? ORDER BY m.id");
     $items->execute([$organizationId,$operationId]);
-    $pdo->prepare('DELETE FROM restaurant_operation_requirements WHERE organization_id=? AND operation_id=?')->execute([$organizationId,$operationId]);
-    $insert=$pdo->prepare("INSERT INTO restaurant_operation_requirements (organization_id,operation_id,menu_item_id,recipe_id,ingredient_name,required_quantity,unit,status,created_by,updated_by) VALUES (?,?,?,?,?,?,?,'planned',?,?)");
-    $count=0;
-    foreach($items->fetchAll() as $item){
-        if(!$item['recipe_id'])continue;
-        $ingredients=json_decode((string)($item['ingredients_json']??'[]'),true);if(!is_array($ingredients))continue;
-        $batches=(float)($item['batches']??0);if($batches<=0){$yield=(float)($item['yield_quantity']??0);$target=(float)($item['target_servings']??0);$batches=$yield>0&&$target>0?$target/$yield:1.0;}
-        foreach($ingredients as $ingredient){$parsed=catering_operations_parse_ingredient($ingredient);if(!$parsed)continue;$qty=$parsed['quantity']===null?null:round((float)$parsed['quantity']*$batches,4);$insert->execute([$organizationId,$operationId,(int)$item['id'],(int)$item['recipe_id'],mb_substr($parsed['name'],0,220,'UTF-8'),$qty,mb_substr($parsed['unit'],0,80,'UTF-8')?:null,$userId,$userId]);$count++;}
+    $rows=$items->fetchAll();
+    $ownsTransaction=!$pdo->inTransaction();
+    if($ownsTransaction)$pdo->beginTransaction();
+    try{
+        $pdo->prepare('DELETE FROM restaurant_operation_requirements WHERE organization_id=? AND operation_id=?')->execute([$organizationId,$operationId]);
+        $insert=$pdo->prepare("INSERT INTO restaurant_operation_requirements (organization_id,operation_id,menu_item_id,recipe_id,ingredient_name,required_quantity,unit,status,notes,created_by,updated_by) VALUES (?,?,?,?,?,?,?,'planned',?,?,?)");
+        $count=0;
+        foreach($rows as $item){
+            if(!$item['recipe_id'])continue;
+            $ingredients=json_decode((string)($item['ingredients_json']??'[]'),true);if(!is_array($ingredients))continue;
+            $scale=null;$batches=(float)($item['batches']??0);
+            if($batches>0)$scale=$batches;
+            else{
+                $yield=(float)($item['yield_quantity']??0);$target=(float)($item['target_servings']??0);
+                if($yield>0&&$target>0&&catering_operations_yield_is_servings((string)($item['yield_unit']??'')))$scale=$target/$yield;
+            }
+            $scaleNote=$scale===null?'Batch quantity required before total ingredient quantity can be calculated.':null;
+            foreach($ingredients as $ingredient){
+                $parsed=catering_operations_parse_ingredient($ingredient);if(!$parsed)continue;
+                $qty=($parsed['quantity']===null||$scale===null)?null:round((float)$parsed['quantity']*$scale,4);
+                $insert->execute([$organizationId,$operationId,(int)$item['id'],(int)$item['recipe_id'],mb_substr($parsed['name'],0,220,'UTF-8'),$qty,mb_substr($parsed['unit'],0,80,'UTF-8')?:null,$scaleNote,$userId,$userId]);$count++;
+            }
+        }
+        if($ownsTransaction)$pdo->commit();
+        return $count;
+    }catch(Throwable $error){
+        if($ownsTransaction&&$pdo->inTransaction())$pdo->rollBack();
+        throw $error;
     }
-    return $count;
+}
+
+function catering_operations_staff_conflict(PDO $pdo,int $organizationId,int $userId,?string $startAt,?string $endAt,int $excludeStaffId=0):?array
+{
+    if($userId<=0||!$startAt||!$endAt)return null;
+    $statement=$pdo->prepare("SELECT s.id,s.role_name,s.shift_start_at,s.shift_end_at,o.public_id AS operation_public_id,o.title AS operation_title FROM restaurant_operation_staff s INNER JOIN restaurant_operations o ON o.id=s.operation_id WHERE s.organization_id=? AND s.user_id=? AND s.status<>'cancelled' AND s.id<>? AND s.shift_start_at IS NOT NULL AND s.shift_end_at IS NOT NULL AND s.shift_start_at<? AND s.shift_end_at>? ORDER BY s.shift_start_at LIMIT 1");
+    $statement->execute([$organizationId,$userId,$excludeStaffId,$endAt,$startAt]);
+    $row=$statement->fetch();return $row?:null;
 }
 
 function catering_operations_readiness(PDO $pdo, int $organizationId, int $operationId, bool $persist = true): array
@@ -110,7 +143,7 @@ function catering_operations_readiness(PDO $pdo, int $organizationId, int $opera
     $op=$pdo->prepare('SELECT * FROM restaurant_operations WHERE id=? AND organization_id=? AND archived_at IS NULL LIMIT 1');$op->execute([$operationId,$organizationId]);$operation=$op->fetch();if(!$operation)return ['percent'=>0,'issues'=>['Operation not found.']];
     $stmt=$pdo->prepare('SELECT COUNT(*) FROM restaurant_operation_menu_items WHERE organization_id=? AND operation_id=?');$stmt->execute([$organizationId,$operationId]);$menuCount=(int)$stmt->fetchColumn();
     $stmt=$pdo->prepare("SELECT COUNT(*) total,SUM(status='done') done_count,SUM(status IN ('open','in_progress','blocked') AND due_at IS NOT NULL AND due_at<NOW()) overdue_count,SUM(status IN ('open','in_progress','blocked') AND priority IN ('critical','high') AND assigned_to IS NULL) unassigned_critical FROM restaurant_operation_tasks WHERE organization_id=? AND operation_id=? AND status<>'cancelled'");$stmt->execute([$organizationId,$operationId]);$tasks=$stmt->fetch()?:[];
-    $stmt=$pdo->prepare("SELECT COUNT(*) total,SUM(status='ready') ready_count,SUM(status='unavailable') unavailable_count FROM restaurant_operation_requirements WHERE organization_id=? AND operation_id=?");$stmt->execute([$organizationId,$operationId]);$req=$stmt->fetch()?:[];
+    $stmt=$pdo->prepare("SELECT COUNT(*) total,SUM(status='ready') ready_count,SUM(status='unavailable') unavailable_count,SUM(required_quantity IS NULL) unknown_count FROM restaurant_operation_requirements WHERE organization_id=? AND operation_id=?");$stmt->execute([$organizationId,$operationId]);$req=$stmt->fetch()?:[];
     $stmt=$pdo->prepare("SELECT COUNT(*) FROM restaurant_operation_staff WHERE organization_id=? AND operation_id=? AND status<>'cancelled'");$stmt->execute([$organizationId,$operationId]);$staffCount=(int)$stmt->fetchColumn();
     $score=0;$issues=[];
     if($operation['service_start_at'])$score+=10;else $issues[]='Event date/time is not set.';
@@ -122,9 +155,10 @@ function catering_operations_readiness(PDO $pdo, int $organizationId, int $opera
     if((int)($tasks['overdue_count']??0)>0)$issues[]=(int)$tasks['overdue_count'].' task(s) are overdue.';
     if((int)($tasks['unassigned_critical']??0)>0)$issues[]=(int)$tasks['unassigned_critical'].' high/critical task(s) are unassigned.';
     if((int)($req['unavailable_count']??0)>0)$issues[]=(int)$req['unavailable_count'].' ingredient requirement(s) are unavailable.';
-    $score=max(0,min(100,$score));if(((int)($tasks['overdue_count']??0)>0||(int)($req['unavailable_count']??0)>0)&&$score>79)$score=79;
+    if((int)($req['unknown_count']??0)>0)$issues[]=(int)$req['unknown_count'].' ingredient requirement(s) need a batch quantity before totals can be calculated.';
+    $score=max(0,min(100,$score));if(((int)($tasks['overdue_count']??0)>0||(int)($req['unavailable_count']??0)>0||(int)($req['unknown_count']??0)>0)&&$score>79)$score=79;
     if($persist)$pdo->prepare('UPDATE restaurant_operations SET readiness_percent=?,updated_at=NOW(6) WHERE id=? AND organization_id=?')->execute([$score,$operationId,$organizationId]);
-    return ['percent'=>$score,'issues'=>$issues,'menuCount'=>$menuCount,'taskTotal'=>$taskTotal,'taskDone'=>$taskDone,'requirementsTotal'=>$reqTotal,'requirementsReady'=>$reqReady,'staffCount'=>$staffCount,'overdueTasks'=>(int)($tasks['overdue_count']??0),'unassignedCritical'=>(int)($tasks['unassigned_critical']??0)];
+    return ['percent'=>$score,'issues'=>$issues,'menuCount'=>$menuCount,'taskTotal'=>$taskTotal,'taskDone'=>$taskDone,'requirementsTotal'=>$reqTotal,'requirementsReady'=>$reqReady,'requirementsUnknown'=>(int)($req['unknown_count']??0),'staffCount'=>$staffCount,'overdueTasks'=>(int)($tasks['overdue_count']??0),'unassignedCritical'=>(int)($tasks['unassigned_critical']??0)];
 }
 
 function catering_operations_context(PDO $pdo, int $organizationId, array $operation): string
@@ -133,7 +167,7 @@ function catering_operations_context(PDO $pdo, int $organizationId, array $opera
     $lines=['Restaurant operation: '.$operation['title'],'Source: '.$operation['source_type'].' / '.$operation['source_public_id'],'Status: '.$operation['status'],'Readiness: '.$readiness['percent'].'%','Service: '.($operation['service_start_at']?:'not scheduled').' to '.($operation['service_end_at']?:'not scheduled'),'Guests: '.($operation['guest_count']??'not recorded'),'Venue: '.(($operation['venue_name']??'')?:'not recorded')];
     if(($operation['dietary_requirements']??'')!=='')$lines[]='Dietary/allergy requirements: '.$operation['dietary_requirements'];
     if($menu){$lines[]='Operational menu:';foreach($menu as $row)$lines[]='- '.$row['item_name'].($row['recipe_name']?' / recipe '.$row['recipe_name']:'').($row['target_servings']?' / '.$row['target_servings'].' servings':'').($row['batches']?' / '.round((float)$row['batches'],2).' batches':'');}
-    if($requirements){$lines[]='Ingredient requirements:';foreach(array_slice($requirements,0,80) as $row)$lines[]='- '.$row['ingredient_name'].($row['required_quantity']!==null?' '.$row['required_quantity'].' '.($row['unit']??''):' quantity TBD').' / '.$row['status'];}
+    if($requirements){$lines[]='Ingredient requirements:';foreach(array_slice($requirements,0,80) as $row)$lines[]='- '.$row['ingredient_name'].($row['required_quantity']!==null?' '.$row['required_quantity'].' '.($row['unit']??''):' quantity TBD').' / '.$row['status'].(($row['notes']??'')?' / '.$row['notes']:'');}
     if($tasks){$lines[]='Execution tasks:';foreach(array_slice($tasks,0,60) as $row)$lines[]='- '.$row['title'].' / '.$row['status'].($row['due_at']?' / due '.$row['due_at']:'').($row['assigned_name']?' / '.$row['assigned_name']:' / unassigned');}
     if($staff){$lines[]='Event staffing:';foreach($staff as $row)$lines[]='- '.$row['user_name'].' / '.$row['role_name'].($row['shift_start_at']?' / '.$row['shift_start_at'].' to '.($row['shift_end_at']?:'TBD'):'');}
     if($readiness['issues']){$lines[]='Readiness issues:';foreach($readiness['issues'] as $issue)$lines[]='- '.$issue;}
