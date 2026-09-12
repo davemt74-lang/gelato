@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/operations-core.php';
+require_once __DIR__ . '/wholesale-portal.php';
 
 function operations_wholesale_ready(PDO $pdo): bool
 {
@@ -23,18 +24,16 @@ function operations_wholesale_item_data(mixed $raw, int $index): array
 {
     if (is_string($raw)) {
         $name = trim($raw);
-        return ['name'=>$name !== '' ? $name : 'Wholesale item '.($index + 1), 'quantity'=>null, 'unit'=>null, 'unitPrice'=>null];
+        return ['name'=>$name !== '' ? $name : 'Wholesale item '.($index + 1), 'quantity'=>null, 'unit'=>null];
     }
-    if (!is_array($raw)) return ['name'=>'Wholesale item '.($index + 1), 'quantity'=>null, 'unit'=>null, 'unitPrice'=>null];
+    if (!is_array($raw)) return ['name'=>'Wholesale item '.($index + 1), 'quantity'=>null, 'unit'=>null];
     $name = trim((string)($raw['product'] ?? $raw['name'] ?? $raw['item'] ?? $raw['flavor'] ?? $raw['description'] ?? ''));
     $quantity = $raw['quantity'] ?? $raw['qty'] ?? null;
     $unit = trim((string)($raw['unit'] ?? $raw['package'] ?? $raw['size'] ?? ''));
-    $price = $raw['unitPrice'] ?? $raw['unit_price'] ?? $raw['price'] ?? null;
     return [
         'name'=>$name !== '' ? $name : 'Wholesale item '.($index + 1),
         'quantity'=>is_numeric($quantity) ? (float)$quantity : null,
         'unit'=>$unit !== '' ? $unit : null,
-        'unitPrice'=>is_numeric($price) ? (float)$price : null,
     ];
 }
 
@@ -42,7 +41,6 @@ function operations_wholesale_task_status(string $orderStatus, string $kind): st
 {
     if ($kind === 'item') {
         return match ($orderStatus) {
-            'in_production' => 'in_progress',
             'ready', 'out_for_delivery', 'delivered' => 'completed',
             'cancelled' => 'cancelled',
             default => 'queued',
@@ -66,8 +64,8 @@ function operations_sync_wholesale_tasks(PDO $pdo, int $organizationId, ?int $us
 
     $orders = $pdo->prepare("SELECT o.*,a.business_name FROM wholesale_orders o INNER JOIN wholesale_accounts a ON a.id=o.wholesale_account_id AND a.organization_id=o.organization_id WHERE o.organization_id=? AND a.archived_at IS NULL ORDER BY o.created_at");
     $orders->execute([$organizationId]);
-    $upsertItem = $pdo->prepare("INSERT INTO restaurant_tasks (organization_id,public_id,category_id,source_type,source_public_id,title,description,quantity,unit,station,priority,status,due_at,created_by,updated_by) VALUES (?,?,?,'wholesale_order_item',?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE category_id=VALUES(category_id),title=VALUES(title),description=VALUES(description),quantity=VALUES(quantity),unit=VALUES(unit),station=VALUES(station),priority=VALUES(priority),status=IF(status='verified' AND VALUES(status)<>'cancelled','verified',VALUES(status)),due_at=VALUES(due_at),updated_by=COALESCE(VALUES(updated_by),updated_by),updated_at=NOW(6)");
-    $upsertFulfillment = $pdo->prepare("INSERT INTO restaurant_tasks (organization_id,public_id,category_id,source_type,source_public_id,title,description,station,priority,status,due_at,created_by,updated_by) VALUES (?,?,?,'wholesale_order_fulfillment',?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE category_id=VALUES(category_id),title=VALUES(title),description=VALUES(description),station=VALUES(station),priority=VALUES(priority),status=IF(status='verified' AND VALUES(status)<>'cancelled','verified',VALUES(status)),due_at=VALUES(due_at),updated_by=COALESCE(VALUES(updated_by),updated_by),updated_at=NOW(6)");
+    $upsertItem = $pdo->prepare("INSERT INTO restaurant_tasks (organization_id,public_id,category_id,source_type,source_public_id,title,description,quantity,unit,station,priority,status,due_at,created_by,updated_by) VALUES (?,?,?,'wholesale_order_item',?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE category_id=VALUES(category_id),title=VALUES(title),description=VALUES(description),quantity=VALUES(quantity),unit=VALUES(unit),station=VALUES(station),priority=VALUES(priority),status=CASE WHEN VALUES(status)='cancelled' THEN 'cancelled' WHEN VALUES(status)='completed' THEN IF(status='verified','verified','completed') ELSE status END,due_at=VALUES(due_at),updated_by=COALESCE(VALUES(updated_by),updated_by),updated_at=NOW(6)");
+    $upsertFulfillment = $pdo->prepare("INSERT INTO restaurant_tasks (organization_id,public_id,category_id,source_type,source_public_id,title,description,station,priority,status,due_at,created_by,updated_by) VALUES (?,?,?,'wholesale_order_fulfillment',?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE category_id=VALUES(category_id),title=VALUES(title),description=VALUES(description),station=VALUES(station),priority=VALUES(priority),status=CASE WHEN VALUES(status)='cancelled' THEN 'cancelled' WHEN VALUES(status)='completed' THEN IF(status='verified','verified','completed') WHEN VALUES(status)='in_progress' AND status NOT IN ('completed','verified') THEN 'in_progress' ELSE status END,due_at=VALUES(due_at),updated_by=COALESCE(VALUES(updated_by),updated_by),updated_at=NOW(6)");
     $count = 0;
 
     foreach ($orders->fetchAll() as $order) {
@@ -75,7 +73,6 @@ function operations_sync_wholesale_tasks(PDO $pdo, int $organizationId, ?int $us
         $orderNumber = (string)$order['order_number'];
         $orderStatus = (string)$order['status'];
         $dueAt = operations_wholesale_due_at($order);
-        $notes = trim((string)($order['internal_notes'] ?? ''));
         $customerNotes = trim((string)($order['customer_notes'] ?? ''));
         $items = json_decode((string)($order['items_json'] ?? '[]'), true);
         if (!is_array($items)) $items = [];
@@ -88,9 +85,7 @@ function operations_sync_wholesale_tasks(PDO $pdo, int $organizationId, ?int $us
             $titleParts = array_values(array_filter([$quantityText, $item['unit'], $item['name']], static fn($v)=>$v !== null && $v !== ''));
             $title = 'Wholesale '.$orderNumber.': '.implode(' ', $titleParts);
             $description = 'Wholesale production for '.$order['business_name'].' · order '.$orderNumber.'.';
-            if ($item['unitPrice'] !== null) $description .= ' Unit price $'.number_format((float)$item['unitPrice'], 2).'.';
             if ($customerNotes !== '') $description .= ' Customer notes: '.$customerNotes;
-            if ($notes !== '') $description .= ' Internal notes: '.$notes;
             $upsertItem->execute([
                 $organizationId,$publicId,(int)$wholesaleCategory['id'],$sourceId,mb_substr($title,0,240,'UTF-8'),$description,
                 $item['quantity'],$item['unit'],'Wholesale Production','normal',operations_wholesale_task_status($orderStatus,'item'),$dueAt,$userId,$userId
@@ -105,7 +100,6 @@ function operations_sync_wholesale_tasks(PDO $pdo, int $organizationId, ?int $us
         $fulfillmentTitle = ($isDelivery ? 'Deliver ' : 'Fulfill ').'wholesale order '.$orderNumber.' — '.$order['business_name'];
         $fulfillmentDescription = 'Wholesale fulfillment for order '.$orderNumber.'.'.($fulfillmentType !== '' ? ' Method: '.$fulfillmentType.'.' : '');
         if ($customerNotes !== '') $fulfillmentDescription .= ' Customer notes: '.$customerNotes;
-        if ($notes !== '') $fulfillmentDescription .= ' Internal notes: '.$notes;
         $upsertFulfillment->execute([
             $organizationId,$fulfillmentPublic,(int)($isDelivery ? $deliveryCategory['id'] : $wholesaleCategory['id']),$fulfillmentSource,
             mb_substr($fulfillmentTitle,0,240,'UTF-8'),$fulfillmentDescription,$isDelivery ? 'Delivery' : 'Wholesale Fulfillment','normal',
@@ -146,7 +140,7 @@ function operations_wholesale_task_status_changed(PDO $pdo, int $organizationId,
         $update = $pdo->prepare("UPDATE wholesale_orders SET status=?,delivered_at=IF(?='delivered',COALESCE(delivered_at,NOW(6)),delivered_at),updated_by=?,updated_at=NOW(6) WHERE id=? AND organization_id=?");
         $update->execute([$next,$next,$userId,$orderId,$organizationId]);
         if (function_exists('app_audit')) app_audit($pdo,$organizationId,$userId,'wholesale.order_status_from_operations','wholesale_order',(string)$order['public_id'],['status'=>$order['status']],['status'=>$next,'task'=>$task['public_id'] ?? null]);
-        if (function_exists('wholesale_portal_sync_account_knowledge')) wholesale_portal_sync_account_knowledge($pdo,$organizationId,(int)$order['wholesale_account_id'],$userId);
+        wholesale_portal_sync_account_knowledge($pdo,$organizationId,(int)$order['wholesale_account_id'],$userId);
     }
     return $next;
 }
