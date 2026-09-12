@@ -14,6 +14,19 @@ function sched_staff_payload(array $rows,string $level):array{
     if($level==='roster')return array_map(static fn(array $row):array=>array_intersect_key($row,array_flip(['user_id','display_name','preferred_name','job_title','positions'])),$rows);
     return array_map(static function(array $row):array{unset($row['phone'],$row['employee_number'],$row['hire_date'],$row['hourly_labor_cost'],$row['scheduling_notes']);return $row;},$rows);
 }
+function sched_validate_availability_windows(array $windows):void{
+    foreach($windows as $index=>$window){
+        if(!is_array($window))throw new InvalidArgumentException('Availability window '.($index+1).' is invalid.');
+        $weekday=filter_var($window['weekday']??null,FILTER_VALIDATE_INT,['options'=>['min_range'=>0,'max_range'=>6]]);
+        $start=trim((string)($window['start']??''));$end=trim((string)($window['end']??''));$type=(string)($window['type']??'available');
+        if($weekday===false||!preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/',$start)||!preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/',$end)||$end<=$start||!in_array($type,['available','unavailable'],true))throw new InvalidArgumentException('Availability window '.($index+1).' has an invalid day, time range, or type.');
+    }
+}
+function sched_validate_org_reference(PDO $pdo,int $organizationId,string $table,mixed $rawId,string $label):void{
+    if($rawId===''||$rawId===null)return;$id=filter_var($rawId,FILTER_VALIDATE_INT,['options'=>['min_range'=>1]]);if($id===false)throw new InvalidArgumentException($label.' is invalid.');
+    $allowed=['positions','locations'];if(!in_array($table,$allowed,true))throw new LogicException('Unsupported scheduling reference validation.');
+    $stmt=$pdo->prepare("SELECT COUNT(*) FROM {$table} WHERE id=? AND organization_id=? AND status='active'");$stmt->execute([(int)$id,$organizationId]);if((int)$stmt->fetchColumn()!==1)throw new InvalidArgumentException($label.' is not valid for this restaurant.');
+}
 
 if($_SERVER['REQUEST_METHOD']==='GET'){
     $action=(string)($_GET['action']??'bootstrap');$week=scheduling_week_start((string)($_GET['week']??''));$canView=sched_can($user,'schedule.view');$canSelf=sched_can($user,'schedule.self');$canStaff=sched_can($user,'staff.view')||sched_can($user,'staff.manage');$canStaffManage=sched_can($user,'staff.manage');$canScheduleManage=sched_can($user,'schedule.manage');if(!$canView&&!$canSelf&&!$canStaff)app_json_response(['ok'=>false,'message'=>'Scheduling permission required.'],403);
@@ -37,7 +50,7 @@ try{
         sched_require($user,'staff.manage');$target=(int)($input['userId']??0);$row=scheduling_profile_save($pdo,$organizationId,$target,$input,$userId);app_audit($pdo,$organizationId,$userId,'staff.profile_saved','user',(string)$target,null,['employmentType'=>$row['employment_type']??null]);app_json_response(['ok'=>true,'staff'=>$row,'message'=>'Staff scheduling profile saved.']);
     }
     if($action==='availability_save'){
-        $target=(int)($input['userId']??$userId);$allowed=$target===$userId&&sched_can($user,'schedule.self');if(!$allowed&&!sched_can($user,'schedule.manage'))app_json_response(['ok'=>false,'message'=>'You can only change your own availability.'],403);$rows=scheduling_availability_replace($pdo,$organizationId,$target,(array)($input['windows']??[]),$userId);app_audit($pdo,$organizationId,$userId,'schedule.availability_saved','user',(string)$target,null,['windows'=>count($rows)]);app_json_response(['ok'=>true,'availability'=>$rows,'message'=>'Availability saved.']);
+        $target=(int)($input['userId']??$userId);$allowed=$target===$userId&&sched_can($user,'schedule.self');if(!$allowed&&!sched_can($user,'schedule.manage'))app_json_response(['ok'=>false,'message'=>'You can only change your own availability.'],403);$windows=(array)($input['windows']??[]);sched_validate_availability_windows($windows);$rows=scheduling_availability_replace($pdo,$organizationId,$target,$windows,$userId);app_audit($pdo,$organizationId,$userId,'schedule.availability_saved','user',(string)$target,null,['windows'=>count($rows)]);app_json_response(['ok'=>true,'availability'=>$rows,'message'=>'Availability saved.']);
     }
     if($action==='exception_request'){
         $target=(int)($input['userId']??$userId);$manager=sched_can($user,'schedule.manage');if($target!==$userId&&!$manager)app_json_response(['ok'=>false,'message'=>'You can only submit your own availability request.'],403);if($target===$userId&&!sched_can($user,'schedule.self')&&!$manager)app_json_response(['ok'=>false,'message'=>'Employee scheduling permission required.'],403);$row=scheduling_exception_create($pdo,$organizationId,$target,$input,$userId,$manager);app_audit($pdo,$organizationId,$userId,'schedule.availability_exception_created','availability_exception',(string)$row['public_id']);app_json_response(['ok'=>true,'exception'=>$row,'message'=>$manager?'Availability exception added.':'Time-off/availability request submitted.'],201);
@@ -61,7 +74,7 @@ try{
         sched_require($user,'schedule.manage');$row=scheduling_request_review($pdo,$organizationId,trim((string)($input['id']??'')),(string)($input['decision']??''),$userId,(string)($input['note']??''));app_audit($pdo,$organizationId,$userId,'schedule.shift_request_reviewed','shift_request',(string)$row['public_id'],null,['status'=>$row['status']]);app_json_response(['ok'=>true,'request'=>$row,'message'=>'Shift request '.$row['status'].'.']);
     }
     if($action==='coverage_rule_save'){
-        sched_require($user,'schedule.manage');$row=scheduling_coverage_rule_save($pdo,$organizationId,$input,$userId);app_audit($pdo,$organizationId,$userId,'schedule.coverage_rule_saved','coverage_rule',(string)$row['id']);app_json_response(['ok'=>true,'rule'=>$row,'message'=>'Coverage rule saved.']);
+        sched_require($user,'schedule.manage');sched_validate_org_reference($pdo,$organizationId,'positions',$input['positionId']??null,'Coverage position');sched_validate_org_reference($pdo,$organizationId,'locations',$input['locationId']??null,'Coverage location');$row=scheduling_coverage_rule_save($pdo,$organizationId,$input,$userId);app_audit($pdo,$organizationId,$userId,'schedule.coverage_rule_saved','coverage_rule',(string)$row['id']);app_json_response(['ok'=>true,'rule'=>$row,'message'=>'Coverage rule saved.']);
     }
     if($action==='coverage_rule_archive'){
         sched_require($user,'schedule.manage');$id=(int)($input['id']??0);$pdo->prepare("UPDATE labor_coverage_rules SET status='inactive',updated_by=?,updated_at=NOW(6) WHERE id=? AND organization_id=?")->execute([$userId,$id,$organizationId]);app_audit($pdo,$organizationId,$userId,'schedule.coverage_rule_archived','coverage_rule',(string)$id);app_json_response(['ok'=>true,'message'=>'Coverage rule archived.']);
