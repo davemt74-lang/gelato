@@ -3,6 +3,11 @@ declare(strict_types=1);
 require __DIR__ . '/includes/bootstrap.php';
 require __DIR__ . '/includes/wholesale-portal.php';
 
+header('Cache-Control: no-store, private');
+header('Referrer-Policy: no-referrer');
+header('X-Frame-Options: DENY');
+header("Content-Security-Policy: frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+
 if(!app_has_config())app_redirect('setup-first-user.php');
 $pdo=app_pdo();app_boot_session();$token=trim((string)($_GET['token']??$_POST['token']??''));$invite=null;$error=null;
 if($token!==''){$hash=hash('sha256',$token);$statement=$pdo->prepare("SELECT i.*,a.business_name,a.public_id AS account_public_id,o.name AS organization_name FROM wholesale_portal_invites i INNER JOIN wholesale_accounts a ON a.id=i.wholesale_account_id INNER JOIN organizations o ON o.id=i.organization_id WHERE i.token_hash=? AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at>NOW(6) AND a.archived_at IS NULL LIMIT 1");$statement->execute([$hash]);$invite=$statement->fetch()?:null;}
@@ -17,8 +22,16 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&$invite){
         $existing=$pdo->prepare('SELECT COUNT(*) FROM users WHERE email=? AND archived_at IS NULL');$existing->execute([$invite['email']]);
         if((int)$existing->fetchColumn()>0)$error='An account already exists for this email. Ask the wholesale team to link your existing login.';
         else{
-            try{$pdo->beginTransaction();$hashPassword=app_password_hash($password);$display=trim($first.' '.$last);$userInsert=$pdo->prepare("INSERT INTO users (email,password_hash,first_name,last_name,display_name,status,email_verified_at,password_changed_at) VALUES (?,?,?,?,?,'active',NOW(6),NOW(6))");$userInsert->execute([$invite['email'],$hashPassword,$first,$last,$display]);$userId=(int)$pdo->lastInsertId();$membership=$pdo->prepare("INSERT INTO organization_memberships (organization_id,user_id,job_title,status) VALUES (?,?,'Wholesale Customer','active')");$membership->execute([(int)$invite['organization_id'],$userId]);$membershipId=(int)$pdo->lastInsertId();$roleId=wholesale_portal_role_id($pdo,(int)$invite['organization_id']);$pdo->prepare('INSERT INTO user_roles (membership_id,role_id,assigned_by) VALUES (?,?,?)')->execute([$membershipId,$roleId,(int)$invite['invited_by']]);$pdo->prepare("INSERT INTO wholesale_account_users (organization_id,wholesale_account_id,user_id,account_role,is_primary,status) VALUES (?,?,?,?,1,'active')")->execute([(int)$invite['organization_id'],(int)$invite['wholesale_account_id'],$userId,$invite['account_role']]);$pdo->prepare('UPDATE wholesale_portal_invites SET accepted_at=NOW(6) WHERE id=?')->execute([(int)$invite['id']]);$pdo->commit();session_regenerate_id(true);$_SESSION['user_id']=$userId;$_SESSION['organization_id']=(int)$invite['organization_id'];$_SESSION['authenticated_at']=time();app_audit($pdo,(int)$invite['organization_id'],$userId,'wholesale.portal_invite_accepted','wholesale_account',(string)$invite['account_public_id'],null,['email'=>$invite['email']]);app_redirect('wholesale-portal.php');}
-            catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();$error='The wholesale account could not be created. Please contact the restaurant.';}
+            try{
+                $pdo->beginTransaction();
+                $lock=$pdo->prepare('SELECT accepted_at,revoked_at,expires_at FROM wholesale_portal_invites WHERE id=? FOR UPDATE');$lock->execute([(int)$invite['id']]);$inviteState=$lock->fetch();
+                if(!$inviteState||$inviteState['accepted_at']!==null||$inviteState['revoked_at']!==null||strtotime((string)$inviteState['expires_at'])<=time())throw new RuntimeException('Invitation is no longer available.');
+                $accountUsers=$pdo->prepare("SELECT id FROM wholesale_account_users WHERE wholesale_account_id=? AND status='active' FOR UPDATE");$accountUsers->execute([(int)$invite['wholesale_account_id']]);$isPrimary=count($accountUsers->fetchAll())===0?1:0;
+                $hashPassword=app_password_hash($password);$display=trim($first.' '.$last);$userInsert=$pdo->prepare("INSERT INTO users (email,password_hash,first_name,last_name,display_name,status,email_verified_at,password_changed_at) VALUES (?,?,?,?,?,'active',NOW(6),NOW(6))");$userInsert->execute([$invite['email'],$hashPassword,$first,$last,$display]);$userId=(int)$pdo->lastInsertId();
+                $membership=$pdo->prepare("INSERT INTO organization_memberships (organization_id,user_id,job_title,status) VALUES (?,?,'Wholesale Customer','active')");$membership->execute([(int)$invite['organization_id'],$userId]);$membershipId=(int)$pdo->lastInsertId();$roleId=wholesale_portal_role_id($pdo,(int)$invite['organization_id']);$pdo->prepare('INSERT INTO user_roles (membership_id,role_id,assigned_by) VALUES (?,?,?)')->execute([$membershipId,$roleId,(int)$invite['invited_by']]);
+                $pdo->prepare("INSERT INTO wholesale_account_users (organization_id,wholesale_account_id,user_id,account_role,is_primary,status) VALUES (?,?,?,?,?,'active')")->execute([(int)$invite['organization_id'],(int)$invite['wholesale_account_id'],$userId,$invite['account_role'],$isPrimary]);$pdo->prepare('UPDATE wholesale_portal_invites SET accepted_at=NOW(6) WHERE id=? AND accepted_at IS NULL')->execute([(int)$invite['id']]);
+                $pdo->commit();session_regenerate_id(true);$_SESSION['user_id']=$userId;$_SESSION['organization_id']=(int)$invite['organization_id'];$_SESSION['authenticated_at']=time();app_audit($pdo,(int)$invite['organization_id'],$userId,'wholesale.portal_invite_accepted','wholesale_account',(string)$invite['account_public_id'],null,['email'=>$invite['email'],'isPrimary'=>(bool)$isPrimary]);app_redirect('wholesale-portal.php');
+            }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();$error=$e instanceof RuntimeException&&$e->getMessage()==='Invitation is no longer available.'?$e->getMessage():'The wholesale account could not be created. Please contact the restaurant.';}
         }
     }
 }
