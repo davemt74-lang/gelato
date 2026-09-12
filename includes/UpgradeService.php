@@ -262,9 +262,9 @@ final class UpgradeService
             $statements = self::executeSqlScript($this->pdo, $raw, true);
             $ms = max(0, (int)round((microtime(true) - $started) * 1000));
 
-            // Current historical migrations have explicit postconditions. Future
-            // migrations remain extensible: a successful SQL script is recorded even
-            // before a dedicated legacy-adoption signature is added here.
+            // Current structural migrations have explicit postconditions. Repair-only
+            // and future migrations are recorded after successful execution rather
+            // than pretending we can infer their prior state from unrelated tables.
             if ($this->hasKnownSignature($key) && !$this->migrationAlreadyPresent($key)) {
                 throw new RuntimeException('Migration finished without its expected schema signature.');
             }
@@ -451,7 +451,6 @@ final class UpgradeService
         return in_array($key, [
             '20260803_brand_images_llm_keys',
             '20260804_public_agent_knowledge_center',
-            '20260804_public_agent_admin_visibility_fix',
             '20260804_jobs_module',
             '20260912_floor_planner',
             '20260912_equipment_catalog_brain',
@@ -470,14 +469,6 @@ final class UpgradeService
                 $this->tableExists('public_agent_settings')
                 && $this->tableExists('knowledge_documents')
                 && $this->tableExists('knowledge_document_chunks'),
-
-            '20260804_public_agent_admin_visibility_fix' =>
-                $this->permissionExists('public_agent.view')
-                && $this->permissionExists('knowledge.view')
-                && $this->ownerRolesHavePermissions([
-                    'public_agent.view', 'public_agent.edit', 'knowledge.view',
-                    'knowledge.create', 'knowledge.edit', 'knowledge.delete',
-                ]),
 
             '20260804_jobs_module' =>
                 $this->tableExists('jobs')
@@ -566,25 +557,5 @@ final class UpgradeService
         $statement = $this->pdo->prepare('SELECT COUNT(*) FROM permissions WHERE permission_key=?');
         $statement->execute([$permission]);
         return (int)$statement->fetchColumn() > 0;
-    }
-
-    /** @param array<int,string> $permissions */
-    private function ownerRolesHavePermissions(array $permissions): bool
-    {
-        if (!$this->tableExists('roles') || !$this->tableExists('permissions') || !$this->tableExists('role_permissions')) {
-            return false;
-        }
-        $ownerCount = (int)$this->pdo->query('SELECT COUNT(*) FROM roles WHERE is_owner_role=1')->fetchColumn();
-        if ($ownerCount === 0) return false;
-        $placeholders = implode(',', array_fill(0, count($permissions), '?'));
-        $statement = $this->pdo->prepare(
-            "SELECT COUNT(DISTINCT CONCAT(r.id, ':', p.permission_key))
-             FROM roles r
-             JOIN role_permissions rp ON rp.role_id=r.id
-             JOIN permissions p ON p.id=rp.permission_id
-             WHERE r.is_owner_role=1 AND p.permission_key IN ($placeholders)"
-        );
-        $statement->execute($permissions);
-        return (int)$statement->fetchColumn() === $ownerCount * count($permissions);
     }
 }
