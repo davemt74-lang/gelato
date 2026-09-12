@@ -2,6 +2,9 @@
 declare(strict_types=1);
 require __DIR__ . '/includes/bootstrap.php';
 $user = app_require_auth();
+if (($user['role_slug'] ?? '') === 'wholesale_customer') {
+    app_redirect('wholesale-portal.php');
+}
 $pdo = app_pdo();
 $organizationId = (int)$user['organization_id'];
 
