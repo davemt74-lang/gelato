@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/host-stand-core.php';
+require_once __DIR__.'/../includes/table-service-reconcile.php';
 
 $user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];$uid=(int)$user['id'];$membership=(int)$user['membership_id'];
 $canView=app_has_permission('host.view',$user);$canUse=app_has_permission('host.use',$user);$canManage=app_has_permission('host.manage',$user);
@@ -16,16 +17,20 @@ function host_api_date(string $value): string
 {
     $d=DateTimeImmutable::createFromFormat('!Y-m-d',$value);return $d&&$d->format('Y-m-d')===$value?$value:date('Y-m-d');
 }
+function host_api_reconcile(PDO $pdo,int $org,int $locationId,int $uid): void
+{
+    table_service_reconcile_closed_checks($pdo,$org,$locationId,$uid);host_reconcile($pdo,$org,$locationId,$uid);
+}
 
 try{
     if($_SERVER['REQUEST_METHOD']==='GET'){
-        $locationId=host_api_location($pdo,$org,$membership);$date=host_api_date((string)($_GET['date']??date('Y-m-d')));$payload=['ok'=>true,'locations'=>pos_locations($pdo,$org),'date'=>$date,'permissions'=>['use'=>$canUse,'manage'=>$canManage],'dashboard'=>host_dashboard($pdo,$org,$locationId,$date,$uid)];
+        $locationId=host_api_location($pdo,$org,$membership);$date=host_api_date((string)($_GET['date']??date('Y-m-d')));host_api_reconcile($pdo,$org,$locationId,$uid);$payload=['ok'=>true,'locations'=>pos_locations($pdo,$org),'date'=>$date,'permissions'=>['use'=>$canUse,'manage'=>$canManage],'dashboard'=>host_dashboard($pdo,$org,$locationId,$date,$uid)];
         $at=trim((string)($_GET['availabilityAt']??''));if($at!=='')$payload['availability']=host_availability($pdo,$org,$locationId,$at,(int)($_GET['partySize']??2),(int)($_GET['durationMinutes']??90));
         if((app_has_permission('crm.view',$user)||app_has_permission('crm.pos_link',$user))&&trim((string)($_GET['customerQuery']??''))!=='')$payload['customers']=crm_search($pdo,$org,(string)$_GET['customerQuery'],20,true);
         app_json_response($payload);
     }
     if($_SERVER['REQUEST_METHOD']!=='POST'){header('Allow: GET, POST');app_json_response(['ok'=>false,'message'=>'Method not allowed.'],405);}
-    $input=app_json_input();app_verify_request_csrf($input);$action=trim((string)($input['action']??''));$locationId=host_api_location($pdo,$org,$membership,$input);$date=host_api_date((string)($input['date']??date('Y-m-d')));
+    $input=app_json_input();app_verify_request_csrf($input);$action=trim((string)($input['action']??''));$locationId=host_api_location($pdo,$org,$membership,$input);$date=host_api_date((string)($input['date']??date('Y-m-d')));host_api_reconcile($pdo,$org,$locationId,$uid);
     if(in_array($action,['asset.sync_all','table.create','asset.update','table.place','combination.save'],true)){
         if(!$canManage)app_json_response(['ok'=>false,'message'=>'Host Stand management permission required.'],403);
         if($action==='asset.sync_all'){$count=host_sync_all_table_assets($pdo,$org,$locationId,$uid);app_audit($pdo,$org,$uid,'host.table_assets_synced','location',(string)$locationId,null,['created'=>$count]);app_json_response(['ok'=>true,'created'=>$count,'dashboard'=>host_dashboard($pdo,$org,$locationId,$date,$uid)]);}
