@@ -5,9 +5,19 @@ function table_service_reconcile_closed_checks(PDO $pdo,int $org,int $locationId
 {
     if(!table_service_ready($pdo))return 0;
     return table_service_transaction($pdo,function()use($pdo,$org,$locationId,$userId){
-        $q=$pdo->prepare("SELECT t.id table_id,t.active_check_id,c.public_id,c.status FROM service_tables t JOIN pos_checks c ON c.id=t.active_check_id AND c.organization_id=t.organization_id WHERE t.organization_id=? AND t.location_id=? AND t.active_check_id IS NOT NULL AND c.status<>'open' FOR UPDATE");
-        $q->execute([$org,$locationId]);$rows=$q->fetchAll();
-        foreach($rows as $row){$pdo->prepare("UPDATE service_tables SET active_check_id=NULL,state='dirty',assigned_user_id=NULL,seated_at=NULL,updated_by=?,updated_at=NOW(6) WHERE organization_id=? AND id=?")->execute([$userId,$org,(int)$row['table_id']]);$pdo->prepare("UPDATE service_check_contexts SET status='closed',closed_at=COALESCE(closed_at,NOW(6)),updated_by=?,updated_at=NOW(6) WHERE organization_id=? AND check_id=? AND status='active'")->execute([$userId,$org,(int)$row['active_check_id']]);table_service_event($pdo,$org,$locationId,(int)$row['table_id'],(int)$row['active_check_id'],null,'check_reconciled','Closed POS check released table.',['checkStatus'=>(string)$row['status']],$userId);}
-        return count($rows);
+        $q=$pdo->prepare("SELECT cx.check_id,cx.table_id,c.status FROM service_check_contexts cx JOIN pos_checks c ON c.id=cx.check_id AND c.organization_id=cx.organization_id WHERE cx.organization_id=? AND cx.location_id=? AND cx.status='active' AND c.status<>'open' FOR UPDATE");
+        $q->execute([$org,$locationId]);$contexts=$q->fetchAll();$closed=0;
+        foreach($contexts as $row){
+            $checkId=(int)$row['check_id'];$tableId=$row['table_id']!==null?(int)$row['table_id']:null;
+            $pdo->prepare("UPDATE service_check_contexts SET status='closed',closed_at=COALESCE(closed_at,NOW(6)),updated_by=?,updated_at=NOW(6) WHERE organization_id=? AND check_id=? AND status='active'")->execute([$userId,$org,$checkId]);
+            $released=false;
+            if($tableId){
+                $u=$pdo->prepare("UPDATE service_tables SET active_check_id=NULL,state='dirty',assigned_user_id=NULL,seated_at=NULL,updated_by=?,updated_at=NOW(6) WHERE organization_id=? AND id=? AND active_check_id=?");
+                $u->execute([$userId,$org,$tableId,$checkId]);$released=$u->rowCount()>0;
+            }
+            table_service_event($pdo,$org,$locationId,$tableId,$checkId,null,'check_reconciled',$released?'Closed primary POS check released table.':'Closed secondary POS check reconciled without changing primary table occupancy.',['checkStatus'=>(string)$row['status'],'releasedTable'=>$released],$userId);
+            $closed++;
+        }
+        return $closed;
     });
 }
