@@ -27,8 +27,8 @@ asc_test(str_contains($shell, 'body.gelato-global-agent-ready #page-workspace>.w
 asc_test(str_contains($shell, 'gelato-agent-ready'), 'Global Agent readiness integration is missing', 10);
 asc_test(str_contains($shell, 'gelato-agent-response'), 'Global Agent responses are not mirrored into the main canvas', 11);
 asc_test(str_contains($shell, 'sendToGuidedTraining'), 'Guided training forwarding is missing', 12);
-asc_test(str_contains($shell, '>Wholesale<'), 'Wholesale navigation normalization is missing', 13);
-asc_test(str_contains($shell, '>Catering<'), 'Catering navigation normalization is missing', 14);
+asc_test(str_contains($shell, "</span>Wholesale'"), 'Wholesale navigation normalization is missing', 13);
+asc_test(str_contains($shell, "</span>Catering'"), 'Catering navigation normalization is missing', 14);
 asc_test(str_contains($loader, "admin-shell-consolidation.js?v=20260913-1"), 'Admin shell script is not loaded by the authenticated workspace', 15);
 
 // Legacy hooks stay in the DOM because existing training/admin code still updates them.
