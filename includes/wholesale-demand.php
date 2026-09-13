@@ -33,9 +33,14 @@ function wholesale_demand_order_date(array $order): string
 function wholesale_demand_recipe_batches(array $row): ?float
 {
     $ordered=max(0,(float)($row['order_quantity']??0));if($ordered<=0)return null;
-    $explicit=(float)($row['recipe_yield_per_batch']??0);
-    if($explicit>0)return $ordered/$explicit;
-    $content=(float)($row['content_quantity']??0);$contentUom=trim((string)($row['content_uom']??''));
+    $content=(float)($row['content_quantity']??0);$contentUom=trim((string)($row['content_uom']??''));$sellUom=trim((string)($row['sell_uom_snapshot']??''));
+    $explicit=(float)($row['recipe_yield_per_batch']??0);$explicitUom=trim((string)($row['recipe_yield_unit']??''));
+    if($explicit>0){
+        if($explicitUom==='')return $ordered/$explicit;
+        if($sellUom!==''){$yieldInSell=restaurant_unit_convert($explicit,$explicitUom,$sellUom);if($yieldInSell!==null&&$yieldInSell>0)return $ordered/$yieldInSell;}
+        if($content>0&&$contentUom!==''){$yieldInContent=restaurant_unit_convert($explicit,$explicitUom,$contentUom);if($yieldInContent!==null&&$yieldInContent>0)return ($ordered*$content)/$yieldInContent;}
+        return null;
+    }
     $recipeYield=(float)($row['yield_quantity']??0);$recipeUom=trim((string)($row['yield_unit']??''));
     if($content<=0||$contentUom===''||$recipeYield<=0||$recipeUom==='')return null;
     $yieldInContentUnit=restaurant_unit_convert($recipeYield,$recipeUom,$contentUom);
@@ -73,7 +78,7 @@ function wholesale_demand_sync_order(PDO $pdo,int $org,string|int $orderId,?int 
             if(empty($line['wholesale_sku_id'])){$result['issues'][]=['type'=>'legacy_line','line'=>$lineNo,'message'=>'Legacy/free-form order line cannot be converted into recipe demand.'];continue;}
             if(empty($line['recipe_public_id'])){$result['issues'][]=['type'=>'missing_recipe','line'=>$lineNo,'sku'=>$line['sku_snapshot'],'message'=>'Wholesale SKU product is not mapped to an active recipe.'];continue;}
             $batches=wholesale_demand_recipe_batches($line);
-            if($batches===null||$batches<=0){$result['issues'][]=['type'=>'missing_yield','line'=>$lineNo,'sku'=>$line['sku_snapshot'],'message'=>'Configure recipe yield per batch or SKU content quantity/unit before this line can reserve ingredients.'];continue;}
+            if($batches===null||$batches<=0){$result['issues'][]=['type'=>'missing_yield','line'=>$lineNo,'sku'=>$line['sku_snapshot'],'message'=>'Configure a compatible recipe yield or SKU content quantity/unit before this line can reserve ingredients.'];continue;}
             $ingredientQ->execute([$org,'recipe:'.$line['recipe_public_id']]);$ingredients=$ingredientQ->fetchAll();
             if(!$ingredients){$result['issues'][]=['type'=>'missing_inventory_mapping','line'=>$lineNo,'recipe'=>$line['recipe_name'],'message'=>'Recipe has no inventory source mappings.'];continue;}
             foreach($ingredients as $ingredient){
