@@ -7,12 +7,13 @@ require_once __DIR__.'/../includes/service-ops-hardening.php';
 require_once __DIR__.'/../includes/service-ops-atomic.php';
 require_once __DIR__.'/../includes/service-ops-floor.php';
 require_once __DIR__.'/../includes/service-ops-reservation.php';
+require_once __DIR__.'/../includes/service-visit-core.php';
 
 $user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];$uid=(int)$user['id'];$membership=(int)$user['membership_id'];
 $rawHostView=app_has_permission('host.view',$user);$canUse=app_has_permission('host.use',$user);$canManage=app_has_permission('host.manage',$user);
 $canView=$rawHostView&&(app_has_permission('table_service.view',$user)||$canUse||$canManage);
 if(!$canView)app_json_response(['ok'=>false,'message'=>'Host Stand permission required.'],403);
-if(!host_ready($pdo))app_json_response(['ok'=>false,'message'=>'Host Stand migration is not installed. Run upgrade.php.'],503);
+if(!host_ready($pdo)||!service_visit_ready($pdo))app_json_response(['ok'=>false,'message'=>'Host Stand dining-visit migration is not installed. Run upgrade.php.'],503);
 
 function host_api_location(PDO $pdo,int $org,int $membership,array $input=[]): int
 {
@@ -24,7 +25,7 @@ function host_api_date(PDO $pdo,int $org,int $locationId,string $value): string
 }
 function host_api_reconcile(PDO $pdo,int $org,int $locationId,int $uid): void
 {
-    table_service_reconcile_closed_checks($pdo,$org,$locationId,$uid);host_reconcile($pdo,$org,$locationId,$uid);
+    table_service_reconcile_closed_checks($pdo,$org,$locationId,$uid);service_visit_reconcile_reservations($pdo,$org,$locationId,$uid);
 }
 
 try{
@@ -51,6 +52,6 @@ try{
     if($action==='reservation.update'){$reservation=service_ops_reservation_update($pdo,$org,$public,$input,$uid);app_audit($pdo,$org,$uid,'host.reservation_updated','guest_reservation',$public,null,['partySize'=>$reservation['partySize'],'scheduledAt'=>$reservation['scheduledAt']]);app_json_response(['ok'=>true,'reservation'=>$reservation,'dashboard'=>host_dashboard($pdo,$org,$locationId,$date,$uid)]);}
     if($action==='reservation.status'){$reservation=service_ops_reservation_status_atomic($pdo,$org,$public,(string)($input['status']??''),$uid);app_audit($pdo,$org,$uid,'host.reservation_status','guest_reservation',$public,null,['status'=>$reservation['status']]);app_json_response(['ok'=>true,'reservation'=>$reservation,'dashboard'=>host_dashboard($pdo,$org,$locationId,$date,$uid)]);}
     if($action==='reservation.assign'){$reservation=service_ops_reservation_assign_safe($pdo,$org,$public,(array)($input['tablePublicIds']??[]),$uid);app_audit($pdo,$org,$uid,'host.reservation_tables','guest_reservation',$public,null,['tables'=>array_column($reservation['tables'],'publicId')]);app_json_response(['ok'=>true,'reservation'=>$reservation,'dashboard'=>host_dashboard($pdo,$org,$locationId,$date,$uid)]);}
-    if($action==='reservation.seat'){$result=service_ops_host_seat($pdo,$org,$public,isset($input['serverUserId'])&&$input['serverUserId']!==''?(int)$input['serverUserId']:null,$uid);app_audit($pdo,$org,$uid,'host.reservation_seated','guest_reservation',$public,null,['checkPublicId'=>$result['check']['publicId'],'tables'=>array_column($result['reservation']['tables'],'publicId')]);app_json_response(['ok'=>true]+$result+['dashboard'=>host_dashboard($pdo,$org,$locationId,$date,$uid)]);}
+    if($action==='reservation.seat'){$result=service_visit_host_seat($pdo,$org,$public,isset($input['serverUserId'])&&$input['serverUserId']!==''?(int)$input['serverUserId']:null,$uid);app_audit($pdo,$org,$uid,'host.reservation_seated','guest_reservation',$public,null,['checkPublicId'=>$result['check']['publicId'],'tables'=>array_column($result['reservation']['tables'],'publicId')]);app_json_response(['ok'=>true]+$result+['dashboard'=>host_dashboard($pdo,$org,$locationId,$date,$uid)]);}
     throw new InvalidArgumentException('Unsupported Host Stand action.');
 }catch(InvalidArgumentException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);}catch(Throwable $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],500);}
