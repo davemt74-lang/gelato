@@ -3,6 +3,7 @@ declare(strict_types=1);
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/customer-crm-core.php';
 require_once __DIR__.'/../includes/service-visit-core.php';
+require_once __DIR__.'/../includes/service-visit-extensions.php';
 
 $user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];$uid=(int)$user['id'];
 $canView=app_has_permission('crm.view',$user);$canManage=app_has_permission('crm.manage',$user);$canConsent=app_has_permission('crm.consent.manage',$user);$canPosLink=app_has_permission('crm.pos_link',$user);
@@ -36,7 +37,7 @@ try{
         if(!$canPosLink)app_json_response(['ok'=>false,'message'=>'POS customer-link permission required.'],403);
         $check=trim((string)($input['checkPublicId']??''));if($check==='')throw new InvalidArgumentException('Choose an open POS check.');
         if($action==='pos.attach'&&$public==='')throw new InvalidArgumentException('Choose a customer to attach.');
-        $attached=service_visit_attach_customer($pdo,$org,$check,$action==='pos.detach'?null:$public);
+        $attached=service_visit_attach_customer_safe($pdo,$org,$check,$action==='pos.detach'?null:$public);
         app_audit($pdo,$org,$uid,$action==='pos.detach'?'crm.pos_detached':'crm.pos_attached','pos_check',$check,null,['customerPublicId'=>$action==='pos.detach'?null:$public]);
         app_json_response(['ok'=>true,'customer'=>$attached]);
     }
