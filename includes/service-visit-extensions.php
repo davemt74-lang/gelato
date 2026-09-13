@@ -3,9 +3,34 @@ declare(strict_types=1);
 
 require_once __DIR__.'/service-visit-core.php';
 
+function service_visit_reconcile_tables(PDO $pdo,int $org,int $locationId,int $userId): int
+{
+    if(!service_visit_ready($pdo))return table_service_reconcile_closed_checks($pdo,$org,$locationId,$userId);
+    return table_service_transaction($pdo,function()use($pdo,$org,$locationId,$userId){
+        $q=$pdo->prepare("SELECT cx.check_id,cx.table_id,cx.visit_group_id,c.status check_status FROM service_check_contexts cx JOIN pos_checks c ON c.id=cx.check_id AND c.organization_id=cx.organization_id WHERE cx.organization_id=? AND cx.location_id=? AND cx.status='active' AND c.status<>'open' FOR UPDATE");
+        $q->execute([$org,$locationId]);$closedContexts=$q->fetchAll();
+        foreach($closedContexts as $row){$pdo->prepare("UPDATE service_check_contexts SET status='closed',closed_at=COALESCE(closed_at,NOW(6)),updated_by=?,updated_at=NOW(6) WHERE organization_id=? AND check_id=? AND status='active'")->execute([$userId,$org,(int)$row['check_id']]);}
+
+        $q=$pdo->prepare("SELECT t.id table_id,t.active_check_id,c.status check_status,cx.visit_group_id FROM service_tables t JOIN pos_checks c ON c.id=t.active_check_id AND c.organization_id=t.organization_id LEFT JOIN service_check_contexts cx ON cx.organization_id=c.organization_id AND cx.check_id=c.id WHERE t.organization_id=? AND t.location_id=? AND t.active_check_id IS NOT NULL AND c.status<>'open' FOR UPDATE");
+        $q->execute([$org,$locationId]);$tables=$q->fetchAll();$changed=0;
+        foreach($tables as $row){
+            $tableId=(int)$row['table_id'];$closedCheckId=(int)$row['active_check_id'];$group=trim((string)($row['visit_group_id']??''));$openId=0;$serverId=null;
+            if($group!==''){$open=$pdo->prepare("SELECT c.id,cx.server_user_id FROM service_check_contexts cx JOIN pos_checks c ON c.id=cx.check_id AND c.organization_id=cx.organization_id WHERE cx.organization_id=? AND cx.location_id=? AND cx.visit_group_id=? AND c.status='open' ORDER BY c.id LIMIT 1 FOR UPDATE");$open->execute([$org,$locationId,$group]);$sibling=$open->fetch();if($sibling){$openId=(int)$sibling['id'];$serverId=$sibling['server_user_id']!==null?(int)$sibling['server_user_id']:null;}}
+            if($openId>0){
+                $u=$pdo->prepare("UPDATE service_tables SET active_check_id=?,assigned_user_id=COALESCE(?,assigned_user_id),state='seated',seated_at=COALESCE(seated_at,NOW(6)),updated_by=?,updated_at=NOW(6) WHERE organization_id=? AND id=? AND active_check_id=?");$u->execute([$openId,$serverId,$userId,$org,$tableId,$closedCheckId]);
+                if($u->rowCount()>0){table_service_event($pdo,$org,$locationId,$tableId,$openId,null,'visit_check_repointed','Physical table stayed occupied because another split check in the dining visit remains open.',['closedCheckId'=>$closedCheckId,'openCheckId'=>$openId,'visitGroupId'=>$group],$userId);$changed++;}
+            }else{
+                $u=$pdo->prepare("UPDATE service_tables SET active_check_id=NULL,state='dirty',assigned_user_id=NULL,seated_at=NULL,updated_by=?,updated_at=NOW(6) WHERE organization_id=? AND id=? AND active_check_id=?");$u->execute([$userId,$org,$tableId,$closedCheckId]);
+                if($u->rowCount()>0){table_service_event($pdo,$org,$locationId,$tableId,$closedCheckId,null,'visit_released','All open checks in the dining visit are terminal; physical table released dirty.',['checkStatus'=>(string)$row['check_status'],'visitGroupId'=>$group?:null],$userId);$changed++;}
+            }
+        }
+        return $changed?:count($closedContexts);
+    });
+}
+
 function service_visit_dashboard(PDO $pdo,int $org,int $locationId,string $date,int $userId): array
 {
-    table_service_reconcile_closed_checks($pdo,$org,$locationId,$userId);
+    service_visit_reconcile_tables($pdo,$org,$locationId,$userId);
     service_visit_reconcile_reservations($pdo,$org,$locationId,$userId);
     return [
         'location'=>table_service_location($pdo,$org,$locationId),
@@ -25,13 +50,14 @@ function service_visit_attach_customer_safe(PDO $pdo,int $org,string $checkPubli
     if(!$check)throw new InvalidArgumentException('POS check was not found.');
     $context=table_service_context($pdo,$org,(int)$check['id'],false);
     if(!$context)return crm_attach_check($pdo,$org,$checkPublicId,$customerPublicId);
-    return table_service_transaction($pdo,function()use($pdo,$org,$checkPublicId,$customerPublicId,$check){
+    return table_service_transaction($pdo,function()use($pdo,$org,$checkPublicId,$customerPublicId){
         $locked=table_service_check_row($pdo,$org,$checkPublicId,true);if($locked['status']!=='open')throw new InvalidArgumentException('Customer can only be changed on an open POS check.');
         service_visit_context($pdo,$org,(int)$locked['id'],true);$group=service_visit_ensure_group($pdo,$org,(int)$locked['id']);
         $customerId=null;if($customerPublicId!==null&&trim($customerPublicId)!==''){$c=crm_customer_row($pdo,$org,trim($customerPublicId));if($c['status']!=='active')throw new InvalidArgumentException('Archived customers cannot be attached to a POS check.');$customerId=(int)$c['id'];}
         $settledQ=$pdo->prepare("SELECT DISTINCT c.customer_id FROM service_check_contexts cx JOIN pos_checks c ON c.id=cx.check_id AND c.organization_id=cx.organization_id WHERE cx.organization_id=? AND cx.visit_group_id=? AND c.status='paid' AND c.customer_id IS NOT NULL");$settledQ->execute([$org,$group]);$settled=array_map('intval',$settledQ->fetchAll(PDO::FETCH_COLUMN));
         if(count($settled)>1||($settled&&$customerId!==$settled[0]))throw new InvalidArgumentException('Customer identity cannot be changed after another check in this dining visit has been paid.');
         $pdo->prepare("UPDATE pos_checks c JOIN service_check_contexts cx ON cx.check_id=c.id AND cx.organization_id=c.organization_id SET c.customer_id=?,c.revision=c.revision+1,c.updated_at=NOW(6) WHERE c.organization_id=? AND cx.visit_group_id=? AND c.status='open'")->execute([$customerId,$org,$group]);
+        $pdo->prepare("UPDATE guest_reservations r JOIN service_check_contexts cx ON cx.check_id=r.seated_check_id AND cx.organization_id=r.organization_id SET r.customer_id=?,r.updated_at=NOW(6) WHERE r.organization_id=? AND cx.visit_group_id=? AND r.status='seated'")->execute([$customerId,$org,$group]);
         return crm_check_customer($pdo,$org,$checkPublicId);
     });
 }
