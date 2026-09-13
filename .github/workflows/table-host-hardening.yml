@@ -5,7 +5,15 @@ on:
     paths:
       - 'api/table-service.php'
       - 'api/host-stand.php'
+      - 'table-service.php'
+      - 'host-stand.php'
+      - 'js/table-service.js'
+      - 'js/host-stand.js'
       - 'includes/service-ops-hardening.php'
+      - 'includes/service-ops-atomic.php'
+      - 'includes/service-ops-floor.php'
+      - 'includes/service-ops-map.php'
+      - 'includes/service-ops-reservation.php'
       - 'tests/table-host-hardening-contract.php'
       - '.github/workflows/table-host-hardening.yml'
   push:
@@ -34,23 +42,43 @@ jobs:
         run: |
           php -l api/table-service.php
           php -l api/host-stand.php
+          php -l table-service.php
+          php -l host-stand.php
           php -l includes/service-ops-hardening.php
+          php -l includes/service-ops-atomic.php
+          php -l includes/service-ops-floor.php
+          php -l includes/service-ops-map.php
+          php -l includes/service-ops-reservation.php
           php -l tests/table-host-hardening-contract.php
+          node --check js/table-service.js
+          node --check js/host-stand.js
       - name: Hardening architecture contract
         run: |
           grep -q 'service_ops_seat' api/table-service.php
           grep -q 'service_ops_transfer' api/table-service.php
           grep -q 'service_ops_split' api/table-service.php
+          grep -q 'service_ops_canonical_map' api/table-service.php
           grep -q 'New dining tables must be created as managed physical assets' api/table-service.php
           grep -q 'service_ops_availability' api/host-stand.php
-          grep -q 'service_ops_reservation_status' api/host-stand.php
+          grep -q 'service_ops_reservation_status_atomic' api/host-stand.php
           grep -q 'service_ops_reservation_update' api/host-stand.php
+          grep -q 'service_ops_reservation_assign_safe' api/host-stand.php
+          grep -q 'service_ops_place_table' api/host-stand.php
           grep -q "app_has_permission('table_service.view'" api/host-stand.php
+          grep -q "app_has_permission('table_service.view'" host-stand.php
           grep -q 'function service_ops_business_date' includes/service-ops-hardening.php
           grep -q 'function service_ops_assert_table_operable' includes/service-ops-hardening.php
           grep -q 'split_cover_allocation' includes/service-ops-hardening.php
           grep -q 'projectedClear' includes/service-ops-hardening.php
-          grep -q 'another active waitlist party' includes/service-ops-hardening.php
+          grep -q 'full table footprint' -i includes/service-ops-floor.php
+          grep -q 'percentage coordinates' tests/table-host-hardening-contract.php
+          grep -q 'another active waitlist party' includes/service-ops-reservation.php
+          grep -q 'movedGuestCount' js/table-service.js
+          grep -q 'physicalReady' js/table-service.js
+          grep -q 'data-edit' js/host-stand.js
+          grep -q 'data-check-availability' js/host-stand.js
+          ! grep -q "new Date().toISOString().slice(0,10)" js/host-stand.js
+          grep -q 'Manage Tables' table-service.php
       - name: Install and upgrade schema
         run: |
           sudo apt-get update -qq
