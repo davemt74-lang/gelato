@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'database/20260926_wholesale_commerce_acquisition.sql'
+      - 'database/20260926_zz_wholesale_commerce_fks.sql'
       - 'includes/wholesale-commerce.php'
       - 'includes/wholesale-acquisition.php'
       - 'api/wholesale-commerce.php'
@@ -61,6 +62,8 @@ jobs:
           grep -q 'CREATE TABLE IF NOT EXISTS wholesale_quote_items' database/20260926_wholesale_commerce_acquisition.sql
           grep -q 'CREATE TABLE IF NOT EXISTS wholesale_order_items' database/20260926_wholesale_commerce_acquisition.sql
           grep -q 'CREATE TABLE IF NOT EXISTS wholesale_acquisition_profiles' database/20260926_wholesale_commerce_acquisition.sql
+          grep -q 'fk_wholesale_quotes_price_list' database/20260926_zz_wholesale_commerce_fks.sql
+          grep -q 'fk_wholesale_orders_price_list' database/20260926_zz_wholesale_commerce_fks.sql
           grep -q 'wholesale_commerce_resolve_lines' includes/wholesale-commerce.php
           grep -q 'wholesale_commerce_totals' includes/wholesale-commerce.php
           grep -q 'staff_acquisition_worksheet' includes/wholesale-acquisition.php
@@ -92,7 +95,8 @@ jobs:
       - name: Verify schema
         run: |
           test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('wholesale_products','wholesale_skus','wholesale_price_lists','wholesale_price_list_items','wholesale_account_price_lists','wholesale_quote_items','wholesale_order_items','wholesale_quote_events','wholesale_order_events','wholesale_acquisition_profiles');")" = "10"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260926_wholesale_commerce_acquisition';")" = "1"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key IN ('20260926_wholesale_commerce_acquisition','20260926_zz_wholesale_commerce_fks');")" = "2"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.referential_constraints WHERE constraint_schema=DATABASE() AND constraint_name IN ('fk_wholesale_quotes_price_list','fk_wholesale_orders_price_list');")" = "2"
       - name: Commerce and acquisition behavior
         run: php tests/wholesale-commerce-acquisition-contract.php
       - name: Existing wholesale Operations regression
