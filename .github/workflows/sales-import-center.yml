@@ -8,7 +8,7 @@ on:
       - 'includes/sales-import-center-core.php'
       - 'js/sales-import-center.js'
       - 'js/sales-intelligence.js'
-      - 'database/20260914_zzzzzzzzz_sales_import_center.sql'
+      - 'database/20260915_sales_import_center.sql'
       - 'tests/sales-import-center-contract.php'
       - '.github/workflows/sales-import-center.yml'
   push:
@@ -43,9 +43,9 @@ jobs:
           node --check js/sales-intelligence.js
       - name: Architecture and privacy contract
         run: |
-          test "$(grep -c 'CREATE TABLE IF NOT EXISTS sales_import_profiles' database/20260914_zzzzzzzzz_sales_import_center.sql)" = "1"
-          grep -q "sales.import_profiles.manage" database/20260914_zzzzzzzzz_sales_import_center.sql
-          grep -q "header_signature" database/20260914_zzzzzzzzz_sales_import_center.sql
+          test "$(grep -c 'CREATE TABLE IF NOT EXISTS sales_import_profiles' database/20260915_sales_import_center.sql)" = "1"
+          grep -q "sales.import_profiles.manage" database/20260915_sales_import_center.sql
+          grep -q "header_signature" database/20260915_sales_import_center.sql
           grep -q "canonical=array_keys(sales_alias_map())" includes/sales-import-center-core.php
           grep -q "sales_import_center_signature" includes/sales-import-center-core.php
           grep -q "Import Center" js/sales-intelligence.js
@@ -78,7 +78,7 @@ jobs:
           test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='sales_import_profiles';")" = "1"
           test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='sales_import_batches' AND column_name='import_profile_id';")" = "1"
           test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key='sales.import_profiles.manage';")" = "1"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260914_zzzzzzzzz_sales_import_center';")" = "1"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260915_sales_import_center';")" = "1"
       - name: Sales Import Center behavioral contract
         run: php tests/sales-import-center-contract.php
       - name: Existing Sales + Demand regression
