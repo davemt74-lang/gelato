@@ -35,7 +35,8 @@ function host_api_reconcile(PDO $pdo,int $org,int $locationId,int $uid): void
 }
 function host_api_dashboard(PDO $pdo,int $org,int $locationId,string $date,int $uid): array
 {
-    return table_turn_readiness_dashboard($pdo,$org,$locationId,$date,$uid);
+    $dashboard=service_reservation_protection_dashboard($pdo,$org,$locationId,$date,$uid);
+    return table_turn_readiness_enrich_dashboard($pdo,$org,$locationId,$date,$dashboard);
 }
 
 try{
