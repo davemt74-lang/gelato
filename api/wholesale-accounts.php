@@ -3,6 +3,7 @@ declare(strict_types=1);
 require __DIR__ . '/../includes/bootstrap.php';
 require __DIR__ . '/../includes/wholesale-portal.php';
 require_once __DIR__ . '/../includes/operations-wholesale.php';
+require_once __DIR__ . '/../includes/wholesale-commerce.php';
 
 $user = app_require_permission($_SERVER['REQUEST_METHOD']==='GET' ? 'wholesale.view' : 'wholesale.manage');
 $pdo = app_pdo();
@@ -25,15 +26,30 @@ function wholesale_admin_detail(PDO $pdo,int $organizationId,array $account): ar
     $users->execute([$organizationId,$accountId]);
     $invites=$pdo->prepare("SELECT id,email,contact_name,account_role,expires_at,accepted_at,revoked_at,created_at FROM wholesale_portal_invites WHERE organization_id=? AND wholesale_account_id=? ORDER BY created_at DESC LIMIT 20");
     $invites->execute([$organizationId,$accountId]);
-    $quotes=$pdo->prepare("SELECT public_id,quote_number,status,items_json,subtotal,delivery_fee,tax_total,total,valid_until,customer_message,terms_text,sent_at,accepted_at,declined_at,created_at,updated_at FROM wholesale_quotes WHERE organization_id=? AND wholesale_account_id=? ORDER BY created_at DESC LIMIT 50");
-    $quotes->execute([$organizationId,$accountId]);
-    $orders=$pdo->prepare("SELECT public_id,order_number,status,items_json,subtotal,delivery_fee,tax_total,total,fulfillment_type,requested_for,promised_for,delivered_at,customer_notes,internal_notes,created_at,updated_at FROM wholesale_orders WHERE organization_id=? AND wholesale_account_id=? ORDER BY created_at DESC LIMIT 50");
-    $orders->execute([$organizationId,$accountId]);
+    $quotes=$pdo->prepare("SELECT id,public_id,quote_number,status,items_json,subtotal,delivery_fee,tax_total,total,valid_until,customer_message,terms_text,sent_at,accepted_at,declined_at,created_at,updated_at FROM wholesale_quotes WHERE organization_id=? AND wholesale_account_id=? ORDER BY created_at DESC LIMIT 50");
+    $quotes->execute([$organizationId,$accountId]);$quoteRows=$quotes->fetchAll();
+    $orders=$pdo->prepare("SELECT id,public_id,order_number,status,items_json,subtotal,delivery_fee,tax_total,total,fulfillment_type,requested_for,promised_for,delivered_at,customer_notes,internal_notes,created_at,updated_at FROM wholesale_orders WHERE organization_id=? AND wholesale_account_id=? ORDER BY created_at DESC LIMIT 50");
+    $orders->execute([$organizationId,$accountId]);$orderRows=$orders->fetchAll();
+    $commerceReady=wholesale_commerce_ready($pdo);
+    if($commerceReady){
+        foreach($quoteRows as &$quote){$quote['lines']=wholesale_commerce_quote_lines($pdo,$organizationId,(int)$quote['id']);unset($quote['id']);}unset($quote);
+        foreach($orderRows as &$order){$order['lines']=wholesale_commerce_order_lines($pdo,$organizationId,(int)$order['id']);unset($order['id']);}unset($order);
+    }else{
+        foreach($quoteRows as &$quote)unset($quote['id']);unset($quote);
+        foreach($orderRows as &$order)unset($order['id']);unset($order);
+    }
     $requests=$pdo->prepare("SELECT r.*,u.display_name AS submitted_by_name FROM wholesale_customer_requests r INNER JOIN users u ON u.id=r.submitted_by WHERE r.organization_id=? AND r.wholesale_account_id=? ORDER BY r.created_at DESC LIMIT 100");
     $requests->execute([$organizationId,$accountId]);
     $locations=$pdo->prepare("SELECT * FROM wholesale_account_locations WHERE organization_id=? AND wholesale_account_id=? ORDER BY is_primary DESC,name");
     $locations->execute([$organizationId,$accountId]);
-    return ['account'=>$account,'users'=>$users->fetchAll(),'invites'=>$invites->fetchAll(),'quotes'=>$quotes->fetchAll(),'orders'=>$orders->fetchAll(),'requests'=>$requests->fetchAll(),'locations'=>$locations->fetchAll()];
+    $commerce=['ready'=>$commerceReady,'catalog'=>[],'priceList'=>null,'priceLists'=>[]];
+    if($commerceReady){
+        $commerce['catalog']=wholesale_commerce_catalog($pdo,$organizationId,$accountId);
+        $active=wholesale_commerce_price_list_for_account($pdo,$organizationId,$accountId);
+        if($active)$commerce['priceList']=['id'=>$active['public_id'],'name'=>$active['name'],'minimumOrderAmount'=>(float)$active['minimum_order_amount']];
+        $lists=$pdo->prepare("SELECT public_id,name,minimum_order_amount,is_default FROM wholesale_price_lists WHERE organization_id=? AND status='active' AND archived_at IS NULL ORDER BY is_default DESC,name");$lists->execute([$organizationId]);$commerce['priceLists']=$lists->fetchAll();
+    }
+    return ['account'=>$account,'users'=>$users->fetchAll(),'invites'=>$invites->fetchAll(),'quotes'=>$quoteRows,'orders'=>$orderRows,'requests'=>$requests->fetchAll(),'locations'=>$locations->fetchAll(),'commerce'=>$commerce];
 }
 
 if($_SERVER['REQUEST_METHOD']==='GET'){
@@ -43,7 +59,7 @@ if($_SERVER['REQUEST_METHOD']==='GET'){
         $accounts->execute([$organizationId]);
         $leads=$pdo->prepare("SELECT l.public_id,l.business_name,l.contact_name,l.email,l.pipeline_stage,l.business_type,l.location_text FROM wholesale_leads l LEFT JOIN wholesale_accounts a ON a.wholesale_lead_id=l.id AND a.archived_at IS NULL WHERE l.organization_id=? AND l.archived_at IS NULL AND a.id IS NULL ORDER BY FIELD(l.pipeline_stage,'won','negotiation','quoted','sample','qualified','new','lost'),l.updated_at DESC");
         $leads->execute([$organizationId]);
-        app_json_response(['ok'=>true,'accounts'=>$accounts->fetchAll(),'availableLeads'=>$leads->fetchAll()]);
+        app_json_response(['ok'=>true,'accounts'=>$accounts->fetchAll(),'availableLeads'=>$leads->fetchAll(),'commerceReady'=>wholesale_commerce_ready($pdo)]);
     }
     if($action==='detail'){
         $account=wholesale_admin_account($pdo,$organizationId,trim((string)($_GET['id']??'')));
@@ -76,6 +92,15 @@ if($action==='invite'){
     app_json_response(['ok'=>true,'message'=>$sent?'Invitation emailed.':'Invitation created. Copy the secure link to the buyer.','inviteUrl'=>$url,'emailSent'=>$sent]);
 }
 
+if($action==='assign_price_list'){
+    if(!wholesale_commerce_ready($pdo))app_json_response(['ok'=>false,'message'=>'Wholesale commerce upgrade is not installed.'],503);
+    try{wholesale_commerce_assign_price_list($pdo,$organizationId,$accountId,trim((string)($input['priceListId']??'')),(int)$user['id']);}
+    catch(Throwable $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);}
+    wholesale_portal_sync_account_knowledge($pdo,$organizationId,$accountId,(int)$user['id']);
+    app_audit($pdo,$organizationId,(int)$user['id'],'wholesale.price_list_assigned','wholesale_account',$accountIdPublic,null,['priceListId'=>$input['priceListId']??null]);
+    app_json_response(['ok'=>true,'message'=>'Wholesale price list assigned.']);
+}
+
 if($action==='update_account'){
     $status=(string)($input['accountStatus']??$account['account_status']);if(!in_array($status,['active','on_hold','closed'],true))app_json_response(['ok'=>false,'message'=>'Invalid account status.'],422);
     $packages=array_values(array_filter(array_map('trim',(array)($input['packagePreferences']??[]))));
@@ -87,24 +112,38 @@ if($action==='update_account'){
 }
 
 if($action==='quote'){
-    $items=(array)($input['items']??[]);if(!$items)app_json_response(['ok'=>false,'message'=>'Add at least one quote item.'],422);
-    $subtotal=max(0,(float)($input['subtotal']??0));$delivery=max(0,(float)($input['deliveryFee']??0));$tax=max(0,(float)($input['taxTotal']??0));$total=max(0,(float)($input['total']??($subtotal+$delivery+$tax)));
-    $valid=trim((string)($input['validUntil']??''));if($valid!==''&&!DateTimeImmutable::createFromFormat('Y-m-d',$valid))app_json_response(['ok'=>false,'message'=>'Quote expiration date is invalid.'],422);
-    $publicId=wholesale_portal_public_id('wquote');$number='Q-'.date('ymd').'-'.strtoupper(substr(bin2hex(random_bytes(4)),0,6));$status=(string)($input['status']??'sent');if(!in_array($status,['draft','sent'],true))$status='sent';
-    $insert=$pdo->prepare("INSERT INTO wholesale_quotes (organization_id,wholesale_account_id,public_id,quote_number,status,items_json,subtotal,delivery_fee,tax_total,total,valid_until,customer_message,terms_text,sent_at,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,IF(?='sent',NOW(6),NULL),?,?)");
-    $insert->execute([$organizationId,$accountId,$publicId,$number,$status,json_encode($items,JSON_THROW_ON_ERROR),$subtotal,$delivery,$tax,$total,$valid?:null,mb_substr(trim((string)($input['customerMessage']??'')),0,10000,'UTF-8')?:null,mb_substr(trim((string)($input['terms']??'')),0,10000,'UTF-8')?:null,$status,(int)$user['id'],(int)$user['id']]);
+    try{
+        if(wholesale_commerce_ready($pdo)){
+            $result=wholesale_commerce_create_quote($pdo,$organizationId,$account,$input,(int)$user['id']);
+            $publicId=$result['publicId'];$number=$result['quoteNumber'];$total=$result['totals']['total'];
+        }else{
+            $items=(array)($input['items']??[]);if(!$items)throw new InvalidArgumentException('Add at least one quote item.');
+            $subtotal=max(0,(float)($input['subtotal']??0));$delivery=max(0,(float)($input['deliveryFee']??0));$tax=max(0,(float)($input['taxTotal']??0));$total=max(0,(float)($input['total']??($subtotal+$delivery+$tax)));
+            $valid=trim((string)($input['validUntil']??''));if($valid!==''&&!DateTimeImmutable::createFromFormat('Y-m-d',$valid))throw new InvalidArgumentException('Quote expiration date is invalid.');
+            $publicId=wholesale_portal_public_id('wquote');$number='Q-'.date('ymd').'-'.strtoupper(substr(bin2hex(random_bytes(4)),0,6));$quoteStatus=(string)($input['status']??'sent');if(!in_array($quoteStatus,['draft','sent'],true))$quoteStatus='sent';
+            $insert=$pdo->prepare("INSERT INTO wholesale_quotes (organization_id,wholesale_account_id,public_id,quote_number,status,items_json,subtotal,delivery_fee,tax_total,total,valid_until,customer_message,terms_text,sent_at,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,IF(?='sent',NOW(6),NULL),?,?)");
+            $insert->execute([$organizationId,$accountId,$publicId,$number,$quoteStatus,json_encode($items,JSON_THROW_ON_ERROR),$subtotal,$delivery,$tax,$total,$valid?:null,mb_substr(trim((string)($input['customerMessage']??'')),0,10000,'UTF-8')?:null,mb_substr(trim((string)($input['terms']??'')),0,10000,'UTF-8')?:null,$quoteStatus,(int)$user['id'],(int)$user['id']]);
+        }
+    }catch(Throwable $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);}
     wholesale_portal_sync_account_knowledge($pdo,$organizationId,$accountId,(int)$user['id']);
     app_audit($pdo,$organizationId,(int)$user['id'],'wholesale.quote_created','wholesale_quote',$publicId,null,['accountId'=>$accountIdPublic,'quoteNumber'=>$number,'total'=>$total]);
     app_json_response(['ok'=>true,'message'=>'Wholesale quote created.','quoteNumber'=>$number]);
 }
 
 if($action==='order'){
-    $items=(array)($input['items']??[]);if(!$items)app_json_response(['ok'=>false,'message'=>'Add at least one order item.'],422);
-    $subtotal=max(0,(float)($input['subtotal']??0));$delivery=max(0,(float)($input['deliveryFee']??0));$tax=max(0,(float)($input['taxTotal']??0));$total=max(0,(float)($input['total']??($subtotal+$delivery+$tax)));
-    $status=(string)($input['status']??'confirmed');if(!in_array($status,['requested','confirmed','in_production','ready','out_for_delivery','delivered','cancelled'],true))$status='confirmed';
-    $publicId=wholesale_portal_public_id('worder');$number='W-'.date('ymd').'-'.strtoupper(substr(bin2hex(random_bytes(4)),0,6));
-    $insert=$pdo->prepare("INSERT INTO wholesale_orders (organization_id,wholesale_account_id,public_id,order_number,status,items_json,subtotal,delivery_fee,tax_total,total,fulfillment_type,requested_for,promised_for,customer_notes,internal_notes,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
-    $insert->execute([$organizationId,$accountId,$publicId,$number,$status,json_encode($items,JSON_THROW_ON_ERROR),$subtotal,$delivery,$tax,$total,mb_substr(trim((string)($input['fulfillmentType']??'')),0,40,'UTF-8')?:null,trim((string)($input['requestedFor']??''))?:null,trim((string)($input['promisedFor']??''))?:null,mb_substr(trim((string)($input['customerNotes']??'')),0,10000,'UTF-8')?:null,mb_substr(trim((string)($input['internalNotes']??'')),0,10000,'UTF-8')?:null,(int)$user['id'],(int)$user['id']]);
+    try{
+        if(wholesale_commerce_ready($pdo)){
+            $result=wholesale_commerce_create_order($pdo,$organizationId,$account,$input,(int)$user['id']);
+            $publicId=$result['publicId'];$number=$result['orderNumber'];$total=$result['totals']['total'];
+        }else{
+            $items=(array)($input['items']??[]);if(!$items)throw new InvalidArgumentException('Add at least one order item.');
+            $subtotal=max(0,(float)($input['subtotal']??0));$delivery=max(0,(float)($input['deliveryFee']??0));$tax=max(0,(float)($input['taxTotal']??0));$total=max(0,(float)($input['total']??($subtotal+$delivery+$tax)));
+            $orderStatus=(string)($input['status']??'confirmed');if(!in_array($orderStatus,['requested','confirmed','in_production','ready','out_for_delivery','delivered','cancelled'],true))$orderStatus='confirmed';
+            $publicId=wholesale_portal_public_id('worder');$number='W-'.date('ymd').'-'.strtoupper(substr(bin2hex(random_bytes(4)),0,6));
+            $insert=$pdo->prepare("INSERT INTO wholesale_orders (organization_id,wholesale_account_id,public_id,order_number,status,items_json,subtotal,delivery_fee,tax_total,total,fulfillment_type,requested_for,promised_for,customer_notes,internal_notes,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+            $insert->execute([$organizationId,$accountId,$publicId,$number,$orderStatus,json_encode($items,JSON_THROW_ON_ERROR),$subtotal,$delivery,$tax,$total,mb_substr(trim((string)($input['fulfillmentType']??'')),0,40,'UTF-8')?:null,trim((string)($input['requestedFor']??''))?:null,trim((string)($input['promisedFor']??''))?:null,mb_substr(trim((string)($input['customerNotes']??'')),0,10000,'UTF-8')?:null,mb_substr(trim((string)($input['internalNotes']??'')),0,10000,'UTF-8')?:null,(int)$user['id'],(int)$user['id']]);
+        }
+    }catch(Throwable $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);}
     wholesale_portal_sync_account_knowledge($pdo,$organizationId,$accountId,(int)$user['id']);
     if(operations_wholesale_ready($pdo))operations_sync_wholesale_tasks($pdo,$organizationId,(int)$user['id']);
     app_audit($pdo,$organizationId,(int)$user['id'],'wholesale.order_created','wholesale_order',$publicId,null,['accountId'=>$accountIdPublic,'orderNumber'=>$number,'total'=>$total]);
