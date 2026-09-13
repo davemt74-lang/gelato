@@ -44,6 +44,8 @@ jobs:
           grep -q 'CREATE TABLE IF NOT EXISTS wholesale_receivable_entries' database/20260930_wholesale_receivables.sql
           grep -q 'CREATE TABLE IF NOT EXISTS wholesale_receivable_events' database/20260930_wholesale_receivables.sql
           grep -q "WHOLESALE_SALES_PROVIDER='gelato_wholesale'" includes/wholesale-receivables.php
+          grep -q 'GET_LOCK' includes/wholesale-receivables.php
+          grep -q 'RELEASE_LOCK' includes/wholesale-receivables.php
           grep -q "entry_type='credit'" includes/wholesale-receivables.php
           grep -q "wholesale.receivables.manage" api/wholesale-receivables.php
           ! grep -q 'INSERT INTO pos_checks' includes/wholesale-receivables.php
