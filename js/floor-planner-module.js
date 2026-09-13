@@ -38,6 +38,10 @@
     addAdminNav('schedule.self', 'scheduling-nav', '◫', 'My Schedule', 'scheduling.php');
     addAdminNav('timeclock.view', 'timeclock-nav', '◷', 'Time Clock + Attendance', 'timeclock.php');
     addAdminNav('timeclock.self', 'timeclock-nav', '◷', 'My Time + Gelato', 'timeclock.php');
+    const adminNav = document.querySelector('[data-nav-group="admin"]');
+    if (adminNav && !adminNav.querySelector('[data-agent-canvas-nav]')) {
+      const button=document.createElement('button');button.type='button';button.className='nav-btn';button.dataset.agentCanvasNav='1';button.innerHTML='<span class="nav-ico">✦</span>Agent Canvas';button.addEventListener('click',()=>{window.location.href='agent-canvas.php';});adminNav.appendChild(button);
+    }
   }
 
   function loadScript(src, marker) {
@@ -53,6 +57,7 @@
 
   function install() {
     installOperationsNav();
+    loadScript('js/global-agent.js?v=20260913-1', 'gelato-global-agent');
     loadScript('js/equipment-module.js', 'equipment-module');
     loadScript('js/catering-module.js', 'catering-module');
     loadScript('js/restaurant-agent-bridge.js', 'restaurant-agent-bridge');
