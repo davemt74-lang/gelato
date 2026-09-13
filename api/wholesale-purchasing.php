@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require __DIR__ . '/../includes/bootstrap.php';
 require __DIR__ . '/../includes/wholesale-purchasing-lifecycle.php';
+require_once __DIR__ . '/../includes/operations-wholesale.php';
 
 $user=app_require_permission($_SERVER['REQUEST_METHOD']==='GET' ? 'wholesale.view' : 'wholesale.manage');
 $pdo=app_pdo();
@@ -49,7 +50,9 @@ try{
         app_json_response(['ok'=>true,'message'=>'Tasting record saved.','tasting'=>wholesale_tasting_save($pdo,$org,$leadId,$input,$userId),'detail'=>wholesale_planning_detail($pdo,$org,$leadId)]);
     }
     if($action==='starter_order.create'){
-        app_json_response(['ok'=>true,'message'=>'Canonical requested starter order created.','order'=>wholesale_planning_create_starter_order($pdo,$org,$leadId,$userId),'detail'=>wholesale_planning_detail($pdo,$org,$leadId)]);
+        $order=wholesale_planning_create_starter_order($pdo,$org,$leadId,$userId);
+        if(operations_wholesale_ready($pdo)) operations_sync_wholesale_tasks($pdo,$org,$userId);
+        app_json_response(['ok'=>true,'message'=>!empty($order['alreadyExists'])?'Existing starter order returned; no duplicate was created.':'Canonical requested starter order created and synced to Operations.','order'=>$order,'detail'=>wholesale_planning_detail($pdo,$org,$leadId)]);
     }
     throw new InvalidArgumentException('Unsupported Wholesale purchasing action.');
 }catch(InvalidArgumentException|RuntimeException $e){
