@@ -1,0 +1,42 @@
+name: Admin Shell Consolidation
+
+on:
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'js/admin-shell-consolidation.js'
+      - 'js/floor-planner-module.js'
+      - 'tests/admin-shell-consolidation-contract.php'
+      - '.github/workflows/admin-shell-consolidation.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'index.html'
+      - 'js/admin-shell-consolidation.js'
+      - 'js/floor-planner-module.js'
+      - 'tests/admin-shell-consolidation-contract.php'
+      - '.github/workflows/admin-shell-consolidation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    name: Admin shell contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          coverage: none
+      - name: PHP syntax
+        run: php -l tests/admin-shell-consolidation-contract.php
+      - name: JavaScript syntax
+        run: |
+          node --check js/admin-shell-consolidation.js
+          node --check js/floor-planner-module.js
+      - name: Admin shell contract
+        run: php tests/admin-shell-consolidation-contract.php
