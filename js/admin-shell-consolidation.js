@@ -5,7 +5,6 @@
   window.GelatoAdminShellConsolidated = true;
 
   const $ = (selector, root = document) => root.querySelector(selector);
-  const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
   }[character]));
@@ -31,13 +30,6 @@
       @media(max-width:840px){#page-workspace .chat-canvas{padding-bottom:96px}.standard-page.admin-page{padding-bottom:96px}}
     `;
     document.head.appendChild(style);
-  }
-
-  function removeDuplicateOwnerConversation() {
-    $('.sidebar .role-card')?.remove();
-    $('#page-owner > .page-head')?.remove();
-    $('#page-owner .owner-agent-dialogue')?.remove();
-    $('#page-owner .owner-agent-composer')?.remove();
   }
 
   function normalizeOperationsNavigation() {
@@ -118,13 +110,12 @@
 
   function install() {
     installStyles();
-    removeDuplicateOwnerConversation();
     normalizeOperationsNavigation();
     clarifyMainAgentCanvas();
     installGlobalAgentCanvasBridge();
 
-    // Operations navigation is installed on DOMContentLoaded by the existing module.
-    // A microtask/next-frame pass guarantees labels/order are normalized afterward.
+    // Existing scripts still update hidden legacy hooks such as sidebarRole and
+    // owner chat elements. Keep those nodes in the DOM and remove them visually.
     queueMicrotask(normalizeOperationsNavigation);
     requestAnimationFrame(normalizeOperationsNavigation);
   }
