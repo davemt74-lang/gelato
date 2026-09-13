@@ -20,6 +20,7 @@ function service_visit_merge_safe(PDO $pdo,int $org,string $sourceCheckPublicId,
         service_visit_context($pdo,$org,(int)$source['id'],true);service_visit_context($pdo,$org,(int)$target['id'],true);
         $sourceGroup=service_visit_ensure_group($pdo,$org,(int)$source['id']);$targetGroup=service_visit_ensure_group($pdo,$org,(int)$target['id']);
         $groups=array_values(array_unique([$sourceGroup,$targetGroup]));$ph=implode(',',array_fill(0,count($groups),'?'));
+        service_visit_lock_groups($pdo,$org,$groups);
         $q=$pdo->prepare("SELECT COUNT(*) FROM pos_tenders t JOIN service_check_contexts cx ON cx.check_id=t.check_id AND cx.organization_id=t.organization_id WHERE t.organization_id=? AND cx.visit_group_id IN ($ph) AND t.status='captured'");$q->execute(array_merge([$org],$groups));
         if((int)$q->fetchColumn()>0)throw new InvalidArgumentException('Checks cannot be merged after any check in either dining visit has captured payment.');
         $customers=service_visit_group_customer_ids($pdo,$org,$groups);if(count($customers)>1)throw new InvalidArgumentException('Checks linked to different CRM customers cannot be merged.');$customerId=$customers[0]??null;
