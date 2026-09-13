@@ -1,0 +1,132 @@
+name: Table Service + Host Stand Hardening
+
+on:
+  pull_request:
+    paths:
+      - 'api/table-service.php'
+      - 'api/host-stand.php'
+      - 'table-service.php'
+      - 'host-stand.php'
+      - 'js/table-service.js'
+      - 'js/host-stand.js'
+      - 'includes/service-ops-hardening.php'
+      - 'includes/service-ops-atomic.php'
+      - 'includes/service-ops-floor.php'
+      - 'includes/service-ops-map.php'
+      - 'includes/service-ops-reservation.php'
+      - 'tests/table-host-hardening-contract.php'
+      - '.github/workflows/table-host-hardening.yml'
+  push:
+    branches: [main]
+
+jobs:
+  table-host-hardening:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - name: Syntax checks
+        run: |
+          php -l api/table-service.php
+          php -l api/host-stand.php
+          php -l table-service.php
+          php -l host-stand.php
+          php -l includes/service-ops-hardening.php
+          php -l includes/service-ops-atomic.php
+          php -l includes/service-ops-floor.php
+          php -l includes/service-ops-map.php
+          php -l includes/service-ops-reservation.php
+          php -l tests/table-host-hardening-contract.php
+          node --check js/table-service.js
+          node --check js/host-stand.js
+      - name: Hardening architecture contract
+        run: |
+          grep -q 'service_ops_seat' api/table-service.php
+          grep -q 'service_ops_transfer' api/table-service.php
+          grep -q 'service_ops_split' api/table-service.php
+          grep -q 'service_ops_canonical_map' api/table-service.php
+          grep -q 'New dining tables must be created as managed physical assets' api/table-service.php
+          grep -q 'service_ops_availability' api/host-stand.php
+          grep -q 'service_ops_reservation_status_atomic' api/host-stand.php
+          grep -q 'service_ops_reservation_update' api/host-stand.php
+          grep -q 'service_ops_reservation_assign_safe' api/host-stand.php
+          grep -q 'service_ops_place_table' api/host-stand.php
+          grep -q "app_has_permission('table_service.view'" api/host-stand.php
+          grep -q "app_has_permission('table_service.view'" host-stand.php
+          grep -q 'function service_ops_business_date' includes/service-ops-hardening.php
+          grep -q 'function service_ops_assert_table_operable' includes/service-ops-hardening.php
+          grep -q 'split_cover_allocation' includes/service-ops-hardening.php
+          grep -q 'projectedClear' includes/service-ops-hardening.php
+          grep -q 'full table footprint' -i includes/service-ops-floor.php
+          grep -q 'percentage coordinates' tests/table-host-hardening-contract.php
+          grep -q 'another active waitlist party' includes/service-ops-reservation.php
+          grep -q 'movedGuestCount' js/table-service.js
+          grep -q 'physicalReady' js/table-service.js
+          grep -q 'data-edit' js/host-stand.js
+          grep -q 'data-check-availability' js/host-stand.js
+          ! grep -q "new Date().toISOString().slice(0,10)" js/host-stand.js
+          grep -q 'Manage Tables' table-service.php
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_restaurant_ai_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->ensureTrackingTables();
+          $s->bootstrapLegacyHistory(null);
+          $s->applyPending(null);
+          if($s->pendingMigrations()) exit(1);
+          PHP
+      - name: Recent work hardening behavior
+        run: php tests/table-host-hardening-contract.php
+      - name: Host Stand regression
+        run: php tests/host-stand-contract.php
+      - name: Table Service regression
+        run: php tests/table-service-contract.php
+      - name: Table Service reconciliation regression
+        run: php tests/table-service-reconcile-contract.php
+      - name: Kitchen Display regression
+        run: php tests/kds-contract.php
+      - name: Native POS regression
+        run: php tests/native-pos-contract.php
+      - name: Customer CRM regression
+        run: php tests/customer-crm-contract.php
+      - name: Daily Manager regression
+        run: php tests/daily-manager-contract.php
+      - name: Upgrader checksum and idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->assertAppliedChecksumsUnchanged();
+          if($s->pendingMigrations()) exit(2);
+          if($s->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP
