@@ -22,6 +22,18 @@ function service_ops_lock_tables_canonical(PDO $pdo,int $org,int $locationId,arr
     return $rows;
 }
 
+function service_ops_current_reservation_table_ids(PDO $pdo,int $org,int $locationId,int $reservationId): array
+{
+    $q=$pdo->prepare("SELECT t.public_id
+        FROM guest_reservation_tables rt
+        JOIN service_tables t ON t.id=rt.service_table_id
+        WHERE rt.reservation_id=? AND t.organization_id=? AND t.location_id=?
+        ORDER BY rt.is_primary DESC,rt.service_table_id
+        FOR UPDATE");
+    $q->execute([$reservationId,$org,$locationId]);
+    return array_map('strval',$q->fetchAll(PDO::FETCH_COLUMN));
+}
+
 function service_ops_current_scheduled_conflict(PDO $pdo,int $org,int $tableId,array $reservation): ?int
 {
     if($reservation['scheduled_at']===null)return null;
