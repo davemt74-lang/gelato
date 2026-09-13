@@ -30,8 +30,8 @@ $pdo->prepare("INSERT INTO menu_item_prices (menu_item_id,option_name,size_code,
 $today=service_ops_business_date($pdo,$org,$location);table_service_section_assign($pdo,$org,$location,$section['publicId'],$user,$today,$user);
 $check=service_ops_seat($pdo,$org,$location,$tableA['publicId'],4,null,'Hardening split test',$user);$checkPublic=(string)$check['publicId'];
 thc((int)$check['serviceContext']['serverUserId']===$user,'Restaurant-local section assignment must drive default server.');
-$check=pos_add_item($pdo,$org,$checkPublic,$price,1,'Seat 1',$user);$item1=(int)end($check['items'])['id'];table_service_item_course($pdo,$org,$checkPublic,$item1,1,'mains',$user);
-$check=pos_add_item($pdo,$org,$checkPublic,$price,1,'Seat 2',$user);$item2=(int)end($check['items'])['id'];table_service_item_course($pdo,$org,$checkPublic,$item2,2,'mains',$user);
+$check=pos_add_item($pdo,$org,$checkPublic,$price,1,'Seat 1',$user);$items=$check['items'];$last=end($items);$item1=(int)$last['id'];table_service_item_course($pdo,$org,$checkPublic,$item1,1,'mains',$user);
+$check=pos_add_item($pdo,$org,$checkPublic,$price,1,'Seat 2',$user);$items=$check['items'];$last=end($items);$item2=(int)$last['id'];table_service_item_course($pdo,$org,$checkPublic,$item2,2,'mains',$user);
 $split=service_ops_split($pdo,$org,$checkPublic,[$item1],$user,null);
 thc((int)$split['created']['guestCount']===1,'A fully moved seat must allocate one cover to the split check.');
 thc((int)$split['source']['guestCount']===3,'Source covers must be reduced after seat split.');
