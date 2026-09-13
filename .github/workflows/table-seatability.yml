@@ -46,10 +46,10 @@ jobs:
           grep -q 'service_reservation_protection_transfer' api/table-service.php
           grep -q 'service_reservation_protection_dashboard' api/host-stand.php
           grep -q 'service_seatability_availability' api/host-stand.php
-          grep -q 'service_seatability_reservation_create' api/host-stand.php
+          grep -q 'service_reservation_protection_reservation_create' api/host-stand.php
           grep -q 'service_seatability_reservation_update' api/host-stand.php
-          grep -q 'service_seatability_reservation_assign' api/host-stand.php
-          grep -q 'service_seatability_host_seat' api/host-stand.php
+          grep -q 'service_reservation_protection_reservation_assign' api/host-stand.php
+          grep -q 'service_reservation_protection_host_seat' api/host-stand.php
           grep -q "state!=='available'" includes/service-seatability.php
           grep -q "in_array(\$state,\['blocked','out_of_service'\]" includes/service-seatability.php
           grep -q 'service_seatability_cleanup_minutes' includes/service-seatability.php
@@ -58,13 +58,18 @@ jobs:
           grep -q 'function service_seatability_reservation_update' includes/service-seatability.php
           grep -q 'function service_reservation_protection_next' includes/service-reservation-protection.php
           grep -q 'function service_reservation_protection_projected_clear' includes/service-reservation-protection.php
+          grep -q 'function service_reservation_protection_assert_walkin_tables' includes/service-reservation-protection.php
+          grep -q 'function service_reservation_protection_reservation_create' includes/service-reservation-protection.php
+          grep -q 'function service_reservation_protection_reservation_assign' includes/service-reservation-protection.php
+          grep -q 'function service_reservation_protection_host_seat' includes/service-reservation-protection.php
           grep -q 'function service_reservation_protection_dashboard' includes/service-reservation-protection.php
           grep -q 'reservationProtected' includes/service-reservation-protection.php
           grep -q "unset(\$input\['tablePublicIds'\],\$input\['combinationPublicId'\])" includes/service-seatability.php
           grep -q 'combinationPublicId' tests/table-seatability-contract.php
           grep -q 'Rejected Dirty-table schedule edit' tests/table-seatability-contract.php
           grep -q 'projected active-check occupancy window' tests/table-seatability-contract.php
-          grep -q 'imminent assigned reservation' tests/upcoming-reservation-protection-contract.php
+          grep -q 'Host Stand walk-in creation' tests/upcoming-reservation-protection-contract.php
+          grep -q 'already-assigned walk-in' tests/upcoming-reservation-protection-contract.php
       - name: Install and upgrade schema
         run: |
           sudo apt-get update -qq
