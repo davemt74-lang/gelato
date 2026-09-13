@@ -134,6 +134,7 @@ function operations_sync_wholesale_tasks(PDO $pdo, int $organizationId, ?int $us
         ]);
         $count++;
     }
+    if(wholesale_demand_ready($pdo))wholesale_demand_sync_organization($pdo,$organizationId,$userId);
     return $count;
 }
 
