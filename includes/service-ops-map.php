@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__.'/service-ops-floor.php';
+require_once __DIR__.'/table-service-reconcile.php';
 
 function service_ops_canonical_map(PDO $pdo,int $org,int $locationId,bool $activeOnly=true): array
 {
