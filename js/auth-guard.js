@@ -10,7 +10,7 @@
     return;
   }
 
-  const ASSET_VERSION = '20260913-global-agent';
+  const ASSET_VERSION = '20260914-employee-home';
 
   function loadScript(src, marker) {
     if (document.querySelector(`script[${marker}]`)) return;
@@ -41,6 +41,7 @@
       }
     }
 
+    loadScript(`js/employee-home-module.js?v=${ASSET_VERSION}`, 'data-gelato-employee-home-nav');
     loadScript(`js/global-agent.js?v=${ASSET_VERSION}`, 'data-gelato-global-agent');
     loadScript(`js/form-media-admin.js?v=${ASSET_VERSION}`, 'data-form-media-admin');
     if (canUseAgentAdmin) {
