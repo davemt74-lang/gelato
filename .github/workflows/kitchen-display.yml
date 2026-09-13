@@ -4,10 +4,12 @@ on:
   pull_request:
     paths:
       - 'kds.php'
+      - 'pos.php'
       - 'api/kds.php'
       - 'api/pos.php'
       - 'includes/kds-core.php'
       - 'js/kds.js'
+      - 'js/pos.js'
       - 'database/20260919_kitchen_display_order_routing.sql'
       - 'tests/kds-contract.php'
       - '.github/workflows/kitchen-display.yml'
@@ -36,11 +38,13 @@ jobs:
       - name: Syntax checks
         run: |
           php -l kds.php
+          php -l pos.php
           php -l api/kds.php
           php -l api/pos.php
           php -l includes/kds-core.php
           php -l tests/kds-contract.php
           node --check js/kds.js
+          node --check js/pos.js
       - name: Architecture and routing contract
         run: |
           test "$(grep -c 'CREATE TABLE IF NOT EXISTS kds_stations' database/20260919_kitchen_display_order_routing.sql)" = "1"
@@ -52,10 +56,16 @@ jobs:
           grep -q "'kds.view'" database/20260919_kitchen_display_order_routing.sql
           grep -q "'kds.update'" database/20260919_kitchen_display_order_routing.sql
           grep -q "'kds.configure'" database/20260919_kitchen_display_order_routing.sql
+          grep -q 'function kds_transaction' includes/kds-core.php
+          grep -q 'return kds_transaction' includes/kds-core.php
           grep -q 'kds_assert_pos_line_mutable' api/pos.php
           grep -q 'kds_cancel_pos_line' api/pos.php
           grep -q 'kds_cancel_check' api/pos.php
           grep -q "action==='kitchen.send'" api/pos.php
+          grep -q 'id="kitchenSend"' js/pos.js
+          grep -q 'id="kitchenHold"' js/pos.js
+          grep -q 'kitchenItemByLine' js/pos.js
+          grep -q 'href="kds.php"' pos.php
       - name: Install and upgrade schema
         run: |
           sudo apt-get update -qq
