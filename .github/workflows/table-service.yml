@@ -1,0 +1,111 @@
+name: Table Service + Guest Lifecycle
+
+on:
+  pull_request:
+    paths:
+      - 'table-service.php'
+      - 'api/table-service.php'
+      - 'includes/table-service-core.php'
+      - 'includes/table-service-reconcile.php'
+      - 'js/table-service.js'
+      - 'database/20260920_table_service_guest_lifecycle.sql'
+      - 'tests/table-service-contract.php'
+      - '.github/workflows/table-service.yml'
+  push:
+    branches: [main]
+
+jobs:
+  table-service:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - name: Syntax checks
+        run: |
+          php -l table-service.php
+          php -l api/table-service.php
+          php -l includes/table-service-core.php
+          php -l includes/table-service-reconcile.php
+          php -l tests/table-service-contract.php
+          node --check js/table-service.js
+      - name: Architecture contract
+        run: |
+          test "$(grep -c 'CREATE TABLE IF NOT EXISTS service_sections' database/20260920_table_service_guest_lifecycle.sql)" = "1"
+          test "$(grep -c 'CREATE TABLE IF NOT EXISTS service_tables' database/20260920_table_service_guest_lifecycle.sql)" = "1"
+          test "$(grep -c 'CREATE TABLE IF NOT EXISTS service_check_contexts' database/20260920_table_service_guest_lifecycle.sql)" = "1"
+          test "$(grep -c 'CREATE TABLE IF NOT EXISTS service_section_assignments' database/20260920_table_service_guest_lifecycle.sql)" = "1"
+          test "$(grep -c 'CREATE TABLE IF NOT EXISTS service_events' database/20260920_table_service_guest_lifecycle.sql)" = "1"
+          grep -q 'seat_number SMALLINT UNSIGNED' database/20260920_table_service_guest_lifecycle.sql
+          grep -q "course_key VARCHAR(40)" database/20260920_table_service_guest_lifecycle.sql
+          grep -q "'table_service.view'" database/20260920_table_service_guest_lifecycle.sql
+          grep -q "'table_service.use'" database/20260920_table_service_guest_lifecycle.sql
+          grep -q "'table_service.manage'" database/20260920_table_service_guest_lifecycle.sql
+          grep -q 'function table_service_transaction' includes/table-service-core.php
+          grep -q 'function table_service_payment_guard' includes/table-service-core.php
+          grep -q 'function table_service_fire_course' includes/table-service-core.php
+          grep -q 'function table_service_split' includes/table-service-core.php
+          grep -q 'function table_service_merge' includes/table-service-core.php
+          grep -q 'kds_order_items SET check_id=' includes/table-service-core.php
+          grep -q 'table_service_reconcile_closed_checks' api/table-service.php
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_restaurant_ai_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->ensureTrackingTables();
+          $s->bootstrapLegacyHistory(null);
+          $s->applyPending(null);
+          if($s->pendingMigrations()) exit(1);
+          PHP
+      - name: Verify schema and permissions
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('service_sections','service_tables','service_check_contexts','service_section_assignments','service_events');")" = "5"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='pos_check_items' AND column_name IN ('seat_number','course_key','course_sequence');")" = "3"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('table_service.view','table_service.use','table_service.manage');")" = "3"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260920_table_service_guest_lifecycle';")" = "1"
+      - name: Table Service behavioral contract
+        run: php tests/table-service-contract.php
+      - name: Kitchen Display regression
+        run: php tests/kds-contract.php
+      - name: Native POS regression
+        run: php tests/native-pos-contract.php
+      - name: Daily Manager regression
+        run: php tests/daily-manager-contract.php
+      - name: Verify upgrader idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->assertAppliedChecksumsUnchanged();
+          if($s->pendingMigrations()) exit(2);
+          if($s->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP
