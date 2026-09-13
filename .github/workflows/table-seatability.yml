@@ -1,0 +1,102 @@
+name: Table Seatability States
+
+on:
+  pull_request:
+    paths:
+      - 'api/table-service.php'
+      - 'api/host-stand.php'
+      - 'includes/service-seatability.php'
+      - 'tests/table-seatability-contract.php'
+      - '.github/workflows/table-seatability.yml'
+  push:
+    branches: [main]
+
+jobs:
+  table-seatability:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - name: Syntax checks
+        run: |
+          php -l api/table-service.php
+          php -l api/host-stand.php
+          php -l includes/service-seatability.php
+          php -l tests/table-seatability-contract.php
+      - name: Seatability architecture contract
+        run: |
+          grep -q 'service_seatability_party_seat' api/table-service.php
+          grep -q 'service_seatability_transfer' api/table-service.php
+          grep -q 'service_seatability_dashboard' api/host-stand.php
+          grep -q 'service_seatability_availability' api/host-stand.php
+          grep -q 'service_seatability_reservation_create' api/host-stand.php
+          grep -q 'service_seatability_reservation_assign' api/host-stand.php
+          grep -q 'service_seatability_host_seat' api/host-stand.php
+          grep -q "state!=='available'" includes/service-seatability.php
+          grep -q "in_array(\$state,\['blocked','out_of_service'\]" includes/service-seatability.php
+          grep -q 'service_seatability_cleanup_minutes' includes/service-seatability.php
+          grep -q 'unset($input' includes/service-seatability.php
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_restaurant_ai_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->ensureTrackingTables();
+          $s->bootstrapLegacyHistory(null);
+          $s->applyPending(null);
+          if($s->pendingMigrations()) exit(1);
+          PHP
+      - name: Table seatability behavioral contract
+        run: php tests/table-seatability-contract.php
+      - name: Dining visit lifecycle regression
+        run: php tests/dining-visit-lifecycle-contract.php
+      - name: Table-host hardening regression
+        run: php tests/table-host-hardening-contract.php
+      - name: Host Stand regression
+        run: php tests/host-stand-contract.php
+      - name: Table Service regression
+        run: php tests/table-service-contract.php
+      - name: Customer CRM regression
+        run: php tests/customer-crm-contract.php
+      - name: Native POS regression
+        run: php tests/native-pos-contract.php
+      - name: Daily Manager regression
+        run: php tests/daily-manager-contract.php
+      - name: Upgrader checksum and idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->assertAppliedChecksumsUnchanged();
+          if($s->pendingMigrations()) exit(2);
+          if($s->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP
