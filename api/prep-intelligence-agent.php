@@ -11,6 +11,7 @@ if(!prep_intelligence_ready($pdo))app_json_response(['ok'=>false,'message'=>'Pre
 $canView=app_has_permission('prep.intelligence.view',$user);
 $canManage=app_has_permission('prep.intelligence.manage',$user);
 $canAgent=app_has_permission('prep.intelligence.agent',$user);
+$canForecast=app_has_permission('inventory.forecast.view',$user)||app_has_permission('inventory.view',$user);
 if(!$canView||!$canAgent)app_json_response(['ok'=>false,'message'=>'Prep Intelligence Agent permission required.'],403);
 if($_SERVER['REQUEST_METHOD']!=='POST'){header('Allow: POST');app_json_response(['ok'=>false,'message'=>'Method not allowed.'],405);}
 $input=app_json_input();
@@ -68,6 +69,12 @@ function pia_compact_quantity(mixed $value): string
     return rtrim(rtrim(number_format((float)$value,3,'.',''),'0'),'.');
 }
 
+function pia_visible_detail(array $detail,bool $canForecast): array
+{
+    if(!$canForecast)$detail['forecasts']=[];
+    return $detail;
+}
+
 try{
     if(preg_match('/\b(?:add|put)\b.*\bprep\s+list\b/iu',$normalized)||preg_match('/\badd(?:\s+these|\s+the following)?(?:\s+items?)?\s+to\s+(?:the\s+)?prep\s+list\b/iu',$normalized)){
         if(!$canManage)app_json_response(['ok'=>false,'message'=>'Prep Intelligence management permission is required to add prep items.'],403);
@@ -90,7 +97,7 @@ try{
     if(preg_match('/\b(?:publish|release)\b.*\bprep\b/iu',$normalized)){
         if(!$canManage)app_json_response(['ok'=>false,'message'=>'Prep Intelligence management permission is required to publish a prep plan.'],403);
         $plan=pia_plan($pdo,$organizationId,$text,true,$userId);if(!$plan)throw new RuntimeException('Prep plan not found.');
-        $detail=prep_publish_plan($pdo,$organizationId,$plan,$userId);
+        $detail=pia_visible_detail(prep_publish_plan($pdo,$organizationId,$plan,$userId),$canForecast);
         app_audit($pdo,$organizationId,$userId,'agent.prep_plan_published','prep_plan',(string)$plan['public_id']);
         app_json_response(['ok'=>true,'skill'=>'prep.publish','answer'=>'Published the '.$plan['plan_date'].' '.ucfirst((string)$plan['service_period']).' prep plan with '.count($detail['tasks']).' linked task(s).','data'=>$detail,'sources'=>array_column($detail['tasks'],'public_id')]);
     }
@@ -100,12 +107,12 @@ try{
         if(!$plan)app_json_response(['ok'=>true,'skill'=>'prep.recommend','answer'=>'There is no prep plan for that period yet, and your role cannot create one.','data'=>null,'sources'=>[]]);
         $detail=$canManage?prep_generate_recommendations($pdo,$organizationId,$plan,$userId):prep_plan_detail($pdo,$organizationId,(string)$plan['public_id']);
         $active=array_values(array_filter($detail['recommendations'],static fn(array $r):bool=>$r['status']!=='dismissed'));
-        $shortages=array_values(array_filter($detail['forecasts'],static fn(array $f):bool=>(float)$f['shortage_quantity']>0||(float)$f['restock_quantity']>0));
+        $shortages=$canForecast?array_values(array_filter($detail['forecasts'],static fn(array $f):bool=>(float)$f['shortage_quantity']>0||(float)$f['restock_quantity']>0)):[];
         $top=array_slice(array_map(static fn(array $r):string=>$r['title'].' '.pia_compact_quantity($r['recommended_quantity']).' '.$r['unit'],$active),0,6);
         $answer=count($active).' recommendation(s) for '.$plan['plan_date'].'.';
         if($top)$answer.=' Top prep: '.implode('; ',$top).'.';
-        $answer.=count($shortages)?' Inventory forecast flags '.count($shortages).' ingredient(s) for shortage/restock.':' Inventory coverage has no flagged shortages from the current forecast.';
-        app_audit($pdo,$organizationId,$userId,'agent.prep_recommendations','prep_plan',(string)$plan['public_id'],null,['recommendations'=>count($active),'shortages'=>count($shortages)]);
+        if($canForecast)$answer.=count($shortages)?' Inventory forecast flags '.count($shortages).' ingredient(s) for shortage/restock.':' Inventory coverage has no flagged shortages from the current forecast.';
+        app_audit($pdo,$organizationId,$userId,'agent.prep_recommendations','prep_plan',(string)$plan['public_id'],null,['recommendations'=>count($active),'shortages'=>$canForecast?count($shortages):null]);
         app_json_response(['ok'=>true,'skill'=>'prep.recommend','answer'=>$answer,'data'=>['plan'=>$detail['plan'],'recommendations'=>$active,'forecasts'=>$shortages,'commitments'=>$detail['commitments']],'sources'=>array_column($active,'public_id')]);
     }
 
@@ -123,6 +130,7 @@ try{
     }
 
     if(preg_match('/\b(?:inventory forecast|forecast.*(?:inventory|shortage)|shortage forecast|what (?:are|is) (?:we|i) short|what do (?:we|i) need to order)\b/iu',$normalized)){
+        if(!$canForecast)app_json_response(['ok'=>false,'message'=>'Inventory forecast permission is required for shortage and restock intelligence.'],403);
         $plan=pia_plan($pdo,$organizationId,$text,$canManage,$userId);
         if(!$plan)app_json_response(['ok'=>true,'skill'=>'prep.inventory_forecast','answer'=>'There is no prep plan for that period yet.','data'=>[],'sources'=>[]]);
         $detail=prep_plan_detail($pdo,$organizationId,(string)$plan['public_id']);if(!$detail['forecasts']&&$canManage)$detail=prep_generate_recommendations($pdo,$organizationId,$plan,$userId);
@@ -133,8 +141,11 @@ try{
 
     $plan=pia_plan($pdo,$organizationId,$text,false,$userId);
     if(!$plan)app_json_response(['ok'=>true,'skill'=>'prep.status','answer'=>'No prep plan exists for that period yet. Ask me to build the prep plan when you are ready.','data'=>null,'sources'=>[]]);
-    $detail=prep_plan_detail($pdo,$organizationId,(string)$plan['public_id']);
+    $detail=pia_visible_detail(prep_plan_detail($pdo,$organizationId,(string)$plan['public_id']),$canForecast);
     $open=count(array_filter($detail['tasks'],static fn(array $t):bool=>!in_array($t['status'],['completed','verified','cancelled'],true)));
     $done=count(array_filter($detail['tasks'],static fn(array $t):bool=>in_array($t['status'],['completed','verified'],true)));
-    app_json_response(['ok'=>true,'skill'=>'prep.status','answer'=>'Prep plan '.$plan['plan_date'].' '.$plan['service_period'].': '.$open.' open task(s), '.$done.' completed, '.count($detail['recommendations']).' recommendation(s), and '.count(array_filter($detail['forecasts'],static fn(array $f):bool=>(float)$f['shortage_quantity']>0)).' forecast shortage(s).','data'=>$detail,'sources'=>array_column($detail['tasks'],'public_id')]);
+    $answer='Prep plan '.$plan['plan_date'].' '.$plan['service_period'].': '.$open.' open task(s), '.$done.' completed, '.count($detail['recommendations']).' recommendation(s)';
+    if($canForecast)$answer.=', and '.count(array_filter($detail['forecasts'],static fn(array $f):bool=>(float)$f['shortage_quantity']>0)).' forecast shortage(s)';
+    $answer.='.';
+    app_json_response(['ok'=>true,'skill'=>'prep.status','answer'=>$answer,'data'=>$detail,'sources'=>array_column($detail['tasks'],'public_id')]);
 }catch(Throwable $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);}
