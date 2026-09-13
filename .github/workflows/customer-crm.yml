@@ -1,0 +1,112 @@
+name: Customer CRM
+
+on:
+  pull_request:
+    paths:
+      - 'customer-crm.php'
+      - 'api/customer-crm.php'
+      - 'includes/customer-crm-core.php'
+      - 'api/pos.php'
+      - 'pos.php'
+      - 'js/customer-crm.js'
+      - 'js/pos.js'
+      - 'database/20260917_customer_crm.sql'
+      - 'tests/customer-crm-contract.php'
+      - '.github/workflows/customer-crm.yml'
+  push:
+    branches: [main]
+
+jobs:
+  customer-crm:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - name: Syntax checks
+        run: |
+          php -l customer-crm.php
+          php -l api/customer-crm.php
+          php -l includes/customer-crm-core.php
+          php -l api/pos.php
+          php -l pos.php
+          php -l tests/customer-crm-contract.php
+          node --check js/customer-crm.js
+          node --check js/pos.js
+      - name: Architecture and privacy contract
+        run: |
+          test "$(grep -c 'CREATE TABLE IF NOT EXISTS crm_' database/20260917_customer_crm.sql)" = "5"
+          grep -q 'ALTER TABLE pos_checks' database/20260917_customer_crm.sql
+          grep -q 'customer_id BIGINT UNSIGNED NULL' database/20260917_customer_crm.sql
+          grep -q "crm.view" database/20260917_customer_crm.sql
+          grep -q "crm.manage" database/20260917_customer_crm.sql
+          grep -q "crm.consent.manage" database/20260917_customer_crm.sql
+          grep -q "crm.pos_link" database/20260917_customer_crm.sql
+          grep -q 'INSERT INTO crm_customer_consents' includes/customer-crm-core.php
+          ! grep -q 'UPDATE crm_customer_consents' includes/customer-crm-core.php
+          ! grep -q 'lifetime_spend' database/20260917_customer_crm.sql
+          ! grep -Eiq 'birthday_year|birth_date|date_of_birth|\bdob\b' database/20260917_customer_crm.sql
+          grep -q "FROM pos_checks WHERE organization_id=? AND customer_id=? AND status='paid'" includes/customer-crm-core.php
+          grep -q "scope:'pos'" js/pos.js
+          grep -q "array_keys(\$minimal\[0\])===\['publicId','displayName','email','phone'\]" tests/customer-crm-contract.php
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_restaurant_ai_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->ensureTrackingTables();
+          $s->bootstrapLegacyHistory(null);
+          $s->applyPending(null);
+          if($s->pendingMigrations()) exit(1);
+          PHP
+      - name: Verify schema and permissions
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('crm_customers','crm_customer_consents','crm_customer_notes','crm_tags','crm_customer_tags');")" = "5"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='pos_checks' AND column_name='customer_id';")" = "1"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('crm.view','crm.manage','crm.consent.manage','crm.pos_link');")" = "4"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260917_customer_crm';")" = "1"
+      - name: Customer CRM behavioral contract
+        run: php tests/customer-crm-contract.php
+      - name: Native POS regression
+        run: php tests/native-pos-contract.php
+      - name: Sales + Demand regression
+        run: php tests/sales-demand-intelligence-contract.php
+      - name: Sales Import Center regression
+        run: php tests/sales-import-center-contract.php
+      - name: Verify upgrader idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->assertAppliedChecksumsUnchanged();
+          if($s->pendingMigrations()) exit(2);
+          if($s->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP
