@@ -48,6 +48,27 @@ $afterChecks=(int)$pdo->query('SELECT COUNT(*) FROM pos_checks')->fetchColumn();
 urp($afterChecks===$beforeChecks,'Rejected protected-table seating must not create a POS check.');
 $soonRow=host_table_row($pdo,$org,$location,$soon['publicId'],false);urp($soonRow['active_check_id']===null,'Rejected protected-table seating must leave the table unoccupied.');
 
+$beforeWaitlists=(int)$pdo->query("SELECT COUNT(*) FROM guest_reservations WHERE reservation_type='waitlist'")->fetchColumn();
+$rejected=false;try{service_reservation_protection_reservation_create($pdo,$org,$location,['type'=>'waitlist','guestName'=>'Protected Walk-in Create','partySize'=>2,'tablePublicIds'=>[$soon['publicId']]],$user);}catch(InvalidArgumentException $e){$rejected=str_contains($e->getMessage(),'protected for the');}
+urp($rejected,'Host Stand walk-in creation must reject assigning an imminent-reservation table.');
+$afterWaitlists=(int)$pdo->query("SELECT COUNT(*) FROM guest_reservations WHERE reservation_type='waitlist'")->fetchColumn();
+urp($afterWaitlists===$beforeWaitlists,'Rejected protected walk-in creation must roll back the waitlist row atomically.');
+
+$walkin=service_reservation_protection_reservation_create($pdo,$org,$location,['type'=>'waitlist','guestName'=>'Protected Walk-in Assign','partySize'=>2],$user);
+$rejected=false;try{service_reservation_protection_reservation_assign($pdo,$org,$walkin['publicId'],[$soon['publicId']],$user);}catch(InvalidArgumentException $e){$rejected=str_contains($e->getMessage(),'protected for the');}
+urp($rejected,'Host Stand walk-in assignment must reject an imminent-reservation table.');
+$walkinReload=host_reservation_row($pdo,$org,$walkin['publicId'],false);urp(host_reservation_tables($pdo,$org,(int)$walkinReload['id'])===[],'Rejected protected walk-in assignment must leave the waitlist unassigned.');
+
+$legacyWalkin=service_seatability_reservation_create($pdo,$org,$location,['type'=>'waitlist','guestName'=>'Legacy Assigned Walk-in','partySize'=>2],$user);
+service_seatability_reservation_assign($pdo,$org,$legacyWalkin['publicId'],[$soon['publicId']],$user);
+$rejected=false;try{service_reservation_protection_host_seat($pdo,$org,$legacyWalkin['publicId'],null,$user);}catch(InvalidArgumentException $e){$rejected=str_contains($e->getMessage(),'protected for the');}
+urp($rejected,'Host Stand seating must recheck protection for an already-assigned walk-in.');
+$legacyReload=host_reservation_row($pdo,$org,$legacyWalkin['publicId'],false);urp((string)$legacyReload['status']==='waiting','Rejected protected walk-in seating must leave its waitlist status unchanged.');
+$soonRow=host_table_row($pdo,$org,$location,$soon['publicId'],false);urp($soonRow['active_check_id']===null,'Rejected protected walk-in seating must leave the reservation table unoccupied.');
+
+$scheduledSeat=service_reservation_protection_host_seat($pdo,$org,$arrivedReservation['publicId'],null,$user);
+urp(($scheduledSeat['reservation']['status']??null)==='seated','A scheduled reservation must be able to seat into its own protected table.');
+
 $laterCheck=service_reservation_protection_party_seat($pdo,$org,$location,$later['publicId'],2,null,'walk-in fits before later reservation',$user);
 urp(($laterCheck['status']??null)==='open','Walk-in must be allowed when projected turn and cleanup finish before the later reservation hold.');
 
