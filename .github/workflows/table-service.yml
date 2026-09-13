@@ -10,6 +10,7 @@ on:
       - 'js/table-service.js'
       - 'database/20260920_table_service_guest_lifecycle.sql'
       - 'tests/table-service-contract.php'
+      - 'tests/table-service-reconcile-contract.php'
       - '.github/workflows/table-service.yml'
   push:
     branches: [main]
@@ -40,6 +41,7 @@ jobs:
           php -l includes/table-service-core.php
           php -l includes/table-service-reconcile.php
           php -l tests/table-service-contract.php
+          php -l tests/table-service-reconcile-contract.php
           node --check js/table-service.js
       - name: Architecture contract
         run: |
@@ -91,6 +93,8 @@ jobs:
           test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260920_table_service_guest_lifecycle';")" = "1"
       - name: Table Service behavioral contract
         run: php tests/table-service-contract.php
+      - name: Split check reconciliation regression
+        run: php tests/table-service-reconcile-contract.php
       - name: Kitchen Display regression
         run: php tests/kds-contract.php
       - name: Native POS regression
