@@ -10,6 +10,7 @@ on:
       - 'api/agent-workspace.php'
       - 'includes/sales-cost-core.php'
       - 'js/sales-cost-intelligence.js'
+      - 'js/sales-intelligence.js'
       - 'database/20260914_zzzzzzzz_sales_cost_margin_intelligence.sql'
       - 'tests/sales-cost-margin-contract.php'
       - '.github/workflows/sales-cost-margin-intelligence.yml'
@@ -44,6 +45,7 @@ jobs:
           php -l includes/sales-cost-core.php
           php -l tests/sales-cost-margin-contract.php
           node --check js/sales-cost-intelligence.js
+          node --check js/sales-intelligence.js
       - name: Architecture and accounting-boundary contract
         run: |
           test "$(grep -c 'CREATE TABLE IF NOT EXISTS sales_cost_profiles' database/20260914_zzzzzzzz_sales_cost_margin_intelligence.sql)" = "1"
@@ -53,6 +55,9 @@ jobs:
           grep -q "Theoretical COGS uses current mapped" includes/sales-cost-core.php
           grep -q "Purchase receipts are cash/inventory inflow, not period COGS" includes/sales-cost-core.php
           grep -q "grossProfitKnownItemsBeforeLaborOverhead" includes/sales-cost-core.php
+          grep -q "h.vendor_id" includes/sales-cost-core.php
+          grep -q "inventory_item_id.*vendor_id" includes/sales-cost-core.php
+          grep -q "sales-cost-intelligence.php" js/sales-intelligence.js
           grep -q "api/sales-cost-agent.php" api/agent-workspace.php
           grep -q "food cost" api/agent-workspace.php
           grep -q "cost_method" database/20260914_zzzzzzzz_sales_cost_margin_intelligence.sql
