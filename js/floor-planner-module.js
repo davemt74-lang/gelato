@@ -34,6 +34,7 @@
     addAdminNav('wholesale.view', 'wholesale-accounts-nav', '◎', 'Wholesale Customers', 'wholesale-accounts.php');
     addAdminNav('catering.view', 'catering-nav', '◈', 'Catering Pipeline', 'catering-pipeline.php');
     addAdminNav('recipes.view', 'recipes-nav', '▤', 'Recipe Library', 'recipes.php');
+    addAdminNav('purchasing.view', 'purchasing-nav', '▣', 'Purchasing + Receiving', 'purchasing.php');
     addAdminNav('schedule.view', 'scheduling-nav', '◫', 'Staff Scheduling', 'scheduling.php');
     addAdminNav('schedule.self', 'scheduling-nav', '◫', 'My Schedule', 'scheduling.php');
     addAdminNav('timeclock.view', 'timeclock-nav', '◷', 'Time Clock + Attendance', 'timeclock.php');

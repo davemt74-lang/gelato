@@ -1,0 +1,8 @@
+<?php
+declare(strict_types=1);
+require_once __DIR__.'/purchasing-receiving.php';
+function purchasing_proactive_signals(PDO $pdo,int $org):array{
+    if(!purchasing_ready($pdo))return [];$signals=[];$suggestions=purchasing_suggestions($pdo,$org);if($suggestions){$mapped=array_values(array_filter($suggestions,static fn($r)=>!empty($r['vendor'])));$unmapped=count($suggestions)-count($mapped);$names=implode(', ',array_slice(array_column($suggestions,'name'),0,4));$signals[]=['type'=>'purchasing.order_pressure','priority'=>'high','message'=>count($suggestions).' inventory item(s) need purchasing attention: '.$names.'.'.($unmapped?' '.$unmapped.' still need vendor mapping.':''),'key'=>'purchasing-pressure:'.date('Y-m-d').':'.count($suggestions),'url'=>'purchasing.php','meta'=>['count'=>count($suggestions),'unmapped'=>$unmapped]];}
+    $q=$pdo->prepare("SELECT po.public_id,po.order_number,v.name vendor_name,po.expected_delivery_date FROM purchase_orders po JOIN vendors v ON v.id=po.vendor_id WHERE po.organization_id=? AND po.archived_at IS NULL AND po.status IN ('submitted','partially_received') AND po.expected_delivery_date IS NOT NULL AND po.expected_delivery_date<CURDATE() ORDER BY po.expected_delivery_date LIMIT 5");$q->execute([$org]);foreach($q->fetchAll() as $po)$signals[]=['type'=>'purchasing.delivery_overdue','priority'=>'high','message'=>$po['order_number'].' from '.$po['vendor_name'].' was expected '.$po['expected_delivery_date'].' and is not fully received.','key'=>'po-overdue:'.$po['public_id'].':'.date('Y-m-d'),'url'=>'purchasing.php','meta'=>['purchaseOrderId'=>$po['public_id']]];
+    return $signals;
+}

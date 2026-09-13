@@ -3,6 +3,7 @@ declare(strict_types=1);
 require __DIR__.'/../includes/bootstrap.php';
 require __DIR__.'/../includes/timeclock-voice-core.php';
 require_once __DIR__.'/../includes/prep-intelligence-core.php';
+require_once __DIR__.'/../includes/purchasing-proactive.php';
 $user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];$uid=(int)$user['id'];if(!tv_ready($pdo))app_json_response(['ok'=>false,'message'=>'Time Clock + Voice Agent migration is not installed. Run upgrade.php.'],503);if(!app_has_permission('agent.proactive',$user))app_json_response(['ok'=>false,'message'=>'Proactive Agent permission required.'],403);
 function pa_preferences(PDO $pdo,int $org,int $uid):array{$q=$pdo->prepare('SELECT * FROM proactive_agent_preferences WHERE organization_id=? AND user_id=?');$q->execute([$org,$uid]);$r=$q->fetch();if($r)return $r;$pdo->prepare('INSERT IGNORE INTO proactive_agent_preferences (organization_id,user_id) VALUES (?,?)')->execute([$org,$uid]);$q->execute([$org,$uid]);return $q->fetch()?:[];}
 function pa_put(PDO $pdo,int $org,int $uid,string $type,string $priority,string $message,string $dedupe,string $url='',array $meta=[]):void{$pdo->prepare("INSERT INTO proactive_agent_events (organization_id,user_id,public_id,event_type,priority,message,action_url,dedupe_key,metadata_json) VALUES (?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE message=VALUES(message),priority=VALUES(priority),action_url=VALUES(action_url),metadata_json=VALUES(metadata_json)")->execute([$org,$uid,tv_public_id('proactive'),$type,$priority,mb_substr($message,0,1000,'UTF-8'),$url?:null,$dedupe,$meta?json_encode($meta,JSON_UNESCAPED_UNICODE):null]);}
@@ -23,6 +24,9 @@ function pa_generate(PDO $pdo,int $org,int $uid,array $prefs,array $user):void{
      }
      elseif(app_has_permission('prep.intelligence.manage',$user)&&(int)$now->format('G')>=7)pa_put($pdo,$org,$uid,'prep.plan_missing','normal','Today does not have a Prep Intelligence plan yet. Ask “Hey Gelato, what should we prep today?” to build one from history.','prep-missing:'.$today,'prep-intelligence.php',['date'=>$today]);
    }catch(Throwable){}
+ }
+ if(app_has_permission('purchasing.view',$user)&&purchasing_ready($pdo)){
+   try{foreach(purchasing_proactive_signals($pdo,$org) as $signal)pa_put($pdo,$org,$uid,$signal['type'],$signal['priority'],$signal['message'],$signal['key'],$signal['url'],$signal['meta']);}catch(Throwable){}
  }
 }
 if($_SERVER['REQUEST_METHOD']==='GET'){$prefs=pa_preferences($pdo,$org,$uid);if(empty($prefs['listening_enabled']))app_json_response(['ok'=>true,'preferences'=>$prefs,'events'=>[]]);pa_generate($pdo,$org,$uid,$prefs,$user);$q=$pdo->prepare("SELECT public_id,event_type,priority,message,action_url,created_at FROM proactive_agent_events WHERE organization_id=? AND user_id=? AND status='pending' ORDER BY FIELD(priority,'high','normal','low'),created_at LIMIT 10");$q->execute([$org,$uid]);$events=$q->fetchAll();if($events){$ids=array_column($events,'public_id');$marks=implode(',',array_fill(0,count($ids),'?'));$pdo->prepare("UPDATE proactive_agent_events SET status='delivered',delivered_at=NOW(6) WHERE organization_id=? AND public_id IN ($marks)")->execute(array_merge([$org],$ids));}app_json_response(['ok'=>true,'preferences'=>$prefs,'events'=>$events]);}
