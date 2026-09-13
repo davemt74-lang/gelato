@@ -78,12 +78,14 @@ function gaw_route(array $user,string $message): array
     if(($user['role_slug']??'')==='wholesale_customer')return ['route'=>'api/wholesale-portal-agent.php','domain'=>'wholesale_portal'];
     $time='/\b(clock(?:ed)?\s+(?:me\s+)?(?:in|out)|time\s*clock|break|attendance|no.?show|late|actual labor|on clock|clock status)\b/u';
     $schedule='/\b(schedule|scheduled|shift|shifts|availability|time off|swap|coverage|staffing|short.?staffed|who works|who is working|when do i work|next shift)\b/u';
+    $employee='/\b(my day|employee home|employee profile|emergency contact|announcement|announcements|restaurant update|handbook|policy|policies|certification|certifications|my training|training due|onboarding|checklist|orientation)\b/u';
     $catering='/\b(catering|banquet|event order|guest count|tasting|deposit|catering readiness)\b/u';
     $purchasing='/\b(purchase order|purchase orders|\bpo\b|vendor|vendors|supplier|suppliers|receiving|receipt|receipts|invoice|invoices|order cutoff|delivery day|price comparison|compare price|cheapest|best price|what.*need.*order|need to order|what should.*buy)\b/u';
     $prepIntel='/\b(prep plan|prep list|what should (?:we|i) prep|prep recommendations?|prep history|normally prep|usually prep|inventory forecast|shortage forecast|forecast.*shortage|publish.*prep|build.*prep|generate.*prep)\b/u';
     $ops='/\b(inventory|stock|par|reorder|shortage|prep|task|tasks|opening|closing|cleaning|assigned|overdue|fulfillment|delivery|order|orders)\b/u';
     if(preg_match($time,$text)&&(app_has_permission('timeclock.agent',$user)||app_has_permission('timeclock.self',$user)||app_has_permission('attendance.view',$user)))return ['route'=>'api/timeclock-agent.php','domain'=>'timeclock'];
     if(preg_match($schedule,$text)&&(app_has_permission('schedule.agent',$user)||app_has_permission('schedule.view',$user)||app_has_permission('schedule.self',$user)))return ['route'=>'api/scheduling-agent.php','domain'=>'scheduling'];
+    if(preg_match($employee,$text)&&(app_has_permission('employee.self',$user)||app_has_permission('tasks.self',$user)||app_has_permission('agent.employee_view',$user)||app_has_permission('training.self_view',$user)))return ['route'=>'api/employee-agent.php','domain'=>'employee_home'];
     if(preg_match($catering,$text)&&app_has_permission('catering.agent',$user))return ['route'=>'api/catering-agent.php','domain'=>'catering'];
     if(preg_match($purchasing,$text)&&app_has_permission('purchasing.agent',$user)&&app_has_permission('purchasing.view',$user))return ['route'=>'api/purchasing-agent.php','domain'=>'purchasing'];
     if(preg_match($prepIntel,$text)&&app_has_permission('prep.intelligence.agent',$user)&&app_has_permission('prep.intelligence.view',$user))return ['route'=>'api/prep-intelligence-agent.php','domain'=>'prep_intelligence'];
