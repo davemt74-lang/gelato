@@ -1,0 +1,53 @@
+name: Build Gelato Deployment ZIP
+
+on:
+  push:
+    branches:
+      - package/gelato-deploy
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Verify source baseline
+        run: |
+          test "$(git rev-parse HEAD^)" = "df27085d1071ac61dd435f6faf994f0329fa2b79"
+
+      - name: Build web-root deployment archive
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/gelato-deploy
+          mkdir -p /tmp/gelato-deploy
+          rsync -a ./ /tmp/gelato-deploy/ \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='.gitignore' \
+            --exclude='tests/' \
+            --exclude='docs/' \
+            --exclude='config.php' \
+            --exclude='*.log'
+          printf '%s\n' 'df27085d1071ac61dd435f6faf994f0329fa2b79' > /tmp/gelato-deploy/DEPLOY_SHA.txt
+          cd /tmp/gelato-deploy
+          zip -q -r "$GITHUB_WORKSPACE/gelato-deploy.zip" .
+          cd "$GITHUB_WORKSPACE"
+          unzip -t gelato-deploy.zip
+          test "$(unzip -p gelato-deploy.zip DEPLOY_SHA.txt | tr -d '\r\n')" = "df27085d1071ac61dd435f6faf994f0329fa2b79"
+          if unzip -l gelato-deploy.zip | grep -Eq '(^|/)(config\.php|\.github/|tests/|docs/)'; then
+            echo 'Deployment archive contains excluded development/private paths.' >&2
+            exit 1
+          fi
+
+      - name: Upload stable deployment ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: gelato-deploy
+          path: gelato-deploy.zip
+          if-no-files-found: error
+          retention-days: 7
