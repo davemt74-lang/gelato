@@ -3,8 +3,8 @@ declare(strict_types=1);
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/service-reservation-protection.php';
 
-$mode=(string)($argv[1]??'');
-$gate=(string)($argv[2]??'');
+$gate=(string)($argv[1]??'');
+$mode=(string)($argv[2]??'');
 $org=(int)($argv[3]??0);
 $location=(int)($argv[4]??0);
 $user=(int)($argv[5]??0);
