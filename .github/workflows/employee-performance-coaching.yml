@@ -29,6 +29,8 @@ jobs:
         run: |
           php -l includes/employee-performance-core.php
           php -l api/employee-development.php
+          php -l api/employee-development-agent.php
+          php -l api/agent-workspace.php
           php -l employee-development.php
           php -l tests/employee-performance-contract.php
           node --check js/employee-development.js
@@ -40,6 +42,8 @@ jobs:
           grep -q "employee.performance.view" database/20260914_zzzzzz_employee_performance_coaching.sql
           grep -q "does not assign an employee score" includes/employee-performance-core.php
           grep -q "Manager-private development workspace" employee-development.php
+          grep -q "employee.development.brief" api/employee-development-agent.php
+          grep -q "employee-development-agent.php" api/agent-workspace.php
       - name: Install and upgrade schema
         run: |
           sudo apt-get update -qq
