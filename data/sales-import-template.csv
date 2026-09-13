@@ -1,0 +1,11 @@
+date,period_end,granularity,service_period,location,row_type,tickets,covers,gross_sales,net_sales,tax,tips,discounts,comps,voids,refunds,service_charges,item_id,item_name,category,quantity,item_sales,hour
+2026-09-01,,daily,all,Main Restaurant,summary,124,198,4250.00,3988.50,326.10,712.00,180.00,45.00,20.00,16.50,38.00,,,,,,
+2026-09-01,,daily,all,Main Restaurant,item,,,,,,,,,,,,PIZ-MARG,Margherita Pizza,Pizza,42,756.00,
+2026-09-01,,daily,all,Main Restaurant,item,,,,,,,,,,,,BEER-IPA,House IPA,Beer,58,406.00,
+2026-09-01,,daily,dinner,Main Restaurant,summary,76,121,2890.00,2714.00,221.20,486.00,112.00,25.00,12.00,9.00,20.00,,,,,,
+2026-09-01,,daily,dinner,Main Restaurant,summary,18,30,640.00,601.00,48.90,104.00,21.00,5.00,0.00,0.00,4.00,,,,,17
+2026-09-01,,daily,dinner,Main Restaurant,summary,24,38,910.00,858.00,70.10,151.00,33.00,8.00,4.00,0.00,7.00,,,,,18
+2026-09-01,,daily,dinner,Main Restaurant,summary,21,34,790.00,742.00,60.60,132.00,29.00,6.00,4.00,3.00,5.00,,,,,19
+2026-09-01,,daily,dinner,Main Restaurant,summary,13,19,550.00,513.00,41.60,99.00,29.00,6.00,4.00,6.00,4.00,,,,,20
+2026-09-08,2026-09-14,weekly,all,Main Restaurant,summary,862,1366,29680.00,27894.00,2274.00,4891.00,1210.00,304.00,155.00,117.00,246.00,,,,,,
+2026-08,2026-08-31,monthly,all,Main Restaurant,summary,3725,5890,128440.00,120755.00,9842.00,21138.00,5220.00,1320.00,682.00,505.00,1061.00,,,,,,
