@@ -9,6 +9,7 @@ require_once __DIR__.'/../includes/service-ops-floor.php';
 require_once __DIR__.'/../includes/service-ops-reservation.php';
 require_once __DIR__.'/../includes/service-visit-core.php';
 require_once __DIR__.'/../includes/service-visit-extensions.php';
+require_once __DIR__.'/../includes/service-visit-live.php';
 
 $user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];$uid=(int)$user['id'];$membership=(int)$user['membership_id'];
 $rawHostView=app_has_permission('host.view',$user);$canUse=app_has_permission('host.use',$user);$canManage=app_has_permission('host.manage',$user);
@@ -26,7 +27,7 @@ function host_api_date(PDO $pdo,int $org,int $locationId,string $value): string
 }
 function host_api_reconcile(PDO $pdo,int $org,int $locationId,int $uid): void
 {
-    table_service_reconcile_closed_checks($pdo,$org,$locationId,$uid);service_visit_reconcile_reservations($pdo,$org,$locationId,$uid);
+    service_visit_reconcile_live($pdo,$org,$locationId,$uid);
 }
 
 try{
