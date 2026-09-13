@@ -22,6 +22,45 @@ function service_ops_lock_tables_canonical(PDO $pdo,int $org,int $locationId,arr
     return $rows;
 }
 
+function service_ops_current_scheduled_conflict(PDO $pdo,int $org,int $tableId,array $reservation): ?int
+{
+    if($reservation['scheduled_at']===null)return null;
+    $start=(string)$reservation['scheduled_at'];
+    $end=(new DateTimeImmutable($start))->modify('+'.max(15,(int)$reservation['duration_minutes']).' minutes')->format('Y-m-d H:i:s');
+    $q=$pdo->prepare("SELECT other.id
+        FROM guest_reservation_tables rt
+        JOIN guest_reservations other ON other.id=rt.reservation_id
+        WHERE rt.service_table_id=?
+          AND other.organization_id=?
+          AND other.id<>?
+          AND other.status IN ('booked','confirmed','arrived')
+          AND other.scheduled_at IS NOT NULL
+          AND other.scheduled_at < ?
+          AND DATE_ADD(other.scheduled_at,INTERVAL other.duration_minutes MINUTE) > ?
+        ORDER BY other.scheduled_at,other.id
+        LIMIT 1 FOR UPDATE");
+    $q->execute([$tableId,$org,(int)$reservation['id'],$end,$start]);
+    $id=$q->fetchColumn();
+    return $id===false?null:(int)$id;
+}
+
+function service_ops_current_waitlist_conflict(PDO $pdo,int $org,int $tableId,int $reservationId): ?int
+{
+    $q=$pdo->prepare("SELECT other.id
+        FROM guest_reservation_tables rt
+        JOIN guest_reservations other ON other.id=rt.reservation_id
+        WHERE rt.service_table_id=?
+          AND other.organization_id=?
+          AND other.id<>?
+          AND other.status IN ('waiting','arrived')
+          AND other.scheduled_at IS NULL
+        ORDER BY other.id
+        LIMIT 1 FOR UPDATE");
+    $q->execute([$tableId,$org,$reservationId]);
+    $id=$q->fetchColumn();
+    return $id===false?null:(int)$id;
+}
+
 function service_ops_reservation_assign_safe(PDO $pdo,int $org,string $publicId,array $tablePublicIds,int $userId): array
 {
     return host_transaction($pdo,function()use($pdo,$org,$publicId,$tablePublicIds,$userId){
@@ -38,8 +77,9 @@ function service_ops_reservation_assign_safe(PDO $pdo,int $org,string $publicId,
                 if($scheduled<$projectedClear)throw new InvalidArgumentException((string)$table['name'].' is projected to still be occupied at that reservation time.');
             }
             if($scheduled===null){
-                $q=$pdo->prepare("SELECT COUNT(*) FROM guest_reservation_tables rt JOIN guest_reservations other ON other.id=rt.reservation_id WHERE rt.service_table_id=? AND other.organization_id=? AND other.id<>? AND other.status IN ('waiting','arrived') AND other.scheduled_at IS NULL");
-                $q->execute([(int)$table['id'],$org,(int)$r['id']]);if((int)$q->fetchColumn()>0)throw new InvalidArgumentException((string)$table['name'].' is already assigned to another active waitlist party.');
+                if(service_ops_current_waitlist_conflict($pdo,$org,(int)$table['id'],(int)$r['id'])!==null)throw new InvalidArgumentException((string)$table['name'].' is already assigned to another active waitlist party.');
+            }elseif(service_ops_current_scheduled_conflict($pdo,$org,(int)$table['id'],$r)!==null){
+                throw new InvalidArgumentException((string)$table['name'].' conflicts with another reservation.');
             }
         }
         return host_reservation_assign($pdo,$org,$publicId,$ids,$userId);
