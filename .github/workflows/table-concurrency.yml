@@ -41,11 +41,15 @@ jobs:
           grep -q 'function service_ops_order_table_ids' includes/service-ops-reservation.php
           grep -q 'ORDER BY id' includes/service-ops-reservation.php
           grep -q 'function service_ops_lock_tables_canonical' includes/service-ops-reservation.php
+          grep -q 'function service_ops_current_reservation_table_ids' includes/service-ops-reservation.php
+          grep -q 'physical table rows -> reservation row -> conflicting reservation rows' includes/service-ops-reservation.php
           grep -q 'function service_ops_current_scheduled_conflict' includes/service-ops-reservation.php
           grep -q 'function service_ops_current_waitlist_conflict' includes/service-ops-reservation.php
-          test "$(grep -c 'LIMIT 1 FOR UPDATE' includes/service-ops-reservation.php)" -ge "2"
+          test "$(grep -c 'FOR UPDATE' includes/service-ops-reservation.php)" -ge "3"
           grep -q 'service_ops_lock_tables_canonical' includes/service-seatability.php
-          grep -q 'service_ops_lock_tables_canonical' includes/service-ops-reservation.php
+          grep -q 'service_ops_current_reservation_table_ids' includes/service-seatability.php
+          grep -q 'Table assignment changed while updating this reservation' includes/service-seatability.php
+          grep -q 'Table assignment changed while seating this party' includes/service-seatability.php
           grep -q 'function service_seatability_validate_locked_now' includes/service-seatability.php
           grep -q 'proc_open' tests/table-concurrency-contract.php
           grep -q 'gelato-concurrency-errors.log' tests/table-concurrency-worker.php
