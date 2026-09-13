@@ -49,7 +49,7 @@ kdsci_assert((int)$pizzaKds['station_id']===(int)$oven['id']&&(string)$pizzaKds[
 kdsci_assert($saladKds['station_id']===null,'Unmapped salad must remain Unrouted.');
 $unroutedBlocked=false;try{kds_transition($pdo,$org,(string)$saladKds['public_id'],'in_progress',$user);}catch(InvalidArgumentException){$unroutedBlocked=true;}kdsci_assert($unroutedBlocked,'Unrouted item must not begin preparation.');
 
-$saladAssigned=kds_reassign($pdo,$org,(string)$saladKds['public_id'],(string)$oven['public_id'],$user,'Expo routed item');
+$saladAssigned=kds_reassign($pdo,$org,(string)$saladKds['public_id'],(string)$oven['public_id'],$user);
 kdsci_assert((int)$saladAssigned['station_id']===(int)$oven['id'],'Expo reassignment failed.');
 $saladProgress=kds_transition($pdo,$org,(string)$saladKds['public_id'],'in_progress',$user);
 kdsci_assert((string)$saladProgress['status']==='in_progress','Queued item did not start preparation.');
@@ -59,7 +59,7 @@ $saladDone=kds_transition($pdo,$org,(string)$saladKds['public_id'],'completed',$
 kdsci_assert((string)$saladDone['status']==='completed'&&!empty($saladDone['completed_at']),'Expo completion failed.');
 $terminalBlocked=false;try{kds_transition($pdo,$org,(string)$saladKds['public_id'],'in_progress',$user);}catch(InvalidArgumentException){$terminalBlocked=true;}kdsci_assert($terminalBlocked,'Completed kitchen items must be terminal.');
 
-$check=pos_add_item($pdo,$org,$public,$pizzaPrice,1,'Second course',$user);$newLine=(int)end($check['items'])['id'];
+$check=pos_add_item($pdo,$org,$public,$pizzaPrice,1,'Second course',$user);$newItems=$check['items'];$lastNew=end($newItems);$newLine=(int)$lastNew['id'];
 $held=kds_send_check($pdo,$org,$public,$user,true);kdsci_assert((int)$held['sent']===3,'Newly added POS line must be sendable after the first kitchen send.');
 $q=$pdo->prepare('SELECT public_id,status,fired_at FROM kds_order_items WHERE organization_id=? AND pos_check_item_id=?');$q->execute([$org,$newLine]);$heldItem=$q->fetch();
 kdsci_assert((string)$heldItem['status']==='held'&&$heldItem['fired_at']===null,'Held send must not start kitchen timing.');
