@@ -2,6 +2,8 @@
 declare(strict_types=1);
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/customer-crm-core.php';
+require_once __DIR__.'/../includes/service-visit-core.php';
+require_once __DIR__.'/../includes/service-visit-extensions.php';
 
 $user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];$uid=(int)$user['id'];
 $canView=app_has_permission('crm.view',$user);$canManage=app_has_permission('crm.manage',$user);$canConsent=app_has_permission('crm.consent.manage',$user);$canPosLink=app_has_permission('crm.pos_link',$user);
@@ -19,7 +21,7 @@ try{
         if($action==='customer'){
             if(!$canView)app_json_response(['ok'=>false,'message'=>'Customer CRM view permission required.'],403);
             $public=trim((string)($_GET['customer']??''));if($public==='')throw new InvalidArgumentException('Choose a customer.');
-            app_json_response(['ok'=>true,'customer'=>crm_profile($pdo,$org,$public),'permissions'=>['view'=>$canView,'manage'=>$canManage,'consent'=>$canConsent,'posLink'=>$canPosLink]]);
+            app_json_response(['ok'=>true,'customer'=>service_visit_crm_profile($pdo,$org,$public),'permissions'=>['view'=>$canView,'manage'=>$canManage,'consent'=>$canConsent,'posLink'=>$canPosLink]]);
         }
         app_json_response(['ok'=>false,'message'=>'Unsupported Customer CRM action.'],422);
     }
@@ -27,7 +29,7 @@ try{
     $input=app_json_input();app_verify_request_csrf($input);$action=(string)($input['action']??'');$public=trim((string)($input['customerPublicId']??$input['publicId']??''));
     if($action==='customer.save'){
         if(!$canManage)app_json_response(['ok'=>false,'message'=>'Customer CRM management permission required.'],403);
-        $saved=crm_customer_save($pdo,$org,$input,$uid,(string)($input['source']??'manual'));$profile=crm_profile($pdo,$org,(string)$saved['public_id']);
+        $saved=crm_customer_save($pdo,$org,$input,$uid,(string)($input['source']??'manual'));$profile=service_visit_crm_profile($pdo,$org,(string)$saved['public_id']);
         app_audit($pdo,$org,$uid,$public!==''?'crm.customer_updated':'crm.customer_created','crm_customer',$profile['publicId'],null,['displayName'=>$profile['displayName'],'source'=>$profile['source']]);
         app_json_response(['ok'=>true,'customer'=>$profile],$public!==''?200:201);
     }
@@ -35,7 +37,7 @@ try{
         if(!$canPosLink)app_json_response(['ok'=>false,'message'=>'POS customer-link permission required.'],403);
         $check=trim((string)($input['checkPublicId']??''));if($check==='')throw new InvalidArgumentException('Choose an open POS check.');
         if($action==='pos.attach'&&$public==='')throw new InvalidArgumentException('Choose a customer to attach.');
-        $attached=crm_attach_check($pdo,$org,$check,$action==='pos.detach'?null:$public);
+        $attached=service_visit_attach_customer_safe($pdo,$org,$check,$action==='pos.detach'?null:$public);
         app_audit($pdo,$org,$uid,$action==='pos.detach'?'crm.pos_detached':'crm.pos_attached','pos_check',$check,null,['customerPublicId'=>$action==='pos.detach'?null:$public]);
         app_json_response(['ok'=>true,'customer'=>$attached]);
     }

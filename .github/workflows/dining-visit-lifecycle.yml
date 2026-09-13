@@ -1,30 +1,22 @@
-name: Table Service + Host Stand Hardening
+name: Dining Visit Lifecycle Hardening
 
 on:
   pull_request:
     paths:
       - 'api/table-service.php'
       - 'api/host-stand.php'
-      - 'table-service.php'
-      - 'host-stand.php'
-      - 'js/table-service.js'
-      - 'js/host-stand.js'
-      - 'includes/service-ops-hardening.php'
-      - 'includes/service-ops-atomic.php'
-      - 'includes/service-ops-floor.php'
-      - 'includes/service-ops-map.php'
-      - 'includes/service-ops-reservation.php'
+      - 'api/customer-crm.php'
       - 'includes/service-visit-core.php'
       - 'includes/service-visit-extensions.php'
       - 'includes/service-visit-live.php'
       - 'database/20260922_dining_visit_lifecycle.sql'
-      - 'tests/table-host-hardening-contract.php'
-      - '.github/workflows/table-host-hardening.yml'
+      - 'tests/dining-visit-lifecycle-contract.php'
+      - '.github/workflows/dining-visit-lifecycle.yml'
   push:
     branches: [main]
 
 jobs:
-  table-host-hardening:
+  dining-visit-lifecycle:
     runs-on: ubuntu-latest
     services:
       mariadb:
@@ -46,48 +38,34 @@ jobs:
         run: |
           php -l api/table-service.php
           php -l api/host-stand.php
-          php -l table-service.php
-          php -l host-stand.php
-          php -l includes/service-ops-hardening.php
-          php -l includes/service-ops-atomic.php
-          php -l includes/service-ops-floor.php
-          php -l includes/service-ops-map.php
-          php -l includes/service-ops-reservation.php
+          php -l api/customer-crm.php
           php -l includes/service-visit-core.php
           php -l includes/service-visit-extensions.php
           php -l includes/service-visit-live.php
-          php -l tests/table-host-hardening-contract.php
+          php -l tests/dining-visit-lifecycle-contract.php
           node --check js/table-service.js
           node --check js/host-stand.js
-      - name: Hardening architecture contract
+      - name: Architecture contract
         run: |
-          grep -q 'service_visit_seat' api/table-service.php
-          grep -q 'service_visit_transfer_safe' api/table-service.php
-          grep -q 'service_visit_split' api/table-service.php
-          grep -q 'service_ops_canonical_map' api/table-service.php
-          grep -q 'New dining tables must be created as managed physical assets' api/table-service.php
-          grep -q 'service_ops_availability' api/host-stand.php
-          grep -q 'service_ops_reservation_status_atomic' api/host-stand.php
-          grep -q 'service_ops_reservation_update' api/host-stand.php
-          grep -q 'service_ops_reservation_assign_safe' api/host-stand.php
-          grep -q 'service_ops_place_table' api/host-stand.php
-          grep -q 'service_visit_reconcile_live' api/host-stand.php
-          grep -q "app_has_permission('table_service.view'" api/host-stand.php
-          grep -q "app_has_permission('table_service.view'" host-stand.php
-          grep -q 'function service_ops_business_date' includes/service-ops-hardening.php
-          grep -q 'function service_ops_assert_table_operable' includes/service-ops-hardening.php
-          grep -q 'split_cover_allocation' includes/service-ops-hardening.php
-          grep -q 'projectedClear' includes/service-ops-hardening.php
-          grep -q 'full table footprint' -i includes/service-ops-floor.php
+          grep -q 'ADD COLUMN visit_group_id' database/20260922_dining_visit_lifecycle.sql
+          grep -q 'idx_service_context_visit' database/20260922_dining_visit_lifecycle.sql
+          grep -q 'function service_visit_split' includes/service-visit-core.php
+          grep -q 'function service_visit_merge_safe' includes/service-visit-live.php
+          grep -q 'function service_visit_lock_groups' includes/service-visit-extensions.php
+          test "$(grep -c 'service_visit_lock_groups' includes/service-visit-extensions.php)" -ge "3"
+          grep -q 'service_visit_lock_groups' includes/service-visit-live.php
           grep -q 'function service_visit_reconcile_tables' includes/service-visit-extensions.php
-          grep -q 'percentage coordinates' tests/table-host-hardening-contract.php
-          grep -q 'another active waitlist party' includes/service-ops-reservation.php
-          grep -q 'movedGuestCount' js/table-service.js
-          grep -q 'physicalReady' js/table-service.js
-          grep -q 'data-edit' js/host-stand.js
-          grep -q 'data-check-availability' js/host-stand.js
-          ! grep -q "new Date().toISOString().slice(0,10)" js/host-stand.js
-          grep -q 'Manage Tables' table-service.php
+          grep -q 'visit_check_repointed' includes/service-visit-extensions.php
+          grep -q 'function service_visit_reconcile_reservations' includes/service-visit-core.php
+          grep -q 'function service_visit_attach_customer_safe' includes/service-visit-extensions.php
+          grep -q 'service_visit_reconcile_live' api/table-service.php
+          grep -q 'service_visit_merge_safe' api/table-service.php
+          grep -q 'service_visit_transfer_safe' api/table-service.php
+          grep -q 'service_visit_dashboard' api/host-stand.php
+          grep -q 'service_visit_attach_customer_safe' api/customer-crm.php
+          ! grep -q "'openChecks'=>pos_open_checks" api/table-service.php
+          ! grep -q 'guest_reservation_tables WHERE organization_id' includes/service-visit-extensions.php
+          ! grep -q 'guest_reservation_tables (organization_id' includes/service-visit-extensions.php
       - name: Install and upgrade schema
         run: |
           sudo apt-get update -qq
@@ -111,7 +89,14 @@ jobs:
           $s->applyPending(null);
           if($s->pendingMigrations()) exit(1);
           PHP
-      - name: Recent work hardening behavior
+      - name: Verify dining visit schema
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='service_check_contexts' AND column_name='visit_group_id';")" = "1"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',') FROM information_schema.statistics WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='service_check_contexts' AND index_name='idx_service_context_visit';")" = "organization_id,location_id,visit_group_id,status"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260922_dining_visit_lifecycle';")" = "1"
+      - name: Dining visit lifecycle behavioral contract
+        run: php tests/dining-visit-lifecycle-contract.php
+      - name: Recent table-host hardening regression
         run: php tests/table-host-hardening-contract.php
       - name: Host Stand regression
         run: php tests/host-stand-contract.php
@@ -119,12 +104,12 @@ jobs:
         run: php tests/table-service-contract.php
       - name: Table Service reconciliation regression
         run: php tests/table-service-reconcile-contract.php
+      - name: Customer CRM regression
+        run: php tests/customer-crm-contract.php
       - name: Kitchen Display regression
         run: php tests/kds-contract.php
       - name: Native POS regression
         run: php tests/native-pos-contract.php
-      - name: Customer CRM regression
-        run: php tests/customer-crm-contract.php
       - name: Daily Manager regression
         run: php tests/daily-manager-contract.php
       - name: Upgrader checksum and idempotence
