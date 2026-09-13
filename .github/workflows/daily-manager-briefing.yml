@@ -1,0 +1,111 @@
+name: Daily Manager Briefing
+
+on:
+  pull_request:
+    paths:
+      - 'daily-manager.php'
+      - 'api/daily-manager.php'
+      - 'api/daily-manager-agent.php'
+      - 'api/agent-workspace.php'
+      - 'includes/daily-manager-core.php'
+      - 'js/daily-manager.js'
+      - 'database/20260918_daily_manager_briefing.sql'
+      - 'tests/daily-manager-contract.php'
+      - '.github/workflows/daily-manager-briefing.yml'
+  push:
+    branches: [main]
+
+jobs:
+  daily-manager-briefing:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - name: Syntax checks
+        run: |
+          php -l daily-manager.php
+          php -l api/daily-manager.php
+          php -l api/daily-manager-agent.php
+          php -l api/agent-workspace.php
+          php -l includes/daily-manager-core.php
+          php -l tests/daily-manager-contract.php
+          node --check js/daily-manager.js
+      - name: Architecture, privacy and employment boundary
+        run: |
+          test "$(grep -c 'CREATE TABLE IF NOT EXISTS manager_daily_' database/20260918_daily_manager_briefing.sql)" = "2"
+          grep -q "manager.brief.view" database/20260918_daily_manager_briefing.sql
+          grep -q "manager.brief.manage" database/20260918_daily_manager_briefing.sql
+          grep -q "manager.brief.agent" database/20260918_daily_manager_briefing.sql
+          grep -q "oldp.permission_key IN ('pos.manage','staff.manage')" database/20260918_daily_manager_briefing.sql
+          ! grep -Eq "oldp.permission_key.*(pos.use|tasks.view|employee.self)" database/20260918_daily_manager_briefing.sql
+          grep -q "daily_manager_brief" api/agent-workspace.php
+          grep -q "api/daily-manager-agent.php" api/agent-workspace.php
+          grep -q "manager.daily_brief" api/daily-manager-agent.php
+          grep -q "does not rank employees" api/daily-manager-agent.php
+          ! grep -Eiq "employee_(performance|coaching)|coaching_notes|development_goals" includes/daily-manager-core.php
+          ! grep -Eiq "crm_customers.*(email|phone)|SELECT.*(email|phone).*crm_customers" includes/daily-manager-core.php
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_restaurant_ai_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->ensureTrackingTables();
+          $s->bootstrapLegacyHistory(null);
+          $s->applyPending(null);
+          if($s->pendingMigrations()) exit(1);
+          PHP
+      - name: Verify schema and permissions
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('manager_daily_logs','manager_daily_exception_actions');")" = "2"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('manager.brief.view','manager.brief.manage','manager.brief.agent');")" = "3"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260918_daily_manager_briefing';")" = "1"
+      - name: Daily Manager behavioral contract
+        run: php tests/daily-manager-contract.php
+      - name: Native POS regression
+        run: php tests/native-pos-contract.php
+      - name: Customer CRM regression
+        run: php tests/customer-crm-contract.php
+      - name: Sales + Demand regression
+        run: php tests/sales-demand-intelligence-contract.php
+      - name: Shift Handoff regression
+        run: php tests/employee-shift-communications-contract.php
+      - name: Agent Workspace regression
+        run: php tests/agent-workspace-contract.php
+      - name: Verify upgrader idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->assertAppliedChecksumsUnchanged();
+          if($s->pendingMigrations()) exit(2);
+          if($s->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP
