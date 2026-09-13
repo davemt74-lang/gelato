@@ -4,6 +4,7 @@ declare(strict_types=1);
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/table-service-core.php';
 require_once __DIR__.'/../includes/table-service-reconcile.php';
+require_once __DIR__.'/../includes/table-cleaning-lifecycle.php';
 
 $pdo=app_pdo();
 function tsci_assert(bool $condition,string $message): void {if(!$condition)throw new RuntimeException($message);}
@@ -72,7 +73,10 @@ $paid=table_service_detail($pdo,$org,$public);$paid=pos_record_tender($pdo,$org,
 $reconciled=table_service_reconcile_closed_checks($pdo,$org,$location,$manager);tsci_assert($reconciled>=1,'Floor reconciliation must release a closed POS check.');
 tsci_assert((string)tsci_one($pdo,'SELECT state FROM service_tables WHERE organization_id=? AND public_id=?',[$org,$t2['publicId']])==='dirty','Paid table must become Dirty after reconciliation.');
 tsci_assert(tsci_one($pdo,'SELECT active_check_id FROM service_tables WHERE organization_id=? AND public_id=?',[$org,$t2['publicId']])===null,'Dirty table must no longer hold an active check pointer.');
-table_service_table_state($pdo,$org,(string)$t2['publicId'],'available',$manager);tsci_assert((string)tsci_one($pdo,'SELECT state FROM service_tables WHERE organization_id=? AND public_id=?',[$org,$t2['publicId']])==='available','Bussed table must return to Available.');
+table_cleaning_start($pdo,$org,$location,(string)$t2['publicId'],$manager);
+table_cleaning_mark_ready($pdo,$org,$location,(string)$t2['publicId'],$manager);
+tsci_assert((string)tsci_one($pdo,'SELECT state FROM service_tables WHERE organization_id=? AND public_id=?',[$org,$t2['publicId']])==='available','Bussed table must complete Dirty -> Cleaning -> Ready before returning Available.');
+tsci_assert(tsci_one($pdo,'SELECT ready_at FROM service_tables WHERE organization_id=? AND public_id=?',[$org,$t2['publicId']])!==null,'Ready table must retain completion timestamp.');
 
 tsci_assert((int)tsci_one($pdo,"SELECT COUNT(*) FROM service_events WHERE organization_id=? AND event_type='party_seated'",[$org])>=2,'Party seating must be audited.');
 tsci_assert((int)tsci_one($pdo,"SELECT COUNT(*) FROM service_events WHERE organization_id=? AND event_type='course_fired'",[$org])>=2,'Course fire must be audited.');
