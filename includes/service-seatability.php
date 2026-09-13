@@ -5,10 +5,11 @@ require_once __DIR__.'/service-ops-floor.php';
 require_once __DIR__.'/service-ops-reservation.php';
 require_once __DIR__.'/service-visit-live.php';
 require_once __DIR__.'/table-cleaning-lifecycle.php';
+require_once __DIR__.'/table-turn-policy.php';
 
-function service_seatability_cleanup_minutes(): int
+function service_seatability_cleanup_minutes(?PDO $pdo=null,?int $org=null,?int $locationId=null): int
 {
-    return 15;
+    return table_turn_reset_minutes($pdo,$org,$locationId);
 }
 
 function service_seatability_state_message(string $state,string $tableName): string
@@ -46,7 +47,7 @@ function service_seatability_candidate_allowed(PDO $pdo,int $org,int $locationId
     if(in_array($state,['blocked','out_of_service'],true))return false;
     if($row['active_check_id']!==null)return true;
     if($state==='available')return true;
-    if(in_array($state,['dirty','cleaning'],true))return $start >= $now->modify('+'.service_seatability_cleanup_minutes().' minutes');
+    if(in_array($state,['dirty','cleaning'],true))return $start >= $now->modify('+'.service_seatability_cleanup_minutes($pdo,$org,$locationId).' minutes');
     return false;
 }
 
@@ -145,7 +146,7 @@ function service_seatability_assert_assignment_window(PDO $pdo,int $org,array $r
             if($scheduled<$projectedClear->modify('+120 minutes'))throw new InvalidArgumentException((string)$row['name'].' is projected to still be occupied at that reservation time.');
             continue;
         }
-        if(in_array($state,['dirty','cleaning'],true)&&$scheduled<$now->modify('+'.service_seatability_cleanup_minutes().' minutes'))throw new InvalidArgumentException((string)$row['name'].' is still inside the table reset window for that reservation time.');
+        if(in_array($state,['dirty','cleaning'],true)&&$scheduled<$now->modify('+'.service_seatability_cleanup_minutes($pdo,$org,$locationId).' minutes'))throw new InvalidArgumentException((string)$row['name'].' is still inside the table reset window for that reservation time.');
         if(!in_array($state,['available','dirty','cleaning'],true))throw new InvalidArgumentException(service_seatability_state_message($state,(string)$row['name']));
     }
 }
