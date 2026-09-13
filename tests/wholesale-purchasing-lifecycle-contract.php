@@ -47,6 +47,15 @@ wpl_assert((float)$calc['servingsPerPan']>42&&(float)$calc['servingsPerPan']<43,
 wpl_assert((float)$calc['projectedMonthlyWholesaleSpend']>4700,'Canonical SKU pricing did not feed monthly wholesale spend.');
 wpl_assert((float)$calc['projectedMonthlyGrossProfit']>0,'Customer gross-profit model was not calculated.');
 
+$dessertCalc=wholesale_planning_calculate([
+    'customerMode'=>'existing_dessert','servingSizeOz'=>3,'currentDessertUnitsPerDay'=>80,'gelatoCapturePercent'=>50,'serviceDaysPerWeek'=>7,'safetyStockPercent'=>0,'wastePercent'=>0
+],$settings,[]);
+wpl_assert(abs((float)$dessertCalc['servingsPerDay']-40)<.001,'Existing-dessert capture model did not derive gelato servings.');
+$existingCalc=wholesale_planning_calculate([
+    'customerMode'=>'existing_gelato','servingSizeOz'=>5,'existingWeeklyPans'=>8,'serviceDaysPerWeek'=>7,'safetyStockPercent'=>0,'wastePercent'=>0
+],$settings,[]);
+wpl_assert((int)$existingCalc['recommendedWeeklyPans']===8,'Existing-gelato mode did not respect known weekly pan volume.');
+
 $saved=wholesale_planning_save_worksheet($pdo,$org,$leadPublic,[
     'customerMode'=>'adding_gelato','servingSizeOz'=>4,'servingsPerDay'=>100,'serviceDaysPerWeek'=>7,'safetyStockPercent'=>10,'wastePercent'=>5,
     'menuPricePerServing'=>6.50,'freezerPanCapacity'=>24,'deliveryFrequency'=>'Weekly','starterItems'=>[['skuId'=>$sku['public_id'],'quantity'=>20]],'selectedSkuIds'=>[$sku['public_id']],
@@ -75,19 +84,37 @@ $pdo->prepare("INSERT INTO wholesale_accounts (organization_id,public_id,wholesa
 $accountId=(int)$pdo->lastInsertId();
 wholesale_commerce_assign_price_list($pdo,$org,$accountId,$list['public_id'],$uid);
 $order=wholesale_planning_create_starter_order($pdo,$org,$leadPublic,$uid);
-wpl_assert($order['orderNumber']!==''&&count($order['lines'])===1,'Starter order did not enter canonical Wholesale order model.');
-$q=$pdo->prepare('SELECT status FROM wholesale_orders WHERE organization_id=? AND public_id=?');$q->execute([$org,$order['publicId']]);wpl_assert($q->fetchColumn()==='requested','Worksheet starter order must begin as requested, not committed production.');
+wpl_assert($order['orderNumber']!==''&&count($order['lines'])===1&&!$order['alreadyExists'],'Starter order did not enter canonical Wholesale order model.');
+$q=$pdo->prepare('SELECT status,id FROM wholesale_orders WHERE organization_id=? AND public_id=?');$q->execute([$org,$order['publicId']]);$orderRow=$q->fetch();wpl_assert($orderRow['status']==='requested','Worksheet starter order must begin as requested, not committed production.');
+$reused=wholesale_planning_create_starter_order($pdo,$org,$leadPublic,$uid);
+wpl_assert($reused['publicId']===$order['publicId']&&!empty($reused['alreadyExists']),'Repeated starter-order creation must reuse the canonical order.');
+$q=$pdo->prepare('SELECT COUNT(*) FROM wholesale_orders WHERE organization_id=? AND wholesale_account_id=?');$q->execute([$org,$accountId]);wpl_assert((int)$q->fetchColumn()===1,'Repeated starter-order creation created a duplicate order.');
+$q=$pdo->prepare('SELECT starter_order_public_id FROM wholesale_purchase_worksheets WHERE organization_id=? AND wholesale_lead_id=(SELECT id FROM wholesale_leads WHERE organization_id=? AND public_id=?)');$q->execute([$org,$org,$leadPublic]);wpl_assert($q->fetchColumn()===$order['publicId'],'Worksheet did not retain its canonical starter-order linkage.');
+if(operations_wholesale_ready($pdo)) operations_sync_wholesale_tasks($pdo,$org,$uid);
+if(restaurant_brain_table_ready($pdo,'inventory_commitments')){
+    $q=$pdo->prepare("SELECT COUNT(*) FROM inventory_commitments WHERE organization_id=? AND source_type='wholesale_order' AND source_id=? AND released_at IS NULL");$q->execute([$org,(int)$orderRow['id']]);
+    wpl_assert((int)$q->fetchColumn()===0,'Requested starter order must not reserve production inventory before confirmation.');
+}
 $q=$pdo->prepare('SELECT lifecycle_stage FROM wholesale_lifecycle l JOIN wholesale_leads w ON w.id=l.wholesale_lead_id WHERE l.organization_id=? AND w.public_id=?');$q->execute([$org,$leadPublic]);wpl_assert($q->fetchColumn()==='trial','Starter order did not advance lifecycle to trial.');
 $q=$pdo->prepare('SELECT pipeline_stage FROM wholesale_leads WHERE organization_id=? AND public_id=?');$q->execute([$org,$leadPublic]);wpl_assert($q->fetchColumn()==='negotiation','Trial lifecycle did not preserve compatibility with the existing negotiation pipeline stage.');
 
 $recurring=wholesale_lifecycle_save($pdo,$org,$leadPublic,['lifecycleStage'=>'recurring','ownerUserId'=>$uid,'nextAction'=>'Review standing order cadence.','nextActionAt'=>'2026-10-01T09:00'],$uid);
 wpl_assert($recurring['lifecycle_stage']==='recurring','Recurring lifecycle stage missing.');
-$q=$pdo->prepare('SELECT pipeline_stage FROM wholesale_leads WHERE organization_id=? AND public_id=?');$q->execute([$org,$leadPublic]);wpl_assert($q->fetchColumn()==='won','Recurring account must remain compatible with the canonical won pipeline stage.');
+$q=$pdo->prepare('SELECT pipeline_stage,won_at,lost_at FROM wholesale_leads WHERE organization_id=? AND public_id=?');$q->execute([$org,$leadPublic]);$terminal=$q->fetch();
+wpl_assert($terminal['pipeline_stage']==='won'&&$terminal['won_at']!==null&&$terminal['lost_at']===null,'Recurring account must mirror canonical won state and terminal timestamps.');
+$lost=wholesale_lifecycle_save($pdo,$org,$leadPublic,['lifecycleStage'=>'lost','ownerUserId'=>$uid,'nextAction'=>'','nextActionAt'=>''],$uid);
+wpl_assert($lost['lifecycle_stage']==='lost','Lost lifecycle stage missing.');
+$q=$pdo->prepare('SELECT pipeline_stage,won_at,lost_at FROM wholesale_leads WHERE organization_id=? AND public_id=?');$q->execute([$org,$leadPublic]);$terminal=$q->fetch();
+wpl_assert($terminal['pipeline_stage']==='lost'&&$terminal['won_at']===null&&$terminal['lost_at']!==null,'Lost lifecycle must clear won_at and match canonical pipeline semantics.');
+wholesale_lifecycle_save($pdo,$org,$leadPublic,['lifecycleStage'=>'recurring','ownerUserId'=>$uid,'nextAction'=>'Reactivated recurring account.','nextActionAt'=>'2026-10-02T09:00'],$uid);
+$q=$pdo->prepare('SELECT pipeline_stage,won_at,lost_at FROM wholesale_leads WHERE organization_id=? AND public_id=?');$q->execute([$org,$leadPublic]);$terminal=$q->fetch();
+wpl_assert($terminal['pipeline_stage']==='won'&&$terminal['won_at']!==null&&$terminal['lost_at']===null,'Reactivated recurring lifecycle must clear lost_at.');
 
 $detail=wholesale_planning_detail($pdo,$org,$leadPublic);
 wpl_assert($detail['canCreateOrder']===true,'Active converted account should expose canonical starter-order capability.');
 wpl_assert(count($detail['tastings'])===1,'Planner detail did not return tasting history.');
 wpl_assert((int)$detail['worksheet']['recommended_weekly_pans']===20,'Planner detail did not return saved demand model.');
+wpl_assert($detail['worksheet']['starter_order_public_id']===$order['publicId'],'Planner detail omitted canonical starter-order linkage.');
 
 $pdo->exec("INSERT INTO organizations (name,status,timezone) VALUES ('Other Planner CI','active','America/Phoenix')");$other=(int)$pdo->lastInsertId();
 $q=$pdo->prepare('SELECT COUNT(*) FROM wholesale_purchase_worksheets WHERE organization_id=?');$q->execute([$other]);wpl_assert((int)$q->fetchColumn()===0,'Wholesale planning data leaked across organizations.');
