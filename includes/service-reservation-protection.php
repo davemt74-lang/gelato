@@ -69,6 +69,19 @@ function service_reservation_protection_assert_window(PDO $pdo,int $org,int $loc
     return ['reservation'=>$next,'projectedClearAt'=>$projectedClear->format('Y-m-d H:i:s'),'mustBeReadyBy'=>$mustBeReadyBy->format('Y-m-d H:i:s')];
 }
 
+function service_reservation_protection_assert_walkin_tables(PDO $pdo,int $org,array $reservation,array $tablePublicIds): void
+{
+    if((string)$reservation['reservation_type']!=='waitlist')return;
+    $locationId=(int)$reservation['location_id'];
+    $party=max(1,(int)$reservation['party_size']);
+    $projectedClear=service_reservation_protection_projected_clear(pos_clock($pdo,$org,$locationId),$party);
+    $ids=array_values(array_unique(array_filter(array_map('strval',$tablePublicIds))));
+    foreach($ids as $public){
+        $table=service_seatability_assert_now($pdo,$org,$locationId,$public,true);
+        service_reservation_protection_assert_window($pdo,$org,$locationId,$table,$party,$projectedClear);
+    }
+}
+
 function service_reservation_protection_party_seat(PDO $pdo,int $org,int $locationId,string $tablePublicId,int $partySize,?int $serverUserId,string $notes,int $userId): array
 {
     return table_service_transaction($pdo,function()use($pdo,$org,$locationId,$tablePublicId,$partySize,$serverUserId,$notes,$userId){
@@ -107,6 +120,40 @@ function service_reservation_protection_transfer(PDO $pdo,int $org,string $check
         $projection=service_reservation_protection_visit_projection($pdo,$org,$group,$locationId);
         service_reservation_protection_assert_window($pdo,$org,$locationId,$dest,(int)$projection['partySize'],$projection['projectedClear']);
         return service_visit_transfer_safe($pdo,$org,$checkPublicId,$destinationTablePublicId,$userId);
+    });
+}
+
+function service_reservation_protection_reservation_create(PDO $pdo,int $org,int $locationId,array $input,int $userId): array
+{
+    return host_transaction($pdo,function()use($pdo,$org,$locationId,$input,$userId){
+        $reservation=service_seatability_reservation_create($pdo,$org,$locationId,$input,$userId);
+        if((string)$reservation['type']==='waitlist'&&!empty($reservation['tables'])){
+            $row=host_reservation_row($pdo,$org,(string)$reservation['publicId'],true);
+            service_reservation_protection_assert_walkin_tables($pdo,$org,$row,array_column($reservation['tables'],'publicId'));
+        }
+        return $reservation;
+    });
+}
+
+function service_reservation_protection_reservation_assign(PDO $pdo,int $org,string $reservationPublicId,array $tablePublicIds,int $userId): array
+{
+    return host_transaction($pdo,function()use($pdo,$org,$reservationPublicId,$tablePublicIds,$userId){
+        $row=host_reservation_row($pdo,$org,$reservationPublicId,true);
+        if((string)$row['reservation_type']==='waitlist')service_reservation_protection_assert_walkin_tables($pdo,$org,$row,$tablePublicIds);
+        return service_seatability_reservation_assign($pdo,$org,$reservationPublicId,$tablePublicIds,$userId);
+    });
+}
+
+function service_reservation_protection_host_seat(PDO $pdo,int $org,string $reservationPublicId,?int $serverUserId,int $userId): array
+{
+    return host_transaction($pdo,function()use($pdo,$org,$reservationPublicId,$serverUserId,$userId){
+        $row=host_reservation_row($pdo,$org,$reservationPublicId,true);
+        if((string)$row['reservation_type']==='waitlist'){
+            $tables=host_reservation_tables($pdo,$org,(int)$row['id']);
+            if(!$tables)throw new InvalidArgumentException('Assign a table before seating this party.');
+            service_reservation_protection_assert_walkin_tables($pdo,$org,$row,array_column($tables,'publicId'));
+        }
+        return service_seatability_host_seat($pdo,$org,$reservationPublicId,$serverUserId,$userId);
     });
 }
 
