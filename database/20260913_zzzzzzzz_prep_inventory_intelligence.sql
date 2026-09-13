@@ -55,9 +55,9 @@ CREATE TABLE IF NOT EXISTS prep_recommendations (
   UNIQUE KEY uq_prep_recommendation_public (organization_id, public_id),
   UNIQUE KEY uq_prep_recommendation_item (plan_id, normalized_key, unit),
   KEY idx_prep_recommendation_status (plan_id, status),
+  KEY idx_prep_recommendation_task (organization_id, task_id),
   CONSTRAINT fk_prep_recommendation_org FOREIGN KEY (organization_id) REFERENCES organizations(id),
-  CONSTRAINT fk_prep_recommendation_plan FOREIGN KEY (plan_id) REFERENCES prep_plans(id) ON DELETE CASCADE,
-  CONSTRAINT fk_prep_recommendation_task FOREIGN KEY (task_id) REFERENCES restaurant_tasks(id) ON DELETE SET NULL
+  CONSTRAINT fk_prep_recommendation_plan FOREIGN KEY (plan_id) REFERENCES prep_plans(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS prep_plan_tasks (
@@ -72,9 +72,9 @@ CREATE TABLE IF NOT EXISTS prep_plan_tasks (
   PRIMARY KEY (id),
   UNIQUE KEY uq_prep_plan_task (task_id),
   KEY idx_prep_plan_tasks_plan (plan_id, created_at),
+  KEY idx_prep_plan_tasks_org_task (organization_id, task_id),
   CONSTRAINT fk_prep_plan_tasks_org FOREIGN KEY (organization_id) REFERENCES organizations(id),
   CONSTRAINT fk_prep_plan_tasks_plan FOREIGN KEY (plan_id) REFERENCES prep_plans(id) ON DELETE CASCADE,
-  CONSTRAINT fk_prep_plan_tasks_task FOREIGN KEY (task_id) REFERENCES restaurant_tasks(id) ON DELETE CASCADE,
   CONSTRAINT fk_prep_plan_tasks_recommendation FOREIGN KEY (recommendation_id) REFERENCES prep_recommendations(id) ON DELETE SET NULL,
   CONSTRAINT fk_prep_plan_tasks_user FOREIGN KEY (added_by) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -93,9 +93,9 @@ CREATE TABLE IF NOT EXISTS prep_plan_events (
   PRIMARY KEY (id),
   KEY idx_prep_plan_events_plan (plan_id, created_at),
   KEY idx_prep_plan_events_org (organization_id, event_type, created_at),
+  KEY idx_prep_plan_events_task (organization_id, task_id, created_at),
   CONSTRAINT fk_prep_plan_events_org FOREIGN KEY (organization_id) REFERENCES organizations(id),
   CONSTRAINT fk_prep_plan_events_plan FOREIGN KEY (plan_id) REFERENCES prep_plans(id) ON DELETE CASCADE,
-  CONSTRAINT fk_prep_plan_events_task FOREIGN KEY (task_id) REFERENCES restaurant_tasks(id) ON DELETE SET NULL,
   CONSTRAINT fk_prep_plan_events_recommendation FOREIGN KEY (recommendation_id) REFERENCES prep_recommendations(id) ON DELETE SET NULL,
   CONSTRAINT fk_prep_plan_events_actor FOREIGN KEY (actor_user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -145,9 +145,9 @@ CREATE TABLE IF NOT EXISTS inventory_forecasts (
   UNIQUE KEY uq_inventory_forecast_public (organization_id, public_id),
   UNIQUE KEY uq_inventory_forecast_item (plan_id, inventory_item_id, unit),
   KEY idx_inventory_forecast_shortage (organization_id, shortage_quantity, restock_quantity),
+  KEY idx_inventory_forecast_inventory (organization_id, inventory_item_id),
   CONSTRAINT fk_inventory_forecast_org FOREIGN KEY (organization_id) REFERENCES organizations(id),
-  CONSTRAINT fk_inventory_forecast_plan FOREIGN KEY (plan_id) REFERENCES prep_plans(id) ON DELETE CASCADE,
-  CONSTRAINT fk_inventory_forecast_item FOREIGN KEY (inventory_item_id) REFERENCES inventory_items(id) ON DELETE CASCADE
+  CONSTRAINT fk_inventory_forecast_plan FOREIGN KEY (plan_id) REFERENCES prep_plans(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO permissions (permission_key,name,description,category) VALUES
