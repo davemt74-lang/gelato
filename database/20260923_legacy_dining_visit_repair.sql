@@ -35,6 +35,30 @@ WHERE e.event_type='check_split_created'
   AND child.id<>parent.id
 ON DUPLICATE KEY UPDATE parent_context_id=VALUES(parent_context_id);
 
+-- MySQL/MariaDB can raise ERROR 1137 (Can't reopen table) when the same
+-- temporary table is referenced by both the anchor and recursive member of a
+-- recursive CTE. Snapshot the edge list into two independent temporary tables
+-- so older production servers can execute the repair safely.
+DROP TEMPORARY TABLE IF EXISTS legacy_dining_visit_edges_anchor;
+CREATE TEMPORARY TABLE legacy_dining_visit_edges_anchor (
+  child_context_id BIGINT UNSIGNED NOT NULL,
+  parent_context_id BIGINT UNSIGNED NOT NULL,
+  PRIMARY KEY (child_context_id),
+  KEY idx_legacy_visit_anchor_parent (parent_context_id)
+) ENGINE=MEMORY;
+INSERT INTO legacy_dining_visit_edges_anchor (child_context_id,parent_context_id)
+SELECT child_context_id,parent_context_id FROM legacy_dining_visit_edges;
+
+DROP TEMPORARY TABLE IF EXISTS legacy_dining_visit_edges_walk;
+CREATE TEMPORARY TABLE legacy_dining_visit_edges_walk (
+  child_context_id BIGINT UNSIGNED NOT NULL,
+  parent_context_id BIGINT UNSIGNED NOT NULL,
+  PRIMARY KEY (child_context_id),
+  KEY idx_legacy_visit_walk_parent (parent_context_id)
+) ENGINE=MEMORY;
+INSERT INTO legacy_dining_visit_edges_walk (child_context_id,parent_context_id)
+SELECT child_context_id,parent_context_id FROM legacy_dining_visit_edges;
+
 DROP TEMPORARY TABLE IF EXISTS legacy_dining_visit_roots;
 CREATE TEMPORARY TABLE legacy_dining_visit_roots (
   child_context_id BIGINT UNSIGNED NOT NULL,
@@ -50,7 +74,7 @@ WITH RECURSIVE ancestry AS (
     e.parent_context_id AS ancestor_context_id,
     1 AS depth,
     CAST(CONCAT(e.child_context_id,',',e.parent_context_id) AS CHAR(4096)) AS visit_path
-  FROM legacy_dining_visit_edges e
+  FROM legacy_dining_visit_edges_anchor e
 
   UNION ALL
 
@@ -60,7 +84,7 @@ WITH RECURSIVE ancestry AS (
     a.depth+1,
     CONCAT(a.visit_path,',',e.parent_context_id)
   FROM ancestry a
-  JOIN legacy_dining_visit_edges e
+  JOIN legacy_dining_visit_edges_walk e
     ON e.child_context_id=a.ancestor_context_id
   WHERE a.depth<64
     AND FIND_IN_SET(e.parent_context_id,a.visit_path)=0
@@ -119,4 +143,6 @@ SET target.customer_id=known_customer.customer_id,
 WHERE target.customer_id IS NULL;
 
 DROP TEMPORARY TABLE IF EXISTS legacy_dining_visit_roots;
+DROP TEMPORARY TABLE IF EXISTS legacy_dining_visit_edges_walk;
+DROP TEMPORARY TABLE IF EXISTS legacy_dining_visit_edges_anchor;
 DROP TEMPORARY TABLE IF EXISTS legacy_dining_visit_edges;

@@ -45,6 +45,10 @@ jobs:
           grep -q 'FIND_IN_SET' database/20260923_legacy_dining_visit_repair.sql
           grep -q "visit_group_id LIKE 'visit-legacy-%'" database/20260923_legacy_dining_visit_repair.sql
           grep -q 'HAVING COUNT(DISTINCT c.customer_id)=1' database/20260923_legacy_dining_visit_repair.sql
+          grep -q 'legacy_dining_visit_edges_anchor' database/20260923_legacy_dining_visit_repair.sql
+          grep -q 'legacy_dining_visit_edges_walk' database/20260923_legacy_dining_visit_repair.sql
+          grep -q 'FROM legacy_dining_visit_edges_anchor e' database/20260923_legacy_dining_visit_repair.sql
+          grep -q 'JOIN legacy_dining_visit_edges_walk e' database/20260923_legacy_dining_visit_repair.sql
           ! grep -q 'child.table_id' database/20260923_legacy_dining_visit_repair.sql
           ! grep -q 'parent.table_id' database/20260923_legacy_dining_visit_repair.sql
           grep -q 'Unrelated same-table history must not be grouped' tests/legacy-dining-visit-repair-contract.php

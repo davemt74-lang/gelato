@@ -31,6 +31,19 @@
   function has(permission,user=current()){if(!user||!user.role)return false;return user.role.permissions.includes('*')||user.role.permissions.includes(permission)}
   function saveUsers(value){write(keys.users,value)}
   function saveRoles(value){write(keys.roles,value)}
+  function installPosHeaderAction(){
+    if(!window.RESTAURANT_SERVER_SESSION||!has('pos.use'))return;
+    const actions=document.querySelector('.top-actions');
+    if(!actions||actions.querySelector('[data-pos-header]'))return;
+    const link=document.createElement('a');
+    link.className='header-link';
+    link.href='pos.php';
+    link.textContent='POS';
+    link.setAttribute('data-pos-header','true');
+    link.setAttribute('aria-label','Open native POS');
+    actions.prepend(link);
+  }
   window.RestaurantAuth={keys,permissionCatalog,seed,users,roles,current,login,logout,has,saveUsers,saveRoles,read,write};
   seed();
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',installPosHeaderAction,{once:true});else installPosHeaderAction();
 })();
