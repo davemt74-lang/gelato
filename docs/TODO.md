@@ -61,11 +61,39 @@ Already canonical:
 
 ### Recommended build sequence
 
-1. **Wholesale Commerce Contract** — canonical products/SKUs, sell UOM/case packs, price lists, account pricing, MOQ/order minimums, normalized quote/order items, server-side total validation, event history, and backward compatibility for existing JSON orders.
-2. **Demand Commitments** — map wholesale products to recipes/yields, create dated ingredient demand, integrate with Prep `inventory_forecasts`, and prove Purchasing suggestions respond automatically to confirmed wholesale demand.
-3. **Inventory Allocation + Fulfillment** — available-to-promise, commitments/reservations, fulfillment location/windows, partial fulfillment, and canonical inventory consumption.
-4. **Wholesale A/R** — invoices, payment terms, payments, credits/refunds, aging/balances, and posting recognized wholesale revenue into Sales Intelligence as a distinct source.
-5. **Portal / Operations expansion** — account-aware catalog/reorder experience, fulfillment board, production demand, receivables visibility, and customer history using the contracts above.
+1. **W1 — Wholesale Commerce Contract**
+   - Canonical products/SKUs or variants.
+   - Sell UOM/case packs and recipe/yield mapping hooks.
+   - Effective-dated price lists and account price-list assignment.
+   - MOQ/order-minimum validation.
+   - Normalized quote/order item rows with immutable price snapshots.
+   - Server-side subtotal/tax/fee/total calculation.
+   - Append-only quote/order events.
+   - Backward-compatible support for existing `items_json` records and existing buyer portal flows.
+
+2. **W2 — Demand Commitments**
+   - Convert confirmed wholesale product quantities into dated ingredient demand.
+   - Integrate that demand with Prep `inventory_forecasts`.
+   - Prove shortages automatically flow into Purchasing suggestions and that open purchase orders suppress duplicate buying recommendations.
+   - Generalize the commitment mechanism enough for Catering to use it later.
+
+3. **W3 — Inventory Allocation + Fulfillment**
+   - Available-to-promise.
+   - Inventory commitments/reservations.
+   - Specific fulfillment location and requested/promised windows.
+   - Partial fulfillment.
+   - Canonical inventory consumption when product is produced/fulfilled.
+
+4. **W4 — Wholesale A/R**
+   - Invoices, payment terms, due dates, payments, credits/refunds, aging, and balances.
+   - Recognized wholesale revenue posted into Sales Intelligence under a distinct internal wholesale source.
+   - No synthetic restaurant POS checks/tenders for terms-based B2B balances.
+
+5. **W5 — Portal / Operations expansion**
+   - Account-aware catalog and reorder experience.
+   - Fulfillment board and production-demand views.
+   - Receivables visibility.
+   - Customer purchase/history views using the contracts above.
 
 ### Boundary rules
 
