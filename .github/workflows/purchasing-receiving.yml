@@ -33,18 +33,25 @@ jobs:
           php -l includes/purchasing-proactive.php
           php -l api/purchasing.php
           php -l api/purchasing-agent.php
+          php -l api/purchasing-document.php
+          php -l api/purchasing-document-view.php
           php -l purchasing.php
           php -l api/proactive-agent.php
           php -l includes/agent-workspace-core.php
           node --check js/purchasing.js
           node --check js/floor-planner-module.js
-      - name: Architecture contract
+      - name: Architecture and private-file contract
         run: |
           grep -q "CREATE TABLE IF NOT EXISTS vendors" database/20260914_zz_purchasing_receiving_vendor.sql
           grep -q "CREATE TABLE IF NOT EXISTS purchase_orders" database/20260914_zz_purchasing_receiving_vendor.sql
           grep -q "CREATE TABLE IF NOT EXISTS goods_receipts" database/20260914_zz_purchasing_receiving_vendor.sql
           grep -q "vendor_price_history" database/20260914_zz_purchasing_receiving_vendor.sql
           grep -q "purchasing.agent" database/20260914_zz_purchasing_receiving_vendor.sql
+          grep -q "CREATE TABLE IF NOT EXISTS purchasing_documents" database/20260914_zzz_purchasing_documents.sql
+          grep -q "gelato-private-storage" api/purchasing-document.php
+          grep -q "local_private" api/purchasing-document.php
+          grep -q "application/pdf" api/purchasing-document.php
+          grep -q "realpath(dirname(RESTAURANT_APP_ROOT)" api/purchasing-document-view.php
           grep -q "api/purchasing-agent.php" includes/agent-workspace-core.php
           grep -q "purchasing_proactive_signals" api/proactive-agent.php
           grep -q "Purchasing + Receiving" js/floor-planner-module.js
@@ -68,10 +75,10 @@ jobs:
           PHP
       - name: Verify schema and permissions
         run: |
-          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('vendors','vendor_contacts','inventory_vendor_items','purchase_orders','purchase_order_items','goods_receipts','goods_receipt_items','vendor_price_history','purchase_order_events')" | grep -qx '9'
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('vendors','vendor_contacts','inventory_vendor_items','purchase_orders','purchase_order_items','goods_receipts','goods_receipt_items','vendor_price_history','purchase_order_events','purchasing_documents')" | grep -qx '10'
           mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -N -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('vendors.view','vendors.manage','purchasing.view','purchasing.manage','purchasing.agent','receiving.view','receiving.manage')" | grep -qx '7'
-          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -N -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260914_zz_purchasing_receiving_vendor'" | grep -qx '1'
-      - name: Purchasing and receiving behavior
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -N -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key IN ('20260914_zz_purchasing_receiving_vendor','20260914_zzz_purchasing_documents')" | grep -qx '2'
+      - name: Purchasing, receiving and document behavior
         run: |
           php <<'PHP'
           <?php
@@ -83,13 +90,20 @@ jobs:
           $pdo->prepare("INSERT INTO inventory_items (organization_id,public_id,normalized_key,name,base_unit,on_hand_quantity,par_level,reorder_point,status,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?, 'active',?,?)")->execute([$org,'inv-cheese','mozzarella','mozzarella','lb',10,40,15,$uid,$uid]);
           $v=purchasing_save_vendor($pdo,$org,['name'=>'CI Foods','leadTimeDays'=>1],$uid);
           purchasing_save_vendor_item($pdo,$org,['vendorId'=>$v['public_id'],'inventoryId'=>'inv-cheese','vendorSku'=>'CHEESE-20','packSize'=>20,'packUnit'=>'lb','pricePerPack'=>55,'preferred'=>true],$uid);
+          $q=$pdo->prepare("SELECT vendor_name,vendor_sku,unit_cost FROM inventory_items WHERE organization_id=? AND public_id='inv-cheese'");$q->execute([$org]);$canonical=$q->fetch();if($canonical['vendor_name']!=='CI Foods'||$canonical['vendor_sku']!=='CHEESE-20'||abs((float)$canonical['unit_cost']-2.75)>.001)throw new RuntimeException('Preferred vendor canonical sync failed.');
           $s=purchasing_suggestions($pdo,$org);if(!$s||$s[0]['suggestedPacks']!=2)throw new RuntimeException('Suggestion contract failed.');
           $po=purchasing_create_order($pdo,$org,$v['public_id'],[['inventoryId'=>'inv-cheese','packs'=>2]],$uid);if($po['status']!=='draft'||count($po['items'])!==1)throw new RuntimeException('PO draft failed.');
+          if(purchasing_suggestions($pdo,$org)!==[])throw new RuntimeException('Open PO quantity must suppress duplicate purchasing suggestions.');
+          $pdo->prepare("INSERT INTO files (organization_id,storage_driver,storage_path,original_name,stored_name,mime_type,file_size,checksum_sha256,uploaded_by,visibility) VALUES (?,'local_private','purchasing-documents/ci/invoice.pdf','invoice.pdf','invoice.pdf','application/pdf',10,REPEAT('a',64),?,'organization_private')")->execute([$org,$uid]);$fileId=(int)$pdo->lastInsertId();
+          $pdo->prepare("INSERT INTO purchasing_documents (organization_id,public_id,purchase_order_id,file_id,document_type,created_by) VALUES (?,?,?,?,'invoice',?)")->execute([$org,'pdoc-ci',(int)$po['id'],$fileId,$uid]);
+          $po=purchasing_order($pdo,$org,$po['public_id']);if(count($po['documents']??[])!==1)throw new RuntimeException('Purchasing document lookup failed.');
           $po=purchasing_submit($pdo,$org,$po['public_id'],$uid);if($po['status']!=='submitted')throw new RuntimeException('PO submit failed.');
-          $item=$po['items'][0];$r=purchasing_receive($pdo,$org,$po['public_id'],[['itemId'=>$item['public_id'],'quantity'=>40,'actualPricePerPack'=>57]],$uid,'INV-CI');if($r['status']!=='received')throw new RuntimeException('Receiving failed.');
-          $q=$pdo->prepare("SELECT on_hand_quantity FROM inventory_items WHERE organization_id=? AND public_id='inv-cheese'");$q->execute([$org]);if((float)$q->fetchColumn()!==50.0)throw new RuntimeException('Inventory posting failed.');
-          $q=$pdo->prepare("SELECT COUNT(*) FROM inventory_transactions WHERE organization_id=? AND source_type='purchase_order'");$q->execute([$org]);if((int)$q->fetchColumn()!==1)throw new RuntimeException('Inventory transaction audit failed.');
-          $q=$pdo->prepare("SELECT COUNT(*) FROM vendor_price_history WHERE organization_id=? AND source_type='receiving'");$q->execute([$org]);if((int)$q->fetchColumn()!==1)throw new RuntimeException('Price history failed.');
+          $item=$po['items'][0];$r=purchasing_receive($pdo,$org,$po['public_id'],[['itemId'=>$item['public_id'],'quantity'=>40,'damagedQuantity'=>5,'actualPricePerPack'=>57]],$uid,'INV-CI');if($r['status']!=='partially_received')throw new RuntimeException('Damaged product must remain outstanding.');
+          $q=$pdo->prepare("SELECT on_hand_quantity FROM inventory_items WHERE organization_id=? AND public_id='inv-cheese'");$q->execute([$org]);if((float)$q->fetchColumn()!==45.0)throw new RuntimeException('Damaged product was incorrectly added to usable inventory.');
+          $r=purchasing_receive($pdo,$org,$po['public_id'],[['itemId'=>$item['public_id'],'quantity'=>5,'actualPricePerPack'=>57]],$uid,'INV-CI-2');if($r['status']!=='received')throw new RuntimeException('Final receiving failed.');
+          $q=$pdo->prepare("SELECT on_hand_quantity FROM inventory_items WHERE organization_id=? AND public_id='inv-cheese'");$q->execute([$org]);if((float)$q->fetchColumn()!==50.0)throw new RuntimeException('Final inventory posting failed.');
+          $q=$pdo->prepare("SELECT COUNT(*) FROM inventory_transactions WHERE organization_id=? AND source_type='purchase_order'");$q->execute([$org]);if((int)$q->fetchColumn()!==2)throw new RuntimeException('Inventory transaction audit failed.');
+          $q=$pdo->prepare("SELECT COUNT(*) FROM vendor_price_history WHERE organization_id=? AND source_type='receiving'");$q->execute([$org]);if((int)$q->fetchColumn()!==2)throw new RuntimeException('Price history failed.');
           echo "purchasing-receiving-ok\n";
           PHP
       - name: Verify upgrader idempotence
