@@ -3,6 +3,16 @@ declare(strict_types=1);
 
 require_once __DIR__.'/service-visit-core.php';
 
+function service_visit_lock_groups(PDO $pdo,int $org,array $groups): array
+{
+    $groups=array_values(array_unique(array_filter(array_map(static fn($g):string=>trim((string)$g),$groups),static fn(string $g):bool=>$g!=='')));
+    if(!$groups)return [];
+    $ph=implode(',',array_fill(0,count($groups),'?'));
+    $q=$pdo->prepare("SELECT c.id,c.status FROM service_check_contexts cx JOIN pos_checks c ON c.id=cx.check_id AND c.organization_id=cx.organization_id WHERE cx.organization_id=? AND cx.visit_group_id IN ($ph) ORDER BY c.id FOR UPDATE");
+    $q->execute(array_merge([$org],$groups));
+    return $q->fetchAll();
+}
+
 function service_visit_reconcile_tables(PDO $pdo,int $org,int $locationId,int $userId): int
 {
     if(!service_visit_ready($pdo))return table_service_reconcile_closed_checks($pdo,$org,$locationId,$userId);
@@ -53,6 +63,7 @@ function service_visit_attach_customer_safe(PDO $pdo,int $org,string $checkPubli
     return table_service_transaction($pdo,function()use($pdo,$org,$checkPublicId,$customerPublicId){
         $locked=table_service_check_row($pdo,$org,$checkPublicId,true);if($locked['status']!=='open')throw new InvalidArgumentException('Customer can only be changed on an open POS check.');
         service_visit_context($pdo,$org,(int)$locked['id'],true);$group=service_visit_ensure_group($pdo,$org,(int)$locked['id']);
+        service_visit_lock_groups($pdo,$org,[$group]);
         $customerId=null;if($customerPublicId!==null&&trim($customerPublicId)!==''){$c=crm_customer_row($pdo,$org,trim($customerPublicId));if($c['status']!=='active')throw new InvalidArgumentException('Archived customers cannot be attached to a POS check.');$customerId=(int)$c['id'];}
         $settledQ=$pdo->prepare("SELECT DISTINCT c.customer_id FROM service_check_contexts cx JOIN pos_checks c ON c.id=cx.check_id AND c.organization_id=cx.organization_id WHERE cx.organization_id=? AND cx.visit_group_id=? AND c.status='paid' AND c.customer_id IS NOT NULL");$settledQ->execute([$org,$group]);$settled=array_map('intval',$settledQ->fetchAll(PDO::FETCH_COLUMN));
         if(count($settled)>1||($settled&&$customerId!==$settled[0]))throw new InvalidArgumentException('Customer identity cannot be changed after another check in this dining visit has been paid.');
@@ -67,6 +78,7 @@ function service_visit_transfer_safe(PDO $pdo,int $org,string $checkPublicId,str
     return table_service_transaction($pdo,function()use($pdo,$org,$checkPublicId,$destinationTablePublicId,$userId){
         $check=table_service_check_row($pdo,$org,$checkPublicId,true);if($check['status']!=='open')throw new InvalidArgumentException('Only an open check can transfer tables.');
         $context=service_visit_context($pdo,$org,(int)$check['id'],true);$group=service_visit_ensure_group($pdo,$org,(int)$check['id']);
+        service_visit_lock_groups($pdo,$org,[$group]);
         $q=$pdo->prepare("SELECT COUNT(*) FROM pos_tenders t JOIN service_check_contexts cx ON cx.check_id=t.check_id AND cx.organization_id=t.organization_id WHERE t.organization_id=? AND cx.visit_group_id=? AND t.status='captured'");$q->execute([$org,$group]);if((int)$q->fetchColumn()>0)throw new InvalidArgumentException('Table transfer is locked after any check in this dining visit has captured payment.');
         $dest=service_ops_assert_table_operable($pdo,$org,(int)$check['location_id'],$destinationTablePublicId,true);$visitCheckIds=service_visit_group_check_ids($pdo,$org,$group,false);
         if(!$visitCheckIds)throw new RuntimeException('Dining visit has no checks.');$phChecks=implode(',',array_fill(0,count($visitCheckIds),'?'));
@@ -77,7 +89,7 @@ function service_visit_transfer_safe(PDO $pdo,int $org,string $checkPublicId,str
         foreach($oldTableIds as $tableId){if($tableId===(int)$dest['id'])continue;$pdo->prepare("UPDATE service_tables SET active_check_id=NULL,state='dirty',assigned_user_id=NULL,seated_at=NULL,updated_by=?,updated_at=NOW(6) WHERE organization_id=? AND id=?")->execute([$userId,$org,$tableId]);}
         $pdo->prepare("UPDATE service_tables SET active_check_id=?,assigned_user_id=?,state='seated',seated_at=COALESCE(seated_at,NOW(6)),updated_by=?,updated_at=NOW(6) WHERE organization_id=? AND id=?")->execute([(int)$check['id'],$context['server_user_id'],$userId,$org,(int)$dest['id']]);
         $pdo->prepare("UPDATE service_check_contexts cx JOIN pos_checks c ON c.id=cx.check_id AND c.organization_id=cx.organization_id SET cx.table_id=?,cx.updated_by=?,cx.updated_at=NOW(6) WHERE cx.organization_id=? AND cx.visit_group_id=? AND c.status='open'")->execute([(int)$dest['id'],$userId,$org,$group]);
-        $pdo->prepare("UPDATE pos_checks c JOIN service_check_contexts cx ON cx.check_id=c.id AND cx.organization_id=cx.organization_id SET c.table_name=?,c.revision=c.revision+1,c.updated_at=NOW(6) WHERE c.organization_id=? AND cx.visit_group_id=? AND c.status='open'")->execute([(string)$dest['name'],$org,$group]);
+        $pdo->prepare("UPDATE pos_checks c JOIN service_check_contexts cx ON cx.check_id=c.id AND cx.organization_id=c.organization_id SET c.table_name=?,c.revision=c.revision+1,c.updated_at=NOW(6) WHERE c.organization_id=? AND cx.visit_group_id=? AND c.status='open'")->execute([(string)$dest['name'],$org,$group]);
         $rq=$pdo->prepare("SELECT r.id FROM guest_reservations r JOIN service_check_contexts cx ON cx.check_id=r.seated_check_id AND cx.organization_id=r.organization_id WHERE r.organization_id=? AND cx.visit_group_id=? AND r.status='seated' FOR UPDATE");$rq->execute([$org,$group]);$reservationIds=array_map('intval',$rq->fetchAll(PDO::FETCH_COLUMN));
         foreach($reservationIds as $reservationId){
             $delete=$pdo->prepare("DELETE rt FROM guest_reservation_tables rt JOIN guest_reservations r ON r.id=rt.reservation_id WHERE r.organization_id=? AND r.id=?");$delete->execute([$org,$reservationId]);
