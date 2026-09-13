@@ -1,0 +1,108 @@
+name: Wholesale Receivables
+
+on:
+  pull_request:
+    paths:
+      - 'database/20260930_wholesale_receivables.sql'
+      - 'includes/wholesale-receivables.php'
+      - 'api/wholesale-receivables.php'
+      - 'wholesale-receivables.php'
+      - 'tests/wholesale-receivables-contract.php'
+      - '.github/workflows/wholesale-receivables.yml'
+  push:
+    branches: [main]
+
+jobs:
+  wholesale-receivables:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - name: Syntax checks
+        run: |
+          php -l includes/wholesale-receivables.php
+          php -l api/wholesale-receivables.php
+          php -l wholesale-receivables.php
+          php -l tests/wholesale-receivables-contract.php
+      - name: Architecture contract
+        run: |
+          grep -q 'CREATE TABLE IF NOT EXISTS wholesale_invoices' database/20260930_wholesale_receivables.sql
+          grep -q 'CREATE TABLE IF NOT EXISTS wholesale_invoice_items' database/20260930_wholesale_receivables.sql
+          grep -q 'CREATE TABLE IF NOT EXISTS wholesale_receivable_entries' database/20260930_wholesale_receivables.sql
+          grep -q 'CREATE TABLE IF NOT EXISTS wholesale_receivable_events' database/20260930_wholesale_receivables.sql
+          grep -q "WHOLESALE_SALES_PROVIDER='gelato_wholesale'" includes/wholesale-receivables.php
+          grep -q 'GET_LOCK' includes/wholesale-receivables.php
+          grep -q 'RELEASE_LOCK' includes/wholesale-receivables.php
+          grep -q "entry_type='credit'" includes/wholesale-receivables.php
+          grep -q "wholesale.receivables.manage" api/wholesale-receivables.php
+          ! grep -q 'INSERT INTO pos_checks' includes/wholesale-receivables.php
+          ! grep -q 'INSERT INTO pos_tenders' includes/wholesale-receivables.php
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_restaurant_ai_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->ensureTrackingTables();
+          $s->bootstrapLegacyHistory(null);
+          $s->applyPending(null);
+          if($s->pendingMigrations()) exit(1);
+          PHP
+      - name: Verify W4 schema
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('wholesale_invoices','wholesale_invoice_items','wholesale_receivable_entries','wholesale_receivable_events');")" = "4"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('wholesale.receivables.view','wholesale.receivables.manage');")" = "2"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260930_wholesale_receivables';")" = "1"
+      - name: W4 receivables behavior
+        run: php tests/wholesale-receivables-contract.php
+      - name: W3 fulfillment regression
+        run: php tests/wholesale-allocation-fulfillment-contract.php
+      - name: W2 demand regression
+        run: php tests/wholesale-demand-commitments-contract.php
+      - name: W1 commerce regression
+        run: php tests/wholesale-commerce-acquisition-contract.php
+      - name: Wholesale lifecycle regression
+        run: php tests/wholesale-purchasing-lifecycle-contract.php
+      - name: Native POS regression
+        run: php tests/native-pos-contract.php
+      - name: Sales Intelligence regression
+        run: php tests/sales-demand-intelligence-contract.php
+      - name: Wholesale Operations regression
+        run: php tests/operations-wholesale-contract.php
+      - name: Verify upgrader idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->assertAppliedChecksumsUnchanged();
+          if($s->pendingMigrations()) exit(2);
+          if($s->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP
