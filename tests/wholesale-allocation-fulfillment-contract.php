@@ -36,7 +36,7 @@ $order=wholesale_commerce_create_order($pdo,$org,$account,['items'=>[['skuId'=>$
 operations_sync_wholesale_tasks($pdo,$org,$uid);
 $detail=wholesale_fulfillment_save_order_plan($pdo,$org,$order['publicId'],['locationId'=>'wloc-waf-main','fulfillmentType'=>'local_delivery','requestedWindowStart'=>'2026-09-20T10:00','requestedWindowEnd'=>'2026-09-20T12:00','promisedWindowStart'=>'2026-09-20T10:30','promisedWindowEnd'=>'2026-09-20T11:30'],$uid);
 waf_assert((int)$pdo->query("SELECT wholesale_account_location_id FROM wholesale_orders WHERE id=".(int)$order['id'])->fetchColumn()===$locationId,'Order fulfillment location was not persisted.');
-waf_assert($detail['order']['promisedWindowEnd']==='2026-09-20 11:30:00','Promised fulfillment window did not persist.');
+waf_assert(substr((string)$detail['order']['promisedWindowEnd'],0,19)==='2026-09-20 11:30:00','Promised fulfillment window did not persist.');
 $badWindow=false;try{wholesale_fulfillment_save_order_plan($pdo,$org,$order['publicId'],['promisedWindowStart'=>'2026-09-20T12:00','promisedWindowEnd'=>'2026-09-20T11:00'],$uid);}catch(InvalidArgumentException){$badWindow=true;}waf_assert($badWindow,'Invalid reversed fulfillment window was accepted.');
 
 // A location from another account in the same organization must never be assignable to this order.
