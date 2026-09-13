@@ -1,0 +1,19 @@
+<?php
+declare(strict_types=1);
+require __DIR__.'/../includes/bootstrap.php';
+require __DIR__.'/../includes/employee-performance-core.php';
+
+$user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];$uid=(int)$user['id'];
+$canView=app_has_permission('employee.performance.view',$user)||app_has_permission('employee.manage',$user)||app_has_permission('staff.manage',$user);
+if(!$canView)app_json_response(['ok'=>false,'message'=>'Employee development permission required.'],403);
+if($_SERVER['REQUEST_METHOD']!=='POST'){header('Allow: POST');app_json_response(['ok'=>false,'message'=>'Method not allowed.'],405);}
+if(!employee_performance_ready($pdo))app_json_response(['ok'=>false,'message'=>'Employee development migration is not installed. Run upgrade.php.'],503);
+$in=app_json_input();app_verify_request_csrf($in);$message=trim((string)($in['message']??''));if($message===''||mb_strlen($message,'UTF-8')>2000)app_json_response(['ok'=>false,'message'=>'Enter a manager development request no longer than 2,000 characters.'],422);
+$normalized=mb_strtolower(preg_replace('/^hey\s+gelato[,\s]*/iu','',$message)??$message,'UTF-8');
+$days=preg_match('/\b(30|90|180)\s*(?:day|days)\b/u',$normalized,$dm)?(int)$dm[1]:90;
+$q=$pdo->prepare("SELECT u.id,u.display_name,u.first_name,u.last_name,COALESCE(NULLIF(sp.preferred_name,''),u.display_name) preferred_name,om.job_title,l.name location_name FROM organization_memberships om INNER JOIN users u ON u.id=om.user_id LEFT JOIN staff_profiles sp ON sp.organization_id=om.organization_id AND sp.user_id=u.id LEFT JOIN locations l ON l.id=om.primary_location_id AND l.organization_id=om.organization_id WHERE om.organization_id=? AND om.status='active' AND u.status='active' AND u.archived_at IS NULL ORDER BY u.display_name");$q->execute([$org]);$staff=$q->fetchAll();
+$matches=[];foreach($staff as $row){$candidates=array_unique(array_filter([mb_strtolower((string)$row['preferred_name'],'UTF-8'),mb_strtolower((string)$row['display_name'],'UTF-8'),mb_strtolower(trim((string)$row['first_name'].' '.(string)$row['last_name']),'UTF-8'),mb_strtolower((string)$row['first_name'],'UTF-8')]));foreach($candidates as $candidate){if($candidate!==''&&preg_match('/(?<![\pL\pN])'.preg_quote($candidate,'/').'(?![\pL\pN])/u',$normalized)){ $matches[(int)$row['id']]=$row;break;}}}
+if(count($matches)!==1){$names=array_map(static fn(array $r):string=>(string)$r['preferred_name'],$staff);$answer=count($matches)>1?'I found more than one employee matching that request. Name one employee exactly.':'Name the employee you want a private development brief for.';app_json_response(['ok'=>true,'skill'=>'employee.development.identify','answer'=>$answer.' Active employees: '.implode(', ',array_slice($names,0,25)).'.','data'=>['matches'=>array_values($matches),'employees'=>$names],'sources'=>['employee-development.php']]);}
+$target=array_values($matches)[0];$brief=employee_performance_brief($pdo,$org,(int)$target['id'],$days);app_audit($pdo,$org,$uid,'agent.employee_development_brief_used','user',(string)$target['id'],null,['days'=>$days]);
+$e=$brief['evidence'];$extras=[];$latestRecognition=$e['recognitions'][0]??null;if($latestRecognition)$extras[]='Latest recognition: '.$latestRecognition['title'].'.';$activeGoals=array_values(array_filter($e['goals'],static fn(array $g):bool=>(string)$g['status']==='active'));if($activeGoals)$extras[]='Active manager-authored goals: '.implode('; ',array_map(static fn(array $g):string=>(string)$g['title'],array_slice($activeGoals,0,5))).'.';
+app_json_response(['ok'=>true,'skill'=>'employee.development.brief','answer'=>$brief['summary'].($extras?' '.implode(' ',$extras):''),'data'=>['employee'=>['userId'=>(int)$target['id'],'name'=>$target['preferred_name'],'jobTitle'=>$target['job_title'],'location'=>$target['location_name']],'days'=>$days,'brief'=>$brief],'sources'=>['employee-development.php']]);
