@@ -73,17 +73,19 @@ jobs:
           grep -q 'service_seatability_availability' api/host-stand.php
           grep -q 'service_seatability_dashboard' api/host-stand.php
           grep -q 'service_seatability_reservation_create' api/host-stand.php
+          grep -q 'service_seatability_reservation_update' api/host-stand.php
           grep -q 'service_seatability_reservation_assign' api/host-stand.php
           grep -q 'service_seatability_host_seat' api/host-stand.php
           grep -q 'service_ops_reservation_status_atomic' api/host-stand.php
-          grep -q 'service_ops_reservation_update' api/host-stand.php
           grep -q 'service_ops_place_table' api/host-stand.php
           grep -q 'service_visit_reconcile_live' api/host-stand.php
           grep -q "app_has_permission('table_service.view'" api/host-stand.php
           grep -q "app_has_permission('table_service.view'" host-stand.php
           grep -q 'function service_seatability_assert_now' includes/service-seatability.php
           grep -q 'function service_seatability_candidate_allowed' includes/service-seatability.php
+          grep -q 'function service_seatability_assert_assignment_window' includes/service-seatability.php
           grep -q 'function service_seatability_reservation_create' includes/service-seatability.php
+          grep -q 'function service_seatability_reservation_update' includes/service-seatability.php
           grep -q 'function service_ops_business_date' includes/service-ops-hardening.php
           grep -q 'function service_ops_assert_table_operable' includes/service-ops-hardening.php
           grep -q 'split_cover_allocation' includes/service-ops-hardening.php
