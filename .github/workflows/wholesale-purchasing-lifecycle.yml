@@ -39,6 +39,7 @@ jobs:
           php -l includes/wholesale-purchasing-lifecycle.php
           php -l api/wholesale-purchasing.php
           php -l wholesale-purchasing.php
+          php -l wholesale-pipeline.php
           php -l tests/wholesale-purchasing-lifecycle-contract.php
       - name: Architecture contract
         run: |
@@ -51,6 +52,7 @@ jobs:
           grep -q 'GET_LOCK' includes/wholesale-purchasing-lifecycle.php
           grep -q 'wholesale_lead_activities' includes/wholesale-purchasing-lifecycle.php
           grep -q 'operations_sync_wholesale_tasks' api/wholesale-purchasing.php
+          grep -q 'wholesale-purchasing.php' wholesale-pipeline.php
           ! grep -q 'CREATE TABLE IF NOT EXISTS wholesale_inventory' database/20260928_wholesale_purchasing_lifecycle.sql
           ! grep -q 'UPDATE inventory_items SET on_hand_quantity' includes/wholesale-purchasing-lifecycle.php
       - name: Install and upgrade schema
