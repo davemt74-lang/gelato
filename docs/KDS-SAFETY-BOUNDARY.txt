@@ -1,0 +1,5 @@
+KDS operational boundary
+
+Kitchen Display timing is an order-execution signal, not an employee performance score. The KDS stores ticket and item timing, routing, station state, and the user who performed an operational action for audit history.
+
+Do not use KDS timing to automatically rank employees or make promotion, discipline, compensation, scheduling, termination, or other employment decisions. Any future workforce analysis must preserve the existing Gelato employment-decision boundary.
