@@ -7,6 +7,7 @@ on:
       - 'api/pos.php'
       - 'includes/pos-core.php'
       - 'js/pos.js'
+      - 'js/auth.js'
       - 'database/20260916_native_pos.sql'
       - 'tests/native-pos-contract.php'
       - '.github/workflows/native-pos.yml'
@@ -39,6 +40,7 @@ jobs:
           php -l includes/pos-core.php
           php -l tests/native-pos-contract.php
           node --check js/pos.js
+          node --check js/auth.js
       - name: Architecture and payment-data contract
         run: |
           test "$(grep -c 'CREATE TABLE IF NOT EXISTS pos_settings' database/20260916_native_pos.sql)" = "1"
@@ -49,6 +51,9 @@ jobs:
           grep -q "source_provider='gelato_pos'" tests/native-pos-contract.php
           grep -q "menu_item_prices" includes/pos-core.php
           grep -q "sales_rebuild_all_location_rollups" includes/pos-core.php
+          grep -q "has('pos.use')" js/auth.js
+          grep -q "href='pos.php'" js/auth.js
+          grep -q "data-pos-header" js/auth.js
           ! grep -Eiq 'card_number|\bpan\b|\bcvv\b|track_data|magstripe' database/20260916_native_pos.sql
       - name: Install and upgrade schema
         run: |
