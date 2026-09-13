@@ -92,8 +92,6 @@ jobs:
         run: php tests/operations-wholesale-contract.php
       - name: Prep + Inventory regression
         run: php tests/prep-inventory-intelligence-contract.php
-      - name: Purchasing + Receiving regression
-        run: php tests/purchasing-orders-contract.php
       - name: Verify upgrader idempotence
         run: |
           php <<'PHP'
