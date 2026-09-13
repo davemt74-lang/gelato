@@ -92,7 +92,7 @@ $q=$pdo->prepare('SELECT COUNT(*) FROM wholesale_orders WHERE organization_id=? 
 $q=$pdo->prepare('SELECT starter_order_public_id FROM wholesale_purchase_worksheets WHERE organization_id=? AND wholesale_lead_id=(SELECT id FROM wholesale_leads WHERE organization_id=? AND public_id=?)');$q->execute([$org,$org,$leadPublic]);wpl_assert($q->fetchColumn()===$order['publicId'],'Worksheet did not retain its canonical starter-order linkage.');
 if(operations_wholesale_ready($pdo)) operations_sync_wholesale_tasks($pdo,$org,$uid);
 if(restaurant_brain_table_ready($pdo,'inventory_commitments')){
-    $q=$pdo->prepare("SELECT COUNT(*) FROM inventory_commitments WHERE organization_id=? AND source_type='wholesale_order' AND source_id=? AND released_at IS NULL");$q->execute([$org,(int)$orderRow['id']]);
+    $q=$pdo->prepare("SELECT COUNT(*) FROM inventory_commitments WHERE organization_id=? AND source_type='wholesale_order' AND source_parent_public_id=? AND status='active'");$q->execute([$org,$order['publicId']]);
     wpl_assert((int)$q->fetchColumn()===0,'Requested starter order must not reserve production inventory before confirmation.');
 }
 $q=$pdo->prepare('SELECT lifecycle_stage FROM wholesale_lifecycle l JOIN wholesale_leads w ON w.id=l.wholesale_lead_id WHERE l.organization_id=? AND w.public_id=?');$q->execute([$org,$leadPublic]);wpl_assert($q->fetchColumn()==='trial','Starter order did not advance lifecycle to trial.');
