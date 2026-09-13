@@ -33,9 +33,18 @@ $leadAgain=wholesale_acquisition_save($pdo,$org,[
     'nextStep'=>'Send sample follow-up.','nextFollowupAt'=>'2026-09-21T11:00','qualificationStatus'=>'sample'
 ],$uid,true);
 wca_assert($leadAgain['pipeline_stage']==='sample','Worksheet update did not move canonical pipeline stage.');
+
+$draft=wholesale_acquisition_save($pdo,$org,[
+    'id'=>$lead['public_id'],'businessName'=>'CI Market','contactName'=>'Casey Buyer','email'=>'buyer-wca@example.test','businessType'=>'Retail / Market',
+    'location'=>'Phoenix','estimatedMonthlyVolume'=>'24 pans / month','orderFrequency'=>'Biweekly','flavorsInterest'=>'Pistachio, vanilla',
+    'fulfillmentPreference'=>'Delivery','buyerRole'=>'Owner','painPoints'=>'Needs reliable premium gelato supply.','buyingProcess'=>'Owner approves pricing.',
+    'nextStep'=>'Draft pricing notes.','nextFollowupAt'=>'2026-09-22T11:00','qualificationStatus'=>'quoted'
+],$uid,false);
+wca_assert($draft['pipeline_stage']==='sample','Draft worksheet save must not reset or advance the existing pipeline stage.');
+
 $q=$pdo->prepare("SELECT COUNT(*) FROM wholesale_lead_activities WHERE organization_id=? AND wholesale_lead_id=(SELECT id FROM wholesale_leads WHERE organization_id=? AND public_id=?) AND activity_type='worksheet'");
 $q->execute([$org,$org,$lead['public_id']]);
-wca_assert((int)$q->fetchColumn()===2,'Worksheet saves must append pipeline activity.');
+wca_assert((int)$q->fetchColumn()===3,'Worksheet saves must append pipeline activity.');
 
 $pdo->prepare("INSERT INTO wholesale_accounts (organization_id,public_id,wholesale_lead_id,business_name,account_status,primary_email,created_by,updated_by) SELECT organization_id,'wacct-wca',id,business_name,'active',email,?,? FROM wholesale_leads WHERE organization_id=? AND public_id=?")->execute([$uid,$uid,$org,$lead['public_id']]);
 $accountId=(int)$pdo->lastInsertId();
