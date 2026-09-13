@@ -4,32 +4,79 @@ _Last updated: 2026-09-13_
 
 ## Current active focus — Wholesale module
 
-The next active build area is the **Wholesale module**.
+The next active build area is **Wholesale**.
 
-Start with the wholesale operating contract and canonical data model before building a large dashboard. The first implementation should establish:
+### Architecture review — existing foundation
 
-- wholesale customer / buyer accounts tied to organizations and locations
-- wholesale-specific price lists and account-level pricing
-- products, variants, case packs, units of measure, and pack-size conversions
-- minimum order quantities and order minimums
-- quote / draft order / submitted / confirmed / fulfilled / cancelled lifecycle
-- pickup, local delivery, and shipment fulfillment modes
-- requested delivery / pickup dates and fulfillment windows
-- payment terms such as prepaid, due on receipt, Net 7, Net 15, and Net 30
-- wholesale tax / exemption metadata without duplicating the existing accounting source of truth
-- inventory allocation that distinguishes wholesale commitments from normal restaurant/POS demand
-- production / prep demand generated from confirmed wholesale orders
-- invoices, payments, credits, refunds, and order balance tracking using canonical financial records
-- audit history and role/permission boundaries for wholesale pricing and order changes
+Wholesale is **not a greenfield module**. Preserve and extend the existing architecture rather than creating a parallel stack.
+
+Already canonical:
+
+- **Wholesale lead pipeline:** `wholesale_leads` + `wholesale_lead_activities`, including stages, projected value, assignment, follow-up, public lead intake, audit history, and Agent context.
+- **B2B customer accounts:** `wholesale_accounts`, linked buyer users, delivery/account locations, customer invitations, account preferences, payment-terms field, price-tier field, and private/customer notes.
+- **Private buyer portal:** account-scoped profile, requests, quotes, orders, customer Agent, least-privilege `wholesale_customer` role, CSRF protection, and organization/account isolation.
+- **Quotes and orders:** quote acceptance is transactional and one quote can create only one order. Existing quote/order records preserve totals and item snapshots.
+- **Operations execution:** wholesale orders already sync into canonical `restaurant_tasks` as production-item and fulfillment tasks. Operations drives `in_production`, `ready`, `out_for_delivery`, and `delivered` state while keeping pricing and private margin out of worker-facing tasks.
+- **Inventory:** `inventory_items`, `inventory_item_sources`, and `inventory_transactions` are the canonical stock source. Do not create a wholesale inventory table.
+- **Prep / demand:** Prep Intelligence already sees wholesale tasks as source commitments and owns `inventory_forecasts`.
+- **Purchasing:** vendor catalog, pack/UOM data, purchase orders, receiving, vendor price history, and purchasing suggestions already operate on canonical inventory. Purchasing suggestions already consume `inventory_forecasts`.
+- **Cost / margin:** Sales Cost Intelligence already resolves recipe/inventory costs and unit conversions. Reuse this costing path rather than adding wholesale-specific food-cost math.
+- **Restaurant POS / sales:** native POS remains the restaurant check/tender engine. Sales Intelligence is the canonical reporting ledger and supports source-provider separation.
+- **Consumer CRM:** `crm_customers` remains the individual/POS customer model. `wholesale_accounts` remains the canonical B2B customer model; do not collapse wholesale companies into consumer CRM records.
+
+### Highest-priority gaps
+
+1. **Canonical wholesale catalog, pricing, and order lines — P0**
+   - Current quotes/orders store `items_json`, and administrative APIs accept caller-provided item arrays and financial totals.
+   - Add canonical wholesale products/SKUs or variants, sell UOM/case-pack definitions, effective-dated price lists, account price-list assignment, MOQ/order-minimum rules, and normalized quote/order line rows.
+   - Recalculate quote/order subtotal and totals server-side from canonical lines and price snapshots.
+   - Preserve `items_json` as a backward-compatible immutable display/snapshot field while normalized rows become the source for new behavior.
+
+2. **Wholesale demand → inventory forecast → purchasing — P0**
+   - Wholesale production tasks already appear as Prep commitments, but current inventory forecast calculation is driven primarily by prep recommendations/recipe mappings and does not consume those wholesale commitments as ingredient demand.
+   - Map each wholesale SKU to a recipe/product yield and convert confirmed order quantities into dated ingredient demand.
+   - Feed that demand into the canonical `inventory_forecasts` path so shortages automatically flow into existing Purchasing suggestions and open-PO suppression.
+   - Prefer a generic demand-commitment mechanism that can also support Catering rather than adding wholesale-only forecast math.
+
+3. **Inventory commitments / available-to-promise — P1**
+   - Confirming an order should not immediately reduce physical on-hand stock.
+   - Add a commitment/reservation layer against canonical inventory with source type/public ID, required date, quantity, state, and audit trail.
+   - Expose available-to-promise as on-hand minus active commitments.
+   - Post actual consumption through canonical `inventory_transactions` when production/fulfillment consumes stock.
+
+4. **Wholesale receivables and invoicing — P1**
+   - Gelato currently has restaurant POS tenders and sales/cost reporting but no general customer A/R ledger.
+   - Do **not** represent Net 7 / Net 15 / Net 30 wholesale receivables as POS checks or POS tenders.
+   - Add a small wholesale subledger for invoices, payments, credits/refunds, due dates, balances, and account aging.
+   - Publish recognized wholesale sales into Sales Intelligence as a distinct internal wholesale source for reporting/margin without fabricating restaurant POS transactions.
+
+5. **Fulfillment location/window + domain history — P2**
+   - Link each order to a specific `wholesale_account_locations` record where applicable.
+   - Add requested/promised fulfillment windows, customer PO/reference number, tax/exemption metadata, and partial-fulfillment support.
+   - Add append-only wholesale quote/order events for price, state, fulfillment, and financial changes while retaining global `app_audit` logging.
+
+6. **CRM bridge only where useful — P2**
+   - Keep B2B account/company data in Wholesale and consumer/person data in CRM.
+   - A future optional bridge may connect a buyer/contact to CRM history or marketing consent, but Wholesale must not duplicate the CRM consent model or make CRM the source of B2B account truth.
 
 ### Recommended build sequence
 
-1. **Wholesale contract + schema** — customer accounts, price lists, case/UOM rules, order lifecycle, fulfillment mode, payment terms, permissions, and audit events.
-2. **Wholesale catalog + pricing** — account-aware catalog, pack sizes, MOQ/order minimum validation, effective-dated pricing, and price overrides with audit history.
-3. **Wholesale order entry** — draft/quote/order workflow, line validation, totals, requested fulfillment date/window, notes, and customer PO/reference numbers.
-4. **Inventory + production commitments** — reserve/commit stock safely, expose shortages, and convert confirmed wholesale demand into production/prep requirements without corrupting POS availability.
-5. **Fulfillment + invoicing** — pick/pack/ready/delivered lifecycle, partial fulfillment, invoice/balance state, payments, credits, and refunds.
-6. **Wholesale operations UI** — account list, order pipeline, fulfillment board, production demand, receivables, and customer history after the operating model is stable.
+1. **Wholesale Commerce Contract** — canonical products/SKUs, sell UOM/case packs, price lists, account pricing, MOQ/order minimums, normalized quote/order items, server-side total validation, event history, and backward compatibility for existing JSON orders.
+2. **Demand Commitments** — map wholesale products to recipes/yields, create dated ingredient demand, integrate with Prep `inventory_forecasts`, and prove Purchasing suggestions respond automatically to confirmed wholesale demand.
+3. **Inventory Allocation + Fulfillment** — available-to-promise, commitments/reservations, fulfillment location/windows, partial fulfillment, and canonical inventory consumption.
+4. **Wholesale A/R** — invoices, payment terms, payments, credits/refunds, aging/balances, and posting recognized wholesale revenue into Sales Intelligence as a distinct source.
+5. **Portal / Operations expansion** — account-aware catalog/reorder experience, fulfillment board, production demand, receivables visibility, and customer history using the contracts above.
+
+### Boundary rules
+
+- Do not create duplicate vendor, purchase-order, inventory, recipe, task, POS, or consumer-CRM systems for Wholesale.
+- Keep `wholesale_accounts` as the B2B customer/account source of truth.
+- Keep `restaurant_tasks` as the execution source of truth for wholesale production/fulfillment work.
+- Keep `inventory_items` / `inventory_transactions` as physical inventory truth.
+- Keep Purchasing as the replenishment source of truth.
+- Keep Sales Cost Intelligence as the recipe/inventory cost calculation source.
+- Keep POS for restaurant transactions; use a Wholesale receivables subledger for terms-based B2B balances.
+- Every new wholesale write must remain organization/account scoped, permission checked, audited, upgrade-safe, and contract tested.
 
 ## Deferred — Table Turn Forecasting + Seating Pace Intelligence
 
@@ -53,9 +100,9 @@ Expected output should include projected tables/covers becoming available, near-
 
 This forecasting remains **table-, reservation-, and demand-based only**. Do not convert it into employee performance scoring, worker ranking, disciplinary recommendations, or staffing-performance surveillance.
 
-## Architecture notes
+## General architecture notes
 
-- Keep existing canonical service/reservation protection as the source layer and add intelligence as enrichment rather than replacing it.
+- Add intelligence as enrichment around existing canonical source layers rather than replacing them.
 - Prefer location-scoped policy where operating behavior differs by restaurant/location.
 - Preserve organization/location isolation, explicit permissions, audit history, upgrade safety, deterministic tests, and backward-compatible defaults.
-- New modules should integrate with existing inventory, purchasing, production/prep, POS/accounting, customer/CRM, and audit systems rather than creating duplicate sources of truth.
+- New modules should integrate with existing inventory, purchasing, production/prep, POS/sales, customer/CRM, and audit systems rather than creating duplicate sources of truth.
