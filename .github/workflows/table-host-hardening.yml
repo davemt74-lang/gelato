@@ -14,6 +14,10 @@ on:
       - 'includes/service-ops-floor.php'
       - 'includes/service-ops-map.php'
       - 'includes/service-ops-reservation.php'
+      - 'includes/service-visit-core.php'
+      - 'includes/service-visit-extensions.php'
+      - 'includes/service-visit-live.php'
+      - 'database/20260922_dining_visit_lifecycle.sql'
       - 'tests/table-host-hardening-contract.php'
       - '.github/workflows/table-host-hardening.yml'
   push:
@@ -49,14 +53,17 @@ jobs:
           php -l includes/service-ops-floor.php
           php -l includes/service-ops-map.php
           php -l includes/service-ops-reservation.php
+          php -l includes/service-visit-core.php
+          php -l includes/service-visit-extensions.php
+          php -l includes/service-visit-live.php
           php -l tests/table-host-hardening-contract.php
           node --check js/table-service.js
           node --check js/host-stand.js
       - name: Hardening architecture contract
         run: |
-          grep -q 'service_ops_seat' api/table-service.php
-          grep -q 'service_ops_transfer' api/table-service.php
-          grep -q 'service_ops_split' api/table-service.php
+          grep -q 'service_visit_seat' api/table-service.php
+          grep -q 'service_visit_transfer_safe' api/table-service.php
+          grep -q 'service_visit_split' api/table-service.php
           grep -q 'service_ops_canonical_map' api/table-service.php
           grep -q 'New dining tables must be created as managed physical assets' api/table-service.php
           grep -q 'service_ops_availability' api/host-stand.php
@@ -64,6 +71,7 @@ jobs:
           grep -q 'service_ops_reservation_update' api/host-stand.php
           grep -q 'service_ops_reservation_assign_safe' api/host-stand.php
           grep -q 'service_ops_place_table' api/host-stand.php
+          grep -q 'service_visit_reconcile_live' api/host-stand.php
           grep -q "app_has_permission('table_service.view'" api/host-stand.php
           grep -q "app_has_permission('table_service.view'" host-stand.php
           grep -q 'function service_ops_business_date' includes/service-ops-hardening.php
@@ -71,6 +79,7 @@ jobs:
           grep -q 'split_cover_allocation' includes/service-ops-hardening.php
           grep -q 'projectedClear' includes/service-ops-hardening.php
           grep -q 'full table footprint' -i includes/service-ops-floor.php
+          grep -q 'function service_visit_reconcile_tables' includes/service-visit-extensions.php
           grep -q 'percentage coordinates' tests/table-host-hardening-contract.php
           grep -q 'another active waitlist party' includes/service-ops-reservation.php
           grep -q 'movedGuestCount' js/table-service.js
