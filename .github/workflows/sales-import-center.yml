@@ -1,0 +1,101 @@
+name: Sales Import Center
+
+on:
+  pull_request:
+    paths:
+      - 'sales-import-center.php'
+      - 'api/sales-import-center.php'
+      - 'includes/sales-import-center-core.php'
+      - 'js/sales-import-center.js'
+      - 'js/sales-intelligence.js'
+      - 'database/20260915_sales_import_center.sql'
+      - 'tests/sales-import-center-contract.php'
+      - '.github/workflows/sales-import-center.yml'
+  push:
+    branches: [main]
+
+jobs:
+  sales-import-center:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - name: Syntax checks
+        run: |
+          php -l sales-import-center.php
+          php -l api/sales-import-center.php
+          php -l includes/sales-import-center-core.php
+          php -l tests/sales-import-center-contract.php
+          node --check js/sales-import-center.js
+          node --check js/sales-intelligence.js
+      - name: Architecture and privacy contract
+        run: |
+          test "$(grep -c 'CREATE TABLE IF NOT EXISTS sales_import_profiles' database/20260915_sales_import_center.sql)" = "1"
+          grep -q "sales.import_profiles.manage" database/20260915_sales_import_center.sql
+          grep -q "header_signature" database/20260915_sales_import_center.sql
+          grep -q "canonical=array_keys(sales_alias_map())" includes/sales-import-center-core.php
+          grep -q "sales_import_center_signature" includes/sales-import-center-core.php
+          grep -q "Import Center" js/sales-intelligence.js
+          grep -q "Unknown customer columns must not persist" tests/sales-import-center-contract.php
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_restaurant_ai_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->ensureTrackingTables();
+          $s->bootstrapLegacyHistory(null);
+          $s->applyPending(null);
+          if($s->pendingMigrations()) exit(1);
+          PHP
+      - name: Verify schema and permissions
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='sales_import_profiles';")" = "1"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='sales_import_batches' AND column_name='import_profile_id';")" = "1"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key='sales.import_profiles.manage';")" = "1"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260915_sales_import_center';")" = "1"
+      - name: Sales Import Center behavioral contract
+        run: php tests/sales-import-center-contract.php
+      - name: Existing Sales + Demand regression
+        run: php tests/sales-demand-intelligence-contract.php
+      - name: Existing Sales Cost + Margin regression
+        run: php tests/sales-cost-margin-contract.php
+      - name: Existing Agent Workspace regression
+        run: php tests/agent-workspace-contract.php
+      - name: Verify upgrader idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->assertAppliedChecksumsUnchanged();
+          if($s->pendingMigrations()) exit(2);
+          if($s->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP
