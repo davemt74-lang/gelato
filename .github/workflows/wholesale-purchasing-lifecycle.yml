@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'database/20260928_wholesale_purchasing_lifecycle.sql'
+      - 'database/20260928_zz_wholesale_purchasing_lifecycle_hardening.sql'
       - 'includes/wholesale-purchasing-lifecycle.php'
       - 'api/wholesale-purchasing.php'
       - 'wholesale-purchasing.php'
@@ -44,9 +45,12 @@ jobs:
           grep -q 'CREATE TABLE IF NOT EXISTS wholesale_purchase_worksheets' database/20260928_wholesale_purchasing_lifecycle.sql
           grep -q 'CREATE TABLE IF NOT EXISTS wholesale_lifecycle' database/20260928_wholesale_purchasing_lifecycle.sql
           grep -q 'CREATE TABLE IF NOT EXISTS wholesale_tastings' database/20260928_wholesale_purchasing_lifecycle.sql
+          grep -q 'starter_order_public_id' database/20260928_zz_wholesale_purchasing_lifecycle_hardening.sql
           grep -q 'wholesale_commerce_create_order' includes/wholesale-purchasing-lifecycle.php
           grep -q "'recurring'=>'won'" includes/wholesale-purchasing-lifecycle.php
+          grep -q 'GET_LOCK' includes/wholesale-purchasing-lifecycle.php
           grep -q 'wholesale_lead_activities' includes/wholesale-purchasing-lifecycle.php
+          grep -q 'operations_sync_wholesale_tasks' api/wholesale-purchasing.php
           ! grep -q 'CREATE TABLE IF NOT EXISTS wholesale_inventory' database/20260928_wholesale_purchasing_lifecycle.sql
           ! grep -q 'UPDATE inventory_items SET on_hand_quantity' includes/wholesale-purchasing-lifecycle.php
       - name: Install and upgrade schema
@@ -75,7 +79,8 @@ jobs:
       - name: Verify lifecycle schema
         run: |
           test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('wholesale_planning_settings','wholesale_purchase_worksheets','wholesale_lifecycle','wholesale_lifecycle_events','wholesale_tastings');")" = "5"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260928_wholesale_purchasing_lifecycle';")" = "1"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='wholesale_purchase_worksheets' AND column_name='starter_order_public_id';")" = "1"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key IN ('20260928_wholesale_purchasing_lifecycle','20260928_zz_wholesale_purchasing_lifecycle_hardening');")" = "2"
       - name: Wholesale purchasing behavior
         run: php tests/wholesale-purchasing-lifecycle-contract.php
       - name: W1 commerce + acquisition regression
