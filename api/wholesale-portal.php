@@ -1,16 +1,18 @@
 <?php
 declare(strict_types=1);
-require __DIR__ . '/../includes/bootstrap.php';
-require __DIR__ . '/../includes/wholesale-portal.php';
-require_once __DIR__ . '/../includes/operations-wholesale.php';
-require_once __DIR__ . '/../includes/wholesale-commerce.php';
+require __DIR__.'/../includes/bootstrap.php';
+require_once __DIR__.'/../includes/wholesale-portal-operations.php';
 
-$user=app_require_permission('wholesale_portal.view');$pdo=app_pdo();$organizationId=(int)$user['organization_id'];$account=wholesale_portal_require_account($pdo,$user);$accountId=(int)$account['id'];
+$user=app_require_permission('wholesale_portal.view');
+$pdo=app_pdo();
+$organizationId=(int)$user['organization_id'];
+$account=wholesale_portal_require_account($pdo,$user);
+$accountId=(int)$account['id'];
 
 if($_SERVER['REQUEST_METHOD']==='GET'){
-    $context=wholesale_portal_customer_safe_context($pdo,$organizationId,$accountId);
-    if(isset($context['account'])) unset($context['account']['id'],$context['account']['organization_id']);
-    $context['portal']=['user'=>['displayName'=>$user['display_name'],'email'=>$user['email'],'accountRole'=>$account['account_role']]];
+    $context=wholesale_portal_dashboard($pdo,$organizationId,$accountId);
+    if(isset($context['account']))unset($context['account']['id'],$context['account']['organization_id'],$context['account']['internal_notes'],$context['account']['created_by'],$context['account']['updated_by'],$context['account']['archived_at'],$context['account']['wholesale_lead_id']);
+    $context['portal']=['user'=>['displayName'=>$user['display_name'],'email'=>$user['email'],'accountRole'=>$account['account_role']],'w5Ready'=>wholesale_portal_operations_ready($pdo)];
     app_json_response(['ok'=>true]+$context);
 }
 if($_SERVER['REQUEST_METHOD']!=='POST'){header('Allow: GET, POST');app_json_response(['ok'=>false,'message'=>'Method not allowed.'],405);}
@@ -37,6 +39,19 @@ if($action==='request'){
     wholesale_portal_sync_account_knowledge($pdo,$organizationId,$accountId,(int)$user['id']);
     app_audit($pdo,$organizationId,(int)$user['id'],'wholesale.portal_request_created','wholesale_customer_request',$publicId,null,['type'=>$type,'subject'=>$subject]);
     app_json_response(['ok'=>true,'message'=>'Your request was sent to the wholesale team.','requestId'=>$publicId]);
+}
+
+if($action==='repeat_order'){
+    if(!app_has_permission('wholesale_portal.orders',$user))app_json_response(['ok'=>false,'message'=>'You do not have permission to place wholesale reorders.'],403);
+    $sourceOrder=trim((string)($input['orderId']??''));if($sourceOrder==='')app_json_response(['ok'=>false,'message'=>'Order ID is required.'],422);
+    $result=wholesale_portal_repeat_order($pdo,$organizationId,$accountId,$sourceOrder,$input,(int)$user['id']);
+    app_json_response(['ok'=>true,'message'=>'Repeat order '.$result['orderNumber'].' was created as a requested order using current catalog pricing.','order'=>$result]);
+}
+
+if($action==='catalog_request'){
+    if(!app_has_permission('wholesale_portal.requests',$user))app_json_response(['ok'=>false,'message'=>'You do not have permission to submit catalog requests.'],403);
+    $result=wholesale_portal_catalog_request($pdo,$organizationId,$accountId,$input,(int)$user['id']);
+    app_json_response(['ok'=>true,'message'=>'Your catalog order request was sent to the wholesale team. Tax and delivery will be confirmed before fulfillment.']+$result);
 }
 
 if($action==='accept_quote'){
