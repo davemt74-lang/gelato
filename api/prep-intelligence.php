@@ -33,6 +33,31 @@ function prep_api_visible_detail(array $detail,bool $canForecast): array
     if(!$canForecast)$detail['forecasts']=[];
     return $detail;
 }
+function prep_api_task_history(PDO $pdo,int $organizationId,string $date,string $query=''): array
+{
+    $tasks=prep_task_history_for_date($pdo,$organizationId,$date,$query);
+    if(!$tasks)return [];
+    $publicIds=array_values(array_unique(array_filter(array_map(static fn(array $row):string=>(string)($row['public_id']??''),$tasks))));
+    if(!$publicIds)return $tasks;
+    $marks=implode(',',array_fill(0,count($publicIds),'?'));
+    $stmt=$pdo->prepare("SELECT t.public_id task_public_id,e.event_type,e.summary,e.metadata_json,e.created_at,u.display_name actor_name FROM restaurant_tasks t INNER JOIN restaurant_task_events e ON e.task_id=t.id LEFT JOIN users u ON u.id=e.actor_user_id WHERE t.organization_id=? AND t.public_id IN ({$marks}) ORDER BY e.created_at,e.id");
+    $stmt->execute(array_merge([$organizationId],$publicIds));
+    $eventsByTask=[];
+    foreach($stmt->fetchAll() as $event){
+        $taskId=(string)$event['task_public_id'];
+        $eventsByTask[$taskId]??=[];
+        $eventsByTask[$taskId][]=[
+            'eventType'=>(string)$event['event_type'],
+            'summary'=>(string)$event['summary'],
+            'actorName'=>$event['actor_name']!==null?(string)$event['actor_name']:null,
+            'createdAt'=>(string)$event['created_at'],
+            'metadata'=>$event['metadata_json']?json_decode((string)$event['metadata_json'],true):null,
+        ];
+    }
+    foreach($tasks as &$task)$task['events']=$eventsByTask[(string)$task['public_id']]??[];
+    unset($task);
+    return $tasks;
+}
 
 if($_SERVER['REQUEST_METHOD']==='GET'){
     $action=(string)($_GET['action']??'bootstrap');
@@ -55,7 +80,7 @@ if($_SERVER['REQUEST_METHOD']==='GET'){
     }
     if($action==='task_history'){
         $date=prep_api_date((string)($_GET['date']??date('Y-m-d')));
-        app_json_response(['ok'=>true,'date'=>$date,'tasks'=>prep_task_history_for_date($pdo,$organizationId,$date,(string)($_GET['q']??''))]);
+        app_json_response(['ok'=>true,'date'=>$date,'tasks'=>prep_api_task_history($pdo,$organizationId,$date,(string)($_GET['q']??''))]);
     }
     if($action==='normal'){
         $query=trim((string)($_GET['q']??''));if($query==='')app_json_response(['ok'=>false,'message'=>'Enter a prep item to analyze.'],422);
