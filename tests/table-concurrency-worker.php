@@ -37,6 +37,8 @@ try{
     }
     throw new InvalidArgumentException('Unsupported concurrency worker mode.');
 }catch(Throwable $e){
-    echo json_encode(['ok'=>false,'mode'=>$mode,'class'=>get_class($e),'message'=>$e->getMessage()],JSON_THROW_ON_ERROR)."\n";
+    $payload=['ok'=>false,'mode'=>$mode,'class'=>get_class($e),'message'=>$e->getMessage()];
+    @file_put_contents(sys_get_temp_dir().'/gelato-concurrency-errors.log',json_encode($payload,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE)."\n",FILE_APPEND|LOCK_EX);
+    echo json_encode($payload,JSON_THROW_ON_ERROR)."\n";
     exit(2);
 }
