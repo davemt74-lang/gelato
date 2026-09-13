@@ -98,9 +98,9 @@ jobs:
           PHP
       - name: Verify cleaning schema
         run: |
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e \"SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='service_tables' AND column_name IN ('dirty_at','cleaning_started_at','cleaning_started_by','ready_at','ready_by');\")" = "5"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e \"SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_schema='gelato_restaurant_ai_ci' AND trigger_name='trg_service_table_cleaning_update';\")" = "1"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e \"SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260924_table_cleaning_lifecycle';\")" = "1"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='service_tables' AND column_name IN ('dirty_at','cleaning_started_at','cleaning_started_by','ready_at','ready_by');")" = "5"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_schema='gelato_restaurant_ai_ci' AND trigger_name='trg_service_table_cleaning_update';")" = "1"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260924_table_cleaning_lifecycle';")" = "1"
       - name: Table cleaning lifecycle behavioral contract
         run: php tests/table-cleaning-lifecycle-contract.php
       - name: Table concurrency regression
