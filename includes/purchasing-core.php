@@ -8,6 +8,7 @@ function purchasing_ready(PDO $pdo): bool {
     }
     return true;
 }
+function purchasing_documents_ready(PDO $pdo): bool { return restaurant_brain_table_ready($pdo,'purchasing_documents'); }
 function purchasing_public_id(string $prefix): string { return $prefix.'-'.bin2hex(random_bytes(10)); }
 function purchasing_vendor(PDO $pdo,int $org,string $publicId): ?array {
     $q=$pdo->prepare('SELECT * FROM vendors WHERE organization_id=? AND public_id=? AND archived_at IS NULL LIMIT 1');
@@ -39,4 +40,9 @@ function purchasing_vendor_catalog(PDO $pdo,int $org,string $vendorPublic=''): a
     $sql="SELECT vi.*,v.public_id vendor_public_id,v.name vendor_name,i.public_id inventory_public_id,i.name inventory_name,i.base_unit,i.on_hand_quantity,i.par_level,i.reorder_point FROM inventory_vendor_items vi JOIN vendors v ON v.id=vi.vendor_id JOIN inventory_items i ON i.id=vi.inventory_item_id WHERE vi.organization_id=? AND vi.archived_at IS NULL";
     $params=[$org]; if($vendorPublic!==''){$sql.=' AND v.public_id=?';$params[]=$vendorPublic;} $sql.=' ORDER BY v.name,i.name';
     $q=$pdo->prepare($sql);$q->execute($params);return $q->fetchAll();
+}
+function purchasing_documents_for_order(PDO $pdo,int $org,int $poId):array{
+    if(!purchasing_documents_ready($pdo))return [];
+    $q=$pdo->prepare("SELECT d.public_id,d.document_type,d.extraction_status,d.notes,d.created_at,f.original_name,f.mime_type,f.file_size,r.public_id receipt_public_id FROM purchasing_documents d INNER JOIN files f ON f.id=d.file_id AND f.organization_id=d.organization_id LEFT JOIN goods_receipts r ON r.id=d.goods_receipt_id AND r.organization_id=d.organization_id WHERE d.organization_id=? AND d.purchase_order_id=? ORDER BY d.created_at DESC");
+    $q->execute([$org,$poId]);return $q->fetchAll();
 }
