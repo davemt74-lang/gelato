@@ -6,7 +6,9 @@ on:
       - 'api/table-service.php'
       - 'api/host-stand.php'
       - 'includes/service-seatability.php'
+      - 'includes/service-reservation-protection.php'
       - 'tests/table-seatability-contract.php'
+      - 'tests/upcoming-reservation-protection-contract.php'
       - '.github/workflows/table-seatability.yml'
   push:
     branches: [main]
@@ -35,12 +37,14 @@ jobs:
           php -l api/table-service.php
           php -l api/host-stand.php
           php -l includes/service-seatability.php
+          php -l includes/service-reservation-protection.php
           php -l tests/table-seatability-contract.php
+          php -l tests/upcoming-reservation-protection-contract.php
       - name: Seatability architecture contract
         run: |
-          grep -q 'service_seatability_party_seat' api/table-service.php
-          grep -q 'service_seatability_transfer' api/table-service.php
-          grep -q 'service_seatability_dashboard' api/host-stand.php
+          grep -q 'service_reservation_protection_party_seat' api/table-service.php
+          grep -q 'service_reservation_protection_transfer' api/table-service.php
+          grep -q 'service_reservation_protection_dashboard' api/host-stand.php
           grep -q 'service_seatability_availability' api/host-stand.php
           grep -q 'service_seatability_reservation_create' api/host-stand.php
           grep -q 'service_seatability_reservation_update' api/host-stand.php
@@ -52,10 +56,15 @@ jobs:
           grep -q 'function service_seatability_combination_table_ids' includes/service-seatability.php
           grep -q 'function service_seatability_assert_assignment_window' includes/service-seatability.php
           grep -q 'function service_seatability_reservation_update' includes/service-seatability.php
+          grep -q 'function service_reservation_protection_next' includes/service-reservation-protection.php
+          grep -q 'function service_reservation_protection_projected_clear' includes/service-reservation-protection.php
+          grep -q 'function service_reservation_protection_dashboard' includes/service-reservation-protection.php
+          grep -q 'reservationProtected' includes/service-reservation-protection.php
           grep -q "unset(\$input\['tablePublicIds'\],\$input\['combinationPublicId'\])" includes/service-seatability.php
           grep -q 'combinationPublicId' tests/table-seatability-contract.php
           grep -q 'Rejected Dirty-table schedule edit' tests/table-seatability-contract.php
           grep -q 'projected active-check occupancy window' tests/table-seatability-contract.php
+          grep -q 'imminent assigned reservation' tests/upcoming-reservation-protection-contract.php
       - name: Install and upgrade schema
         run: |
           sudo apt-get update -qq
@@ -79,6 +88,8 @@ jobs:
           $s->applyPending(null);
           if($s->pendingMigrations()) exit(1);
           PHP
+      - name: Upcoming reservation protection behavior
+        run: php tests/upcoming-reservation-protection-contract.php
       - name: Table seatability behavioral contract
         run: php tests/table-seatability-contract.php
       - name: Dining visit lifecycle regression
