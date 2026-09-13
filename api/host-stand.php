@@ -12,12 +12,13 @@ require_once __DIR__.'/../includes/service-visit-extensions.php';
 require_once __DIR__.'/../includes/service-visit-live.php';
 require_once __DIR__.'/../includes/service-seatability.php';
 require_once __DIR__.'/../includes/service-reservation-protection.php';
+require_once __DIR__.'/../includes/table-cleaning-lifecycle.php';
 
 $user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];$uid=(int)$user['id'];$membership=(int)$user['membership_id'];
 $rawHostView=app_has_permission('host.view',$user);$canUse=app_has_permission('host.use',$user);$canManage=app_has_permission('host.manage',$user);
 $canView=$rawHostView&&(app_has_permission('table_service.view',$user)||$canUse||$canManage);
 if(!$canView)app_json_response(['ok'=>false,'message'=>'Host Stand permission required.'],403);
-if(!host_ready($pdo)||!service_visit_ready($pdo))app_json_response(['ok'=>false,'message'=>'Host Stand dining-visit migration is not installed. Run upgrade.php.'],503);
+if(!host_ready($pdo)||!service_visit_ready($pdo)||!table_cleaning_ready($pdo))app_json_response(['ok'=>false,'message'=>'Host Stand migrations are not installed. Run upgrade.php.'],503);
 
 function host_api_location(PDO $pdo,int $org,int $membership,array $input=[]): int
 {
@@ -51,6 +52,19 @@ try{
         if($action==='combination.save'){$combo=service_ops_combination_save($pdo,$org,$locationId,$input,$uid);app_audit($pdo,$org,$uid,'host.table_combination_saved','table_combination',(string)$combo['publicId'],null,['tables'=>array_column($combo['tables'],'publicId'),'capacity'=>$combo['capacity']]);app_json_response(['ok'=>true,'combination'=>$combo,'dashboard'=>service_reservation_protection_dashboard($pdo,$org,$locationId,$date,$uid)]);}
     }
     if(!$canUse)app_json_response(['ok'=>false,'message'=>'Host Stand operating permission required.'],403);
+    $tablePublic=trim((string)($input['tablePublicId']??''));
+    if($action==='table.cleaning_start'){
+        if($tablePublic==='')throw new InvalidArgumentException('Choose a table to clean.');
+        $table=table_cleaning_start($pdo,$org,$locationId,$tablePublic,$uid);
+        app_audit($pdo,$org,$uid,'host.table_cleaning_started','service_table',$tablePublic,null,['dirtyAt'=>$table['dirty_at']??null]);
+        app_json_response(['ok'=>true,'tablePublicId'=>$tablePublic,'dashboard'=>service_reservation_protection_dashboard($pdo,$org,$locationId,$date,$uid)]);
+    }
+    if($action==='table.ready'){
+        if($tablePublic==='')throw new InvalidArgumentException('Choose a table to mark ready.');
+        $table=table_cleaning_mark_ready($pdo,$org,$locationId,$tablePublic,$uid);
+        app_audit($pdo,$org,$uid,'host.table_ready','service_table',$tablePublic,null,['readyAt'=>$table['ready_at']??null]);
+        app_json_response(['ok'=>true,'tablePublicId'=>$tablePublic,'dashboard'=>service_reservation_protection_dashboard($pdo,$org,$locationId,$date,$uid)]);
+    }
     if($action==='reservation.create'){$reservation=service_reservation_protection_reservation_create($pdo,$org,$locationId,$input,$uid);app_audit($pdo,$org,$uid,'host.reservation_created','guest_reservation',(string)$reservation['publicId'],null,['type'=>$reservation['type'],'partySize'=>$reservation['partySize'],'scheduledAt'=>$reservation['scheduledAt']]);app_json_response(['ok'=>true,'reservation'=>$reservation,'dashboard'=>service_reservation_protection_dashboard($pdo,$org,$locationId,$date,$uid)],201);}
     $public=trim((string)($input['reservationPublicId']??''));if($public==='')throw new InvalidArgumentException('Choose a reservation or waitlist entry.');
     if($action==='reservation.update'){$reservation=service_seatability_reservation_update($pdo,$org,$public,$input,$uid);app_audit($pdo,$org,$uid,'host.reservation_updated','guest_reservation',$public,null,['partySize'=>$reservation['partySize'],'scheduledAt'=>$reservation['scheduledAt']]);app_json_response(['ok'=>true,'reservation'=>$reservation,'dashboard'=>service_reservation_protection_dashboard($pdo,$org,$locationId,$date,$uid)]);}
