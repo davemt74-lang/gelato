@@ -20,13 +20,21 @@ function service_seatability_state_message(string $state,string $tableName): str
     };
 }
 
-function service_seatability_assert_now(PDO $pdo,int $org,int $locationId,string $tablePublicId,bool $forUpdate=true): array
+function service_seatability_validate_locked_now(array $row): array
 {
-    $row=service_ops_assert_table_operable($pdo,$org,$locationId,$tablePublicId,$forUpdate);
+    if((string)$row['status']!=='active')throw new InvalidArgumentException((string)$row['name'].' is inactive.');
+    if(empty($row['equipment_asset_id']))throw new InvalidArgumentException((string)$row['name'].' is not linked to a managed physical table asset. Sync it in Host Stand first.');
+    if(!empty($row['asset_archived_at'])||(string)$row['asset_operational_status']!=='active'||(string)$row['asset_condition_status']==='poor'||(string)$row['state']==='out_of_service')throw new InvalidArgumentException((string)$row['name'].' is not physically available for service.');
     if($row['active_check_id']!==null)throw new InvalidArgumentException((string)$row['name'].' already has an active check.');
     $state=(string)$row['state'];
     if($state!=='available')throw new InvalidArgumentException(service_seatability_state_message($state,(string)$row['name']));
     return $row;
+}
+
+function service_seatability_assert_now(PDO $pdo,int $org,int $locationId,string $tablePublicId,bool $forUpdate=true): array
+{
+    $row=service_ops_assert_table_operable($pdo,$org,$locationId,$tablePublicId,$forUpdate);
+    return service_seatability_validate_locked_now($row);
 }
 
 function service_seatability_candidate_allowed(PDO $pdo,int $org,int $locationId,array $row,DateTimeImmutable $start,DateTimeImmutable $now): bool
@@ -111,11 +119,13 @@ function service_seatability_assert_assignment_window(PDO $pdo,int $org,array $r
     $locationId=(int)$reservation['location_id'];
     $ids=array_values(array_unique(array_filter(array_map('strval',$tablePublicIds))));
     if(!$ids)throw new InvalidArgumentException('Choose at least one table.');
+    $locked=service_ops_lock_tables_canonical($pdo,$org,$locationId,$ids);
     $tz=service_ops_timezone($pdo,$org,$locationId);
     $now=pos_clock($pdo,$org,$locationId);
     $scheduled=$reservation['scheduled_at']!==null?new DateTimeImmutable((string)$reservation['scheduled_at'],$tz):null;
     foreach($ids as $public){
-        $row=service_ops_assert_table_operable($pdo,$org,$locationId,$public,true);
+        $row=$locked[$public];
+        if((string)$row['status']!=='active'||empty($row['equipment_asset_id'])||!empty($row['asset_archived_at'])||(string)$row['asset_operational_status']!=='active'||(string)$row['asset_condition_status']==='poor'||(string)$row['state']==='out_of_service')throw new InvalidArgumentException((string)$row['name'].' is not physically available for service.');
         $state=(string)$row['state'];
         if($scheduled===null){
             if($row['active_check_id']!==null)throw new InvalidArgumentException((string)$row['name'].' already has a seated party.');
@@ -181,7 +191,9 @@ function service_seatability_host_seat(PDO $pdo,int $org,string $reservationPubl
         $locationId=(int)$r['location_id'];
         $tables=host_reservation_tables($pdo,$org,(int)$r['id']);
         if(!$tables)throw new InvalidArgumentException('Assign a table before seating this party.');
-        foreach($tables as $table)service_seatability_assert_now($pdo,$org,$locationId,(string)$table['publicId'],true);
+        $ids=array_column($tables,'publicId');
+        $locked=service_ops_lock_tables_canonical($pdo,$org,$locationId,$ids);
+        foreach($tables as $table)service_seatability_validate_locked_now($locked[(string)$table['publicId']]);
         return service_visit_host_seat($pdo,$org,$reservationPublicId,$serverUserId,$userId);
     });
 }
