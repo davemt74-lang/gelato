@@ -9,6 +9,7 @@ on:
       - 'api/sales-agent.php'
       - 'api/agent-workspace.php'
       - 'includes/sales-intelligence-core.php'
+      - 'includes/sales-location-rollup.php'
       - 'includes/sales-pos-connectors.php'
       - 'js/sales-intelligence.js'
       - 'data/sales-import-template.csv'
@@ -45,6 +46,7 @@ jobs:
           php -l api/sales-agent.php
           php -l api/agent-workspace.php
           php -l includes/sales-intelligence-core.php
+          php -l includes/sales-location-rollup.php
           php -l includes/sales-pos-connectors.php
           php -l tests/sales-demand-intelligence-contract.php
           node --check js/sales-intelligence.js
@@ -58,6 +60,9 @@ jobs:
           grep -q "file_checksum" database/20260914_zzzzzzz_sales_demand_intelligence.sql
           grep -q "granularity.*daily.*weekly.*monthly\|daily.*weekly.*monthly" includes/sales-intelligence-core.php
           grep -q "no employee-level scheduling" includes/sales-intelligence-core.php
+          grep -q "sales_recognized_row" includes/sales-intelligence-core.php
+          grep -q "successful sync has populated the ledger" includes/sales-intelligence-core.php
+          grep -q "location_key='all'" includes/sales-location-rollup.php
           grep -q "api/sales-agent.php" api/agent-workspace.php
           grep -q "TOAST_CLIENT_SECRET" includes/sales-pos-connectors.php
           grep -q "credentialsStoredInDatabase.*false" includes/sales-pos-connectors.php
