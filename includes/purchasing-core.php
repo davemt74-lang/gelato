@@ -3,7 +3,7 @@ declare(strict_types=1);
 require_once __DIR__.'/operations-core.php';
 
 function purchasing_ready(PDO $pdo): bool {
-    foreach (['vendors','inventory_vendor_items','purchase_orders','purchase_order_items','goods_receipts','goods_receipt_items','vendor_price_history','purchase_order_events'] as $table) {
+    foreach (['vendors','vendor_contacts','inventory_vendor_items','purchase_orders','purchase_order_items','goods_receipts','goods_receipt_items','vendor_price_history','purchase_order_events'] as $table) {
         if (!restaurant_brain_table_ready($pdo,$table)) return false;
     }
     return true;
@@ -15,8 +15,17 @@ function purchasing_vendor(PDO $pdo,int $org,string $publicId): ?array {
     $q->execute([$org,$publicId]); $row=$q->fetch(); return $row?:null;
 }
 function purchasing_vendors(PDO $pdo,int $org): array {
-    $q=$pdo->prepare("SELECT * FROM vendors WHERE organization_id=? AND archived_at IS NULL ORDER BY status<>'active',name");
+    $q=$pdo->prepare("SELECT v.*,(SELECT COUNT(*) FROM vendor_contacts c WHERE c.organization_id=v.organization_id AND c.vendor_id=v.id) contact_count,(SELECT COUNT(*) FROM inventory_vendor_items vi WHERE vi.organization_id=v.organization_id AND vi.vendor_id=v.id AND vi.archived_at IS NULL AND vi.status='active') item_count FROM vendors v WHERE v.organization_id=? AND v.archived_at IS NULL ORDER BY v.status<>'active',v.name");
     $q->execute([$org]); return $q->fetchAll();
+}
+function purchasing_vendor_contacts(PDO $pdo,int $org,string $vendorPublic=''):array{
+    $sql='SELECT c.*,v.public_id vendor_public_id,v.name vendor_name FROM vendor_contacts c INNER JOIN vendors v ON v.id=c.vendor_id AND v.organization_id=c.organization_id WHERE c.organization_id=?';$params=[$org];if($vendorPublic!==''){$sql.=' AND v.public_id=?';$params[]=$vendorPublic;}$sql.=' ORDER BY v.name,c.is_primary DESC,c.name';$q=$pdo->prepare($sql);$q->execute($params);return $q->fetchAll();
+}
+function purchasing_save_vendor_contact(PDO $pdo,int $org,array $in,int $uid):array{
+    $vendor=purchasing_vendor($pdo,$org,trim((string)($in['vendorId']??'')));if(!$vendor)throw new InvalidArgumentException('Vendor not found.');$id=trim((string)($in['id']??''));$name=mb_substr(trim((string)($in['name']??'')),0,180,'UTF-8');if($name==='')throw new InvalidArgumentException('Contact name is required.');$primary=!empty($in['primary'])?1:0;if($primary)$pdo->prepare('UPDATE vendor_contacts SET is_primary=0 WHERE organization_id=? AND vendor_id=?')->execute([$org,(int)$vendor['id']]);
+    if($id===''){$id=purchasing_public_id('vcontact');$pdo->prepare('INSERT INTO vendor_contacts (organization_id,vendor_id,public_id,name,role_title,email,phone,is_primary,notes) VALUES (?,?,?,?,?,?,?,?,?)')->execute([$org,(int)$vendor['id'],$id,$name,mb_substr(trim((string)($in['roleTitle']??'')),0,160,'UTF-8')?:null,mb_substr(trim((string)($in['email']??'')),0,254,'UTF-8')?:null,mb_substr(trim((string)($in['phone']??'')),0,60,'UTF-8')?:null,$primary,mb_substr(trim((string)($in['notes']??'')),0,1000,'UTF-8')?:null]);}
+    else{$q=$pdo->prepare('UPDATE vendor_contacts SET name=?,role_title=?,email=?,phone=?,is_primary=?,notes=?,updated_at=NOW(6) WHERE organization_id=? AND vendor_id=? AND public_id=?');$q->execute([$name,mb_substr(trim((string)($in['roleTitle']??'')),0,160,'UTF-8')?:null,mb_substr(trim((string)($in['email']??'')),0,254,'UTF-8')?:null,mb_substr(trim((string)($in['phone']??'')),0,60,'UTF-8')?:null,$primary,mb_substr(trim((string)($in['notes']??'')),0,1000,'UTF-8')?:null,$org,(int)$vendor['id'],$id]);if($q->rowCount()===0)throw new RuntimeException('Vendor contact not found.');}
+    foreach(purchasing_vendor_contacts($pdo,$org,(string)$vendor['public_id']) as $row)if((string)$row['public_id']===$id)return $row;return [];
 }
 function purchasing_event(PDO $pdo,int $org,int $poId,string $type,string $summary,?int $uid=null,array $meta=[]): void {
     $q=$pdo->prepare('INSERT INTO purchase_order_events (organization_id,purchase_order_id,event_type,summary,metadata_json,actor_user_id) VALUES (?,?,?,?,?,?)');
@@ -25,7 +34,7 @@ function purchasing_event(PDO $pdo,int $org,int $poId,string $type,string $summa
 function purchasing_save_vendor(PDO $pdo,int $org,array $in,int $uid): array {
     $id=trim((string)($in['id']??'')); $name=mb_substr(trim((string)($in['name']??'')),0,220,'UTF-8');
     if($name==='') throw new InvalidArgumentException('Vendor name is required.');
-    $days=array_values(array_unique(array_filter(array_map('intval',(array)($in['deliveryDays']??[])),static fn($d)=>$d>=0&&$d<=6)));
+    $daysRaw=$in['deliveryDays']??[];if(is_string($daysRaw))$daysRaw=preg_split('/[^0-9]+/',$daysRaw,-1,PREG_SPLIT_NO_EMPTY)?:[];$days=array_values(array_unique(array_filter(array_map('intval',(array)$daysRaw),static fn($d)=>$d>=0&&$d<=6)));
     $vals=[($in['accountNumber']??'')?:null,($in['phone']??'')?:null,($in['email']??'')?:null,($in['orderingEmail']??'')?:null,($in['website']??'')?:null,($in['minimumOrderAmount']??'')!==''?(float)$in['minimumOrderAmount']:null,max(0,(int)($in['leadTimeDays']??0)),$days?json_encode($days):null,($in['cutoffTime']??'')?:null,($in['paymentTerms']??'')?:null,($in['notes']??'')?:null,(string)($in['status']??'active')==='inactive'?'inactive':'active'];
     if($id===''){
         $public=purchasing_public_id('vendor');
