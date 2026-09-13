@@ -17,7 +17,7 @@ function wholesale_fulfillment_datetime(mixed $value,string $label): ?string
 {
     $value=trim((string)$value);
     if($value==='')return null;
-    foreach(['Y-m-d\TH:i','Y-m-d H:i:s','Y-m-d H:i'] as $format){
+    foreach(['Y-m-d H:i:s.u','Y-m-d\TH:i:s.u','Y-m-d\TH:i:s','Y-m-d\TH:i','Y-m-d H:i:s','Y-m-d H:i'] as $format){
         $date=DateTimeImmutable::createFromFormat('!'.$format,$value);
         if($date)return $date->format('Y-m-d H:i:s');
     }
