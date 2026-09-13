@@ -1,0 +1,121 @@
+name: Dining Visit Lifecycle Hardening
+
+on:
+  pull_request:
+    paths:
+      - 'api/table-service.php'
+      - 'api/host-stand.php'
+      - 'api/customer-crm.php'
+      - 'includes/service-visit-core.php'
+      - 'includes/service-visit-extensions.php'
+      - 'includes/service-visit-live.php'
+      - 'database/20260922_dining_visit_lifecycle.sql'
+      - 'tests/dining-visit-lifecycle-contract.php'
+      - '.github/workflows/dining-visit-lifecycle.yml'
+  push:
+    branches: [main]
+
+jobs:
+  dining-visit-lifecycle:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - name: Syntax checks
+        run: |
+          php -l api/table-service.php
+          php -l api/host-stand.php
+          php -l api/customer-crm.php
+          php -l includes/service-visit-core.php
+          php -l includes/service-visit-extensions.php
+          php -l includes/service-visit-live.php
+          php -l tests/dining-visit-lifecycle-contract.php
+          node --check js/table-service.js
+          node --check js/host-stand.js
+      - name: Architecture contract
+        run: |
+          grep -q 'ADD COLUMN visit_group_id' database/20260922_dining_visit_lifecycle.sql
+          grep -q 'idx_service_context_visit' database/20260922_dining_visit_lifecycle.sql
+          grep -q 'function service_visit_split' includes/service-visit-core.php
+          grep -q 'function service_visit_merge_safe' includes/service-visit-live.php
+          grep -q 'function service_visit_reconcile_tables' includes/service-visit-extensions.php
+          grep -q 'visit_check_repointed' includes/service-visit-extensions.php
+          grep -q 'function service_visit_reconcile_reservations' includes/service-visit-core.php
+          grep -q 'function service_visit_attach_customer_safe' includes/service-visit-extensions.php
+          grep -q 'service_visit_reconcile_live' api/table-service.php
+          grep -q 'service_visit_merge_safe' api/table-service.php
+          grep -q 'service_visit_transfer_safe' api/table-service.php
+          grep -q 'service_visit_dashboard' api/host-stand.php
+          grep -q 'service_visit_attach_customer_safe' api/customer-crm.php
+          ! grep -q "'openChecks'=>pos_open_checks" api/table-service.php
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_restaurant_ai_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->ensureTrackingTables();
+          $s->bootstrapLegacyHistory(null);
+          $s->applyPending(null);
+          if($s->pendingMigrations()) exit(1);
+          PHP
+      - name: Verify dining visit schema
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='service_check_contexts' AND column_name='visit_group_id';")" = "1"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='service_check_contexts' AND index_name='idx_service_context_visit';")" = "1"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260922_dining_visit_lifecycle';")" = "1"
+      - name: Dining visit lifecycle behavioral contract
+        run: php tests/dining-visit-lifecycle-contract.php
+      - name: Recent table-host hardening regression
+        run: php tests/table-host-hardening-contract.php
+      - name: Host Stand regression
+        run: php tests/host-stand-contract.php
+      - name: Table Service regression
+        run: php tests/table-service-contract.php
+      - name: Table Service reconciliation regression
+        run: php tests/table-service-reconcile-contract.php
+      - name: Customer CRM regression
+        run: php tests/customer-crm-contract.php
+      - name: Kitchen Display regression
+        run: php tests/kds-contract.php
+      - name: Native POS regression
+        run: php tests/native-pos-contract.php
+      - name: Daily Manager regression
+        run: php tests/daily-manager-contract.php
+      - name: Upgrader checksum and idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->assertAppliedChecksumsUnchanged();
+          if($s->pendingMigrations()) exit(2);
+          if($s->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP
