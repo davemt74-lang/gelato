@@ -7,12 +7,14 @@ on:
       - 'api/host-stand.php'
       - 'api/customer-crm.php'
       - 'includes/service-seatability.php'
+      - 'includes/service-reservation-protection.php'
       - 'includes/service-visit-core.php'
       - 'includes/service-visit-extensions.php'
       - 'includes/service-visit-live.php'
       - 'database/20260922_dining_visit_lifecycle.sql'
       - 'tests/dining-visit-lifecycle-contract.php'
       - 'tests/table-seatability-contract.php'
+      - 'tests/upcoming-reservation-protection-contract.php'
       - '.github/workflows/dining-visit-lifecycle.yml'
   push:
     branches: [main]
@@ -42,11 +44,13 @@ jobs:
           php -l api/host-stand.php
           php -l api/customer-crm.php
           php -l includes/service-seatability.php
+          php -l includes/service-reservation-protection.php
           php -l includes/service-visit-core.php
           php -l includes/service-visit-extensions.php
           php -l includes/service-visit-live.php
           php -l tests/dining-visit-lifecycle-contract.php
           php -l tests/table-seatability-contract.php
+          php -l tests/upcoming-reservation-protection-contract.php
           node --check js/table-service.js
           node --check js/host-stand.js
       - name: Architecture contract
@@ -64,8 +68,9 @@ jobs:
           grep -q 'function service_visit_attach_customer_safe' includes/service-visit-extensions.php
           grep -q 'service_visit_reconcile_live' api/table-service.php
           grep -q 'service_visit_merge_safe' api/table-service.php
-          grep -q 'service_seatability_transfer' api/table-service.php
-          grep -q 'service_seatability_dashboard' api/host-stand.php
+          grep -q 'service_reservation_protection_transfer' api/table-service.php
+          grep -q 'service_reservation_protection_dashboard' api/host-stand.php
+          grep -q 'function service_reservation_protection_visit_projection' includes/service-reservation-protection.php
           grep -q 'service_visit_attach_customer_safe' api/customer-crm.php
           ! grep -q "'openChecks'=>pos_open_checks" api/table-service.php
           ! grep -q 'guest_reservation_tables WHERE organization_id' includes/service-visit-extensions.php
@@ -98,6 +103,8 @@ jobs:
           test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='service_check_contexts' AND column_name='visit_group_id';")" = "1"
           test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',') FROM information_schema.statistics WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='service_check_contexts' AND index_name='idx_service_context_visit';")" = "organization_id,location_id,visit_group_id,status"
           test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260922_dining_visit_lifecycle';")" = "1"
+      - name: Upcoming reservation protection regression
+        run: php tests/upcoming-reservation-protection-contract.php
       - name: Dining visit lifecycle behavioral contract
         run: php tests/dining-visit-lifecycle-contract.php
       - name: Seatability regression
