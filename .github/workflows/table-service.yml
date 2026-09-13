@@ -61,7 +61,7 @@ jobs:
           grep -q 'function table_service_split' includes/table-service-core.php
           grep -q 'function table_service_merge' includes/table-service-core.php
           grep -q 'kds_order_items SET check_id=' includes/table-service-core.php
-          grep -q 'table_service_reconcile_closed_checks' api/table-service.php
+          grep -q 'service_visit_reconcile_live' api/table-service.php
       - name: Install and upgrade schema
         run: |
           sudo apt-get update -qq
