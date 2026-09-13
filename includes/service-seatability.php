@@ -106,6 +106,36 @@ function service_seatability_combination_table_ids(PDO $pdo,int $org,int $locati
     return $ids;
 }
 
+function service_seatability_assert_assignment_window(PDO $pdo,int $org,array $reservation,array $tablePublicIds): void
+{
+    $locationId=(int)$reservation['location_id'];
+    $ids=array_values(array_unique(array_filter(array_map('strval',$tablePublicIds))));
+    if(!$ids)throw new InvalidArgumentException('Choose at least one table.');
+    $tz=service_ops_timezone($pdo,$org,$locationId);
+    $now=pos_clock($pdo,$org,$locationId);
+    $scheduled=$reservation['scheduled_at']!==null?new DateTimeImmutable((string)$reservation['scheduled_at'],$tz):null;
+    foreach($ids as $public){
+        $row=service_ops_assert_table_operable($pdo,$org,$locationId,$public,true);
+        $state=(string)$row['state'];
+        if($scheduled===null){
+            if($row['active_check_id']!==null)throw new InvalidArgumentException((string)$row['name'].' already has a seated party.');
+            if($state!=='available')throw new InvalidArgumentException(service_seatability_state_message($state,(string)$row['name']));
+            continue;
+        }
+        if(in_array($state,['blocked','out_of_service'],true))throw new InvalidArgumentException(service_seatability_state_message($state,(string)$row['name']));
+        if($row['active_check_id']!==null){
+            $q=$pdo->prepare('SELECT opened_at FROM pos_checks WHERE organization_id=? AND id=? LIMIT 1');
+            $q->execute([$org,(int)$row['active_check_id']]);
+            $opened=$q->fetchColumn();
+            $projectedClear=$opened?new DateTimeImmutable((string)$opened,$tz):$now;
+            if($scheduled<$projectedClear->modify('+120 minutes'))throw new InvalidArgumentException((string)$row['name'].' is projected to still be occupied at that reservation time.');
+            continue;
+        }
+        if($state==='dirty'&&$scheduled<$now->modify('+'.service_seatability_cleanup_minutes().' minutes'))throw new InvalidArgumentException((string)$row['name'].' is still inside the table cleanup window for that reservation time.');
+        if(!in_array($state,['available','dirty'],true))throw new InvalidArgumentException(service_seatability_state_message($state,(string)$row['name']));
+    }
+}
+
 function service_seatability_reservation_create(PDO $pdo,int $org,int $locationId,array $input,int $userId): array
 {
     return host_transaction($pdo,function()use($pdo,$org,$locationId,$input,$userId){
@@ -123,25 +153,24 @@ function service_seatability_reservation_assign(PDO $pdo,int $org,string $reserv
 {
     return host_transaction($pdo,function()use($pdo,$org,$reservationPublicId,$tablePublicIds,$userId){
         $r=host_reservation_row($pdo,$org,$reservationPublicId,true);
-        $locationId=(int)$r['location_id'];
         $ids=array_values(array_unique(array_filter(array_map('strval',$tablePublicIds))));
-        if(!$ids)throw new InvalidArgumentException('Choose at least one table.');
-        $tz=service_ops_timezone($pdo,$org,$locationId);
-        $now=pos_clock($pdo,$org,$locationId);
-        $scheduled=$r['scheduled_at']!==null?new DateTimeImmutable((string)$r['scheduled_at'],$tz):null;
-        foreach($ids as $public){
-            $row=service_ops_assert_table_operable($pdo,$org,$locationId,$public,true);
-            $state=(string)$row['state'];
-            if($scheduled===null){
-                if($row['active_check_id']!==null)throw new InvalidArgumentException((string)$row['name'].' already has a seated party.');
-                if($state!=='available')throw new InvalidArgumentException(service_seatability_state_message($state,(string)$row['name']));
-                continue;
-            }
-            if(in_array($state,['blocked','out_of_service'],true))throw new InvalidArgumentException(service_seatability_state_message($state,(string)$row['name']));
-            if($row['active_check_id']===null&&$state==='dirty'&&$scheduled<$now->modify('+'.service_seatability_cleanup_minutes().' minutes'))throw new InvalidArgumentException((string)$row['name'].' is still inside the table cleanup window for that reservation time.');
-            if($row['active_check_id']===null&&!in_array($state,['available','dirty'],true))throw new InvalidArgumentException(service_seatability_state_message($state,(string)$row['name']));
-        }
+        service_seatability_assert_assignment_window($pdo,$org,$r,$ids);
         return service_ops_reservation_assign_safe($pdo,$org,$reservationPublicId,$ids,$userId);
+    });
+}
+
+function service_seatability_reservation_update(PDO $pdo,int $org,string $reservationPublicId,array $input,int $userId): array
+{
+    return host_transaction($pdo,function()use($pdo,$org,$reservationPublicId,$input,$userId){
+        $before=host_reservation_row($pdo,$org,$reservationPublicId,true);
+        $tables=host_reservation_tables($pdo,$org,(int)$before['id']);
+        $scheduledChanged=(string)$before['reservation_type']==='reservation'&&array_key_exists('scheduledAt',$input);
+        $updated=service_ops_reservation_update($pdo,$org,$reservationPublicId,$input,$userId);
+        if($scheduledChanged&&$tables){
+            $after=host_reservation_row($pdo,$org,$reservationPublicId,false);
+            service_seatability_assert_assignment_window($pdo,$org,$after,array_column($tables,'publicId'));
+        }
+        return $updated;
     });
 }
 

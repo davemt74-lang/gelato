@@ -43,14 +43,19 @@ jobs:
           grep -q 'service_seatability_dashboard' api/host-stand.php
           grep -q 'service_seatability_availability' api/host-stand.php
           grep -q 'service_seatability_reservation_create' api/host-stand.php
+          grep -q 'service_seatability_reservation_update' api/host-stand.php
           grep -q 'service_seatability_reservation_assign' api/host-stand.php
           grep -q 'service_seatability_host_seat' api/host-stand.php
           grep -q "state!=='available'" includes/service-seatability.php
           grep -q "in_array(\$state,\['blocked','out_of_service'\]" includes/service-seatability.php
           grep -q 'service_seatability_cleanup_minutes' includes/service-seatability.php
           grep -q 'function service_seatability_combination_table_ids' includes/service-seatability.php
+          grep -q 'function service_seatability_assert_assignment_window' includes/service-seatability.php
+          grep -q 'function service_seatability_reservation_update' includes/service-seatability.php
           grep -q "unset(\$input\['tablePublicIds'\],\$input\['combinationPublicId'\])" includes/service-seatability.php
           grep -q 'combinationPublicId' tests/table-seatability-contract.php
+          grep -q 'Rejected Dirty-table schedule edit' tests/table-seatability-contract.php
+          grep -q 'projected active-check occupancy window' tests/table-seatability-contract.php
       - name: Install and upgrade schema
         run: |
           sudo apt-get update -qq

@@ -29,7 +29,7 @@ tsc($a!==null&&!empty($a['reservableNow']),'Available table must be reservable n
 tsc($d!==null&&empty($d['reservableNow']),'Dirty table must not be reservable now.');
 tsc($b!==null&&empty($b['reservableNow']),'Blocked table must not be reservable now.');
 
-$now=pos_clock($pdo,$org,$location);$near=$now->modify('+5 minutes')->format('Y-m-d H:i:s');$future=$now->modify('+30 minutes')->format('Y-m-d H:i:s');
+$now=pos_clock($pdo,$org,$location);$near=$now->modify('+5 minutes')->format('Y-m-d H:i:s');$future=$now->modify('+30 minutes')->format('Y-m-d H:i:s');$far=$now->modify('+150 minutes')->format('Y-m-d H:i:s');
 $nearAvailability=service_seatability_availability($pdo,$org,$location,$near,2,90);
 tsc(tsc_has($nearAvailability,$available['publicId']),'Available table must remain a near-term reservation candidate.');
 tsc(!tsc_has($nearAvailability,$dirty['publicId']),'Dirty table must be excluded during cleanup lead time.');
@@ -61,11 +61,19 @@ $validComboReservation=service_seatability_reservation_create($pdo,$org,$locatio
 tsc(count($validComboReservation['tables'])===2,'Valid table combination must still attach both member tables through the hardened assignment path.');
 $validComboIds=array_column($validComboReservation['tables'],'publicId');sort($validComboIds);$expectedComboIds=[$available['publicId'],$blocked['publicId']];sort($expectedComboIds);tsc($validComboIds===$expectedComboIds,'Valid combination reservation must preserve the saved member table set.');
 
+$occupiedFuture=service_seatability_reservation_create($pdo,$org,$location,['type'=>'reservation','guestName'=>'Occupied Future','partySize'=>2,'scheduledAt'=>$far,'durationMinutes'=>90,'tablePublicIds'=>[$source['publicId']]],$user);
+$occupiedOriginal=$occupiedFuture['scheduledAt'];$rejected=false;try{service_seatability_reservation_update($pdo,$org,$occupiedFuture['publicId'],['scheduledAt'=>$future],$user);}catch(InvalidArgumentException){$rejected=true;}tsc($rejected,'Reservation edit must reject moving an assigned table inside the projected active-check occupancy window.');
+$occupiedReload=host_reservation_row($pdo,$org,$occupiedFuture['publicId'],false);tsc((string)$occupiedReload['scheduled_at']===(string)$occupiedOriginal,'Rejected occupied-table schedule edit must roll back its scheduled time.');
+
 $nearRes=service_seatability_reservation_create($pdo,$org,$location,['type'=>'reservation','guestName'=>'Dirty Near','partySize'=>2,'scheduledAt'=>$near,'durationMinutes'=>90],$user);
 $rejected=false;try{service_seatability_reservation_assign($pdo,$org,$nearRes['publicId'],[$dirty['publicId']],$user);}catch(InvalidArgumentException){$rejected=true;}tsc($rejected,'Dirty table must reject reservation assignment inside cleanup window.');
 
 $futureRes=service_seatability_reservation_create($pdo,$org,$location,['type'=>'reservation','guestName'=>'Dirty Future','partySize'=>2,'scheduledAt'=>$future,'durationMinutes'=>90,'tablePublicIds'=>[$dirty['publicId']]],$user);
 tsc(count($futureRes['tables'])===1&&$futureRes['tables'][0]['publicId']===$dirty['publicId'],'Sufficiently future reservation may assign a Dirty table pending cleanup.');
+$dirtyOriginal=$futureRes['scheduledAt'];$rejected=false;try{service_seatability_reservation_update($pdo,$org,$futureRes['publicId'],['scheduledAt'=>$near],$user);}catch(InvalidArgumentException){$rejected=true;}tsc($rejected,'Reservation edit must reject moving an assigned Dirty table inside cleanup lead time.');
+$dirtyReload=host_reservation_row($pdo,$org,$futureRes['publicId'],false);tsc((string)$dirtyReload['scheduled_at']===(string)$dirtyOriginal,'Rejected Dirty-table schedule edit must roll back its scheduled time.');
+$contactEdit=service_seatability_reservation_update($pdo,$org,$futureRes['publicId'],['guestName'=>'Dirty Future Updated'], $user);tsc($contactEdit['guestName']==='Dirty Future Updated','Non-schedule reservation edits must remain allowed while a future table is Dirty.');
+$later=$now->modify('+45 minutes')->format('Y-m-d H:i:s');service_seatability_reservation_update($pdo,$org,$futureRes['publicId'],['scheduledAt'=>$later],$user);$laterReload=host_reservation_row($pdo,$org,$futureRes['publicId'],false);tsc((new DateTimeImmutable((string)$laterReload['scheduled_at']))->format('Y-m-d H:i:s')===$later,'Dirty table reservation may be moved to another time outside the cleanup window.');
 $rejected=false;try{service_seatability_host_seat($pdo,$org,$futureRes['publicId'],null,$user);}catch(InvalidArgumentException){$rejected=true;}tsc($rejected,'Assigned Dirty table must still be Available before actual seating.');
 $pdo->prepare("UPDATE service_tables SET state='available' WHERE organization_id=? AND public_id=?")->execute([$org,$dirty['publicId']]);
 $seated=service_seatability_host_seat($pdo,$org,$futureRes['publicId'],null,$user);
