@@ -37,12 +37,18 @@ function wholesale_fulfillment_order(PDO $pdo,int $org,string $publicId,bool $fo
     return $row;
 }
 
-function wholesale_fulfillment_location(PDO $pdo,int $org,int $accountId,mixed $publicId): ?array
+function wholesale_fulfillment_location(PDO $pdo,int $org,int $accountId,mixed $identifier): ?array
 {
-    $publicId=trim((string)$publicId);
-    if($publicId==='')return null;
-    $q=$pdo->prepare("SELECT * FROM wholesale_account_locations WHERE organization_id=? AND wholesale_account_id=? AND public_id=? AND status='active' LIMIT 1");
-    $q->execute([$org,$accountId,$publicId]);$row=$q->fetch();
+    $identifier=trim((string)$identifier);
+    if($identifier==='')return null;
+    if(ctype_digit($identifier)){
+        $q=$pdo->prepare("SELECT * FROM wholesale_account_locations WHERE organization_id=? AND wholesale_account_id=? AND id=? AND status='active' LIMIT 1");
+        $q->execute([$org,$accountId,(int)$identifier]);
+    }else{
+        $q=$pdo->prepare("SELECT * FROM wholesale_account_locations WHERE organization_id=? AND wholesale_account_id=? AND public_id=? AND status='active' LIMIT 1");
+        $q->execute([$org,$accountId,$identifier]);
+    }
+    $row=$q->fetch();
     if(!$row)throw new InvalidArgumentException('Fulfillment location does not belong to this Wholesale account or is inactive.');
     return $row;
 }
@@ -129,6 +135,7 @@ function wholesale_fulfillment_order_availability(PDO $pdo,int $org,array $order
             $byInventory[$key]['remainingDemand']+=$remaining;$byInventory[$key]['lines'][]=['lineNumber'=>(int)$line['line_number'],'quantity'=>round($remaining,4)];
         }
     }
+    ksort($byInventory,SORT_NUMERIC);
     foreach($byInventory as &$row){$row['remainingDemand']=round($row['remainingDemand'],4);$row['shortage']=round(max(0,$row['remainingDemand']-$row['onHand']),4);}unset($row);
     return ['items'=>array_values($byInventory),'issues'=>$issues,'shortages'=>count(array_filter($byInventory,static fn($r)=>$r['shortage']>.0001))];
 }
@@ -203,11 +210,11 @@ function wholesale_fulfillment_set_status(PDO $pdo,int $org,string $publicId,str
         }else{
             $pdo->prepare("UPDATE wholesale_fulfillments SET status='cancelled',cancelled_at=COALESCE(cancelled_at,NOW(6)),updated_by=?,updated_at=NOW(6) WHERE id=? AND organization_id=?")->execute([$userId,(int)$batch['id'],$org]);
         }
-        wholesale_commerce_order_event($pdo,$org,(int)$batch['wholesale_order_id'],'fulfillment_'.$next,'Fulfillment batch '.$batch['fulfillment_number'].' moved to '.$next.'.',$userId,['fulfillmentId'=>$public]);
+        wholesale_commerce_order_event($pdo,$org,(int)$batch['wholesale_order_id'],'fulfillment_'.$next,'Fulfillment batch '.$batch['fulfillment_number'].' moved to '.$next.'.',$userId,['fulfillmentId'=>$publicId]);
         $pdo->commit();
     }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
-    if(function_exists('app_audit'))app_audit($pdo,$org,$userId,'wholesale.fulfillment_'.$next,'wholesale_fulfillment',$public,['status'=>$current],['status'=>$next]);
-    return wholesale_fulfillment_batch_payload($pdo,$org,wholesale_fulfillment_batch($pdo,$org,$public));
+    if(function_exists('app_audit'))app_audit($pdo,$org,$userId,'wholesale.fulfillment_'.$next,'wholesale_fulfillment',$publicId,['status'=>$current],['status'=>$next]);
+    return wholesale_fulfillment_batch_payload($pdo,$org,wholesale_fulfillment_batch($pdo,$org,$publicId));
 }
 
 function wholesale_fulfillment_batch_availability(PDO $pdo,int $org,array $batch): array
@@ -222,6 +229,7 @@ function wholesale_fulfillment_batch_availability(PDO $pdo,int $org,array $batch
         $ratio=(float)$line['order_quantity']>0?(float)$item['quantity']/(float)$line['order_quantity']:0;
         foreach($resolved['requirements'] as $r){$id=(int)$r['inventoryItemId'];$qty=round((float)$r['quantity']*$ratio,4);if($qty<=0)continue;if(!isset($aggregated[$id]))$aggregated[$id]=['inventoryItemId'=>$id,'inventoryId'=>$r['inventoryPublicId'],'name'=>$r['inventoryName'],'unit'=>$r['unit'],'onHand'=>(float)$r['onHand'],'required'=>0.0,'shortage'=>0.0,'lines'=>[]];$aggregated[$id]['required']+=$qty;$aggregated[$id]['lines'][]=['fulfillmentItemId'=>(int)$item['id'],'orderItemId'=>(int)$item['wholesale_order_item_id'],'lineNumber'=>(int)$line['line_number'],'quantity'=>$qty,'commitmentPublicId'=>$r['commitmentPublicId']];}
     }
+    ksort($aggregated,SORT_NUMERIC);
     foreach($aggregated as &$r){$r['required']=round($r['required'],4);$r['shortage']=round(max(0,$r['required']-$r['onHand']),4);}unset($r);
     return ['items'=>array_values($aggregated),'issues'=>$issues,'shortages'=>count(array_filter($aggregated,static fn($r)=>$r['shortage']>.0001))];
 }
@@ -237,8 +245,7 @@ function wholesale_fulfillment_deliver(PDO $pdo,int $org,string $publicId,int $u
         if(!in_array((string)$batch['status'],['ready','dispatched'],true))throw new InvalidArgumentException('Mark the fulfillment batch ready before delivery.');
         if(!in_array((string)$batch['order_status'],['ready','out_for_delivery'],true))throw new InvalidArgumentException('Wholesale production must be ready before delivery.');
         $availability=wholesale_fulfillment_batch_availability($pdo,$org,$batch);
-        $blocking=array_values(array_filter($availability['issues'],static fn($i)=>($i['type']??'')!=='legacy_line'));
-        if($blocking)throw new RuntimeException('Inventory consumption cannot be resolved for this batch: '.($blocking[0]['message']??'Resolve the Wholesale demand mapping first.'));
+        if($availability['issues'])throw new RuntimeException('Inventory consumption cannot be resolved for this batch: '.($availability['issues'][0]['message']??'Resolve the Wholesale demand mapping first.'));
         if((int)$availability['shortages']>0){$short=array_values(array_filter($availability['items'],static fn($r)=>$r['shortage']>.0001));$first=$short[0];throw new RuntimeException('Insufficient '.$first['name'].' for delivery: short '.rtrim(rtrim(number_format((float)$first['shortage'],4,'.',''),'0'),'.').' '.$first['unit'].'.');}
         $transaction=$pdo->prepare("INSERT INTO inventory_transactions (organization_id,inventory_item_id,transaction_type,quantity_delta,resulting_quantity,unit,note,source_type,source_public_id,created_by) VALUES (?,?,'use',?,?,?,?, 'wholesale_fulfillment',?,?)");
         $consume=$pdo->prepare("INSERT INTO wholesale_fulfillment_consumptions (organization_id,wholesale_fulfillment_id,wholesale_fulfillment_item_id,wholesale_order_item_id,inventory_item_id,inventory_transaction_id,source_inventory_commitment_public_id,quantity,unit) VALUES (?,?,?,?,?,?,?,?,?)");
