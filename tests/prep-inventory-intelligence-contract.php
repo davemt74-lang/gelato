@@ -68,8 +68,8 @@ pit_assert((string)$updated['status']==='accepted','Recommendation acceptance wa
 $published=prep_publish_plan($pdo,$orgId,$plan,$userId);
 $generated=array_values(array_filter($published['tasks'],static fn(array $row):bool=>(string)($row['source_type']??'')==='prep_plan'));
 pit_assert(count($generated)>=1,'Publishing did not create canonical prep tasks.');
-$taskCount1=(int)$pdo->prepare("SELECT COUNT(*) FROM restaurant_tasks WHERE organization_id=? AND source_type='prep_plan'")->execute([$orgId]);
-$stmt=$pdo->prepare("SELECT COUNT(*) FROM restaurant_tasks WHERE organization_id=? AND source_type='prep_plan'");$stmt->execute([$orgId]);$before=(int)$stmt->fetchColumn();
+$stmt=$pdo->prepare("SELECT COUNT(*) FROM restaurant_tasks WHERE organization_id=? AND source_type='prep_plan'");
+$stmt->execute([$orgId]);$before=(int)$stmt->fetchColumn();
 $publishedAgain=prep_publish_plan($pdo,$orgId,prep_plan($pdo,$orgId,(string)$plan['public_id'])??$plan,$userId);
 $stmt->execute([$orgId]);$after=(int)$stmt->fetchColumn();
 pit_assert($before===$after,'Republishing duplicated canonical prep tasks.');
@@ -90,7 +90,8 @@ pit_assert(($route['route']??null)==='api/prep-intelligence-agent.php','Prep his
 $route=gaw_route($routeUser,'Hey Gelato, count inventory');
 pit_assert(($route['route']??null)==='api/operations-agent.php','Generic inventory should remain on the Operations Agent.');
 
-$events=$pdo->prepare('SELECT COUNT(*) FROM prep_plan_events WHERE organization_id=? AND plan_id=?');$events->execute([$orgId,(int)$plan['id']);
+$events=$pdo->prepare('SELECT COUNT(*) FROM prep_plan_events WHERE organization_id=? AND plan_id=?');
+$events->execute([$orgId,(int)$plan['id']]);
 pit_assert((int)$events->fetchColumn()>=4,'Prep plan append-only event history is incomplete.');
 
 $closed=prep_close_plan($pdo,$orgId,prep_plan($pdo,$orgId,(string)$plan['public_id'])??$plan,$userId);
