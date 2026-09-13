@@ -1,0 +1,113 @@
+name: Sales + Demand Intelligence
+
+on:
+  pull_request:
+    paths:
+      - 'sales-intelligence.php'
+      - 'api/sales-import.php'
+      - 'api/sales-intelligence.php'
+      - 'api/sales-agent.php'
+      - 'api/agent-workspace.php'
+      - 'includes/sales-intelligence-core.php'
+      - 'includes/sales-pos-connectors.php'
+      - 'js/sales-intelligence.js'
+      - 'data/sales-import-template.csv'
+      - 'database/20260914_zzzzzzz_sales_demand_intelligence.sql'
+      - 'tests/sales-demand-intelligence-contract.php'
+      - '.github/workflows/sales-demand-intelligence.yml'
+  push:
+    branches: [main]
+
+jobs:
+  sales-demand-intelligence:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - name: Syntax checks
+        run: |
+          php -l sales-intelligence.php
+          php -l api/sales-import.php
+          php -l api/sales-intelligence.php
+          php -l api/sales-agent.php
+          php -l api/agent-workspace.php
+          php -l includes/sales-intelligence-core.php
+          php -l includes/sales-pos-connectors.php
+          php -l tests/sales-demand-intelligence-contract.php
+          node --check js/sales-intelligence.js
+      - name: Architecture and decision-boundary contract
+        run: |
+          test "$(grep -c 'CREATE TABLE IF NOT EXISTS sales_' database/20260914_zzzzzzz_sales_demand_intelligence.sql)" = "8"
+          grep -q "sales.view" database/20260914_zzzzzzz_sales_demand_intelligence.sql
+          grep -q "sales.import" database/20260914_zzzzzzz_sales_demand_intelligence.sql
+          grep -q "sales.agent" database/20260914_zzzzzzz_sales_demand_intelligence.sql
+          grep -q "sales.integrations.manage" database/20260914_zzzzzzz_sales_demand_intelligence.sql
+          grep -q "file_checksum" database/20260914_zzzzzzz_sales_demand_intelligence.sql
+          grep -q "granularity.*daily.*weekly.*monthly\|daily.*weekly.*monthly" includes/sales-intelligence-core.php
+          grep -q "no employee-level scheduling" includes/sales-intelligence-core.php
+          grep -q "api/sales-agent.php" api/agent-workspace.php
+          grep -q "TOAST_CLIENT_SECRET" includes/sales-pos-connectors.php
+          grep -q "credentialsStoredInDatabase.*false" includes/sales-pos-connectors.php
+          grep -q "authentication/v1/authentication/login" includes/sales-pos-connectors.php
+          grep -q "orders/v2/ordersBulk" includes/sales-pos-connectors.php
+          grep -q "app_verify_request_csrf" api/sales-import.php
+          grep -q "15\*1024\*1024" api/sales-import.php
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_restaurant_ai_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->ensureTrackingTables();
+          $s->bootstrapLegacyHistory(null);
+          $s->applyPending(null);
+          if($s->pendingMigrations()) exit(1);
+          PHP
+      - name: Verify schema and permissions
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('sales_integrations','sales_import_batches','sales_import_rows','sales_periods','sales_item_periods','sales_hourly','sales_forecasts','sales_forecast_items');")" = "8"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('sales.view','sales.import','sales.agent','sales.integrations.manage');")" = "4"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260914_zzzzzzz_sales_demand_intelligence';")" = "1"
+      - name: CSV import, demand, labor and forecast contract
+        run: php tests/sales-demand-intelligence-contract.php
+      - name: Existing Prep Intelligence regression
+        run: php tests/prep-inventory-intelligence-contract.php
+      - name: Existing Agent Workspace regression
+        run: php tests/agent-workspace-contract.php
+      - name: Verify upgrader idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->assertAppliedChecksumsUnchanged();
+          if($s->pendingMigrations()) exit(2);
+          if($s->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP
