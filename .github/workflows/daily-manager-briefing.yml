@@ -94,7 +94,7 @@ jobs:
       - name: Sales + Demand regression
         run: php tests/sales-demand-intelligence-contract.php
       - name: Shift Handoff regression
-        run: php tests/employee-shift-communications-contract.php
+        run: php tests/shift-handoff-contract.php
       - name: Agent Workspace regression
         run: php tests/agent-workspace-contract.php
       - name: Verify upgrader idempotence
