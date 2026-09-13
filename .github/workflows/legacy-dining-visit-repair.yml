@@ -1,0 +1,106 @@
+name: Legacy Dining Visit Repair
+
+on:
+  pull_request:
+    paths:
+      - 'database/20260923_legacy_dining_visit_repair.sql'
+      - 'tests/legacy-dining-visit-repair-contract.php'
+      - 'includes/service-visit-core.php'
+      - 'includes/service-visit-extensions.php'
+      - 'includes/service-visit-live.php'
+      - '.github/workflows/legacy-dining-visit-repair.yml'
+  push:
+    branches: [main]
+
+jobs:
+  legacy-dining-visit-repair:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - name: Syntax checks
+        run: |
+          php -l tests/legacy-dining-visit-repair-contract.php
+          php -l includes/service-visit-core.php
+          php -l includes/service-visit-extensions.php
+          php -l includes/service-visit-live.php
+      - name: Repair architecture contract
+        run: |
+          grep -q "event_type='check_split_created'" database/20260923_legacy_dining_visit_repair.sql
+          grep -q 'sourceCheckPublicId' database/20260923_legacy_dining_visit_repair.sql
+          grep -q 'WITH RECURSIVE ancestry' database/20260923_legacy_dining_visit_repair.sql
+          grep -q 'FIND_IN_SET' database/20260923_legacy_dining_visit_repair.sql
+          grep -q "visit_group_id LIKE 'visit-legacy-%'" database/20260923_legacy_dining_visit_repair.sql
+          grep -q 'HAVING COUNT(DISTINCT c.customer_id)=1' database/20260923_legacy_dining_visit_repair.sql
+          ! grep -q 'child.table_id' database/20260923_legacy_dining_visit_repair.sql
+          ! grep -q 'parent.table_id' database/20260923_legacy_dining_visit_repair.sql
+          grep -q 'Unrelated same-table history must not be grouped' tests/legacy-dining-visit-repair-contract.php
+          grep -q 'Legacy repaired table must repoint' tests/legacy-dining-visit-repair-contract.php
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_restaurant_ai_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->ensureTrackingTables();
+          $s->bootstrapLegacyHistory(null);
+          $s->applyPending(null);
+          if($s->pendingMigrations()) exit(1);
+          PHP
+      - name: Verify repair migration registration
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260923_legacy_dining_visit_repair';")" = "1"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='service_check_contexts' AND column_name='visit_group_id';")" = "1"
+      - name: Legacy dining visit repair behavior
+        run: php tests/legacy-dining-visit-repair-contract.php
+      - name: Dining visit lifecycle regression
+        run: php tests/dining-visit-lifecycle-contract.php
+      - name: Table + Host hardening regression
+        run: php tests/table-host-hardening-contract.php
+      - name: Host Stand regression
+        run: php tests/host-stand-contract.php
+      - name: Table Service regression
+        run: php tests/table-service-contract.php
+      - name: Customer CRM regression
+        run: php tests/customer-crm-contract.php
+      - name: Native POS regression
+        run: php tests/native-pos-contract.php
+      - name: Daily Manager regression
+        run: php tests/daily-manager-contract.php
+      - name: Upgrader checksum and idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->assertAppliedChecksumsUnchanged();
+          if($s->pendingMigrations()) exit(2);
+          if($s->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP
