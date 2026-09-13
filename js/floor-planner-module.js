@@ -59,6 +59,7 @@
   function install() {
     installOperationsNav();
     loadScript('js/global-agent.js?v=20260913-1', 'gelato-global-agent');
+    loadScript('js/admin-shell-consolidation.js?v=20260913-1', 'gelato-admin-shell-consolidation');
     loadScript('js/equipment-module.js', 'equipment-module');
     loadScript('js/catering-module.js', 'catering-module');
     loadScript('js/restaurant-agent-bridge.js', 'restaurant-agent-bridge');
