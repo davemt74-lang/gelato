@@ -34,6 +34,7 @@ $t1=table_service_table_save($pdo,$org,$location,['name'=>'T1','sectionPublicId'
 $t2=table_service_table_save($pdo,$org,$location,['name'=>'T2','sectionPublicId'=>$section['publicId'],'capacity'=>4,'shape'=>'square','xPercent'=>45,'yPercent'=>30],$manager);
 $t3=table_service_table_save($pdo,$org,$location,['name'=>'T3','sectionPublicId'=>$section['publicId'],'capacity'=>2,'shape'=>'round','xPercent'=>70,'yPercent'=>30],$manager);
 tsci_assert(count(table_service_map($pdo,$org,$location)['tables'])===3,'Floor map must expose configured tables.');
+$synced=host_sync_all_table_assets($pdo,$org,$location,$manager);tsci_assert($synced===3,'Legacy Table Service fixtures must sync to managed physical assets before modern service operations.');
 
 $check=table_service_seat($pdo,$org,$location,(string)$t1['publicId'],3,null,'Birthday dinner',$manager);$public=(string)$check['publicId'];
 tsci_assert((string)$check['serviceContext']['tablePublicId']===(string)$t1['publicId'],'Seating must attach the canonical POS check to the table.');
