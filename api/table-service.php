@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/table-service-core.php';
+require_once __DIR__.'/../includes/table-service-reconcile.php';
 
 $user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];$uid=(int)$user['id'];$membership=(int)$user['membership_id'];
 $canView=app_has_permission('table_service.view',$user);$canUse=app_has_permission('table_service.use',$user);$canManage=app_has_permission('table_service.manage',$user);
@@ -15,7 +16,7 @@ function table_service_api_location(PDO $pdo,int $org,int $membership,array $inp
 
 try{
     if($_SERVER['REQUEST_METHOD']==='GET'){
-        $locationId=table_service_api_location($pdo,$org,$membership);$checkPublic=trim((string)($_GET['check']??''));
+        $locationId=table_service_api_location($pdo,$org,$membership);table_service_reconcile_closed_checks($pdo,$org,$locationId,$uid);$checkPublic=trim((string)($_GET['check']??''));
         $payload=['ok'=>true,'locationId'=>$locationId,'locations'=>pos_locations($pdo,$org),'map'=>table_service_map($pdo,$org,$locationId),'menu'=>pos_menu($pdo,$org),'openChecks'=>pos_open_checks($pdo,$org,$locationId),'permissions'=>['use'=>$canUse,'manage'=>$canManage]];
         if($checkPublic!=='')$payload['check']=table_service_detail($pdo,$org,$checkPublic);
         app_json_response($payload);
