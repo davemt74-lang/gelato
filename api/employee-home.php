@@ -2,25 +2,28 @@
 declare(strict_types=1);
 require __DIR__.'/../includes/bootstrap.php';
 require __DIR__.'/../includes/employee-home-core.php';
+require __DIR__.'/../includes/employee-shift-communications.php';
 
 $user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];$uid=(int)$user['id'];
 if(!employee_home_ready($pdo))app_json_response(['ok'=>false,'message'=>'Employee Home migration is not installed. Run upgrade.php.'],503);
 function eh_can(array $u,string $p):bool{return app_has_permission($p,$u);}function eh_self_access(array $u):bool{return eh_can($u,'employee.self')||eh_can($u,'schedule.self')||eh_can($u,'timeclock.self')||eh_can($u,'training.self_view')||eh_can($u,'tasks.self')||eh_can($u,'agent.employee_view');}function eh_need(array $u,string $p):void{if(!eh_can($u,$p))app_json_response(['ok'=>false,'message'=>'Permission required: '.$p],403);}function eh_error(Throwable $e):never{$status=$e instanceof InvalidArgumentException?422:($e instanceof RuntimeException?403:500);app_json_response(['ok'=>false,'message'=>$e->getMessage()],$status);}
 $canSelf=eh_self_access($user);$canManage=eh_can($user,'employee.manage')||eh_can($user,'staff.manage');if(!$canSelf&&!$canManage)app_json_response(['ok'=>false,'message'=>'Employee Home permission required.'],403);
+$commsReady=employee_shift_comms_ready($pdo);$canHandoffView=eh_can($user,'employee.handoffs.view')||$canSelf||$canManage;$canHandoffCreate=eh_can($user,'employee.handoffs.create')||$canManage;$canHandoffManage=eh_can($user,'employee.handoffs.manage')||$canManage;
 
 if($_SERVER['REQUEST_METHOD']==='GET'){
     $action=(string)($_GET['action']??'bootstrap');
     if($action==='bootstrap'){
-        if(!$canSelf&&!$canManage)app_json_response(['ok'=>false,'message'=>'Employee self-service permission required.'],403);
         $dashboard=employee_home_dashboard($pdo,$org,$uid);
-        app_json_response(['ok'=>true]+$dashboard+['team'=>$canManage?employee_home_team($pdo,$org):[],'permissions'=>['self'=>$canSelf,'manage'=>$canManage,'announcementsManage'=>eh_can($user,'employee.announcements.manage'),'policiesManage'=>eh_can($user,'employee.policies.manage'),'timeclockSelf'=>eh_can($user,'timeclock.self'),'scheduleSelf'=>eh_can($user,'schedule.self'),'tasksSelf'=>eh_can($user,'tasks.self'),'trainingSelf'=>eh_can($user,'training.self_view')]]);
+        if($commsReady&&$canHandoffView){$dashboard['handoffs']=employee_shift_messages_for_user($pdo,$org,$uid);$dashboard['arrivalBrief']=employee_shift_arrival_brief($pdo,$org,$uid);$dashboard['summary']['unreadHandoffs']=count(array_filter($dashboard['handoffs'],static fn(array $r):bool=>empty($r['read_at'])));}else{$dashboard['handoffs']=[];$dashboard['arrivalBrief']=['active'=>false,'headline'=>'Shift handoff upgrade is pending.','messages'=>[],'announcements'=>[],'tasks'=>[],'summary'=>['unreadHandoffs'=>0,'unreadAnnouncements'=>0,'openTasks'=>0]];$dashboard['summary']['unreadHandoffs']=0;}
+        app_json_response(['ok'=>true]+$dashboard+['team'=>$canManage?employee_home_team($pdo,$org):[],'audiences'=>($commsReady&&$canHandoffManage)?employee_shift_audiences($pdo,$org):['locations'=>[],'positions'=>[],'shifts'=>[],'users'=>[]],'permissions'=>['self'=>$canSelf,'manage'=>$canManage,'announcementsManage'=>eh_can($user,'employee.announcements.manage'),'policiesManage'=>eh_can($user,'employee.policies.manage'),'timeclockSelf'=>eh_can($user,'timeclock.self'),'scheduleSelf'=>eh_can($user,'schedule.self'),'tasksSelf'=>eh_can($user,'tasks.self'),'trainingSelf'=>eh_can($user,'training.self_view'),'handoffsReady'=>$commsReady,'handoffsView'=>$canHandoffView,'handoffsCreate'=>$canHandoffCreate,'handoffsManage'=>$canHandoffManage]]);
     }
     if($action==='team'){if(!$canManage)app_json_response(['ok'=>false,'message'=>'Employee management permission required.'],403);app_json_response(['ok'=>true,'team'=>employee_home_team($pdo,$org)]);}
     if($action==='employee'){
-        if(!$canManage)app_json_response(['ok'=>false,'message'=>'Employee management permission required.'],403);$target=(int)($_GET['userId']??0);if($target<=0)app_json_response(['ok'=>false,'message'=>'Employee is required.'],422);app_json_response(['ok'=>true,'profile'=>employee_home_profile($pdo,$org,$target),'checklist'=>employee_home_checklist($pdo,$org,$target),'training'=>employee_home_training($pdo,$org,$target),'shifts'=>employee_home_shifts($pdo,$org,$target,21),'clock'=>employee_home_clock($pdo,$org,$target)]);
+        if(!$canManage)app_json_response(['ok'=>false,'message'=>'Employee management permission required.'],403);$target=(int)($_GET['userId']??0);if($target<=0)app_json_response(['ok'=>false,'message'=>'Employee is required.'],422);app_json_response(['ok'=>true,'profile'=>employee_home_profile($pdo,$org,$target),'checklist'=>employee_home_checklist($pdo,$org,$target),'training'=>employee_home_training($pdo,$org,$target),'shifts'=>employee_home_shifts($pdo,$org,$target,21),'clock'=>employee_home_clock($pdo,$org,$target),'handoffs'=>$commsReady?employee_shift_messages_for_user($pdo,$org,$target):[]]);
     }
     if($action==='announcements'){if(!$canSelf&&!$canManage)app_json_response(['ok'=>false,'message'=>'Employee access required.'],403);app_json_response(['ok'=>true,'announcements'=>employee_home_announcements($pdo,$org,$uid,$canManage&&eh_can($user,'employee.announcements.manage'))]);}
     if($action==='policies'){if(!$canSelf&&!$canManage)app_json_response(['ok'=>false,'message'=>'Employee access required.'],403);app_json_response(['ok'=>true,'policies'=>employee_home_policies($pdo,$org,$uid,$canManage&&eh_can($user,'employee.policies.manage'))]);}
+    if($action==='handoffs'){if(!$commsReady)app_json_response(['ok'=>false,'message'=>'Shift handoff migration is not installed. Run upgrade.php.'],503);if(!$canHandoffView)app_json_response(['ok'=>false,'message'=>'Shift handoff permission required.'],403);app_json_response(['ok'=>true,'handoffs'=>employee_shift_messages_for_user($pdo,$org,$uid,$canHandoffManage,$canHandoffManage),'arrivalBrief'=>employee_shift_arrival_brief($pdo,$org,$uid)]);}
     app_json_response(['ok'=>false,'message'=>'Unsupported employee action.'],422);
 }
 
@@ -59,6 +62,15 @@ try{
     }
     if($action==='checklist_cancel'){
         if(!$canManage)app_json_response(['ok'=>false,'message'=>'Employee management permission required.'],403);$id=trim((string)($in['id']??''));$q=$pdo->prepare("UPDATE employee_checklist_items SET status='cancelled',updated_at=NOW(6) WHERE organization_id=? AND public_id=? AND archived_at IS NULL");$q->execute([$org,$id]);if($q->rowCount()!==1)throw new InvalidArgumentException('Checklist item not found.');app_audit($pdo,$org,$uid,'employee.checklist_cancelled','employee_checklist',$id);app_json_response(['ok'=>true,'message'=>'Checklist item cancelled.']);
+    }
+    if($action==='handoff_save'){
+        if(!$commsReady)app_json_response(['ok'=>false,'message'=>'Shift handoff migration is not installed. Run upgrade.php.'],503);if(!$canHandoffCreate&&!$canHandoffManage)app_json_response(['ok'=>false,'message'=>'Shift handoff create permission required.'],403);$manager=$canHandoffManage&&!empty($in['managerMode']);$row=employee_shift_message_save($pdo,$org,$in,$uid,$manager);app_audit($pdo,$org,$uid,'employee.handoff_saved','employee_shift_message',(string)$row['public_id'],null,['messageType'=>$row['message_type'],'priority'=>$row['priority'],'managerMode'=>$manager]);app_json_response(['ok'=>true,'handoff'=>$row,'message'=>$row['message_type']==='announcement'?'Targeted shift update posted.':'Shift handoff saved.']);
+    }
+    if($action==='handoff_read'){
+        if(!$commsReady)app_json_response(['ok'=>false,'message'=>'Shift handoff migration is not installed. Run upgrade.php.'],503);if(!$canHandoffView)app_json_response(['ok'=>false,'message'=>'Shift handoff view permission required.'],403);$id=trim((string)($in['id']??''));employee_shift_message_read($pdo,$org,$uid,$id);app_json_response(['ok'=>true,'message'=>'Shift communication marked read.']);
+    }
+    if($action==='handoff_resolve'){
+        if(!$commsReady)app_json_response(['ok'=>false,'message'=>'Shift handoff migration is not installed. Run upgrade.php.'],503);if(!$canHandoffManage)app_json_response(['ok'=>false,'message'=>'Shift handoff management permission required.'],403);$id=trim((string)($in['id']??''));employee_shift_message_resolve($pdo,$org,$id,$uid);app_audit($pdo,$org,$uid,'employee.handoff_resolved','employee_shift_message',$id);app_json_response(['ok'=>true,'message'=>'Shift communication resolved.']);
     }
     app_json_response(['ok'=>false,'message'=>'Unsupported employee action.'],422);
 }catch(Throwable $e){eh_error($e);}
