@@ -3,9 +3,9 @@ declare(strict_types=1);
 
 require_once __DIR__.'/service-seatability.php';
 
-function service_reservation_protection_setup_minutes(): int
+function service_reservation_protection_setup_minutes(?PDO $pdo=null,?int $org=null,?int $locationId=null): int
 {
-    return 10;
+    return table_turn_ready_buffer_minutes($pdo,$org,$locationId);
 }
 
 function service_reservation_protection_grace_minutes(): int
@@ -48,11 +48,11 @@ function service_reservation_protection_next(PDO $pdo,int $org,int $tableId,Date
     ];
 }
 
-function service_reservation_protection_projected_clear(DateTimeImmutable $start,int $partySize): DateTimeImmutable
+function service_reservation_protection_projected_clear(DateTimeImmutable $start,int $partySize,?PDO $pdo=null,?int $org=null,?int $locationId=null): DateTimeImmutable
 {
     return $start
         ->modify('+'.service_reservation_protection_turn_minutes($partySize).' minutes')
-        ->modify('+'.service_seatability_cleanup_minutes().' minutes');
+        ->modify('+'.service_seatability_cleanup_minutes($pdo,$org,$locationId).' minutes');
 }
 
 function service_reservation_protection_assert_window(PDO $pdo,int $org,int $locationId,array $table,int $partySize,DateTimeImmutable $projectedClear): ?array
@@ -62,7 +62,7 @@ function service_reservation_protection_assert_window(PDO $pdo,int $org,int $loc
     if(!$next)return null;
     $tz=service_ops_timezone($pdo,$org,$locationId);
     $reservationAt=new DateTimeImmutable((string)$next['scheduledAt'],$tz);
-    $mustBeReadyBy=$projectedClear->modify('+'.service_reservation_protection_setup_minutes().' minutes');
+    $mustBeReadyBy=$projectedClear->modify('+'.service_reservation_protection_setup_minutes($pdo,$org,$locationId).' minutes');
     if($reservationAt<$mustBeReadyBy){
         throw new InvalidArgumentException((string)$table['name'].' is protected for the '.$reservationAt->format('g:i A').' reservation.');
     }
@@ -74,7 +74,7 @@ function service_reservation_protection_assert_walkin_tables(PDO $pdo,int $org,a
     if((string)$reservation['reservation_type']!=='waitlist')return;
     $locationId=(int)$reservation['location_id'];
     $party=max(1,(int)$reservation['party_size']);
-    $projectedClear=service_reservation_protection_projected_clear(pos_clock($pdo,$org,$locationId),$party);
+    $projectedClear=service_reservation_protection_projected_clear(pos_clock($pdo,$org,$locationId),$party,$pdo,$org,$locationId);
     $ids=array_values(array_unique(array_filter(array_map('strval',$tablePublicIds))));
     foreach($ids as $public){
         $table=service_seatability_assert_now($pdo,$org,$locationId,$public,true);
@@ -87,7 +87,7 @@ function service_reservation_protection_party_seat(PDO $pdo,int $org,int $locati
     return table_service_transaction($pdo,function()use($pdo,$org,$locationId,$tablePublicId,$partySize,$serverUserId,$notes,$userId){
         $table=service_seatability_assert_now($pdo,$org,$locationId,$tablePublicId,true);
         $now=pos_clock($pdo,$org,$locationId);
-        $projectedClear=service_reservation_protection_projected_clear($now,$partySize);
+        $projectedClear=service_reservation_protection_projected_clear($now,$partySize,$pdo,$org,$locationId);
         service_reservation_protection_assert_window($pdo,$org,$locationId,$table,$partySize,$projectedClear);
         return service_visit_seat($pdo,$org,$locationId,$tablePublicId,$partySize,$serverUserId,$notes,$userId);
     });
@@ -104,7 +104,7 @@ function service_reservation_protection_visit_projection(PDO $pdo,int $org,strin
     $party=max(1,(int)($r['guests']??0));
     $tz=service_ops_timezone($pdo,$org,$locationId);
     $start=!empty($r['opened_at'])?new DateTimeImmutable((string)$r['opened_at'],$tz):pos_clock($pdo,$org,$locationId);
-    return ['partySize'=>$party,'projectedClear'=>service_reservation_protection_projected_clear($start,$party)];
+    return ['partySize'=>$party,'projectedClear'=>service_reservation_protection_projected_clear($start,$party,$pdo,$org,$locationId)];
 }
 
 function service_reservation_protection_transfer(PDO $pdo,int $org,string $checkPublicId,string $destinationTablePublicId,int $userId): array
@@ -171,8 +171,8 @@ function service_reservation_protection_dashboard(PDO $pdo,int $org,int $locatio
         if(!$next)continue;
         $table['nextReservationAt']=$next['scheduledAt'];
         $table['nextReservationPublicId']=$next['publicId'];
-        $projectedClear=service_reservation_protection_projected_clear($now,min(2,max(1,(int)$table['capacity'])));
-        $mustBeReadyBy=$projectedClear->modify('+'.service_reservation_protection_setup_minutes().' minutes');
+        $projectedClear=service_reservation_protection_projected_clear($now,min(2,max(1,(int)$table['capacity'])),$pdo,$org,$locationId);
+        $mustBeReadyBy=$projectedClear->modify('+'.service_reservation_protection_setup_minutes($pdo,$org,$locationId).' minutes');
         $reservationAt=new DateTimeImmutable((string)$next['scheduledAt'],$tz);
         if($reservationAt<$mustBeReadyBy){
             $table['reservationProtected']=true;
