@@ -2,7 +2,8 @@
 SET NAMES utf8mb4;
 
 ALTER TABLE wholesale_skus
-  ADD COLUMN content_uom VARCHAR(80) NULL AFTER units_per_sell_uom;
+  ADD COLUMN content_quantity DECIMAL(14,4) NULL AFTER units_per_sell_uom,
+  ADD COLUMN content_uom VARCHAR(80) NULL AFTER content_quantity;
 
 CREATE TABLE IF NOT EXISTS inventory_commitments (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
