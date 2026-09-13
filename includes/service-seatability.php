@@ -114,16 +114,17 @@ function service_seatability_combination_table_ids(PDO $pdo,int $org,int $locati
     return $ids;
 }
 
-function service_seatability_assert_assignment_window(PDO $pdo,int $org,array $reservation,array $tablePublicIds): void
+function service_seatability_assert_assignment_window(PDO $pdo,int $org,array $reservation,array $tablePublicIds,?array $lockedRows=null): void
 {
     $locationId=(int)$reservation['location_id'];
     $ids=array_values(array_unique(array_filter(array_map('strval',$tablePublicIds))));
     if(!$ids)throw new InvalidArgumentException('Choose at least one table.');
-    $locked=service_ops_lock_tables_canonical($pdo,$org,$locationId,$ids);
+    $locked=$lockedRows??service_ops_lock_tables_canonical($pdo,$org,$locationId,$ids);
     $tz=service_ops_timezone($pdo,$org,$locationId);
     $now=pos_clock($pdo,$org,$locationId);
     $scheduled=$reservation['scheduled_at']!==null?new DateTimeImmutable((string)$reservation['scheduled_at'],$tz):null;
     foreach($ids as $public){
+        if(!isset($locked[$public]))throw new RuntimeException('A required table lock was not acquired.');
         $row=$locked[$public];
         if((string)$row['status']!=='active'||empty($row['equipment_asset_id'])||!empty($row['asset_archived_at'])||(string)$row['asset_operational_status']!=='active'||(string)$row['asset_condition_status']==='poor'||(string)$row['state']==='out_of_service')throw new InvalidArgumentException((string)$row['name'].' is not physically available for service.');
         $state=(string)$row['state'];
@@ -162,9 +163,14 @@ function service_seatability_reservation_create(PDO $pdo,int $org,int $locationI
 function service_seatability_reservation_assign(PDO $pdo,int $org,string $reservationPublicId,array $tablePublicIds,int $userId): array
 {
     return host_transaction($pdo,function()use($pdo,$org,$reservationPublicId,$tablePublicIds,$userId){
-        $r=host_reservation_row($pdo,$org,$reservationPublicId,true);
         $ids=array_values(array_unique(array_filter(array_map('strval',$tablePublicIds))));
-        service_seatability_assert_assignment_window($pdo,$org,$r,$ids);
+        if(!$ids)throw new InvalidArgumentException('Choose at least one table.');
+        $peek=host_reservation_row($pdo,$org,$reservationPublicId,false);
+        $locationId=(int)$peek['location_id'];
+        $locked=service_ops_lock_tables_canonical($pdo,$org,$locationId,$ids);
+        $r=host_reservation_row($pdo,$org,$reservationPublicId,true);
+        if((int)$r['location_id']!==$locationId)throw new RuntimeException('Reservation location changed during assignment.');
+        service_seatability_assert_assignment_window($pdo,$org,$r,$ids,$locked);
         return service_ops_reservation_assign_safe($pdo,$org,$reservationPublicId,$ids,$userId);
     });
 }
@@ -172,13 +178,22 @@ function service_seatability_reservation_assign(PDO $pdo,int $org,string $reserv
 function service_seatability_reservation_update(PDO $pdo,int $org,string $reservationPublicId,array $input,int $userId): array
 {
     return host_transaction($pdo,function()use($pdo,$org,$reservationPublicId,$input,$userId){
+        $peek=host_reservation_row($pdo,$org,$reservationPublicId,false);
+        $snapshotTables=host_reservation_tables($pdo,$org,(int)$peek['id']);
+        $scheduledChanged=(string)$peek['reservation_type']==='reservation'&&array_key_exists('scheduledAt',$input);
+        $locked=[];
+        $snapshotIds=array_map('strval',array_column($snapshotTables,'publicId'));
+        if($scheduledChanged&&$snapshotIds)$locked=service_ops_lock_tables_canonical($pdo,$org,(int)$peek['location_id'],$snapshotIds);
+
         $before=host_reservation_row($pdo,$org,$reservationPublicId,true);
-        $tables=host_reservation_tables($pdo,$org,(int)$before['id']);
-        $scheduledChanged=(string)$before['reservation_type']==='reservation'&&array_key_exists('scheduledAt',$input);
+        $currentTables=host_reservation_tables($pdo,$org,(int)$before['id']);
+        $currentIds=array_map('strval',array_column($currentTables,'publicId'));
+        if($scheduledChanged&&$currentIds!==$snapshotIds)throw new InvalidArgumentException('Table assignment changed while updating this reservation. Refresh and try again.');
+
         $updated=service_ops_reservation_update($pdo,$org,$reservationPublicId,$input,$userId);
-        if($scheduledChanged&&$tables){
+        if($scheduledChanged&&$currentTables){
             $after=host_reservation_row($pdo,$org,$reservationPublicId,false);
-            service_seatability_assert_assignment_window($pdo,$org,$after,array_column($tables,'publicId'));
+            service_seatability_assert_assignment_window($pdo,$org,$after,$currentIds,$locked);
         }
         return $updated;
     });
@@ -187,12 +202,17 @@ function service_seatability_reservation_update(PDO $pdo,int $org,string $reserv
 function service_seatability_host_seat(PDO $pdo,int $org,string $reservationPublicId,?int $serverUserId,int $userId): array
 {
     return host_transaction($pdo,function()use($pdo,$org,$reservationPublicId,$serverUserId,$userId){
+        $peek=host_reservation_row($pdo,$org,$reservationPublicId,false);
+        $locationId=(int)$peek['location_id'];
+        $snapshotTables=host_reservation_tables($pdo,$org,(int)$peek['id']);
+        if(!$snapshotTables)throw new InvalidArgumentException('Assign a table before seating this party.');
+        $snapshotIds=array_map('strval',array_column($snapshotTables,'publicId'));
+        $locked=service_ops_lock_tables_canonical($pdo,$org,$locationId,$snapshotIds);
+
         $r=host_reservation_row($pdo,$org,$reservationPublicId,true);
-        $locationId=(int)$r['location_id'];
         $tables=host_reservation_tables($pdo,$org,(int)$r['id']);
-        if(!$tables)throw new InvalidArgumentException('Assign a table before seating this party.');
-        $ids=array_column($tables,'publicId');
-        $locked=service_ops_lock_tables_canonical($pdo,$org,$locationId,$ids);
+        $currentIds=array_map('strval',array_column($tables,'publicId'));
+        if($currentIds!==$snapshotIds)throw new InvalidArgumentException('Table assignment changed while seating this party. Refresh and try again.');
         foreach($tables as $table)service_seatability_validate_locked_now($locked[(string)$table['publicId']]);
         return service_visit_host_seat($pdo,$org,$reservationPublicId,$serverUserId,$userId);
     });
