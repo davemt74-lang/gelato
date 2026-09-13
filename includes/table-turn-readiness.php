@@ -27,7 +27,7 @@ function table_turn_readiness_queue(PDO $pdo,int $org,int $locationId,array $das
         if(!in_array((string)$table['state'],['dirty','cleaning'],true))continue;
         if(empty($table['physicalReady'])||empty($table['managedAsset']))continue;
         $next=service_reservation_protection_next($pdo,$org,(int)$table['id'],$now);
-        $readyBy=null;$minutesToReadyBy=null;$urgency='backlog';$reservationAt=null;
+        $readyBy=null;$minutesToReadyBy=null;$urgency='backlog';
         if($next){
             $reservationAt=new DateTimeImmutable((string)$next['scheduledAt'],$tz);
             $readyBy=$reservationAt->modify('-'.(int)$policy['readyBufferMinutes'].' minutes');
@@ -66,9 +66,9 @@ function table_turn_readiness_queue(PDO $pdo,int $org,int $locationId,array $das
             'recommendedAction'=>(string)$table['state']==='dirty'?'start_cleaning':'mark_ready',
         ];
     }
-    $rank=['overdue'=>0,'urgent'=>1,'scheduled'=>2,'backlog'=>3];
-    usort($queue,static function(array $a,array $b)use($rank):int{
-        $r=($rank[$a['urgency']]??9)<=>($rank[$b['urgency']]??9);if($r!==0)return $r;
+    $priority=['overdue'=>0,'urgent'=>1,'scheduled'=>2,'backlog'=>3];
+    usort($queue,static function(array $a,array $b)use($priority):int{
+        $r=($priority[$a['urgency']]??9)<=>($priority[$b['urgency']]??9);if($r!==0)return $r;
         $aReady=$a['readyBy']??'9999-12-31 23:59:59';$bReady=$b['readyBy']??'9999-12-31 23:59:59';$r=strcmp($aReady,$bReady);if($r!==0)return $r;
         $aDirty=$a['dirtyAt']??'9999-12-31 23:59:59';$bDirty=$b['dirtyAt']??'9999-12-31 23:59:59';$r=strcmp($aDirty,$bDirty);if($r!==0)return $r;
         return $a['tableId']<=>$b['tableId'];
@@ -106,9 +106,8 @@ function table_turn_reset_metrics(PDO $pdo,int $org,int $locationId,string $date
     ];
 }
 
-function table_turn_readiness_dashboard(PDO $pdo,int $org,int $locationId,string $date,int $userId): array
+function table_turn_readiness_enrich_dashboard(PDO $pdo,int $org,int $locationId,string $date,array $dashboard): array
 {
-    $dashboard=service_reservation_protection_dashboard($pdo,$org,$locationId,$date,$userId);
     $policy=table_turn_policy($pdo,$org,$locationId);
     $queue=table_turn_readiness_queue($pdo,$org,$locationId,$dashboard);
     $dashboard['turnPolicy']=$policy;
@@ -116,4 +115,9 @@ function table_turn_readiness_dashboard(PDO $pdo,int $org,int $locationId,string
     $dashboard['resetMetrics']=table_turn_reset_metrics($pdo,$org,$locationId,$date);
     $dashboard['urgentResetCount']=count(array_filter($queue,static fn(array $r):bool=>in_array($r['urgency'],['overdue','urgent'],true)));
     return $dashboard;
+}
+
+function table_turn_readiness_dashboard(PDO $pdo,int $org,int $locationId,string $date,int $userId): array
+{
+    return table_turn_readiness_enrich_dashboard($pdo,$org,$locationId,$date,service_reservation_protection_dashboard($pdo,$org,$locationId,$date,$userId));
 }
