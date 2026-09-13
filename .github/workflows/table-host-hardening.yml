@@ -76,10 +76,10 @@ jobs:
           grep -q 'New dining tables must be created as managed physical assets' api/table-service.php
           grep -q 'service_seatability_availability' api/host-stand.php
           grep -q 'service_reservation_protection_dashboard' api/host-stand.php
-          grep -q 'service_seatability_reservation_create' api/host-stand.php
+          grep -q 'service_reservation_protection_reservation_create' api/host-stand.php
           grep -q 'service_seatability_reservation_update' api/host-stand.php
-          grep -q 'service_seatability_reservation_assign' api/host-stand.php
-          grep -q 'service_seatability_host_seat' api/host-stand.php
+          grep -q 'service_reservation_protection_reservation_assign' api/host-stand.php
+          grep -q 'service_reservation_protection_host_seat' api/host-stand.php
           grep -q 'service_ops_reservation_status_atomic' api/host-stand.php
           grep -q 'service_ops_place_table' api/host-stand.php
           grep -q 'service_visit_reconcile_live' api/host-stand.php
@@ -91,7 +91,11 @@ jobs:
           grep -q 'function service_seatability_reservation_create' includes/service-seatability.php
           grep -q 'function service_seatability_reservation_update' includes/service-seatability.php
           grep -q 'function service_reservation_protection_assert_window' includes/service-reservation-protection.php
+          grep -q 'function service_reservation_protection_assert_walkin_tables' includes/service-reservation-protection.php
           grep -q 'function service_reservation_protection_transfer' includes/service-reservation-protection.php
+          grep -q 'function service_reservation_protection_reservation_create' includes/service-reservation-protection.php
+          grep -q 'function service_reservation_protection_reservation_assign' includes/service-reservation-protection.php
+          grep -q 'function service_reservation_protection_host_seat' includes/service-reservation-protection.php
           grep -q 'function service_reservation_protection_dashboard' includes/service-reservation-protection.php
           grep -q 'function service_ops_business_date' includes/service-ops-hardening.php
           grep -q 'function service_ops_assert_table_operable' includes/service-ops-hardening.php
