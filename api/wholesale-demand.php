@@ -23,8 +23,9 @@ try{
     }
     if($action==='sku_production'){
         $profile=wholesale_demand_save_sku_production($pdo,$org,$input,(int)$user['id']);
-        app_audit($pdo,$org,(int)$user['id'],'wholesale.sku_production_updated','wholesale_sku',(string)$profile['public_id'],null,['recipeYieldPerBatch'=>$profile['recipe_yield_per_batch'],'contentQuantity'=>$profile['content_quantity'],'contentUom'=>$profile['content_uom']]);
-        app_json_response(['ok'=>true,'message'=>'Wholesale SKU production mapping updated.','profile'=>$profile]);
+        $sync=wholesale_demand_sync_organization($pdo,$org,(int)$user['id']);
+        app_audit($pdo,$org,(int)$user['id'],'wholesale.sku_production_updated','wholesale_sku',(string)$profile['public_id'],null,['recipeYieldPerBatch'=>$profile['recipe_yield_per_batch'],'contentQuantity'=>$profile['content_quantity'],'contentUom'=>$profile['content_uom'],'commitmentSync'=>['orders'=>$sync['orders'],'issues'=>count($sync['issues'])]]);
+        app_json_response(['ok'=>true,'message'=>'Wholesale SKU production mapping updated and active commitments recalculated.','profile'=>$profile,'sync'=>$sync]);
     }
 }catch(InvalidArgumentException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);}catch(Throwable $e){app_json_response(['ok'=>false,'message'=>'Wholesale demand update failed.'],500);}
 app_json_response(['ok'=>false,'message'=>'Unsupported wholesale demand action.'],422);
