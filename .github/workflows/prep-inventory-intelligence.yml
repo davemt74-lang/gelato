@@ -1,0 +1,120 @@
+name: Prep + Inventory Intelligence Contract
+
+on:
+  pull_request:
+    paths:
+      - 'prep-intelligence.php'
+      - 'api/prep-intelligence.php'
+      - 'api/prep-intelligence-agent.php'
+      - 'api/proactive-agent.php'
+      - 'includes/prep-intelligence-core.php'
+      - 'includes/agent-workspace-core.php'
+      - 'js/prep-intelligence.js'
+      - 'database/20260913_zzzzzzzz_prep_inventory_intelligence.sql'
+      - 'tests/prep-inventory-intelligence-contract.php'
+      - '.github/workflows/prep-inventory-intelligence.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'prep-intelligence.php'
+      - 'api/prep-intelligence.php'
+      - 'api/prep-intelligence-agent.php'
+      - 'api/proactive-agent.php'
+      - 'includes/prep-intelligence-core.php'
+      - 'includes/agent-workspace-core.php'
+      - 'js/prep-intelligence.js'
+      - 'database/20260913_zzzzzzzz_prep_inventory_intelligence.sql'
+      - 'tests/prep-inventory-intelligence-contract.php'
+      - '.github/workflows/prep-inventory-intelligence.yml'
+
+jobs:
+  prep-inventory-intelligence:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - name: Syntax checks
+        run: |
+          php -l prep-intelligence.php
+          php -l api/prep-intelligence.php
+          php -l api/prep-intelligence-agent.php
+          php -l api/proactive-agent.php
+          php -l includes/prep-intelligence-core.php
+          php -l includes/agent-workspace-core.php
+          php -l tests/prep-inventory-intelligence-contract.php
+          node --check js/prep-intelligence.js
+      - name: Architecture and safety contract
+        run: |
+          grep -q "CREATE TABLE IF NOT EXISTS prep_plans" database/20260913_zzzzzzzz_prep_inventory_intelligence.sql
+          grep -q "CREATE TABLE IF NOT EXISTS prep_recommendations" database/20260913_zzzzzzzz_prep_inventory_intelligence.sql
+          grep -q "CREATE TABLE IF NOT EXISTS prep_plan_tasks" database/20260913_zzzzzzzz_prep_inventory_intelligence.sql
+          grep -q "CREATE TABLE IF NOT EXISTS prep_plan_events" database/20260913_zzzzzzzz_prep_inventory_intelligence.sql
+          grep -q "CREATE TABLE IF NOT EXISTS prep_demand_signals" database/20260913_zzzzzzzz_prep_inventory_intelligence.sql
+          grep -q "CREATE TABLE IF NOT EXISTS inventory_forecasts" database/20260913_zzzzzzzz_prep_inventory_intelligence.sql
+          grep -q "prep.intelligence.view" database/20260913_zzzzzzzz_prep_inventory_intelligence.sql
+          grep -q "prep.intelligence.manage" database/20260913_zzzzzzzz_prep_inventory_intelligence.sql
+          grep -q "prep.intelligence.agent" database/20260913_zzzzzzzz_prep_inventory_intelligence.sql
+          grep -q "inventory.forecast.view" database/20260913_zzzzzzzz_prep_inventory_intelligence.sql
+          grep -q "status='closed'" includes/prep-intelligence-core.php
+          grep -q "sourceType.*prep_plan" includes/prep-intelligence-core.php
+          grep -q "api/prep-intelligence-agent.php" includes/agent-workspace-core.php
+          grep -q "prep.plan_missing" api/proactive-agent.php
+          grep -q "inventory.shortage_forecast" api/proactive-agent.php
+          grep -q "originalTranscript\|transcript" api/prep-intelligence-agent.php
+          grep -q "app_verify_request_csrf" api/prep-intelligence.php
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_restaurant_ai_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->ensureTrackingTables();
+          $s->bootstrapLegacyHistory(null);
+          $s->applyPending(null);
+          if($s->pendingMigrations()) exit(1);
+          PHP
+      - name: Verify schema and permissions
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('prep_plans','prep_recommendations','prep_plan_tasks','prep_plan_events','prep_demand_signals','inventory_forecasts');")" = "6"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('prep.intelligence.view','prep.intelligence.manage','prep.intelligence.agent','inventory.forecast.view');")" = "4"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260913_zzzzzzzz_prep_inventory_intelligence';")" = "1"
+      - name: Historical planning, forecast and publish contract
+        run: php tests/prep-inventory-intelligence-contract.php
+      - name: Verify upgrader idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->assertAppliedChecksumsUnchanged();
+          if($s->pendingMigrations()) exit(2);
+          $r=$s->applyPending(null);
+          if($r) exit(3);
+          echo "idempotent\n";
+          PHP
