@@ -4,6 +4,7 @@ require __DIR__.'/../includes/bootstrap.php';
 require __DIR__.'/../includes/wholesale-commerce.php';
 require __DIR__.'/../includes/wholesale-demand.php';
 require __DIR__.'/../includes/purchasing-orders.php';
+require __DIR__.'/../includes/operations-wholesale.php';
 
 function wdc_assert(bool $ok,string $message):void{if(!$ok)throw new RuntimeException($message);}
 $pdo=app_pdo();
@@ -32,6 +33,10 @@ wholesale_commerce_assign_price_list($pdo,$org,$accountId,$list['public_id'],$ui
 
 $beforeMilk=(float)$pdo->query("SELECT on_hand_quantity FROM inventory_items WHERE id={$milkId}")->fetchColumn();
 $order=wholesale_commerce_create_order($pdo,$org,$account,['items'=>[['skuId'=>$sku['public_id'],'quantity'=>4]],'status'=>'confirmed','fulfillmentType'=>'Delivery','requestedFor'=>date('Y-m-d',strtotime('+2 days'))],$uid);
+$taskCount=operations_sync_wholesale_tasks($pdo,$org,$uid);
+wdc_assert($taskCount===2,'One-item wholesale order should create one production task plus fulfillment.');
+$q=$pdo->prepare("SELECT COUNT(*) FROM inventory_commitments WHERE organization_id=? AND source_parent_public_id=? AND status='active'");$q->execute([$org,$order['publicId']]);
+wdc_assert((int)$q->fetchColumn()===2,'Operations wholesale sync must automatically build ingredient commitments.');
 $sync=wholesale_demand_sync_order($pdo,$org,$order['publicId'],$uid);
 wdc_assert((int)$sync['created']===2,'Confirmed order should create two ingredient commitments.');
 wdc_assert(count($sync['issues'])===0,'Mapped confirmed order should not have commitment issues.');
@@ -52,8 +57,26 @@ wdc_assert(is_array($milkSuggestion),'Purchasing did not consume wholesale commi
 wdc_assert((float)$milkSuggestion['committedQuantity']>17.63,'Purchasing commitment quantity missing.');
 wdc_assert((float)$milkSuggestion['needQuantity']>17.63,'Purchasing should recommend replenishment for committed demand.');
 
+// Explicit sell-unit-per-batch yield must override the 5L content fallback.
+wholesale_demand_save_sku_production($pdo,$org,['skuId'=>$sku['public_id'],'recipeYieldPerBatch'=>4,'recipeYieldUnit'=>'pan','contentQuantity'=>5,'contentUom'=>'l'],$uid);
+operations_sync_wholesale_tasks($pdo,$org,$uid);
+$q=$pdo->prepare("SELECT quantity FROM inventory_commitments WHERE organization_id=? AND source_parent_public_id=? AND inventory_item_id=? AND status='active'");$q->execute([$org,$order['publicId'],$milkId]);
+wdc_assert(abs((float)$q->fetchColumn()-8.81849)<0.002,'Explicit four-pans-per-batch yield should require one batch and 4kg milk.');
+
 $requested=wholesale_commerce_create_order($pdo,$org,$account,['items'=>[['skuId'=>$sku['public_id'],'quantity'=>2]],'status'=>'requested','requestedFor'=>date('Y-m-d',strtotime('+3 days'))],$uid);
-$r=wholesale_demand_sync_order($pdo,$org,$requested['publicId'],$uid);wdc_assert((int)$r['created']===0,'Requested/unconfirmed order must not reserve inventory.');
+operations_sync_wholesale_tasks($pdo,$org,$uid);
+$q=$pdo->prepare("SELECT COUNT(*) FROM inventory_commitments WHERE organization_id=? AND source_parent_public_id=? AND status='active'");$q->execute([$org,$requested['publicId']]);
+wdc_assert((int)$q->fetchColumn()===0,'Requested/unconfirmed order must not reserve inventory.');
+
+// Starting production from Operations converts requested demand into committed demand.
+$q=$pdo->prepare("SELECT id FROM wholesale_orders WHERE organization_id=? AND public_id=?");$q->execute([$org,$requested['publicId']]);$requestedDbId=(int)$q->fetchColumn();
+$q=$pdo->prepare("SELECT * FROM restaurant_tasks WHERE organization_id=? AND source_type='wholesale_order_item' AND source_public_id=? LIMIT 1");$q->execute([$org,'wholesale-order-'.$requestedDbId.'-item-0']);$requestedTask=$q->fetch();
+wdc_assert((bool)$requestedTask,'Requested order production task missing.');
+$requestedTask=operations_task_set_status($pdo,$org,(string)$requestedTask['public_id'],'in_progress',$uid);
+operations_wholesale_task_status_changed($pdo,$org,$requestedTask,'in_progress',$uid);
+$q=$pdo->prepare("SELECT status FROM wholesale_orders WHERE organization_id=? AND public_id=?");$q->execute([$org,$requested['publicId']]);wdc_assert($q->fetchColumn()==='in_production','Operations transition did not move requested order into production.');
+$q=$pdo->prepare("SELECT COUNT(*) FROM inventory_commitments WHERE organization_id=? AND source_parent_public_id=? AND status='active'");$q->execute([$org,$requested['publicId']]);wdc_assert((int)$q->fetchColumn()===2,'Starting production must activate requested-order ingredient commitments.');
+
 $pdo->prepare("UPDATE wholesale_orders SET status='cancelled' WHERE organization_id=? AND public_id=?")->execute([$org,$order['publicId']]);
 $cancel=wholesale_demand_sync_order($pdo,$org,$order['publicId'],$uid);wdc_assert((int)$cancel['created']===0,'Cancelled order must not create commitments.');
 $q=$pdo->prepare("SELECT COUNT(*) FROM inventory_commitments WHERE organization_id=? AND source_parent_public_id=? AND status='active'");$q->execute([$org,$order['publicId']]);wdc_assert((int)$q->fetchColumn()===0,'Cancelled order commitments must be released.');
