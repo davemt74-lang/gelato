@@ -16,8 +16,9 @@ UPDATE service_tables
 SET dirty_at=COALESCE(dirty_at,updated_at)
 WHERE state='dirty';
 
--- Lifecycle timestamps are enforced at the table record so every path that dirties a
--- table (POS close, combined-table reconciliation, manual operations) stays consistent.
+-- Lifecycle timestamps and the Ready transition are enforced at the table record so
+-- every path that dirties a table (POS close, combined-table reconciliation, transfers)
+-- stays consistent. Dirty/Cleaning cannot be released by a raw state flip.
 DROP TRIGGER IF EXISTS trg_service_table_cleaning_update;
 DELIMITER $$
 CREATE TRIGGER trg_service_table_cleaning_update
@@ -40,8 +41,12 @@ BEGIN
   END IF;
 
   IF NEW.state='available' AND OLD.state IN ('dirty','cleaning') THEN
-    SET NEW.ready_at=COALESCE(NEW.ready_at,NOW(6));
-    SET NEW.ready_by=COALESCE(NEW.ready_by,NEW.updated_by);
+    IF OLD.state<>'cleaning' THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Table must enter Cleaning before it can become Available.';
+    END IF;
+    IF NEW.ready_at IS NULL OR NEW.ready_by IS NULL THEN
+      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT='Use Table Ready to release a Cleaning table.';
+    END IF;
   END IF;
 END$$
 DELIMITER ;
