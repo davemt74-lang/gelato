@@ -11,11 +11,12 @@ require_once __DIR__.'/../includes/service-visit-extensions.php';
 require_once __DIR__.'/../includes/service-visit-live.php';
 require_once __DIR__.'/../includes/service-seatability.php';
 require_once __DIR__.'/../includes/service-reservation-protection.php';
+require_once __DIR__.'/../includes/table-cleaning-lifecycle.php';
 
 $user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];$uid=(int)$user['id'];$membership=(int)$user['membership_id'];
 $canView=app_has_permission('table_service.view',$user);$canUse=app_has_permission('table_service.use',$user);$canManage=app_has_permission('table_service.manage',$user);
 if(!$canView)app_json_response(['ok'=>false,'message'=>'Table Service permission required.'],403);
-if(!table_service_ready($pdo)||!service_visit_ready($pdo))app_json_response(['ok'=>false,'message'=>'Table Service dining-visit migration is not installed. Run upgrade.php.'],503);
+if(!table_service_ready($pdo)||!service_visit_ready($pdo)||!table_cleaning_ready($pdo))app_json_response(['ok'=>false,'message'=>'Table Service migrations are not installed. Run upgrade.php.'],503);
 
 function table_service_api_location(PDO $pdo,int $org,int $membership,array $input=[]): int
 {
@@ -41,9 +42,22 @@ try{
         }
     }
     if(!$canUse)app_json_response(['ok'=>false,'message'=>'Table Service operating permission required.'],403);
+    $tablePublic=trim((string)($input['tablePublicId']??''));
+    if($action==='table.cleaning_start'){
+        if($tablePublic==='')throw new InvalidArgumentException('Choose a table to clean.');
+        $table=table_cleaning_start($pdo,$org,$locationId,$tablePublic,$uid);
+        app_audit($pdo,$org,$uid,'table_service.cleaning_started','service_table',$tablePublic,null,['dirtyAt'=>$table['dirty_at']??null]);
+        app_json_response(['ok'=>true,'tablePublicId'=>$tablePublic,'map'=>service_ops_canonical_map($pdo,$org,$locationId)]);
+    }
+    if($action==='table.ready'){
+        if($tablePublic==='')throw new InvalidArgumentException('Choose a table to mark ready.');
+        $table=table_cleaning_mark_ready($pdo,$org,$locationId,$tablePublic,$uid);
+        app_audit($pdo,$org,$uid,'table_service.table_ready','service_table',$tablePublic,null,['readyAt'=>$table['ready_at']??null]);
+        app_json_response(['ok'=>true,'tablePublicId'=>$tablePublic,'map'=>service_ops_canonical_map($pdo,$org,$locationId)]);
+    }
     $checkPublic=trim((string)($input['checkPublicId']??''));
-    if($action==='party.seat'){$check=service_reservation_protection_party_seat($pdo,$org,$locationId,(string)($input['tablePublicId']??''),(int)($input['partySize']??1),isset($input['serverUserId'])&&$input['serverUserId']!==null?(int)$input['serverUserId']:null,(string)($input['notes']??''),$uid);app_audit($pdo,$org,$uid,'table_service.party_seated','pos_check',(string)$check['publicId'],null,['tablePublicId'=>(string)($input['tablePublicId']??''),'partySize'=>(int)($input['partySize']??1)]);app_json_response(['ok'=>true,'check'=>$check,'map'=>service_ops_canonical_map($pdo,$org,$locationId),'openChecks'=>service_visit_open_checks($pdo,$org,$locationId)],201);}
-    if($action==='table.state'){$map=service_ops_table_state($pdo,$org,(string)($input['tablePublicId']??''),(string)($input['state']??''),$uid);app_audit($pdo,$org,$uid,'table_service.table_state','service_table',(string)($input['tablePublicId']??''),null,['state'=>(string)($input['state']??'')]);app_json_response(['ok'=>true,'map'=>service_ops_canonical_map($pdo,$org,$locationId)]);}
+    if($action==='party.seat'){$check=service_reservation_protection_party_seat($pdo,$org,$locationId,$tablePublic,(int)($input['partySize']??1),isset($input['serverUserId'])&&$input['serverUserId']!==null?(int)$input['serverUserId']:null,(string)($input['notes']??''),$uid);app_audit($pdo,$org,$uid,'table_service.party_seated','pos_check',(string)$check['publicId'],null,['tablePublicId'=>$tablePublic,'partySize'=>(int)($input['partySize']??1)]);app_json_response(['ok'=>true,'check'=>$check,'map'=>service_ops_canonical_map($pdo,$org,$locationId),'openChecks'=>service_visit_open_checks($pdo,$org,$locationId)],201);}
+    if($action==='table.state'){$map=service_ops_table_state($pdo,$org,$tablePublic,(string)($input['state']??''),$uid);app_audit($pdo,$org,$uid,'table_service.table_state','service_table',$tablePublic,null,['state'=>(string)($input['state']??'')]);app_json_response(['ok'=>true,'map'=>service_ops_canonical_map($pdo,$org,$locationId)]);}
     if($checkPublic==='')throw new InvalidArgumentException('Choose an open table-service check.');
     if($action==='server.assign'){$check=service_ops_assign_server($pdo,$org,$checkPublic,(int)($input['serverUserId']??0),$uid);app_audit($pdo,$org,$uid,'table_service.server_assigned','pos_check',$checkPublic,null,['serverUserId'=>(int)($input['serverUserId']??0)]);app_json_response(['ok'=>true,'check'=>$check,'map'=>service_ops_canonical_map($pdo,$org,$locationId)]);}
     if($action==='item.course'){$check=table_service_item_course($pdo,$org,$checkPublic,(int)($input['itemId']??0),isset($input['seatNumber'])&&$input['seatNumber']!==''?(int)$input['seatNumber']:null,(string)($input['courseKey']??'mains'),$uid);app_audit($pdo,$org,$uid,'table_service.item_course_updated','pos_check',$checkPublic,null,['itemId'=>(int)($input['itemId']??0),'seatNumber'=>$input['seatNumber']??null,'courseKey'=>(string)($input['courseKey']??'mains')]);app_json_response(['ok'=>true,'check'=>$check]);}

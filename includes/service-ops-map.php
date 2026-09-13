@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__.'/service-ops-floor.php';
 require_once __DIR__.'/table-service-reconcile.php';
+require_once __DIR__.'/table-cleaning-lifecycle.php';
 
 function service_ops_canonical_map(PDO $pdo,int $org,int $locationId,bool $activeOnly=true): array
 {
@@ -18,5 +19,5 @@ function service_ops_canonical_map(PDO $pdo,int $org,int $locationId,bool $activ
         $table['floorPlanId']=$asset['floorPlanId'];
     }unset($table);
     $map['floorPlans']=array_values($plans);
-    return $map;
+    return table_cleaning_enrich_map($pdo,$org,$locationId,$map);
 }

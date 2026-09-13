@@ -3,6 +3,7 @@ declare(strict_types=1);
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/service-ops-map.php';
 require_once __DIR__.'/../includes/service-ops-reservation.php';
+require_once __DIR__.'/../includes/table-cleaning-lifecycle.php';
 
 $pdo=app_pdo();
 function thc(bool $ok,string $message): void {if(!$ok)throw new RuntimeException($message);}
@@ -52,7 +53,10 @@ $source=pos_record_tender($pdo,$org,(string)$source['publicId'],['tenderType'=>'
 $created=pos_record_tender($pdo,$org,(string)$created['publicId'],['tenderType'=>'cash','amount'=>$created['balanceDue'],'tipAmount'=>0,'receivedAmount'=>$created['balanceDue']],$user);
 thc((int)thc_one($pdo,"SELECT covers FROM sales_periods WHERE organization_id=? AND location_key=? AND source_provider='gelato_pos' AND granularity='daily' AND service_period='all' AND period_start=?",[$org,'id:'.$location,$today])===4,'Paid split checks must not double-count covers in Sales Intelligence.');
 
-table_service_reconcile_closed_checks($pdo,$org,$location,$user);$pdo->prepare("UPDATE service_tables SET state='available' WHERE organization_id=? AND public_id=?")->execute([$org,$tableA['publicId']]);
+table_service_reconcile_closed_checks($pdo,$org,$location,$user);
+table_cleaning_start($pdo,$org,$location,(string)$tableA['publicId'],$user);
+table_cleaning_mark_ready($pdo,$org,$location,(string)$tableA['publicId'],$user);
+thc((string)thc_one($pdo,'SELECT state FROM service_tables WHERE organization_id=? AND public_id=?',[$org,$tableA['publicId']])==='available','Split-check table must complete cleaning before it is reused.');
 $current=service_ops_seat($pdo,$org,$location,$tableA['publicId'],2,null,'Current occupancy',$user);
 $future=(new DateTimeImmutable('tomorrow 19:00',service_ops_timezone($pdo,$org,$location)))->format('Y-m-d H:i:s');
 $available=service_ops_availability($pdo,$org,$location,$future,2,90);

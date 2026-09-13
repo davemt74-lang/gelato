@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__.'/service-ops-floor.php';
 require_once __DIR__.'/service-ops-reservation.php';
 require_once __DIR__.'/service-visit-live.php';
+require_once __DIR__.'/table-cleaning-lifecycle.php';
 
 function service_seatability_cleanup_minutes(): int
 {
@@ -13,7 +14,8 @@ function service_seatability_cleanup_minutes(): int
 function service_seatability_state_message(string $state,string $tableName): string
 {
     return match($state){
-        'dirty'=>$tableName.' must be bussed and marked Available before seating.',
+        'dirty'=>$tableName.' must be reset before seating.',
+        'cleaning'=>$tableName.' is being cleaned and is not ready for seating yet.',
         'blocked'=>$tableName.' is blocked and cannot be seated.',
         'out_of_service'=>$tableName.' is out of service.',
         default=>$tableName.' is not in an Available state for seating.',
@@ -44,13 +46,14 @@ function service_seatability_candidate_allowed(PDO $pdo,int $org,int $locationId
     if(in_array($state,['blocked','out_of_service'],true))return false;
     if($row['active_check_id']!==null)return true;
     if($state==='available')return true;
-    if($state==='dirty')return $start >= $now->modify('+'.service_seatability_cleanup_minutes().' minutes');
+    if(in_array($state,['dirty','cleaning'],true))return $start >= $now->modify('+'.service_seatability_cleanup_minutes().' minutes');
     return false;
 }
 
 function service_seatability_dashboard(PDO $pdo,int $org,int $locationId,string $date,int $userId): array
 {
     $dashboard=service_visit_dashboard($pdo,$org,$locationId,$date,$userId);
+    $dashboard=table_cleaning_enrich_map($pdo,$org,$locationId,$dashboard);
     foreach($dashboard['tables'] as &$table){
         $table['reservableNow']=!empty($table['physicalReady'])
             && $table['activeCheckId']===null
@@ -142,8 +145,8 @@ function service_seatability_assert_assignment_window(PDO $pdo,int $org,array $r
             if($scheduled<$projectedClear->modify('+120 minutes'))throw new InvalidArgumentException((string)$row['name'].' is projected to still be occupied at that reservation time.');
             continue;
         }
-        if($state==='dirty'&&$scheduled<$now->modify('+'.service_seatability_cleanup_minutes().' minutes'))throw new InvalidArgumentException((string)$row['name'].' is still inside the table cleanup window for that reservation time.');
-        if(!in_array($state,['available','dirty'],true))throw new InvalidArgumentException(service_seatability_state_message($state,(string)$row['name']));
+        if(in_array($state,['dirty','cleaning'],true)&&$scheduled<$now->modify('+'.service_seatability_cleanup_minutes().' minutes'))throw new InvalidArgumentException((string)$row['name'].' is still inside the table reset window for that reservation time.');
+        if(!in_array($state,['available','dirty','cleaning'],true))throw new InvalidArgumentException(service_seatability_state_message($state,(string)$row['name']));
     }
 }
 

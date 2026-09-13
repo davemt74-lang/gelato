@@ -75,8 +75,9 @@ $dirtyReload=host_reservation_row($pdo,$org,$futureRes['publicId'],false);tsc((s
 $contactEdit=service_seatability_reservation_update($pdo,$org,$futureRes['publicId'],['guestName'=>'Dirty Future Updated'], $user);tsc($contactEdit['guestName']==='Dirty Future Updated','Non-schedule reservation edits must remain allowed while a future table is Dirty.');
 $later=$now->modify('+45 minutes')->format('Y-m-d H:i:s');service_seatability_reservation_update($pdo,$org,$futureRes['publicId'],['scheduledAt'=>$later],$user);$laterReload=host_reservation_row($pdo,$org,$futureRes['publicId'],false);tsc((new DateTimeImmutable((string)$laterReload['scheduled_at']))->format('Y-m-d H:i:s')===$later,'Dirty table reservation may be moved to another time outside the cleanup window.');
 $rejected=false;try{service_seatability_host_seat($pdo,$org,$futureRes['publicId'],null,$user);}catch(InvalidArgumentException){$rejected=true;}tsc($rejected,'Assigned Dirty table must still be Available before actual seating.');
-$pdo->prepare("UPDATE service_tables SET state='available' WHERE organization_id=? AND public_id=?")->execute([$org,$dirty['publicId']]);
+table_cleaning_start($pdo,$org,$location,(string)$dirty['publicId'],$user);
+table_cleaning_mark_ready($pdo,$org,$location,(string)$dirty['publicId'],$user);
 $seated=service_seatability_host_seat($pdo,$org,$futureRes['publicId'],null,$user);
-tsc(($seated['reservation']['status']??null)==='seated','Reservation must seat after the physical table is marked Available.');
+tsc(($seated['reservation']['status']??null)==='seated','Reservation must seat after the table completes Dirty -> Cleaning -> Ready.');
 
 echo "table-seatability-ok\n";

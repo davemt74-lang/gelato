@@ -3,6 +3,7 @@ declare(strict_types=1);
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/host-stand-core.php';
 require_once __DIR__.'/../includes/table-service-reconcile.php';
+require_once __DIR__.'/../includes/table-cleaning-lifecycle.php';
 
 $pdo=app_pdo();
 function hci(bool $ok,string $message): void {if(!$ok)throw new RuntimeException($message);}
@@ -57,7 +58,11 @@ $reconciled=host_reconcile($pdo,$org,$location,$user);hci($reconciled===1,'Host 
 hci((string)hci_one($pdo,'SELECT status FROM guest_reservations WHERE organization_id=? AND public_id=?',[$org,$res['publicId']])==='completed','Paid POS check must complete the reservation.');
 hci((int)hci_one($pdo,"SELECT COUNT(*) FROM service_tables WHERE organization_id=? AND public_id IN (?,?) AND state='dirty' AND active_check_id IS NULL",[$org,$t12['publicId'],$t13['publicId']])===2,'Both combined tables must become dirty after payment.');
 
-$pdo->prepare("UPDATE service_tables SET state='available' WHERE organization_id=? AND public_id IN (?,?)")->execute([$org,$t12['publicId'],$t13['publicId']]);
+foreach([$t12['publicId'],$t13['publicId']] as $tablePublicId){
+    table_cleaning_start($pdo,$org,$location,(string)$tablePublicId,$user);
+    table_cleaning_mark_ready($pdo,$org,$location,(string)$tablePublicId,$user);
+}
+hci((int)hci_one($pdo,"SELECT COUNT(*) FROM service_tables WHERE organization_id=? AND public_id IN (?,?) AND state='available' AND ready_at IS NOT NULL",[$org,$t12['publicId'],$t13['publicId']])===2,'Both combined tables must complete the cleaning lifecycle before returning Available.');
 $t13=host_update_table_asset($pdo,$org,$location,$t13['publicId'],['operationalStatus'=>'out_of_service','conditionStatus'=>'poor','widthInches'=>36,'depthInches'=>36,'heightInches'=>30,'replacementCost'=>180,'assetTag'=>'TABLE-013'],$user);
 hci(!$t13['physicalReady']&&$t13['state']==='out_of_service','Out-of-service/poor physical table must leave reservable capacity.');
 $blocked=false;try{host_reservation_save($pdo,$org,$location,['type'=>'reservation','guestName'=>'Cannot Seat','partySize'=>2,'scheduledAt'=>(new DateTimeImmutable('tomorrow 21:00'))->format('Y-m-d H:i:s'),'tablePublicIds'=>[$t13['publicId']]],$user);}catch(InvalidArgumentException){$blocked=true;}hci($blocked,'Out-of-service table asset must be blocked from reservation assignment.');

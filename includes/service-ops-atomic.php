@@ -41,7 +41,10 @@ function service_ops_assign_server(PDO $pdo,int $org,string $checkPublicId,int $
 
 function service_ops_table_state(PDO $pdo,int $org,string $tablePublicId,string $state,int $userId): array
 {
-    $q=$pdo->prepare('SELECT location_id FROM service_tables WHERE organization_id=? AND public_id=? LIMIT 1');$q->execute([$org,$tablePublicId]);$locationId=(int)$q->fetchColumn();if(!$locationId)throw new InvalidArgumentException('Table was not found.');
+    $q=$pdo->prepare('SELECT location_id,state FROM service_tables WHERE organization_id=? AND public_id=? LIMIT 1');$q->execute([$org,$tablePublicId]);$row=$q->fetch();
+    if(!$row)throw new InvalidArgumentException('Table was not found.');
+    $locationId=(int)$row['location_id'];$current=(string)$row['state'];
+    if($state==='available'&&in_array($current,['dirty','cleaning'],true))throw new InvalidArgumentException('Use the table cleaning workflow and Table Ready before making this table available.');
     if($state==='available')service_ops_assert_table_operable($pdo,$org,$locationId,$tablePublicId,false);
     return table_service_table_state($pdo,$org,$tablePublicId,$state,$userId);
 }
