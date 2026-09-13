@@ -5,6 +5,7 @@ require_once __DIR__.'/../includes/host-stand-core.php';
 require_once __DIR__.'/../includes/table-service-reconcile.php';
 require_once __DIR__.'/../includes/service-ops-hardening.php';
 require_once __DIR__.'/../includes/service-ops-atomic.php';
+require_once __DIR__.'/../includes/service-ops-floor.php';
 
 $user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];$uid=(int)$user['id'];$membership=(int)$user['membership_id'];
 $rawHostView=app_has_permission('host.view',$user);$canUse=app_has_permission('host.use',$user);$canManage=app_has_permission('host.manage',$user);
@@ -36,11 +37,11 @@ try{
     $input=app_json_input();app_verify_request_csrf($input);$action=trim((string)($input['action']??''));$locationId=host_api_location($pdo,$org,$membership,$input);$date=host_api_date($pdo,$org,$locationId,(string)($input['date']??service_ops_business_date($pdo,$org,$locationId)));host_api_reconcile($pdo,$org,$locationId,$uid);
     if(in_array($action,['asset.sync_all','table.create','asset.update','table.place','combination.save'],true)){
         if(!$canManage)app_json_response(['ok'=>false,'message'=>'Host Stand management permission required.'],403);
-        if($action==='asset.sync_all'){$count=host_sync_all_table_assets($pdo,$org,$locationId,$uid);app_audit($pdo,$org,$uid,'host.table_assets_synced','location',(string)$locationId,null,['created'=>$count]);app_json_response(['ok'=>true,'created'=>$count,'dashboard'=>host_dashboard($pdo,$org,$locationId,$date,$uid)]);}
-        if($action==='table.create'){$table=service_ops_managed_table_create($pdo,$org,$locationId,$input,$uid);app_audit($pdo,$org,$uid,'host.managed_table_created','service_table',(string)$table['publicId'],null,['assetId'=>$table['asset']['id'],'capacity'=>$table['capacity']]);app_json_response(['ok'=>true,'table'=>$table,'dashboard'=>host_dashboard($pdo,$org,$locationId,$date,$uid)],201);}
+        if($action==='asset.sync_all'){$count=service_ops_sync_all_table_assets($pdo,$org,$locationId,$uid);app_audit($pdo,$org,$uid,'host.table_assets_synced','location',(string)$locationId,null,['created'=>$count]);app_json_response(['ok'=>true,'created'=>$count,'dashboard'=>host_dashboard($pdo,$org,$locationId,$date,$uid)]);}
+        if($action==='table.create'){$table=service_ops_managed_table_create_safe($pdo,$org,$locationId,$input,$uid);app_audit($pdo,$org,$uid,'host.managed_table_created','service_table',(string)$table['publicId'],null,['assetId'=>$table['asset']['id'],'capacity'=>$table['capacity']]);app_json_response(['ok'=>true,'table'=>$table,'dashboard'=>host_dashboard($pdo,$org,$locationId,$date,$uid)],201);}
         $tablePublic=trim((string)($input['tablePublicId']??''));
         if($action==='asset.update'){$table=host_update_table_asset($pdo,$org,$locationId,$tablePublic,$input,$uid);app_audit($pdo,$org,$uid,'host.table_asset_updated','service_table',$tablePublic,null,['operationalStatus'=>$table['asset']['operationalStatus'],'conditionStatus'=>$table['asset']['conditionStatus']]);app_json_response(['ok'=>true,'table'=>$table,'dashboard'=>host_dashboard($pdo,$org,$locationId,$date,$uid)]);}
-        if($action==='table.place'){$table=host_place_table($pdo,$org,$locationId,$tablePublic,$input,$uid);app_audit($pdo,$org,$uid,'host.table_placed','service_table',$tablePublic,null,['floorPlanId'=>$table['asset']['floorPlanId'],'xFt'=>$table['asset']['xFt'],'yFt'=>$table['asset']['yFt']]);app_json_response(['ok'=>true,'table'=>$table,'dashboard'=>host_dashboard($pdo,$org,$locationId,$date,$uid)]);}
+        if($action==='table.place'){$table=service_ops_place_table($pdo,$org,$locationId,$tablePublic,$input,$uid);app_audit($pdo,$org,$uid,'host.table_placed','service_table',$tablePublic,null,['floorPlanId'=>$table['asset']['floorPlanId'],'xFt'=>$table['asset']['xFt'],'yFt'=>$table['asset']['yFt']]);app_json_response(['ok'=>true,'table'=>$table,'dashboard'=>host_dashboard($pdo,$org,$locationId,$date,$uid)]);}
         if($action==='combination.save'){$combo=host_combination_save($pdo,$org,$locationId,$input,$uid);app_audit($pdo,$org,$uid,'host.table_combination_saved','table_combination',(string)$combo['publicId'],null,['tables'=>array_column($combo['tables'],'publicId'),'capacity'=>$combo['capacity']]);app_json_response(['ok'=>true,'combination'=>$combo,'dashboard'=>host_dashboard($pdo,$org,$locationId,$date,$uid)]);}
     }
     if(!$canUse)app_json_response(['ok'=>false,'message'=>'Host Stand operating permission required.'],403);
