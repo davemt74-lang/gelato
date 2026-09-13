@@ -1,0 +1,116 @@
+name: Global Restaurant Agent Workspace
+
+on:
+  pull_request:
+    paths:
+      - 'agent-canvas.php'
+      - 'api/agent-workspace.php'
+      - 'api/employee-agent.php'
+      - 'includes/agent-workspace-core.php'
+      - 'js/global-agent.js'
+      - 'js/agent-canvas.js'
+      - 'js/auth-guard.js'
+      - 'js/floor-planner-module.js'
+      - 'database/20260913_zzzzzz_agent_workspace.sql'
+      - 'tests/agent-workspace-contract.php'
+      - '.github/workflows/agent-workspace.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'agent-canvas.php'
+      - 'api/agent-workspace.php'
+      - 'api/employee-agent.php'
+      - 'includes/agent-workspace-core.php'
+      - 'js/global-agent.js'
+      - 'js/agent-canvas.js'
+      - 'js/auth-guard.js'
+      - 'js/floor-planner-module.js'
+      - 'database/20260913_zzzzzz_agent_workspace.sql'
+      - 'tests/agent-workspace-contract.php'
+      - '.github/workflows/agent-workspace.yml'
+
+jobs:
+  agent-workspace:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - name: Syntax checks
+        run: |
+          php -l agent-canvas.php
+          php -l api/agent-workspace.php
+          php -l api/employee-agent.php
+          php -l includes/agent-workspace-core.php
+          php -l tests/agent-workspace-contract.php
+          node --check js/global-agent.js
+          node --check js/agent-canvas.js
+          node --check js/auth-guard.js
+          node --check js/floor-planner-module.js
+      - name: Architecture and security contract
+        run: |
+          grep -q "CREATE TABLE IF NOT EXISTS agent_conversations" database/20260913_zzzzzz_agent_workspace.sql
+          grep -q "CREATE TABLE IF NOT EXISTS agent_messages" database/20260913_zzzzzz_agent_workspace.sql
+          grep -q "CREATE TABLE IF NOT EXISTS restaurant_agent_actions" database/20260913_zzzzzz_agent_workspace.sql
+          grep -q "agent.workspace" database/20260913_zzzzzz_agent_workspace.sql
+          grep -q "agent.history_all" database/20260913_zzzzzz_agent_workspace.sql
+          grep -q "organization_id=? AND user_id=?" includes/agent-workspace-core.php
+          grep -q "api/employee-agent.php" includes/agent-workspace-core.php
+          grep -q "api/wholesale-portal-agent.php" includes/agent-workspace-core.php
+          grep -q "api/timeclock-agent.php" includes/agent-workspace-core.php
+          grep -q "api/scheduling-agent.php" includes/agent-workspace-core.php
+          grep -q "api/operations-agent.php" includes/agent-workspace-core.php
+          grep -q "api/catering-agent.php" includes/agent-workspace-core.php
+          grep -q "api/agent-brain.php" includes/agent-workspace-core.php
+          grep -q "app_verify_request_csrf" api/agent-workspace.php
+          grep -q "voice-identity.php" js/global-agent.js
+          grep -q "proactive-agent.php" js/global-agent.js
+          grep -q "Hey Gelato" js/global-agent.js
+          grep -q "agent-canvas.php" js/global-agent.js
+          grep -q "global-agent.js" js/auth-guard.js
+          grep -q "global-agent.js" js/floor-planner-module.js
+          grep -q "data-agent-canvas" agent-canvas.php
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_restaurant_ai_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php'; require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);$s->ensureTrackingTables();$s->bootstrapLegacyHistory(null);$s->applyPending(null);if($s->pendingMigrations())exit(1);
+          PHP
+      - name: Verify schema and permissions
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('agent_conversations','agent_messages','restaurant_agent_actions');")" = "3"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('agent.workspace','agent.history_all');")" = "2"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260913_zzzzzz_agent_workspace';")" = "1"
+      - name: Verify conversation isolation, routing and action receipts
+        run: php tests/agent-workspace-contract.php
+      - name: Verify upgrader idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php'; require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);$s->assertAppliedChecksumsUnchanged();if($s->pendingMigrations())exit(2);$r=$s->applyPending(null);if($r)exit(3);echo "idempotent\n";
+          PHP
