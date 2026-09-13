@@ -8,6 +8,7 @@ require_once __DIR__.'/../includes/service-ops-atomic.php';
 require_once __DIR__.'/../includes/service-ops-map.php';
 require_once __DIR__.'/../includes/service-visit-core.php';
 require_once __DIR__.'/../includes/service-visit-extensions.php';
+require_once __DIR__.'/../includes/service-visit-live.php';
 
 $user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];$uid=(int)$user['id'];$membership=(int)$user['membership_id'];
 $canView=app_has_permission('table_service.view',$user);$canUse=app_has_permission('table_service.use',$user);$canManage=app_has_permission('table_service.manage',$user);
@@ -21,7 +22,7 @@ function table_service_api_location(PDO $pdo,int $org,int $membership,array $inp
 
 try{
     if($_SERVER['REQUEST_METHOD']==='GET'){
-        $locationId=table_service_api_location($pdo,$org,$membership);table_service_reconcile_closed_checks($pdo,$org,$locationId,$uid);$checkPublic=trim((string)($_GET['check']??''));
+        $locationId=table_service_api_location($pdo,$org,$membership);service_visit_reconcile_live($pdo,$org,$locationId,$uid);$checkPublic=trim((string)($_GET['check']??''));
         $payload=['ok'=>true,'locationId'=>$locationId,'locations'=>pos_locations($pdo,$org),'businessDate'=>service_ops_business_date($pdo,$org,$locationId),'map'=>service_ops_canonical_map($pdo,$org,$locationId),'menu'=>pos_menu($pdo,$org),'openChecks'=>service_visit_open_checks($pdo,$org,$locationId),'permissions'=>['use'=>$canUse,'manage'=>$canManage]];
         if($checkPublic!=='')$payload['check']=table_service_detail($pdo,$org,$checkPublic);
         app_json_response($payload);
@@ -47,6 +48,6 @@ try{
     if($action==='course.fire'||$action==='course.hold'){$held=$action==='course.hold';$result=table_service_fire_course($pdo,$org,$checkPublic,(string)($input['courseKey']??'mains'),$uid,$held);app_audit($pdo,$org,$uid,$held?'table_service.course_held':'table_service.course_fired','pos_check',$checkPublic,null,['courseKey'=>(string)($input['courseKey']??'mains')]);app_json_response(['ok'=>true]+$result);}
     if($action==='table.transfer'){$check=service_visit_transfer_safe($pdo,$org,$checkPublic,(string)($input['destinationTablePublicId']??''),$uid);app_audit($pdo,$org,$uid,'table_service.table_transfer','pos_check',$checkPublic,null,['destinationTablePublicId'=>(string)($input['destinationTablePublicId']??'')]);app_json_response(['ok'=>true,'check'=>$check,'map'=>service_ops_canonical_map($pdo,$org,$locationId),'openChecks'=>service_visit_open_checks($pdo,$org,$locationId)]);}
     if($action==='check.split'){$movedGuests=isset($input['movedGuestCount'])&&$input['movedGuestCount']!==''?(int)$input['movedGuestCount']:null;$result=service_visit_split($pdo,$org,$checkPublic,is_array($input['itemIds']??null)?$input['itemIds']:[],$uid,$movedGuests);app_audit($pdo,$org,$uid,'table_service.check_split','pos_check',$checkPublic,null,['createdCheckPublicId'=>$result['created']['publicId'],'itemIds'=>$input['itemIds']??[],'movedGuestCount'=>$result['created']['guestCount']]);app_json_response(['ok'=>true]+$result+['map'=>service_ops_canonical_map($pdo,$org,$locationId),'openChecks'=>service_visit_open_checks($pdo,$org,$locationId)],201);}
-    if($action==='check.merge'){$target=trim((string)($input['targetCheckPublicId']??''));$check=service_visit_merge($pdo,$org,$checkPublic,$target,$uid);app_audit($pdo,$org,$uid,'table_service.check_merged','pos_check',$target,null,['sourceCheckPublicId'=>$checkPublic]);app_json_response(['ok'=>true,'check'=>$check,'map'=>service_ops_canonical_map($pdo,$org,$locationId),'openChecks'=>service_visit_open_checks($pdo,$org,$locationId)]);}
+    if($action==='check.merge'){$target=trim((string)($input['targetCheckPublicId']??''));$check=service_visit_merge_safe($pdo,$org,$checkPublic,$target,$uid);app_audit($pdo,$org,$uid,'table_service.check_merged','pos_check',$target,null,['sourceCheckPublicId'=>$checkPublic]);app_json_response(['ok'=>true,'check'=>$check,'map'=>service_ops_canonical_map($pdo,$org,$locationId),'openChecks'=>service_visit_open_checks($pdo,$org,$locationId)]);}
     app_json_response(['ok'=>false,'message'=>'Unsupported Table Service action.'],422);
 }catch(InvalidArgumentException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);}catch(Throwable $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],500);}
