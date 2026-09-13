@@ -59,7 +59,7 @@ function crm_customer_save(PDO $pdo,int $org,array $input,int $userId,string $so
     $source=in_array($source,['manual','pos','import','web'],true)?$source:'manual';
 
     $existingId=0;
-    if($public!==''){$existing=crm_customer_row($pdo,$org,$public,true);$existingId=(int)$existing['id'];}
+    if($public!==''){$existing=crm_customer_row($pdo,$org,$public);$existingId=(int)$existing['id'];}
     if($email||$phone){
         $clauses=[];$args=[$org];
         if($email){$clauses[]='email_normalized=?';$args[]=$email;}
@@ -82,7 +82,7 @@ function crm_customer_save(PDO $pdo,int $org,array $input,int $userId,string $so
 
 function crm_customer_archive(PDO $pdo,int $org,string $publicId,int $userId): array
 {
-    $c=crm_customer_row($pdo,$org,$publicId,true);
+    $c=crm_customer_row($pdo,$org,$publicId);
     $pdo->prepare("UPDATE crm_customers SET status='archived',updated_by=?,updated_at=NOW(6) WHERE organization_id=? AND id=?")->execute([$userId,$org,(int)$c['id']]);
     return crm_customer_row($pdo,$org,$publicId);
 }
@@ -91,7 +91,14 @@ function crm_search(PDO $pdo,int $org,string $query='',int $limit=50,bool $minim
 {
     $limit=max(1,min(100,$limit));$query=trim($query);$args=[$org];
     $sql="SELECT public_id,display_name,first_name,last_name,email,phone,status,source,created_at,updated_at FROM crm_customers WHERE organization_id=? AND status='active'";
-    if($query!==''){$like='%'.$query.'%';$digits=preg_replace('/\D+/','',$query)??'';$sql.=' AND (display_name LIKE ? OR email_normalized LIKE ? OR phone_normalized LIKE ?)';$args[]=$like;$args[]=mb_strtolower($like,'UTF-8');$args[]='%'.$digits.'%';}
+    if($query!==''){
+        $like='%'.$query.'%';
+        $parts=['display_name LIKE ?','email_normalized LIKE ?'];
+        $args[]=$like;$args[]=mb_strtolower($like,'UTF-8');
+        $digits=preg_replace('/\D+/','',$query)??'';
+        if($digits!==''){$parts[]='phone_normalized LIKE ?';$args[]='%'.$digits.'%';}
+        $sql.=' AND ('.implode(' OR ',$parts).')';
+    }
     $sql.=' ORDER BY updated_at DESC,id DESC LIMIT '.$limit;$q=$pdo->prepare($sql);$q->execute($args);$rows=$q->fetchAll();
     if($minimal)return array_map(static fn(array $r):array=>['publicId'=>(string)$r['public_id'],'displayName'=>(string)$r['display_name'],'email'=>$r['email'],'phone'=>$r['phone']],$rows);
     foreach($rows as &$r){$r['publicId']=$r['public_id'];unset($r['public_id']);}unset($r);return $rows;
@@ -131,7 +138,9 @@ function crm_notes(PDO $pdo,int $org,int $customerId,int $limit=50): array
 
 function crm_tag_slug(string $name): string
 {
-    $slug=mb_strtolower(trim($name),'UTF-8');$slug=preg_replace('/[^a-z0-9]+/u','-',$slug)??'';return trim($slug,'-');
+    $slug=mb_strtolower(trim($name),'UTF-8');
+    $slug=preg_replace('/[^\pL\pN]+/u','-',$slug)??'';
+    return trim($slug,'-');
 }
 function crm_tags(PDO $pdo,int $org,int $customerId): array
 {
