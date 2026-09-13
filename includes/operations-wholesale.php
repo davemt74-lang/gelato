@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/operations-core.php';
 require_once __DIR__ . '/wholesale-portal.php';
+require_once __DIR__ . '/wholesale-demand.php';
 
 function operations_wholesale_ready(PDO $pdo): bool
 {
@@ -133,6 +134,7 @@ function operations_sync_wholesale_tasks(PDO $pdo, int $organizationId, ?int $us
         ]);
         $count++;
     }
+    if(wholesale_demand_ready($pdo))wholesale_demand_sync_organization($pdo,$organizationId,$userId);
     return $count;
 }
 
@@ -165,6 +167,7 @@ function operations_wholesale_task_status_changed(PDO $pdo, int $organizationId,
         $update->execute([$next,$next,$userId,$orderId,$organizationId]);
         if (function_exists('app_audit')) app_audit($pdo,$organizationId,$userId,'wholesale.order_status_from_operations','wholesale_order',(string)$order['public_id'],['status'=>$order['status']],['status'=>$next,'task'=>$task['public_id'] ?? null]);
         wholesale_portal_sync_account_knowledge($pdo,$organizationId,(int)$order['wholesale_account_id'],$userId);
+        if(wholesale_demand_ready($pdo))wholesale_demand_sync_order($pdo,$organizationId,(int)$order['id'],$userId);
     }
     return $next;
 }
