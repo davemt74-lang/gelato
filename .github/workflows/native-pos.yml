@@ -1,0 +1,100 @@
+name: Native Gelato POS
+
+on:
+  pull_request:
+    paths:
+      - 'pos.php'
+      - 'api/pos.php'
+      - 'includes/pos-core.php'
+      - 'js/pos.js'
+      - 'database/20260916_native_pos.sql'
+      - 'tests/native-pos-contract.php'
+      - '.github/workflows/native-pos.yml'
+  push:
+    branches: [main]
+
+jobs:
+  native-pos:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - name: Syntax checks
+        run: |
+          php -l pos.php
+          php -l api/pos.php
+          php -l includes/pos-core.php
+          php -l tests/native-pos-contract.php
+          node --check js/pos.js
+      - name: Architecture and payment-data contract
+        run: |
+          test "$(grep -c 'CREATE TABLE IF NOT EXISTS pos_settings' database/20260916_native_pos.sql)" = "1"
+          test "$(grep -c 'CREATE TABLE IF NOT EXISTS pos_checks' database/20260916_native_pos.sql)" = "1"
+          test "$(grep -c 'CREATE TABLE IF NOT EXISTS pos_check_items' database/20260916_native_pos.sql)" = "1"
+          test "$(grep -c 'CREATE TABLE IF NOT EXISTS pos_tenders' database/20260916_native_pos.sql)" = "1"
+          grep -q "pos.use" database/20260916_native_pos.sql
+          grep -q "source_provider='gelato_pos'" tests/native-pos-contract.php
+          grep -q "menu_item_prices" includes/pos-core.php
+          grep -q "sales_rebuild_all_location_rollups" includes/pos-core.php
+          ! grep -Eiq 'card_number|\bpan\b|\bcvv\b|track_data|magstripe' database/20260916_native_pos.sql
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_restaurant_ai_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->ensureTrackingTables();
+          $s->bootstrapLegacyHistory(null);
+          $s->applyPending(null);
+          if($s->pendingMigrations()) exit(1);
+          PHP
+      - name: Verify schema and permissions
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('pos_settings','pos_checks','pos_check_items','pos_tenders');")" = "4"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('pos.use','pos.discount','pos.void','pos.manage');")" = "4"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260916_native_pos';")" = "1"
+      - name: Native POS behavioral contract
+        run: php tests/native-pos-contract.php
+      - name: Existing Sales + Demand regression
+        run: php tests/sales-demand-intelligence-contract.php
+      - name: Existing Sales Cost + Margin regression
+        run: php tests/sales-cost-margin-contract.php
+      - name: Existing Sales Import Center regression
+        run: php tests/sales-import-center-contract.php
+      - name: Verify upgrader idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->assertAppliedChecksumsUnchanged();
+          if($s->pendingMigrations()) exit(2);
+          if($s->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP
