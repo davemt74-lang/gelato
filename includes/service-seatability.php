@@ -34,7 +34,7 @@ function service_seatability_candidate_allowed(PDO $pdo,int $org,int $locationId
     if(!host_asset_available($row))return false;
     $state=(string)$row['state'];
     if(in_array($state,['blocked','out_of_service'],true))return false;
-    if($row['active_check_id']!==null)return true; // service_ops_availability already enforces projected clear time.
+    if($row['active_check_id']!==null)return true;
     if($state==='available')return true;
     if($state==='dirty')return $start >= $now->modify('+'.service_seatability_cleanup_minutes().' minutes');
     return false;
@@ -89,6 +89,17 @@ function service_seatability_transfer(PDO $pdo,int $org,string $checkPublicId,st
         service_visit_lock_groups($pdo,$org,[$group]);
         service_seatability_assert_now($pdo,$org,(int)$check['location_id'],$destinationTablePublicId,true);
         return service_visit_transfer_safe($pdo,$org,$checkPublicId,$destinationTablePublicId,$userId);
+    });
+}
+
+function service_seatability_reservation_create(PDO $pdo,int $org,int $locationId,array $input,int $userId): array
+{
+    return host_transaction($pdo,function()use($pdo,$org,$locationId,$input,$userId){
+        $tablePublicIds=array_values(array_unique(array_filter(array_map('strval',(array)($input['tablePublicIds']??[])))));
+        unset($input['tablePublicIds']);
+        $reservation=service_ops_reservation_create($pdo,$org,$locationId,$input,$userId);
+        if(!$tablePublicIds)return $reservation;
+        return service_seatability_reservation_assign($pdo,$org,(string)$reservation['publicId'],$tablePublicIds,$userId);
     });
 }
 
