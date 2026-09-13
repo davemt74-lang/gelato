@@ -39,6 +39,11 @@ tcl($dirtyDash!==null&&empty($dirtyDash['reservableNow'])&&!empty($dirtyDash['di
 
 $rejected=false;try{service_ops_table_state($pdo,$org,$table['publicId'],'available',$user);}catch(InvalidArgumentException $e){$rejected=str_contains($e->getMessage(),'Table Ready');}
 tcl($rejected,'Legacy table.state must not bypass Dirty -> Cleaning -> Table Ready lifecycle.');
+$rawRejected=false;try{
+    $pdo->prepare("UPDATE service_tables SET state='available',updated_by=?,updated_at=NOW(6) WHERE organization_id=? AND public_id=?")->execute([$user,$org,$table['publicId']]);
+}catch(PDOException $e){$rawRejected=$e->getCode()==='45000'||str_contains($e->getMessage(),'Cleaning before it can become Available');}
+tcl($rawRejected,'Database trigger must reject a raw Dirty -> Available state bypass.');
+tcl((string)tcl_one($pdo,'SELECT state FROM service_tables WHERE organization_id=? AND public_id=?',[$org,$table['publicId']])==='dirty','Rejected raw bypass must leave the table Dirty.');
 $rejected=false;try{table_cleaning_mark_ready($pdo,$org,$location,$table['publicId'],$user);}catch(InvalidArgumentException){$rejected=true;}
 tcl($rejected,'Dirty table cannot skip directly to Table Ready.');
 
