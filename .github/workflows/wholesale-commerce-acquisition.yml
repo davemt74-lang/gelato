@@ -12,6 +12,7 @@ on:
       - 'api/wholesale-portal.php'
       - 'wholesale-commerce.php'
       - 'wholesale-acquisition.php'
+      - 'wholesale-order-entry.php'
       - 'wholesale-accounts.php'
       - 'wholesale-pipeline.php'
       - 'tests/wholesale-commerce-acquisition-contract.php'
@@ -48,6 +49,7 @@ jobs:
           php -l api/wholesale-portal.php
           php -l wholesale-commerce.php
           php -l wholesale-acquisition.php
+          php -l wholesale-order-entry.php
           php -l wholesale-accounts.php
           php -l wholesale-pipeline.php
           php -l tests/wholesale-commerce-acquisition-contract.php
@@ -62,6 +64,7 @@ jobs:
           grep -q 'wholesale_commerce_resolve_lines' includes/wholesale-commerce.php
           grep -q 'wholesale_commerce_totals' includes/wholesale-commerce.php
           grep -q 'staff_acquisition_worksheet' includes/wholesale-acquisition.php
+          grep -q "action:isQuote?'quote':'order'" wholesale-order-entry.php
           ! grep -q 'CREATE TABLE IF NOT EXISTS wholesale_inventory' database/20260926_wholesale_commerce_acquisition.sql
       - name: Install and upgrade schema
         run: |
