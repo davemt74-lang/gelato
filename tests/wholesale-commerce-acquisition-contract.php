@@ -51,15 +51,34 @@ $accountId=(int)$pdo->lastInsertId();
 $account=wholesale_commerce_account($pdo,$org,$accountId);
 
 $product=wholesale_commerce_save_product($pdo,$org,['name'=>'Pistachio Gelato','category'=>'Gelato','recipeId'=>'recipe-wca-pistachio'],$uid);
+$productAgain=wholesale_commerce_save_product($pdo,$org,['id'=>$product['public_id'],'name'=>'Pistachio Gelato','category'=>'Gelato','recipeId'=>'recipe-wca-pistachio'],$uid);
+wca_assert($productAgain['public_id']===$product['public_id'],'No-op product edit should remain valid.');
+
 $sku=wholesale_commerce_save_sku($pdo,$org,['productId'=>$product['public_id'],'sku'=>'GEL-PIS-5L','name'=>'Pistachio 5L Pan','sellUom'=>'pan','minimumQuantity'=>2,'quantityIncrement'=>1,'recipeYieldPerBatch'=>4,'recipeYieldUnit'=>'pan'],$uid);
+$skuAgain=wholesale_commerce_save_sku($pdo,$org,['id'=>$sku['public_id'],'productId'=>$product['public_id'],'sku'=>'GEL-PIS-5L','name'=>'Pistachio 5L Pan','sellUom'=>'pan','minimumQuantity'=>2,'quantityIncrement'=>1,'recipeYieldPerBatch'=>4,'recipeYieldUnit'=>'pan'],$uid);
+wca_assert($skuAgain['public_id']===$sku['public_id'],'No-op SKU edit should remain valid.');
+
 $list=wholesale_commerce_save_price_list($pdo,$org,['name'=>'CI Wholesale','minimumOrderAmount'=>80,'isDefault'=>true],$uid);
+$listAgain=wholesale_commerce_save_price_list($pdo,$org,['id'=>$list['public_id'],'name'=>'CI Wholesale','minimumOrderAmount'=>80,'isDefault'=>true],$uid);
+wca_assert($listAgain['public_id']===$list['public_id'],'No-op price-list edit should remain valid.');
+
+$badDate=false;
+try{wholesale_commerce_set_price($pdo,$org,['priceListId'=>$list['public_id'],'skuId'=>$sku['public_id'],'unitPrice'=>48,'effectiveFrom'=>'09/01/2026'],$uid);}catch(InvalidArgumentException){$badDate=true;}
+wca_assert($badDate,'Invalid price effective dates must be rejected.');
 wholesale_commerce_set_price($pdo,$org,['priceListId'=>$list['public_id'],'skuId'=>$sku['public_id'],'unitPrice'=>48,'effectiveFrom'=>'2026-09-01'],$uid);
 wholesale_commerce_assign_price_list($pdo,$org,$accountId,$list['public_id'],$uid);
+wholesale_commerce_assign_price_list($pdo,$org,$accountId,$list['public_id'],$uid);
+$q=$pdo->prepare("SELECT COUNT(*) FROM wholesale_account_price_lists WHERE organization_id=? AND wholesale_account_id=? AND effective_until IS NULL");$q->execute([$org,$accountId]);
+wca_assert((int)$q->fetchColumn()===1,'Repeated price-list assignment must be idempotent.');
 
 $catalog=wholesale_commerce_catalog($pdo,$org,$accountId,'2026-09-13');
 wca_assert(count($catalog)===1&&abs((float)$catalog[0]['unitPrice']-48)<.001,'Account catalog did not resolve canonical price.');
 $failed=false;try{wholesale_commerce_resolve_lines($pdo,$org,$accountId,[['skuId'=>$sku['public_id'],'quantity'=>1]],'2026-09-13');}catch(InvalidArgumentException){$failed=true;}
 wca_assert($failed,'MOQ must be enforced server-side.');
+
+$badTax=false;
+try{wholesale_commerce_totals(100,0,31);}catch(InvalidArgumentException){$badTax=true;}
+wca_assert($badTax,'Invalid tax rates must be rejected rather than silently clamped.');
 
 $quote=wholesale_commerce_create_quote($pdo,$org,$account,['items'=>[['skuId'=>$sku['public_id'],'quantity'=>2]],'subtotal'=>1,'total'=>1,'deliveryFee'=>5,'taxRatePercent'=>8.5,'status'=>'sent'],$uid);
 wca_assert(abs((float)$quote['totals']['subtotal']-96)<.001,'Quote trusted caller subtotal instead of canonical pricing.');
@@ -71,6 +90,11 @@ $order=wholesale_commerce_create_order($pdo,$org,$account,['items'=>[['skuId'=>$
 wca_assert(abs((float)$order['totals']['subtotal']-144)<.001,'Order trusted caller subtotal instead of canonical pricing.');
 $q=$pdo->prepare('SELECT COUNT(*) FROM wholesale_order_items WHERE organization_id=? AND wholesale_order_id=?');$q->execute([$org,$order['id']]);wca_assert((int)$q->fetchColumn()===1,'Normalized order line missing.');
 $q=$pdo->prepare('SELECT COUNT(*) FROM wholesale_order_events WHERE organization_id=? AND wholesale_order_id=?');$q->execute([$org,$order['id']]);wca_assert((int)$q->fetchColumn()===1,'Order event missing.');
+
+$pdo->prepare("UPDATE wholesale_accounts SET account_status='on_hold' WHERE id=? AND organization_id=?")->execute([$accountId,$org]);
+$holdBlocked=false;
+try{wholesale_commerce_create_order($pdo,$org,wholesale_commerce_account($pdo,$org,$accountId),['items'=>[['skuId'=>$sku['public_id'],'quantity'=>2]],'deliveryFee'=>0,'taxRatePercent'=>0],$uid);}catch(InvalidArgumentException){$holdBlocked=true;}
+wca_assert($holdBlocked,'On-hold wholesale accounts must not create new orders.');
 
 $pdo->exec("INSERT INTO organizations (name,status,timezone) VALUES ('Other Wholesale CI','active','America/Phoenix')");
 $other=(int)$pdo->lastInsertId();
