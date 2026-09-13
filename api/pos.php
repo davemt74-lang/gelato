@@ -1,0 +1,33 @@
+<?php
+declare(strict_types=1);
+require __DIR__.'/../includes/bootstrap.php';
+require_once __DIR__.'/../includes/pos-core.php';
+
+$user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];$uid=(int)$user['id'];$membership=(int)$user['membership_id'];
+$canUse=app_has_permission('pos.use',$user);$canDiscount=app_has_permission('pos.discount',$user);$canVoid=app_has_permission('pos.void',$user);$canManage=app_has_permission('pos.manage',$user);
+if(!$canUse)app_json_response(['ok'=>false,'message'=>'Native POS permission required.'],403);
+if(!pos_ready($pdo))app_json_response(['ok'=>false,'message'=>'Native POS migration is not installed. Run upgrade.php.'],503);
+
+function pos_api_location(PDO $pdo,int $org,int $membership,array $input=[]): int
+{
+    $id=(int)($input['locationId']??$_GET['locationId']??0);if($id>0){pos_location($pdo,$org,$id);return $id;}$primary=pos_primary_location_id($pdo,$org,$membership);if($primary)return $primary;$locations=pos_locations($pdo,$org);if(!$locations)throw new InvalidArgumentException('Create an active restaurant location before using POS.');return (int)$locations[0]['id'];
+}
+
+try{
+    if($_SERVER['REQUEST_METHOD']==='GET'){
+        $locationId=pos_api_location($pdo,$org,$membership);$public=trim((string)($_GET['check']??''));
+        app_json_response(['ok'=>true,'locationId'=>$locationId,'locations'=>pos_locations($pdo,$org),'settings'=>pos_settings($pdo,$org,$locationId),'menu'=>pos_menu($pdo,$org),'openChecks'=>pos_open_checks($pdo,$org,$locationId),'recentChecks'=>pos_recent_checks($pdo,$org,$locationId),'check'=>$public!==''?pos_check_details($pdo,$org,$public):null,'permissions'=>['discount'=>$canDiscount,'void'=>$canVoid,'manage'=>$canManage]]);
+    }
+    if($_SERVER['REQUEST_METHOD']!=='POST'){header('Allow: GET, POST');app_json_response(['ok'=>false,'message'=>'Method not allowed.'],405);}
+    $input=app_json_input();app_verify_request_csrf($input);$action=(string)($input['action']??'');$public=trim((string)($input['checkPublicId']??''));
+    if($action==='check.create'){$locationId=pos_api_location($pdo,$org,$membership,$input);$check=pos_create_check($pdo,$org,$locationId,$input,$uid);app_audit($pdo,$org,$uid,'pos.check_created','pos_check',$check['publicId'],null,['checkNumber'=>$check['checkNumber'],'locationId'=>$locationId,'serviceMode'=>$check['serviceMode'],'guestCount'=>$check['guestCount']]);app_json_response(['ok'=>true,'check'=>$check,'openChecks'=>pos_open_checks($pdo,$org,$locationId)],201);}
+    if($public==='')throw new InvalidArgumentException('Choose an open POS check.');
+    if($action==='item.add'){$check=pos_add_item($pdo,$org,$public,(int)($input['priceId']??0),(float)($input['quantity']??1),(string)($input['specialInstructions']??''),$uid);app_audit($pdo,$org,$uid,'pos.item_added','pos_check',$public,null,['priceId'=>(int)($input['priceId']??0),'quantity'=>(float)($input['quantity']??1)]);app_json_response(['ok'=>true,'check'=>$check]);}
+    if($action==='item.update'){$check=pos_update_item($pdo,$org,$public,(int)($input['itemId']??0),(float)($input['quantity']??1),(string)($input['specialInstructions']??''));app_audit($pdo,$org,$uid,'pos.item_updated','pos_check',$public,null,['itemId'=>(int)($input['itemId']??0),'quantity'=>(float)($input['quantity']??1)]);app_json_response(['ok'=>true,'check'=>$check]);}
+    if($action==='item.void'){if(!$canVoid)app_json_response(['ok'=>false,'message'=>'POS void permission required.'],403);$reason=(string)($input['reason']??'');$check=pos_void_item($pdo,$org,$public,(int)($input['itemId']??0),$reason,$uid);app_audit($pdo,$org,$uid,'pos.item_voided','pos_check',$public,null,['itemId'=>(int)($input['itemId']??0),'reason'=>mb_substr(trim($reason),0,500,'UTF-8')]);app_json_response(['ok'=>true,'check'=>$check]);}
+    if($action==='discount.set'){if(!$canDiscount)app_json_response(['ok'=>false,'message'=>'POS discount permission required.'],403);$reason=(string)($input['reason']??'');$amount=(float)($input['amount']??0);$check=pos_apply_discount($pdo,$org,$public,$amount,$reason);app_audit($pdo,$org,$uid,'pos.discount_updated','pos_check',$public,null,['amount'=>pos_money($amount),'reason'=>mb_substr(trim($reason),0,500,'UTF-8')]);app_json_response(['ok'=>true,'check'=>$check]);}
+    if($action==='tender.record'){$check=pos_record_tender($pdo,$org,$public,$input,$uid);app_audit($pdo,$org,$uid,'pos.tender_recorded','pos_check',$public,null,['tenderType'=>(string)($input['tenderType']??''),'amount'=>pos_money((float)($input['amount']??0)),'tipAmount'=>pos_money((float)($input['tipAmount']??0)),'checkStatus'=>$check['status']]);app_json_response(['ok'=>true,'check'=>$check,'openChecks'=>pos_open_checks($pdo,$org,(int)$check['locationId']),'recentChecks'=>pos_recent_checks($pdo,$org,(int)$check['locationId'])],201);}
+    if($action==='check.cancel'){if(!$canVoid)app_json_response(['ok'=>false,'message'=>'POS void permission required.'],403);$reason=(string)($input['reason']??'');$check=pos_cancel_check($pdo,$org,$public,$reason,$uid);app_audit($pdo,$org,$uid,'pos.check_cancelled','pos_check',$public,null,['reason'=>mb_substr(trim($reason),0,500,'UTF-8')]);app_json_response(['ok'=>true,'check'=>$check,'openChecks'=>pos_open_checks($pdo,$org,(int)$check['locationId'])]);}
+    if($action==='settings.save'){if(!$canManage)app_json_response(['ok'=>false,'message'=>'POS management permission required.'],403);$locationId=pos_api_location($pdo,$org,$membership,$input);$settings=pos_settings_save($pdo,$org,$locationId,$input,$uid);app_audit($pdo,$org,$uid,'pos.settings_updated','pos_settings',(string)$locationId,null,['taxRate'=>$settings['taxRate'],'serviceChargeRate'=>$settings['serviceChargeRate'],'defaultServiceMode'=>$settings['defaultServiceMode'],'makePrimary'=>!empty($input['makePrimary'])]);app_json_response(['ok'=>true,'settings'=>$settings]);}
+    app_json_response(['ok'=>false,'message'=>'Unsupported POS action.'],422);
+}catch(InvalidArgumentException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);}catch(Throwable $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],500);}
