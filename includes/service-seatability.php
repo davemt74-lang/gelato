@@ -92,11 +92,27 @@ function service_seatability_transfer(PDO $pdo,int $org,string $checkPublicId,st
     });
 }
 
+function service_seatability_combination_table_ids(PDO $pdo,int $org,int $locationId,string $combinationPublicId): array
+{
+    $q=$pdo->prepare("SELECT t.public_id
+        FROM table_combinations c
+        JOIN table_combination_members m ON m.combination_id=c.id
+        JOIN service_tables t ON t.id=m.service_table_id AND t.organization_id=c.organization_id AND t.location_id=c.location_id
+        WHERE c.organization_id=? AND c.location_id=? AND c.public_id=? AND c.status='active'
+        ORDER BY m.is_primary DESC,m.sort_order,t.id");
+    $q->execute([$org,$locationId,$combinationPublicId]);
+    $ids=array_values(array_unique(array_filter(array_map('strval',$q->fetchAll(PDO::FETCH_COLUMN)))));
+    if(!$ids)throw new InvalidArgumentException('Active table combination was not found.');
+    return $ids;
+}
+
 function service_seatability_reservation_create(PDO $pdo,int $org,int $locationId,array $input,int $userId): array
 {
     return host_transaction($pdo,function()use($pdo,$org,$locationId,$input,$userId){
         $tablePublicIds=array_values(array_unique(array_filter(array_map('strval',(array)($input['tablePublicIds']??[])))));
-        unset($input['tablePublicIds']);
+        $combinationPublicId=trim((string)($input['combinationPublicId']??''));
+        if($combinationPublicId!=='')$tablePublicIds=service_seatability_combination_table_ids($pdo,$org,$locationId,$combinationPublicId);
+        unset($input['tablePublicIds'],$input['combinationPublicId']);
         $reservation=service_ops_reservation_create($pdo,$org,$locationId,$input,$userId);
         if(!$tablePublicIds)return $reservation;
         return service_seatability_reservation_assign($pdo,$org,(string)$reservation['publicId'],$tablePublicIds,$userId);
