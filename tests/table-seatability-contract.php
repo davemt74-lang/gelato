@@ -38,4 +38,28 @@ $futureAvailability=service_seatability_availability($pdo,$org,$location,$future
 tsc(tsc_has($futureAvailability,$dirty['publicId']),'Dirty table may be offered for a sufficiently future reservation after cleanup lead time.');
 tsc(!tsc_has($futureAvailability,$blocked['publicId']),'Blocked table must remain unavailable for future reservations.');
 
-echo "table-seatability-part1-ok\n";
+$rejected=false;try{service_seatability_party_seat($pdo,$org,$location,$dirty['publicId'],2,null,'dirty direct seat',$user);}catch(InvalidArgumentException){$rejected=true;}tsc($rejected,'Dirty table must reject immediate direct seating.');
+$rejected=false;try{service_seatability_party_seat($pdo,$org,$location,$blocked['publicId'],2,null,'blocked direct seat',$user);}catch(InvalidArgumentException){$rejected=true;}tsc($rejected,'Blocked table must reject immediate direct seating.');
+
+$check=service_seatability_party_seat($pdo,$org,$location,$source['publicId'],2,null,'transfer source',$user);
+$rejected=false;try{service_seatability_transfer($pdo,$org,(string)$check['publicId'],$dirty['publicId'],$user);}catch(InvalidArgumentException){$rejected=true;}tsc($rejected,'Open visit must not transfer to a Dirty table.');
+$rejected=false;try{service_seatability_transfer($pdo,$org,(string)$check['publicId'],$blocked['publicId'],$user);}catch(InvalidArgumentException){$rejected=true;}tsc($rejected,'Open visit must not transfer to a Blocked table.');
+
+$wait=service_seatability_reservation_create($pdo,$org,$location,['type'=>'waitlist','guestName'=>'Wait Dirty','partySize'=>2],$user);
+$rejected=false;try{service_seatability_reservation_assign($pdo,$org,$wait['publicId'],[$dirty['publicId']],$user);}catch(InvalidArgumentException){$rejected=true;}tsc($rejected,'Active waitlist party must not be assigned to a Dirty table.');
+
+$before=(int)$pdo->query("SELECT COUNT(*) FROM guest_reservations")->fetchColumn();
+$rejected=false;try{service_seatability_reservation_create($pdo,$org,$location,['type'=>'reservation','guestName'=>'Blocked Create','partySize'=>2,'scheduledAt'=>$future,'durationMinutes'=>90,'tablePublicIds'=>[$blocked['publicId']]],$user);}catch(InvalidArgumentException){$rejected=true;}tsc($rejected,'Reservation creation must reject a Blocked table assignment.');
+$after=(int)$pdo->query("SELECT COUNT(*) FROM guest_reservations")->fetchColumn();tsc($after===$before,'Rejected reservation creation with table assignment must roll back atomically.');
+
+$nearRes=service_seatability_reservation_create($pdo,$org,$location,['type'=>'reservation','guestName'=>'Dirty Near','partySize'=>2,'scheduledAt'=>$near,'durationMinutes'=>90],$user);
+$rejected=false;try{service_seatability_reservation_assign($pdo,$org,$nearRes['publicId'],[$dirty['publicId']],$user);}catch(InvalidArgumentException){$rejected=true;}tsc($rejected,'Dirty table must reject reservation assignment inside cleanup window.');
+
+$futureRes=service_seatability_reservation_create($pdo,$org,$location,['type'=>'reservation','guestName'=>'Dirty Future','partySize'=>2,'scheduledAt'=>$future,'durationMinutes'=>90,'tablePublicIds'=>[$dirty['publicId']]],$user);
+tsc(count($futureRes['tables'])===1&&$futureRes['tables'][0]['publicId']===$dirty['publicId'],'Sufficiently future reservation may assign a Dirty table pending cleanup.');
+$rejected=false;try{service_seatability_host_seat($pdo,$org,$futureRes['publicId'],null,$user);}catch(InvalidArgumentException){$rejected=true;}tsc($rejected,'Assigned Dirty table must still be Available before actual seating.');
+$pdo->prepare("UPDATE service_tables SET state='available' WHERE organization_id=? AND public_id=?")->execute([$org,$dirty['publicId']]);
+$seated=service_seatability_host_seat($pdo,$org,$futureRes['publicId'],null,$user);
+tsc(($seated['reservation']['status']??null)==='seated','Reservation must seat after the physical table is marked Available.');
+
+echo "table-seatability-ok\n";
