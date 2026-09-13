@@ -57,11 +57,11 @@ wdc_assert(is_array($milkSuggestion),'Purchasing did not consume wholesale commi
 wdc_assert((float)$milkSuggestion['committedQuantity']>17.63,'Purchasing commitment quantity missing.');
 wdc_assert((float)$milkSuggestion['needQuantity']>17.63,'Purchasing should recommend replenishment for committed demand.');
 
-// Explicit sell-unit-per-batch yield must override the 5L content fallback.
-wholesale_demand_save_sku_production($pdo,$org,['skuId'=>$sku['public_id'],'recipeYieldPerBatch'=>4,'recipeYieldUnit'=>'pan','contentQuantity'=>5,'contentUom'=>'l'],$uid);
+// Explicit 20 L/batch output must override the linked recipe's 10 L/batch fallback.
+wholesale_demand_save_sku_production($pdo,$org,['skuId'=>$sku['public_id'],'recipeYieldPerBatch'=>20,'recipeYieldUnit'=>'l','contentQuantity'=>5,'contentUom'=>'l'],$uid);
 operations_sync_wholesale_tasks($pdo,$org,$uid);
 $q=$pdo->prepare("SELECT quantity FROM inventory_commitments WHERE organization_id=? AND source_parent_public_id=? AND inventory_item_id=? AND status='active'");$q->execute([$org,$order['publicId'],$milkId]);
-wdc_assert(abs((float)$q->fetchColumn()-8.81849)<0.002,'Explicit four-pans-per-batch yield should require one batch and 4kg milk.');
+wdc_assert(abs((float)$q->fetchColumn()-8.81849)<0.002,'20 L/batch with 5L pans should make four pans per batch and require one batch / 4kg milk.');
 
 $requested=wholesale_commerce_create_order($pdo,$org,$account,['items'=>[['skuId'=>$sku['public_id'],'quantity'=>2]],'status'=>'requested','requestedFor'=>date('Y-m-d',strtotime('+3 days'))],$uid);
 operations_sync_wholesale_tasks($pdo,$org,$uid);
