@@ -52,6 +52,15 @@ $before=(int)$pdo->query("SELECT COUNT(*) FROM guest_reservations")->fetchColumn
 $rejected=false;try{service_seatability_reservation_create($pdo,$org,$location,['type'=>'reservation','guestName'=>'Blocked Create','partySize'=>2,'scheduledAt'=>$future,'durationMinutes'=>90,'tablePublicIds'=>[$blocked['publicId']]],$user);}catch(InvalidArgumentException){$rejected=true;}tsc($rejected,'Reservation creation must reject a Blocked table assignment.');
 $after=(int)$pdo->query("SELECT COUNT(*) FROM guest_reservations")->fetchColumn();tsc($after===$before,'Rejected reservation creation with table assignment must roll back atomically.');
 
+$blockedCombo=service_ops_combination_save($pdo,$org,$location,['name'=>'Available plus Blocked','tablePublicIds'=>[$available['publicId'],$blocked['publicId']]],$user);
+$beforeCombo=(int)$pdo->query("SELECT COUNT(*) FROM guest_reservations")->fetchColumn();
+$rejected=false;try{service_seatability_reservation_create($pdo,$org,$location,['type'=>'reservation','guestName'=>'Blocked Combination','partySize'=>6,'scheduledAt'=>$future,'durationMinutes'=>90,'combinationPublicId'=>$blockedCombo['publicId']],$user);}catch(InvalidArgumentException){$rejected=true;}tsc($rejected,'Reservation creation must route a table combination through seatability policy and reject its Blocked member.');
+$afterCombo=(int)$pdo->query("SELECT COUNT(*) FROM guest_reservations")->fetchColumn();tsc($afterCombo===$beforeCombo,'Rejected combination reservation must roll back atomically.');
+$pdo->prepare("UPDATE service_tables SET state='available' WHERE organization_id=? AND public_id=?")->execute([$org,$blocked['publicId']]);
+$validComboReservation=service_seatability_reservation_create($pdo,$org,$location,['type'=>'reservation','guestName'=>'Valid Combination','partySize'=>6,'scheduledAt'=>$future,'durationMinutes'=>90,'combinationPublicId'=>$blockedCombo['publicId']],$user);
+tsc(count($validComboReservation['tables'])===2,'Valid table combination must still attach both member tables through the hardened assignment path.');
+$validComboIds=array_column($validComboReservation['tables'],'publicId');sort($validComboIds);$expectedComboIds=[$available['publicId'],$blocked['publicId']];sort($expectedComboIds);tsc($validComboIds===$expectedComboIds,'Valid combination reservation must preserve the saved member table set.');
+
 $nearRes=service_seatability_reservation_create($pdo,$org,$location,['type'=>'reservation','guestName'=>'Dirty Near','partySize'=>2,'scheduledAt'=>$near,'durationMinutes'=>90],$user);
 $rejected=false;try{service_seatability_reservation_assign($pdo,$org,$nearRes['publicId'],[$dirty['publicId']],$user);}catch(InvalidArgumentException){$rejected=true;}tsc($rejected,'Dirty table must reject reservation assignment inside cleanup window.');
 

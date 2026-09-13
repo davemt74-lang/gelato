@@ -48,7 +48,9 @@ jobs:
           grep -q "state!=='available'" includes/service-seatability.php
           grep -q "in_array(\$state,\['blocked','out_of_service'\]" includes/service-seatability.php
           grep -q 'service_seatability_cleanup_minutes' includes/service-seatability.php
-          grep -q 'unset($input' includes/service-seatability.php
+          grep -q 'function service_seatability_combination_table_ids' includes/service-seatability.php
+          grep -q "unset(\$input\['tablePublicIds'\],\$input\['combinationPublicId'\])" includes/service-seatability.php
+          grep -q 'combinationPublicId' tests/table-seatability-contract.php
       - name: Install and upgrade schema
         run: |
           sudo apt-get update -qq
