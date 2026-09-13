@@ -64,9 +64,19 @@ function service_ops_current_waitlist_conflict(PDO $pdo,int $org,int $tableId,in
 function service_ops_reservation_assign_safe(PDO $pdo,int $org,string $publicId,array $tablePublicIds,int $userId): array
 {
     return host_transaction($pdo,function()use($pdo,$org,$publicId,$tablePublicIds,$userId){
-        $r=host_reservation_row($pdo,$org,$publicId,true);$locationId=(int)$r['location_id'];$ids=array_values(array_unique(array_filter(array_map('strval',$tablePublicIds))));
+        $ids=array_values(array_unique(array_filter(array_map('strval',$tablePublicIds))));
         if(!$ids)throw new InvalidArgumentException('Choose at least one table.');
+
+        // Global concurrency order for reservation/table mutations:
+        // physical table rows -> reservation row -> conflicting reservation rows.
+        // The initial reservation read is intentionally non-locking and is used only
+        // to discover the immutable location needed to acquire the table locks.
+        $peek=host_reservation_row($pdo,$org,$publicId,false);
+        $locationId=(int)$peek['location_id'];
         $locked=service_ops_lock_tables_canonical($pdo,$org,$locationId,$ids);
+        $r=host_reservation_row($pdo,$org,$publicId,true);
+        if((int)$r['location_id']!==$locationId)throw new RuntimeException('Reservation location changed during assignment.');
+
         $tz=service_ops_timezone($pdo,$org,$locationId);$scheduled=$r['scheduled_at']!==null?new DateTimeImmutable((string)$r['scheduled_at'],$tz):null;
         foreach($ids as $public){
             $table=$locked[$public];
