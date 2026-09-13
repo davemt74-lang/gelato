@@ -86,10 +86,10 @@ function wholesale_planning_starter_items(array $input,array $catalog,float $rec
     if($items)return $items;
     $selected=array_values(array_filter(array_unique(array_map('strval',(array)($input['selectedSkuIds']??[]))),static fn($id)=>isset($map[$id])));
     if(!$selected)return [];
-    $base=max(1,(int)ceil($recommendedWeeklyPans/count($selected)));$remaining=max(1,(int)ceil($recommendedWeeklyPans));
+    $remaining=max(1,(int)ceil($recommendedWeeklyPans));
     foreach($selected as $i=>$skuId){
         $sku=$map[$skuId];$slots=count($selected)-$i;$qty=max(1,(int)ceil($remaining/$slots));$remaining=max(0,$remaining-$qty);
-        $min=max((float)($sku['priceMinimumQuantity']??0),(float)($sku['minimumQuantity']??1));$inc=max(.0001,(float)($sku['quantityIncrement']??1));$qty=max($qty,$min);$qty=ceil(($qty-0.0000001)/$inc)*$inc;
+        $min=max((float)($sku['priceMinimumQuantity']??0),(float)($sku['minimumQuantity']??1));$inc=max(.0001,(float)$sku['quantityIncrement']);$qty=max($qty,$min);$qty=ceil(($qty-0.0000001)/$inc)*$inc;
         $items[]=['skuId'=>$skuId,'sku'=>(string)$sku['sku'],'name'=>(string)$sku['name'],'quantity'=>round($qty,4),'sellUom'=>(string)$sku['sellUom'],'unitPrice'=>$sku['unitPrice']!==null?(float)$sku['unitPrice']:null];
     }
     return $items;
@@ -178,7 +178,7 @@ function wholesale_lifecycle_save(PDO $pdo,int $org,string $leadPublic,array $in
     try{
         $q=$pdo->prepare("INSERT INTO wholesale_lifecycle (organization_id,wholesale_lead_id,lifecycle_stage,owner_user_id,next_action,next_action_at,trial_started_at,active_at,recurring_at,paused_at,lost_at,lifecycle_notes,created_by,updated_by) VALUES (?,?,?,?,?,?,IF(?='trial',NOW(6),NULL),IF(?='active',NOW(6),NULL),IF(?='recurring',NOW(6),NULL),IF(?='paused',NOW(6),NULL),IF(?='lost',NOW(6),NULL),?,?,?) ON DUPLICATE KEY UPDATE lifecycle_stage=VALUES(lifecycle_stage),owner_user_id=VALUES(owner_user_id),next_action=VALUES(next_action),next_action_at=VALUES(next_action_at),trial_started_at=IF(VALUES(lifecycle_stage)='trial',COALESCE(trial_started_at,NOW(6)),trial_started_at),active_at=IF(VALUES(lifecycle_stage)='active',COALESCE(active_at,NOW(6)),active_at),recurring_at=IF(VALUES(lifecycle_stage)='recurring',COALESCE(recurring_at,NOW(6)),recurring_at),paused_at=IF(VALUES(lifecycle_stage)='paused',COALESCE(paused_at,NOW(6)),paused_at),lost_at=IF(VALUES(lifecycle_stage)='lost',COALESCE(lost_at,NOW(6)),lost_at),lifecycle_notes=VALUES(lifecycle_notes),updated_by=VALUES(updated_by),updated_at=NOW(6)");
         $q->execute([$org,(int)$lead['id'],$stage,$owner,$next,$nextAt,$stage,$stage,$stage,$stage,$stage,$notes,$userId,$userId]);
-        if($pipeline!==null){$prob=wholesale_acquisition_probability($pipeline);$pdo->prepare("UPDATE wholesale_leads SET pipeline_stage=?,probability_percent=?,assigned_to=?,next_followup_at=?,won_at=IF(?='won',COALESCE(won_at,NOW(6)),won_at),lost_at=IF(?='lost',COALESCE(lost_at,NOW(6)),lost_at),updated_at=NOW(6) WHERE organization_id=? AND id=?")->execute([$pipeline,$prob,$owner,$nextAt,$pipeline,$pipeline,$org,(int)$lead['id']]);}
+        if($pipeline!==null){$prob=wholesale_acquisition_probability($pipeline);$pdo->prepare("UPDATE wholesale_leads SET pipeline_stage=?,probability_percent=?,assigned_to=?,next_followup_at=?,won_at=IF(?='won',COALESCE(won_at,NOW(6)),NULL),lost_at=IF(?='lost',COALESCE(lost_at,NOW(6)),NULL),updated_at=NOW(6) WHERE organization_id=? AND id=?")->execute([$pipeline,$prob,$owner,$nextAt,$pipeline,$pipeline,$org,(int)$lead['id']]);}
         else $pdo->prepare('UPDATE wholesale_leads SET assigned_to=?,next_followup_at=?,updated_at=NOW(6) WHERE organization_id=? AND id=?')->execute([$owner,$nextAt,$org,(int)$lead['id']]);
         if($stage!==$from)$pdo->prepare("INSERT INTO wholesale_lifecycle_events (organization_id,wholesale_lead_id,from_stage,to_stage,event_type,summary,metadata_json,actor_user_id) VALUES (?,?,?,?, 'stage_changed',?,?,?)")->execute([$org,(int)$lead['id'],$from,$stage,'Lifecycle moved from '.$from.' to '.$stage,json_encode(['pipelineStage'=>$pipeline],JSON_THROW_ON_ERROR),$userId]);
         $pdo->prepare("INSERT INTO wholesale_lead_activities (organization_id,wholesale_lead_id,activity_type,summary,details,metadata_json,created_by) VALUES (?,?,'followup',?,?,?,?)")->execute([$org,(int)$lead['id'],'Lifecycle: '.$stage,$next?('Next action: '.$next):null,json_encode(['from'=>$from,'to'=>$stage,'nextActionAt'=>$nextAt],JSON_THROW_ON_ERROR),$userId]);
@@ -211,14 +211,45 @@ function wholesale_planning_detail(PDO $pdo,int $org,string $leadPublic): array
     return ['lead'=>$lead,'settings'=>wholesale_planning_settings($pdo,$org),'worksheet'=>$worksheet,'lifecycle'=>wholesale_lifecycle_get($pdo,$org,$lead),'tastings'=>$tastings,'catalog'=>$catalog,'canCreateOrder'=>!empty($lead['account_id'])&&(string)$lead['account_status']==='active'&&wholesale_commerce_ready($pdo)];
 }
 
+function wholesale_planning_order_result(PDO $pdo,int $org,array $row,bool $alreadyExists): array
+{
+    return [
+        'publicId'=>(string)$row['public_id'],'orderNumber'=>(string)$row['order_number'],'id'=>(int)$row['id'],
+        'totals'=>['subtotal'=>(float)$row['subtotal'],'deliveryFee'=>(float)$row['delivery_fee'],'taxTotal'=>(float)$row['tax_total'],'total'=>(float)$row['total']],
+        'lines'=>wholesale_commerce_order_lines($pdo,$org,(int)$row['id']),'alreadyExists'=>$alreadyExists,
+    ];
+}
+
 function wholesale_planning_create_starter_order(PDO $pdo,int $org,string $leadPublic,int $userId): array
 {
-    $lead=wholesale_planning_lead($pdo,$org,$leadPublic);if(empty($lead['account_id']))throw new InvalidArgumentException('Convert this lead to a Wholesale account before creating a canonical starter order.');if((string)$lead['account_status']!=='active')throw new InvalidArgumentException('The linked Wholesale account is not active.');
-    $q=$pdo->prepare('SELECT starter_order_json FROM wholesale_purchase_worksheets WHERE organization_id=? AND wholesale_lead_id=? LIMIT 1');$q->execute([$org,(int)$lead['id']]);$raw=$q->fetchColumn();$starter=$raw?json_decode((string)$raw,true):[];if(!$starter)throw new InvalidArgumentException('Save a purchasing worksheet with starter items first.');
-    $account=wholesale_commerce_account($pdo,$org,(int)$lead['account_id']);$items=array_map(static fn($row)=>['skuId'=>$row['skuId'],'quantity'=>$row['quantity']],$starter);
-    $result=wholesale_commerce_create_order($pdo,$org,$account,['status'=>'requested','items'=>$items,'fulfillmentType'=>$lead['fulfillment_preference']??null,'internalNotes'=>'Starter order generated from Wholesale Purchasing Worksheet for lead '.$leadPublic.'.'],$userId);
-    wholesale_commerce_order_event($pdo,$org,(int)$result['id'],'worksheet_generated','Starter order generated from purchasing worksheet.',$userId,['leadId'=>$leadPublic]);
-    wholesale_lifecycle_save($pdo,$org,$leadPublic,['lifecycleStage'=>'trial','ownerUserId'=>$lead['assigned_to'],'nextAction'=>'Confirm starter order and launch trial account.','nextActionAt'=>date('Y-m-d\TH:i',strtotime('+2 days'))],$userId);
-    app_audit($pdo,$org,$userId,'wholesale.starter_order_created','wholesale_order',$result['publicId'],null,['leadId'=>$leadPublic,'orderNumber'=>$result['orderNumber'],'total'=>$result['totals']['total']]);
-    return $result;
+    $lead=wholesale_planning_lead($pdo,$org,$leadPublic);
+    if(empty($lead['account_id']))throw new InvalidArgumentException('Convert this lead to a Wholesale account before creating a canonical starter order.');
+    if((string)$lead['account_status']!=='active')throw new InvalidArgumentException('The linked Wholesale account is not active.');
+    $lockKey='gelato:wstarter:'.$org.':'.(int)$lead['id'];$lock=$pdo->prepare('SELECT GET_LOCK(?,5)');$lock->execute([$lockKey]);
+    if((int)$lock->fetchColumn()!==1)throw new RuntimeException('Starter order is being created by another request. Try again.');
+    try{
+        $q=$pdo->prepare('SELECT starter_order_json,starter_order_public_id FROM wholesale_purchase_worksheets WHERE organization_id=? AND wholesale_lead_id=? LIMIT 1');$q->execute([$org,(int)$lead['id']]);$worksheet=$q->fetch();
+        if(!$worksheet)throw new InvalidArgumentException('Save a purchasing worksheet with starter items first.');
+        $starter=json_decode((string)($worksheet['starter_order_json']??'[]'),true)?:[];if(!$starter)throw new InvalidArgumentException('Save a purchasing worksheet with starter items first.');
+        $account=wholesale_commerce_account($pdo,$org,(int)$lead['account_id']);
+        $existingPublic=trim((string)($worksheet['starter_order_public_id']??''));$marker='Starter order generated from Wholesale Purchasing Worksheet for lead '.$leadPublic.'.';
+        $existing=$pdo->prepare('SELECT id,public_id,order_number,subtotal,delivery_fee,tax_total,total FROM wholesale_orders WHERE organization_id=? AND wholesale_account_id=? AND (public_id=? OR internal_notes=?) ORDER BY id DESC LIMIT 1');
+        $existing->execute([$org,(int)$account['id'],$existingPublic,$marker]);$row=$existing->fetch();
+        if($row){
+            if($existingPublic==='')$pdo->prepare('UPDATE wholesale_purchase_worksheets SET starter_order_public_id=?,updated_by=?,updated_at=NOW(6) WHERE organization_id=? AND wholesale_lead_id=?')->execute([$row['public_id'],$userId,$org,(int)$lead['id']]);
+            $result=wholesale_planning_order_result($pdo,$org,$row,true);
+            app_audit($pdo,$org,$userId,'wholesale.starter_order_reused','wholesale_order',$result['publicId'],null,['leadId'=>$leadPublic,'orderNumber'=>$result['orderNumber']]);
+            return $result;
+        }
+        $items=array_map(static fn($row)=>['skuId'=>$row['skuId'],'quantity'=>$row['quantity']],$starter);
+        $result=wholesale_commerce_create_order($pdo,$org,$account,['status'=>'requested','items'=>$items,'fulfillmentType'=>$lead['fulfillment_preference']??null,'internalNotes'=>$marker],$userId);
+        $pdo->prepare('UPDATE wholesale_purchase_worksheets SET starter_order_public_id=?,updated_by=?,updated_at=NOW(6) WHERE organization_id=? AND wholesale_lead_id=?')->execute([$result['publicId'],$userId,$org,(int)$lead['id']]);
+        wholesale_commerce_order_event($pdo,$org,(int)$result['id'],'worksheet_generated','Starter order generated from purchasing worksheet.',$userId,['leadId'=>$leadPublic]);
+        wholesale_lifecycle_save($pdo,$org,$leadPublic,['lifecycleStage'=>'trial','ownerUserId'=>$lead['assigned_to'],'nextAction'=>'Confirm starter order and launch trial account.','nextActionAt'=>date('Y-m-d\TH:i',strtotime('+2 days'))],$userId);
+        app_audit($pdo,$org,$userId,'wholesale.starter_order_created','wholesale_order',$result['publicId'],null,['leadId'=>$leadPublic,'orderNumber'=>$result['orderNumber'],'total'=>$result['totals']['total']]);
+        $result['alreadyExists']=false;
+        return $result;
+    }finally{
+        $release=$pdo->prepare('SELECT RELEASE_LOCK(?)');$release->execute([$lockKey]);
+    }
 }
