@@ -1,0 +1,100 @@
+name: Wholesale Purchasing + Lifecycle
+
+on:
+  pull_request:
+    paths:
+      - 'database/20260928_wholesale_purchasing_lifecycle.sql'
+      - 'includes/wholesale-purchasing-lifecycle.php'
+      - 'api/wholesale-purchasing.php'
+      - 'wholesale-purchasing.php'
+      - 'wholesale-acquisition.php'
+      - 'wholesale-pipeline.php'
+      - 'tests/wholesale-purchasing-lifecycle-contract.php'
+      - '.github/workflows/wholesale-purchasing-lifecycle.yml'
+  push:
+    branches: [main]
+
+jobs:
+  wholesale-purchasing-lifecycle:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - name: Syntax checks
+        run: |
+          php -l includes/wholesale-purchasing-lifecycle.php
+          php -l api/wholesale-purchasing.php
+          php -l wholesale-purchasing.php
+          php -l tests/wholesale-purchasing-lifecycle-contract.php
+      - name: Architecture contract
+        run: |
+          grep -q 'CREATE TABLE IF NOT EXISTS wholesale_purchase_worksheets' database/20260928_wholesale_purchasing_lifecycle.sql
+          grep -q 'CREATE TABLE IF NOT EXISTS wholesale_lifecycle' database/20260928_wholesale_purchasing_lifecycle.sql
+          grep -q 'CREATE TABLE IF NOT EXISTS wholesale_tastings' database/20260928_wholesale_purchasing_lifecycle.sql
+          grep -q 'wholesale_commerce_create_order' includes/wholesale-purchasing-lifecycle.php
+          grep -q "'recurring'=>'won'" includes/wholesale-purchasing-lifecycle.php
+          grep -q 'wholesale_lead_activities' includes/wholesale-purchasing-lifecycle.php
+          ! grep -q 'CREATE TABLE IF NOT EXISTS wholesale_inventory' database/20260928_wholesale_purchasing_lifecycle.sql
+          ! grep -q 'UPDATE inventory_items SET on_hand_quantity' includes/wholesale-purchasing-lifecycle.php
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_restaurant_ai_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->ensureTrackingTables();
+          $s->bootstrapLegacyHistory(null);
+          $s->applyPending(null);
+          if($s->pendingMigrations()) exit(1);
+          PHP
+      - name: Verify lifecycle schema
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('wholesale_planning_settings','wholesale_purchase_worksheets','wholesale_lifecycle','wholesale_lifecycle_events','wholesale_tastings');")" = "5"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260928_wholesale_purchasing_lifecycle';")" = "1"
+      - name: Wholesale purchasing behavior
+        run: php tests/wholesale-purchasing-lifecycle-contract.php
+      - name: W1 commerce + acquisition regression
+        run: php tests/wholesale-commerce-acquisition-contract.php
+      - name: W2 demand commitment regression
+        run: php tests/wholesale-demand-commitments-contract.php
+      - name: Wholesale Operations regression
+        run: php tests/operations-wholesale-contract.php
+      - name: Prep + Inventory regression
+        run: php tests/prep-inventory-intelligence-contract.php
+      - name: Verify upgrader idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->assertAppliedChecksumsUnchanged();
+          if($s->pendingMigrations()) exit(2);
+          if($s->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP
