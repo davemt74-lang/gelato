@@ -26,19 +26,19 @@ $pdo->prepare("INSERT INTO menu_items (organization_id,section_id,name,slug,is_a
 sales_ensure_csv_integration($pdo,$org,$user);
 $csv=tempnam(sys_get_temp_dir(),'gelato-sales-');sdi_assert(is_string($csv),'Temp CSV could not be created.');
 $rows=[
- ['date','period_end','granularity','service_period','row_type','tickets','covers','gross_sales','net_sales','item_id','item_name','category','quantity','item_sales','hour'],
- ['2026-08-29','','daily','all','summary','100','150','3900','3600','','','','','',''],
- ['2026-08-29','','daily','all','item','','','','','MARG','Margherita Pizza','Pizza','30','600',''],
- ['2026-09-05','','daily','all','summary','110','165','4200','3900','','','','','',''],
- ['2026-09-05','','daily','all','item','','','','','MARG','Margherita Pizza','Pizza','34','680',''],
- ['2026-09-12','','daily','all','summary','120','180','4500','4200','','','','','',''],
- ['2026-09-12','','daily','all','item','','','','','MARG','Margherita Pizza','Pizza','38','760',''],
- ['2026-09-19','','daily','all','summary','130','195','4800','4500','','','','','',''],
- ['2026-09-19','','daily','all','item','','','','','MARG','Margherita Pizza','Pizza','42','840',''],
- ['2026-09-19','','daily','dinner','summary','15','20','550','500','','','','','','17'],
- ['2026-09-19','','daily','dinner','summary','20','30','760','700','','','','','','18'],
- ['2026-09-14','2026-09-20','weekly','all','summary','800','1200','30000','28000','','','','','',''],
- ['2026-08','2026-08-31','monthly','all','summary','3400','5100','125000','118000','','','','','',''],
+ ['date','period_end','granularity','service_period','row_type','tickets','covers','gross_sales','net_sales','item_id','item_name','category','quantity','item_sales','hour','customer_email'],
+ ['2026-08-29','','daily','all','summary','100','150','3900','3600','','','','','','','guest@example.test'],
+ ['2026-08-29','','daily','all','item','','','','','MARG','Margherita Pizza','Pizza','30','600','',''],
+ ['2026-09-05','','daily','all','summary','110','165','4200','3900','','','','','','',''],
+ ['2026-09-05','','daily','all','item','','','','','MARG','Margherita Pizza','Pizza','34','680','',''],
+ ['2026-09-12','','daily','all','summary','120','180','4500','4200','','','','','','',''],
+ ['2026-09-12','','daily','all','item','','','','','MARG','Margherita Pizza','Pizza','38','760','',''],
+ ['2026-09-19','','daily','all','summary','130','195','4800','4500','','','','','','',''],
+ ['2026-09-19','','daily','all','item','','','','','MARG','Margherita Pizza','Pizza','42','840','',''],
+ ['2026-09-19','','daily','dinner','summary','15','20','550','500','','','','','','17',''],
+ ['2026-09-19','','daily','dinner','summary','20','30','760','700','','','','','','18',''],
+ ['2026-09-14','2026-09-20','weekly','all','summary','800','1200','30000','28000','','','','','','',''],
+ ['2026-08','2026-08-31','monthly','all','summary','3400','5100','125000','118000','','','','','','',''],
 ];
 $fh=fopen($csv,'wb');sdi_assert((bool)$fh,'Temp CSV could not be opened.');foreach($rows as $r)fputcsv($fh,$r);fclose($fh);
 $import=sales_import_csv($pdo,$org,$user,$csv,'sales-ci.csv',$location,false);sdi_assert($import['accepted']===12,'All twelve sales rows should be accepted.');sdi_assert($import['rejected']===0,'No sales rows should be rejected.');
@@ -47,6 +47,7 @@ sdi_assert(sdi_count($pdo,"SELECT COUNT(*) FROM sales_periods WHERE organization
 sdi_assert(sdi_count($pdo,"SELECT COUNT(*) FROM sales_periods WHERE organization_id=? AND granularity='monthly'",[$org])===1,'Monthly total must remain a monthly record.');
 $q=$pdo->prepare("SELECT net_sales,tickets,covers FROM sales_periods WHERE organization_id=? AND period_start='2026-09-19' AND service_period='dinner'");$q->execute([$org]);$dinner=$q->fetch();sdi_assert(abs((float)$dinner['net_sales']-1200.0)<0.01&&(int)$dinner['tickets']===35&&(int)$dinner['covers']===50,'Hourly dinner rows must aggregate instead of last-row overwrite.');sdi_assert(sdi_count($pdo,"SELECT COUNT(*) FROM sales_hourly WHERE organization_id=? AND business_date='2026-09-19'",[$org])===2,'Two hourly sales rows should be retained.');
 $q=$pdo->prepare("SELECT menu_item_id,quantity FROM sales_item_periods WHERE organization_id=? ORDER BY id LIMIT 1");$q->execute([$org]);$item=$q->fetch();sdi_assert((int)$item['menu_item_id']===$menuItem,'Exact menu-name match should link imported item to canonical menu item.');
+$q=$pdo->prepare("SELECT raw_json FROM sales_import_rows WHERE organization_id=? AND import_batch_id=(SELECT id FROM sales_import_batches WHERE organization_id=? AND public_id=?) ORDER BY row_number LIMIT 1");$q->execute([$org,$org,$import['publicId']]);$raw=(string)$q->fetchColumn();sdi_assert(!str_contains($raw,'customer_email')&&!str_contains($raw,'guest@example.test'),'Unknown POS/customer columns must not be persisted in sales row audit data.');
 $duplicateBlocked=false;try{sales_import_csv($pdo,$org,$user,$csv,'sales-ci.csv',$location,false);}catch(InvalidArgumentException){$duplicateBlocked=true;}sdi_assert($duplicateBlocked,'Exact duplicate CSV import must be blocked by checksum.');
 
 $historyDates=['2026-08-29','2026-09-05','2026-09-12','2026-09-19'];
@@ -57,6 +58,8 @@ sdi_assert(count($forecast['items'])>=1,'Item mix forecast should be generated f
 sdi_assert(sdi_count($pdo,"SELECT COUNT(*) FROM prep_demand_signals WHERE organization_id=? AND source_type='sales_forecast' AND source_public_id=?",[$org,$f['public_id']])>=2,'Sales forecast should feed covers/item demand context into Prep Intelligence.');
 
 $dash=sales_dashboard($pdo,$org,'2026-08-29','2026-09-19',$location);sdi_assert(abs((float)$dash['totals']['netSales']-16200.0)<0.01,'Dashboard daily net sales total is incorrect.');sdi_assert(abs((float)$dash['totals']['actualLaborHours']-32.0)<0.01,'Dashboard should calculate 32 actual labor hours.');sdi_assert(abs((float)$dash['totals']['actualLaborCost']-640.0)<0.01,'Dashboard labor cost should use staff hourly labor cost.');sdi_assert(abs((float)$dash['totals']['laborPercent']-3.95)<0.1,'Labor percent calculation is incorrect.');
+
+$primaryBlocked=false;try{sales_integration_save($pdo,$org,['provider'=>'toast','displayName'=>'Toast','restaurantExternalId'=>'ci-guid','isPrimary'=>true],$user);}catch(InvalidArgumentException){$primaryBlocked=true;}sdi_assert($primaryBlocked,'Unsynced POS providers must not replace the canonical CSV source.');sdi_assert(sales_primary_provider($pdo,$org)==='csv','CSV must remain canonical until a provider has successfully synced sales into the ledger.');
 
 $pdo->prepare("INSERT INTO organizations (name,status,timezone) VALUES (?,'active','America/Phoenix')")->execute(['Sales Isolation '.$slug]);$otherOrg=(int)$pdo->lastInsertId();$other=sales_dashboard($pdo,$otherOrg,'2026-08-01','2026-09-30',null);sdi_assert((float)$other['totals']['netSales']===0.0,'Cross-organization sales data leaked.');
 
