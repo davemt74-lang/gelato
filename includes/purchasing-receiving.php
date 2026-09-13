@@ -1,0 +1,28 @@
+<?php
+declare(strict_types=1);
+require_once __DIR__.'/purchasing-orders.php';
+
+function purchasing_receive(PDO $pdo,int $org,string $publicId,array $lines,int $uid,string $invoice='',string $notes=''):array{
+    $po=purchasing_order($pdo,$org,$publicId);if(!$po)throw new RuntimeException('Purchase order not found.');if(!in_array($po['status'],['submitted','partially_received'],true))throw new InvalidArgumentException('Only submitted purchase orders can be received.');if(!$lines)throw new InvalidArgumentException('Select at least one quantity to receive.');
+    $pdo->beginTransaction();
+    try{
+        $receiptPublic=purchasing_public_id('receipt');$receiptNumber='RCV-'.date('ymd').'-'.strtoupper(substr(bin2hex(random_bytes(4)),0,6));
+        $pdo->prepare('INSERT INTO goods_receipts (organization_id,purchase_order_id,vendor_id,public_id,receipt_number,received_by,vendor_invoice_number,notes) VALUES (?,?,?,?,?,?,?,?)')->execute([$org,(int)$po['id'],(int)$po['vendor_id'],$receiptPublic,$receiptNumber,$uid,$invoice?:null,$notes?:null]);$receiptId=(int)$pdo->lastInsertId();
+        $load=$pdo->prepare('SELECT * FROM purchase_order_items WHERE organization_id=? AND purchase_order_id=? AND public_id=? FOR UPDATE');$posted=0;
+        foreach($lines as $line){$qty=(float)($line['quantity']??0);if($qty<=0)continue;$load->execute([$org,(int)$po['id'],(string)($line['itemId']??'')]);$poi=$load->fetch();if(!$poi)throw new InvalidArgumentException('Purchase-order item not found.');$outstanding=max(0,(float)$poi['ordered_base_quantity']-(float)$poi['received_base_quantity']);if($qty>$outstanding+0.0001)throw new InvalidArgumentException('Received quantity exceeds the outstanding purchase-order quantity.');
+            $actual=isset($line['actualPricePerPack'])&&$line['actualPricePerPack']!==''?(float)$line['actualPricePerPack']:($poi['price_per_pack']!==null?(float)$poi['price_per_pack']:null);$damaged=max(0,(float)($line['damagedQuantity']??0));$missing=max(0,(float)($line['missingQuantity']??0));
+            $pdo->prepare('INSERT INTO goods_receipt_items (organization_id,goods_receipt_id,purchase_order_item_id,inventory_item_id,public_id,received_base_quantity,unit,actual_price_per_pack,damaged_quantity,missing_quantity,lot_code,expires_on,notes) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)')->execute([$org,$receiptId,(int)$poi['id'],(int)$poi['inventory_item_id'],purchasing_public_id('rcvi'),$qty,$poi['unit'],$actual,$damaged,$missing,trim((string)($line['lotCode']??''))?:null,trim((string)($line['expiresOn']??''))?:null,trim((string)($line['notes']??''))?:null]);
+            $inv=$pdo->prepare('SELECT * FROM inventory_items WHERE organization_id=? AND id=? FOR UPDATE');$inv->execute([$org,(int)$poi['inventory_item_id']]);$item=$inv->fetch();if(!$item)throw new RuntimeException('Inventory item is unavailable.');$new=(float)$item['on_hand_quantity']+$qty;
+            $pdo->prepare('UPDATE inventory_items SET on_hand_quantity=?,updated_by=?,updated_at=NOW(6) WHERE organization_id=? AND id=?')->execute([$new,$uid,$org,(int)$item['id']]);
+            $pdo->prepare('INSERT INTO inventory_transactions (organization_id,inventory_item_id,transaction_type,quantity_delta,resulting_quantity,unit,note,source_type,source_public_id,created_by) VALUES (?,?,?,?,?,?,?,?,?,?)')->execute([$org,(int)$item['id'],'receive',$qty,$new,$poi['unit'],'Received on '.$po['order_number'],'purchase_order',$po['public_id'],$uid]);
+            $pdo->prepare('UPDATE purchase_order_items SET received_base_quantity=received_base_quantity+?,updated_at=NOW(6) WHERE id=?')->execute([$qty,(int)$poi['id']]);
+            if($actual!==null)$pdo->prepare('INSERT INTO vendor_price_history (organization_id,vendor_id,inventory_item_id,vendor_item_id,price_per_pack,pack_size,unit,source_type,source_public_id,created_by) VALUES (?,?,?,?,?,?,?,?,?,?)')->execute([$org,(int)$po['vendor_id'],(int)$poi['inventory_item_id'],$poi['vendor_item_id']?(int)$poi['vendor_item_id']:null,$actual,$poi['pack_size'],$poi['unit'],'receiving',$receiptPublic,$uid]);$posted++;
+        }
+        if($posted===0)throw new InvalidArgumentException('Enter at least one received quantity greater than zero.');
+        $check=$pdo->prepare('SELECT SUM(CASE WHEN received_base_quantity+0.0001 < ordered_base_quantity THEN 1 ELSE 0 END) remaining FROM purchase_order_items WHERE purchase_order_id=?');$check->execute([(int)$po['id']]);$remaining=(int)$check->fetchColumn();$status=$remaining===0?'received':'partially_received';
+        $pdo->prepare("UPDATE purchase_orders SET status=?,received_at=IF(?='received',NOW(6),received_at),received_by=IF(?='received',?,received_by),updated_by=?,updated_at=NOW(6) WHERE id=?")->execute([$status,$status,$status,$uid,$uid,(int)$po['id']]);
+        purchasing_event($pdo,$org,(int)$po['id'],'received','Goods receipt '.$receiptNumber.' recorded.',$uid,['receiptId'=>$receiptPublic,'status'=>$status,'lines'=>$posted]);$pdo->commit();
+        return ['order'=>purchasing_order($pdo,$org,$publicId),'receiptId'=>$receiptPublic,'receiptNumber'=>$receiptNumber,'status'=>$status];
+    }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
+}
+function purchasing_receipts(PDO $pdo,int $org,int $limit=100):array{$limit=max(1,min(500,$limit));$q=$pdo->prepare("SELECT r.*,po.public_id purchase_order_public_id,po.order_number,v.name vendor_name,(SELECT COUNT(*) FROM goods_receipt_items ri WHERE ri.goods_receipt_id=r.id) line_count FROM goods_receipts r JOIN purchase_orders po ON po.id=r.purchase_order_id JOIN vendors v ON v.id=r.vendor_id WHERE r.organization_id=? ORDER BY r.received_at DESC LIMIT {$limit}");$q->execute([$org]);return $q->fetchAll();}
