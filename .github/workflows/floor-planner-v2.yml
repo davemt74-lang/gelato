@@ -1,0 +1,58 @@
+name: Floor Planner 2.0
+
+on:
+  pull_request:
+    paths:
+      - 'floor-plan-api.php'
+      - 'floor-planner.php'
+      - 'floor-planner-v2.php'
+      - 'floor-planner-ops.php'
+      - 'js/floor-planner-v2.js'
+      - 'js/floor-planner-v2-runtime.js'
+      - 'js/floor-planner-module.js'
+      - 'js/floor-planner-ops.js'
+      - 'api/floor-plans.php'
+      - 'api/equipment-placement.php'
+      - 'api/equipment.php'
+      - 'tests/floor-planner-v2-contract.php'
+      - '.github/workflows/floor-planner-v2.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'floor-plan-api.php'
+      - 'floor-planner.php'
+      - 'floor-planner-v2.php'
+      - 'floor-planner-ops.php'
+      - 'js/floor-planner-v2.js'
+      - 'js/floor-planner-v2-runtime.js'
+      - 'js/floor-planner-module.js'
+      - 'js/floor-planner-ops.js'
+      - 'api/floor-plans.php'
+      - 'api/equipment-placement.php'
+      - 'api/equipment.php'
+      - 'tests/floor-planner-v2-contract.php'
+      - '.github/workflows/floor-planner-v2.yml'
+
+jobs:
+  floor-planner-v2:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+      - name: PHP syntax
+        run: |
+          php -l floor-plan-api.php
+          php -l floor-planner.php
+          php -l floor-planner-v2.php
+          php -l floor-planner-ops.php
+          php -l tests/floor-planner-v2-contract.php
+      - name: JavaScript syntax
+        run: |
+          node --check js/floor-planner-v2.js
+          node --check js/floor-planner-v2-runtime.js
+          node --check js/floor-planner-module.js
+          node --check js/floor-planner-ops.js
+      - name: Floor Planner 2.0 contract
+        run: php tests/floor-planner-v2-contract.php
