@@ -42,6 +42,7 @@ jobs:
           php -l customer-account.php
           php -l customer-logout.php
           php -l includes/customer-account-core.php
+          php -l includes/public-site.php
           php -l tests/customer-account-contract.php
       - name: Customer security and architecture contract
         run: |
@@ -63,6 +64,8 @@ jobs:
           grep -q 'sms_marketing' customer-signup.php
           grep -q 'customer-logout.php' customer-account.php
           grep -q 'Internal CRM notes and staff-only tags are never exposed' customer-account.php
+          grep -q 'customer-account.php">Account' includes/public-site.php
+          grep -q "'Staff Login' => 'login.php'" includes/public-site.php
       - name: Install and upgrade schema
         run: |
           sudo apt-get update -qq
@@ -110,3 +113,26 @@ jobs:
           if($s->applyPending(null)) exit(3);
           echo "idempotent\n";
           PHP
+      - name: Build deploy patch
+        run: |
+          mkdir -p deploy-patch/includes deploy-patch/assets/css deploy-patch/database
+          cp customer-signup.php customer-login.php customer-account.php customer-logout.php deploy-patch/
+          cp includes/customer-account-core.php includes/public-site.php deploy-patch/includes/
+          cp assets/css/customer-account.css deploy-patch/assets/css/
+          cp database/20261002_customer_accounts_online_ordering_foundation.sql deploy-patch/database/
+          cat > deploy-patch/README-DEPLOY.txt <<'EOF'
+          Stonefellows / Gelato customer-account deploy patch
+
+          Copy the files into the application web root while preserving folders.
+          Then sign in as an administrator and run the normal Upgrade process once.
+
+          This patch adds customer signup/login/account access, Customer-role permissions,
+          CRM account linkage, consent capture, and the identity foundation for online ordering.
+          It does not yet include cart, checkout, payment capture, delivery dispatch, or order scheduling.
+          EOF
+      - uses: actions/upload-artifact@v4
+        with:
+          name: customer-account-deploy
+          path: deploy-patch/
+          if-no-files-found: error
+          retention-days: 14
