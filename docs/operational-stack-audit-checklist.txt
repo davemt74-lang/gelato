@@ -1,0 +1,13 @@
+Release checklist
+- Location-scoped POS permissions enforced
+- Location-scoped Table Service permissions enforced
+- Location-scoped KDS permissions enforced
+- POS/KDS/Table Service lifecycle mutations rollback atomically
+- POS tender close and table release rollback atomically
+- Floor sync transaction-composable
+- KDS timing DB-authoritative
+- Production API 500s client-safe and server-logged
+- KDS runtime follows location permissions
+- Esc exits KDS when fullscreen is unavailable
+- Exact-head CI green
+- Post-merge main CI green
