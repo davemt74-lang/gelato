@@ -6,6 +6,7 @@ on:
       - 'online-order.php'
       - 'customer-account.php'
       - 'customer-promotions.php'
+      - 'includes/public-site.php'
       - 'includes/online-order-core.php'
       - 'includes/customer-inbox-core.php'
       - 'assets/js/online-order.js'
@@ -43,6 +44,7 @@ jobs:
           php -l online-order.php
           php -l customer-account.php
           php -l customer-promotions.php
+          php -l includes/public-site.php
           php -l includes/online-order-core.php
           php -l includes/customer-inbox-core.php
           php -l tests/online-ordering-inbox-contract.php
@@ -122,15 +124,22 @@ jobs:
           rm -rf deploy-patch stonefellows-online-ordering-inbox-deploy.zip
           mkdir -p deploy-patch/includes deploy-patch/assets/js deploy-patch/assets/css deploy-patch/database
           cp online-order.php customer-account.php customer-promotions.php deploy-patch/
-          cp includes/online-order-core.php includes/customer-inbox-core.php deploy-patch/includes/
+          cp includes/public-site.php includes/online-order-core.php includes/customer-inbox-core.php deploy-patch/includes/
           cp assets/js/online-order.js deploy-patch/assets/js/
           cp assets/css/online-order.css assets/css/customer-account.css assets/css/customer-inbox.css deploy-patch/assets/css/
           cp database/20261004_online_ordering_customer_inbox.sql deploy-patch/database/
+          test -f deploy-patch/includes/public-site.php
+          test -f deploy-patch/includes/online-order-core.php
+          test -f deploy-patch/database/20261004_online_ordering_customer_inbox.sql
           cat > deploy-patch/README-DEPLOY.txt <<'EOF'
           Stonefellows / Gelato online ordering + customer Inbox deploy patch
 
           Copy these files into the application web root while preserving folders.
           Then sign in as an administrator and run the normal Upgrade process once.
+
+          This package deliberately includes includes/public-site.php because online-order.php
+          depends on the public-site fallback helpers. Deploy the package as a unit; partial
+          file replacement can leave production on an incompatible dependency set.
 
           Adds:
           - signed-in pickup ordering using canonical menu prices and native POS totals
