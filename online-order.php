@@ -4,13 +4,79 @@ require_once __DIR__.'/includes/public-site.php';
 require_once __DIR__.'/includes/online-order-core.php';
 
 app_boot_session();
-$pdo=app_pdo();
-$context=public_site_context($pdo);
-$organizationId=(int)$context['organizationId'];
+$context=public_site_fallback_context();
 $settings=$context['settings'];
+$organizationId=0;
+$pdo=null;
+$bootstrapError=null;
+$locations=[];
+
+try{
+    $pdo=app_pdo();
+    try{
+        $context=public_site_context($pdo);
+        $settings=$context['settings'];
+        $organizationId=(int)$context['organizationId'];
+    }catch(Throwable $exception){
+        $bootstrapError='Online ordering is temporarily unavailable.';
+        error_log('Online ordering bootstrap failed: '.$exception->getMessage());
+    }
+
+    if($bootstrapError===null){
+        $runtimeReady=false;
+        try{
+            $runtimeReady=$organizationId>0 && customer_account_ready($pdo) && online_order_ready($pdo);
+        }catch(Throwable $exception){
+            error_log('Online ordering readiness check failed: '.$exception->getMessage());
+        }
+        if(!$runtimeReady){
+            $bootstrapError='Online ordering is temporarily unavailable.';
+            error_log('Online ordering bootstrap failed: required production schema is not installed. Run Gelato Upgrade.');
+        }
+    }
+
+    if($bootstrapError===null){
+        try{
+            $locations=online_order_locations($pdo,$organizationId);
+        }catch(Throwable $exception){
+            $bootstrapError='Online ordering is temporarily unavailable.';
+            error_log('Online ordering location bootstrap failed: '.$exception->getMessage());
+        }
+    }
+}catch(Throwable $exception){
+    $bootstrapError='Online ordering is temporarily unavailable.';
+    error_log('Online ordering bootstrap failed: '.$exception->getMessage());
+}
+
+if($bootstrapError!==null || !$pdo instanceof PDO || $organizationId<1){
+    http_response_code(503);
+    ?>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b0b09">
+<meta name="robots" content="noindex,nofollow">
+<title>Order Online | <?=app_escape((string)($settings['restaurant_name']??'Stonefellows'))?></title>
+<link rel="stylesheet" href="assets/css/site.css?v=20260914-2">
+<style>
+.order-unavailable{min-height:72vh;display:grid;place-items:center;padding:130px 0 80px}.order-unavailable-card{width:min(720px,100%);padding:42px;border:1px solid var(--line);background:var(--panel);box-shadow:var(--shadow)}.order-unavailable-card h1{font-size:clamp(2.4rem,6vw,4.4rem);margin:10px 0 18px}.order-unavailable-card p{max-width:620px;color:var(--muted)}.order-unavailable-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px}
+</style>
+</head>
+<body>
+<?php public_site_render_header($settings,'menu'); ?>
+<main class="order-unavailable"><div class="shell"><section class="order-unavailable-card"><div class="eyebrow">Stonefellows Online Ordering</div><h1>Online ordering is temporarily unavailable.</h1><p>The ordering system is being prepared for service. The restaurant website and menu are still available.</p><div class="order-unavailable-actions"><a class="btn btn-primary" href="menu.php">View Menu</a><a class="btn btn-secondary" href="locations.php">Locations</a><a class="btn btn-secondary" href="index.php">Back Home</a></div></section></div></main>
+<?php public_site_render_footer($settings); ?>
+<script src="assets/js/site.js?v=20260914"></script>
+</body>
+</html>
+<?php
+    exit;
+}
+
 $account=customer_account_require($pdo,$organizationId);
 $error=null;
-$locations=online_order_locations($pdo,$organizationId);
 $selected=null;
 
 $requestedSlug=trim((string)($_GET['location']??''));
@@ -48,7 +114,15 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
     }
 }
 
-$menu=$selected?online_order_menu($pdo,$organizationId):[];
+$menu=[];
+if($selected){
+    try{
+        $menu=online_order_menu($pdo,$organizationId);
+    }catch(Throwable $exception){
+        $error=$error?:'The ordering menu is temporarily unavailable. Please try again shortly.';
+        error_log('Online ordering menu failed: '.$exception->getMessage());
+    }
+}
 $initials=mb_strtoupper(mb_substr((string)($account['first_name']??''),0,1,'UTF-8').mb_substr((string)($account['last_name']??''),0,1,'UTF-8'),'UTF-8');
 ?>
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0b0b09"><meta name="robots" content="noindex,nofollow"><title>Order Online | <?=app_escape((string)$settings['restaurant_name'])?></title><link rel="stylesheet" href="assets/css/site.css?v=20260914-2"><link rel="stylesheet" href="assets/css/customer-account.css?v=20260914-2"><link rel="stylesheet" href="assets/css/online-order.css?v=20260914-1"></head><body class="customer-page online-order-page">
