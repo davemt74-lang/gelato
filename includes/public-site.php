@@ -284,7 +284,7 @@ function public_site_render_header(array $settings, string $active = ''): void
         $class = $active === $key ? ' class="active"' : '';
         echo '<a' . $class . ' href="' . app_escape($href) . '">' . app_escape($label) . '</a>';
     }
-    echo '</nav><a class="nav-cta" href="contact.php">Get in Touch</a>';
+    echo '</nav><a class="nav-cta" href="login.php">Login</a>';
     echo '<button class="menu-toggle" id="menuToggle" type="button" aria-label="Open navigation" aria-expanded="false">☰</button>';
     echo '</div></header>';
 }
