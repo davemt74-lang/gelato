@@ -1,0 +1,136 @@
+name: Restaurant Admin Control Center
+
+on:
+  pull_request:
+    paths:
+      - 'admin.php'
+      - 'online-orders-admin.php'
+      - 'workspace.php'
+      - 'includes/admin-control-core.php'
+      - 'assets/css/admin-control.css'
+      - 'tests/admin-control-center-contract.php'
+      - '.github/workflows/admin-control-center.yml'
+  push:
+    branches: [main]
+
+jobs:
+  admin-control-center:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - name: Syntax checks
+        run: |
+          php -l admin.php
+          php -l online-orders-admin.php
+          php -l workspace.php
+          php -l includes/admin-control-core.php
+          php -l tests/admin-control-center-contract.php
+      - name: Static access and architecture contract
+        run: |
+          grep -q "Restaurant administration permission required" admin.php
+          grep -q "admin_control_allowed" admin.php
+          grep -q "admin_online_orders_allowed" online-orders-admin.php
+          grep -q "RESTAURANT_ADMIN_CONTROL_ALLOWED" workspace.php
+          grep -q "restaurantAdminControlLink" workspace.php
+          grep -q "customer.portal" tests/admin-control-center-contract.php
+          grep -q "Menu Import must remain owner-only" tests/admin-control-center-contract.php
+          grep -q "online_orders" includes/admin-control-core.php
+          grep -q "pos_checks" includes/admin-control-core.php
+          grep -q "kds_order_items" includes/admin-control-core.php
+          grep -q "crm_customers" includes/admin-control-core.php
+          grep -q "online_ordering_enabled" includes/admin-control-core.php
+          ! grep -Eqi 'card_number|cvv|track_data|magstripe' admin.php online-orders-admin.php includes/admin-control-core.php
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client zip
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_admin_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->ensureTrackingTables();
+          $s->bootstrapLegacyHistory(null);
+          $s->applyPending(null);
+          if($s->pendingMigrations()) exit(1);
+          PHP
+      - name: Verify commerce foundation
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('online_orders','pos_checks','crm_customers','locations');")" = "4"
+      - name: Admin control center behavioral contract
+        run: php tests/admin-control-center-contract.php
+      - name: Online ordering regression
+        run: php tests/online-ordering-inbox-contract.php
+      - name: Customer account regression
+        run: php tests/customer-account-contract.php
+      - name: Native POS regression
+        run: php tests/native-pos-contract.php
+      - name: Location regression
+        run: php tests/location-foundation-contract.php
+      - name: Verify upgrader idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->assertAppliedChecksumsUnchanged();
+          if($s->pendingMigrations()) exit(2);
+          if($s->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP
+      - name: Build deploy ZIP
+        run: |
+          rm -rf deploy-patch stonefellows-admin-control-center-deploy.zip
+          mkdir -p deploy-patch/includes deploy-patch/assets/css
+          cp admin.php online-orders-admin.php workspace.php deploy-patch/
+          cp includes/admin-control-core.php deploy-patch/includes/
+          cp assets/css/admin-control.css deploy-patch/assets/css/
+          cat > deploy-patch/README-DEPLOY.txt <<'EOF'
+          Stonefellows / Gelato admin control center deploy patch
+
+          Copy these files into the application web root while preserving folders.
+          No new database migration is required for this admin UI phase.
+
+          Adds:
+          - unified permission-aware restaurant admin dashboard
+          - online-order operations center with location/status/search filters
+          - live online-order, customer and location KPIs
+          - permission-gated Restaurant Admin link in the existing staff workspace
+          - direct navigation to POS, KDS, CRM, Promotions, Locations, Website,
+            Operations, Scheduling, Purchasing, Sales and related tools
+          - customer-role isolation from restaurant administration
+
+          The online order center uses the existing online_orders + POS + CRM + KDS data.
+          EOF
+          (cd deploy-patch && zip -qr ../stonefellows-admin-control-center-deploy.zip .)
+          unzip -t stonefellows-admin-control-center-deploy.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stonefellows-admin-control-center-deploy
+          path: stonefellows-admin-control-center-deploy.zip
+          if-no-files-found: error
+          retention-days: 30

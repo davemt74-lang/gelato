@@ -1,10 +1,12 @@
 <?php
 declare(strict_types=1);
 require __DIR__ . '/includes/bootstrap.php';
+require __DIR__ . '/includes/admin-control-core.php';
 $user = app_require_auth();
 if (($user['role_slug'] ?? '') === 'wholesale_customer') {
     app_redirect('wholesale-portal.php');
 }
+$adminControlAllowed = admin_control_allowed($user);
 $pdo = app_pdo();
 $organizationId = (int)$user['organization_id'];
 
@@ -142,6 +144,6 @@ if (!is_string($html)) {
     http_response_code(500);
     exit('The workspace template could not be loaded.');
 }
-$script = '<script>window.RESTAURANT_SERVER_SESSION=true;window.RESTAURANT_CSRF_TOKEN=' . json_encode(app_csrf_token(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) . ';window.RESTAURANT_CURRENT_USER_ID=' . (int)$user['id'] . ';(function(d){localStorage.setItem("restaurant-admin-users-v1",JSON.stringify(d.users));localStorage.setItem("restaurant-admin-roles-v1",JSON.stringify(d.roles));localStorage.setItem("restaurant-admin-permissions-v1",JSON.stringify(d.permissions));localStorage.setItem("restaurant-jobs-v1",JSON.stringify(d.jobs||[]));localStorage.setItem("restaurant-admin-session-v1",JSON.stringify(d.session));})(' . json_encode($bootstrap, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) . ');</script>';
+$script = '<script>window.RESTAURANT_SERVER_SESSION=true;window.RESTAURANT_CSRF_TOKEN=' . json_encode(app_csrf_token(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) . ';window.RESTAURANT_CURRENT_USER_ID=' . (int)$user['id'] . ';window.RESTAURANT_ADMIN_CONTROL_ALLOWED=' . ($adminControlAllowed ? 'true' : 'false') . ';(function(d){localStorage.setItem("restaurant-admin-users-v1",JSON.stringify(d.users));localStorage.setItem("restaurant-admin-roles-v1",JSON.stringify(d.roles));localStorage.setItem("restaurant-admin-permissions-v1",JSON.stringify(d.permissions));localStorage.setItem("restaurant-jobs-v1",JSON.stringify(d.jobs||[]));localStorage.setItem("restaurant-admin-session-v1",JSON.stringify(d.session));})(' . json_encode($bootstrap, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) . ');if(window.RESTAURANT_ADMIN_CONTROL_ALLOWED){document.addEventListener("DOMContentLoaded",function(){var settings=document.getElementById("profileSettingsLink");if(!settings||document.getElementById("restaurantAdminControlLink"))return;var link=document.createElement("a");link.id="restaurantAdminControlLink";link.href="admin.php";link.textContent="▦ Restaurant Admin";settings.insertAdjacentElement("afterend",link);});}</script>';
 $html = str_replace('<script src="js/auth.js"></script>', $script . "\n  <script src=\"js/auth.js\"></script>\n  <script src=\"js/floor-planner-module.js\"></script>", $html);
 echo $html;
