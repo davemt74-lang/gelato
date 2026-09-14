@@ -19,6 +19,7 @@ on:
       - 'api/equipment.php'
       - 'api/floor-planner-equipment-create.php'
       - 'tests/floor-planner-v2-contract.php'
+      - 'tests/floor-planner-counter-edge-contract.php'
       - '.github/workflows/floor-planner-v2.yml'
   push:
     branches: [main]
@@ -39,6 +40,7 @@ on:
       - 'api/equipment.php'
       - 'api/floor-planner-equipment-create.php'
       - 'tests/floor-planner-v2-contract.php'
+      - 'tests/floor-planner-counter-edge-contract.php'
       - '.github/workflows/floor-planner-v2.yml'
 
 jobs:
@@ -58,6 +60,7 @@ jobs:
           php -l floor-planner-ops-legacy.php
           php -l api/floor-planner-equipment-create.php
           php -l tests/floor-planner-v2-contract.php
+          php -l tests/floor-planner-counter-edge-contract.php
       - name: JavaScript syntax
         run: |
           node --check js/floor-planner-v2.js
@@ -67,4 +70,6 @@ jobs:
           node --check js/floor-planner-module.js
           node --check js/floor-planner-ops.js
       - name: Floor Planner 2.0 contract
-        run: php tests/floor-planner-v2-contract.php
+        run: |
+          php tests/floor-planner-v2-contract.php
+          php tests/floor-planner-counter-edge-contract.php
