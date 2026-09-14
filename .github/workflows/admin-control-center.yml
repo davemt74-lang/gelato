@@ -5,6 +5,7 @@ on:
     paths:
       - 'admin.php'
       - 'online-orders-admin.php'
+      - 'workspace.php'
       - 'includes/admin-control-core.php'
       - 'assets/css/admin-control.css'
       - 'tests/admin-control-center-contract.php'
@@ -35,6 +36,7 @@ jobs:
         run: |
           php -l admin.php
           php -l online-orders-admin.php
+          php -l workspace.php
           php -l includes/admin-control-core.php
           php -l tests/admin-control-center-contract.php
       - name: Static access and architecture contract
@@ -42,6 +44,8 @@ jobs:
           grep -q "Restaurant administration permission required" admin.php
           grep -q "admin_control_allowed" admin.php
           grep -q "admin_online_orders_allowed" online-orders-admin.php
+          grep -q "RESTAURANT_ADMIN_CONTROL_ALLOWED" workspace.php
+          grep -q "restaurantAdminControlLink" workspace.php
           grep -q "customer.portal" tests/admin-control-center-contract.php
           grep -q "Menu Import must remain owner-only" tests/admin-control-center-contract.php
           grep -q "online_orders" includes/admin-control-core.php
@@ -102,7 +106,7 @@ jobs:
         run: |
           rm -rf deploy-patch stonefellows-admin-control-center-deploy.zip
           mkdir -p deploy-patch/includes deploy-patch/assets/css
-          cp admin.php online-orders-admin.php deploy-patch/
+          cp admin.php online-orders-admin.php workspace.php deploy-patch/
           cp includes/admin-control-core.php deploy-patch/includes/
           cp assets/css/admin-control.css deploy-patch/assets/css/
           cat > deploy-patch/README-DEPLOY.txt <<'EOF'
@@ -115,6 +119,7 @@ jobs:
           - unified permission-aware restaurant admin dashboard
           - online-order operations center with location/status/search filters
           - live online-order, customer and location KPIs
+          - permission-gated Restaurant Admin link in the existing staff workspace
           - direct navigation to POS, KDS, CRM, Promotions, Locations, Website,
             Operations, Scheduling, Purchasing, Sales and related tools
           - customer-role isolation from restaurant administration
