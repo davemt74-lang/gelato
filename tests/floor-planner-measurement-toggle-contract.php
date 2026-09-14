@@ -15,7 +15,6 @@ function measurement_toggle_assert(bool $condition, string $message): void
 }
 
 measurement_toggle_assert(str_contains($shell, 'floor-planner-v2-display.js?v=20260914-1'), 'Floor Planner shell must load the measurement display layer.');
-measurement_toggle_assert(str_contains($display, "event.ctrlKey || !event.shiftKey") === false, 'Shortcut guard must not invert the requested modifier logic.');
 measurement_toggle_assert(str_contains($display, "!event.ctrlKey || !event.shiftKey"), 'Measurement toggle must require Ctrl + Shift.');
 measurement_toggle_assert(str_contains($display, "key !== 'a'"), 'Measurement toggle must use the A key.');
 measurement_toggle_assert(str_contains($display, 'event.preventDefault()'), 'Measurement shortcut must suppress the page/browser default when delivered to the app.');
@@ -23,6 +22,7 @@ measurement_toggle_assert(str_contains($display, 'event.stopImmediatePropagation
 measurement_toggle_assert(str_contains($display, '#stage .dim'), 'Measurement toggle must hide only on-floor dimension labels.');
 measurement_toggle_assert(str_contains($display, 'display:none!important'), 'Hidden measurement state must actually remove labels from the floor.');
 measurement_toggle_assert(str_contains($display, 'floorPlanner.measurementsVisible'), 'Measurement visibility must persist in local storage.');
-measurement_toggle_assert(str_contains($display, "Item measurements ${visible ? 'shown' : 'hidden'}."), 'Measurement toggle must report its current state.');
+measurement_toggle_assert(str_contains($display, 'Item measurements'), 'Measurement toggle must report its current state.');
+measurement_toggle_assert(str_contains($display, "visible ? 'shown' : 'hidden'"), 'Measurement status must distinguish shown and hidden states.');
 
 echo "floor-planner-measurement-toggle-contract-ok\n";
