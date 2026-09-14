@@ -13,6 +13,7 @@ on:
       - 'js/floor-planner-v2-enhancements.js'
       - 'js/floor-planner-v2-fixes.js'
       - 'js/floor-planner-v2-display.js'
+      - 'js/floor-planner-v2-groups.js'
       - 'js/floor-planner-module.js'
       - 'js/floor-planner-ops.js'
       - 'api/floor-plans.php'
@@ -22,6 +23,7 @@ on:
       - 'tests/floor-planner-v2-contract.php'
       - 'tests/floor-planner-counter-edge-contract.php'
       - 'tests/floor-planner-measurement-toggle-contract.php'
+      - 'tests/floor-planner-group-tools-contract.php'
       - '.github/workflows/floor-planner-v2.yml'
   push:
     branches: [main]
@@ -36,6 +38,7 @@ on:
       - 'js/floor-planner-v2-enhancements.js'
       - 'js/floor-planner-v2-fixes.js'
       - 'js/floor-planner-v2-display.js'
+      - 'js/floor-planner-v2-groups.js'
       - 'js/floor-planner-module.js'
       - 'js/floor-planner-ops.js'
       - 'api/floor-plans.php'
@@ -45,6 +48,7 @@ on:
       - 'tests/floor-planner-v2-contract.php'
       - 'tests/floor-planner-counter-edge-contract.php'
       - 'tests/floor-planner-measurement-toggle-contract.php'
+      - 'tests/floor-planner-group-tools-contract.php'
       - '.github/workflows/floor-planner-v2.yml'
 
 jobs:
@@ -66,6 +70,7 @@ jobs:
           php -l tests/floor-planner-v2-contract.php
           php -l tests/floor-planner-counter-edge-contract.php
           php -l tests/floor-planner-measurement-toggle-contract.php
+          php -l tests/floor-planner-group-tools-contract.php
       - name: JavaScript syntax
         run: |
           node --check js/floor-planner-v2.js
@@ -73,6 +78,7 @@ jobs:
           node --check js/floor-planner-v2-enhancements.js
           node --check js/floor-planner-v2-fixes.js
           node --check js/floor-planner-v2-display.js
+          node --check js/floor-planner-v2-groups.js
           node --check js/floor-planner-module.js
           node --check js/floor-planner-ops.js
       - name: Floor Planner 2.0 contract
@@ -80,3 +86,4 @@ jobs:
           php tests/floor-planner-v2-contract.php
           php tests/floor-planner-counter-edge-contract.php
           php tests/floor-planner-measurement-toggle-contract.php
+          php tests/floor-planner-group-tools-contract.php
