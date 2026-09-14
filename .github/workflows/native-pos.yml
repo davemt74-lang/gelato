@@ -51,9 +51,16 @@ jobs:
           grep -q "source_provider='gelato_pos'" tests/native-pos-contract.php
           grep -q "menu_item_prices" includes/pos-core.php
           grep -q "sales_rebuild_all_location_rollups" includes/pos-core.php
-          grep -q "has('pos.use')" js/auth.js
+          grep -q "\['pos.use','Point of Sale'" js/auth.js
+          grep -q "\['pos.discount','Point of Sale'" js/auth.js
+          grep -q "\['pos.void','Point of Sale'" js/auth.js
+          grep -q "\['pos.manage','Point of Sale'" js/auth.js
+          grep -q "if(!has('pos.use'))return" js/auth.js
+          grep -q "className='btn btn-dark pos-header-action'" js/auth.js
           grep -q "href='pos.php'" js/auth.js
           grep -q "data-pos-header" js/auth.js
+          grep -q "data-permission','pos.use'" js/auth.js
+          ! grep -q "RESTAURANT_SERVER_SESSION||!has('pos.use')" js/auth.js
           ! grep -Eiq 'card_number|\bpan\b|\bcvv\b|track_data|magstripe' database/20260916_native_pos.sql
       - name: Install and upgrade schema
         run: |
