@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 $root = dirname(__DIR__);
 $source = file_get_contents($root . '/online-order.php') ?: '';
+$core = file_get_contents($root . '/includes/online-order-core.php') ?: '';
 $workflow = file_get_contents($root . '/.github/workflows/online-ordering-inbox.yml') ?: '';
 
 foreach ([
@@ -39,11 +40,43 @@ foreach ([
     }
 }
 
-if (!str_contains($workflow, 'cp includes/public-site.php includes/online-order-core.php includes/customer-inbox-core.php deploy-patch/includes/')) {
-    throw new RuntimeException('Deploy artifact must include includes/public-site.php with online-order.php.');
+foreach ([
+    'online_order_missing_requirements',
+    "'online_orders'",
+    "'pos_settings'",
+    "'pos_checks'",
+    "'pos_check_items'",
+    "'pos_tenders'",
+    "'sales_integrations'",
+    "'public_slug'",
+    "'pickup_enabled'",
+    "'online_ordering_enabled'",
+    "'pickup_lead_minutes'",
+] as $needle) {
+    if (!str_contains($core, $needle)) {
+        throw new RuntimeException('Online-order direct readiness contract missing: ' . $needle);
+    }
 }
-if (!str_contains($workflow, "test -f deploy-patch/includes/public-site.php")) {
-    throw new RuntimeException('Deploy artifact must verify the public-site dependency is packaged.');
+if (str_contains($core, 'pos_ready($pdo)')) {
+    throw new RuntimeException('Online ordering must not be blocked by unrelated sales-intelligence readiness through pos_ready().');
 }
 
-echo "PASS: online-order runtime readiness gate prevents raw production 500s and deploys its public-site dependency.\n";
+foreach ([
+    'cp includes/*.php deploy-patch/includes/',
+    'customer-login.php customer-signup.php customer-promotions.php upgrade.php',
+    'database/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_*.sql',
+    'deploy-patch/database/20260914_zzzzzzz_sales_demand_intelligence.sql',
+    'deploy-patch/database/20260916_native_pos.sql',
+    'deploy-patch/database/20260917_customer_crm.sql',
+    'deploy-patch/database/20261001_system_user_types_pos_order_types.sql',
+    'deploy-patch/database/20261002_customer_accounts_online_ordering_foundation.sql',
+    'deploy-patch/database/20261003_location_foundation.sql',
+    'deploy-patch/database/20261004_online_ordering_customer_inbox.sql',
+    'stonefellows-online-ordering-recovery-deploy.zip',
+] as $needle) {
+    if (!str_contains($workflow, $needle)) {
+        throw new RuntimeException('Dependency-complete recovery artifact contract missing: ' . $needle);
+    }
+}
+
+echo "PASS: online-order runtime readiness uses direct dependencies and recovery deploy contains the complete runtime/migration closure.\n";
