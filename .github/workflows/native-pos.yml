@@ -9,7 +9,9 @@ on:
       - 'js/pos.js'
       - 'js/auth.js'
       - 'database/20260916_native_pos.sql'
+      - 'database/20261001_system_user_types_pos_order_types.sql'
       - 'tests/native-pos-contract.php'
+      - 'tests/system-user-pos-types-contract.php'
       - '.github/workflows/native-pos.yml'
   push:
     branches: [main]
@@ -39,6 +41,7 @@ jobs:
           php -l api/pos.php
           php -l includes/pos-core.php
           php -l tests/native-pos-contract.php
+          php -l tests/system-user-pos-types-contract.php
           node --check js/pos.js
           node --check js/auth.js
       - name: Architecture and payment-data contract
@@ -51,6 +54,13 @@ jobs:
           grep -q "source_provider='gelato_pos'" tests/native-pos-contract.php
           grep -q "menu_item_prices" includes/pos-core.php
           grep -q "sales_rebuild_all_location_rollups" includes/pos-core.php
+          grep -q "return \['dine_in','delivery','pickup'\]" includes/pos-core.php
+          grep -q "'bar' => 'dine_in'" includes/pos-core.php
+          grep -q "'takeout' => 'pickup'" includes/pos-core.php
+          grep -q "CREATE TRIGGER organizations_seed_operational_user_types" database/20261001_system_user_types_pos_order_types.sql
+          grep -q "'Customer', 'customer'" database/20261001_system_user_types_pos_order_types.sql
+          grep -q "'Service', 'service'" database/20261001_system_user_types_pos_order_types.sql
+          grep -q "'Driver', 'driver'" database/20261001_system_user_types_pos_order_types.sql
           grep -q "\['pos.use','Point of Sale'" js/auth.js
           grep -q "\['pos.discount','Point of Sale'" js/auth.js
           grep -q "\['pos.void','Point of Sale'" js/auth.js
@@ -62,6 +72,7 @@ jobs:
           grep -q "data-permission','pos.use'" js/auth.js
           ! grep -q "RESTAURANT_SERVER_SESSION||!has('pos.use')" js/auth.js
           ! grep -Eiq 'card_number|\bpan\b|\bcvv\b|track_data|magstripe' database/20260916_native_pos.sql
+          php tests/system-user-pos-types-contract.php
       - name: Install and upgrade schema
         run: |
           sudo apt-get update -qq
@@ -90,6 +101,8 @@ jobs:
           test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('pos_settings','pos_checks','pos_check_items','pos_tenders');")" = "4"
           test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('pos.use','pos.discount','pos.void','pos.manage');")" = "4"
           test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260916_native_pos';")" = "1"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20261001_system_user_types_pos_order_types';")" = "1"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_schema='gelato_restaurant_ai_ci' AND trigger_name='organizations_seed_operational_user_types';")" = "1"
       - name: Native POS behavioral contract
         run: php tests/native-pos-contract.php
       - name: Existing Sales + Demand regression

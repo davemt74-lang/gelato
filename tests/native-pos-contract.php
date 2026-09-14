@@ -9,8 +9,13 @@ function posci_assert(bool $condition,string $message): void { if(!$condition)th
 function posci_one(PDO $pdo,string $sql,array $args=[]): mixed {$q=$pdo->prepare($sql);$q->execute($args);return $q->fetchColumn();}
 
 posci_assert(pos_ready($pdo),'Native POS must be installed.');
+posci_assert(pos_order_types()===['dine_in','delivery','pickup'],'Canonical POS order types must be dine_in, delivery, pickup.');
+posci_assert(pos_order_type('bar')==='dine_in','Legacy bar must normalize to dine_in.');
+posci_assert(pos_order_type('takeout')==='pickup','Legacy takeout must normalize to pickup.');
 $slug='pos-ci-'.bin2hex(random_bytes(4));
 $pdo->prepare("INSERT INTO organizations (name,status,timezone) VALUES (?,'active','America/Phoenix')")->execute(['POS CI '.$slug]);$org=(int)$pdo->lastInsertId();
+$seededRoles=(int)posci_one($pdo,"SELECT COUNT(*) FROM roles WHERE organization_id=? AND slug IN ('customer','service','driver') AND is_system_role=1 AND is_assignable=1",[$org]);
+posci_assert($seededRoles===3,'New organizations must automatically receive Customer, Service, and Driver system roles.');
 $pdo->prepare("INSERT INTO locations (organization_id,name,city,state,status) VALUES (?,'Main Restaurant','Phoenix','AZ','active')")->execute([$org]);$location=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO users (email,password_hash,first_name,last_name,display_name,status) VALUES (?,?,?,?,?,'active')")->execute([$slug.'@example.test',password_hash('CI-only-password',PASSWORD_DEFAULT),'POS','Manager','POS Manager']);$user=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO organization_memberships (organization_id,user_id,primary_location_id,job_title,status) VALUES (?,?,?,'Manager','active')")->execute([$org,$user,$location]);$membership=(int)$pdo->lastInsertId();
@@ -18,13 +23,16 @@ $pdo->prepare("INSERT INTO menu_sections (organization_id,name,slug,status,sort_
 $pdo->prepare("INSERT INTO menu_items (organization_id,section_id,name,slug,is_active) VALUES (?,?,'Margherita Pizza',?,1)")->execute([$org,$section,'margherita-'.$slug]);$item=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO menu_item_prices (menu_item_id,option_name,size_code,amount,currency,sort_order) VALUES (?,'12 inch','12',20.00,'USD',1)")->execute([$item]);$price=(int)$pdo->lastInsertId();
 
-$settings=pos_settings_save($pdo,$org,$location,['taxRate'=>0.085,'serviceChargeRate'=>0.02,'defaultServiceMode'=>'dine_in','makePrimary'=>true],$user);
+$settings=pos_settings_save($pdo,$org,$location,['taxRate'=>0.085,'serviceChargeRate'=>0.02,'defaultServiceMode'=>'pickup','makePrimary'=>true],$user);
 posci_assert(abs((float)$settings['taxRate']-.085)<.000001,'Tax rate was not saved.');
+posci_assert((string)$settings['defaultServiceMode']==='pickup','Pickup must be saved as the canonical default order type.');
+posci_assert((string)posci_one($pdo,'SELECT default_service_mode FROM pos_settings WHERE organization_id=? AND location_id=?',[$org,$location])==='pickup','POS settings must persist canonical pickup.');
 posci_assert(pos_primary_location_id($pdo,$org,$membership)===$location,'Primary POS location lookup failed.');
 posci_assert((string)posci_one($pdo,"SELECT provider FROM sales_integrations WHERE organization_id=? AND is_primary=1",[$org])==='gelato_pos','Native POS should be selectable as the primary Sales Intelligence source.');
 $menu=pos_menu($pdo,$org);posci_assert(count($menu)===1&&count($menu[0]['items'])===1&&(int)$menu[0]['items'][0]['prices'][0]['id']===$price,'POS menu must come from canonical menu tables.');
 
 $check=pos_create_check($pdo,$org,$location,['serviceMode'=>'dine_in','tableName'=>'Table 8','guestCount'=>2],$user);$public=(string)$check['publicId'];
+posci_assert((string)$check['serviceMode']==='dine_in','Dine-in order type must persist canonically.');
 $check=pos_add_item($pdo,$org,$public,$price,1,'No basil',$user);$firstId=(int)$check['items'][0]['id'];
 $check=pos_add_item($pdo,$org,$public,$price,1,'',$user);$secondId=(int)$check['items'][1]['id'];
 posci_assert(abs((float)$check['subtotal']-40.0)<.01,'POS must use the canonical $20 menu price twice.');
@@ -56,9 +64,21 @@ posci_assert((string)posci_one($pdo,"SELECT last_sync_status FROM sales_integrat
 $doubleBlocked=false;try{pos_record_tender($pdo,$org,$public,['tenderType'=>'cash','amount'=>1],$user);}catch(InvalidArgumentException){$doubleBlocked=true;}posci_assert($doubleBlocked,'A paid check must reject a second close/payment attempt.');
 posci_assert(abs((float)posci_one($pdo,"SELECT net_sales FROM sales_periods WHERE organization_id=? AND location_key=? AND source_provider='gelato_pos' AND period_start=?",[$org,'id:'.$location,$businessDate])-15.0)<.01,'Rejected duplicate payment must not double-post sales.');
 
-$cancel=pos_create_check($pdo,$org,$location,['serviceMode'=>'takeout','tableName'=>'Pickup CI','guestCount'=>1],$user);$cancel=pos_add_item($pdo,$org,(string)$cancel['publicId'],$price,1,'',$user);$cancel=pos_cancel_check($pdo,$org,(string)$cancel['publicId'],'Guest changed mind',$user);posci_assert($cancel['status']==='cancelled','Open unpaid check must support audited cancellation.');
+$cancel=pos_create_check($pdo,$org,$location,['serviceMode'=>'pickup','tableName'=>'Pickup CI','guestCount'=>1],$user);
+posci_assert((string)$cancel['serviceMode']==='pickup','Pickup order type must persist canonically.');
+posci_assert((string)posci_one($pdo,'SELECT service_mode FROM pos_checks WHERE organization_id=? AND public_id=?',[$org,(string)$cancel['publicId']])==='pickup','POS check must store pickup, not legacy takeout.');
+$cancel=pos_add_item($pdo,$org,(string)$cancel['publicId'],$price,1,'',$user);$cancel=pos_cancel_check($pdo,$org,(string)$cancel['publicId'],'Guest changed mind',$user);posci_assert($cancel['status']==='cancelled','Open unpaid pickup check must support audited cancellation.');
+
+$delivery=pos_create_check($pdo,$org,$location,['serviceMode'=>'delivery','tableName'=>'Delivery CI','guestCount'=>1],$user);
+posci_assert((string)$delivery['serviceMode']==='delivery','Delivery order type must persist canonically.');
+$delivery=pos_cancel_check($pdo,$org,(string)$delivery['publicId'],'CI cleanup',$user);posci_assert($delivery['status']==='cancelled','Open unpaid delivery check must support audited cancellation.');
+
+$legacy=pos_create_check($pdo,$org,$location,['serviceMode'=>'takeout','tableName'=>'Legacy Pickup CI','guestCount'=>1],$user);
+posci_assert((string)$legacy['serviceMode']==='pickup','Legacy takeout callers must normalize to pickup during transition.');
+$legacy=pos_cancel_check($pdo,$org,(string)$legacy['publicId'],'CI cleanup',$user);
 
 $pdo->prepare("INSERT INTO organizations (name,status,timezone) VALUES (?,'active','America/Phoenix')")->execute(['POS Isolation '.$slug]);$otherOrg=(int)$pdo->lastInsertId();$isolated=false;try{pos_check_details($pdo,$otherOrg,$public);}catch(InvalidArgumentException){$isolated=true;}posci_assert($isolated,'POS checks must be organization-isolated.');
+posci_assert((int)posci_one($pdo,"SELECT COUNT(*) FROM roles WHERE organization_id=? AND slug IN ('customer','service','driver')",[$otherOrg])===3,'Role-seeding trigger must apply to every newly created organization.');
 $forbiddenColumns=(int)posci_one($pdo,"SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='pos_tenders' AND column_name IN ('card_number','pan','cvv','track_data','magstripe')");posci_assert($forbiddenColumns===0,'Native POS must not create raw payment-card storage fields.');
 
 echo "native-pos contract passed\n";
