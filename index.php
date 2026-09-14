@@ -14,7 +14,7 @@ $favoriteImages = ['favorite-stonefellow.jpg', 'favorite-funghi.jpg', 'favorite-
 $address = public_site_format_address($settings);
 ?>
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0b0b09"><meta name="description" content="<?= app_escape((string)$settings['tagline']) ?>"><title><?= app_escape((string)$settings['restaurant_name']) ?> | Pizzeria + Bar</title><link rel="stylesheet" href="assets/css/site.css?v=20260914"></head><body>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0b0b09"><meta name="description" content="<?= app_escape((string)$settings['tagline']) ?>"><title><?= app_escape((string)$settings['restaurant_name']) ?> | Pizzeria + Bar</title><link rel="stylesheet" href="assets/css/site.css?v=20260914-2"></head><body>
 <?php public_site_render_header($settings, 'home'); ?>
 <main id="top">
 <section class="hero"><img class="hero-bg" src="<?= app_escape(public_site_asset('hero.jpg')) ?>" alt="Wood-fired pizza, beer and cocktails at <?= app_escape((string)$settings['restaurant_name']) ?>"><div class="shell hero-inner"><div class="hero-copy" data-reveal><div class="eyebrow">Neighborhood Pizzeria · Exceptional Nights</div><h1>Wood-Fired Pizza.<br>Craft Drinks.<br>Good Company.</h1><p><?= app_escape((string)$settings['tagline']) ?></p><div class="hero-actions"><a class="btn btn-primary" href="menu.php">View Our Menu</a><a class="btn btn-secondary" href="locations.php">Visit Us</a></div></div></div></section>
