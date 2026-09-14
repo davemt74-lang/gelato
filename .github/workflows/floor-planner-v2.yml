@@ -7,6 +7,7 @@ on:
       - 'floor-planner.php'
       - 'floor-planner-v2.php'
       - 'floor-planner-ops.php'
+      - 'floor-planner-ops-legacy.php'
       - 'js/floor-planner-v2.js'
       - 'js/floor-planner-v2-runtime.js'
       - 'js/floor-planner-module.js'
@@ -23,6 +24,7 @@ on:
       - 'floor-planner.php'
       - 'floor-planner-v2.php'
       - 'floor-planner-ops.php'
+      - 'floor-planner-ops-legacy.php'
       - 'js/floor-planner-v2.js'
       - 'js/floor-planner-v2-runtime.js'
       - 'js/floor-planner-module.js'
@@ -47,6 +49,7 @@ jobs:
           php -l floor-planner.php
           php -l floor-planner-v2.php
           php -l floor-planner-ops.php
+          php -l floor-planner-ops-legacy.php
           php -l tests/floor-planner-v2-contract.php
       - name: JavaScript syntax
         run: |

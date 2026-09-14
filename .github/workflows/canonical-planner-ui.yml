@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'floor-planner-ops.php'
+      - 'floor-planner-ops-legacy.php'
+      - 'floor-planner-v2.php'
       - 'js/floor-planner-ops.js'
       - 'api/equipment-placement.php'
       - 'api/floor-plans.php'
@@ -12,6 +14,8 @@ on:
     branches: [main]
     paths:
       - 'floor-planner-ops.php'
+      - 'floor-planner-ops-legacy.php'
+      - 'floor-planner-v2.php'
       - 'js/floor-planner-ops.js'
       - 'api/equipment-placement.php'
       - 'api/floor-plans.php'
@@ -28,13 +32,15 @@ jobs:
       - name: Syntax
         run: |
           php -l floor-planner-ops.php
+          php -l floor-planner-ops-legacy.php
+          php -l floor-planner-v2.php
           node --check js/floor-planner-ops.js
       - name: Preserve planning analytics
         run: |
-          grep -q 'id="diningSeats"' floor-planner-ops.php
-          grep -q 'id="barSeats"' floor-planner-ops.php
-          grep -q 'id="patioSeats"' floor-planner-ops.php
-          grep -q 'id="dailyRevenue"' floor-planner-ops.php
+          grep -q 'id="diningSeats"' floor-planner-ops-legacy.php
+          grep -q 'id="barSeats"' floor-planner-ops-legacy.php
+          grep -q 'id="patioSeats"' floor-planner-ops-legacy.php
+          grep -q 'id="dailyRevenue"' floor-planner-ops-legacy.php
           grep -q 'revenue:revenueSettings()' js/floor-planner-ops.js
           grep -q 'loadRevenue(plan.data' js/floor-planner-ops.js
           grep -q 'tableSpacing' js/floor-planner-ops.js
