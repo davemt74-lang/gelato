@@ -1,4 +1,4 @@
-name: Kitchen Display + Order Routing
+name: Kitchen Display + Production Expo
 
 on:
   pull_request:
@@ -8,10 +8,13 @@ on:
       - 'api/kds.php'
       - 'api/pos.php'
       - 'includes/kds-core.php'
+      - 'includes/kds-production.php'
+      - 'includes/table-service-core.php'
       - 'js/kds.js'
       - 'js/pos.js'
       - 'database/20260919_kitchen_display_order_routing.sql'
       - 'tests/kds-contract.php'
+      - 'tests/kds-production-expo-contract.php'
       - '.github/workflows/kitchen-display.yml'
   push:
     branches: [main]
@@ -42,10 +45,12 @@ jobs:
           php -l api/kds.php
           php -l api/pos.php
           php -l includes/kds-core.php
+          php -l includes/kds-production.php
           php -l tests/kds-contract.php
+          php -l tests/kds-production-expo-contract.php
           node --check js/kds.js
           node --check js/pos.js
-      - name: Architecture and routing contract
+      - name: Architecture and production contract
         run: |
           test "$(grep -c 'CREATE TABLE IF NOT EXISTS kds_stations' database/20260919_kitchen_display_order_routing.sql)" = "1"
           test "$(grep -c 'CREATE TABLE IF NOT EXISTS kds_menu_routes' database/20260919_kitchen_display_order_routing.sql)" = "1"
@@ -57,7 +62,16 @@ jobs:
           grep -q "'kds.update'" database/20260919_kitchen_display_order_routing.sql
           grep -q "'kds.configure'" database/20260919_kitchen_display_order_routing.sql
           grep -q 'function kds_transaction' includes/kds-core.php
-          grep -q 'return kds_transaction' includes/kds-core.php
+          grep -q 'function kds_production_board' includes/kds-production.php
+          grep -q 'function kds_production_ticket_action' includes/kds-production.php
+          grep -q 'function kds_production_recall_item' includes/kds-production.php
+          grep -q 'Only Expo / All can bump' includes/kds-production.php
+          ! grep -q 'CREATE TABLE' includes/kds-production.php
+          grep -q "action==='ticket.action'" api/kds.php
+          grep -q "action==='item.recall'" api/kds.php
+          grep -q 'data-ticket-act' js/kds.js
+          grep -q 'readyToBump' js/kds.js
+          grep -q 'All Day' kds.php
           grep -q 'kds_assert_pos_line_mutable' api/pos.php
           grep -q 'kds_cancel_pos_line' api/pos.php
           grep -q 'kds_cancel_check' api/pos.php
@@ -96,8 +110,14 @@ jobs:
           test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260919_kitchen_display_order_routing';")" = "1"
       - name: Kitchen Display behavioral contract
         run: php tests/kds-contract.php
+      - name: KDS production and Expo contract
+        run: php tests/kds-production-expo-contract.php
+      - name: Table Service regression
+        run: php tests/table-service-contract.php
       - name: Native POS regression
         run: php tests/native-pos-contract.php
+      - name: POS Floor integration regression
+        run: php tests/pos-floor-plan-integration-contract.php
       - name: Daily Manager regression
         run: php tests/daily-manager-contract.php
       - name: Verify upgrader idempotence
