@@ -97,6 +97,7 @@ try {
 } finally {
     $pdo->prepare('DELETE FROM location_hours WHERE organization_id=?')->execute([$organizationId]);
     $pdo->prepare('DELETE FROM locations WHERE organization_id=?')->execute([$organizationId]);
+    $pdo->prepare('DELETE FROM audit_log WHERE organization_id=?')->execute([$organizationId]);
     $pdo->prepare('DELETE rp FROM role_permissions rp INNER JOIN roles r ON r.id=rp.role_id WHERE r.organization_id=?')->execute([$organizationId]);
     $pdo->prepare('DELETE FROM roles WHERE organization_id=?')->execute([$organizationId]);
     $pdo->prepare('DELETE FROM organizations WHERE id=?')->execute([$organizationId]);
