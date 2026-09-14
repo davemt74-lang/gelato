@@ -18,6 +18,10 @@ on:
       - 'login.html'
       - 'forgot-password.php'
       - 'reset-password.php'
+      - 'customer-signup.php'
+      - 'customer-login.php'
+      - 'customer-account.php'
+      - 'customer-logout.php'
       - 'workspace.php'
       - 'public-site-settings.php'
       - 'assets/**'
@@ -26,8 +30,10 @@ on:
       - 'css/stonefellows-public-v2.css'
       - 'js/public-account-menu.js'
       - 'includes/public-site.php'
+      - 'includes/customer-account-core.php'
       - 'includes/menu-sync.php'
       - 'database/20260914_public_site_settings.sql'
+      - 'database/20261002_customer_accounts_online_ordering_foundation.sql'
       - 'tests/public-site-contract.php'
 permissions:
   contents: read
@@ -46,7 +52,7 @@ jobs:
       - name: Lint public and workspace PHP
         run: |
           set -euo pipefail
-          for f in index.php menu.php gelato.php about.php contact.php locations.php job.php catering.php wholesale.php login.php forgot-password.php reset-password.php workspace.php public-site-settings.php includes/public-site.php; do php -l "$f"; done
+          for f in index.php menu.php gelato.php about.php contact.php locations.php job.php catering.php wholesale.php login.php forgot-password.php reset-password.php customer-signup.php customer-login.php customer-account.php customer-logout.php workspace.php public-site-settings.php includes/public-site.php includes/customer-account-core.php; do php -l "$f"; done
       - name: Validate JavaScript
         run: |
           node --check assets/js/site.js
