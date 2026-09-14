@@ -10,7 +10,7 @@ on:
       - 'js/floor-planner-module.js'
       - 'js/floor-planner-ops.js'
       - 'database/20260912_floor_planner.sql'
-      - 'index.php'
+      - 'workspace.php'
       - '.github/workflows/floor-planner-contract.yml'
   push:
     branches: [main]
@@ -22,7 +22,7 @@ on:
       - 'js/floor-planner-module.js'
       - 'js/floor-planner-ops.js'
       - 'database/20260912_floor_planner.sql'
-      - 'index.php'
+      - 'workspace.php'
       - '.github/workflows/floor-planner-contract.yml'
 
 jobs:
@@ -39,7 +39,7 @@ jobs:
           php -l floor-planner-ops.php
           php -l api/floor-plans.php
           php -l api/equipment-placement.php
-          php -l index.php
+          php -l workspace.php
       - name: JavaScript syntax
         run: |
           node --check js/floor-planner-module.js
@@ -56,4 +56,4 @@ jobs:
           grep -q "floor-planner-ops.php" floor-planner.php
           grep -q "api/floor-plans.php" js/floor-planner-ops.js
           grep -q "api/equipment-placement.php" js/floor-planner-ops.js
-          grep -q "floor-planner-module.js" index.php
+          grep -q "floor-planner-module.js" workspace.php

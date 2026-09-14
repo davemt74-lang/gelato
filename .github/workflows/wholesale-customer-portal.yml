@@ -12,7 +12,7 @@ on:
       - 'wholesale-portal.php'
       - 'wholesale-accept.php'
       - 'wholesale-login.php'
-      - 'index.php'
+      - 'workspace.php'
       - 'js/floor-planner-module.js'
       - '.github/workflows/wholesale-customer-portal.yml'
   push:
@@ -27,7 +27,7 @@ on:
       - 'wholesale-portal.php'
       - 'wholesale-accept.php'
       - 'wholesale-login.php'
-      - 'index.php'
+      - 'workspace.php'
       - 'js/floor-planner-module.js'
       - '.github/workflows/wholesale-customer-portal.yml'
 
@@ -64,7 +64,7 @@ jobs:
           php -l wholesale-portal.php
           php -l wholesale-accept.php
           php -l wholesale-login.php
-          php -l index.php
+          php -l workspace.php
           node --check js/floor-planner-module.js
 
       - name: Security and feature contract
@@ -83,7 +83,7 @@ jobs:
           grep -q "app_verify_request_csrf" api/wholesale-portal.php
           grep -q "app_verify_request_csrf" api/wholesale-accounts.php
           grep -q "app_password_is_valid" wholesale-accept.php
-          grep -q "role_slug.*wholesale_customer" index.php
+          grep -q "role_slug.*wholesale_customer" workspace.php
           grep -q "Wholesale Customers" js/floor-planner-module.js
           ! grep -q "wholesale.view.*Wholesale Customer" database/20260912_zz_wholesale_customer_portal.sql
 

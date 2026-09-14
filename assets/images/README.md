@@ -1,6 +1,6 @@
 # Stonefellows public-site images
 
-Upload the approved Stonefellows image files into this directory using these exact filenames:
+Production presentation assets belong at the root public path `/assets/images/`:
 
 - `hero.jpg`
 - `card-pizza.jpg`
@@ -15,4 +15,4 @@ Upload the approved Stonefellows image files into this directory using these exa
 - `favorite-spicy.jpg`
 - `favorite-burrata.jpg`
 
-The four `favorite-*.jpg` files are presentation assets only. Pizza names, descriptions, prices, and featured selection come from the canonical menu database.
+Menu names, descriptions, prices and featured selection remain database-driven. These files are presentation assets only.
