@@ -294,7 +294,7 @@ function public_site_render_footer(array $settings): void
     $address = public_site_format_address($settings);
     $socials = public_site_social_links($settings);
     echo '<footer><div class="shell footer-grid">';
-    echo '<div class="footer-brand"><strong>' . app_escape((string)($settings['restaurant_name'] ?? 'Stonefellows')) . '</strong><span>Pizzeria + Bar</span></div>';
+    echo '<div class="footer-brand"><strong>' . app_escape((string)($settings['restaurant_name'] ?? 'Stonefellows')) . '</strong><span>Pizzeria + Bar</span><nav class="socials" aria-label="Business links" style="margin-top:14px"><a href="jobs.html">Jobs</a><a href="catering.php">Catering</a><a href="wholesale.php">Wholesale</a></nav></div>';
     echo '<div><strong>Visit</strong><br>' . ($address !== '' ? app_escape($address) : 'Location details coming soon') . '</div>';
     echo '<div><strong>Hours</strong><br>' . ($settings['hours_text'] !== '' ? nl2br(app_escape((string)$settings['hours_text'])) : 'Hours coming soon') . '</div>';
     echo '<div class="socials" aria-label="Social links">';
