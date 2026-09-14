@@ -46,7 +46,21 @@
     link.setAttribute('title','Open native POS');
     actions.prepend(link);
   }
+  function installPublicSiteNavigation(){
+    if(!has('public_pages.edit')&&!has('settings.organization_edit'))return;
+    const landing=document.querySelector('[data-nav="landing-builder"]');
+    if(!landing||document.querySelector('[data-public-site-settings]'))return;
+    const link=document.createElement('a');
+    link.className='nav-btn';
+    link.href='public-site-settings.php';
+    link.innerHTML='<span class="nav-ico">⌂</span>Public Site';
+    link.setAttribute('data-public-site-settings','true');
+    link.setAttribute('data-permission','public_pages.edit');
+    link.setAttribute('aria-label','Open public site settings');
+    landing.insertAdjacentElement('afterend',link);
+  }
   window.RestaurantAuth={keys,permissionCatalog,seed,users,roles,current,login,logout,has,saveUsers,saveRoles,read,write};
   seed();
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',installPosHeaderAction,{once:true});else installPosHeaderAction();
+  function installHeaderActions(){installPosHeaderAction();installPublicSiteNavigation();}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',installHeaderActions,{once:true});else installHeaderActions();
 })();
