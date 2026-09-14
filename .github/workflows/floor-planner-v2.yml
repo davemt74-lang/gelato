@@ -8,6 +8,7 @@ on:
       - 'floor-planner-v2.php'
       - 'floor-planner-ops.php'
       - 'js/floor-planner-v2.js'
+      - 'js/floor-planner-v2-runtime.js'
       - 'js/floor-planner-module.js'
       - 'js/floor-planner-ops.js'
       - 'api/floor-plans.php'
@@ -23,6 +24,7 @@ on:
       - 'floor-planner-v2.php'
       - 'floor-planner-ops.php'
       - 'js/floor-planner-v2.js'
+      - 'js/floor-planner-v2-runtime.js'
       - 'js/floor-planner-module.js'
       - 'js/floor-planner-ops.js'
       - 'api/floor-plans.php'
@@ -49,6 +51,7 @@ jobs:
       - name: JavaScript syntax
         run: |
           node --check js/floor-planner-v2.js
+          node --check js/floor-planner-v2-runtime.js
           node --check js/floor-planner-module.js
           node --check js/floor-planner-ops.js
       - name: Floor Planner 2.0 contract
