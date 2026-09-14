@@ -1,17 +1,24 @@
 <?php
 declare(strict_types=1);
-require_once __DIR__.'/includes/public-site.php';
-require_once __DIR__.'/includes/online-order-core.php';
 
-app_boot_session();
-$context=public_site_fallback_context();
-$settings=$context['settings'];
+$settings=['restaurant_name'=>'Stonefellows'];
 $organizationId=0;
 $pdo=null;
 $bootstrapError=null;
 $locations=[];
 
 try{
+    require_once __DIR__.'/includes/public-site.php';
+    require_once __DIR__.'/includes/online-order-core.php';
+
+    app_boot_session();
+    if(function_exists('public_site_fallback_context')){
+        $context=public_site_fallback_context();
+        if(isset($context['settings']) && is_array($context['settings'])) $settings=$context['settings'];
+    }elseif(function_exists('public_site_defaults')){
+        $settings=public_site_defaults();
+    }
+
     $pdo=app_pdo();
     try{
         $context=public_site_context($pdo);
@@ -45,11 +52,47 @@ try{
     }
 }catch(Throwable $exception){
     $bootstrapError='Online ordering is temporarily unavailable.';
-    error_log('Online ordering bootstrap failed: '.$exception->getMessage());
+    error_log('Online ordering bootstrap failed before runtime readiness: '.$exception->getMessage());
 }
 
-if($bootstrapError!==null || !$pdo instanceof PDO || $organizationId<1){
+$account=null;
+if($bootstrapError===null && $pdo instanceof PDO && $organizationId>0){
+    try{
+        $account=customer_account_require($pdo,$organizationId);
+    }catch(Throwable $exception){
+        $bootstrapError='Online ordering is temporarily unavailable.';
+        error_log('Online ordering customer bootstrap failed: '.$exception->getMessage());
+    }
+}
+
+if($bootstrapError!==null || !$pdo instanceof PDO || $organizationId<1 || !is_array($account)){
     http_response_code(503);
+    $escape=static function(mixed $value): string {
+        if(function_exists('app_escape')) return app_escape((string)$value);
+        return htmlspecialchars((string)$value,ENT_QUOTES|ENT_SUBSTITUTE,'UTF-8');
+    };
+    $renderHeader=static function(array $settings): void {
+        if(function_exists('public_site_render_header')){
+            try{
+                public_site_render_header($settings,'menu');
+                return;
+            }catch(Throwable $exception){
+                error_log('Online ordering fallback header failed: '.$exception->getMessage());
+            }
+        }
+        echo '<header class="site-header inner"><div class="shell nav"><a class="brand" href="index.php"><strong>Stonefellows</strong><span>Pizzeria + Bar</span></a><nav class="nav-links" aria-label="Primary navigation"><a href="index.php">Home</a><a class="active" href="menu.php">Menu</a><a href="locations.php">Locations</a></nav></div></header>';
+    };
+    $renderFooter=static function(array $settings): void {
+        if(function_exists('public_site_render_footer')){
+            try{
+                public_site_render_footer($settings);
+                return;
+            }catch(Throwable $exception){
+                error_log('Online ordering fallback footer failed: '.$exception->getMessage());
+            }
+        }
+        echo '<footer><div class="shell"><div class="footer-brand"><strong>Stonefellows</strong><span>Pizzeria + Bar</span></div></div></footer>';
+    };
     ?>
 <!doctype html>
 <html lang="en">
@@ -58,16 +101,16 @@ if($bootstrapError!==null || !$pdo instanceof PDO || $organizationId<1){
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#0b0b09">
 <meta name="robots" content="noindex,nofollow">
-<title>Order Online | <?=app_escape((string)($settings['restaurant_name']??'Stonefellows'))?></title>
+<title>Order Online | <?=$escape((string)($settings['restaurant_name']??'Stonefellows'))?></title>
 <link rel="stylesheet" href="assets/css/site.css?v=20260914-2">
 <style>
 .order-unavailable{min-height:72vh;display:grid;place-items:center;padding:130px 0 80px}.order-unavailable-card{width:min(720px,100%);padding:42px;border:1px solid var(--line);background:var(--panel);box-shadow:var(--shadow)}.order-unavailable-card h1{font-size:clamp(2.4rem,6vw,4.4rem);margin:10px 0 18px}.order-unavailable-card p{max-width:620px;color:var(--muted)}.order-unavailable-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px}
 </style>
 </head>
 <body>
-<?php public_site_render_header($settings,'menu'); ?>
+<?php $renderHeader($settings); ?>
 <main class="order-unavailable"><div class="shell"><section class="order-unavailable-card"><div class="eyebrow">Stonefellows Online Ordering</div><h1>Online ordering is temporarily unavailable.</h1><p>The ordering system is being prepared for service. The restaurant website and menu are still available.</p><div class="order-unavailable-actions"><a class="btn btn-primary" href="menu.php">View Menu</a><a class="btn btn-secondary" href="locations.php">Locations</a><a class="btn btn-secondary" href="index.php">Back Home</a></div></section></div></main>
-<?php public_site_render_footer($settings); ?>
+<?php $renderFooter($settings); ?>
 <script src="assets/js/site.js?v=20260914"></script>
 </body>
 </html>
@@ -75,7 +118,6 @@ if($bootstrapError!==null || !$pdo instanceof PDO || $organizationId<1){
     exit;
 }
 
-$account=customer_account_require($pdo,$organizationId);
 $error=null;
 $selected=null;
 
