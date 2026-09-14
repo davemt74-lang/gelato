@@ -62,6 +62,7 @@ function kds_production_board(PDO $pdo,int $org,int $locationId,?string $station
     kds_location($pdo,$org,$locationId);
     $service=kds_production_service_context_ready($pdo);
     [$scopeWhere,$scopeArgs]=kds_production_scope_sql($stationPublicId);
+    $expoScope=$stationPublicId===null||trim($stationPublicId)==='';
 
     $historyWhere=$includeCompleted
         ? " AND (k.status NOT IN ('completed','cancelled') OR COALESCE(k.completed_at,k.cancelled_at,k.updated_at)>=DATE_SUB(NOW(6),INTERVAL 2 HOUR))"
@@ -152,7 +153,8 @@ function kds_production_board(PDO $pdo,int $org,int $locationId,?string $station
     }
 
     foreach($tickets as &$ticket){
-        $ticket['readyToBump']=$ticket['activeFiredCount']>0
+        $ticket['readyToBump']=$expoScope
+            &&$ticket['activeFiredCount']>0
             &&$ticket['ready']===$ticket['activeFiredCount']
             &&$ticket['unrouted']===0;
         if($ticket['late'])$ticket['warning']=false;
@@ -281,6 +283,8 @@ function kds_production_ticket_action(PDO $pdo,int $org,int $locationId,string $
 {
     if(!in_array($action,['fire','hold','start','ready','bump','recall'],true))
         throw new InvalidArgumentException('Kitchen ticket action is invalid.');
+    if($action==='bump'&&$stationPublicId!==null&&trim($stationPublicId)!=='')
+        throw new InvalidArgumentException('Only Expo / All can bump a completed kitchen ticket. Station views hand items to Expo by marking them Ready.');
 
     return kds_transaction($pdo,function()use($pdo,$org,$locationId,$checkPublicId,$action,$stationPublicId,$userId):array{
         $rows=kds_production_ticket_rows($pdo,$org,$locationId,$checkPublicId,$stationPublicId,true);
