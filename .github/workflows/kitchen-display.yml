@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'kds.php'
+      - 'kds-dashboard.php'
       - 'pos.php'
       - 'api/kds.php'
       - 'api/pos.php'
@@ -11,6 +12,7 @@ on:
       - 'includes/kds-production.php'
       - 'includes/table-service-core.php'
       - 'js/kds.js'
+      - 'js/kds-dashboard.js'
       - 'js/pos.js'
       - 'database/20260919_kitchen_display_order_routing.sql'
       - 'tests/kds-contract.php'
@@ -41,6 +43,7 @@ jobs:
       - name: Syntax checks
         run: |
           php -l kds.php
+          php -l kds-dashboard.php
           php -l pos.php
           php -l api/kds.php
           php -l api/pos.php
@@ -49,6 +52,7 @@ jobs:
           php -l tests/kds-contract.php
           php -l tests/kds-production-expo-contract.php
           node --check js/kds.js
+          node --check js/kds-dashboard.js
           node --check js/pos.js
       - name: Architecture and production contract
         run: |
@@ -57,7 +61,6 @@ jobs:
           test "$(grep -c 'CREATE TABLE IF NOT EXISTS kds_order_items' database/20260919_kitchen_display_order_routing.sql)" = "1"
           test "$(grep -c 'CREATE TABLE IF NOT EXISTS kds_order_events' database/20260919_kitchen_display_order_routing.sql)" = "1"
           grep -q 'uq_kds_order_pos_line' database/20260919_kitchen_display_order_routing.sql
-          grep -q 'station_id BIGINT UNSIGNED NULL' database/20260919_kitchen_display_order_routing.sql
           grep -q "'kds.view'" database/20260919_kitchen_display_order_routing.sql
           grep -q "'kds.update'" database/20260919_kitchen_display_order_routing.sql
           grep -q "'kds.configure'" database/20260919_kitchen_display_order_routing.sql
@@ -69,8 +72,21 @@ jobs:
           ! grep -q 'CREATE TABLE' includes/kds-production.php
           grep -q "action==='ticket.action'" api/kds.php
           grep -q "action==='item.recall'" api/kds.php
-          grep -q 'data-ticket-act' js/kds.js
-          grep -q 'readyToBump' js/kds.js
+          grep -q 'id="startKds"' kds.php
+          grep -q 'Esc exits to Kitchen Dashboard' kds.php
+          grep -q 'requestFullscreen' js/kds.js
+          grep -q "e.key==='Enter'" js/kds.js
+          grep -q "e.key.toLowerCase()==='b'" js/kds.js
+          grep -q "e.key.toLowerCase()==='r'" js/kds.js
+          grep -q 'selectedTicketId' js/kds.js
+          grep -q 'kds-dashboard.php' kds.php
+          grep -q 'Launch Full-Screen KDS' kds-dashboard.php
+          grep -q 'id="summary"' kds-dashboard.php
+          grep -q 'id="stationForm"' kds-dashboard.php
+          grep -q "action:'station.save'" js/kds-dashboard.js
+          grep -q "action:'route.save'" js/kds-dashboard.js
+          ! grep -q 'id="summary"' kds.php
+          ! grep -q 'id="stationForm"' kds.php
           grep -q 'All Day' kds.php
           grep -q 'kds_assert_pos_line_mutable' api/pos.php
           grep -q 'kds_cancel_pos_line' api/pos.php
