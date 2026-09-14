@@ -3,7 +3,11 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/public-site.php';
 
 $context = public_site_fallback_context();
-try { $context = public_site_context(app_pdo()); } catch (Throwable $exception) { error_log('Public homepage load failed: ' . $exception->getMessage()); }
+try {
+    $context = public_site_context(app_pdo());
+} catch (Throwable $exception) {
+    error_log('Public homepage load failed: ' . $exception->getMessage());
+}
 $settings = $context['settings'];
 $sections = $context['menuSections'];
 $pizzaSection = public_site_section($sections, 'pizza');
@@ -12,12 +16,33 @@ $featuredPizzas = $pizzaSection ? public_site_featured_items($pizzaSection, 4) :
 $gelatoItems = $gelatoSection ? public_site_featured_items($gelatoSection, 4) : [];
 $favoriteImages = ['favorite-stonefellow.jpg', 'favorite-funghi.jpg', 'favorite-spicy.jpg', 'favorite-burrata.jpg'];
 $address = public_site_format_address($settings);
+
+ob_start();
+public_site_render_header($settings, 'home');
+$homeHeader = (string)ob_get_clean();
+$accountCta = '<a class="nav-cta" href="customer-account.php">Account</a>';
+$orderCta = '<a class="nav-cta home-order-cta" href="online-order.php">Order Online</a>';
+if (str_contains($homeHeader, $accountCta)) {
+    $homeHeader = str_replace($accountCta, $orderCta . $accountCta, $homeHeader);
+}
 ?>
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0b0b09"><meta name="description" content="<?= app_escape((string)$settings['tagline']) ?>"><title><?= app_escape((string)$settings['restaurant_name']) ?> | Pizzeria + Bar</title><link rel="stylesheet" href="assets/css/site.css?v=20260914-2"></head><body>
-<?php public_site_render_header($settings, 'home'); ?>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b0b09">
+<meta name="description" content="<?= app_escape((string)$settings['tagline']) ?>">
+<title><?= app_escape((string)$settings['restaurant_name']) ?> | Pizzeria + Bar</title>
+<link rel="stylesheet" href="assets/css/site.css?v=20260914-2">
+<style>
+.home-order-cta{background:var(--gold2);color:#17130b;border-color:var(--gold2);box-shadow:0 8px 24px rgba(0,0,0,.16);white-space:nowrap}.home-order-cta:hover{background:#fff0c8;border-color:#fff0c8;color:#17130b}@media(max-width:760px){.site-header .nav{gap:10px}.site-header .home-order-cta{display:inline-flex;padding:8px 10px;font-size:.58rem}.site-header .menu-toggle{margin-left:0}}@media(max-width:430px){.site-header .home-order-cta{padding:8px;letter-spacing:.08em}.site-header .brand span{display:none}}
+</style>
+</head>
+<body>
+<?= $homeHeader ?>
 <main id="top">
-<section class="hero"><img class="hero-bg" src="<?= app_escape(public_site_asset('hero.jpg')) ?>" alt="Wood-fired pizza, beer and cocktails at <?= app_escape((string)$settings['restaurant_name']) ?>"><div class="shell hero-inner"><div class="hero-copy" data-reveal><div class="eyebrow">Neighborhood Pizzeria · Exceptional Nights</div><h1>Wood-Fired Pizza.<br>Craft Drinks.<br>Good Company.</h1><p><?= app_escape((string)$settings['tagline']) ?></p><div class="hero-actions"><a class="btn btn-primary" href="menu.php">View Our Menu</a><a class="btn btn-secondary" href="locations.php">Visit Us</a></div></div></div></section>
+<section class="hero"><img class="hero-bg" src="<?= app_escape(public_site_asset('hero.jpg')) ?>" alt="Wood-fired pizza, beer and cocktails at <?= app_escape((string)$settings['restaurant_name']) ?>"><div class="shell hero-inner"><div class="hero-copy" data-reveal><div class="eyebrow">Neighborhood Pizzeria · Exceptional Nights</div><h1>Wood-Fired Pizza.<br>Craft Drinks.<br>Good Company.</h1><p><?= app_escape((string)$settings['tagline']) ?></p><div class="hero-actions"><a class="btn btn-primary" href="online-order.php">Order Online</a><a class="btn btn-secondary" href="menu.php">View Our Menu</a><a class="btn btn-secondary" href="locations.php">Visit Us</a></div></div></div></section>
 <div class="feature-wrap"><div class="shell feature-grid">
 <article class="feature-card" data-reveal><img src="<?= app_escape(public_site_asset('card-pizza.jpg')) ?>" alt="Stonefellows wood-fired pizza"><div class="feature-content"><div class="eyebrow">Our Pizza</div><h3>Fire, Flour, Patience.</h3><p>Browse the current restaurant menu, pulled directly from the same menu data used by the restaurant system.</p><a class="btn-link" href="menu.php">View Menu →</a></div></article>
 <article class="feature-card" data-reveal><img src="<?= app_escape(public_site_asset('card-drinks.jpg')) ?>" alt="Drinks at the Stonefellows bar"><div class="feature-content"><div class="eyebrow">Beer + Wine</div><h3>Stay Awhile.</h3><p>Pizza, drinks and a neighborhood room designed for lunch, dinner and the evening after.</p><a class="btn-link" href="menu.php">See the Menu →</a></div></article>
@@ -28,4 +53,8 @@ $address = public_site_format_address($settings);
 <section class="gelato-section" id="gelato"><div class="shell gelato-grid" data-reveal><div class="gelato-copy"><div class="eyebrow">Gelato</div><h2>The Perfect Finish.</h2><?php if ($gelatoItems): ?><p>Current flavors come directly from the restaurant menu database.</p><div class="gelato-flavors" aria-label="Current gelato flavors"><?php foreach ($gelatoItems as $item): ?><span><?= app_escape((string)$item['name']) ?></span><?php endforeach; ?></div><?php else: ?><p>Our gelato lineup rotates. Check the Gelato menu for the current selection.</p><?php endif; ?><a class="btn btn-secondary" href="gelato.php">View Gelato Menu</a></div><div class="gelato-visual"><img src="<?= app_escape(public_site_asset('gelato.jpg')) ?>" alt="Assorted Stonefellows gelato"></div></div></section>
 <section class="section-tight" id="favorites"><div class="shell"><div class="section-head"><div><div class="eyebrow">From the Current Menu</div><h2>Featured Pizza</h2></div><a class="btn-link" href="menu.php">View Full Menu →</a></div><?php if ($featuredPizzas): ?><div class="favorites-grid"><?php foreach ($featuredPizzas as $index => $item): ?><article class="menu-card" data-reveal><img src="<?= app_escape(public_site_asset($favoriteImages[$index] ?? $favoriteImages[0])) ?>" alt="<?= app_escape((string)$item['name']) ?>"><div class="menu-card-body"><h3><?= app_escape((string)$item['name']) ?></h3><?php if (trim((string)$item['description']) !== ''): ?><p><?= app_escape((string)$item['description']) ?></p><?php endif; ?><?php $price=public_site_price($item); if($price!==''): ?><span class="price"><?= app_escape($price) ?></span><?php endif; ?></div></article><?php endforeach; ?></div><?php else: ?><div class="empty-state">The pizza menu has not been published to the restaurant database yet.</div><?php endif; ?></div></section>
 <section class="section" id="visit"><div class="shell bottom-grid"><article class="info-panel" data-reveal><div class="eyebrow">Visit Stonefellows</div><h3><?= $address !== '' ? app_escape($address) : 'Location details coming soon' ?></h3><a class="btn-link" href="locations.php">All Location Details →</a></article><article class="info-panel" data-reveal><div class="eyebrow">Hours</div><h3><?= $settings['hours_text'] !== '' ? nl2br(app_escape((string)$settings['hours_text'])) : 'Hours coming soon' ?></h3><a class="btn-link" href="contact.php">Contact Us →</a></article><article class="info-panel" data-reveal><div class="eyebrow">Questions?</div><h3>Talk to the restaurant.</h3><?php if($settings['phone']!==''): ?><p><a class="contact-link" href="tel:<?= app_escape(preg_replace('/[^+0-9]/','',(string)$settings['phone']) ?? '') ?>"><?= app_escape((string)$settings['phone']) ?></a></p><?php endif; ?><?php if($settings['email']!==''): ?><p><a class="contact-link" href="mailto:<?= app_escape((string)$settings['email']) ?>"><?= app_escape((string)$settings['email']) ?></a></p><?php endif; ?></article></div></section>
-</main><?php public_site_render_footer($settings); ?><script src="assets/js/site.js?v=20260914"></script></body></html>
+</main>
+<?php public_site_render_footer($settings); ?>
+<script src="assets/js/site.js?v=20260914"></script>
+</body>
+</html>
