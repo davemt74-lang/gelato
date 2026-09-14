@@ -1,6 +1,6 @@
 (()=>{'use strict';
 const C=window.KDS_CONFIG||{};
-const S={locationId:0,station:'',completed:false,data:null,timer:null,loading:false};
+const S={locationId:0,station:'',completed:false,data:null,timer:null,loading:false,mutating:false,epoch:0};
 const $=s=>document.querySelector(s);
 const esc=v=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const fmtAge=s=>{s=Math.max(0,Number(s)||0);const m=Math.floor(s/60),r=s%60;return m+':'+String(r).padStart(2,'0')};
@@ -64,8 +64,8 @@ function itemActionButtons(item){
   if(status==='held')out+='<button class="action" data-item-act="queued">Fire</button>';
   if(status==='queued')out+='<button class="action" data-item-act="in_progress">Start</button><button class="action alt" data-item-act="held">Hold</button>';
   if(status==='in_progress')out+='<button class="action good" data-item-act="ready">Ready</button>';
-  if(status==='ready')out+='<button class="action good" data-item-act="completed">Complete</button><button class="action alt" data-item-act="in_progress">Undo</button>';
-  if(status==='completed'&&item.recallable)out+='<button class="action warn" data-item-recall>Recall</button>';
+  if(status==='ready')out+=(S.station?'':'<button class="action good" data-item-act="completed">Complete at Expo</button>')+'<button class="action alt" data-item-act="in_progress">Undo</button>';
+  if(!S.station&&status==='completed'&&item.recallable)out+='<button class="action warn" data-item-recall>Recall</button>';
   return out;
 }
 function renderItem(item){
@@ -112,19 +112,32 @@ function renderConfig(){
 }
 function render(){renderLocations();renderTabs();renderAlert();renderSummary();renderAllDay();renderBoard();renderConfig()}
 async function load(){
-  if(S.loading)return;S.loading=true;
-  try{const data=await api();S.data=data;if(!S.locationId)S.locationId=Number(data.locationId)||0;render()}
-  catch(e){toast(e.message)}finally{S.loading=false}
+  if(S.loading||S.mutating)return;
+  S.loading=true;
+  const epoch=S.epoch;
+  try{
+    const data=await api();
+    if(epoch!==S.epoch||S.mutating)return;
+    S.data=data;
+    if(!S.locationId)S.locationId=Number(data.locationId)||0;
+    render();
+  }catch(e){if(epoch===S.epoch)toast(e.message)}finally{S.loading=false}
 }
 async function post(body){
+  S.mutating=true;
+  S.epoch++;
   try{
     const data=await api('POST',{locationId:S.locationId,station:S.station,completed:S.completed?1:0,...body});
-    if(data.board)S.data.board=data.board;if(data.catalog)S.data.catalog=data.catalog;if(data.stations&&S.data?.board)S.data.board.stations=data.stations;render();return data;
-  }catch(e){toast(e.message);throw e}
+    if(data.board)S.data.board=data.board;
+    if(data.catalog)S.data.catalog=data.catalog;
+    if(data.stations&&S.data?.board)S.data.board.stations=data.stations;
+    render();
+    return data;
+  }catch(e){toast(e.message);throw e}finally{S.mutating=false}
 }
 document.addEventListener('click',async e=>{
   const tab=e.target.closest('[data-station]');
-  if(tab){S.station=tab.dataset.station||'';await load();return}
+  if(tab){S.station=tab.dataset.station||'';S.epoch++;await load();return}
   const item=e.target.closest('[data-item]');
   const itemAct=e.target.closest('[data-item-act]');
   if(item&&itemAct){itemAct.disabled=true;await post({action:'item.transition',itemPublicId:item.dataset.item,status:itemAct.dataset.itemAct}).catch(()=>{});return}
@@ -135,12 +148,12 @@ document.addEventListener('click',async e=>{
   if(ticket&&ticketAct){ticketAct.disabled=true;await post({action:'ticket.action',checkPublicId:ticket.dataset.ticket,ticketAction:ticketAct.dataset.ticketAct}).catch(()=>{});return}
 });
 document.addEventListener('change',async e=>{
-  if(e.target.id==='location'){S.locationId=Number(e.target.value)||0;S.station='';await load();return}
+  if(e.target.id==='location'){S.locationId=Number(e.target.value)||0;S.station='';S.epoch++;await load();return}
   if(e.target.matches('[data-route]')){const item=e.target.closest('[data-item]');if(!item)return;await post({action:'item.reassign',itemPublicId:item.dataset.item,stationPublicId:e.target.value||null}).catch(()=>{});return}
   if(e.target.matches('[data-menu-route]')){await post({action:'route.save',menuItemId:Number(e.target.dataset.menuRoute),stationPublicId:e.target.value||null}).then(()=>toast('Route saved')).catch(()=>{});return}
 });
-$('#refresh').addEventListener('click',load);
-$('#history').addEventListener('click',async()=>{S.completed=!S.completed;$('#history').textContent=S.completed?'Hide recent completed':'Show recent completed';await load()});
+$('#refresh').addEventListener('click',()=>{S.epoch++;load()});
+$('#history').addEventListener('click',async()=>{S.completed=!S.completed;S.epoch++;$('#history').textContent=S.completed?'Hide recent completed':'Show recent completed';await load()});
 $('#fullscreen').addEventListener('click',async()=>{try{if(!document.fullscreenElement)await document.documentElement.requestFullscreen();else await document.exitFullscreen()}catch(e){toast('Full-screen mode is unavailable in this browser.')}});
 document.addEventListener('fullscreenchange',()=>{document.body.classList.toggle('kiosk',!!document.fullscreenElement);$('#fullscreen').textContent=document.fullscreenElement?'Exit full screen':'Full screen'});
 $('#stationForm').addEventListener('submit',async e=>{e.preventDefault();await post({action:'station.save',name:$('#stationName').value,targetSeconds:(Number($('#targetMinutes').value)||10)*60,sortOrder:Number($('#sortOrder').value)||0,status:'active'}).then(()=>{toast('Station added');$('#stationName').value=''}).catch(()=>{})});
