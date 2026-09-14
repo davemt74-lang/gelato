@@ -1,0 +1,113 @@
+name: Location Foundation
+
+on:
+  pull_request:
+    paths:
+      - 'database/20261003_location_foundation.sql'
+      - 'includes/location-core.php'
+      - 'locations-admin.php'
+      - 'locations.php'
+      - 'tests/location-foundation-contract.php'
+      - '.github/workflows/location-foundation.yml'
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  location-foundation:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+          coverage: none
+      - name: Syntax checks
+        run: |
+          set -euo pipefail
+          php -l includes/location-core.php
+          php -l locations-admin.php
+          php -l locations.php
+          php -l tests/location-foundation-contract.php
+      - name: Static location contract
+        run: |
+          set -euo pipefail
+          grep -q 'CREATE TABLE location_hours' database/20261003_location_foundation.sql
+          grep -q 'public_slug' database/20261003_location_foundation.sql
+          grep -q 'online_ordering_enabled' database/20261003_location_foundation.sql
+          grep -q 'delivery_radius_miles' database/20261003_location_foundation.sql
+          grep -q 'locations.manage' database/20261003_location_foundation.sql
+          grep -q 'location_archive' locations-admin.php
+          ! grep -q 'DELETE FROM locations' locations-admin.php
+          grep -q 'Use this location' locations.php
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_location_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $service = new UpgradeService(app_pdo(), __DIR__);
+          $service->ensureTrackingTables();
+          $service->bootstrapLegacyHistory(null);
+          $service->applyPending(null);
+          if ($service->pendingMigrations()) exit(1);
+          PHP
+      - name: Verify location schema
+        run: |
+          set -euo pipefail
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='locations' AND column_name IN ('public_slug','email','timezone','is_primary','sort_order','dine_in_enabled','pickup_enabled','delivery_enabled','online_ordering_enabled','delivery_radius_miles','delivery_minimum','delivery_fee','pickup_lead_minutes','delivery_lead_minutes','latitude','longitude');")" = "16"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='location_hours';")" = "1"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('locations.view','locations.manage');")" = "2"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20261003_location_foundation';")" = "1"
+      - name: Location behavioral contract
+        run: php tests/location-foundation-contract.php
+      - name: Public site regression
+        run: php tests/public-site-contract.php
+      - name: Native POS regression
+        run: php tests/native-pos-contract.php
+      - name: Customer account regression
+        run: php tests/customer-account-contract.php
+      - name: Verify upgrader idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $service = new UpgradeService(app_pdo(), __DIR__);
+          $service->assertAppliedChecksumsUnchanged();
+          if ($service->pendingMigrations()) exit(2);
+          if ($service->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP
+      - name: Build deploy ZIP
+        run: git archive --format=zip --output=stonefellows-deploy.zip HEAD
+      - name: Upload deploy ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: stonefellows-location-foundation-deploy
+          path: stonefellows-deploy.zip
+          if-no-files-found: error
