@@ -14,6 +14,7 @@ on:
       - 'js/floor-planner-v2-fixes.js'
       - 'js/floor-planner-v2-display.js'
       - 'js/floor-planner-v2-groups.js'
+      - 'js/floor-planner-v2-group-state.js'
       - 'js/floor-planner-module.js'
       - 'js/floor-planner-ops.js'
       - 'api/floor-plans.php'
@@ -39,6 +40,7 @@ on:
       - 'js/floor-planner-v2-fixes.js'
       - 'js/floor-planner-v2-display.js'
       - 'js/floor-planner-v2-groups.js'
+      - 'js/floor-planner-v2-group-state.js'
       - 'js/floor-planner-module.js'
       - 'js/floor-planner-ops.js'
       - 'api/floor-plans.php'
@@ -79,6 +81,7 @@ jobs:
           node --check js/floor-planner-v2-fixes.js
           node --check js/floor-planner-v2-display.js
           node --check js/floor-planner-v2-groups.js
+          node --check js/floor-planner-v2-group-state.js
           node --check js/floor-planner-module.js
           node --check js/floor-planner-ops.js
       - name: Floor Planner 2.0 contract
