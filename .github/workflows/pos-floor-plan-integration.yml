@@ -1,0 +1,106 @@
+name: POS + Floor Plan Integration
+
+on:
+  pull_request:
+    paths:
+      - 'database/20260930_pos_floor_plan_integration.sql'
+      - 'includes/pos-floor-plan.php'
+      - 'api/pos.php'
+      - 'pos.php'
+      - 'js/pos.js'
+      - 'tests/pos-floor-plan-integration-contract.php'
+      - '.github/workflows/pos-floor-plan-integration.yml'
+  push:
+    branches: [main]
+
+jobs:
+  pos-floor-plan-integration:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - name: Syntax checks
+        run: |
+          php -l includes/pos-floor-plan.php
+          php -l api/pos.php
+          php -l pos.php
+          php -l tests/pos-floor-plan-integration-contract.php
+          node --check js/pos.js
+      - name: Architecture and safety contract
+        run: |
+          grep -q 'CREATE TABLE IF NOT EXISTS pos_floor_plan_settings' database/20260930_pos_floor_plan_integration.sql
+          grep -q 'floor_plan_component_id' database/20260930_pos_floor_plan_integration.sql
+          grep -q 'function pos_floor_plan_sync_tables' includes/pos-floor-plan.php
+          grep -q "action==='table.seat'" api/pos.php
+          grep -q "action==='floor.sync'" api/pos.php
+          grep -q 'table_service_release_closed_check' api/pos.php
+          grep -q 'floorPlanSelect' pos.php
+          grep -q 'data-table-public' js/pos.js
+          grep -q "mutate('table.seat'" js/pos.js
+          ! grep -q 'DELETE FROM service_tables' includes/pos-floor-plan.php
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_restaurant_ai_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->ensureTrackingTables();
+          $s->bootstrapLegacyHistory(null);
+          $s->applyPending(null);
+          if($s->pendingMigrations()) exit(1);
+          PHP
+      - name: Verify integration schema
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='pos_floor_plan_settings';")" = "1"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='service_tables' AND column_name IN ('floor_plan_public_id','floor_plan_component_id','floor_plan_synced_at');")" = "3"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260930_pos_floor_plan_integration';")" = "1"
+      - name: POS floor-plan behavioral contract
+        run: php tests/pos-floor-plan-integration-contract.php
+      - name: Native POS regression
+        run: php tests/native-pos-contract.php
+      - name: Table Service regression
+        run: php tests/table-service-contract.php
+      - name: Floor Planner static regression
+        run: |
+          php -l floor-planner.php
+          php -l api/floor-plans.php
+          node --check js/floor-planner-ops.js
+      - name: Kitchen Display regression
+        run: php tests/kds-contract.php
+      - name: Upgrader checksum and idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->assertAppliedChecksumsUnchanged();
+          if($s->pendingMigrations()) exit(2);
+          if($s->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP
