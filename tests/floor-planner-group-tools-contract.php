@@ -9,12 +9,14 @@ function group_tools_assert(bool $condition, string $message): void
 }
 
 $groups = file_get_contents(__DIR__ . '/../js/floor-planner-v2-groups.js');
+$state = file_get_contents(__DIR__ . '/../js/floor-planner-v2-group-state.js');
 $shell = file_get_contents(__DIR__ . '/../floor-planner-v2.php');
-if ($groups === false || $shell === false) {
+if ($groups === false || $state === false || $shell === false) {
     throw new RuntimeException('Unable to read Floor Planner group-tool sources.');
 }
 
 group_tools_assert(str_contains($shell, 'floor-planner-v2-groups.js?v=20260914-1'), 'Floor Planner shell must load the group tools layer.');
+group_tools_assert(str_contains($shell, 'floor-planner-v2-group-state.js?v=20260914-1'), 'Floor Planner shell must load the group state hardening layer.');
 $groupPos = strpos($shell, 'floor-planner-v2-groups.js?v=20260914-1');
 $canonicalPos = strpos($shell, '. $needle');
 group_tools_assert($groupPos !== false && $canonicalPos !== false && $groupPos < $canonicalPos, 'Group persistence must load before the canonical planner starts initial plan hydration.');
@@ -31,6 +33,9 @@ group_tools_assert(str_contains($groups, "node.dataset[LOCKED_ATTR] = '1'"), 'Lo
 group_tools_assert(str_contains($groups, 'syncV2Selection(members'), 'Clicking a locked group member must select the entire logical group.');
 group_tools_assert(str_contains($groups, 'parsed.plan.data.groups = groupRecords()'), 'Locked-group membership must persist with the saved floor plan.');
 group_tools_assert(str_contains($groups, 'kind:\'equipment\'') && str_contains($groups, 'kind:\'structure\''), 'Persisted groups must support both structure and equipment membership.');
+group_tools_assert(str_contains($state, 'const desired = new Map()'), 'Live group state must remember user lock/unlock intent within the session.');
+group_tools_assert(str_contains($state, "desired.set(key, null)"), 'Unlocking a group must prevent stale loaded group state from re-locking it.');
+group_tools_assert(str_contains($state, 'fp-group-composite-member'), 'Lock/unlock must mutate a tracked class so the unsaved-change guard sees logical group changes.');
 group_tools_assert(str_contains($groups, "const GELATO_TYPE = 'gelato-display'"), 'Planner must define a first-class Gelato element type.');
 group_tools_assert(str_contains($groups, 'data-structure="gelato-display"'), 'Gelato element must be added to the structure palette.');
 group_tools_assert(str_contains($groups, 'function gelatoNode'), 'Planner must create and restore Gelato elements.');
