@@ -28,6 +28,7 @@
   }
 
   function installOperationsNav() {
+    // Floor Planner 2.0 wraps the canonical floor-planner-ops.php runtime.
     addAdminNav('floorplans.view', 'floor-planner-nav', '▦', 'Floor Planner', 'floor-planner-v2.php');
     addAdminNav('equipment.view', 'equipment-nav', '⚙', 'Equipment Catalog', 'equipment.php');
     addAdminNav('wholesale.view', 'wholesale-nav', '◇', 'Wholesale Pipeline', 'wholesale-pipeline.php');
