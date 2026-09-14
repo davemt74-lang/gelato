@@ -5,15 +5,16 @@ on:
     paths:
       - 'online-order.php'
       - 'customer-account.php'
+      - 'customer-login.php'
+      - 'customer-signup.php'
       - 'customer-promotions.php'
-      - 'includes/public-site.php'
-      - 'includes/online-order-core.php'
-      - 'includes/customer-inbox-core.php'
+      - 'upgrade.php'
+      - 'includes/*.php'
       - 'assets/js/online-order.js'
       - 'assets/css/online-order.css'
       - 'assets/css/customer-account.css'
       - 'assets/css/customer-inbox.css'
-      - 'database/20261004_online_ordering_customer_inbox.sql'
+      - 'database/*.sql'
       - 'tests/online-ordering-inbox-contract.php'
       - 'tests/online-order-runtime-gate-contract.php'
       - '.github/workflows/online-ordering-inbox.yml'
@@ -43,10 +44,19 @@ jobs:
         run: |
           php -l online-order.php
           php -l customer-account.php
+          php -l customer-login.php
+          php -l customer-signup.php
           php -l customer-promotions.php
+          php -l upgrade.php
           php -l includes/public-site.php
           php -l includes/online-order-core.php
+          php -l includes/customer-account-core.php
           php -l includes/customer-inbox-core.php
+          php -l includes/customer-crm-core.php
+          php -l includes/location-core.php
+          php -l includes/pos-core.php
+          php -l includes/kds-core.php
+          php -l includes/UpgradeService.php
           php -l tests/online-ordering-inbox-contract.php
           php -l tests/online-order-runtime-gate-contract.php
           node --check assets/js/online-order.js
@@ -63,6 +73,8 @@ jobs:
           grep -q 'pos_add_item' includes/online-order-core.php
           grep -q 'kds_send_check' includes/online-order-core.php
           grep -q 'customer_inbox_send_direct' includes/online-order-core.php
+          grep -q 'online_order_missing_requirements' includes/online-order-core.php
+          ! grep -q 'pos_ready($pdo)' includes/online-order-core.php
           grep -q 'COALESCE(pref.promotions_enabled,1)=1' includes/customer-inbox-core.php
           grep -q 'Turning this off does not block transactional order updates' customer-account.php
           grep -q 'No card information is collected' online-order.php
@@ -92,11 +104,13 @@ jobs:
           $s->applyPending(null);
           if($s->pendingMigrations()) exit(1);
           PHP
-      - name: Verify ordering and Inbox schema
+      - name: Verify ordering dependency schema
         run: |
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('customer_inbox_messages','customer_inbox_recipients','customer_inbox_preferences','online_orders');")" = "4"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key='customer_promotions.manage';")" = "1"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20261004_online_ordering_customer_inbox';")" = "1"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('sales_integrations','pos_settings','pos_checks','pos_check_items','pos_tenders','crm_customers','customer_inbox_messages','customer_inbox_recipients','customer_inbox_preferences','online_orders');")" = "10"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='locations' AND column_name IN ('public_slug','pickup_enabled','online_ordering_enabled','pickup_lead_minutes');")" = "4"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='crm_customers' AND column_name='user_id';")" = "1"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('customer.portal','online_ordering.use','customer_promotions.manage');")" = "3"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key IN ('20260914_zzzzzzz_sales_demand_intelligence','20260916_native_pos','20260917_customer_crm','20261001_system_user_types_pos_order_types','20261002_customer_accounts_online_ordering_foundation','20261003_location_foundation','20261004_online_ordering_customer_inbox');")" = "7"
       - name: Online ordering and Inbox behavioral contract
         run: php tests/online-ordering-inbox-contract.php
       - name: Customer account regression
@@ -119,45 +133,67 @@ jobs:
           if($s->applyPending(null)) exit(3);
           echo "idempotent\n";
           PHP
-      - name: Build deploy ZIP
+      - name: Build dependency-complete direct deploy ZIP
         run: |
-          rm -rf deploy-patch stonefellows-online-ordering-inbox-deploy.zip
+          rm -rf deploy-patch stonefellows-online-ordering-recovery-deploy.zip
           mkdir -p deploy-patch/includes deploy-patch/assets/js deploy-patch/assets/css deploy-patch/database
-          cp online-order.php customer-account.php customer-promotions.php deploy-patch/
-          cp includes/public-site.php includes/online-order-core.php includes/customer-inbox-core.php deploy-patch/includes/
+          cp online-order.php customer-account.php customer-login.php customer-signup.php customer-promotions.php upgrade.php deploy-patch/
+          cp includes/*.php deploy-patch/includes/
           cp assets/js/online-order.js deploy-patch/assets/js/
           cp assets/css/online-order.css assets/css/customer-account.css assets/css/customer-inbox.css deploy-patch/assets/css/
-          cp database/20261004_online_ordering_customer_inbox.sql deploy-patch/database/
+          for migration in database/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_*.sql; do
+            name="$(basename "$migration")"
+            case "$name" in
+              *_demo_*|*_sample_*|*_seed_*) continue ;;
+            esac
+            cp "$migration" deploy-patch/database/
+          done
           test -f deploy-patch/includes/public-site.php
           test -f deploy-patch/includes/online-order-core.php
+          test -f deploy-patch/includes/customer-account-core.php
+          test -f deploy-patch/includes/customer-crm-core.php
+          test -f deploy-patch/includes/location-core.php
+          test -f deploy-patch/includes/pos-core.php
+          test -f deploy-patch/includes/UpgradeService.php
+          test -f deploy-patch/database/20260914_zzzzzzz_sales_demand_intelligence.sql
+          test -f deploy-patch/database/20260916_native_pos.sql
+          test -f deploy-patch/database/20260917_customer_crm.sql
+          test -f deploy-patch/database/20261001_system_user_types_pos_order_types.sql
+          test -f deploy-patch/database/20261002_customer_accounts_online_ordering_foundation.sql
+          test -f deploy-patch/database/20261003_location_foundation.sql
           test -f deploy-patch/database/20261004_online_ordering_customer_inbox.sql
           cat > deploy-patch/README-DEPLOY.txt <<'EOF'
-          Stonefellows / Gelato online ordering + customer Inbox deploy patch
+          Stonefellows / Gelato online ordering production recovery deploy
 
-          Copy these files into the application web root while preserving folders.
-          Then sign in as an administrator and run the normal Upgrade process once.
+          This is a direct deploy package. Extract its contents into the application
+          web root, preserving folders and overwriting the included files.
 
-          This package deliberately includes includes/public-site.php because online-order.php
-          depends on the public-site fallback helpers. Deploy the package as a unit; partial
-          file replacement can leave production on an incompatible dependency set.
+          IMPORTANT: after copying the files, sign in as the owner/administrator and
+          run upgrade.php -> Upgrade once. The package includes the complete production
+          migration set so an installation that missed an earlier POS, CRM, customer,
+          location, or ordering migration can catch up in dependency order.
 
-          Adds:
-          - signed-in pickup ordering using canonical menu prices and native POS totals
-          - pay-at-pickup checkout with no card-data storage
-          - CRM customer linkage and KDS submission
-          - idempotent checkout protection
-          - customer Inbox with transactional order confirmation, unread/read/dismiss state
-          - optional in-account promotion preference
-          - staff promotion composer with CRM-tag targeting
-          - production readiness gate that returns a branded 503 instead of a raw HTTP 500 when migrations are pending
+          The package also includes the current /includes runtime as a unit so the
+          ordering page cannot be paired with stale helper/core files from an older deploy.
+
+          Online ordering requires:
+          - sales integration foundation used by native POS
+          - native POS tables
+          - customer CRM + POS customer linkage
+          - Customer system role and customer-facing permissions
+          - canonical location ordering fields
+          - online order + customer Inbox tables
+
+          KDS remains optional at runtime; when installed, online pickup orders are routed
+          into the kitchen workflow automatically.
 
           Online payment capture and delivery checkout are intentionally not included yet.
           EOF
-          (cd deploy-patch && zip -qr ../stonefellows-online-ordering-inbox-deploy.zip .)
-          unzip -t stonefellows-online-ordering-inbox-deploy.zip
+          (cd deploy-patch && zip -qr ../stonefellows-online-ordering-recovery-deploy.zip .)
+          unzip -t stonefellows-online-ordering-recovery-deploy.zip
       - uses: actions/upload-artifact@v4
         with:
-          name: stonefellows-online-ordering-inbox-deploy
-          path: stonefellows-online-ordering-inbox-deploy.zip
+          name: stonefellows-online-ordering-recovery-deploy
+          path: stonefellows-online-ordering-recovery-deploy.zip
           if-no-files-found: error
           retention-days: 30

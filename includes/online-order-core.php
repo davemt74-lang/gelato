@@ -7,10 +7,23 @@ require_once __DIR__.'/location-core.php';
 require_once __DIR__.'/pos-core.php';
 require_once __DIR__.'/kds-core.php';
 
+function online_order_missing_requirements(PDO $pdo): array
+{
+    $missing=[];
+    foreach(['online_orders','pos_settings','pos_checks','pos_check_items','pos_tenders','sales_integrations'] as $table){
+        $q=$pdo->prepare('SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?');
+        $q->execute([$table]);
+        if((int)$q->fetchColumn()!==1) $missing[]='table:'.$table;
+    }
+    $q=$pdo->query("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='locations' AND column_name IN ('public_slug','pickup_enabled','online_ordering_enabled','pickup_lead_minutes')");
+    if((int)$q->fetchColumn()!==4) $missing[]='migration:20261003_location_foundation';
+    if(!customer_inbox_ready($pdo)) $missing[]='migration:20261004_online_ordering_customer_inbox';
+    return $missing;
+}
+
 function online_order_ready(PDO $pdo): bool
 {
-    $q=$pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='online_orders'");
-    return (int)$q->fetchColumn()===1 && pos_ready($pdo) && customer_inbox_ready($pdo);
+    return online_order_missing_requirements($pdo)===[];
 }
 
 function online_order_locations(PDO $pdo,int $organizationId): array
