@@ -1,0 +1,149 @@
+name: Online Ordering + Customer Inbox
+
+on:
+  pull_request:
+    paths:
+      - 'online-order.php'
+      - 'customer-account.php'
+      - 'customer-promotions.php'
+      - 'includes/online-order-core.php'
+      - 'includes/customer-inbox-core.php'
+      - 'assets/js/online-order.js'
+      - 'assets/css/online-order.css'
+      - 'assets/css/customer-account.css'
+      - 'assets/css/customer-inbox.css'
+      - 'database/20261004_online_ordering_customer_inbox.sql'
+      - 'tests/online-ordering-inbox-contract.php'
+      - '.github/workflows/online-ordering-inbox.yml'
+  push:
+    branches: [main]
+
+jobs:
+  online-ordering-inbox:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - name: Syntax checks
+        run: |
+          php -l online-order.php
+          php -l customer-account.php
+          php -l customer-promotions.php
+          php -l includes/online-order-core.php
+          php -l includes/customer-inbox-core.php
+          php -l tests/online-ordering-inbox-contract.php
+          node --check assets/js/online-order.js
+      - name: Static commerce and privacy contract
+        run: |
+          grep -q 'CREATE TABLE customer_inbox_messages' database/20261004_online_ordering_customer_inbox.sql
+          grep -q 'CREATE TABLE customer_inbox_recipients' database/20261004_online_ordering_customer_inbox.sql
+          grep -q 'CREATE TABLE customer_inbox_preferences' database/20261004_online_ordering_customer_inbox.sql
+          grep -q 'CREATE TABLE online_orders' database/20261004_online_ordering_customer_inbox.sql
+          grep -q 'uq_online_order_idempotency' database/20261004_online_ordering_customer_inbox.sql
+          grep -q 'customer_promotions.manage' database/20261004_online_ordering_customer_inbox.sql
+          grep -q "'pay_at_pickup'" includes/online-order-core.php
+          grep -q 'pos_create_check' includes/online-order-core.php
+          grep -q 'pos_add_item' includes/online-order-core.php
+          grep -q 'kds_send_check' includes/online-order-core.php
+          grep -q 'customer_inbox_send_direct' includes/online-order-core.php
+          grep -q 'COALESCE(pref.promotions_enabled,1)=1' includes/customer-inbox-core.php
+          grep -q 'Turning this off does not block transactional order updates' customer-account.php
+          grep -q 'No card information is collected' online-order.php
+          ! grep -Eqi 'card_number|cvv|track_data|magstripe' database/20261004_online_ordering_customer_inbox.sql
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client zip
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_online_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->ensureTrackingTables();
+          $s->bootstrapLegacyHistory(null);
+          $s->applyPending(null);
+          if($s->pendingMigrations()) exit(1);
+          PHP
+      - name: Verify ordering and Inbox schema
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('customer_inbox_messages','customer_inbox_recipients','customer_inbox_preferences','online_orders');")" = "4"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key='customer_promotions.manage';")" = "1"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20261004_online_ordering_customer_inbox';")" = "1"
+      - name: Online ordering and Inbox behavioral contract
+        run: php tests/online-ordering-inbox-contract.php
+      - name: Customer account regression
+        run: php tests/customer-account-contract.php
+      - name: Customer CRM regression
+        run: php tests/customer-crm-contract.php
+      - name: Native POS regression
+        run: php tests/native-pos-contract.php
+      - name: Location regression
+        run: php tests/location-foundation-contract.php
+      - name: Verify upgrader idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->assertAppliedChecksumsUnchanged();
+          if($s->pendingMigrations()) exit(2);
+          if($s->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP
+      - name: Build deploy ZIP
+        run: |
+          rm -rf deploy-patch stonefellows-online-ordering-inbox-deploy.zip
+          mkdir -p deploy-patch/includes deploy-patch/assets/js deploy-patch/assets/css deploy-patch/database
+          cp online-order.php customer-account.php customer-promotions.php deploy-patch/
+          cp includes/online-order-core.php includes/customer-inbox-core.php deploy-patch/includes/
+          cp assets/js/online-order.js deploy-patch/assets/js/
+          cp assets/css/online-order.css assets/css/customer-account.css assets/css/customer-inbox.css deploy-patch/assets/css/
+          cp database/20261004_online_ordering_customer_inbox.sql deploy-patch/database/
+          cat > deploy-patch/README-DEPLOY.txt <<'EOF'
+          Stonefellows / Gelato online ordering + customer Inbox deploy patch
+
+          Copy these files into the application web root while preserving folders.
+          Then sign in as an administrator and run the normal Upgrade process once.
+
+          Adds:
+          - signed-in pickup ordering using canonical menu prices and native POS totals
+          - pay-at-pickup checkout with no card-data storage
+          - CRM customer linkage and KDS submission
+          - idempotent checkout protection
+          - customer Inbox with transactional order confirmation, unread/read/dismiss state
+          - optional in-account promotion preference
+          - staff promotion composer with CRM-tag targeting
+
+          Online payment capture and delivery checkout are intentionally not included yet.
+          EOF
+          (cd deploy-patch && zip -qr ../stonefellows-online-ordering-inbox-deploy.zip .)
+          unzip -t stonefellows-online-ordering-inbox-deploy.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stonefellows-online-ordering-inbox-deploy
+          path: stonefellows-online-ordering-inbox-deploy.zip
+          if-no-files-found: error
+          retention-days: 30
