@@ -89,6 +89,11 @@ function customer_account_link_crm(PDO $pdo,int $organizationId,int $userId,arra
         }
     }
 
+    if($customer && !$phone){
+        $phoneRaw=trim((string)($customer['phone']??''));
+        $phone=$customer['phone_normalized']!==null?(string)$customer['phone_normalized']:null;
+    }
+
     if($phone){
         $args=[$organizationId,$phone];
         $sql="SELECT id FROM crm_customers WHERE organization_id=? AND status='active' AND phone_normalized=?";
@@ -117,8 +122,8 @@ function customer_account_register(PDO $pdo,int $organizationId,array $input): a
     $last=mb_substr(trim((string)($input['lastName']??'')),0,100,'UTF-8');
     if($first===''||$last==='') throw new InvalidArgumentException('Enter your first and last name.');
     $email=(string)crm_normalize_email((string)($input['email']??''));
-    if($email==='') throw new InvalidArgumentException('Enter your email address.');
-    $phoneRaw=trim((string)($input['phone']??''));
+    if($email===''||mb_strlen($email,'UTF-8')>254) throw new InvalidArgumentException('Enter an email address of 254 characters or fewer.');
+    $phoneRaw=mb_substr(trim((string)($input['phone']??'')),0,40,'UTF-8');
     $phone=crm_normalize_phone($phoneRaw);
     $password=(string)($input['password']??'');
     $confirm=(string)($input['passwordConfirm']??'');
