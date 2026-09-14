@@ -5,6 +5,8 @@ function fpv2_assert(bool $condition,string $message): void { if(!$condition) th
 function fpv2_source(string $path): string { $value=file_get_contents(__DIR__.'/../'.$path); if($value===false) throw new RuntimeException('Unable to read '.$path); return $value; }
 
 $entry=fpv2_source('floor-planner.php');
+$redirect=fpv2_source('floor-planner-ops.php');
+$legacy=fpv2_source('floor-planner-ops-legacy.php');
 $shell=fpv2_source('floor-planner-v2.php');
 $api=fpv2_source('floor-plan-api.php');
 $module=fpv2_source('js/floor-planner-module.js');
@@ -12,13 +14,16 @@ $js=fpv2_source('js/floor-planner-v2.js');
 $runtime=fpv2_source('js/floor-planner-v2-runtime.js');
 
 fpv2_assert(str_contains($entry,'floor-planner-v2.php'),'Primary Floor Planner entry must route to v2.');
-fpv2_assert(str_contains($shell,'floor-planner-ops.php'),'V2 shell must wrap the canonical operational planner.');
-fpv2_assert(str_contains($shell,'$replacement = \'<script src="js/floor-planner-v2.js?v=20260914-1"></script>\''),'V2 shell must inject the preloader before the canonical planner runtime.');
+fpv2_assert(str_contains($redirect,'floor-planner-v2.php'),'Legacy operational planner URL must redirect to v2.');
+fpv2_assert(str_contains($legacy,'Operational Floor Planner'),'Internal canonical planner shell must remain available to the v2 wrapper.');
+fpv2_assert(str_contains($shell,'floor-planner-ops-legacy.php'),'V2 shell must wrap the internal canonical operational planner.');
+fpv2_assert(str_contains($shell,'floor-planner-v2.js?v=20260914-2'),'V2 shell must load the current interaction layer.');
 fpv2_assert(str_contains($shell,'. $needle'),'V2 shell must preserve the canonical planner script between its preloader and post-runtime hardening.');
-fpv2_assert(str_contains($shell,'floor-planner-v2-runtime.js'),'V2 shell must load post-runtime hardening after the canonical planner.');
+fpv2_assert(str_contains($shell,'floor-planner-v2-runtime.js?v=20260914-2'),'V2 shell must load current post-runtime hardening after the canonical planner.');
+fpv2_assert(str_contains($shell,'Triple-click item = controls'),'V2 shell must make the slide-out item panel gesture discoverable.');
+fpv2_assert(str_contains($shell,'drag-select = group move'),'V2 shell must make grouped movement discoverable.');
 fpv2_assert(str_contains($api,"require __DIR__ . '/api/floor-plans.php'"),'Stable Floor Planner API entry must delegate to the canonical API.');
 fpv2_assert(str_contains($module,"'floor-planner-v2.php'"),'Admin navigation must launch Floor Planner 2.0.');
-fpv2_assert(str_contains($module,'floor-planner-ops.php'),'V2 admin navigation must retain its canonical runtime contract.');
 
 fpv2_assert(str_contains($js,"'floor-plan-api.php'"),'Planner must rewrite canonical floor-plan requests to the stable application-relative route.');
 fpv2_assert(str_contains($js,'fp-marquee'),'Planner must provide drag-box marquee selection.');
