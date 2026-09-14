@@ -57,5 +57,12 @@ function operational_filter_locations(PDO $pdo, array $user, string $permission,
 
 function operational_safe_error(Throwable $error, string $fallback): string
 {
+    error_log(sprintf(
+        '[gelato-operational] %s: %s in %s:%d',
+        $error::class,
+        $error->getMessage(),
+        $error->getFile(),
+        $error->getLine()
+    ));
     return (bool)(app_config()['app']['debug'] ?? false) ? $error->getMessage() : $fallback;
 }
