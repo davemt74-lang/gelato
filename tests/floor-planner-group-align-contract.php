@@ -38,7 +38,7 @@ group_align_assert(str_contains($align, 'function gelatoPath'), 'Gelato element 
 group_align_assert(str_contains($align, 'topMidY = topY + bow') && str_contains($align, 'bottomMidY = bottomY + bow'), 'Gelato arc must bow both long edges together.');
 group_align_assert(str_contains($align, 'topLeftX = 5 + endInset') && str_contains($align, 'topRightX = 95 - endInset'), 'Gelato end caps must angle as arc degree increases.');
 group_align_assert(str_contains($align, 'fp-gelato-arc-slider'), 'Selected Gelato element must expose an in-rectangle Arc slider.');
-group_align_assert(str_contains($align, 'type=\"range\"') && str_contains($align, 'min=\"0\" max=\"45\"'), 'Gelato Arc slider must provide a degree range.');
+group_align_assert(str_contains($align, 'type="range"') && str_contains($align, 'min="0" max="45"'), 'Gelato Arc slider must provide a degree range.');
 group_align_assert(str_contains($align, 'applyGelatoArc(node, slider.value, true)'), 'Gelato Arc slider must update geometry live.');
 group_align_assert(str_contains($align, 'item.gelatoArcDegree = arcDegreeForNode(node)'), 'Gelato arc degree must persist with floor-plan item data.');
 group_align_assert(str_contains($align, 'arcByPlan.set(id, map)'), 'Saved Gelato arc degree must restore on plan load.');
