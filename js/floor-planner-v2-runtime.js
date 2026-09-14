@@ -5,6 +5,7 @@
   const CAN_EDIT = Boolean(cfg.canEdit);
   let dirty = false;
   let armed = false;
+  let hasEdited = false;
   let mutationTimer = 0;
 
   function init() {
@@ -22,11 +23,18 @@
     };
 
     function markDirty() {
-      if (armed) dirty = true;
+      if (!armed) return;
+      dirty = true;
+      hasEdited = true;
     }
 
     function markClean() {
       dirty = false;
+    }
+
+    function resetLoadedBaseline() {
+      dirty = false;
+      hasEdited = false;
     }
 
     // Replace the legacy per-node structural drag with event delegation. This
@@ -66,6 +74,7 @@
           window.removeEventListener('pointermove', move, true);
           window.removeEventListener('pointerup', up, true);
           markDirty();
+          structure.click();
         };
         window.addEventListener('pointermove', move, true);
         window.addEventListener('pointerup', up, true);
@@ -85,6 +94,7 @@
         window.removeEventListener('pointermove', move, true);
         window.removeEventListener('pointerup', up, true);
         markDirty();
+        structure.click();
       };
       window.addEventListener('pointermove', move, true);
       window.addEventListener('pointerup', up, true);
@@ -121,7 +131,8 @@
     if (status) {
       new MutationObserver(() => {
         const text = status.textContent || '';
-        if (text.startsWith('Plan loaded') || text.startsWith('Layout saved')) markClean();
+        if (text.startsWith('Plan loaded') || text.startsWith('New unsaved plan')) resetLoadedBaseline();
+        else if (text.startsWith('Layout saved')) markClean();
       }).observe(status, {childList:true,subtree:true,characterData:true});
     }
 
@@ -141,6 +152,17 @@
       return response;
     };
 
+    // Do not let the editor's pre-hydration blank snapshot become a user-facing
+    // Undo target. Once the user has made a real edit, normal undo/redo proceeds.
+    document.addEventListener('keydown', event => {
+      if (hasEdited) return;
+      if (!(event.ctrlKey || event.metaKey)) return;
+      const key = event.key.toLowerCase();
+      if (key !== 'z' && key !== 'y') return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }, true);
+
     window.addEventListener('beforeunload', event => {
       if (!dirty) return;
       event.preventDefault();
@@ -151,7 +173,7 @@
     // point are user-driven and should participate in the unsaved-change guard.
     setTimeout(() => {
       armed = true;
-      markClean();
+      resetLoadedBaseline();
     }, 1400);
   }
 
