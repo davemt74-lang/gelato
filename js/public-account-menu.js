@@ -16,8 +16,8 @@
 
   function installServiceLinks() {
     const services = [
-      { href: 'wholesale.php', label: 'Wholesale Gelato', menuLabel: '◇ Wholesale Gelato' },
-      { href: 'catering.php', label: 'Catering', menuLabel: '◈ Catering' },
+      { href: 'wholesale.php', label: 'Wholesale' },
+      { href: 'catering.php', label: 'Catering' },
     ];
     document.querySelectorAll('.public-nav').forEach((nav) => {
       const account = nav.querySelector('[data-public-account-menu]');
@@ -29,14 +29,15 @@
         if (account) nav.insertBefore(link, account); else nav.appendChild(link);
       });
     });
-    document.querySelectorAll('.guest-menu-list').forEach((list) => {
-      services.forEach((service) => {
-        if (list.querySelector(`a[href="${service.href}"]`)) return;
-        const link = document.createElement('a');
-        link.href = service.href;
-        link.textContent = service.menuLabel;
-        list.appendChild(link);
-      });
+  }
+
+  function replaceGuestMenuWithLogin() {
+    document.querySelectorAll('.public-nav [data-public-account-menu]').forEach((account) => {
+      const login = document.createElement('a');
+      login.className = 'primary';
+      login.href = 'login.php';
+      login.textContent = 'Login';
+      account.replaceWith(login);
     });
   }
 
@@ -68,6 +69,8 @@
 
   installStonefellowsTheme();
   normalizeLegacyLinks();
+  installServiceLinks();
+  replaceGuestMenuWithLogin();
 
   const menus = document.querySelectorAll('[data-public-account-menu]');
   if (menus.length) {
@@ -86,7 +89,6 @@
       const button = wrap.querySelector('[data-guest-menu-button]');
       const menu = wrap.querySelector('[data-guest-menu]');
       if (!button || !menu) return;
-
       button.addEventListener('click', (event) => {
         event.stopPropagation();
         const opening = menu.classList.contains('hidden');
@@ -94,17 +96,14 @@
         menu.classList.toggle('hidden', !opening);
         button.setAttribute('aria-expanded', String(opening));
       });
-
       menu.addEventListener('click', (event) => event.stopPropagation());
     });
-
     document.addEventListener('click', () => closeAll());
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') closeAll();
     });
   }
 
-  installServiceLinks();
   installUnifiedFooter();
   loadPublicAgent();
 })();
