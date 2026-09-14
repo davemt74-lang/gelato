@@ -9,18 +9,17 @@ $csrf = app_csrf_token();
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b0b09">
 <meta name="description" content="Wholesale gelato inquiry for restaurants, cafés, hotels, event venues, caterers, and specialty retailers.">
-<title>Wholesale Gelato</title>
-<link rel="stylesheet" href="css/public.css">
+<title>Wholesale Gelato · Stonefellows</title>
+<link rel="stylesheet" href="css/public.css?v=20260914-3">
 <style>
   .wholesale-hero{padding:72px 24px 54px;background:linear-gradient(135deg,#171b1a,#2d3732);color:#fff}.wholesale-hero-inner{max-width:1180px;margin:auto;display:grid;grid-template-columns:minmax(0,1.2fr) minmax(280px,.8fr);gap:40px;align-items:end}.wholesale-hero h1{max-width:850px;margin:8px 0 18px;font-size:clamp(46px,8vw,92px);line-height:.9;letter-spacing:-.065em}.wholesale-hero p{max-width:720px;margin:0;color:rgba(255,255,255,.72);font-size:18px;line-height:1.6}.wholesale-side{padding:22px;border:1px solid rgba(255,255,255,.15);border-radius:24px;background:rgba(255,255,255,.08);backdrop-filter:blur(10px)}.wholesale-side strong{display:block;font-size:18px}.wholesale-side ul{margin:14px 0 0;padding-left:20px;color:rgba(255,255,255,.72);line-height:1.8}.wholesale-wrap{max-width:1180px;margin:0 auto;padding:44px 24px 80px}.wholesale-layout{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:24px;align-items:start}.wholesale-card{padding:28px;border:1px solid #dddcd5;border-radius:24px;background:#fff;box-shadow:0 18px 50px rgba(25,26,22,.07)}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:17px}.form-field{display:grid;gap:7px}.form-field.wide{grid-column:1/-1}.form-field label{font-size:12px;font-weight:850}.form-field small{color:#747770;line-height:1.45}.form-field input,.form-field select,.form-field textarea{width:100%;min-height:46px;padding:11px 12px;border:1px solid #d8d9d4;border-radius:12px;background:#fff;color:#171815;font:inherit;outline:none}.form-field textarea{min-height:110px;resize:vertical}.form-field input:focus,.form-field select:focus,.form-field textarea:focus{border-color:var(--brand-primary,#d94a2b);box-shadow:0 0 0 4px rgba(217,74,43,.10)}.check-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.check{display:flex;align-items:flex-start;gap:8px;padding:10px;border:1px solid #e1e2dd;border-radius:11px;background:#fafaf8;font-size:12px}.check input{width:auto;min-height:0;margin-top:2px}.submit-row{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-top:22px;padding-top:20px;border-top:1px solid #e4e4df}.submit-row p{margin:0;color:#747770;font-size:11px;line-height:1.5}.wholesale-submit{min-height:46px;padding:0 22px;border:0;border-radius:12px;color:#fff;background:var(--brand-primary,#d94a2b);font-weight:850}.wholesale-submit:disabled{opacity:.55}.side-stack{display:grid;gap:14px}.info-card{padding:20px;border:1px solid #dddcd5;border-radius:18px;background:#fff}.info-card h3{margin:0 0 8px;font-size:16px}.info-card p{margin:0;color:#70736e;font-size:12px;line-height:1.6}.info-card strong{display:block;margin-top:12px;font-size:12px}.message{margin-top:16px;padding:12px 14px;border-radius:12px;font-size:12px}.message.good{background:#eef9f1;color:#176b3d;border:1px solid #b8dfc4}.message.bad{background:#fff1ef;color:#9e2c24;border:1px solid #efc4bd}.hidden{display:none}.hp{position:absolute!important;left:-10000px!important;width:1px!important;height:1px!important;overflow:hidden!important}.eyebrow{font-size:10px;font-weight:900;letter-spacing:.13em;text-transform:uppercase;color:var(--brand-secondary,#ff835f)}@media(max-width:850px){.wholesale-hero-inner,.wholesale-layout{grid-template-columns:1fr}.wholesale-side{max-width:520px}.form-grid{grid-template-columns:1fr}.form-field.wide{grid-column:auto}}@media(max-width:520px){.check-grid{grid-template-columns:1fr}.submit-row{align-items:stretch;flex-direction:column}.wholesale-submit{width:100%}}
 </style>
+<link rel="stylesheet" href="css/stonefellows-public-v2.css?v=20260914-2">
 </head>
 <body>
-<header class="public-header">
-  <a class="public-brand" href="landing.html"><span class="public-logo" id="wholesaleLogo">G</span><span><strong id="wholesaleBrand">Gelato</strong><span>Restaurant & wholesale</span></span></a>
-  <nav class="public-nav"><a href="landing.html">Home</a><a href="jobs.html">Jobs</a><a class="primary" href="wholesale.php">Wholesale Gelato</a><?= app_guest_account_menu('public') ?></nav>
-</header>
+<header class="public-header"><a class="public-brand" href="index.php"><span class="public-logo" id="wholesaleLogo">SF</span><span><strong id="wholesaleBrand">Stonefellows</strong><span>Pizzeria + Bar</span></span></a><nav class="public-nav"><a href="index.php">Home</a><a href="menu.php">Menu</a><a href="gelato.php">Gelato</a><a href="about.php">About</a><a href="locations.php">Locations</a><a href="contact.php">Contact</a><a class="primary" href="login.php">Login</a></nav></header>
 <section class="wholesale-hero">
   <div class="wholesale-hero-inner">
     <div><p class="eyebrow">Wholesale program</p><h1>Gelato built for your menu.</h1><p>Tell us about your restaurant, café, hotel, event program, or retail operation. We’ll use your request to build the right flavor, package, fulfillment, and private-label conversation.</p></div>
@@ -65,14 +64,14 @@ $csrf = app_csrf_token();
     </aside>
   </div>
 </main>
-<script src="js/public-account-menu.js"></script>
+<footer class="sf-public-footer"><div class="sf-footer-grid"><div class="sf-brand"><strong>Stonefellows</strong><span>Pizzeria + Bar</span></div><div><strong>Links</strong><nav><a href="menu.php">Menu</a><a href="gelato.php">Gelato</a><a href="about.php">About</a><a href="locations.php">Locations</a><a href="contact.php">Contact</a><a href="jobs.html">Jobs</a><a href="catering.php">Catering</a><a href="wholesale.php">Wholesale</a></nav></div><div><strong>Wholesale</strong><nav><a href="wholesale.php">Wholesale Inquiry</a><a href="wholesale-login.php">Buyer Login</a></nav></div><div><strong>Account</strong><nav><a href="login.php">Login</a><a href="forgot-password.php">Forgot Password</a></nav></div><div><strong>Visit</strong><nav><a href="locations.php">Locations</a><a href="contact.php">Hours + Contact</a></nav></div></div></footer>
 <script>
 (async()=>{
   const message=document.getElementById('formMessage'),button=document.getElementById('submitButton');
   const show=(text,bad=false)=>{message.textContent=text;message.className='message '+(bad?'bad':'good')};
   try{
     const response=await fetch('api/public-brand.php',{headers:{Accept:'application/json'},cache:'no-store'});const data=await response.json();
-    if(data.brand){const b=data.brand;document.documentElement.style.setProperty('--brand-primary',b.primary||'#d94a2b');document.documentElement.style.setProperty('--brand-secondary',b.secondary||'#ff835f');document.getElementById('wholesaleBrand').textContent=b.restaurantName||'Restaurant';const logo=document.getElementById('wholesaleLogo');if(b.logoUrl)logo.innerHTML=`<img src="${String(b.logoUrl).replaceAll('"','%22')}" alt="">`;else logo.textContent=b.logoText||'G';document.title=`Wholesale Gelato · ${b.restaurantName||'Restaurant'}`;document.getElementById('contactLine').textContent=[b.email,b.phone].filter(Boolean).join(' · ')}
+    if(data.brand){const b=data.brand;document.getElementById('wholesaleBrand').textContent=b.restaurantName||'Stonefellows';const logo=document.getElementById('wholesaleLogo');if(b.logoUrl)logo.innerHTML=`<img src="${String(b.logoUrl).replaceAll('"','%22')}" alt="">`;else logo.textContent=b.logoText||'SF';document.title=`Wholesale Gelato · ${b.restaurantName||'Stonefellows'}`;document.getElementById('contactLine').textContent=[b.email,b.phone].filter(Boolean).join(' · ')}
   }catch{}
   document.getElementById('wholesaleForm').addEventListener('submit',async event=>{
     event.preventDefault();message.className='message hidden';

@@ -3,7 +3,7 @@
     if (document.querySelector('link[data-stonefellows-public-theme]')) return;
     const link = document.createElement('link');
     link.rel = 'stylesheet';
-    link.href = 'css/stonefellows-public.css?v=20260914-1';
+    link.href = 'css/stonefellows-public-v2.css?v=20260914-2';
     link.dataset.stonefellowsPublicTheme = 'true';
     document.head.appendChild(link);
   }

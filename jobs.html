@@ -6,21 +6,22 @@
   <meta name="theme-color" content="#0b0b09">
   <meta name="description" content="Current Stonefellows restaurant job openings and application information.">
   <title>Available Jobs · Stonefellows</title>
-  <link rel="stylesheet" href="css/public.css?v=20260914-jobs2">
-  <link rel="stylesheet" href="css/stonefellows-public.css?v=20260914-1">
+  <link rel="stylesheet" href="css/public.css?v=20260914-jobs3">
+  <link rel="stylesheet" href="css/stonefellows-public-v2.css?v=20260914-2">
 </head>
 <body>
 <header class="public-header">
-  <a class="public-brand" href="index.php"><span class="public-logo" id="jobsLogo">SF</span><span><strong id="jobsBrand">Stonefellows</strong><span>Pizzeria + Bar careers</span></span></a>
-  <nav class="public-nav" aria-label="Primary navigation"><a href="index.php">Home</a><a href="menu.php">Menu</a><a href="catering.php">Catering</a><a href="wholesale.php">Wholesale</a><a href="apply.html">Apply</a><a class="primary" href="login.php">Login</a></nav>
+  <a class="public-brand" href="index.php"><span class="public-logo" id="jobsLogo">SF</span><span><strong id="jobsBrand">Stonefellows</strong><span>Pizzeria + Bar</span></span></a>
+  <nav class="public-nav" aria-label="Primary navigation"><a href="index.php">Home</a><a href="menu.php">Menu</a><a href="gelato.php">Gelato</a><a href="about.php">About</a><a href="locations.php">Locations</a><a href="contact.php">Contact</a><a class="primary" href="login.php">Login</a></nav>
 </header>
 <section class="jobs-hero"><div class="jobs-hero-inner"><p class="eyebrow">Careers at Stonefellows</p><h1>Find your place on the team.</h1><p>Review active openings, job expectations, schedules, and training pathways before submitting your application.</p></div></section>
 <main class="jobs-shell"><div class="jobs-toolbar"><input class="field" id="jobPublicSearch" placeholder="Search jobs, departments, locations, or schedules..." aria-label="Search jobs"><select class="field" id="jobPublicDepartment" aria-label="Filter by department"><option value="all">All departments</option></select></div><div class="job-grid" id="publicJobList"></div></main>
+<footer class="sf-public-footer"><div class="sf-footer-grid"><div class="sf-brand"><strong>Stonefellows</strong><span>Pizzeria + Bar</span></div><div><strong>Links</strong><nav><a href="menu.php">Menu</a><a href="gelato.php">Gelato</a><a href="about.php">About</a><a href="locations.php">Locations</a><a href="contact.php">Contact</a><a href="jobs.html">Jobs</a><a href="catering.php">Catering</a><a href="wholesale.php">Wholesale</a></nav></div><div><strong>Careers</strong><nav><a href="jobs.html">Open Positions</a><a href="apply.html">Submit Resume</a></nav></div><div><strong>Account</strong><nav><a href="login.php">Login</a><a href="forgot-password.php">Forgot Password</a></nav></div><div><strong>Visit</strong><nav><a href="locations.php">Locations</a><a href="contact.php">Hours + Contact</a></nav></div></div></footer>
 <script src="js/public-jobs.js?v=20260804-jobs1"></script>
 <script>
 (async()=>{
   const read=(key,fallback)=>{try{return JSON.parse(localStorage.getItem(key)||JSON.stringify(fallback))}catch{return fallback}};
-  const esc=value=>String(value??'').replace(/[&<>'"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
+  const esc=value=>String(value??'').replace(/[&<>'\"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','\"':'&quot;'}[ch]));
   const brand=read('restaurant-brand-v1',{restaurantName:'Stonefellows',logoText:'SF',primary:'#d9bb75',secondary:'#f2db9f',dark:'#0b0b09'});let jobs=await window.RestaurantPublicJobs.load();
   document.getElementById('jobsLogo').textContent=brand.logoText||'SF';document.getElementById('jobsBrand').textContent=brand.restaurantName||'Stonefellows';document.title=`Available Jobs · ${brand.restaurantName||'Stonefellows'}`;
   const departments=[...new Set(jobs.map(job=>job.department).filter(Boolean))].sort();document.getElementById('jobPublicDepartment').innerHTML='<option value="all">All departments</option>'+departments.map(value=>`<option value="${esc(value)}">${esc(value)}</option>`).join('');
@@ -29,6 +30,5 @@
   try{const response=await fetch('api/public-brand.php',{cache:'no-store'}),data=await response.json();if(response.ok&&data.brand){const b=data.brand;const logo=document.getElementById('jobsLogo');if(b.logoUrl)logo.innerHTML=`<img src="${b.logoUrl}" alt="${esc(b.restaurantName||'Stonefellows')} logo">`;else logo.textContent=b.logoText||'SF';document.getElementById('jobsBrand').textContent=b.restaurantName||'Stonefellows';document.title=`Available Jobs · ${b.restaurantName||'Stonefellows'}`}}catch{}
 })();
 </script>
-<script src="js/public-account-menu.js?v=20260914-1"></script>
 </body>
 </html>

@@ -3,37 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="Submit a resume for current and future restaurant opportunities.">
-  <title>Submit Your Resume</title>
-  <link rel="stylesheet" href="css/public.css">
+  <meta name="theme-color" content="#0b0b09">
+  <meta name="description" content="Submit a resume for current and future Stonefellows opportunities.">
+  <title>Submit Your Resume · Stonefellows</title>
+  <link rel="stylesheet" href="css/public.css?v=20260914-3">
+  <link rel="stylesheet" href="css/stonefellows-public-v2.css?v=20260914-2">
 </head>
 <body class="form-page">
   <header class="public-header">
-    <a class="public-brand" href="landing.html"><span class="public-logo" id="applyLogo">FR</span><span><strong id="applyBrand">Restaurant</strong><span>Resume submission</span></span></a>
-    <nav class="public-nav">
-      <a href="jobs.html">Jobs</a><a class="primary" href="apply.html">Submit Resume</a>
-      <div class="guest-profile-wrap" data-public-account-menu>
-        <button class="guest-profile-button" type="button" data-guest-menu-button aria-haspopup="true" aria-expanded="false"><span class="guest-avatar">G</span><span class="guest-profile-copy"><strong>Guest</strong><span>Not signed in</span></span><span class="guest-chevron">⌄</span></button>
-        <div class="guest-profile-menu hidden" data-guest-menu>
-          <div class="guest-menu-head"><span class="guest-avatar">G</span><div><strong>Logged-out account</strong><span>Sign in to access training</span></div></div>
-          <div class="guest-menu-list">
-            <a class="primary" href="login.php">↪ Sign in</a>
-            <a href="forgot-password.php">? Forgot password</a>
-            <div class="guest-menu-divider"></div>
-            <a href="landing.html">⌂ Public landing page</a>
-            <a href="jobs.html">⌂ Available jobs</a>
-            <a href="apply.html">▤ Submit a resume</a>
-          </div>
-        </div>
-      </div>
-    </nav>
+    <a class="public-brand" href="index.php"><span class="public-logo" id="applyLogo">SF</span><span><strong id="applyBrand">Stonefellows</strong><span>Pizzeria + Bar</span></span></a>
+    <nav class="public-nav" aria-label="Primary navigation"><a href="index.php">Home</a><a href="menu.php">Menu</a><a href="gelato.php">Gelato</a><a href="about.php">About</a><a href="locations.php">Locations</a><a href="contact.php">Contact</a><a class="primary" href="login.php">Login</a></nav>
   </header>
-  <section class="form-hero"><div class="form-hero-inner"><p class="eyebrow">Restaurant opportunities</p><h1>Submit your resume.</h1><p>Tell us which position interests you and share the experience, availability, and information needed for an initial review.</p></div></section>
+  <section class="form-hero"><div class="form-hero-inner"><p class="eyebrow">Careers at Stonefellows</p><h1>Submit your resume.</h1><p>Tell us which position interests you and share the experience, availability, and information needed for an initial review.</p></div></section>
   <main class="application-wrap">
     <section class="application-card" id="applicationCard">
       <form id="resumeForm"><div class="application-grid" id="publicFormFields"></div><div class="button-row"><p class="privacy-note">This local-first prototype stores application records and selected media only in this browser. Video and photos are kept in private browser storage and do not leave the device.</p><button class="submit-button" style="width:auto;padding:0 24px" type="submit">Submit resume</button></div><div class="form-message hidden" id="submissionMessage"></div></form>
     </section>
   </main>
+  <footer class="sf-public-footer"><div class="sf-footer-grid"><div class="sf-brand"><strong>Stonefellows</strong><span>Pizzeria + Bar</span></div><div><strong>Links</strong><nav><a href="menu.php">Menu</a><a href="gelato.php">Gelato</a><a href="about.php">About</a><a href="locations.php">Locations</a><a href="contact.php">Contact</a><a href="jobs.html">Jobs</a><a href="catering.php">Catering</a><a href="wholesale.php">Wholesale</a></nav></div><div><strong>Careers</strong><nav><a href="jobs.html">Open Positions</a><a href="apply.html">Submit Resume</a></nav></div><div><strong>Account</strong><nav><a href="login.php">Login</a><a href="forgot-password.php">Forgot Password</a></nav></div><div><strong>Visit</strong><nav><a href="locations.php">Locations</a><a href="contact.php">Hours + Contact</a></nav></div></div></footer>
 <script src="js/public-jobs.js?v=20260804-jobs1"></script>
 <script src="js/form-media-storage.js?v=20260804-media1"></script>
 <script>
@@ -45,7 +32,7 @@
   const write = (key, value) => localStorage.setItem(key, JSON.stringify(value));
   const esc = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
   const mediaTools = window.RestaurantFormMedia;
-  const brand = read('restaurant-brand-v1', {restaurantName:'Gelato Spot',logoText:'GS',primary:'#d94a2b',secondary:'#ff835f',dark:'#171b1a'});
+  const brand = read('restaurant-brand-v1', {restaurantName:'Stonefellows',logoText:'SF',primary:'#d9bb75',secondary:'#f2db9f',dark:'#0b0b09'});
   const jobs = (await window.RestaurantPublicJobs.load()).filter(job => window.RestaurantPublicJobs.isActive(job));
   const jobOptions = jobs.map(job => ({value:String(job.id), label:job.title}));
   const mediaDefaults = [
@@ -77,12 +64,9 @@
     : field
   );
 
-  document.documentElement.style.setProperty('--brand-primary', brand.primary);
-  document.documentElement.style.setProperty('--brand-secondary', brand.secondary);
-  document.documentElement.style.setProperty('--brand-dark', brand.dark);
-  document.getElementById('applyLogo').textContent = brand.logoText || 'FR';
-  document.getElementById('applyBrand').textContent = brand.restaurantName;
-  document.title = `Submit Resume · ${brand.restaurantName}`;
+  document.getElementById('applyLogo').textContent = brand.logoText || 'SF';
+  document.getElementById('applyBrand').textContent = brand.restaurantName || 'Stonefellows';
+  document.title = `Submit Resume · ${brand.restaurantName || 'Stonefellows'}`;
 
   const slug = id => `field_${id.replace(/[^a-z0-9]/gi, '_')}`;
   const valueForId = (formData, id) => formData.get(slug(id)) || '';
@@ -254,45 +238,14 @@
 
       const media = {
         storage:'indexeddb',
-        video: videoFile ? {
-          name:videoFile.name,
-          type:videoFile.type,
-          size:videoFile.size,
-          duration:videoDuration,
-        } : null,
-        photos: photoFiles.map(photo => ({
-          name:photo.name,
-          type:photo.type,
-          size:photo.size,
-        })),
+        video: videoFile ? {name:videoFile.name,type:videoFile.type,size:videoFile.size,duration:videoDuration} : null,
+        photos: photoFiles.map(photo => ({name:photo.name,type:photo.type,size:photo.size})),
       };
 
       const submissions = read('restaurant-resumes-v1', []);
       submissions.unshift({
-        id:resumeId,
-        jobId:job.id,
-        firstName,
-        lastName,
-        email,
-        phone,
-        position:job.title,
-        availability,
-        experience,
-        status:'new',
-        submittedAt:new Date().toISOString(),
-        fileName:file?.name || '',
-        fileSize:file?.size || 0,
-        fileType:file?.type || '',
-        media,
-        source:'Public resume form',
-        notes:[],
-        reviewer:null,
-        answers:Object.fromEntries(Object.entries(answers).filter(([key]) => ![
-          'First name','Last name','Email address','Phone number',
-          'Position of interest — active job posting','Availability',
-          'Relevant experience','Resume file',
-          'Short introduction video (30 seconds maximum)','Photos (up to 5)'
-        ].includes(key)))
+        id:resumeId,jobId:job.id,firstName,lastName,email,phone,position:job.title,availability,experience,status:'new',submittedAt:new Date().toISOString(),fileName:file?.name || '',fileSize:file?.size || 0,fileType:file?.type || '',media,source:'Public resume form',notes:[],reviewer:null,
+        answers:Object.fromEntries(Object.entries(answers).filter(([key]) => !['First name','Last name','Email address','Phone number','Position of interest — active job posting','Availability','Relevant experience','Resume file','Short introduction video (30 seconds maximum)','Photos (up to 5)'].includes(key)))
       });
       write('restaurant-resumes-v1', submissions);
       document.getElementById('applicationCard').innerHTML = `<div class="success-card"><div class="success-icon">✓</div><p class="eyebrow">Submission received</p><h2 style="margin:9px 0;font-size:34px;letter-spacing:-.04em">Thank you, ${esc(firstName)}.</h2><p style="max-width:600px;margin:0 auto;color:var(--muted);line-height:1.6">Your application for <strong>${esc(job.title)}</strong> was added to the review queue.${videoFile || photoFiles.length ? ' Your media was stored privately in this browser.' : ''}</p><div style="display:flex;justify-content:center;gap:9px;flex-wrap:wrap;margin-top:22px"><a class="button" style="color:#fff;background:var(--brand-primary)" href="jobs.html">View jobs</a><a class="button" style="border-color:var(--line)" href="apply.html">Submit another resume</a></div></div>`;
@@ -311,22 +264,13 @@
     const data = await response.json();
     if (!response.ok || !data.brand) return;
     const brand = data.brand;
-    document.documentElement.style.setProperty('--brand-primary', brand.primary || '#d94a2b');
-    document.documentElement.style.setProperty('--brand-secondary', brand.secondary || '#ff835f');
-    document.documentElement.style.setProperty('--brand-dark', brand.dark || '#171b1a');
     const logo = document.getElementById('applyLogo');
-    if (brand.logoUrl) logo.innerHTML = `<img src="${brand.logoUrl}" alt="${brand.restaurantName || 'Restaurant'} logo">`;
-    else logo.textContent = brand.logoText || 'FR';
-    document.getElementById('applyBrand').textContent = brand.restaurantName || 'Restaurant';
-    document.title = `Submit Resume · ${brand.restaurantName || 'Restaurant'}`;
-    const hero = document.querySelector('.form-hero');
-    if (hero && brand.coverUrl) {
-      hero.classList.add('has-cover-image');
-      hero.style.backgroundImage = `linear-gradient(110deg, rgba(23,27,26,.92), rgba(23,27,26,.60)), url("${brand.coverUrl.replaceAll('"','%22')}")`;
-    }
+    if (brand.logoUrl) logo.innerHTML = `<img src="${brand.logoUrl}" alt="${brand.restaurantName || 'Stonefellows'} logo">`;
+    else logo.textContent = brand.logoText || 'SF';
+    document.getElementById('applyBrand').textContent = brand.restaurantName || 'Stonefellows';
+    document.title = `Submit Resume · ${brand.restaurantName || 'Stonefellows'}`;
   } catch {}
 })();
 </script>
-<script src="js/public-account-menu.js"></script>
 </body>
 </html>

@@ -22,6 +22,7 @@ on:
       - 'public-site-settings.php'
       - 'assets/**'
       - 'css/stonefellows-public.css'
+      - 'css/stonefellows-public-v2.css'
       - 'js/public-account-menu.js'
       - 'includes/public-site.php'
       - 'includes/menu-sync.php'
