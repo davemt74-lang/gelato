@@ -15,6 +15,9 @@ if ($groups === false || $shell === false) {
 }
 
 group_tools_assert(str_contains($shell, 'floor-planner-v2-groups.js?v=20260914-1'), 'Floor Planner shell must load the group tools layer.');
+$groupPos = strpos($shell, 'floor-planner-v2-groups.js?v=20260914-1');
+$canonicalPos = strpos($shell, '. $needle');
+group_tools_assert($groupPos !== false && $canonicalPos !== false && $groupPos < $canonicalPos, 'Group persistence must load before the canonical planner starts initial plan hydration.');
 group_tools_assert(str_contains($groups, "window.addEventListener('contextmenu'"), 'Group tools must provide a right-click menu for multi-selection.');
 group_tools_assert(str_contains($groups, 'fpGroupMenu'), 'Group tools must render a dedicated group context menu.');
 group_tools_assert(str_contains($groups, 'Even Distance'), 'Group menu must expose Even Distance.');
