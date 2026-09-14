@@ -9,7 +9,7 @@ require_once __DIR__.'/../includes/pos-floor-plan.php';
 $user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];$uid=(int)$user['id'];$membership=(int)$user['membership_id'];
 $canUse=app_has_permission('pos.use',$user);$canDiscount=app_has_permission('pos.discount',$user);$canVoid=app_has_permission('pos.void',$user);$canManage=app_has_permission('pos.manage',$user);
 $crmAvailable=crm_ready($pdo);$canCustomerLink=$crmAvailable&&app_has_permission('crm.pos_link',$user);$kdsAvailable=kds_ready($pdo);
-$floorReady=pos_floor_plan_ready($pdo);$canFloorView=$floorReady&&app_has_permission('floorplans.view',$user)&&app_has_permission('table_service.view',$user);$canFloorManage=$floorReady&&$canManage&&app_has_permission('floorplans.view',$user)&&app_has_permission('table_service.manage',$user);$canTableUse=table_service_ready($pdo)&&app_has_permission('table_service.use',$user);
+$floorReady=pos_floor_plan_ready($pdo);$canFloorView=$floorReady&&app_has_permission('table_service.view',$user);$canFloorManage=$floorReady&&$canManage&&app_has_permission('floorplans.view',$user)&&app_has_permission('table_service.manage',$user);$canTableUse=table_service_ready($pdo)&&app_has_permission('table_service.use',$user);
 if(!$canUse)app_json_response(['ok'=>false,'message'=>'Native POS permission required.'],403);
 if(!pos_ready($pdo))app_json_response(['ok'=>false,'message'=>'Native POS migration is not installed. Run upgrade.php.'],503);
 
