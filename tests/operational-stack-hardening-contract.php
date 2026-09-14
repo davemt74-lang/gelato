@@ -62,8 +62,7 @@ kds_route_save($pdo,$org,$locationA,$menuItem,(string)$station['public_id'],$use
 $serviceSection=table_service_section_save($pdo,$org,$locationA,['name'=>'Dining Room','sortOrder'=>10],$userId);
 table_service_section_assign($pdo,$org,$locationA,(string)$serviceSection['publicId'],$userId,pos_clock($pdo,$org,$locationA)->format('Y-m-d'),$userId);
 
-// Cancellation must be one transaction across POS, KDS, Table Service, and audit.
-$table1=table_service_table_save($pdo,$org,$locationA,['name'=>'Audit Table 1','sectionPublicId'=>$serviceSection['publicId'],'capacity'=>4,'shape'=>'round'], $userId);
+$table1=table_service_table_save($pdo,$org,$locationA,['name'=>'Audit Table 1','sectionPublicId'=>$serviceSection['publicId'],'capacity'=>4,'shape'=>'round'],$userId);
 $check1=table_service_seat($pdo,$org,$locationA,(string)$table1['publicId'],2,$userId,'Atomic cancel test',$userId);
 $check1=pos_add_item($pdo,$org,(string)$check1['publicId'],$price,1,'',$userId);
 $line1=(int)$check1['items'][0]['id'];
@@ -78,7 +77,7 @@ try{
         app_audit($pdo,$org,$userId,'audit.forced_cancel','pos_check',(string)$check1['publicId']);
         throw new RuntimeException('Force outer rollback');
     });
-}catch(RuntimeException $e){$forced=$e->getMessage()==='Force outer rollback';}
+}catch(RuntimeException $error){$forced=$error->getMessage()==='Force outer rollback';}
 opaudit_assert($forced,'Forced cancellation rollback must throw from the outer transaction.');
 opaudit_assert((string)opaudit_one($pdo,'SELECT status FROM pos_checks WHERE organization_id=? AND id=?',[$org,$check1Id])==='open','Outer rollback must restore the POS check to open.');
 opaudit_assert((string)opaudit_one($pdo,'SELECT status FROM kds_order_items WHERE organization_id=? AND pos_check_item_id=?',[$org,$line1])==='queued','Outer rollback must restore the KDS line.');
@@ -96,8 +95,7 @@ opaudit_assert((string)opaudit_one($pdo,'SELECT status FROM kds_order_items WHER
 opaudit_assert(opaudit_one($pdo,'SELECT active_check_id FROM service_tables WHERE organization_id=? AND public_id=?',[$org,$table1['publicId']])===null,'Committed cancellation must release the table.');
 opaudit_assert((string)opaudit_one($pdo,'SELECT state FROM service_tables WHERE organization_id=? AND public_id=?',[$org,$table1['publicId']])==='dirty','Committed cancellation must move the released table into reset/dirty state.');
 
-// Payment close + sales posting + table release must also roll back as one unit.
-$table2=table_service_table_save($pdo,$org,$locationA,['name'=>'Audit Table 2','sectionPublicId'=>$serviceSection['publicId'],'capacity'=>2,'shape'=>'square'], $userId);
+$table2=table_service_table_save($pdo,$org,$locationA,['name'=>'Audit Table 2','sectionPublicId'=>$serviceSection['publicId'],'capacity'=>2,'shape'=>'square'],$userId);
 $check2=table_service_seat($pdo,$org,$locationA,(string)$table2['publicId'],1,$userId,'Atomic payment test',$userId);
 $check2=pos_add_item($pdo,$org,(string)$check2['publicId'],$price,1,'',$userId);
 $check2Id=(int)$check2['id'];
@@ -110,7 +108,7 @@ try{
         app_audit($pdo,$org,$userId,'audit.forced_tender','pos_check',(string)$check2['publicId'],null,['status'=>$paid['status']]);
         throw new RuntimeException('Force tender rollback');
     });
-}catch(RuntimeException $e){$forced=$e->getMessage()==='Force tender rollback';}
+}catch(RuntimeException $error){$forced=$error->getMessage()==='Force tender rollback';}
 opaudit_assert($forced,'Forced tender rollback must throw from the outer transaction.');
 opaudit_assert((string)opaudit_one($pdo,'SELECT status FROM pos_checks WHERE organization_id=? AND id=?',[$org,$check2Id])==='open','Tender rollback must restore the POS check to open.');
 opaudit_assert((int)opaudit_one($pdo,'SELECT COUNT(*) FROM pos_tenders WHERE organization_id=? AND check_id=?',[$org,$check2Id])===0,'Tender rollback must remove the captured tender.');
@@ -128,10 +126,11 @@ opaudit_assert((int)opaudit_one($pdo,'SELECT COUNT(*) FROM pos_tenders WHERE org
 opaudit_assert(opaudit_one($pdo,'SELECT active_check_id FROM service_tables WHERE organization_id=? AND public_id=?',[$org,$table2['publicId']])===null,'Committed tender must release the dining table.');
 opaudit_assert((int)opaudit_one($pdo,"SELECT COUNT(*) FROM audit_log WHERE organization_id=? AND action='audit.committed_tender'",[$org])===1,'Committed tender must persist its audit record.');
 
+$raw500Pattern='message\'=>$e->getMessage()],500';
 foreach(['api/pos.php','api/kds.php','api/table-service.php'] as $relative){
     $source=(string)file_get_contents(__DIR__.'/../'.$relative);
     opaudit_assert(str_contains($source,'operational_safe_error'),'Operational API '.$relative.' must use production-safe unexpected error handling.');
-    opaudit_assert(!str_contains($source,"catch(Throwable $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],500)"),'Operational API '.$relative.' must not return raw unexpected exception messages.');
+    opaudit_assert(!str_contains($source,$raw500Pattern),'Operational API '.$relative.' must not return raw unexpected exception messages.');
 }
 
 $posApi=(string)file_get_contents(__DIR__.'/../api/pos.php');
@@ -141,5 +140,6 @@ opaudit_assert(str_contains($posApi,"operational_location_allowed($pdo,$user,'po
 opaudit_assert(str_contains($tableApi,"operational_location_allowed($pdo,$user,'table_service.view'"),'Table Service API must enforce location-scoped access.');
 opaudit_assert(str_contains($kdsApi,"operational_location_allowed($pdo,$user,'kds.view'"),'KDS API must enforce location-scoped access.');
 opaudit_assert(str_contains((string)file_get_contents(__DIR__.'/../includes/pos-core.php'),'function pos_transaction'),'POS core mutations must remain transaction-composable.');
+opaudit_assert(str_contains((string)file_get_contents(__DIR__.'/../includes/pos-floor-plan.php'),'$owns=!$pdo->inTransaction()'),'Floor-plan sync must remain transaction-composable.');
 
 echo "operational-stack-hardening-ok\n";
