@@ -26,7 +26,7 @@ $pdo->prepare("INSERT INTO crm_customers (organization_id,public_id,first_name,l
 
 $password='Customer-CI-Password!42';
 $result=customer_account_register($pdo,$org,[
-    'firstName'=>'Existing','lastName'=>'Guest','email'=>$email,'phone'=>'(602) 555-0188',
+    'firstName'=>'Existing','lastName'=>'Guest','email'=>$email,'phone'=>'',
     'password'=>$password,'passwordConfirm'=>$password,'emailMarketing'=>true,'smsMarketing'=>false,
 ]);
 $userId=(int)$result['userId'];
@@ -37,6 +37,7 @@ caci_assert((int)caci_one($pdo,"SELECT COUNT(*) FROM user_roles ur JOIN roles r 
 caci_assert((int)caci_one($pdo,'SELECT COUNT(*) FROM crm_customers WHERE organization_id=? AND email_normalized=?',[$org,$email])===1,'Signup must not duplicate a CRM customer already known by email.');
 caci_assert((int)caci_one($pdo,'SELECT user_id FROM crm_customers WHERE organization_id=? AND public_id=?',[$org,$public])===$userId,'Existing CRM customer must be linked to the application user.');
 caci_assert((string)caci_one($pdo,'SELECT source FROM crm_customers WHERE organization_id=? AND public_id=?',[$org,$public])==='pos','Linking an existing customer must preserve its original acquisition source.');
+caci_assert((string)caci_one($pdo,'SELECT phone_normalized FROM crm_customers WHERE organization_id=? AND public_id=?',[$org,$public])===$phone,'Omitting an optional phone at signup must not erase an existing CRM phone number.');
 caci_assert((int)caci_one($pdo,"SELECT COUNT(*) FROM crm_customer_consents c JOIN crm_customers cc ON cc.id=c.customer_id WHERE cc.organization_id=? AND cc.user_id=? AND c.channel='email' AND c.consent_status='opted_in' AND c.source='web'",[$org,$userId])===1,'Explicit email marketing opt-in must be recorded append-only in CRM consent history.');
 caci_assert((int)caci_one($pdo,"SELECT COUNT(*) FROM crm_customer_consents c JOIN crm_customers cc ON cc.id=c.customer_id WHERE cc.organization_id=? AND cc.user_id=? AND c.channel='sms'",[$org,$userId])===0,'Unchecked SMS marketing must remain unknown instead of being treated as an opt-in.');
 caci_assert((int)caci_one($pdo,"SELECT COUNT(*) FROM crm_customer_tags ct JOIN crm_customers cc ON cc.id=ct.customer_id JOIN crm_tags t ON t.id=ct.tag_id WHERE cc.organization_id=? AND cc.user_id=? AND t.slug='online-customer'",[$org,$userId])===1,'Signup must mark the CRM profile as an Online Customer.');
