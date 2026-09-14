@@ -1,0 +1,41 @@
+name: Stonefellows public site
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/public-site-contract.yml'
+      - 'public/**'
+      - 'public-site-settings.php'
+      - 'includes/public-site.php'
+      - 'includes/menu-sync.php'
+      - 'database/20261001_public_site_settings.sql'
+      - 'tests/public-site-contract.php'
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php-version: ['8.1', '8.3']
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+          coverage: none
+      - name: Lint public PHP
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -l includes/public-site.php
+          php -l public-site-settings.php
+          find public -maxdepth 1 -name '*.php' -print0 | xargs -0 -n1 php -l
+      - name: Validate JavaScript
+        run: node --check public/assets/js/site.js
+      - name: Enforce public-site contract
+        run: php tests/public-site-contract.php
