@@ -55,3 +55,13 @@ jobs:
           node --check js/auth.js
       - name: Enforce root public-site contract
         run: php tests/public-site-contract.php
+      - name: Build deploy ZIP
+        if: matrix.php-version == '8.3'
+        run: git archive --format=zip --output=stonefellows-deploy.zip HEAD
+      - name: Upload deploy ZIP
+        if: matrix.php-version == '8.3'
+        uses: actions/upload-artifact@v4
+        with:
+          name: stonefellows-deploy
+          path: stonefellows-deploy.zip
+          if-no-files-found: error
