@@ -61,16 +61,15 @@ kdsp_assert((int)$board['stationCounts']['all']===2&&(int)$board['stationCounts'
 
 $scope=kds_production_board($pdo,$org,$location,(string)$oven['public_id'],false);
 kdsp_assert(count($scope['tickets'])===1&&count($scope['tickets'][0]['items'])===1,'Station board must scope ticket lines to that station.');
+kdsp_assert($scope['tickets'][0]['readyToBump']===false,'Station views must never advertise whole-ticket Expo bump readiness.');
+$stationBumpBlocked=false;try{kds_production_ticket_action($pdo,$org,$location,$checkPublic,'bump',(string)$oven['public_id'],$user);}catch(InvalidArgumentException){$stationBumpBlocked=true;}kdsp_assert($stationBumpBlocked,'Station views must not bypass Expo by completing ticket work.');
 
-kds_production_ticket_action($pdo,$org,$location,$checkPublic,'fire',null,$user);
-$board=kds_production_board($pdo,$org,$location,null,false);
-kdsp_assert((int)$board['metrics']['queued']===2&&(int)$board['metrics']['held']===0,'Ticket Fire must release held items into the queue.');
-kds_production_ticket_action($pdo,$org,$location,$checkPublic,'start',null,$user);
-$board=kds_production_board($pdo,$org,$location,null,false);
-kdsp_assert((int)$board['metrics']['inProgress']===2,'Start Batch must atomically start all queued ticket items.');
-kds_production_ticket_action($pdo,$org,$location,$checkPublic,'ready',null,$user);
-$board=kds_production_board($pdo,$org,$location,null,false);
-kdsp_assert((int)$board['metrics']['ready']===2&&(int)$board['metrics']['readyTickets']===1&&$board['tickets'][0]['readyToBump']===true,'Whole-ticket Expo readiness must require all fired lines to be Ready.');
+kds_production_ticket_action($pdo,$org,$location,$checkPublic,'start',(string)$oven['public_id'],$user);
+kdsp_assert((string)kdsp_one($pdo,'SELECT status FROM kds_order_items WHERE organization_id=? AND pos_check_item_id=?',[$org,$pizzaLine])==='in_progress','Station Start Batch must start only its scoped item.');
+kdsp_assert((string)kdsp_one($pdo,'SELECT status FROM kds_order_items WHERE organization_id=? AND pos_check_item_id=?',[$org,$saladLine])==='held','Station action must preserve another station held future course.');
+kds_production_ticket_action($pdo,$org,$location,$checkPublic,'ready',(string)$oven['public_id'],$user);
+$heldReady=kds_production_board($pdo,$org,$location,null,false);
+kdsp_assert($heldReady['tickets'][0]['readyToBump']===true&&(int)$heldReady['tickets'][0]['held']===1,'Held future-course items must not block Expo readiness of the currently fired batch.');
 
 $pdo->prepare("UPDATE kds_order_items SET fired_at=DATE_SUB(NOW(6),INTERVAL 90 SECOND) WHERE organization_id=? AND pos_check_item_id=?")->execute([$org,$pizzaLine]);
 $warning=kds_production_board($pdo,$org,$location,null,false);$warningPizza=array_values(array_filter($warning['items'],static fn(array $r):bool=>(int)$r['pos_check_item_id']===$pizzaLine))[0]??null;
@@ -79,9 +78,24 @@ $pdo->prepare("UPDATE kds_order_items SET fired_at=DATE_SUB(NOW(6),INTERVAL 120 
 $late=kds_production_board($pdo,$org,$location,null,false);$latePizza=array_values(array_filter($late['items'],static fn(array $r):bool=>(int)$r['pos_check_item_id']===$pizzaLine))[0]??null;
 kdsp_assert(is_array($latePizza)&&$latePizza['late']===true,'KDS must mark work Late after station SLA is exceeded.');
 
-$bumped=kds_production_ticket_action($pdo,$org,$location,$checkPublic,'bump',null,$user);
-kdsp_assert((int)$bumped['affected']===2,'Expo bump must complete every ready fired line in the ticket.');
-kdsp_assert((int)kdsp_one($pdo,"SELECT COUNT(*) FROM kds_order_items WHERE organization_id=? AND check_id=(SELECT id FROM pos_checks WHERE organization_id=? AND public_id=?) AND status='completed'",[$org,$org,$checkPublic])===2,'Expo bump must persist completed status for the whole fired ticket.');
+$firstBump=kds_production_ticket_action($pdo,$org,$location,$checkPublic,'bump',null,$user);
+kdsp_assert((int)$firstBump['affected']===1,'Expo bump must complete the current fired batch without completing held future courses.');
+kdsp_assert((string)kdsp_one($pdo,'SELECT status FROM kds_order_items WHERE organization_id=? AND pos_check_item_id=?',[$org,$pizzaLine])==='completed','Expo bump must complete the ready fired item.');
+kdsp_assert((string)kdsp_one($pdo,'SELECT status FROM kds_order_items WHERE organization_id=? AND pos_check_item_id=?',[$org,$saladLine])==='held','Expo bump must leave held future-course work untouched.');
+
+kds_production_ticket_action($pdo,$org,$location,$checkPublic,'fire',null,$user);
+$board=kds_production_board($pdo,$org,$location,null,false);
+kdsp_assert((int)$board['metrics']['queued']===1&&(int)$board['metrics']['held']===0,'Ticket Fire must release the remaining held course into the queue.');
+kds_production_ticket_action($pdo,$org,$location,$checkPublic,'start',null,$user);
+$board=kds_production_board($pdo,$org,$location,null,false);
+kdsp_assert((int)$board['metrics']['inProgress']===1,'Start Batch must start the newly fired course.');
+kds_production_ticket_action($pdo,$org,$location,$checkPublic,'ready',null,$user);
+$board=kds_production_board($pdo,$org,$location,null,false);
+kdsp_assert((int)$board['metrics']['ready']===1&&(int)$board['metrics']['readyTickets']===1&&$board['tickets'][0]['readyToBump']===true,'Expo readiness must reappear when the next fired course reaches Ready.');
+$secondBump=kds_production_ticket_action($pdo,$org,$location,$checkPublic,'bump',null,$user);
+kdsp_assert((int)$secondBump['affected']===1,'Second Expo bump must complete the newly fired ready course.');
+kdsp_assert((int)kdsp_one($pdo,"SELECT COUNT(*) FROM kds_order_items WHERE organization_id=? AND check_id=(SELECT id FROM pos_checks WHERE organization_id=? AND public_id=?) AND status='completed'",[$org,$org,$checkPublic])===2,'Both courses must be completed after their respective Expo bumps.');
+
 $history=kds_production_board($pdo,$org,$location,null,true);
 kdsp_assert(count($history['tickets'])===1&&(int)$history['tickets'][0]['recallableCount']===2,'Recent completed ticket must be visible and recallable in history mode.');
 $firstCompleted=(string)$history['tickets'][0]['items'][0]['public_id'];
@@ -107,5 +121,5 @@ $badBoard=kds_production_board($pdo,$org,$location,null,false);kdsp_assert((int)
 $pdo->prepare("INSERT INTO organizations (name,status,timezone) VALUES (?,'active','America/Phoenix')")->execute(['KDS Production Isolation '.$slug]);$otherOrg=(int)$pdo->lastInsertId();
 $isolated=false;try{kds_production_recall_item($pdo,$otherOrg,$expiredPublic,$user);}catch(InvalidArgumentException){$isolated=true;}kdsp_assert($isolated,'KDS production actions must remain organization-isolated.');
 
-kdsp_assert((int)kdsp_one($pdo,"SELECT COUNT(*) FROM kds_order_events WHERE organization_id=? AND event_type IN ('ticket_fired','ticket_started','ticket_ready','ticket_bumped')",[$org])>=8,'Ticket production actions must append KDS audit events.');
+kdsp_assert((int)kdsp_one($pdo,"SELECT COUNT(*) FROM kds_order_events WHERE organization_id=? AND event_type IN ('ticket_fired','ticket_started','ticket_ready','ticket_bumped','recalled')",[$org])>=9,'Production and recall actions must append the expected KDS audit events.');
 echo "kds-production-expo-ok\n";
