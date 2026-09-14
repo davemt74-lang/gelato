@@ -1,21 +1,31 @@
 <?php
 declare(strict_types=1);
 $root=dirname(__DIR__);
-$required=['index.php','menu.php','gelato.php','about.php','contact.php','locations.php','jobs.html','job.php','apply.html','catering.php','wholesale.php','login.php','login.html','forgot-password.php','reset-password.php','workspace.php','public-site-settings.php','assets/css/site.css','assets/css/page-headers.css','css/stonefellows-public.css','css/stonefellows-public-v2.css','assets/js/site.js','js/public-account-menu.js','assets/images/README.md','includes/public-site.php','database/20260914_public_site_settings.sql'];
+$required=['index.php','menu.php','gelato.php','about.php','contact.php','locations.php','jobs.html','job.php','apply.html','catering.php','wholesale.php','login.php','login.html','forgot-password.php','reset-password.php','workspace.php','public-site-settings.php','customer-signup.php','customer-login.php','customer-account.php','customer-logout.php','assets/css/site.css','assets/css/page-headers.css','assets/css/customer-account.css','css/stonefellows-public.css','css/stonefellows-public-v2.css','assets/js/site.js','js/public-account-menu.js','assets/images/README.md','includes/public-site.php','includes/customer-account-core.php','database/20260914_public_site_settings.sql','database/20261002_customer_accounts_online_ordering_foundation.sql'];
 foreach($required as $path)if(!is_file($root.'/'.$path))throw new RuntimeException('Missing required root public-site file: '.$path);
 if(is_dir($root.'/public'))throw new RuntimeException('Legacy /public directory must not exist.');
 
 $helper=file_get_contents($root.'/includes/public-site.php')?:'';
 if(!str_contains($helper,'menu_database_sections'))throw new RuntimeException('Public site must use canonical menu database helper.');
-if(!str_contains($helper,'href="login.php">Login</a>'))throw new RuntimeException('Public header must use Login CTA.');
+if(!str_contains($helper,'href="customer-account.php">Account</a>'))throw new RuntimeException('Public header must expose the customer Account CTA.');
+if(!str_contains($helper,"'Staff Login' => 'login.php'"))throw new RuntimeException('Public footer must retain a separate Staff Login path.');
 if(str_contains($helper,'href="contact.php">Get in Touch</a>'))throw new RuntimeException('Legacy Get in Touch header CTA must not remain.');
-foreach(['menu.php','gelato.php','about.php','locations.php','contact.php','jobs.html','catering.php','wholesale.php'] as $href)if(!str_contains($helper,"'".$href."'"))throw new RuntimeException('Footer link missing: '.$href);
+foreach(['menu.php','gelato.php','about.php','locations.php','contact.php','customer-account.php','jobs.html','catering.php','wholesale.php','login.php'] as $href)if(!str_contains($helper,"'".$href."'"))throw new RuntimeException('Footer link missing: '.$href);
 foreach(['footer-column-title','footer-links','Links','Follow'] as $needle)if(!str_contains($helper,$needle))throw new RuntimeException('Footer column contract missing: '.$needle);
 
 foreach(['index.php','menu.php','gelato.php'] as $path){$source=file_get_contents($root.'/'.$path)?:'';if(str_contains($source,'api/menu.php')||preg_match('/fetch\s*\(/',$source))throw new RuntimeException($path.' must not use authenticated menu API.');if(!str_contains($source,"__DIR__ . '/includes/public-site.php'"))throw new RuntimeException($path.' must load root public-site helper.');}
 
 $workspace=file_get_contents($root.'/workspace.php')?:'';if(!str_contains($workspace,'app_require_auth'))throw new RuntimeException('workspace.php must remain authenticated.');
 $login=file_get_contents($root.'/login.php')?:'';if(!str_contains($login,'workspace.php'))throw new RuntimeException('Login must return staff to workspace.php.');if(!str_contains($login,'stonefellows-public-v2.css'))throw new RuntimeException('Login must load the explicit Stonefellows v2 theme.');
+
+$signup=file_get_contents($root.'/customer-signup.php')?:'';
+foreach(['customer_account_register','app_verify_csrf','email_marketing','sms_marketing','customer-account.php?welcome=1'] as $needle)if(!str_contains($signup,$needle))throw new RuntimeException('Customer signup contract missing: '.$needle);
+$customerLogin=file_get_contents($root.'/customer-login.php')?:'';
+foreach(['customer_account_authenticate','app_verify_csrf','customer-signup.php'] as $needle)if(!str_contains($customerLogin,$needle))throw new RuntimeException('Customer login contract missing: '.$needle);
+$customerAccount=file_get_contents($root.'/customer-account.php')?:'';
+foreach(['customer_account_require','customer_account_profile','customer_account_orders','customer-logout.php'] as $needle)if(!str_contains($customerAccount,$needle))throw new RuntimeException('Customer account contract missing: '.$needle);
+$customerCore=file_get_contents($root.'/includes/customer-account-core.php')?:'';
+foreach(['customer.portal','online_ordering.use','crm_customers','crm_consent_set','Online Customer','password_verify','session_regenerate_id'] as $needle)if(!str_contains($customerCore,$needle))throw new RuntimeException('Customer identity contract missing: '.$needle);
 
 $settings=file_get_contents($root.'/public-site-settings.php')?:'';foreach(['app_require_auth','app_verify_csrf','public_pages.edit','public_site_settings','workspace.php'] as $needle)if(!str_contains($settings,$needle))throw new RuntimeException('Admin settings contract missing: '.$needle);
 
@@ -28,7 +38,7 @@ foreach(['jobs.html','job.php','apply.html','catering.php','wholesale.php','logi
 foreach(['jobs.html','job.php','apply.html','catering.php','wholesale.php'] as $path){$source=file_get_contents($root.'/'.$path)?:'';if(!str_contains($source,'sf-public-footer'))throw new RuntimeException($path.' must render the Stonefellows footer directly.');}
 foreach(['catering.php','wholesale.php','apply.html'] as $path){$source=file_get_contents($root.'/'.$path)?:'';if(str_contains($source,'landing.html'))throw new RuntimeException($path.' must not link to the legacy landing page.');}
 
-$legacyJs=file_get_contents($root.'/js/public-account-menu.js')?:'';if(!str_contains($legacyJs,'stonefellows-public-v2.css?v=20260914-2'))throw new RuntimeException('Legacy public integration must load the v2 theme when needed.');if(str_contains($legacyJs,'signup.php'))throw new RuntimeException('Public navigation must not expose a signup flow that does not exist.');
+$legacyJs=file_get_contents($root.'/js/public-account-menu.js')?:'';if(!str_contains($legacyJs,'stonefellows-public-v2.css?v=20260914-2'))throw new RuntimeException('Legacy public integration must load the v2 theme when needed.');if(str_contains($legacyJs,'signup.php'))throw new RuntimeException('Legacy public account menu must not expose the obsolete generic signup route.');
 
 $assets=file_get_contents($root.'/assets/images/README.md')?:'';foreach(['hero.jpg','card-pizza.jpg','card-drinks.jpg','card-music.jpg','card-reservations.jpg','gelato.jpg','story-one.jpg','story-two.jpg'] as $asset)if(!str_contains($assets,$asset))throw new RuntimeException('Missing image asset contract: '.$asset);
-echo "PASS: Stonefellows root public-site and visible unified design contract verified.\n";
+echo "PASS: Stonefellows root public-site, customer account surface, and visible unified design contract verified.\n";

@@ -1,0 +1,138 @@
+name: Customer Accounts + Online Ordering Foundation
+
+on:
+  pull_request:
+    paths:
+      - 'customer-signup.php'
+      - 'customer-login.php'
+      - 'customer-account.php'
+      - 'customer-logout.php'
+      - 'includes/customer-account-core.php'
+      - 'includes/public-site.php'
+      - 'assets/css/customer-account.css'
+      - 'database/20261002_customer_accounts_online_ordering_foundation.sql'
+      - 'tests/customer-account-contract.php'
+      - '.github/workflows/customer-accounts.yml'
+  push:
+    branches: [main]
+
+jobs:
+  customer-accounts:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - name: Syntax checks
+        run: |
+          php -l customer-signup.php
+          php -l customer-login.php
+          php -l customer-account.php
+          php -l customer-logout.php
+          php -l includes/customer-account-core.php
+          php -l includes/public-site.php
+          php -l tests/customer-account-contract.php
+      - name: Customer security and architecture contract
+        run: |
+          grep -q 'ADD COLUMN user_id BIGINT UNSIGNED NULL' database/20261002_customer_accounts_online_ordering_foundation.sql
+          grep -q 'uq_crm_customer_user' database/20261002_customer_accounts_online_ordering_foundation.sql
+          grep -q "customer.portal" database/20261002_customer_accounts_online_ordering_foundation.sql
+          grep -q "online_ordering.use" database/20261002_customer_accounts_online_ordering_foundation.sql
+          grep -q 'roles_seed_customer_account_permissions' database/20261002_customer_accounts_online_ordering_foundation.sql
+          grep -q "r.slug='customer'" database/20261002_customer_accounts_online_ordering_foundation.sql
+          ! grep -Eq "permission_key IN \([^)]*(pos.use|crm.manage|roles.edit|users.edit)" database/20261002_customer_accounts_online_ordering_foundation.sql
+          grep -q "source'=>'web'" includes/customer-account-core.php
+          grep -q "Online Customer" includes/customer-account-core.php
+          grep -q "Customer selected email updates" includes/customer-account-core.php
+          grep -q "Customer selected SMS updates" includes/customer-account-core.php
+          grep -q "password_verify" includes/customer-account-core.php
+          grep -q "session_regenerate_id" includes/customer-account-core.php
+          grep -q "crm_customers c ON c.organization_id=om.organization_id AND c.user_id=om.user_id" includes/customer-account-core.php
+          grep -q 'email_marketing' customer-signup.php
+          grep -q 'sms_marketing' customer-signup.php
+          grep -q 'customer-logout.php' customer-account.php
+          grep -q 'Internal CRM notes and staff-only tags are never exposed' customer-account.php
+          grep -q 'customer-account.php">Account' includes/public-site.php
+          grep -q "'Staff Login' => 'login.php'" includes/public-site.php
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_restaurant_ai_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->ensureTrackingTables();
+          $s->bootstrapLegacyHistory(null);
+          $s->applyPending(null);
+          if($s->pendingMigrations()) exit(1);
+          PHP
+      - name: Verify account schema
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='crm_customers' AND column_name='user_id';")" = "1"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('customer.portal','online_ordering.use');")" = "2"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_schema='gelato_restaurant_ai_ci' AND trigger_name='roles_seed_customer_account_permissions';")" = "1"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20261002_customer_accounts_online_ordering_foundation';")" = "1"
+      - name: Customer account behavioral contract
+        run: php tests/customer-account-contract.php
+      - name: Customer CRM regression
+        run: php tests/customer-crm-contract.php
+      - name: Native POS regression
+        run: php tests/native-pos-contract.php
+      - name: Verify upgrader idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->assertAppliedChecksumsUnchanged();
+          if($s->pendingMigrations()) exit(2);
+          if($s->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP
+      - name: Build deploy patch
+        run: |
+          mkdir -p deploy-patch/includes deploy-patch/assets/css deploy-patch/database
+          cp customer-signup.php customer-login.php customer-account.php customer-logout.php deploy-patch/
+          cp includes/customer-account-core.php includes/public-site.php deploy-patch/includes/
+          cp assets/css/customer-account.css deploy-patch/assets/css/
+          cp database/20261002_customer_accounts_online_ordering_foundation.sql deploy-patch/database/
+          cat > deploy-patch/README-DEPLOY.txt <<'EOF'
+          Stonefellows / Gelato customer-account deploy patch
+
+          Copy the files into the application web root while preserving folders.
+          Then sign in as an administrator and run the normal Upgrade process once.
+
+          This patch adds customer signup/login/account access, Customer-role permissions,
+          CRM account linkage, consent capture, and the identity foundation for online ordering.
+          It does not yet include cart, checkout, payment capture, delivery dispatch, or order scheduling.
+          EOF
+      - uses: actions/upload-artifact@v4
+        with:
+          name: customer-account-deploy
+          path: deploy-patch/
+          if-no-files-found: error
+          retention-days: 14
