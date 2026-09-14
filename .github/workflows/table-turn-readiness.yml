@@ -56,6 +56,9 @@ jobs:
           grep -q 'function table_turn_policy_save' includes/table-turn-policy.php
           grep -q 'function table_turn_readiness_queue' includes/table-turn-readiness.php
           grep -q 'function table_turn_reset_metrics' includes/table-turn-readiness.php
+          grep -q 'UNIX_TIMESTAMP(created_at)' includes/table-turn-readiness.php
+          grep -q 'Metric fixture next day' tests/table-turn-readiness-contract.php
+          grep -q 'FROM_UNIXTIME' tests/table-turn-readiness-contract.php
           grep -q 'table_turn_reset_minutes' includes/service-seatability.php
           grep -q 'table_turn_ready_buffer_minutes' includes/service-reservation-protection.php
           grep -q "turn_policy.save" api/host-stand.php

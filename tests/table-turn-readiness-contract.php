@@ -62,10 +62,19 @@ ttr(!ttr_has_candidate($near,$policyTable['publicId']),'Configured 20-minute res
 ttr(ttr_has_candidate($far,$policyTable['publicId']),'Configured reset policy must allow the Dirty table beyond the reset lead window.');
 
 // Aggregate metrics are table/location facts derived from append-only table_ready events, never employee scoring.
-table_service_event($pdo,$org,$location,(int)$overdue['id'],null,null,'table_ready','Metric fixture A.',['dirtyToReadySeconds'=>300,'cleaningSeconds'=>120],$user);
-table_service_event($pdo,$org,$location,(int)$scheduled['id'],null,null,'table_ready','Metric fixture B.',['dirtyToReadySeconds'=>1800,'cleaningSeconds'=>600],$user);
+// Pin the fixtures by epoch so the database stores them in its own session timezone while the
+// requested metrics day remains the restaurant's America/Phoenix business date.
+$metricTz=service_ops_timezone($pdo,$org,$location);
+table_service_event($pdo,$org,$location,(int)$overdue['id'],null,null,'table_ready','Metric fixture A.',['dirtyToReadySeconds'=>300,'cleaningSeconds'=>120],$user);$metricEventA=(int)$pdo->lastInsertId();
+table_service_event($pdo,$org,$location,(int)$scheduled['id'],null,null,'table_ready','Metric fixture B.',['dirtyToReadySeconds'=>1800,'cleaningSeconds'=>600],$user);$metricEventB=(int)$pdo->lastInsertId();
+table_service_event($pdo,$org,$location,(int)$scheduled['id'],null,null,'table_ready','Metric fixture next day.',['dirtyToReadySeconds'=>9999,'cleaningSeconds'=>9999],$user);$metricEventNext=(int)$pdo->lastInsertId();
+$metricEpochA=(new DateTimeImmutable($date.' 23:30:00',$metricTz))->getTimestamp();
+$metricEpochB=(new DateTimeImmutable($date.' 23:40:00',$metricTz))->getTimestamp();
+$metricEpochNext=(new DateTimeImmutable($date.' 00:30:00',$metricTz))->modify('+1 day')->getTimestamp();
+$stamp=$pdo->prepare('UPDATE service_events SET created_at=FROM_UNIXTIME(?) WHERE organization_id=? AND id=?');
+$stamp->execute([$metricEpochA,$org,$metricEventA]);$stamp->execute([$metricEpochB,$org,$metricEventB]);$stamp->execute([$metricEpochNext,$org,$metricEventNext]);
 $metrics=table_turn_reset_metrics($pdo,$org,$location,$date);
-ttr($metrics['resetCount']===2&&$metrics['averageResetSeconds']===1050&&$metrics['medianResetSeconds']===1050,'Reset metrics must aggregate factual reset durations.');
+ttr($metrics['resetCount']===2&&$metrics['averageResetSeconds']===1050&&$metrics['medianResetSeconds']===1050,'Reset metrics must aggregate factual reset durations for the restaurant-local business date.');
 ttr($metrics['withinTargetCount']===1&&abs((float)$metrics['withinTargetPercent']-50.0)<0.1,'Reset target compliance must be location aggregate only.');
 ttr($metrics['averageCleaningSeconds']===360,'Cleaning duration average is incorrect.');
 
