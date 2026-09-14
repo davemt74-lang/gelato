@@ -1,0 +1,24 @@
+<?php
+declare(strict_types=1);
+require_once __DIR__ . '/../includes/public-site.php';
+$context = public_site_fallback_context();
+try { $context = public_site_context(app_pdo()); } catch (Throwable $e) { error_log('Public menu load failed: ' . $e->getMessage()); }
+$settings = $context['settings'];
+$sections = array_values(array_filter($context['menuSections'], static function (array $section): bool {
+    $id = mb_strtolower((string)($section['id'] ?? ''), 'UTF-8');
+    $name = mb_strtolower((string)($section['name'] ?? ''), 'UTF-8');
+    return !str_contains($id, 'gelato') && !str_contains($name, 'gelato');
+}));
+?>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0b0b09"><meta name="description" content="Current <?= app_escape((string)$settings['restaurant_name']) ?> food and drink menu."><title>Menu | <?= app_escape((string)$settings['restaurant_name']) ?></title><link rel="stylesheet" href="assets/css/site.css?v=20261001"></head><body>
+<?php public_site_render_header($settings, 'menu'); ?>
+<main class="page-main"><section class="page-hero"><div class="shell"><div class="eyebrow">Current Restaurant Menu</div><h1>Pizza, Food + Drinks.</h1><p>This page is rendered from the active menu sections, items and prices in the Stonefellows restaurant database.</p><?php if ($context['dataMessage'] !== ''): ?><div class="data-note"><?= app_escape((string)$context['dataMessage']) ?></div><?php endif; ?></div></section>
+<section class="section"><div class="shell menu-sections">
+<?php if ($sections): foreach ($sections as $section): ?>
+<section class="menu-section" id="<?= app_escape((string)$section['id']) ?>"><div class="menu-section-head"><div><div class="eyebrow">Menu</div><h2><?= app_escape((string)$section['name']) ?></h2></div><?php if (trim((string)($section['intro'] ?? '')) !== ''): ?><p><?= app_escape((string)$section['intro']) ?></p><?php endif; ?></div>
+<?php $items = is_array($section['items'] ?? null) ? $section['items'] : []; if ($items): ?><div class="menu-list">
+<?php foreach ($items as $item): ?><article class="menu-item"><div><h3><?= app_escape((string)$item['name']) ?></h3><?php if (trim((string)$item['description']) !== ''): ?><p><?= app_escape((string)$item['description']) ?></p><?php endif; ?><?php if (!empty($item['ingredients'])): ?><div class="ingredients"><?= app_escape(implode(' · ', array_map('strval', $item['ingredients']))) ?></div><?php endif; ?></div><?php $price = public_site_price($item); ?><div class="menu-price"><?= $price !== '' ? app_escape($price) : '' ?></div></article><?php endforeach; ?>
+</div><?php else: ?><div class="empty-state">No active items are published in this section.</div><?php endif; ?></section>
+<?php endforeach; else: ?><div class="empty-state">The active restaurant menu is not available yet. Admin can publish or sync menu data, then this page will update automatically.</div><?php endif; ?>
+</div></section></main>
+<?php public_site_render_footer($settings); ?><script src="assets/js/site.js?v=20261001"></script></body></html>
