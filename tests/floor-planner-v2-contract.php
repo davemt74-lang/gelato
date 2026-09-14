@@ -9,11 +9,13 @@ $shell=fpv2_source('floor-planner-v2.php');
 $api=fpv2_source('floor-plan-api.php');
 $module=fpv2_source('js/floor-planner-module.js');
 $js=fpv2_source('js/floor-planner-v2.js');
+$runtime=fpv2_source('js/floor-planner-v2-runtime.js');
 
 fpv2_assert(str_contains($entry,'floor-planner-v2.php'),'Primary Floor Planner entry must route to v2.');
 fpv2_assert(str_contains($shell,'floor-planner-ops.php'),'V2 shell must wrap the canonical operational planner.');
-fpv2_assert(str_contains($shell,'floor-planner-v2.js'),'V2 interaction layer must load.');
-fpv2_assert(str_contains($shell,'$replacement = \'<script src="js/floor-planner-v2.js?v=20260914-1"></script>\' . $needle;'),'V2 shell must inject the preloader immediately before the canonical planner script.');
+fpv2_assert(str_contains($shell,'$replacement = \'<script src="js/floor-planner-v2.js?v=20260914-1"></script>\''),'V2 shell must inject the preloader before the canonical planner runtime.');
+fpv2_assert(str_contains($shell,'. $needle'),'V2 shell must preserve the canonical planner script between its preloader and post-runtime hardening.');
+fpv2_assert(str_contains($shell,'floor-planner-v2-runtime.js'),'V2 shell must load post-runtime hardening after the canonical planner.');
 fpv2_assert(str_contains($api,"require __DIR__ . '/api/floor-plans.php'"),'Stable Floor Planner API entry must delegate to the canonical API.');
 fpv2_assert(str_contains($module,"'floor-planner-v2.php'"),'Admin navigation must launch Floor Planner 2.0.');
 fpv2_assert(str_contains($module,'floor-planner-ops.php'),'V2 admin navigation must retain its canonical runtime contract.');
@@ -40,5 +42,10 @@ fpv2_assert(str_contains($js,"api/equipment.php?asset="),'Equipment inspector mu
 fpv2_assert(str_contains($js,'Service contracts & contacts'),'Equipment control panel must include service contract/contact information.');
 fpv2_assert(str_contains($js,'Service history'),'Equipment control panel must include service history.');
 fpv2_assert(str_contains($js,'Operating knowledge'),'Equipment control panel must include operational/maintenance knowledge.');
+
+fpv2_assert(str_contains($runtime,'event.stopImmediatePropagation()'),'V2 runtime must own delegated structural drag/resize events so Undo-restored items remain interactive.');
+fpv2_assert(str_contains($runtime,'floor-planner-v2.php'),'Opening a canonical Equipment Record must return to Floor Planner 2.0.');
+fpv2_assert(str_contains($runtime,"window.addEventListener('beforeunload'"),'V2 group/counter edits must participate in unsaved-change protection.');
+fpv2_assert(str_contains($runtime,"floor-plan-api\\.php|api\\/floor-plans\\.php"),'A successful Floor Plan save must clear the v2 dirty state.');
 
 echo "floor-planner-v2-contract-ok\n";
