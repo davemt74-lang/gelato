@@ -3,6 +3,12 @@
 
   const cfg = window.FLOOR_PLANNER_CONFIG || {};
   const csrf = String(cfg.csrf || '');
+  const COUNTER_EDGE_HIT_PX = 20;
+  const COUNTER_NODE_LIMIT = 48;
+  const counterUndo = [];
+  const counterRedo = [];
+  let activeCounter = null;
+  let activeCounterNodeIndex = -1;
 
   function status(message, bad = false) {
     const el = document.getElementById('status');
@@ -21,12 +27,328 @@
         stroke:rgba(204,210,214,.82)!important;
         stroke-width:10!important;
         filter:drop-shadow(0 -1px 0 rgba(255,255,255,.72)) drop-shadow(0 2px 2px rgba(64,70,76,.16)) brightness(1.04)!important;
+        pointer-events:all!important;
       }
       .fp-counter-shape{
         opacity:.96;
       }
+      .fp-counter-node{
+        display:none!important;
+      }
+      .fp-counter-edge-node{
+        position:absolute;
+        width:15px;
+        height:15px;
+        z-index:200020;
+        border:3px solid #fff;
+        border-radius:50%;
+        background:#2563eb;
+        box-shadow:0 0 0 2px rgba(37,99,235,.36),0 3px 10px rgba(0,0,0,.24);
+        transform:translate(-50%,-50%);
+        cursor:grab;
+        touch-action:none;
+      }
+      .fp-counter-edge-node:active{cursor:grabbing}
+      body.fp-counter-node-mode #stage .fp-counter{cursor:crosshair!important}
     `;
     document.head.appendChild(style);
+  }
+
+  function counterPoints(counter) {
+    try {
+      const points = JSON.parse(counter.dataset.counterPoints || 'null');
+      if (Array.isArray(points) && points.length >= 3) {
+        return points.map(point => ({x:Number(point.x) || 0, y:Number(point.y) || 0}));
+      }
+    } catch {}
+    return [{x:0,y:0},{x:1,y:0},{x:1,y:1},{x:0,y:1}];
+  }
+
+  function counterSvg(counter) {
+    return counter?.querySelector('svg.fp-counter-shape') || null;
+  }
+
+  function svgPointFromClient(svg, clientX, clientY) {
+    const matrix = svg?.getScreenCTM?.();
+    if (!matrix) return null;
+    const point = svg.createSVGPoint();
+    point.x = clientX;
+    point.y = clientY;
+    const local = point.matrixTransform(matrix.inverse());
+    return {x:local.x / 1000, y:local.y / 1000};
+  }
+
+  function clientPointFromSvg(svg, pointValue) {
+    const matrix = svg?.getScreenCTM?.();
+    if (!matrix) return null;
+    const point = svg.createSVGPoint();
+    point.x = pointValue.x * 1000;
+    point.y = pointValue.y * 1000;
+    const screen = point.matrixTransform(matrix);
+    return {x:screen.x, y:screen.y};
+  }
+
+  function nearestCounterEdge(counter, clientX, clientY) {
+    const svg = counterSvg(counter);
+    const point = svgPointFromClient(svg, clientX, clientY);
+    if (!svg || !point) return null;
+    const points = counterPoints(counter);
+    let best = null;
+
+    points.forEach((a, index) => {
+      const b = points[(index + 1) % points.length];
+      const vx = b.x - a.x;
+      const vy = b.y - a.y;
+      const lengthSquared = Math.max(.0000001, vx * vx + vy * vy);
+      const t = Math.max(0, Math.min(1, ((point.x - a.x) * vx + (point.y - a.y) * vy) / lengthSquared));
+      const projected = {x:a.x + t * vx, y:a.y + t * vy};
+      const client = clientPointFromSvg(svg, projected);
+      if (!client) return;
+      const distance = Math.hypot(clientX - client.x, clientY - client.y);
+      if (!best || distance < best.distance) best = {edgeIndex:index, projected, distance};
+    });
+
+    return best;
+  }
+
+  function serializePoints(points) {
+    return JSON.stringify(points.map(point => ({
+      x:Number(point.x.toFixed(5)),
+      y:Number(point.y.toFixed(5)),
+    })));
+  }
+
+  function counterState(counter) {
+    return {
+      id:String(counter?.dataset.id || ''),
+      points:String(counter?.dataset.counterPoints || serializePoints(counterPoints(counter))),
+    };
+  }
+
+  function renderCounterGeometry(counter, points) {
+    counter.dataset.counterPoints = serializePoints(points);
+    counter.dataset.counterTransform = '0';
+    counter.querySelectorAll('.fp-counter-node').forEach(node => node.remove());
+    const polygon = counterSvg(counter)?.querySelector('polygon');
+    if (polygon) {
+      polygon.setAttribute('points', points.map(point => `${Math.round(point.x * 1000)},${Math.round(point.y * 1000)}`).join(' '));
+    }
+    positionActiveCounterNode();
+  }
+
+  function counterById(id) {
+    return [...document.querySelectorAll('#stage .fp-counter[data-id]')].find(counter => counter.dataset.id === id) || null;
+  }
+
+  function applyCounterState(state) {
+    const counter = counterById(state.id);
+    if (!counter) return false;
+    let points = null;
+    try { points = JSON.parse(state.points); } catch {}
+    if (!Array.isArray(points) || points.length < 3) return false;
+    clearActiveCounterNode();
+    renderCounterGeometry(counter, points);
+    return true;
+  }
+
+  function recordCounterEdit(before, after) {
+    if (!before?.id || before.id !== after?.id || before.points === after.points) return;
+    counterUndo.push({before, after});
+    if (counterUndo.length > 80) counterUndo.shift();
+    counterRedo.length = 0;
+  }
+
+  function undoCounterEdit() {
+    const operation = counterUndo.pop();
+    if (!operation) return false;
+    if (!applyCounterState(operation.before)) {
+      counterUndo.push(operation);
+      return false;
+    }
+    counterRedo.push(operation);
+    status('Counter edit undone.');
+    return true;
+  }
+
+  function redoCounterEdit() {
+    const operation = counterRedo.pop();
+    if (!operation) return false;
+    if (!applyCounterState(operation.after)) {
+      counterRedo.push(operation);
+      return false;
+    }
+    counterUndo.push(operation);
+    status('Counter edit redone.');
+    return true;
+  }
+
+  function clearCounterHistory() {
+    counterUndo.length = 0;
+    counterRedo.length = 0;
+  }
+
+  function clearActiveCounterNode() {
+    document.querySelectorAll('.fp-counter-edge-node').forEach(node => node.remove());
+    activeCounter = null;
+    activeCounterNodeIndex = -1;
+  }
+
+  function positionActiveCounterNode() {
+    if (!activeCounter || activeCounterNodeIndex < 0 || !activeCounter.isConnected) return;
+    const points = counterPoints(activeCounter);
+    const point = points[activeCounterNodeIndex];
+    if (!point) return;
+    let handle = activeCounter.querySelector('.fp-counter-edge-node');
+    if (!handle) {
+      handle = document.createElement('span');
+      handle.className = 'fp-counter-edge-node';
+      handle.title = 'Drag to reshape counter';
+      activeCounter.appendChild(handle);
+    }
+    handle.dataset.index = String(activeCounterNodeIndex);
+    handle.style.left = `${point.x * 100}%`;
+    handle.style.top = `${point.y * 100}%`;
+  }
+
+  function activateCounterNode(counter, index) {
+    clearActiveCounterNode();
+    activeCounter = counter;
+    activeCounterNodeIndex = index;
+    positionActiveCounterNode();
+  }
+
+  function constrainCounterPoint(point) {
+    return {
+      x:Math.max(-4, Math.min(5, point.x)),
+      y:Math.max(-4, Math.min(5, point.y)),
+    };
+  }
+
+  function dragCounterNode(event, counter, index, before = counterState(counter)) {
+    const svg = counterSvg(counter);
+    if (!svg) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    activateCounterNode(counter, index);
+
+    const move = current => {
+      const next = svgPointFromClient(svg, current.clientX, current.clientY);
+      if (!next) return;
+      const points = counterPoints(counter);
+      if (!points[index]) return;
+      points[index] = constrainCounterPoint(next);
+      renderCounterGeometry(counter, points);
+    };
+
+    const up = () => {
+      window.removeEventListener('pointermove', move, true);
+      window.removeEventListener('pointerup', up, true);
+      recordCounterEdit(before, counterState(counter));
+      status('Counter shape updated. Ctrl-click another edge to add a node.');
+    };
+
+    window.addEventListener('pointermove', move, true);
+    window.addEventListener('pointerup', up, true);
+  }
+
+  function addCounterEdgeNode(event, counter) {
+    const hit = nearestCounterEdge(counter, event.clientX, event.clientY);
+    if (!hit || hit.distance > COUNTER_EDGE_HIT_PX) return false;
+    const points = counterPoints(counter);
+    if (points.length >= COUNTER_NODE_LIMIT) {
+      status(`Counter node limit reached (${COUNTER_NODE_LIMIT}).`, true);
+      return true;
+    }
+
+    const before = counterState(counter);
+    const index = hit.edgeIndex + 1;
+    points.splice(index, 0, hit.projected);
+    renderCounterGeometry(counter, points);
+    activateCounterNode(counter, index);
+    status('Counter node added — drag to extend the shape.');
+    dragCounterNode(event, counter, index, before);
+    return true;
+  }
+
+  function simplifyLegacyCounterMenu() {
+    document.querySelectorAll('#fpCounterMenu').forEach(menu => {
+      menu.querySelectorAll('[data-counter-action="add"],[data-counter-action="transform"]').forEach(button => button.remove());
+      const reset = menu.querySelector('[data-counter-action="reset"]');
+      if (reset) reset.textContent = 'Reset Counter Shape';
+    });
+  }
+
+  function installCounterEdgeEditing() {
+    window.addEventListener('keydown', event => {
+      if (event.key === 'Control') {
+        document.body.classList.add('fp-counter-node-mode');
+        return;
+      }
+      if (!(event.ctrlKey || event.metaKey)) return;
+      if (event.target instanceof Element && event.target.closest('input,textarea,select,[contenteditable="true"]')) return;
+      const key = event.key.toLowerCase();
+      const wantsUndo = key === 'z' && !event.shiftKey;
+      const wantsRedo = key === 'y' || (key === 'z' && event.shiftKey);
+      if (wantsUndo && counterUndo.length && undoCounterEdit()) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      } else if (wantsRedo && counterRedo.length && redoCounterEdit()) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+    }, true);
+    window.addEventListener('keyup', event => {
+      if (event.key === 'Control') document.body.classList.remove('fp-counter-node-mode');
+    }, true);
+    window.addEventListener('blur', () => document.body.classList.remove('fp-counter-node-mode'));
+
+    document.addEventListener('pointerdown', event => {
+      if (!cfg.canEdit || event.button !== 0 || !(event.target instanceof Element)) return;
+
+      const handle = event.target.closest('.fp-counter-edge-node');
+      if (handle) {
+        const counter = handle.closest('#stage .fp-counter');
+        const index = Number(handle.dataset.index);
+        if (counter && Number.isInteger(index) && index >= 0) dragCounterNode(event, counter, index);
+        return;
+      }
+
+      const counter = event.target.closest('#stage .fp-counter');
+      if (event.ctrlKey && counter && addCounterEdgeNode(event, counter)) return;
+
+      if (counter && activeCounter && counter !== activeCounter) clearActiveCounterNode();
+      if (!counter && !event.target.closest('#fpCounterMenu')) clearActiveCounterNode();
+    }, true);
+
+    document.addEventListener('click', event => {
+      if (!(event.target instanceof Element)) return;
+      if (event.target.closest('[data-counter-action="reset"]')) {
+        clearActiveCounterNode();
+        clearCounterHistory();
+      }
+    }, true);
+
+    const stage = document.getElementById('stage');
+    if (stage) {
+      new MutationObserver(records => {
+        if (!counterUndo.length && !counterRedo.length) return;
+        const laterGeometryEdit = records.some(record => {
+          if (!(record.target instanceof Element)) return false;
+          if (record.target.closest('.fp-counter-edge-node')) return false;
+          return record.type === 'attributes' && ['style','data-rotation','data-seats','data-seat-zone'].includes(record.attributeName || '');
+        });
+        if (laterGeometryEdit) clearCounterHistory();
+      }).observe(stage, {
+        subtree:true,
+        attributes:true,
+        attributeFilter:['style','data-rotation','data-seats','data-seat-zone'],
+      });
+    }
+
+    const menuObserver = new MutationObserver(simplifyLegacyCounterMenu);
+    menuObserver.observe(document.body, {childList:true, subtree:true});
+    simplifyLegacyCounterMenu();
   }
 
   async function createEquipmentFromPlanner(button) {
@@ -97,6 +419,7 @@
 
   function init() {
     injectCounterFinish();
+    installCounterEdgeEditing();
     installEquipmentCreateFix();
   }
 
