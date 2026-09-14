@@ -48,6 +48,12 @@ function table_service_location(PDO $pdo,int $org,int $locationId): array
     return pos_location($pdo,$org,$locationId);
 }
 
+function table_service_business_date(PDO $pdo,int $org,int $locationId): string
+{
+    table_service_location($pdo,$org,$locationId);
+    return pos_clock($pdo,$org,$locationId)->format('Y-m-d');
+}
+
 function table_service_user(PDO $pdo,int $org,int $userId): array
 {
     $q=$pdo->prepare("SELECT u.id,u.display_name,m.job_title FROM organization_memberships m JOIN users u ON u.id=m.user_id WHERE m.organization_id=? AND u.id=? AND m.status='active' AND u.status<>'archived' LIMIT 1");
@@ -73,10 +79,10 @@ function table_service_event(PDO $pdo,int $org,int $locationId,?int $tableId,?in
 
 function table_service_sections(PDO $pdo,int $org,int $locationId,bool $activeOnly=true): array
 {
-    table_service_location($pdo,$org,$locationId);
-    $sql='SELECT s.id,s.public_id,s.name,s.sort_order,s.status,a.assigned_user_id,u.display_name assigned_user_name FROM service_sections s LEFT JOIN service_section_assignments a ON a.section_id=s.id AND a.organization_id=s.organization_id AND a.business_date=CURDATE() LEFT JOIN users u ON u.id=a.assigned_user_id WHERE s.organization_id=? AND s.location_id=?';
+    $businessDate=table_service_business_date($pdo,$org,$locationId);
+    $sql='SELECT s.id,s.public_id,s.name,s.sort_order,s.status,a.assigned_user_id,u.display_name assigned_user_name FROM service_sections s LEFT JOIN service_section_assignments a ON a.section_id=s.id AND a.organization_id=s.organization_id AND a.business_date=? LEFT JOIN users u ON u.id=a.assigned_user_id WHERE s.organization_id=? AND s.location_id=?';
     if($activeOnly)$sql.=" AND s.status='active'";
-    $sql.=' ORDER BY s.sort_order,s.name,s.id';$q=$pdo->prepare($sql);$q->execute([$org,$locationId]);
+    $sql.=' ORDER BY s.sort_order,s.name,s.id';$q=$pdo->prepare($sql);$q->execute([$businessDate,$org,$locationId]);
     return array_map(static fn(array $r):array=>['id'=>(int)$r['id'],'publicId'=>(string)$r['public_id'],'name'=>(string)$r['name'],'sortOrder'=>(int)$r['sort_order'],'status'=>(string)$r['status'],'assignedUserId'=>$r['assigned_user_id']!==null?(int)$r['assigned_user_id']:null,'assignedUserName'=>$r['assigned_user_name']],$q->fetchAll());
 }
 
@@ -144,7 +150,7 @@ function table_service_detail(PDO $pdo,int $org,string $checkPublicId): array
 
 function table_service_default_server(PDO $pdo,int $org,int $locationId,?int $sectionId,int $actorUserId): int
 {
-    if($sectionId){$q=$pdo->prepare('SELECT assigned_user_id FROM service_section_assignments WHERE organization_id=? AND location_id=? AND section_id=? AND business_date=CURDATE() LIMIT 1');$q->execute([$org,$locationId,$sectionId]);$assigned=(int)($q->fetchColumn()?:0);if($assigned>0)return $assigned;}
+    if($sectionId){$businessDate=table_service_business_date($pdo,$org,$locationId);$q=$pdo->prepare('SELECT assigned_user_id FROM service_section_assignments WHERE organization_id=? AND location_id=? AND section_id=? AND business_date=? LIMIT 1');$q->execute([$org,$locationId,$sectionId,$businessDate]);$assigned=(int)($q->fetchColumn()?:0);if($assigned>0)return $assigned;}
     return $actorUserId;
 }
 

@@ -56,6 +56,8 @@ jobs:
           grep -q "'table_service.use'" database/20260920_table_service_guest_lifecycle.sql
           grep -q "'table_service.manage'" database/20260920_table_service_guest_lifecycle.sql
           grep -q 'function table_service_transaction' includes/table-service-core.php
+          grep -q 'function table_service_business_date' includes/table-service-core.php
+          ! grep -q 'business_date=CURDATE()' includes/table-service-core.php
           grep -q 'function table_service_payment_guard' includes/table-service-core.php
           grep -q 'function table_service_fire_course' includes/table-service-core.php
           grep -q 'function table_service_split' includes/table-service-core.php
