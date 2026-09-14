@@ -37,12 +37,6 @@
         link.textContent = service.menuLabel;
         list.appendChild(link);
       });
-      if (!list.querySelector('a[href="signup.php"]')) {
-        const link = document.createElement('a');
-        link.href = 'signup.php';
-        link.textContent = '＋ Account access / Sign up';
-        list.appendChild(link);
-      }
     });
   }
 
@@ -56,7 +50,7 @@
       <div class="sf-footer-grid">
         <div class="sf-brand"><strong>Stonefellows</strong><span>Pizzeria + Bar</span></div>
         <div><strong>Links</strong><nav><a href="menu.php">Menu</a><a href="gelato.php">Gelato</a><a href="about.php">About</a><a href="locations.php">Locations</a><a href="contact.php">Contact</a><a href="jobs.html">Jobs</a><a href="catering.php">Catering</a><a href="wholesale.php">Wholesale</a></nav></div>
-        <div><strong>Accounts</strong><nav><a href="login.php">Login</a><a href="signup.php">Sign Up / Access</a><a href="forgot-password.php">Forgot Password</a></nav></div>
+        <div><strong>Account</strong><nav><a href="login.php">Login</a><a href="forgot-password.php">Forgot Password</a></nav></div>
         <div><strong>Visit</strong><nav><a href="locations.php">Location details</a><a href="contact.php">Hours + contact</a></nav></div>
         <div><strong>Explore</strong><nav><a href="index.php">Home</a><a href="jobs.html">Careers</a><a href="apply.html">Apply</a></nav></div>
       </div>`;
