@@ -12,16 +12,17 @@ $api=fpv2_source('floor-plan-api.php');
 $module=fpv2_source('js/floor-planner-module.js');
 $js=fpv2_source('js/floor-planner-v2.js');
 $runtime=fpv2_source('js/floor-planner-v2-runtime.js');
+$enhancements=fpv2_source('js/floor-planner-v2-enhancements.js');
 
 fpv2_assert(str_contains($entry,'floor-planner-v2.php'),'Primary Floor Planner entry must route to v2.');
 fpv2_assert(str_contains($redirect,'floor-planner-v2.php'),'Legacy operational planner URL must redirect to v2.');
 fpv2_assert(str_contains($legacy,'Operational Floor Planner'),'Internal canonical planner shell must remain available to the v2 wrapper.');
 fpv2_assert(str_contains($shell,'floor-planner-ops-legacy.php'),'V2 shell must wrap the internal canonical operational planner.');
-fpv2_assert(str_contains($shell,'floor-planner-v2.js?v=20260914-2'),'V2 shell must load the current interaction layer.');
+fpv2_assert(str_contains($shell,'floor-planner-v2.js?v=20260914-3'),'V2 shell must load the current interaction layer.');
 fpv2_assert(str_contains($shell,'. $needle'),'V2 shell must preserve the canonical planner script between its preloader and post-runtime hardening.');
-fpv2_assert(str_contains($shell,'floor-planner-v2-runtime.js?v=20260914-2'),'V2 shell must load current post-runtime hardening after the canonical planner.');
-fpv2_assert(str_contains($shell,'Triple-click item = controls'),'V2 shell must make the slide-out item panel gesture discoverable.');
-fpv2_assert(str_contains($shell,'drag-select = group move'),'V2 shell must make grouped movement discoverable.');
+fpv2_assert(str_contains($shell,'floor-planner-v2-runtime.js?v=20260914-3'),'V2 shell must load current post-runtime hardening after the canonical planner.');
+fpv2_assert(str_contains($shell,'floor-planner-v2-enhancements.js?v=20260914-1'),'V2 shell must load the equipment/clipboard enhancement layer.');
+fpv2_assert(!str_contains($shell,'Shift-click / drag-select = group move'),'V2 header must not include tutorial copy.');
 fpv2_assert(str_contains($api,"require __DIR__ . '/api/floor-plans.php'"),'Stable Floor Planner API entry must delegate to the canonical API.');
 fpv2_assert(str_contains($module,"'floor-planner-v2.php'"),'Admin navigation must launch Floor Planner 2.0.');
 
@@ -47,6 +48,20 @@ fpv2_assert(str_contains($js,"api/equipment.php?asset="),'Equipment inspector mu
 fpv2_assert(str_contains($js,'Service contracts & contacts'),'Equipment control panel must include service contract/contact information.');
 fpv2_assert(str_contains($js,'Service history'),'Equipment control panel must include service history.');
 fpv2_assert(str_contains($js,'Operating knowledge'),'Equipment control panel must include operational/maintenance knowledge.');
+
+fpv2_assert(str_contains($enhancements,'.fp-counter-shape polygon{fill:#f4dfa0'),'Counter must use the requested light-yellow v2 style.');
+fpv2_assert(str_contains($enhancements,'function duplicateSelection'),'V2 must own structural duplication so chairs, counters, tables, walls and other layout objects use one path.');
+fpv2_assert(str_contains($enhancements,'counterPoints') || str_contains($enhancements,'cloneNode(true)'),'Duplication must preserve counter geometry.');
+fpv2_assert(str_contains($enhancements,"key === 'c'") && str_contains($enhancements,"key === 'v'") && str_contains($enhancements,"key === 'x'"),'V2 must support Ctrl/Cmd+C, Ctrl/Cmd+V and Ctrl/Cmd+X.');
+fpv2_assert(str_contains($enhancements,'Equipment assets are unique records and cannot be copied.'),'Clipboard behavior must not silently clone physical equipment records.');
+fpv2_assert(str_contains($enhancements,'fpEquipmentPicker'),'Equipment palette node must open a first-class equipment picker.');
+fpv2_assert(str_contains($enhancements,"api/equipment.php', {method:'GET'}") || str_contains($enhancements,"api/equipment.php', {method:'GET'"),'Equipment picker must use the canonical Equipment Catalog list.');
+fpv2_assert(str_contains($enhancements,"action:'place'"),'Equipment picker must place canonical equipment assets on the floor plan.');
+fpv2_assert(str_contains($enhancements,'Create New Equipment'),'Equipment picker must preserve the create-new-equipment path.');
+fpv2_assert(str_contains($enhancements,'Service Contacts') && str_contains($enhancements,'Service History') && str_contains($enhancements,'Operating Knowledge'),'Equipment slide-out must show equipment data, service contacts, service history and operating knowledge.');
+fpv2_assert(str_contains($enhancements,'Create Service History from Invoice'),'Equipment slide-out must support creating service history from an invoice.');
+fpv2_assert(str_contains($enhancements,"action:'save_event'"),'Invoice/service history must write through the canonical Equipment service-event API.');
+fpv2_assert(str_contains($enhancements,'.app{grid-template-rows:48px 1fr!important}') && str_contains($enhancements,'.top strong{font-size:12px!important'),'V2 header must be compact with reduced title size.');
 
 fpv2_assert(str_contains($runtime,'event.stopImmediatePropagation()'),'V2 runtime must own delegated structural drag/resize events so Undo-restored items remain interactive.');
 fpv2_assert(str_contains($runtime,'floor-planner-v2.php'),'Opening a canonical Equipment Record must return to Floor Planner 2.0.');
