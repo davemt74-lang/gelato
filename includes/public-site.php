@@ -293,16 +293,32 @@ function public_site_render_footer(array $settings): void
 {
     $address = public_site_format_address($settings);
     $socials = public_site_social_links($settings);
+    $footerLinks = [
+        'Menu' => 'menu.php',
+        'Gelato' => 'gelato.php',
+        'About' => 'about.php',
+        'Locations' => 'locations.php',
+        'Contact' => 'contact.php',
+        'Jobs' => 'jobs.html',
+        'Catering' => 'catering.php',
+        'Wholesale' => 'wholesale.php',
+    ];
+
     echo '<footer><div class="shell footer-grid">';
-    echo '<div class="footer-brand"><strong>' . app_escape((string)($settings['restaurant_name'] ?? 'Stonefellows')) . '</strong><span>Pizzeria + Bar</span><nav class="socials" aria-label="Business links" style="margin-top:14px"><a href="jobs.html">Jobs</a><a href="catering.php">Catering</a><a href="wholesale.php">Wholesale</a></nav></div>';
-    echo '<div><strong>Visit</strong><br>' . ($address !== '' ? app_escape($address) : 'Location details coming soon') . '</div>';
-    echo '<div><strong>Hours</strong><br>' . ($settings['hours_text'] !== '' ? nl2br(app_escape((string)$settings['hours_text'])) : 'Hours coming soon') . '</div>';
-    echo '<div class="socials" aria-label="Social links">';
+    echo '<div class="footer-brand"><strong>' . app_escape((string)($settings['restaurant_name'] ?? 'Stonefellows')) . '</strong><span>Pizzeria + Bar</span></div>';
+    echo '<div><strong class="footer-column-title">Links</strong><nav class="footer-links" aria-label="Footer links">';
+    foreach ($footerLinks as $label => $href) {
+        echo '<a href="' . app_escape($href) . '">' . app_escape($label) . '</a>';
+    }
+    echo '</nav></div>';
+    echo '<div><strong class="footer-column-title">Visit</strong>' . ($address !== '' ? app_escape($address) : 'Location details coming soon') . '</div>';
+    echo '<div><strong class="footer-column-title">Hours</strong>' . ($settings['hours_text'] !== '' ? nl2br(app_escape((string)$settings['hours_text'])) : 'Hours coming soon') . '</div>';
+    echo '<div><strong class="footer-column-title">Follow</strong><div class="socials" aria-label="Social links">';
     foreach ($socials as $label => $url) {
         echo '<a href="' . app_escape($url) . '" target="_blank" rel="noopener noreferrer">' . app_escape($label) . '</a>';
     }
     if (!$socials) {
-        echo '<a href="contact.php">Contact</a>';
+        echo '<span>Social links coming soon</span>';
     }
-    echo '</div></div></footer>';
+    echo '</div></div></div></footer>';
 }
