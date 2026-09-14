@@ -24,17 +24,32 @@ function pos_floor_plan_plans(PDO $pdo,int $org): array
     ],$q->fetchAll());
 }
 
+function pos_floor_plan_assignment(PDO $pdo,int $org,int $locationId): array
+{
+    if(!pos_floor_plan_ready($pdo))return ['configured'=>false,'publicId'=>null];
+    $q=$pdo->prepare('SELECT id,floor_plan_public_id FROM pos_floor_plan_settings WHERE organization_id=? AND location_id=? LIMIT 1');
+    $q->execute([$org,$locationId]);$row=$q->fetch();
+    if(!$row)return ['configured'=>false,'publicId'=>null];
+    $public=$row['floor_plan_public_id']!==null&&trim((string)$row['floor_plan_public_id'])!==''?(string)$row['floor_plan_public_id']:null;
+    return ['configured'=>true,'publicId'=>$public];
+}
+
 function pos_floor_plan_setting(PDO $pdo,int $org,int $locationId): ?string
 {
-    if(!pos_floor_plan_ready($pdo))return null;
-    $q=$pdo->prepare('SELECT floor_plan_public_id FROM pos_floor_plan_settings WHERE organization_id=? AND location_id=? LIMIT 1');
-    $q->execute([$org,$locationId]);$v=$q->fetchColumn();return is_string($v)&&trim($v)!==''?(string)$v:null;
+    $assignment=pos_floor_plan_assignment($pdo,$org,$locationId);
+    return $assignment['configured']?$assignment['publicId']:null;
 }
 
 function pos_floor_plan_selected_id(PDO $pdo,int $org,int $locationId): ?string
 {
-    $selected=pos_floor_plan_setting($pdo,$org,$locationId);
-    if($selected!==null){$q=$pdo->prepare('SELECT public_id FROM floor_plans WHERE organization_id=? AND public_id=? AND archived_at IS NULL LIMIT 1');$q->execute([$org,$selected]);if($q->fetchColumn())return $selected;}
+    $assignment=pos_floor_plan_assignment($pdo,$org,$locationId);
+    if($assignment['configured']){
+        $selected=$assignment['publicId'];
+        if($selected===null)return null;
+        $q=$pdo->prepare('SELECT public_id FROM floor_plans WHERE organization_id=? AND public_id=? AND archived_at IS NULL LIMIT 1');
+        $q->execute([$org,$selected]);
+        return $q->fetchColumn()!==false?$selected:null;
+    }
     $q=$pdo->prepare("SELECT public_id FROM floor_plans WHERE organization_id=? AND archived_at IS NULL ORDER BY is_default DESC,updated_at DESC,id DESC LIMIT 1");$q->execute([$org]);$v=$q->fetchColumn();return $v!==false?(string)$v:null;
 }
 
@@ -68,12 +83,12 @@ function pos_floor_plan_tables(PDO $pdo,int $org,int $locationId): array
 
 function pos_floor_plan_bootstrap(PDO $pdo,int $org,int $locationId): array
 {
-    if(!pos_floor_plan_ready($pdo))return ['ready'=>false,'configured'=>false,'mode'=>'unavailable','plans'=>[],'selectedPlan'=>null,'structures'=>[],'tables'=>[],'componentTableCount'=>0,'mappedCount'=>0,'unmappedCount'=>0];
-    table_service_location($pdo,$org,$locationId);$plans=pos_floor_plan_plans($pdo,$org);$selectedId=pos_floor_plan_selected_id($pdo,$org,$locationId);$selected=null;$structures=[];
+    if(!pos_floor_plan_ready($pdo))return ['ready'=>false,'configured'=>false,'mode'=>'unavailable','plans'=>[],'selectedPlan'=>null,'structures'=>[],'tables'=>[],'componentTableCount'=>0,'mappedCount'=>0,'unmappedCount'=>0,'selectedBy'=>'unavailable'];
+    table_service_location($pdo,$org,$locationId);$plans=pos_floor_plan_plans($pdo,$org);$assignment=pos_floor_plan_assignment($pdo,$org,$locationId);$selectedId=pos_floor_plan_selected_id($pdo,$org,$locationId);$selected=null;$structures=[];
     if($selectedId!==null){$row=pos_floor_plan_row($pdo,$org,$selectedId);$selected=['publicId'=>(string)$row['public_id'],'name'=>(string)$row['name'],'widthFt'=>(float)$row['width_ft'],'depthFt'=>(float)$row['depth_ft'],'scale'=>(float)$row['scale_px_per_ft'],'version'=>(int)$row['version'],'isDefault'=>(bool)$row['is_default']];$structures=pos_floor_plan_structure_items($row);}
     $tables=pos_floor_plan_tables($pdo,$org,$locationId);$componentTableCount=count(array_filter($structures,static fn(array $i):bool=>$i['type']==='table'));$mapped=0;foreach($tables as $t)if($selectedId!==null&&$t['floorPlanPublicId']===$selectedId&&$t['floorPlanComponentId']!==null)$mapped++;
-    $configured=$selected!==null&&$mapped>0;$mode=$selected!==null?'floor_plan':($tables?'service_map':'unconfigured');
-    return ['ready'=>true,'configured'=>$configured,'mode'=>$mode,'plans'=>$plans,'selectedPlan'=>$selected,'structures'=>$structures,'tables'=>$tables,'componentTableCount'=>$componentTableCount,'mappedCount'=>$mapped,'unmappedCount'=>max(0,count($tables)-$mapped),'selectedBy'=>pos_floor_plan_setting($pdo,$org,$locationId)!==null?'location_setting':'default'];
+    $configured=$selected!==null&&$mapped>0;$mode=$selected!==null?'floor_plan':($tables?'service_map':'unconfigured');$selectedBy=$assignment['configured']?($assignment['publicId']===null?'none':'location_setting'):'default';
+    return ['ready'=>true,'configured'=>$configured,'mode'=>$mode,'plans'=>$plans,'selectedPlan'=>$selected,'structures'=>$structures,'tables'=>$tables,'componentTableCount'=>$componentTableCount,'mappedCount'=>$mapped,'unmappedCount'=>max(0,count($tables)-$mapped),'selectedBy'=>$selectedBy];
 }
 
 function pos_floor_plan_select(PDO $pdo,int $org,int $locationId,?string $publicId,int $userId): void
@@ -94,11 +109,17 @@ function pos_floor_plan_sync_tables(PDO $pdo,int $org,int $locationId,int $userI
     if(!pos_floor_plan_ready($pdo))throw new RuntimeException('POS floor-plan integration migration is not installed. Run upgrade.php.');$selectedId=pos_floor_plan_selected_id($pdo,$org,$locationId);if($selectedId===null)throw new InvalidArgumentException('Choose or create a floor plan before syncing tables.');$row=pos_floor_plan_row($pdo,$org,$selectedId);$structures=array_values(array_filter(pos_floor_plan_structure_items($row),static fn(array $i):bool=>$i['type']==='table'));
     $created=0;$updated=0;$componentIds=[];$pdo->beginTransaction();
     try{
-        foreach($structures as $index=>$item){$component=(string)$item['id'];$componentIds[$component]=true;$q=$pdo->prepare('SELECT id,public_id FROM service_tables WHERE organization_id=? AND location_id=? AND floor_plan_public_id=? AND floor_plan_component_id=? LIMIT 1 FOR UPDATE');$q->execute([$org,$locationId,$selectedId,$component]);$existing=$q->fetch();$id=$existing?(int)$existing['id']:null;$label=trim((string)$item['label']);if($label===''||strtoupper($label)==='4-TOP')$label='Table '.($index+1);$name=pos_floor_plan_unique_table_name($pdo,$org,$locationId,$label,$id);$capacity=max(1,(int)($item['seats']?:4));$ratio=(float)$item['widthPercent']/max(.001,(float)$item['heightPercent']);$shape=$ratio>1.25||$ratio<.8?'rectangle':'square';$x=max(0,min(97,(float)$item['xPercent']));$y=max(0,min(97,(float)$item['yPercent']));$w=max(2,min(40,(float)$item['widthPercent']));$h=max(2,min(40,(float)$item['heightPercent']));
-            if($existing){$pdo->prepare('UPDATE service_tables SET name=?,capacity=?,shape=?,x_percent=?,y_percent=?,width_percent=?,height_percent=?,status=\'active\',floor_plan_synced_at=NOW(6),updated_by=?,updated_at=NOW(6) WHERE organization_id=? AND id=?')->execute([$name,$capacity,$shape,$x,$y,$w,$h,$userId,$org,$id]);$updated++;}
-            else{$public=table_service_public_id('table');$pdo->prepare("INSERT INTO service_tables (organization_id,location_id,section_id,floor_plan_public_id,floor_plan_component_id,floor_plan_synced_at,public_id,name,capacity,shape,x_percent,y_percent,width_percent,height_percent,state,status,created_by,updated_by) VALUES (?,?,NULL,?,?,NOW(6),?,?,?,?,?,?,?,?, 'available','active',?,?)")->execute([$org,$locationId,$selectedId,$component,$public,$name,$capacity,$shape,$x,$y,$w,$h,$userId,$userId]);$created++;}
+        foreach($structures as $index=>$item){
+            $component=(string)$item['id'];$componentIds[$component]=true;$q=$pdo->prepare('SELECT id,public_id,active_check_id FROM service_tables WHERE organization_id=? AND location_id=? AND floor_plan_public_id=? AND floor_plan_component_id=? LIMIT 1 FOR UPDATE');$q->execute([$org,$locationId,$selectedId,$component]);$existing=$q->fetch();$id=$existing?(int)$existing['id']:null;$label=trim((string)$item['label']);if($label===''||strtoupper($label)==='4-TOP')$label='Table '.($index+1);$name=pos_floor_plan_unique_table_name($pdo,$org,$locationId,$label,$id);$capacity=max(1,(int)($item['seats']?:4));$ratio=(float)$item['widthPercent']/max(.001,(float)$item['heightPercent']);$shape=$ratio>1.25||$ratio<.8?'rectangle':'square';$w=max(2,min(40,(float)$item['widthPercent']));$h=max(2,min(40,(float)$item['heightPercent']));$x=max(0,min(100-$w,(float)$item['xPercent']));$y=max(0,min(100-$h,(float)$item['yPercent']));
+            if($existing){
+                $pdo->prepare("UPDATE service_tables SET name=?,capacity=?,shape=?,x_percent=?,y_percent=?,width_percent=?,height_percent=?,status='active',floor_plan_synced_at=NOW(6),updated_by=?,updated_at=NOW(6) WHERE organization_id=? AND id=?")->execute([$name,$capacity,$shape,$x,$y,$w,$h,$userId,$org,$id]);
+                if($existing['active_check_id']!==null)$pdo->prepare("UPDATE pos_checks SET table_name=?,revision=revision+1,updated_at=NOW(6) WHERE organization_id=? AND id=? AND status='open'")->execute([$name,$org,(int)$existing['active_check_id']]);
+                $updated++;
+            } else {
+                $public=table_service_public_id('table');$pdo->prepare("INSERT INTO service_tables (organization_id,location_id,section_id,floor_plan_public_id,floor_plan_component_id,floor_plan_synced_at,public_id,name,capacity,shape,x_percent,y_percent,width_percent,height_percent,state,status,created_by,updated_by) VALUES (?,?,NULL,?,?,NOW(6),?,?,?,?,?,?,?,?, 'available','active',?,?)")->execute([$org,$locationId,$selectedId,$component,$public,$name,$capacity,$shape,$x,$y,$w,$h,$userId,$userId]);$created++;
+            }
         }
-        $q=$pdo->prepare('SELECT floor_plan_component_id FROM service_tables WHERE organization_id=? AND location_id=? AND floor_plan_public_id=? AND status=\'active\'');$q->execute([$org,$locationId,$selectedId]);$orphaned=0;foreach($q->fetchAll(PDO::FETCH_COLUMN) as $component)if($component!==null&&!isset($componentIds[(string)$component]))$orphaned++;
+        $q=$pdo->prepare("SELECT floor_plan_component_id FROM service_tables WHERE organization_id=? AND location_id=? AND floor_plan_public_id=? AND status='active'");$q->execute([$org,$locationId,$selectedId]);$orphaned=0;foreach($q->fetchAll(PDO::FETCH_COLUMN) as $component)if($component!==null&&!isset($componentIds[(string)$component]))$orphaned++;
         $pdo->commit();
     }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
     return ['floorPlanPublicId'=>$selectedId,'componentTables'=>count($structures),'created'=>$created,'updated'=>$updated,'orphaned'=>$orphaned,'bootstrap'=>pos_floor_plan_bootstrap($pdo,$org,$locationId)];
