@@ -1,5 +1,18 @@
 (() => {
-  const menus = document.querySelectorAll('[data-public-account-menu]');
+  function installStonefellowsTheme() {
+    if (document.querySelector('link[data-stonefellows-public-theme]')) return;
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'css/stonefellows-public.css?v=20260914-1';
+    link.dataset.stonefellowsPublicTheme = 'true';
+    document.head.appendChild(link);
+  }
+
+  function normalizeLegacyLinks() {
+    document.querySelectorAll('a[href="landing.html"]').forEach((link) => {
+      link.setAttribute('href', 'index.php');
+    });
+  }
 
   function installServiceLinks() {
     const services = [
@@ -24,18 +37,45 @@
         link.textContent = service.menuLabel;
         list.appendChild(link);
       });
+      if (!list.querySelector('a[href="signup.php"]')) {
+        const link = document.createElement('a');
+        link.href = 'signup.php';
+        link.textContent = '＋ Account access / Sign up';
+        list.appendChild(link);
+      }
     });
   }
 
+  function installUnifiedFooter() {
+    if (document.querySelector('.auth-shell') || document.querySelector('.sf-public-footer')) return;
+    const oldFooter = document.querySelector('footer.public-footer');
+    if (oldFooter) oldFooter.remove();
+    const footer = document.createElement('footer');
+    footer.className = 'sf-public-footer';
+    footer.innerHTML = `
+      <div class="sf-footer-grid">
+        <div class="sf-brand"><strong>Stonefellows</strong><span>Pizzeria + Bar</span></div>
+        <div><strong>Links</strong><nav><a href="menu.php">Menu</a><a href="gelato.php">Gelato</a><a href="about.php">About</a><a href="locations.php">Locations</a><a href="contact.php">Contact</a><a href="jobs.html">Jobs</a><a href="catering.php">Catering</a><a href="wholesale.php">Wholesale</a></nav></div>
+        <div><strong>Accounts</strong><nav><a href="login.php">Login</a><a href="signup.php">Sign Up / Access</a><a href="forgot-password.php">Forgot Password</a></nav></div>
+        <div><strong>Visit</strong><nav><a href="locations.php">Location details</a><a href="contact.php">Hours + contact</a></nav></div>
+        <div><strong>Explore</strong><nav><a href="index.php">Home</a><a href="jobs.html">Careers</a><a href="apply.html">Apply</a></nav></div>
+      </div>`;
+    document.body.appendChild(footer);
+  }
+
   function loadPublicAgent() {
-    const page = (location.pathname.split('/').pop() || 'landing.html').toLowerCase();
-    if (!['landing.html', ''].includes(page) || document.querySelector('script[data-public-agent]')) return;
+    const page = (location.pathname.split('/').pop() || 'index.php').toLowerCase();
+    if (!['index.php', 'landing.html', ''].includes(page) || document.querySelector('script[data-public-agent]')) return;
     const script = document.createElement('script');
     script.src = 'js/public-agent.js?v=20260804-agent1';
     script.dataset.publicAgent = 'true';
     document.head.appendChild(script);
   }
 
+  installStonefellowsTheme();
+  normalizeLegacyLinks();
+
+  const menus = document.querySelectorAll('[data-public-account-menu]');
   if (menus.length) {
     function closeAll(except = null) {
       menus.forEach((wrap) => {
@@ -71,5 +111,6 @@
   }
 
   installServiceLinks();
+  installUnifiedFooter();
   loadPublicAgent();
 })();
