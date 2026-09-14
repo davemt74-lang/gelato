@@ -82,8 +82,8 @@ function ticketActions(ticket){
   if(Number(ticket.held)>0)buttons.push('<button class="action" data-ticket-act="fire">Fire held</button>');
   if(Number(ticket.queued)>0){buttons.push('<button class="action alt" data-ticket-act="hold">Hold queued</button>');buttons.push('<button class="action" data-ticket-act="start">Start batch</button>')}
   if(Number(ticket.inProgress)>0)buttons.push('<button class="action good" data-ticket-act="ready">Ready batch</button>');
-  if(ticket.readyToBump)buttons.push('<button class="action good" data-ticket-act="bump">Bump ticket</button>');
-  if(Number(ticket.recallableCount)>0)buttons.push('<button class="action warn" data-ticket-act="recall">Recall recent</button>');
+  if(!S.station&&ticket.readyToBump)buttons.push('<button class="action good" data-ticket-act="bump">Expo bump ticket</button>');
+  if(!S.station&&Number(ticket.recallableCount)>0)buttons.push('<button class="action warn" data-ticket-act="recall">Recall ticket</button>');
   return buttons.join('');
 }
 function renderBoard(){
