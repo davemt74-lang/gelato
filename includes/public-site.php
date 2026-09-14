@@ -284,7 +284,7 @@ function public_site_render_header(array $settings, string $active = ''): void
         $class = $active === $key ? ' class="active"' : '';
         echo '<a' . $class . ' href="' . app_escape($href) . '">' . app_escape($label) . '</a>';
     }
-    echo '</nav><a class="nav-cta" href="login.php">Login</a>';
+    echo '</nav><a class="nav-cta" href="customer-account.php">Account</a>';
     echo '<button class="menu-toggle" id="menuToggle" type="button" aria-label="Open navigation" aria-expanded="false">☰</button>';
     echo '</div></header>';
 }
@@ -299,9 +299,11 @@ function public_site_render_footer(array $settings): void
         'About' => 'about.php',
         'Locations' => 'locations.php',
         'Contact' => 'contact.php',
+        'Account' => 'customer-account.php',
         'Jobs' => 'jobs.html',
         'Catering' => 'catering.php',
         'Wholesale' => 'wholesale.php',
+        'Staff Login' => 'login.php',
     ];
 
     echo '<footer><div class="shell footer-grid">';
