@@ -21,6 +21,7 @@ on:
       - 'workspace.php'
       - 'public-site-settings.php'
       - 'assets/**'
+      - 'css/public.css'
       - 'css/stonefellows-public.css'
       - 'css/stonefellows-public-v2.css'
       - 'js/public-account-menu.js'
