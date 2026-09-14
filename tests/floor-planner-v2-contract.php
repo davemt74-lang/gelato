@@ -13,7 +13,7 @@ $js=fpv2_source('js/floor-planner-v2.js');
 fpv2_assert(str_contains($entry,'floor-planner-v2.php'),'Primary Floor Planner entry must route to v2.');
 fpv2_assert(str_contains($shell,'floor-planner-ops.php'),'V2 shell must wrap the canonical operational planner.');
 fpv2_assert(str_contains($shell,'floor-planner-v2.js'),'V2 interaction layer must load.');
-fpv2_assert(strpos($shell,'floor-planner-v2.js') < strpos($shell,'floor-planner-ops.js'),'V2 preloader must run before the canonical planner so it can stabilize API routing.');
+fpv2_assert(str_contains($shell,"$replacement = '<script src=\"js/floor-planner-v2.js?v=20260914-1\"></script>' . $needle;") || str_contains($shell,"\$replacement = '<script src=\"js/floor-planner-v2.js?v=20260914-1\"></script>' . \$needle;"),'V2 shell must inject the preloader immediately before the canonical planner script.');
 fpv2_assert(str_contains($api,"require __DIR__ . '/api/floor-plans.php'"),'Stable Floor Planner API entry must delegate to the canonical API.');
 fpv2_assert(str_contains($module,"'floor-planner-v2.php'"),'Admin navigation must launch Floor Planner 2.0.');
 
