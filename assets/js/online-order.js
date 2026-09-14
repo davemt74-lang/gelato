@@ -1,0 +1,65 @@
+(()=>{
+  const cfg=window.STONEFELLOWS_ORDER||{};
+  const locationId=Number(cfg.locationId||0);
+  const key=`stonefellows.onlineCart.v1.${locationId}`;
+  const linesEl=document.getElementById('cartLines');
+  const countEl=document.getElementById('cartCount');
+  const subtotalEl=document.getElementById('cartSubtotal');
+  const cartJson=document.getElementById('cartJson');
+  const form=document.getElementById('checkoutForm');
+  const submit=document.getElementById('placeOrder');
+  const token=document.getElementById('idempotencyKey');
+  if(!linesEl||!countEl||!subtotalEl||!cartJson||!form||!submit||!token)return;
+
+  const makeToken=()=>{
+    if(window.crypto&&crypto.getRandomValues){const bytes=new Uint8Array(20);crypto.getRandomValues(bytes);return Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');}
+    return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}_${Math.random().toString(36).slice(2)}`.replace(/[^A-Za-z0-9_-]/g,'').slice(0,80);
+  };
+  token.value=makeToken();
+
+  let cart=[];
+  try{const parsed=JSON.parse(sessionStorage.getItem(key)||'[]');if(Array.isArray(parsed))cart=parsed.filter(row=>row&&Number(row.priceId)>0&&Number(row.quantity)>0);}catch(_){cart=[];}
+
+  const money=value=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(value||0));
+  const persist=()=>{try{sessionStorage.setItem(key,JSON.stringify(cart));}catch(_){};};
+  const submitPayload=()=>cart.map(({priceId,quantity,instructions=''})=>({priceId:Number(priceId),quantity:Number(quantity),instructions:String(instructions||'')}));
+  const escapeHtml=value=>String(value??'').replace(/[&<>'"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
+
+  function render(){
+    cart=cart.filter(row=>Number(row.quantity)>0);
+    const qty=cart.reduce((sum,row)=>sum+Number(row.quantity||0),0);
+    const subtotal=cart.reduce((sum,row)=>sum+(Number(row.price||0)*Number(row.quantity||0)),0);
+    countEl.textContent=`${qty} item${qty===1?'':'s'}`;
+    subtotalEl.textContent=money(subtotal);
+    cartJson.value=JSON.stringify(submitPayload());
+    submit.disabled=!locationId||cart.length===0;
+    if(!cart.length){linesEl.innerHTML='<div class="customer-empty">Your cart is empty.</div>';persist();return;}
+    linesEl.innerHTML=cart.map((row,index)=>`<article class="cart-line"><div><strong>${escapeHtml(row.name)}</strong><small>${escapeHtml(row.option)}</small><em>${money(row.price)}</em></div><div class="cart-stepper"><button type="button" data-cart-action="minus" data-index="${index}" aria-label="Decrease quantity">−</button><span>${Number(row.quantity)}</span><button type="button" data-cart-action="plus" data-index="${index}" aria-label="Increase quantity">+</button></div><button class="cart-remove" type="button" data-cart-action="remove" data-index="${index}">Remove</button></article>`).join('');
+    persist();
+  }
+
+  document.addEventListener('click',event=>{
+    const add=event.target.closest('.order-add');
+    if(add){
+      const priceId=Number(add.dataset.priceId||0);if(!priceId)return;
+      const existing=cart.find(row=>Number(row.priceId)===priceId&&String(row.instructions||'')==='');
+      if(existing)existing.quantity=Math.min(20,Number(existing.quantity||0)+1);
+      else cart.push({priceId,quantity:1,instructions:'',name:add.dataset.itemName||'Item',option:add.dataset.optionName||'',price:Number(add.dataset.price||0)});
+      add.classList.add('added');setTimeout(()=>add.classList.remove('added'),240);render();return;
+    }
+    const control=event.target.closest('[data-cart-action]');if(!control)return;
+    const index=Number(control.dataset.index);if(!Number.isInteger(index)||!cart[index])return;
+    const action=control.dataset.cartAction;
+    if(action==='minus')cart[index].quantity=Math.max(0,Number(cart[index].quantity||0)-1);
+    if(action==='plus')cart[index].quantity=Math.min(20,Number(cart[index].quantity||0)+1);
+    if(action==='remove')cart.splice(index,1);
+    render();
+  });
+
+  form.addEventListener('submit',event=>{
+    if(!cart.length){event.preventDefault();return;}
+    cartJson.value=JSON.stringify(submitPayload());
+    submit.disabled=true;submit.textContent='Sending order…';
+  });
+  render();
+})();
