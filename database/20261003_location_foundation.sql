@@ -38,6 +38,31 @@ JOIN (
 ) first_location ON first_location.location_id = l.id
 SET l.is_primary = 1;
 
+-- Preserve compatibility with older/internal code paths that still insert only
+-- organization_id + name + status. The new manager always supplies its own slug,
+-- but legacy inserts receive a collision-resistant canonical slug automatically.
+DROP TRIGGER IF EXISTS locations_seed_canonical_defaults;
+CREATE TRIGGER locations_seed_canonical_defaults
+BEFORE INSERT ON locations
+FOR EACH ROW
+SET
+  NEW.public_slug = CASE
+    WHEN NEW.public_slug IS NULL OR TRIM(NEW.public_slug) = ''
+      THEN CONCAT('location-', LEFT(REPLACE(UUID(), '-', ''), 16))
+    ELSE NEW.public_slug
+  END,
+  NEW.is_primary = CASE
+    WHEN NEW.status = 'active'
+      AND NOT EXISTS (
+        SELECT 1 FROM locations existing
+        WHERE existing.organization_id = NEW.organization_id
+          AND existing.status = 'active'
+          AND existing.is_primary = 1
+      )
+      THEN 1
+    ELSE 0
+  END;
+
 CREATE TABLE location_hours (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   organization_id BIGINT UNSIGNED NOT NULL,
