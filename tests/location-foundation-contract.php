@@ -11,7 +11,7 @@ $migration = file_get_contents($root . '/database/20261003_location_foundation.s
 $core = file_get_contents($root . '/includes/location-core.php') ?: '';
 $admin = file_get_contents($root . '/locations-admin.php') ?: '';
 $public = file_get_contents($root . '/locations.php') ?: '';
-foreach (['public_slug','location_hours','is_primary','pickup_enabled','delivery_enabled','online_ordering_enabled','delivery_radius_miles','latitude','longitude','locations.manage'] as $needle) {
+foreach (['public_slug','location_hours','is_primary','pickup_enabled','delivery_enabled','online_ordering_enabled','delivery_radius_miles','latitude','longitude','locations.manage','locations_seed_canonical_defaults'] as $needle) {
     location_contract_assert(str_contains($migration, $needle), 'Location migration missing: ' . $needle);
 }
 location_contract_assert(!str_contains($admin, 'DELETE FROM locations'), 'Location admin must archive rather than delete locations.');
@@ -26,12 +26,12 @@ $pdo = app_pdo();
 $columnCheck = $pdo->query("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='locations' AND column_name IN ('public_slug','is_primary','pickup_enabled','delivery_enabled','online_ordering_enabled','latitude','longitude')");
 location_contract_assert((int)$columnCheck->fetchColumn() === 7, 'Location migration columns were not applied.');
 location_contract_assert((int)$pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='location_hours'")->fetchColumn() === 1, 'location_hours table is missing.');
+location_contract_assert((int)$pdo->query("SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_schema=DATABASE() AND trigger_name='locations_seed_canonical_defaults'")->fetchColumn() === 1, 'Legacy location default trigger is missing.');
 location_contract_assert((int)$pdo->query("SELECT COUNT(*) FROM permissions WHERE permission_key IN ('locations.view','locations.manage')")->fetchColumn() === 2, 'Location permissions are missing.');
 
 $token = bin2hex(random_bytes(5));
 $pdo->prepare("INSERT INTO organizations (name,legal_name,status,timezone) VALUES (?,?,'active','America/Phoenix')")->execute(['Location Contract ' . $token, 'Location Contract ' . $token]);
 $organizationId = (int)$pdo->lastInsertId();
-$createdIds = [];
 
 try {
     $hours = [];
@@ -46,19 +46,26 @@ try {
         'delivery_enabled'=>true,'online_ordering_enabled'=>true,'delivery_radius_miles'=>'6.5','delivery_minimum'=>'20','delivery_fee'=>'3.5',
         'pickup_lead_minutes'=>20,'delivery_lead_minutes'=>45,'latitude'=>'33.4484','longitude'=>'-112.0740','hours'=>$hours,
     ]);
-    $createdIds[] = (int)$first['id'];
     location_contract_assert($first['is_primary'] === true, 'First active location must automatically become primary.');
     location_contract_assert($first['public_slug'] === 'central-store', 'Requested public slug was not preserved.');
     location_contract_assert(count($first['hours']) === 7, 'Weekly hours must persist seven day records.');
     location_contract_assert(str_contains($first['hoursText'], 'Mon 11:00 AM–9:00 PM'), 'Per-location hours text was not generated.');
     location_contract_assert(location_service_labels($first) === ['Dine In','Pickup','Delivery','Online Ordering'], 'Location service capabilities are incorrect.');
 
+    // setup-first-user.php and older internal paths historically inserted only org/name/status.
+    // The migration trigger must keep those inserts valid after public_slug becomes required.
+    $pdo->prepare("INSERT INTO locations (organization_id,name,status) VALUES (?,?,'active')")->execute([$organizationId,'Legacy Insert']);
+    $legacyId = (int)$pdo->lastInsertId();
+    $legacy = location_get($pdo,$organizationId,$legacyId);
+    location_contract_assert($legacy !== null && str_starts_with((string)$legacy['public_slug'],'location-'), 'Legacy location insert must receive a canonical public slug.');
+    location_contract_assert($legacy['is_primary'] === false, 'Legacy insert must not create a second primary location.');
+    location_archive($pdo,$organizationId,$legacyId,null);
+
     $second = location_save($pdo,$organizationId,null,[
         'name'=>'Central Store','public_slug'=>'central-store','address_line_1'=>'200 Test Ave','city'=>'Phoenix','state'=>'AZ','postal_code'=>'85002','country_code'=>'US',
         'timezone'=>'America/Phoenix','dine_in_enabled'=>true,'pickup_enabled'=>true,'delivery_enabled'=>false,'online_ordering_enabled'=>true,
         'pickup_lead_minutes'=>15,'delivery_lead_minutes'=>45,
     ]);
-    $createdIds[] = (int)$second['id'];
     location_contract_assert($second['public_slug'] === 'central-store-2', 'Duplicate public slugs must receive a deterministic suffix.');
     location_contract_assert($second['is_primary'] === false, 'Second location must not replace the primary unless requested.');
 
