@@ -21,6 +21,18 @@ FROM roles r
 JOIN permissions p ON p.permission_key IN ('customer.portal','online_ordering.use')
 WHERE r.slug='customer';
 
+-- Future Customer roles receive the same narrow permission set even when an
+-- organization is created after this migration has already run.
+DROP TRIGGER IF EXISTS roles_seed_customer_account_permissions;
+CREATE TRIGGER roles_seed_customer_account_permissions
+AFTER INSERT ON roles
+FOR EACH ROW
+INSERT IGNORE INTO role_permissions (role_id,permission_id)
+SELECT NEW.id,p.id
+FROM permissions p
+WHERE NEW.slug='customer'
+  AND p.permission_key IN ('customer.portal','online_ordering.use');
+
 -- Owners retain visibility into the customer account capability catalog.
 INSERT IGNORE INTO role_permissions (role_id,permission_id)
 SELECT r.id,p.id
