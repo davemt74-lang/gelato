@@ -17,6 +17,22 @@ function pos_ready(PDO $pdo): bool
 function pos_money(float $value): float { return round(max(0.0,$value)+1e-9,2); }
 function pos_rate(float $value): float { return round(max(0.0,min(0.5,$value)),6); }
 
+function pos_order_types(): array
+{
+    return ['dine_in','delivery','pickup'];
+}
+
+function pos_order_type(string $value): string
+{
+    $value=strtolower(trim($value));
+    if(in_array($value,pos_order_types(),true)) return $value;
+    return match($value){
+        'bar' => 'dine_in',
+        'takeout' => 'pickup',
+        default => '',
+    };
+}
+
 function pos_transaction(PDO $pdo,callable $work): mixed
 {
     $owns=!$pdo->inTransaction();
@@ -69,13 +85,14 @@ function pos_settings(PDO $pdo,int $org,int $locationId): array
 {
     $location=pos_location($pdo,$org,$locationId);$q=$pdo->prepare('SELECT * FROM pos_settings WHERE organization_id=? AND location_key=? LIMIT 1');$q->execute([$org,$location['key']]);$row=$q->fetch();
     if(!$row)return ['locationId'=>$locationId,'locationName'=>$location['name'],'taxRate'=>0.0,'serviceChargeRate'=>0.0,'defaultServiceMode'=>'dine_in'];
-    return ['locationId'=>$locationId,'locationName'=>$location['name'],'taxRate'=>(float)$row['tax_rate'],'serviceChargeRate'=>(float)$row['service_charge_rate'],'defaultServiceMode'=>(string)$row['default_service_mode']];
+    $mode=pos_order_type((string)$row['default_service_mode'])?:'dine_in';
+    return ['locationId'=>$locationId,'locationName'=>$location['name'],'taxRate'=>(float)$row['tax_rate'],'serviceChargeRate'=>(float)$row['service_charge_rate'],'defaultServiceMode'=>$mode];
 }
 
 function pos_settings_save(PDO $pdo,int $org,int $locationId,array $input,int $userId): array
 {
-    $location=pos_location($pdo,$org,$locationId);$tax=pos_rate((float)($input['taxRate']??0));$service=pos_rate((float)($input['serviceChargeRate']??0));$mode=(string)($input['defaultServiceMode']??'dine_in');
-    if(!in_array($mode,['dine_in','bar','takeout','delivery'],true))$mode='dine_in';
+    $location=pos_location($pdo,$org,$locationId);$tax=pos_rate((float)($input['taxRate']??0));$service=pos_rate((float)($input['serviceChargeRate']??0));$mode=pos_order_type((string)($input['defaultServiceMode']??'dine_in'));
+    if($mode==='')$mode='dine_in';
     $pdo->prepare("INSERT INTO pos_settings (organization_id,location_id,location_key,tax_rate,service_charge_rate,default_service_mode,updated_by) VALUES (?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE location_id=VALUES(location_id),tax_rate=VALUES(tax_rate),service_charge_rate=VALUES(service_charge_rate),default_service_mode=VALUES(default_service_mode),updated_by=VALUES(updated_by),updated_at=NOW(6)")->execute([$org,$locationId,$location['key'],$tax,$service,$mode,$userId]);
     pos_ensure_sales_integration($pdo,$org,$userId);
     if(!empty($input['makePrimary'])){$pdo->prepare('UPDATE sales_integrations SET is_primary=0,updated_by=?,updated_at=NOW(6) WHERE organization_id=?')->execute([$userId,$org]);$pdo->prepare("UPDATE sales_integrations SET is_primary=1,status='active',updated_by=?,updated_at=NOW(6) WHERE organization_id=? AND provider='gelato_pos' AND location_id IS NULL")->execute([$userId,$org]);}
@@ -98,18 +115,23 @@ function pos_check_base(PDO $pdo,int $org,string $publicId,bool $forUpdate=false
 function pos_check_details(PDO $pdo,int $org,string $publicId): array
 {
     $c=pos_check_base($pdo,$org,$publicId,false);$items=$pdo->prepare('SELECT id,menu_item_id,menu_item_price_id,item_name_snapshot,option_name_snapshot,category_name_snapshot,quantity,unit_price,gross_amount,net_amount,special_instructions,status,void_reason,voided_at FROM pos_check_items WHERE organization_id=? AND check_id=? ORDER BY id');$items->execute([$org,(int)$c['id']]);$tenders=$pdo->prepare('SELECT id,public_id,tender_type,amount,tip_amount,received_amount,change_amount,external_reference,status,processed_at FROM pos_tenders WHERE organization_id=? AND check_id=? ORDER BY id');$tenders->execute([$org,(int)$c['id']]);
-    $saleDue=pos_money((float)$c['subtotal']-(float)$c['discount_amount']+(float)$c['tax_amount']+(float)$c['service_charge_amount']);$salePaid=0.0;$allTenders=$tenders->fetchAll();foreach($allTenders as $t)if($t['status']==='captured')$salePaid+=(float)$t['amount'];
-    return ['id'=>(int)$c['id'],'publicId'=>(string)$c['public_id'],'checkNumber'=>(string)$c['check_number'],'locationId'=>(int)$c['location_id'],'locationName'=>(string)$c['location_name'],'businessDate'=>(string)$c['business_date'],'serviceMode'=>(string)$c['service_mode'],'tableName'=>$c['table_name'],'guestCount'=>(int)$c['guest_count'],'status'=>(string)$c['status'],'currency'=>(string)$c['currency'],'subtotal'=>(float)$c['subtotal'],'discountAmount'=>(float)$c['discount_amount'],'discountReason'=>$c['discount_reason'],'taxRate'=>(float)$c['tax_rate'],'taxAmount'=>(float)$c['tax_amount'],'serviceChargeRate'=>(float)$c['service_charge_rate'],'serviceChargeAmount'=>(float)$c['service_charge_amount'],'tipAmount'=>(float)$c['tip_amount'],'totalAmount'=>(float)$c['total_amount'],'amountPaid'=>(float)$c['amount_paid'],'saleDue'=>$saleDue,'salePaid'=>pos_money($salePaid),'balanceDue'=>pos_money(max(0,$saleDue-$salePaid)),'notes'=>$c['notes'],'openedBy'=>(string)$c['opened_by_name'],'openedAt'=>(string)$c['opened_at'],'closedAt'=>$c['closed_at'],'items'=>$items->fetchAll(),'tenders'=>$allTenders];
+    $saleDue=pos_money((float)$c['subtotal']-(float)$c['discount_amount']+(float)$c['tax_amount']+(float)$c['service_charge_amount']);$salePaid=0.0;$allTenders=$tenders->fetchAll();foreach($allTenders as $t)if($t['status']==='captured')$salePaid+=(float)$t['amount'];$mode=pos_order_type((string)$c['service_mode'])?:'dine_in';
+    return ['id'=>(int)$c['id'],'publicId'=>(string)$c['public_id'],'checkNumber'=>(string)$c['check_number'],'locationId'=>(int)$c['location_id'],'locationName'=>(string)$c['location_name'],'businessDate'=>(string)$c['business_date'],'serviceMode'=>$mode,'tableName'=>$c['table_name'],'guestCount'=>(int)$c['guest_count'],'status'=>(string)$c['status'],'currency'=>(string)$c['currency'],'subtotal'=>(float)$c['subtotal'],'discountAmount'=>(float)$c['discount_amount'],'discountReason'=>$c['discount_reason'],'taxRate'=>(float)$c['tax_rate'],'taxAmount'=>(float)$c['tax_amount'],'serviceChargeRate'=>(float)$c['service_charge_rate'],'serviceChargeAmount'=>(float)$c['service_charge_amount'],'tipAmount'=>(float)$c['tip_amount'],'totalAmount'=>(float)$c['total_amount'],'amountPaid'=>(float)$c['amount_paid'],'saleDue'=>$saleDue,'salePaid'=>pos_money($salePaid),'balanceDue'=>pos_money(max(0,$saleDue-$salePaid)),'notes'=>$c['notes'],'openedBy'=>(string)$c['opened_by_name'],'openedAt'=>(string)$c['opened_at'],'closedAt'=>$c['closed_at'],'items'=>$items->fetchAll(),'tenders'=>$allTenders];
+}
+
+function pos_normalize_check_rows(array $rows): array
+{
+    foreach($rows as &$row){$row['service_mode']=pos_order_type((string)($row['service_mode']??''))?:'dine_in';}unset($row);return $rows;
 }
 
 function pos_open_checks(PDO $pdo,int $org,?int $locationId=null): array
 {
-    $sql="SELECT c.public_id,c.check_number,c.location_id,l.name location_name,c.service_mode,c.table_name,c.guest_count,c.subtotal,c.discount_amount,c.tax_amount,c.service_charge_amount,c.tip_amount,c.total_amount,c.amount_paid,c.opened_at,u.display_name opened_by_name FROM pos_checks c JOIN locations l ON l.id=c.location_id JOIN users u ON u.id=c.opened_by WHERE c.organization_id=? AND c.status='open'";$args=[$org];if($locationId){$sql.=' AND c.location_id=?';$args[]=$locationId;}$sql.=' ORDER BY c.opened_at DESC,c.id DESC LIMIT 100';$q=$pdo->prepare($sql);$q->execute($args);return $q->fetchAll();
+    $sql="SELECT c.public_id,c.check_number,c.location_id,l.name location_name,c.service_mode,c.table_name,c.guest_count,c.subtotal,c.discount_amount,c.tax_amount,c.service_charge_amount,c.tip_amount,c.total_amount,c.amount_paid,c.opened_at,u.display_name opened_by_name FROM pos_checks c JOIN locations l ON l.id=c.location_id JOIN users u ON u.id=c.opened_by WHERE c.organization_id=? AND c.status='open'";$args=[$org];if($locationId){$sql.=' AND c.location_id=?';$args[]=$locationId;}$sql.=' ORDER BY c.opened_at DESC,c.id DESC LIMIT 100';$q=$pdo->prepare($sql);$q->execute($args);return pos_normalize_check_rows($q->fetchAll());
 }
 
 function pos_recent_checks(PDO $pdo,int $org,?int $locationId=null,int $limit=30): array
 {
-    $limit=max(1,min(100,$limit));$sql="SELECT c.public_id,c.check_number,c.location_id,l.name location_name,c.service_mode,c.table_name,c.guest_count,c.status,c.total_amount,c.closed_at,c.cancelled_at FROM pos_checks c JOIN locations l ON l.id=c.location_id WHERE c.organization_id=? AND c.status<>'open'";$args=[$org];if($locationId){$sql.=' AND c.location_id=?';$args[]=$locationId;}$sql.=' ORDER BY COALESCE(c.closed_at,c.cancelled_at,c.updated_at) DESC,c.id DESC LIMIT '.$limit;$q=$pdo->prepare($sql);$q->execute($args);return $q->fetchAll();
+    $limit=max(1,min(100,$limit));$sql="SELECT c.public_id,c.check_number,c.location_id,l.name location_name,c.service_mode,c.table_name,c.guest_count,c.status,c.total_amount,c.closed_at,c.cancelled_at FROM pos_checks c JOIN locations l ON l.id=c.location_id WHERE c.organization_id=? AND c.status<>'open'";$args=[$org];if($locationId){$sql.=' AND c.location_id=?';$args[]=$locationId;}$sql.=' ORDER BY COALESCE(c.closed_at,c.cancelled_at,c.updated_at) DESC,c.id DESC LIMIT '.$limit;$q=$pdo->prepare($sql);$q->execute($args);return pos_normalize_check_rows($q->fetchAll());
 }
 
 function pos_recalculate_check(PDO $pdo,int $org,int $checkId): void
@@ -122,7 +144,7 @@ function pos_recalculate_check(PDO $pdo,int $org,int $checkId): void
 
 function pos_create_check(PDO $pdo,int $org,int $locationId,array $input,int $userId): array
 {
-    $location=pos_location($pdo,$org,$locationId);$settings=pos_settings($pdo,$org,$locationId);$mode=(string)($input['serviceMode']??$settings['defaultServiceMode']);if(!in_array($mode,['dine_in','bar','takeout','delivery'],true))throw new InvalidArgumentException('Choose a valid POS service mode.');$table=mb_substr(trim((string)($input['tableName']??'')),0,120,'UTF-8')?:null;$guests=max(1,min(99,(int)($input['guestCount']??1)));$notes=mb_substr(trim((string)($input['notes']??'')),0,5000,'UTF-8')?:null;$now=pos_clock($pdo,$org,$locationId);$public=sales_public_id('pos-check');$number=$now->format('ymd').'-'.strtoupper(substr(bin2hex(random_bytes(4)),0,8));pos_ensure_sales_integration($pdo,$org,$userId);
+    $location=pos_location($pdo,$org,$locationId);$settings=pos_settings($pdo,$org,$locationId);$mode=pos_order_type((string)($input['serviceMode']??$settings['defaultServiceMode']));if($mode==='')throw new InvalidArgumentException('Choose a valid POS order type.');$table=mb_substr(trim((string)($input['tableName']??'')),0,120,'UTF-8')?:null;$guests=max(1,min(99,(int)($input['guestCount']??1)));$notes=mb_substr(trim((string)($input['notes']??'')),0,5000,'UTF-8')?:null;$now=pos_clock($pdo,$org,$locationId);$public=sales_public_id('pos-check');$number=$now->format('ymd').'-'.strtoupper(substr(bin2hex(random_bytes(4)),0,8));pos_ensure_sales_integration($pdo,$org,$userId);
     $pdo->prepare("INSERT INTO pos_checks (organization_id,location_id,public_id,check_number,business_date,service_mode,table_name,guest_count,status,tax_rate,service_charge_rate,notes,opened_by,opened_at) VALUES (?,?,?,?,?,?,?,?,'open',?,?,?,?,?)")->execute([$org,$locationId,$public,$number,$now->format('Y-m-d'),$mode,$table,$guests,$settings['taxRate'],$settings['serviceChargeRate'],$notes,$userId,$now->format('Y-m-d H:i:s.u')]);return pos_check_details($pdo,$org,$public);
 }
 
@@ -167,7 +189,7 @@ function pos_cancel_check(PDO $pdo,int $org,string $publicId,string $reason,int 
 {
     $reason=mb_substr(trim($reason),0,500,'UTF-8');if($reason==='')throw new InvalidArgumentException('A cancellation reason is required.');
     return pos_transaction($pdo,function()use($pdo,$org,$publicId,$reason,$userId):array{
-        $c=pos_require_open_check($pdo,$org,$publicId,true);$q=$pdo->prepare("SELECT COUNT(*) FROM pos_tenders WHERE organization_id=? AND check_id=? AND status='captured'");$q->execute([$org,(int)$c['id']]);if((int)$q->fetchColumn()>0)throw new InvalidArgumentException('A check with captured payment cannot be cancelled; use a refund workflow.');$now=pos_clock($pdo,$org,(int)$c['location_id']);$pdo->prepare("UPDATE pos_checks SET status='cancelled',cancel_reason=?,cancelled_by=?,cancelled_at=?,revision=revision+1,updated_at=NOW(6) WHERE organization_id=? AND id=?")->execute([$reason,$userId,$now->format('Y-m-d H:i:s.u'),$org,(int)$c['id']]);return pos_check_details($pdo,$org,$publicId);
+        $c=pos_require_open_check($pdo,$org,$publicId,true);$q=$pdo->prepare("SELECT COUNT(*) FROM pos_tenders WHERE organization_id=? AND check_id=? AND status='captured'");$q->execute([$org,(int)$c['id']]);if((int)$q->fetchColumn()>0)throw new InvalidArgumentException('A check with captured payment cannot be cancelled; use a refund workflow.');$now=pos_clock($pdo,$org,(int)$c['location_id']);$pdo->prepare("UPDATE pos_checks SET status='cancelled',cancel_reason=?,cancelled_by=?,cancelled_at=?,revision=revision+1,updated_at=NOW(6) WHERE organization_id=? AND id=? AND status='open'")->execute([$reason,$userId,$now->format('Y-m-d H:i:s.u'),$org,(int)$c['id']]);return pos_check_details($pdo,$org,$publicId);
     });
 }
 
