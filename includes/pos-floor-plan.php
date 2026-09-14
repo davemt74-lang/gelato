@@ -106,8 +106,10 @@ function pos_floor_plan_unique_table_name(PDO $pdo,int $org,int $locationId,stri
 
 function pos_floor_plan_sync_tables(PDO $pdo,int $org,int $locationId,int $userId): array
 {
-    if(!pos_floor_plan_ready($pdo))throw new RuntimeException('POS floor-plan integration migration is not installed. Run upgrade.php.');$selectedId=pos_floor_plan_selected_id($pdo,$org,$locationId);if($selectedId===null)throw new InvalidArgumentException('Choose or create a floor plan before syncing tables.');$row=pos_floor_plan_row($pdo,$org,$selectedId);$structures=array_values(array_filter(pos_floor_plan_structure_items($row),static fn(array $i):bool=>$i['type']==='table'));
-    $created=0;$updated=0;$componentIds=[];$pdo->beginTransaction();
+    if(!pos_floor_plan_ready($pdo))throw new RuntimeException('POS floor-plan integration migration is not installed. Run upgrade.php.');
+    $selectedId=pos_floor_plan_selected_id($pdo,$org,$locationId);if($selectedId===null)throw new InvalidArgumentException('Choose or create a floor plan before syncing tables.');
+    $row=pos_floor_plan_row($pdo,$org,$selectedId);$structures=array_values(array_filter(pos_floor_plan_structure_items($row),static fn(array $i):bool=>$i['type']==='table'));
+    $created=0;$updated=0;$componentIds=[];$owns=!$pdo->inTransaction();if($owns)$pdo->beginTransaction();
     try{
         foreach($structures as $index=>$item){
             $component=(string)$item['id'];$componentIds[$component]=true;$q=$pdo->prepare('SELECT id,public_id,active_check_id FROM service_tables WHERE organization_id=? AND location_id=? AND floor_plan_public_id=? AND floor_plan_component_id=? LIMIT 1 FOR UPDATE');$q->execute([$org,$locationId,$selectedId,$component]);$existing=$q->fetch();$id=$existing?(int)$existing['id']:null;$label=trim((string)$item['label']);if($label===''||strtoupper($label)==='4-TOP')$label='Table '.($index+1);$name=pos_floor_plan_unique_table_name($pdo,$org,$locationId,$label,$id);$capacity=max(1,(int)($item['seats']?:4));$ratio=(float)$item['widthPercent']/max(.001,(float)$item['heightPercent']);$shape=$ratio>1.25||$ratio<.8?'rectangle':'square';$w=max(2,min(40,(float)$item['widthPercent']));$h=max(2,min(40,(float)$item['heightPercent']));$x=max(0,min(100-$w,(float)$item['xPercent']));$y=max(0,min(100-$h,(float)$item['yPercent']));
@@ -115,12 +117,12 @@ function pos_floor_plan_sync_tables(PDO $pdo,int $org,int $locationId,int $userI
                 $pdo->prepare("UPDATE service_tables SET name=?,capacity=?,shape=?,x_percent=?,y_percent=?,width_percent=?,height_percent=?,status='active',floor_plan_synced_at=NOW(6),updated_by=?,updated_at=NOW(6) WHERE organization_id=? AND id=?")->execute([$name,$capacity,$shape,$x,$y,$w,$h,$userId,$org,$id]);
                 if($existing['active_check_id']!==null)$pdo->prepare("UPDATE pos_checks SET table_name=?,revision=revision+1,updated_at=NOW(6) WHERE organization_id=? AND id=? AND status='open'")->execute([$name,$org,(int)$existing['active_check_id']]);
                 $updated++;
-            } else {
+            }else{
                 $public=table_service_public_id('table');$pdo->prepare("INSERT INTO service_tables (organization_id,location_id,section_id,floor_plan_public_id,floor_plan_component_id,floor_plan_synced_at,public_id,name,capacity,shape,x_percent,y_percent,width_percent,height_percent,state,status,created_by,updated_by) VALUES (?,?,NULL,?,?,NOW(6),?,?,?,?,?,?,?,?, 'available','active',?,?)")->execute([$org,$locationId,$selectedId,$component,$public,$name,$capacity,$shape,$x,$y,$w,$h,$userId,$userId]);$created++;
             }
         }
         $q=$pdo->prepare("SELECT floor_plan_component_id FROM service_tables WHERE organization_id=? AND location_id=? AND floor_plan_public_id=? AND status='active'");$q->execute([$org,$locationId,$selectedId]);$orphaned=0;foreach($q->fetchAll(PDO::FETCH_COLUMN) as $component)if($component!==null&&!isset($componentIds[(string)$component]))$orphaned++;
-        $pdo->commit();
-    }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
+        if($owns)$pdo->commit();
+    }catch(Throwable $e){if($owns&&$pdo->inTransaction())$pdo->rollBack();throw $e;}
     return ['floorPlanPublicId'=>$selectedId,'componentTables'=>count($structures),'created'=>$created,'updated'=>$updated,'orphaned'=>$orphaned,'bootstrap'=>pos_floor_plan_bootstrap($pdo,$org,$locationId)];
 }
