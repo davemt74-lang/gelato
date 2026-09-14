@@ -8,6 +8,7 @@
     ['training.self_view','Training','View own training'],['training.assign','Training','Assign training'],['training.view_employee_progress','Training','View employee progress'],['training.view_all_progress','Training','View organization-wide progress'],['training.issue_certifications','Training','Issue certifications'],
     ['resumes.view','Hiring','View resume submissions'],['jobs.view','Hiring','View job openings'],['jobs.create','Hiring','Create job openings'],['jobs.edit','Hiring','Edit job openings'],['jobs.publish','Hiring','Publish and pause job openings'],['resumes.review','Hiring','Review and change resume status'],['resumes.add_notes','Hiring','Add internal resume notes'],['resumes.convert_to_employee','Hiring','Convert applicants to employee accounts'],
     ['forms.view','Content','View forms'],['forms.create','Content','Create forms'],['forms.edit','Content','Edit and publish forms'],['public_pages.view','Content','View public page settings'],['public_pages.edit','Content','Edit and publish public pages'],
+    ['pos.use','Point of Sale','Open and use the native Gelato POS'],['pos.discount','Point of Sale','Apply manager-authorized POS discounts'],['pos.void','Point of Sale','Void items or cancel POS checks'],['pos.manage','Point of Sale','Manage POS location settings and sales-source behavior'],
     ['brand.view','Organization','View brand settings'],['brand.edit','Organization','Edit brand settings'],['reports.view','Organization','View reports'],['settings.self_edit','Organization','Edit own profile'],['settings.organization_edit','Organization','Edit organization settings'],['audit.view','Organization','View audit history']
   ].map(([key,group,name])=>({key,group,name}));
   const defaultRoles=[
@@ -32,15 +33,17 @@
   function saveUsers(value){write(keys.users,value)}
   function saveRoles(value){write(keys.roles,value)}
   function installPosHeaderAction(){
-    if(!window.RESTAURANT_SERVER_SESSION||!has('pos.use'))return;
+    if(!has('pos.use'))return;
     const actions=document.querySelector('.top-actions');
     if(!actions||actions.querySelector('[data-pos-header]'))return;
     const link=document.createElement('a');
-    link.className='header-link';
+    link.className='btn btn-dark pos-header-action';
     link.href='pos.php';
     link.textContent='POS';
     link.setAttribute('data-pos-header','true');
+    link.setAttribute('data-permission','pos.use');
     link.setAttribute('aria-label','Open native POS');
+    link.setAttribute('title','Open native POS');
     actions.prepend(link);
   }
   window.RestaurantAuth={keys,permissionCatalog,seed,users,roles,current,login,logout,has,saveUsers,saveRoles,read,write};
