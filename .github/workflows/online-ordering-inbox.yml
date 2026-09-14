@@ -14,6 +14,7 @@ on:
       - 'assets/css/customer-inbox.css'
       - 'database/20261004_online_ordering_customer_inbox.sql'
       - 'tests/online-ordering-inbox-contract.php'
+      - 'tests/online-order-runtime-gate-contract.php'
       - '.github/workflows/online-ordering-inbox.yml'
   push:
     branches: [main]
@@ -45,6 +46,7 @@ jobs:
           php -l includes/online-order-core.php
           php -l includes/customer-inbox-core.php
           php -l tests/online-ordering-inbox-contract.php
+          php -l tests/online-order-runtime-gate-contract.php
           node --check assets/js/online-order.js
       - name: Static commerce and privacy contract
         run: |
@@ -63,6 +65,8 @@ jobs:
           grep -q 'Turning this off does not block transactional order updates' customer-account.php
           grep -q 'No card information is collected' online-order.php
           ! grep -Eqi 'card_number|cvv|track_data|magstripe' database/20261004_online_ordering_customer_inbox.sql
+      - name: Production runtime gate contract
+        run: php tests/online-order-runtime-gate-contract.php
       - name: Install and upgrade schema
         run: |
           sudo apt-get update -qq
@@ -136,6 +140,7 @@ jobs:
           - customer Inbox with transactional order confirmation, unread/read/dismiss state
           - optional in-account promotion preference
           - staff promotion composer with CRM-tag targeting
+          - production readiness gate that returns a branded 503 instead of a raw HTTP 500 when migrations are pending
 
           Online payment capture and delivery checkout are intentionally not included yet.
           EOF
