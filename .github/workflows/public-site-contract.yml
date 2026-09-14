@@ -9,11 +9,20 @@ on:
       - 'about.php'
       - 'contact.php'
       - 'locations.php'
-      - 'workspace.php'
+      - 'jobs.html'
+      - 'job.php'
+      - 'apply.html'
+      - 'catering.php'
+      - 'wholesale.php'
       - 'login.php'
+      - 'login.html'
+      - 'forgot-password.php'
+      - 'reset-password.php'
+      - 'workspace.php'
       - 'public-site-settings.php'
       - 'assets/**'
-      - 'public/**'
+      - 'css/stonefellows-public.css'
+      - 'js/public-account-menu.js'
       - 'includes/public-site.php'
       - 'includes/menu-sync.php'
       - 'database/20260914_public_site_settings.sql'
@@ -35,10 +44,12 @@ jobs:
       - name: Lint public and workspace PHP
         run: |
           set -euo pipefail
-          for f in index.php menu.php gelato.php about.php contact.php locations.php workspace.php login.php public-site-settings.php includes/public-site.php; do php -l "$f"; done
+          for f in index.php menu.php gelato.php about.php contact.php locations.php job.php catering.php wholesale.php login.php forgot-password.php reset-password.php workspace.php public-site-settings.php includes/public-site.php; do php -l "$f"; done
       - name: Validate JavaScript
         run: |
           node --check assets/js/site.js
+          node --check js/public-account-menu.js
+          node --check js/public-jobs.js
           node --check js/auth.js
       - name: Enforce root public-site contract
         run: php tests/public-site-contract.php
