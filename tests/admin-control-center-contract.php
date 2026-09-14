@@ -5,7 +5,6 @@ require __DIR__.'/../includes/admin-control-core.php';
 
 $pdo=app_pdo();
 function acc_assert(bool $condition,string $message): void {if(!$condition)throw new RuntimeException($message);}
-function acc_one(PDO $pdo,string $sql,array $args=[]): mixed {$q=$pdo->prepare($sql);$q->execute($args);return $q->fetchColumn();}
 
 $customerUser=['is_owner_role'=>0,'permissions'=>['customer.portal','online_ordering.use']];
 acc_assert(!admin_control_allowed($customerUser),'Customer portal users must never enter the restaurant admin control center.');
@@ -32,7 +31,7 @@ $staff=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO users (email,password_hash,first_name,last_name,display_name,status) VALUES (?,?,?,?,?,'active')")->execute([$slug.'-customer@example.test',password_hash('Admin-CI-Customer!42',PASSWORD_DEFAULT),'Online','Guest','Online Guest']);
 $customerUserId=(int)$pdo->lastInsertId();
 $customerPublic='admin-customer-'.bin2hex(random_bytes(6));
-$pdo->prepare("INSERT INTO crm_customers (organization_id,user_id,public_id,first_name,last_name,display_name,email,email_normalized,status,source) VALUES (?,?,?,?,?,?,?,?, 'active','web')")
+$pdo->prepare("INSERT INTO crm_customers (organization_id,user_id,public_id,first_name,last_name,display_name,email,email_normalized,status,source) VALUES (?,?,?,?,?,?,?,?,'active','web')")
     ->execute([$org,$customerUserId,$customerPublic,'Online','Guest','Online Guest',$slug.'-customer@example.test',$slug.'-customer@example.test']);
 $customer=(int)$pdo->lastInsertId();
 $checkPublic='admin-check-'.bin2hex(random_bytes(6));
@@ -59,10 +58,7 @@ acc_assert((string)$orders[0]['customer_name']==='Online Guest','Admin order lis
 acc_assert((string)$orders[0]['displayStatus']==='Submitted','An open order with no KDS rows should display Submitted.');
 acc_assert(count(admin_online_orders($pdo,$org,$location,20))===1,'Location filter must preserve matching online orders.');
 
-$pdo->prepare("UPDATE customer_inbox_preferences SET promotions_enabled=0 WHERE customer_id=?")->execute([$customer]);
-if($pdo->lastInsertId()===0){
-    $pdo->prepare("INSERT INTO customer_inbox_preferences (organization_id,customer_id,promotions_enabled,updated_by) VALUES (?,?,0,?) ON DUPLICATE KEY UPDATE promotions_enabled=0,updated_by=VALUES(updated_by)")->execute([$org,$customer,$staff]);
-}
+$pdo->prepare("INSERT INTO customer_inbox_preferences (organization_id,customer_id,promotions_enabled,updated_by) VALUES (?,?,0,?) ON DUPLICATE KEY UPDATE promotions_enabled=0,updated_by=VALUES(updated_by)")->execute([$org,$customer,$staff]);
 $metrics=admin_dashboard_metrics($pdo,$org);
 acc_assert((int)$metrics['promotionReach']===0,'Inbox promotion opt-out must reduce Admin promotion reach without affecting account access.');
 $pdo->prepare("UPDATE pos_checks SET status='paid',amount_paid=27.00,closed_at=NOW(6) WHERE id=?")->execute([$check]);
