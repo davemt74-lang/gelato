@@ -35,7 +35,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
 $orders=customer_account_orders($pdo,$organizationId,$customerId,35);
 $onlineOrders=online_order_ready($pdo)?online_order_customer_orders($pdo,$organizationId,$customerId,25):[];
 $onlineCheckIds=array_fill_keys(array_map(static fn(array $row):string=>(string)$row['check_public_id'],$onlineOrders),true);
-$otherOrders=array_values(array_filter($orders,static fn(array $row):bool=>!isset($onlineCheckIds[(string)$row['checkPublicId']]));
+$otherOrders=array_values(array_filter($orders,static fn(array $row):bool=>!isset($onlineCheckIds[(string)$row['checkPublicId']])));
 $inbox=customer_inbox_ready($pdo)?customer_inbox_messages($pdo,$organizationId,$customerId,50):[];
 $unread=customer_inbox_ready($pdo)?customer_inbox_unread_count($pdo,$organizationId,$customerId):0;
 $inboxPrefs=customer_inbox_ready($pdo)?customer_inbox_preferences($pdo,$organizationId,$customerId):['promotionsEnabled'=>true];
