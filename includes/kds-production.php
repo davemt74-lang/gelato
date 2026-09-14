@@ -79,6 +79,7 @@ function kds_production_board(PDO $pdo,int $org,int $locationId,?string $station
         : '';
 
     $sql="SELECT k.public_id,k.status,k.sent_at,k.fired_at,k.started_at,k.ready_at,k.completed_at,k.cancelled_at,k.station_id,
+        TIMESTAMPDIFF(SECOND,COALESCE(k.fired_at,k.sent_at),NOW(6)) active_age_seconds,
         TIMESTAMPDIFF(SECOND,k.completed_at,NOW(6)) completed_age_seconds,
         s.public_id station_public_id,s.name station_name,s.target_seconds,
         c.public_id check_public_id,c.check_number,c.business_date,c.service_mode,c.table_name,c.guest_count,c.status check_status,
@@ -99,16 +100,14 @@ function kds_production_board(PDO $pdo,int $org,int $locationId,?string $station
     $q->execute(array_merge([$org,$locationId],$scopeArgs));
     $rows=$q->fetchAll();
 
-    $now=microtime(true);
     foreach($rows as &$r){
         $status=(string)$r['status'];
-        $anchor=$r['fired_at']?:$r['sent_at'];
-        $age=max(0,$now-(strtotime((string)$anchor)?:time()));
+        $age=max(0,(int)($r['active_age_seconds']??0));
         $target=(int)($r['target_seconds']??0);
         $active=in_array($status,['queued','in_progress','ready'],true);
         $ratio=$active&&$target>0?$age/$target:0.0;
         $completedAge=$r['completed_age_seconds']!==null?(int)$r['completed_age_seconds']:null;
-        $r['ageSeconds']=(int)round($age);
+        $r['ageSeconds']=$age;
         $r['slaRatio']=round($ratio,3);
         $r['late']=$active&&$target>0&&$ratio>1;
         $r['warning']=$active&&$target>0&&$ratio>=0.8&&$ratio<=1;
