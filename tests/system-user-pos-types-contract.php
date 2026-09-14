@@ -12,16 +12,18 @@ $root = dirname(__DIR__);
 $migration = file_get_contents($root . '/database/20261001_system_user_types_pos_order_types.sql');
 $core = file_get_contents($root . '/includes/pos-core.php');
 $pos = file_get_contents($root . '/pos.php');
-$setup = file_get_contents($root . '/setup-first-user.php');
 
-if ($migration === false || $core === false || $pos === false || $setup === false) {
+if ($migration === false || $core === false || $pos === false) {
     throw new RuntimeException('Unable to read system user / POS order type sources.');
 }
 
 foreach (['Customer' => 'customer', 'Service' => 'service', 'Driver' => 'driver'] as $name => $slug) {
     system_types_assert(str_contains($migration, "'{$name}', '{$slug}'"), "Migration must seed {$name} ({$slug}) for existing organizations.");
-    system_types_assert(str_contains($setup, "'{$slug}' => ['{$name}'"), "First-user setup must seed {$name} ({$slug}) for new organizations.");
 }
+system_types_assert(str_contains($migration, 'CREATE TRIGGER organizations_seed_operational_user_types'), 'Future organizations must automatically receive the new system user types.');
+system_types_assert(str_contains($migration, "(NEW.id, 'Customer', 'customer'"), 'Future organizations must receive Customer.');
+system_types_assert(str_contains($migration, "(NEW.id, 'Service', 'service'"), 'Future organizations must receive Service.');
+system_types_assert(str_contains($migration, "(NEW.id, 'Driver', 'driver'"), 'Future organizations must receive Driver.');
 
 system_types_assert(str_contains($migration, "WHEN 'bar' THEN 'dine_in'"), 'Legacy bar orders must normalize to dine_in.');
 system_types_assert(str_contains($migration, "WHEN 'takeout' THEN 'pickup'"), 'Legacy takeout orders must normalize to pickup.');
