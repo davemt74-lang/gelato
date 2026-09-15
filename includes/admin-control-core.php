@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__.'/bootstrap.php';
+require_once __DIR__.'/online-order-lifecycle.php';
 
 function admin_has_any(array $user,array $permissions): bool
 {
@@ -95,24 +96,23 @@ function admin_dashboard_metrics(PDO $pdo,int $organizationId): array
         $q=$pdo->prepare("SELECT COUNT(*) order_count,COALESCE(SUM(c.total_amount),0) order_value FROM online_orders oo JOIN pos_checks c ON c.organization_id=oo.organization_id AND c.id=oo.pos_check_id WHERE oo.organization_id=? AND c.business_date=CURDATE() AND c.status<>'cancelled'");
         try{$q->execute([$organizationId]);$row=$q->fetch()?:[];$metrics['onlineOrdersToday']=(int)($row['order_count']??0);$metrics['onlineOrderValueToday']=round((float)($row['order_value']??0),2);}catch(Throwable){}
         $metrics['openOnlineOrders']=(int)admin_scalar($pdo,"SELECT COUNT(*) FROM online_orders oo JOIN pos_checks c ON c.organization_id=oo.organization_id AND c.id=oo.pos_check_id WHERE oo.organization_id=? AND c.status='open'",[$organizationId]);
-        if(admin_table_exists($pdo,'kds_order_items')){
-            $metrics['readyOnlineOrders']=(int)admin_scalar($pdo,"SELECT COUNT(DISTINCT oo.id) FROM online_orders oo JOIN pos_checks c ON c.organization_id=oo.organization_id AND c.id=oo.pos_check_id JOIN kds_order_items k ON k.organization_id=oo.organization_id AND k.check_id=oo.pos_check_id WHERE oo.organization_id=? AND c.status='open' AND k.status='ready'",[$organizationId]);
-        }
+        $metrics['readyOnlineOrders']=(int)admin_scalar($pdo,"SELECT COUNT(*) FROM online_orders oo JOIN pos_checks c ON c.organization_id=oo.organization_id AND c.id=oo.pos_check_id WHERE oo.organization_id=? AND c.status='open' AND oo.status='ready'",[$organizationId]);
     }
     return $metrics;
 }
 
 function admin_online_order_status(array $row): string
 {
-    if((string)($row['check_status']??'')==='cancelled') return 'Cancelled';
-    if((string)($row['check_status']??'')==='paid') return 'Completed';
-    $count=(int)($row['kds_count']??0);
-    $completed=(int)($row['kds_completed_count']??0);
-    if((int)($row['kds_ready_count']??0)>0) return 'Ready';
-    if((int)($row['kds_progress_count']??0)>0) return 'Preparing';
-    if((int)($row['kds_waiting_count']??0)>0) return 'In kitchen';
-    if($count>0&&$completed===$count) return 'Kitchen complete';
-    return 'Submitted';
+    return online_order_lifecycle_display_status(online_order_lifecycle_derive([
+        'check_status'=>$row['check_status']??'',
+        'kds_count'=>$row['kds_count']??0,
+        'kds_queued_count'=>$row['kds_queued_count']??0,
+        'kds_held_count'=>$row['kds_held_count']??0,
+        'kds_progress_count'=>$row['kds_progress_count']??0,
+        'kds_ready_count'=>$row['kds_ready_count']??0,
+        'kds_completed_count'=>$row['kds_completed_count']??0,
+        'kds_cancelled_count'=>$row['kds_cancelled_count']??0,
+    ]));
 }
 
 function admin_online_orders(PDO $pdo,int $organizationId,?int $locationId=null,int $limit=100): array
@@ -120,8 +120,8 @@ function admin_online_orders(PDO $pdo,int $organizationId,?int $locationId=null,
     if(!admin_table_exists($pdo,'online_orders')||!admin_table_exists($pdo,'pos_checks')) return [];
     $limit=max(1,min(200,$limit));
     $hasKds=admin_table_exists($pdo,'kds_order_items');
-    $kdsJoin=$hasKds?"LEFT JOIN (SELECT organization_id,check_id,COUNT(*) kds_count,SUM(status='ready') kds_ready_count,SUM(status='in_progress') kds_progress_count,SUM(status IN ('queued','held')) kds_waiting_count,SUM(status='completed') kds_completed_count FROM kds_order_items GROUP BY organization_id,check_id) ks ON ks.organization_id=oo.organization_id AND ks.check_id=oo.pos_check_id":"";
-    $kdsSelect=$hasKds?"COALESCE(ks.kds_count,0) kds_count,COALESCE(ks.kds_ready_count,0) kds_ready_count,COALESCE(ks.kds_progress_count,0) kds_progress_count,COALESCE(ks.kds_waiting_count,0) kds_waiting_count,COALESCE(ks.kds_completed_count,0) kds_completed_count":"0 kds_count,0 kds_ready_count,0 kds_progress_count,0 kds_waiting_count,0 kds_completed_count";
+    $kdsJoin=$hasKds?"LEFT JOIN (SELECT organization_id,check_id,COUNT(*) kds_count,SUM(status='queued') kds_queued_count,SUM(status='held') kds_held_count,SUM(status='in_progress') kds_progress_count,SUM(status='ready') kds_ready_count,SUM(status='completed') kds_completed_count,SUM(status='cancelled') kds_cancelled_count FROM kds_order_items GROUP BY organization_id,check_id) ks ON ks.organization_id=oo.organization_id AND ks.check_id=oo.pos_check_id":"";
+    $kdsSelect=$hasKds?"COALESCE(ks.kds_count,0) kds_count,COALESCE(ks.kds_queued_count,0) kds_queued_count,COALESCE(ks.kds_held_count,0) kds_held_count,COALESCE(ks.kds_progress_count,0) kds_progress_count,COALESCE(ks.kds_ready_count,0) kds_ready_count,COALESCE(ks.kds_completed_count,0) kds_completed_count,COALESCE(ks.kds_cancelled_count,0) kds_cancelled_count":"0 kds_count,0 kds_queued_count,0 kds_held_count,0 kds_progress_count,0 kds_ready_count,0 kds_completed_count,0 kds_cancelled_count";
     $sql="SELECT oo.public_id order_public_id,oo.service_mode,oo.payment_mode,oo.status order_status,oo.requested_ready_at,oo.customer_note,oo.submitted_at,c.public_id check_public_id,c.check_number,c.business_date,c.status check_status,c.subtotal,c.tax_amount,c.service_charge_amount,c.total_amount,c.amount_paid,l.id location_id,l.name location_name,cc.public_id customer_public_id,cc.display_name customer_name,cc.email customer_email,{$kdsSelect} FROM online_orders oo JOIN pos_checks c ON c.organization_id=oo.organization_id AND c.id=oo.pos_check_id JOIN locations l ON l.organization_id=oo.organization_id AND l.id=oo.location_id JOIN crm_customers cc ON cc.organization_id=oo.organization_id AND cc.id=oo.customer_id {$kdsJoin} WHERE oo.organization_id=?";
     $args=[$organizationId];
     if($locationId!==null&&$locationId>0){$sql.=' AND oo.location_id=?';$args[]=$locationId;}
