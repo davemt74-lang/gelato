@@ -1,0 +1,80 @@
+(()=>{
+'use strict';
+const root=document.getElementById('menuManager');
+const builder=document.getElementById('foodBuilder');
+if(!root||!builder)return;
+const cfg=window.GELATO_MENU_MANAGER||{};
+const csrf=String(cfg.csrf||root.dataset.csrf||'');
+const canManage=Boolean(cfg.canManage);
+let currentItemId=0,details=null,refreshTimer=0,busy=false;
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function itemId(){const text=document.getElementById('foodBuilderStatus')?.textContent||'';const match=text.match(/item\s+#(\d+)/i);return match?Number(match[1]):0;}
+async function json(url,options={}){const response=await fetch(url,{cache:'no-store',credentials:'same-origin',...options});const data=await response.json().catch(()=>({ok:false,message:'Invalid response.'}));if(!response.ok||!data.ok)throw new Error(data.message||'Image request failed.');return data;}
+async function status(target,id){return (await json(`api/media.php?target=${encodeURIComponent(target)}&id=${Number(id)}`,{headers:{Accept:'application/json'}})).media;}
+async function itemDetails(id){return (await json(`api/menu-manager.php?action=item&id=${Number(id)}`,{headers:{Accept:'application/json'}})).item;}
+
+async function upload(target,id,file){
+  const form=new FormData();form.append('csrf_token',csrf);form.append('action','upload');form.append('target',target);form.append('id',String(id));form.append('image',file);
+  return (await json('api/media.php',{method:'POST',body:form})).media;
+}
+async function remove(target,id){
+  const form=new FormData();form.append('csrf_token',csrf);form.append('action','remove');form.append('target',target);form.append('id',String(id));
+  return (await json('api/media.php',{method:'POST',body:form})).media;
+}
+function chooseFile(callback){const input=document.createElement('input');input.type='file';input.accept='image/jpeg,image/png,image/webp';input.hidden=true;document.body.appendChild(input);input.addEventListener('change',()=>{const file=input.files?.[0];input.remove();if(file)callback(file);},{once:true});input.click();}
+function setMessage(message,error=false){const node=document.querySelector('#canonicalMediaDock .cm-status');if(node){node.textContent=message;node.style.color=error?'#a62a24':'#777';}}
+
+function ensureDock(){
+  let dock=document.getElementById('canonicalMediaDock');
+  if(dock)return dock;
+  dock=document.createElement('section');dock.id='canonicalMediaDock';dock.className='cm-dock';
+  const main=builder.querySelector('.fb-main');if(main)builder.insertBefore(dock,main);else builder.appendChild(dock);
+  dock.addEventListener('click',event=>{
+    const uploadBtn=event.target.closest('[data-main-image-upload]');
+    const removeBtn=event.target.closest('[data-main-image-remove]');
+    if(uploadBtn&&currentItemId&&canManage&&!busy)chooseFile(file=>changeMainImage(file));
+    if(removeBtn&&currentItemId&&canManage&&!busy)removeMainImage();
+  });
+  return dock;
+}
+async function renderDock(){
+  const dock=ensureDock();
+  if(!currentItemId){dock.innerHTML='<div class="cm-preview">No image</div><div class="cm-copy"><strong>Main menu image</strong><span>Save this Food or Drink item first, then upload its customer-facing image.</span><div class="cm-status">JPEG, PNG or WebP · max 10 MB</div></div>';return;}
+  try{
+    const media=await status('menu_item',currentItemId);const file=media.file;
+    dock.innerHTML=`<div class="cm-preview">${file?`<img src="${esc(file.url)}" alt="">`:'No image'}</div><div class="cm-copy"><strong>Main menu image</strong><span>This image follows the canonical item to the public menu and Online Ordering.</span><div class="cm-status">${file?esc(file.originalName):'JPEG, PNG or WebP · max 10 MB'}</div></div>${canManage?`<div class="cm-actions"><button class="cm-btn primary" type="button" data-main-image-upload>${file?'Replace':'Upload image'}</button>${file?'<button class="cm-btn danger" type="button" data-main-image-remove>Remove</button>':''}</div>`:''}`;
+  }catch(error){dock.innerHTML=`<div class="cm-preview">Image</div><div class="cm-copy"><strong>Main menu image</strong><span class="cm-status" style="color:#a62a24">${esc(error.message)}</span></div>`;}
+}
+async function changeMainImage(file){busy=true;setMessage('Uploading…');try{await upload('menu_item',currentItemId,file);await renderDock();}catch(error){setMessage(error.message,true);alert(error.message);}finally{busy=false;}}
+async function removeMainImage(){if(!confirm('Remove this menu image?'))return;busy=true;setMessage('Removing…');try{await remove('menu_item',currentItemId);await renderDock();}catch(error){setMessage(error.message,true);}finally{busy=false;}}
+
+async function renderIngredientControls(){
+  const rows=[...builder.querySelectorAll('#foodCanvas [data-ingredient-index]')];if(!rows.length)return;
+  if(!currentItemId){rows.forEach(row=>{if(!row.querySelector('.cm-ingredient'))row.insertAdjacentHTML('beforeend','<div class="cm-ingredient"><span class="cm-status">Save item before adding ingredient image.</span></div>');});return;}
+  if(!details||Number(details.id)!==currentItemId){try{details=await itemDetails(currentItemId);}catch{return;}}
+  for(const row of rows){
+    if(row.querySelector('.cm-ingredient'))continue;
+    const index=Number(row.dataset.ingredientIndex||0);const ingredient=details.ingredients?.[index];
+    if(!ingredient?.id)continue;
+    let media=null;try{media=await status('ingredient',ingredient.id);}catch{}
+    const box=document.createElement('div');box.className='cm-ingredient';box.dataset.ingredientMediaId=String(ingredient.id);
+    box.innerHTML=`<div class="cm-ingredient-thumb">${media?.file?`<img src="${esc(media.file.url)}" alt="">`:'Image'}</div>${canManage?`<div class="cm-actions"><button class="cm-btn" type="button" data-ingredient-upload="${ingredient.id}">${media?.file?'Replace':'Add image'}</button>${media?.file?`<button class="cm-btn danger" type="button" data-ingredient-remove="${ingredient.id}">×</button>`:''}</div>`:''}`;
+    row.appendChild(box);
+  }
+}
+
+builder.addEventListener('click',event=>{
+  const uploadBtn=event.target.closest('[data-ingredient-upload]');const removeBtn=event.target.closest('[data-ingredient-remove]');
+  if(uploadBtn&&canManage&&!busy){const id=Number(uploadBtn.dataset.ingredientUpload);chooseFile(async file=>{busy=true;try{await upload('ingredient',id,file);details=null;scheduleRefresh();}catch(error){alert(error.message);}finally{busy=false;}});}
+  if(removeBtn&&canManage&&!busy){const id=Number(removeBtn.dataset.ingredientRemove);if(!confirm('Remove this ingredient image?'))return;busy=true;remove('ingredient',id).then(()=>{details=null;scheduleRefresh();}).catch(error=>alert(error.message)).finally(()=>{busy=false;});}
+});
+
+async function refresh(){
+  const next=itemId();if(next!==currentItemId){currentItemId=next;details=null;}
+  await renderDock();await renderIngredientControls();
+}
+function scheduleRefresh(){clearTimeout(refreshTimer);refreshTimer=setTimeout(refresh,80);}
+const observer=new MutationObserver(scheduleRefresh);observer.observe(builder,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['class','aria-hidden']});
+scheduleRefresh();
+})();
