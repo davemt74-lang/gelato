@@ -45,6 +45,13 @@ function admin_route_access_catalog(): array
         'wholesale-order-entry.php'=>['any'=>['wholesale.manage']],
         'wholesale-purchasing.php'=>['any'=>['wholesale.manage']],
         'wholesale-receivables.php'=>['any'=>['wholesale.receivables.view']],
+
+        // Specialized workstations that are launched from the canonical shell
+        // still need shell visibility to match the workstation's own guard.
+        'floor-planner.php'=>['any'=>['floorplans.view']],
+        'floor-planner-v2.php'=>['any'=>['floorplans.view']],
+        'floor-planner-ops.php'=>['any'=>['floorplans.view']],
+        'floor-planner-ops-legacy.php'=>['any'=>['floorplans.view']],
     ];
 }
 
