@@ -63,6 +63,7 @@ rpe_assert(admin_route_access_allowed(rpe_user(['sales.import']),'sales-import-c
 rpe_assert(!admin_route_access_allowed(rpe_user(['sales.import_profiles.manage']),'sales-import-center.php'),'Import-profile management alone must not open Sales Import Center',15);
 
 rpe_assert(admin_route_access_allowed(rpe_user(['sales.costs.view']),'sales-cost-intelligence.php'),'Dedicated sales-cost view permission should open Cost Intelligence',16);
+rpe_assert(rpe_nav_has(rpe_user(['sales.costs.view']),'sales-cost-intelligence.php'),'Shell hides Cost Intelligence from a dedicated sales-cost viewer',61);
 rpe_assert(admin_route_access_allowed(rpe_user(['sales.view']),'sales-cost-intelligence.php'),'Sales view permission should open Cost Intelligence',17);
 rpe_assert(!admin_route_access_allowed(rpe_user(['inventory.view']),'sales-cost-intelligence.php'),'Inventory view alone must not open Cost Intelligence',18);
 rpe_assert(!rpe_nav_has(rpe_user(['inventory.view']),'sales-cost-intelligence.php'),'Shell exposes Cost Intelligence to inventory-only account',19);
@@ -100,6 +101,7 @@ rpe_assert(admin_route_access_allowed(rpe_user(['staff.manage']),'scheduling.php
 
 // Specialized workstations linked from the canonical shell must also match their own route guards.
 rpe_assert(admin_route_access_allowed(rpe_user(['floorplans.view']),'floor-planner-v2.php'),'Floor Planner view should open the workstation',44);
+rpe_assert(rpe_nav_has(rpe_user(['floorplans.view']),'floor-planner-v2.php'),'Shell hides Floor Planner from a workstation viewer',62);
 rpe_assert(!admin_route_access_allowed(rpe_user(['floorplans.edit']),'floor-planner-v2.php'),'Floor Planner edit-only must not imply workstation access',45);
 rpe_assert(!rpe_nav_has(rpe_user(['floorplans.edit']),'floor-planner-v2.php'),'Shell exposes Floor Planner to an edit-only account',46);
 
