@@ -1,20 +1,31 @@
 (() => {
 'use strict';
-if(window.GelatoEmployeeHomeNav)return;window.GelatoEmployeeHomeNav=true;
-const Auth=window.RestaurantAuth;if(!Auth?.current?.())return;
-const permissions=['employee.self','schedule.self','timeclock.self','training.self_view','tasks.self','agent.employee_view','employee.manage','staff.manage'];
-if(!permissions.some(p=>Auth.has?.(p)))return;
-function add(){
-  if(document.querySelector('[data-employee-home-link]'))return;
-  const nav=document.querySelector('[data-nav-group="admin"]');
-  if(!nav)return;
-  const link=document.createElement('a');
-  link.href='employee-home.php';
-  link.textContent='Employee Home';
-  link.dataset.employeeHomeLink='1';
-  link.className='nav-item';
-  link.style.cssText='display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;font-weight:700';
-  nav.prepend(link);
+if(window.GelatoEmployeeHomeNavCleanup)return;
+window.GelatoEmployeeHomeNavCleanup=true;
+
+function cleanNavigation(){
+  document.querySelectorAll('[data-nav-group="admin"] [data-employee-home-link], [data-nav-group="admin"] a[href="employee-home.php"]')
+    .forEach(node=>node.remove());
+
+  const actions=document.querySelector('.topbar .top-actions');
+  if(actions){
+    actions.querySelectorAll('a[href="landing.html"], a[href="./landing.html"]').forEach(node=>node.remove());
+    actions.querySelectorAll('a[href="pos.php"]:not(#gelatoHeaderPos), a[href="./pos.php"]:not(#gelatoHeaderPos)').forEach(node=>node.remove());
+    Array.from(actions.querySelectorAll('button')).forEach(node=>{
+      if(node.id==='gelatoHeaderPos')return;
+      if(node.textContent.trim().toUpperCase()==='POS')node.remove();
+    });
+  }
 }
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',add,{once:true});else add();
+
+function install(){
+  cleanNavigation();
+  const observer=new MutationObserver(()=>cleanNavigation());
+  observer.observe(document.body,{childList:true,subtree:true});
+  queueMicrotask(cleanNavigation);
+  requestAnimationFrame(cleanNavigation);
+}
+
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});
+else install();
 })();
