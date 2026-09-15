@@ -18,7 +18,13 @@ try{
     $priceId=max(0,(int)($_GET['priceId']??0));
     $locationId=max(0,(int)($_GET['locationId']??0));
     if($priceId<1)throw new InvalidArgumentException('Choose a menu option to customize.');
-    $customization=menu_order_customization_context($pdo,$organizationId,$priceId,$locationId?:null);
+
+    // Keep the established canonical ingredient/removal/substitution context as the base.
+    $customization=online_order_customization_context($pdo,$organizationId,$priceId);
+    $customization['addOnGroups']=menu_manager_ready($pdo)
+        ? menu_manager_customization_addons($pdo,$organizationId,$priceId,'online_order',$locationId?:null)
+        : [];
+
     app_json_response(['ok'=>true,'customization'=>$customization]);
 }catch(InvalidArgumentException $e){
     app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);
