@@ -49,5 +49,6 @@ $ready=package_deals_ready(app_pdo());
 </main>
 <script>window.GELATO_PACKAGE_ADMIN={csrf:<?=json_encode(app_csrf_token())?>,canManage:<?=json_encode($canManage)?>};</script>
 <script src="assets/js/packages-admin.js?v=20260915-1"></script>
+<script src="js/universal-admin-page-shell.js?v=20260915-shell2"></script>
 </body>
 </html>
