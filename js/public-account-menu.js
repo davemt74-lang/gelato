@@ -3,7 +3,7 @@
 
   document.querySelectorAll('a[href="landing.html"]').forEach((link) => link.setAttribute('href', 'index.php'));
 
-  if (!document.querySelector('script[data-public-shell-script]')) {
+  if (!document.querySelector('script[data-public-shell-script],script[src*="assets/js/public-shell.js"]')) {
     const shell = document.createElement('script');
     shell.src = 'assets/js/public-shell.js?v=20260915-1';
     shell.dataset.publicShellScript = 'true';
