@@ -1,0 +1,117 @@
+name: Temporary POS shell follow-up patch
+
+on:
+  push:
+    branches: [fix/pos-header-table-id-admin-shell]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[tmp-patch]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/pos-header-table-id-admin-shell
+          fetch-depth: 0
+      - name: Apply focused runtime patch
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          def replace_once(path, old, new):
+              p=Path(path); s=p.read_text()
+              if new in s:
+                  return
+              if old not in s:
+                  raise SystemExit(f'Expected text not found in {path}')
+              p.write_text(s.replace(old,new,1))
+
+          # Universal shell: recognize Sales Import Center and expose it in Sales & Events.
+          p=Path('js/universal-admin-page-shell.js'); s=p.read_text()
+          marker="    'sales-intelligence.php': ['Sales Intelligence', 'Sales performance, demand and source health'],\n"
+          addition="    'sales-intelligence.php': ['Sales Intelligence', 'Sales performance, demand and source health'],\n    'sales-import-center.php': ['Sales Import Center', 'Import, normalize and monitor external POS sales data'],\n"
+          if "'sales-import-center.php': ['Sales Import Center'" not in s:
+              if marker not in s: raise SystemExit('Sales page title marker missing')
+              s=s.replace(marker,addition,1)
+          marker="        ['↗', 'Sales Intelligence', 'sales-intelligence.php'],\n"
+          addition="        ['↗', 'Sales Intelligence', 'sales-intelligence.php'],\n        ['⇩', 'Sales Import Center', 'sales-import-center.php'],\n"
+          if "['⇩', 'Sales Import Center', 'sales-import-center.php']" not in s:
+              if marker not in s: raise SystemExit('Sales nav marker missing')
+              s=s.replace(marker,addition,1)
+          p.write_text(s)
+
+          # Missing shell loaders.
+          replace_once('sales-import-center.php',
+              '<script src="js/sales-import-center.js?v=20260914-1"></script></body></html>',
+              '<script src="js/universal-admin-page-shell.js?v=20260915-3"></script><script src="js/sales-import-center.js?v=20260914-1"></script></body></html>')
+          replace_once('public-site-settings.php',
+              '</main></body></html>',
+              '</main><script src="js/universal-admin-page-shell.js?v=20260915-3"></script></body></html>')
+
+          # Existing shell pages get a cache-busting revision so production cannot reuse the stale shell.
+          for name in ['timeclock.php','prep-intelligence.php','equipment.php','purchasing.php','scheduling.php']:
+              p=Path(name); s=p.read_text()
+              s=s.replace('js/universal-admin-page-shell.js?v=20260915-2','js/universal-admin-page-shell.js?v=20260915-3')
+              p.write_text(s)
+
+          # Active POS checks include the canonical service-table database ID when available.
+          p=Path('includes/pos-core.php'); s=p.read_text()
+          pattern=re.compile(r"function pos_open_checks\(PDO \$pdo,int \$org,\?int \$locationId=null\): array\n\{.*?\n\}\n\nfunction pos_recent_checks", re.S)
+          replacement='''function pos_open_checks(PDO $pdo,int $org,?int $locationId=null): array
+          {
+              $hasServiceTables=false;
+              try{
+                  $q=$pdo->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='service_tables'");
+                  $q->execute();
+                  $hasServiceTables=(int)$q->fetchColumn()===1;
+              }catch(Throwable){}
+              $tableSelect=$hasServiceTables?',t.id table_id':',NULL table_id';
+              $tableJoin=$hasServiceTables?' LEFT JOIN service_tables t ON t.organization_id=c.organization_id AND t.location_id=c.location_id AND t.active_check_id=c.id':'';
+              $sql="SELECT c.public_id,c.check_number,c.location_id,l.name location_name,c.service_mode,c.table_name,c.guest_count,c.subtotal,c.discount_amount,c.tax_amount,c.service_charge_amount,c.tip_amount,c.total_amount,c.amount_paid,c.opened_at,u.display_name opened_by_name".$tableSelect." FROM pos_checks c JOIN locations l ON l.id=c.location_id JOIN users u ON u.id=c.opened_by".$tableJoin." WHERE c.organization_id=? AND c.status='open'";
+              $args=[$org];if($locationId){$sql.=' AND c.location_id=?';$args[]=$locationId;}$sql.=' ORDER BY c.opened_at DESC,c.id DESC LIMIT 100';$q=$pdo->prepare($sql);$q->execute($args);return pos_normalize_check_rows($q->fetchAll());
+          }
+
+          function pos_recent_checks'''
+          if 'table_id' not in re.search(pattern,s).group(0):
+              s,n=pattern.subn(replacement,s,count=1)
+              if n!=1: raise SystemExit('pos_open_checks patch failed')
+              p.write_text(s)
+
+          # Render actual Table ID #N in the Active Tickets drawer.
+          p=Path('js/pos.js'); s=p.read_text()
+          pattern=re.compile(r"function renderChecks\(\)\{.*?\}\nfunction renderCategories\(\)", re.S)
+          replacement='''function renderChecks(){const el=$('openChecks'),badge=$('activeTicketBadge');if(badge){badge.textContent=String(state.openChecks.length);badge.classList.toggle('hidden',state.openChecks.length===0)}if(!el)return;if(!state.openChecks.length){el.innerHTML='<div class="empty">No active tickets.</div>';return}el.innerHTML=state.openChecks.map(c=>{const active=state.current&&state.current.publicId===c.public_id;const mode=String(c.service_mode||'').replaceAll('_',' ');const tableId=Number(c.table_id||0);const tableName=String(c.table_name||'').trim();let destination=`<span>${esc(mode)}</span>`;if(String(c.service_mode||'')==='dine_in'){const label=tableId>0?`Table ID #${tableId}${tableName?' · '+esc(tableName):''}`:(tableName?`Table · ${esc(tableName)}`:'Table ID #—');destination=`<span class="table-id">${label}</span>`}return `<button class="check-chip ${active?'active':''}" data-check="${esc(c.public_id)}"><strong><span>${esc(c.check_number)}</span><span>${money(c.total_amount)}</span></strong>${destination}<span>${esc(mode)} · ${Number(c.guest_count||1)} guest${Number(c.guest_count||1)===1?'':'s'}</span><span>Opened by ${esc(c.opened_by_name||'Staff')}</span></button>`}).join('')}
+          function renderCategories()'''
+          current=pattern.search(s)
+          if not current: raise SystemExit('renderChecks function not found')
+          if 'Table ID #${tableId}' not in current.group(0):
+              s,n=pattern.subn(replacement,s,count=1)
+              if n!=1: raise SystemExit('renderChecks patch failed')
+              p.write_text(s)
+          PY
+
+          php -l sales-import-center.php
+          php -l public-site-settings.php
+          php -l timeclock.php
+          php -l prep-intelligence.php
+          php -l equipment.php
+          php -l purchasing.php
+          php -l scheduling.php
+          php -l includes/pos-core.php
+          node --check js/pos.js
+          node --check js/universal-admin-page-shell.js
+
+          git config user.name 'gelato-ci-patch'
+          git config user.email 'actions@users.noreply.github.com'
+          git add js/universal-admin-page-shell.js sales-import-center.php public-site-settings.php timeclock.php prep-intelligence.php equipment.php purchasing.php scheduling.php includes/pos-core.php js/pos.js
+          if git diff --cached --quiet; then
+            echo 'No patch changes required.'
+            exit 0
+          fi
+          git commit -m '[tmp-patch] POS table IDs and universal shell coverage'
+          git push origin HEAD:fix/pos-header-table-id-admin-shell
