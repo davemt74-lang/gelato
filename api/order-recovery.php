@@ -4,6 +4,7 @@ declare(strict_types=1);
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/operational-access.php';
 require_once __DIR__.'/../includes/order-recovery-core.php';
+require_once __DIR__.'/../includes/order-recovery-reporting.php';
 
 $user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];$uid=(int)$user['id'];
 if(!order_recovery_can_view($user))app_json_response(['ok'=>false,'message'=>'Order recovery permission required.'],403);
@@ -72,7 +73,11 @@ try{
     if($action==='refund.record'){
         if(!order_recovery_can_refund($user))app_json_response(['ok'=>false,'message'=>'Manager refund permission required.'],403);
         or_api_order_for_action($pdo,$org,$user,$public,'refund');
-        $result=operational_db_wrap($pdo,fn()=>order_recovery_refund($pdo,$org,$public,(float)($input['amount']??0),(string)($input['method']??'manual'),(string)($input['reason']??''),(string)($input['externalReference']??''),$uid));
+        $result=operational_db_wrap($pdo,function()use($pdo,$org,$public,$input,$uid):array{
+            $refund=order_recovery_refund($pdo,$org,$public,(float)($input['amount']??0),(string)($input['method']??'manual'),(string)($input['reason']??''),(string)($input['externalReference']??''),$uid);
+            $checkId=(int)($refund['order']['pos_check_id']??0);if($checkId>0)order_recovery_sync_native_sales_for_check($pdo,$org,$checkId);
+            return $refund;
+        });
         app_json_response(['ok'=>true,'result'=>$result]);
     }
 
