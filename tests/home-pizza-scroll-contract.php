@@ -44,8 +44,9 @@ home_story_assert(str_contains($css, '.pizza-story-stage:before'), 'Pizza story 
 home_story_assert(str_contains($css, '@media(prefers-reduced-motion:reduce)'), 'Pizza story must provide a reduced-motion fallback.');
 
 home_story_assert(str_contains($js, "document.getElementById('pizzaStory')"), 'Pizza runtime must bind the story root.');
-home_story_assert(str_contains($js, 'rotation = (1 - entry) * 320 - exit * 110'), 'Pizza must roll into and out of the stage instead of only fading.');
-home_story_assert(str_contains($js, 'imageTransform(image, -24 * exit, -110 * exit'), 'Previous pizza must continue rolling left while the next pizza enters.');
+home_story_assert(str_contains($js, 'rotation = (1 - entry) * 360 - exit * 115'), 'Pizza must complete a full wheel rotation into the stage and keep rolling on exit.');
+home_story_assert(str_contains($js, 'imageTransform(image, -27 * exit, -115 * exit'), 'Previous pizza must continue rolling left while the next pizza enters.');
+home_story_assert(str_contains($js, 'imageTransform(image, 116, 360, 0.80, 0)'), 'Inactive pizzas must reset beyond the right edge with the full-roll start pose.');
 home_story_assert(str_contains($js, 'translate3d(${x}vw,0,0)'), 'Pizza must travel horizontally while rolling.');
 home_story_assert(str_contains($js, 'outroStart'), 'Pizza runtime must fade out and return to normal page scrolling.');
 home_story_assert(str_contains($js, "prefers-reduced-motion: reduce"), 'Pizza runtime must honor reduced-motion preferences.');
