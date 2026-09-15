@@ -28,9 +28,16 @@ $policy=employee_home_policy_save($pdo,$org,['title'=>'Uniform policy','version'
 $item=employee_home_checklist_save($pdo,$org,['userId'=>$uid,'phase'=>'onboarding','title'=>'Review kitchen map','description'=>'Know exits and hand sinks.','selfCompletable'=>true],$uid);employee_home_checklist_complete($pdo,$org,$uid,(string)$item['public_id'],$uid,false);$rows=employee_home_checklist($pdo,$org,$uid);must(($rows[0]['status']??'')==='completed','Checklist self completion failed.');
 $otherItem=employee_home_checklist_save($pdo,$org,['userId'=>$coworker,'phase'=>'onboarding','title'=>'Meet trainer','selfCompletable'=>true],$uid);$blocked=false;try{employee_home_checklist_complete($pdo,$org,$uid,(string)$otherItem['public_id'],$uid,false);}catch(RuntimeException){$blocked=true;}must($blocked,'Employee could complete another employee checklist item.');
 
-$pdo->prepare("INSERT INTO schedule_weeks (organization_id,week_start,status,published_at,published_by,created_by,updated_by) VALUES (?,'2026-09-14','published',NOW(6),?,?,?)")->execute([$org,$uid,$uid,$uid]);$publishedWeek=(int)$pdo->lastInsertId();
-$pdo->prepare("INSERT INTO schedule_weeks (organization_id,week_start,status,created_by,updated_by) VALUES (?,'2026-09-21','draft',?,?)")->execute([$org,$uid,$uid]);$draftWeek=(int)$pdo->lastInsertId();
-$s=$pdo->prepare("INSERT INTO schedule_shifts (organization_id,public_id,schedule_week_id,user_id,title,starts_at,ends_at,status,created_by,updated_by) VALUES (?,?,?,?,?,?,?,'scheduled',?,?)");$s->execute([$org,'shift-published-ci',$publishedWeek,$uid,'Dinner shift','2026-09-15 16:00:00','2026-09-15 22:00:00',$uid,$uid]);$s->execute([$org,'shift-draft-ci',$draftWeek,$uid,'Hidden draft shift','2026-09-22 16:00:00','2026-09-22 22:00:00',$uid,$uid]);
+// Keep schedule fixtures relative to runtime so this regression remains valid after the original CI date passes.
+$publishedStart=(new DateTimeImmutable('now'))->modify('+1 day')->setTime(16,0,0);
+$publishedEnd=$publishedStart->setTime(22,0,0);
+$draftStart=(new DateTimeImmutable('now'))->modify('+8 days')->setTime(16,0,0);
+$draftEnd=$draftStart->setTime(22,0,0);
+$publishedWeekStart=$publishedStart->modify('monday this week')->format('Y-m-d');
+$draftWeekStart=$draftStart->modify('monday this week')->format('Y-m-d');
+$week=$pdo->prepare("INSERT INTO schedule_weeks (organization_id,week_start,status,published_at,published_by,created_by,updated_by) VALUES (?,?,'published',NOW(6),?,?,?)");$week->execute([$org,$publishedWeekStart,$uid,$uid,$uid]);$publishedWeek=(int)$pdo->lastInsertId();
+$week=$pdo->prepare("INSERT INTO schedule_weeks (organization_id,week_start,status,created_by,updated_by) VALUES (?,?,'draft',?,?)");$week->execute([$org,$draftWeekStart,$uid,$uid]);$draftWeek=(int)$pdo->lastInsertId();
+$s=$pdo->prepare("INSERT INTO schedule_shifts (organization_id,public_id,schedule_week_id,user_id,title,starts_at,ends_at,status,created_by,updated_by) VALUES (?,?,?,?,?,?,?,'scheduled',?,?)");$s->execute([$org,'shift-published-ci',$publishedWeek,$uid,'Dinner shift',$publishedStart->format('Y-m-d H:i:s'),$publishedEnd->format('Y-m-d H:i:s'),$uid,$uid]);$s->execute([$org,'shift-draft-ci',$draftWeek,$uid,'Hidden draft shift',$draftStart->format('Y-m-d H:i:s'),$draftEnd->format('Y-m-d H:i:s'),$uid,$uid]);
 $shifts=employee_home_shifts($pdo,$org,$uid,30);must(count($shifts)===1&&$shifts[0]['public_id']==='shift-published-ci','Draft schedule leaked into Employee Home.');
 
 $pdo->prepare("INSERT INTO certifications (organization_id,user_id,certification_type,status,score,issued_by,issued_at,expires_at) VALUES (?,?,'Food Handler','issued',95,?,NOW(6),DATE_ADD(NOW(6),INTERVAL 20 DAY))")->execute([$org,$uid,$uid]);$training=employee_home_training($pdo,$org,$uid);must(count($training['certifications'])===1,'Certification projection failed.');
