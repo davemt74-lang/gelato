@@ -1,0 +1,75 @@
+name: Homepage Pizza Scroll Story
+
+on:
+  pull_request:
+    paths:
+      - 'index.php'
+      - 'includes/menu-sync.php'
+      - 'assets/css/home-pizza-scroll.css'
+      - 'assets/js/home-pizza-scroll.js'
+      - 'assets/images/pizza-scroll-feature.webp'
+      - 'tests/home-pizza-scroll-contract.php'
+      - '.github/workflows/home-pizza-scroll.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'index.php'
+      - 'includes/menu-sync.php'
+      - 'assets/css/home-pizza-scroll.css'
+      - 'assets/js/home-pizza-scroll.js'
+      - 'assets/images/pizza-scroll-feature.webp'
+      - 'tests/home-pizza-scroll-contract.php'
+      - '.github/workflows/home-pizza-scroll.yml'
+
+jobs:
+  pizza-scroll-story:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+      - name: PHP syntax
+        run: |
+          php -l index.php
+          php -l includes/menu-sync.php
+          php -l tests/home-pizza-scroll-contract.php
+      - name: JavaScript syntax
+        run: node --check assets/js/home-pizza-scroll.js
+      - name: Homepage pizza scroll contract
+        run: php tests/home-pizza-scroll-contract.php
+      - name: Build direct deploy ZIP
+        run: |
+          mkdir -p deploy/assets/css deploy/assets/js deploy/assets/images deploy/includes
+          cp index.php deploy/
+          cp includes/menu-sync.php deploy/includes/
+          cp assets/css/home-pizza-scroll.css deploy/assets/css/
+          cp assets/js/home-pizza-scroll.js deploy/assets/js/
+          cp assets/images/pizza-scroll-feature.webp deploy/assets/images/
+          cat > deploy/README-DEPLOY.txt <<'EOF'
+          Stonefellows Homepage Pizza Scroll Story
+
+          Extract this ZIP directly into the application web root and overwrite the included files.
+
+          Includes:
+          - index.php
+          - includes/menu-sync.php
+          - assets/css/home-pizza-scroll.css
+          - assets/js/home-pizza-scroll.js
+          - assets/images/pizza-scroll-feature.webp
+
+          No database migration or Upgrade run is required.
+
+          The homepage reads up to five pizzas, descriptions, prices, toppings/ingredients,
+          and preparation notes from the existing menu database.
+          EOF
+          cd deploy
+          zip -qr ../stonefellows-home-pizza-scroll-deploy.zip .
+          cd ..
+          unzip -t stonefellows-home-pizza-scroll-deploy.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stonefellows-home-pizza-scroll-deploy
+          path: stonefellows-home-pizza-scroll-deploy.zip
+          if-no-files-found: error
