@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require __DIR__.'/../includes/bootstrap.php';
 require __DIR__.'/../includes/agent-workspace-core.php';
+require_once __DIR__.'/../includes/admin-control-core.php';
 $user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];$uid=(int)$user['id'];
 if(!gaw_ready($pdo))app_json_response(['ok'=>false,'message'=>'Agent Workspace migration is not installed. Run upgrade.php.'],503);
 
@@ -25,7 +26,7 @@ try{
         $message=trim((string)($in['message']??''));if($message==='')throw new InvalidArgumentException('Enter an Agent request.');
         $text=mb_strtolower(preg_replace('/^hey\s+gelato[,\s]*/iu','',$message)??$message,'UTF-8');
         $dashboardIntent=preg_match('/\b(command center|command centre|dashboard|restaurant overview|operating snapshot|operations snapshot|location performance|compare locations?|active tables?|open (?:pos )?(?:tickets?|checks?)|ready tickets?|kds ready|online orders?|what needs attention|what is happening right now|what\x27s happening right now|how is wholesale doing|wholesale (?:status|overview|pipeline|orders?|receivables?|accounts?|sales)|catering (?:status|overview|readiness|events?))\b/u',$text)===1;
-        $dashboardAccess=app_has_permission('sales.view',$user)||app_has_permission('pos.use',$user)||app_has_permission('pos.manage',$user)||app_has_permission('kds.view',$user)||app_has_permission('table_service.view',$user)||app_has_permission('wholesale.view',$user)||app_has_permission('catering.view',$user)||app_has_permission('crm.view',$user)||app_has_permission('customer_promotions.manage',$user);
+        $dashboardAccess=admin_control_allowed($user);
         if($dashboardIntent&&$dashboardAccess)app_json_response(['ok'=>true,'route'=>'api/admin-dashboard-agent.php','domain'=>'admin_dashboard']);
         $managerIntent=preg_match('/\b(gm brief|manager brief|daily brief|opening brief|morning brief|closing brief|manager recap|daily manager|restaurant status|how is (?:the )?restaurant doing|how are we doing today|what needs manager attention)\b/u',$text)===1;
         if($managerIntent&&app_has_permission('manager.brief.view',$user)&&app_has_permission('manager.brief.agent',$user))app_json_response(['ok'=>true,'route'=>'api/daily-manager-agent.php','domain'=>'daily_manager_brief']);
