@@ -23,6 +23,7 @@
     'catering-operations.php': ['Catering Operations', 'Production, fulfillment and event execution'],
     'catering-pipeline.php': ['Catering Pipeline', 'Catering leads, quotes and customer pipeline'],
     'sales-intelligence.php': ['Sales Intelligence', 'Sales performance, demand and source health'],
+    'sales-import-center.php': ['Sales Import Center', 'Import, normalize and monitor external POS sales data'],
     'sales-cost-intelligence.php': ['Cost Intelligence', 'Food cost, margin and sales-cost performance'],
     'customer-promotions.php': ['Customer Promotions', 'Customer campaigns and account Inbox promotions'],
     'customer-crm.php': ['Customer CRM', 'Identity, consent and transaction relationships'],
@@ -69,6 +70,7 @@
     {
       id: 'sales', label: 'Sales & Events', items: [
         ['↗', 'Sales Intelligence', 'sales-intelligence.php'],
+        ['⇩', 'Sales Import Center', 'sales-import-center.php'],
         ['$', 'Cost Intelligence', 'sales-cost-intelligence.php'],
         ['◎', 'Customer CRM', 'customer-crm.php'],
         ['✦', 'Customer Promotions', 'customer-promotions.php'],

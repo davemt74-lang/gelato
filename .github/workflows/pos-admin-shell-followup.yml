@@ -1,0 +1,69 @@
+name: POS + Admin Shell Follow-up
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'pos.php'
+      - 'includes/pos-core.php'
+      - 'js/pos.js'
+      - 'js/universal-admin-page-shell.js'
+      - 'sales-import-center.php'
+      - 'timeclock.php'
+      - 'public-site-settings.php'
+      - 'prep-intelligence.php'
+      - 'equipment.php'
+      - 'purchasing.php'
+      - 'scheduling.php'
+      - 'tests/pos-admin-shell-followup-contract.php'
+      - '.github/workflows/pos-admin-shell-followup.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'pos.php'
+      - 'includes/pos-core.php'
+      - 'js/pos.js'
+      - 'js/universal-admin-page-shell.js'
+      - 'sales-import-center.php'
+      - 'timeclock.php'
+      - 'public-site-settings.php'
+      - 'prep-intelligence.php'
+      - 'equipment.php'
+      - 'purchasing.php'
+      - 'scheduling.php'
+      - 'tests/pos-admin-shell-followup-contract.php'
+      - '.github/workflows/pos-admin-shell-followup.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    strategy:
+      matrix:
+        php: ['8.1','8.3']
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+      - name: PHP syntax
+        run: |
+          php -l pos.php
+          php -l includes/pos-core.php
+          php -l sales-import-center.php
+          php -l timeclock.php
+          php -l public-site-settings.php
+          php -l prep-intelligence.php
+          php -l equipment.php
+          php -l purchasing.php
+          php -l scheduling.php
+          php -l tests/pos-admin-shell-followup-contract.php
+      - name: JavaScript syntax
+        run: |
+          node --check js/pos.js
+          node --check js/universal-admin-page-shell.js
+      - name: POS and shell contract
+        run: php tests/pos-admin-shell-followup-contract.php
