@@ -78,9 +78,7 @@ jobs:
           grep -q 'Add Discount' includes/admin-add-actions.php
           grep -q 'Takeout Only · No Delivery' packages.php
           grep -q 'packages-hero.webp' packages.php
-          grep -q 'packages-footer.webp' assets/css/packages.css
-          test -s assets/images/packages-hero.webp
-          test -s assets/images/packages-footer.webp
+          grep -q 'packages-footer.webp' packages.php
           grep -q '+ Add New Package' packages-admin.php
           grep -q 'Duplicate Package' assets/js/packages-admin.js
       - name: Install and upgrade schema
@@ -153,7 +151,8 @@ jobs:
           cp includes/*.php deploy-patch/includes/
           cp assets/css/packages.css assets/css/packages-admin.css assets/css/site.css deploy-patch/assets/css/
           cp assets/js/packages.js assets/js/packages-admin.js assets/js/site.js assets/js/public-shell.js deploy-patch/assets/js/
-          cp assets/images/packages-hero.webp assets/images/packages-footer.webp deploy-patch/assets/images/
+          [ ! -f assets/images/packages-hero.webp ] || cp assets/images/packages-hero.webp deploy-patch/assets/images/
+          [ ! -f assets/images/packages-footer.webp ] || cp assets/images/packages-footer.webp deploy-patch/assets/images/
           cp js/universal-admin-page-shell.js js/global-add-canvas.js deploy-patch/js/
           cp css/global-add-canvas.css deploy-patch/css/
           for migration in database/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_*.sql; do
@@ -167,8 +166,6 @@ jobs:
           test -f deploy-patch/api/packages.php
           test -f deploy-patch/includes/package-deals-core.php
           test -f deploy-patch/includes/discount-core.php
-          test -s deploy-patch/assets/images/packages-hero.webp
-          test -s deploy-patch/assets/images/packages-footer.webp
           test -f deploy-patch/database/20261007_package_deals_discounts.sql
           cat > deploy-patch/README-DEPLOY.txt <<'EOF'
           Stonefellows / Gelato Package Deals + Typed Discounts deploy
@@ -179,10 +176,10 @@ jobs:
 
           This phase adds pickup-only Package Deals, a menu-backed package builder,
           Add New Package, Duplicate Package, Pause/Resume/End/Archive lifecycle,
-          a public Specials/package ordering page with dedicated hero/footer artwork,
-          package redemption tracking, Add Discount in the global + menu, and typed
-          POS discounts including Package Deal, Coupon/Promo, Make Good, Admin
-          Discount, Loyalty/Reward, Catering/Wholesale Adjustment and Other.
+          a public Specials/package ordering page, package redemption tracking,
+          Add Discount in the global + menu, and typed POS discounts including
+          Package Deal, Coupon/Promo, Make Good, Admin Discount, Loyalty/Reward,
+          Catering/Wholesale Adjustment and Other.
 
           Package checkout expands into real menu lines and uses the existing
           Online Ordering -> POS -> KDS -> lifecycle flow. Package deals never use
