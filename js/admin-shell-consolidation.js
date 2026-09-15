@@ -39,10 +39,10 @@
       body.gelato-global-agent-ready #page-workspace>.workspace>.composer{display:none!important}
       #page-workspace .chat-canvas{padding-bottom:105px}
       .standard-page.admin-page{padding-bottom:105px}
-      [data-nav-group="admin"].admin-nav-accordion-ready{display:block!important;padding-bottom:10px}
+      [data-nav-group="admin"].admin-nav-accordion-ready{padding-bottom:10px}
       .admin-nav-accordion{display:block;border-top:1px solid rgba(255,255,255,.055)}
       .admin-nav-accordion:first-child{border-top:0}
-      .admin-nav-section-toggle{appearance:none;width:100%;border:0;background:transparent;color:rgba(230,235,232,.62);display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 10px 7px;font:800 .58rem/1.2 inherit;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;text-align:left}
+      .admin-nav-section-toggle{appearance:none;width:100%;border:0;background:transparent;color:rgba(230,235,232,.62);display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 10px 7px;font-family:inherit;font-size:.58rem;font-weight:800;line-height:1.2;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;text-align:left}
       .admin-nav-section-toggle:hover{color:#fff}
       .admin-nav-section-toggle:focus-visible{outline:2px solid rgba(255,255,255,.34);outline-offset:-2px;border-radius:7px}
       .admin-nav-chevron{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;font-size:.78rem;transition:transform .18s ease;color:rgba(230,235,232,.48)}
