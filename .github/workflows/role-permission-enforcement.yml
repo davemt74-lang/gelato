@@ -1,0 +1,93 @@
+name: Role + Permission Enforcement
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'includes/admin-route-access.php'
+      - 'includes/admin-shell-core.php'
+      - 'includes/admin-control-core.php'
+      - 'api/admin-shell.php'
+      - 'api/pos.php'
+      - 'api/kds.php'
+      - 'admin.php'
+      - 'admin-menu-import.php'
+      - 'locations-admin.php'
+      - 'operations.php'
+      - 'timeclock.php'
+      - 'scheduling.php'
+      - 'purchasing.php'
+      - 'equipment.php'
+      - 'equipment-detail.php'
+      - 'recipes.php'
+      - 'prep-intelligence.php'
+      - 'catering-operations.php'
+      - 'catering-pipeline.php'
+      - 'sales-intelligence.php'
+      - 'sales-import-center.php'
+      - 'sales-cost-intelligence.php'
+      - 'customer-promotions.php'
+      - 'customer-crm.php'
+      - 'online-orders-admin.php'
+      - 'public-site-settings.php'
+      - 'wholesale-*.php'
+      - 'tests/role-permission-enforcement-contract.php'
+      - '.github/workflows/role-permission-enforcement.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'includes/admin-route-access.php'
+      - 'includes/admin-shell-core.php'
+      - 'includes/admin-control-core.php'
+      - 'api/admin-shell.php'
+      - 'api/pos.php'
+      - 'api/kds.php'
+      - 'admin.php'
+      - 'admin-menu-import.php'
+      - 'locations-admin.php'
+      - 'operations.php'
+      - 'timeclock.php'
+      - 'scheduling.php'
+      - 'purchasing.php'
+      - 'equipment.php'
+      - 'equipment-detail.php'
+      - 'recipes.php'
+      - 'prep-intelligence.php'
+      - 'catering-operations.php'
+      - 'catering-pipeline.php'
+      - 'sales-intelligence.php'
+      - 'sales-import-center.php'
+      - 'sales-cost-intelligence.php'
+      - 'customer-promotions.php'
+      - 'customer-crm.php'
+      - 'online-orders-admin.php'
+      - 'public-site-settings.php'
+      - 'wholesale-*.php'
+      - 'tests/role-permission-enforcement-contract.php'
+      - '.github/workflows/role-permission-enforcement.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    strategy:
+      fail-fast: true
+      matrix:
+        php: ['8.1','8.3']
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+      - name: PHP syntax
+        run: |
+          php -l includes/admin-route-access.php
+          php -l includes/admin-shell-core.php
+          php -l api/admin-shell.php
+          php -l tests/role-permission-enforcement-contract.php
+          for file in admin.php admin-menu-import.php locations-admin.php operations.php timeclock.php scheduling.php purchasing.php equipment.php equipment-detail.php recipes.php prep-intelligence.php catering-operations.php catering-pipeline.php sales-intelligence.php sales-import-center.php sales-cost-intelligence.php customer-promotions.php customer-crm.php online-orders-admin.php public-site-settings.php wholesale-pipeline.php wholesale-accounts.php wholesale-acquisition.php wholesale-commerce.php wholesale-customer-360.php wholesale-demand.php wholesale-fulfillment.php wholesale-order-entry.php wholesale-purchasing.php wholesale-receivables.php api/pos.php api/kds.php; do php -l "$file"; done
+      - name: Role and route permission contract
+        run: php tests/role-permission-enforcement-contract.php
