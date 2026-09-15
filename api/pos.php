@@ -6,6 +6,7 @@ require_once __DIR__.'/../includes/pos-core.php';
 require_once __DIR__.'/../includes/customer-crm-core.php';
 require_once __DIR__.'/../includes/kds-core.php';
 require_once __DIR__.'/../includes/pos-floor-plan.php';
+require_once __DIR__.'/../includes/online-order-lifecycle.php';
 
 $user=app_require_auth();
 $pdo=app_pdo();
@@ -216,6 +217,7 @@ try{
             pos_api_assert_ticket_mutable($pdo,$org,$public);
             $check=pos_void_item($pdo,$org,$public,$itemId,$reason,$uid);
             if($kdsAvailable)kds_cancel_pos_line($pdo,$org,$itemId,$reason,$uid);
+            online_order_lifecycle_sync_safe($pdo,$org,$public,$uid);
             $check=pos_api_enrich_check($pdo,$org,$check,$crmAvailable,$kdsAvailable);
             app_audit($pdo,$org,$uid,'pos.item_voided','pos_check',$public,null,['itemId'=>$itemId,'reason'=>mb_substr(trim($reason),0,500,'UTF-8')]);
             return $check;
@@ -241,6 +243,7 @@ try{
         $result=operational_db_wrap($pdo,function()use($pdo,$org,$public,$input,$uid,$crmAvailable,$kdsAvailable):array{
             pos_api_assert_ticket_mutable($pdo,$org,$public);
             $summary=kds_send_check($pdo,$org,$public,$uid,!empty($input['hold']));
+            online_order_lifecycle_sync_safe($pdo,$org,$public,$uid);
             $check=pos_api_enrich_check($pdo,$org,pos_check_details($pdo,$org,$public),$crmAvailable,$kdsAvailable);
             app_audit($pdo,$org,$uid,'pos.kitchen_sent','pos_check',$public,null,['sent'=>$summary['sent'],'unsent'=>$summary['unsent'],'unrouted'=>$summary['unrouted'],'held'=>!empty($input['hold'])]);
             return ['check'=>$check,'kitchen'=>$summary];
@@ -252,6 +255,7 @@ try{
         $check=operational_db_wrap($pdo,function()use($pdo,$org,$public,$input,$uid,$crmAvailable,$kdsAvailable):array{
             $check=pos_api_enrich_check($pdo,$org,pos_record_tender($pdo,$org,$public,$input,$uid),$crmAvailable,$kdsAvailable);
             if($check['status']!=='open'&&table_service_ready($pdo))table_service_release_closed_check($pdo,$org,$public,$uid);
+            online_order_lifecycle_sync_safe($pdo,$org,$public,$uid);
             app_audit($pdo,$org,$uid,'pos.tender_recorded','pos_check',$public,null,['tenderType'=>(string)($input['tenderType']??''),'amount'=>pos_money((float)($input['amount']??0)),'tipAmount'=>pos_money((float)($input['tipAmount']??0)),'checkStatus'=>$check['status']]);
             return $check;
         });
@@ -267,6 +271,7 @@ try{
             $check=pos_cancel_check($pdo,$org,$public,$reason,$uid);
             if($kdsAvailable)kds_cancel_check($pdo,$org,(int)$base['id'],$reason,$uid);
             if(table_service_ready($pdo))table_service_release_closed_check($pdo,$org,$public,$uid);
+            online_order_lifecycle_sync_safe($pdo,$org,$public,$uid);
             $check=pos_api_enrich_check($pdo,$org,$check,$crmAvailable,$kdsAvailable);
             app_audit($pdo,$org,$uid,'pos.check_cancelled','pos_check',$public,null,['reason'=>mb_substr(trim($reason),0,500,'UTF-8')]);
             return $check;
