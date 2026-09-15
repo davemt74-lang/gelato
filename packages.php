@@ -36,30 +36,39 @@ if($_SERVER['REQUEST_METHOD']==='POST'&&$pdo instanceof PDO&&$organizationId>0){
 function package_page_price_range(array $package): array
 {
     $min=0.0;$max=0.0;
-    foreach($package['groups'] as $group){$prices=array_map(static fn(array $i):float=>(float)$i['amount'],array_filter($group['items'],static fn(array $i):bool=>!empty($i['available'])));if(!$prices)continue;$min+=min($prices)*(int)$group['requiredQuantity'];$max+=max($prices)*(int)$group['requiredQuantity'];}
+    foreach($package['groups'] as $group){
+        $prices=array_map(static fn(array $i):float=>(float)$i['amount'],array_filter($group['items'],static fn(array $i):bool=>!empty($i['available'])));
+        if(!$prices)continue;
+        $min+=min($prices)*(int)$group['requiredQuantity'];$max+=max($prices)*(int)$group['requiredQuantity'];
+    }
     $discountMin=discount_calculate($min,(string)$package['discountMethod'],(float)$package['discountValue']);$discountMax=discount_calculate($max,(string)$package['discountMethod'],(float)$package['discountValue']);
     return ['minRetail'=>pos_money($min),'maxRetail'=>pos_money($max),'minDiscount'=>$discountMin,'maxDiscount'=>$discountMax,'minPrice'=>pos_money($min-$discountMin),'maxPrice'=>pos_money($max-$discountMax)];
 }
 $packagesForJs=[];foreach($packages as $package){$package['pricing']=package_page_price_range($package);$packagesForJs[]=$package;}
 $packages=$packagesForJs;$address=public_site_format_address($settings);$openPackage=trim((string)($_GET['package']??''));
+ob_start();public_site_render_header($settings,'');$packageHeader=(string)ob_get_clean();
+$aboutLink='<a href="about.php">About</a>';$specialLink='<a class="active" href="packages.php">Specials</a>';
+if(str_contains($packageHeader,$aboutLink))$packageHeader=str_replace($aboutLink,$specialLink.$aboutLink,$packageHeader);
 ?>
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#080907"><meta name="description" content="Stonefellows pickup-only family dinner package deals."><title>Family Dinner Specials | <?=app_escape((string)$settings['restaurant_name'])?></title><link rel="stylesheet" href="assets/css/site.css?v=20260914-2"><link rel="stylesheet" href="assets/css/packages.css?v=20260915-1"></head>
 <body class="packages-page">
-<?php public_site_render_header($settings,'specials'); ?>
+<?=$packageHeader?>
 <main>
 <section class="packages-hero"><img src="<?=app_escape(public_site_asset('hero.jpg'))?>" alt="Stonefellows wood-fired pizza"><div class="packages-hero-shade"></div><div class="shell packages-hero-inner"><div class="packages-hero-copy"><span class="packages-kicker">Good pizza brings people together</span><h1>Family Dinner<br>Specials</h1><p>Bundle your favorites and save on family-style takeout meals.</p><div class="pickup-note"><i></i><strong>Takeout Only · No Delivery</strong></div><div class="packages-hero-actions"><a class="package-btn gold" href="#packages">View Packages</a><a class="package-btn outline" href="online-order.php">Order From Menu</a></div></div></div></section>
 <section class="packages-grid-section" id="packages"><div class="shell">
   <div class="packages-section-head"><span>Pickup packages</span><h2>Choose Your Family Meal</h2><p>Every package is built from the current Stonefellows menu and prepared through the same kitchen system as a regular pickup order.</p></div>
+  <?php if(count($locations)>1):?><form class="package-location-select" method="get"><label><span>Pickup location</span><select name="location" onchange="this.form.submit()"><?php foreach($locations as $location):?><option value="<?=app_escape((string)$location['public_slug'])?>" <?=((int)$location['id']===(int)($selected['id']??0))?'selected':''?>><?=app_escape((string)$location['name'])?></option><?php endforeach;?></select></label></form><?php endif;?>
+  <?php if(!$selected&&$packages):?><div class="packages-message bad">No Stonefellows location currently has online pickup enabled for package ordering.</div><?php endif;?>
   <?php if($error):?><div class="packages-message bad"><?=app_escape($error)?></div><?php endif;?>
   <?php if(!$packages):?><div class="packages-empty"><strong>New package deals are coming soon.</strong><span>Check the regular menu for current pickup ordering.</span><a class="package-btn gold" href="online-order.php">Order Pickup</a></div><?php else:?><div class="deal-grid">
-  <?php foreach($packages as $package):$pricing=$package['pricing'];$exact=abs($pricing['minPrice']-$pricing['maxPrice'])<0.01; ?>
+  <?php foreach($packages as $package):$pricing=$package['pricing'];$exact=abs($pricing['minPrice']-$pricing['maxPrice'])<0.01;$retailExact=abs($pricing['minRetail']-$pricing['maxRetail'])<0.01; ?>
   <article class="deal-card <?=!empty($package['featured'])?'featured':''?>">
     <?php if(!empty($package['featured'])):?><span class="featured-flag">Featured</span><?php endif;?>
     <span class="deal-eyebrow"><?=app_escape($package['eyebrow']?:'Family takeout')?></span><h3><?=app_escape((string)$package['name'])?></h3>
     <?php if($package['description']!==''):?><p class="deal-description"><?=app_escape((string)$package['description'])?></p><?php endif;?>
     <div class="deal-rule"><i></i></div><ul class="deal-includes"><?php foreach($package['groups'] as $group):?><li><strong><?=number_format((int)$group['requiredQuantity'])?></strong> <?=app_escape((string)$group['label'])?></li><?php endforeach;?></ul>
-    <div class="deal-pricing"><div><span>Retail</span><strong><?=$exact?money_format_unused:''?><?=app_escape($pricing['minRetail']===$pricing['maxRetail']?'$'.number_format($pricing['minRetail'],2):'$'.number_format($pricing['minRetail'],2).'+')?></strong></div><div><span>Save</span><strong><?=$package['discountMethod']==='percent'?app_escape(number_format((float)$package['discountValue'],0).'%'):app_escape('$'.number_format((float)$package['discountValue'],2))?></strong></div><div class="special"><span>Special Price</span><strong><?=app_escape(($exact?'$':'From $').number_format($pricing['minPrice'],2))?></strong></div></div>
-    <button class="deal-order" type="button" data-order-package="<?=app_escape((string)$package['slug'])?>">Order This Package</button>
+    <div class="deal-pricing"><div><span>Retail</span><strong><?=app_escape(($retailExact?'$':'From $').number_format($pricing['minRetail'],2))?></strong></div><div><span>Save</span><strong><?=$package['discountMethod']==='percent'?app_escape(number_format((float)$package['discountValue'],0).'%'):app_escape('$'.number_format((float)$package['discountValue'],2))?></strong></div><div class="special"><span>Special Price</span><strong><?=app_escape(($exact?'$':'From $').number_format($pricing['minPrice'],2))?></strong></div></div>
+    <button class="deal-order" type="button" data-order-package="<?=app_escape((string)$package['slug'])?>" <?=!$selected?'disabled':''?>>Order This Package</button>
   </article>
   <?php endforeach;?></div><?php endif;?>
 </div></section>
