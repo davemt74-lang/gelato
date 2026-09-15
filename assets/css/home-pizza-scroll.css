@@ -47,6 +47,19 @@
   pointer-events:none;
   will-change:opacity;
 }
+.pizza-story-stage:before{
+  content:"";
+  position:absolute;
+  left:-7vw;
+  top:50%;
+  width:min(68vw,900px);
+  aspect-ratio:1/1;
+  transform:translateY(-50%);
+  border-radius:50%;
+  background:radial-gradient(circle,rgba(205,151,63,.13),rgba(205,151,63,.035) 43%,transparent 70%);
+  filter:blur(10px);
+  pointer-events:none;
+}
 .pizza-story-slide{
   position:absolute;
   inset:0;
@@ -61,26 +74,30 @@
   position:absolute;
   left:max(-2vw,-24px);
   top:50%;
-  width:min(55vw,760px);
+  width:min(58vw,800px);
   transform:translateY(-50%);
   display:flex;
   align-items:center;
   justify-content:flex-start;
   perspective:1100px;
+  pointer-events:none;
 }
 .pizza-story-image{
-  width:min(52vw,720px);
+  width:min(56vw,770px);
   max-width:none;
   aspect-ratio:1/1;
   object-fit:contain;
   transform-origin:50% 50%;
-  filter:drop-shadow(0 30px 44px rgba(0,0,0,.54));
+  filter:drop-shadow(0 34px 48px rgba(0,0,0,.62));
   will-change:transform,opacity;
   backface-visibility:hidden;
+  transform-style:preserve-3d;
+  user-select:none;
 }
+.pizza-story-image.image-missing{visibility:hidden}
 .pizza-story-copy{
   position:absolute;
-  left:56%;
+  left:57%;
   right:max(5vw,42px);
   top:50%;
   max-width:540px;
@@ -194,16 +211,17 @@
 .pizza-scroll-story.is-ending .pizza-story-progress{opacity:0!important}
 
 @media(max-width:900px){
+  .pizza-story-stage:before{left:-18vw;width:88vw}
   .pizza-story-visual{
-    left:-8vw;
-    top:38%;
-    width:72vw;
+    left:-10vw;
+    top:39%;
+    width:78vw;
   }
-  .pizza-story-image{width:72vw}
+  .pizza-story-image{width:76vw}
   .pizza-story-copy{
-    left:48%;
+    left:49%;
     right:24px;
-    top:52%;
+    top:53%;
     max-width:46vw;
   }
   .pizza-story-copy h2{font-size:clamp(2.15rem,7vw,4rem)}
@@ -211,14 +229,20 @@
 @media(max-width:700px){
   .pizza-scroll-story,
   .pizza-story-sticky{min-height:620px}
+  .pizza-story-stage:before{
+    left:50%;
+    top:31%;
+    width:118vw;
+    transform:translate(-50%,-50%);
+  }
   .pizza-story-visual{
     left:50%;
-    top:32%;
-    width:min(94vw,560px);
+    top:31%;
+    width:min(98vw,580px);
     transform:translate(-50%,-50%);
     justify-content:center;
   }
-  .pizza-story-image{width:min(91vw,540px)}
+  .pizza-story-image{width:min(94vw,560px)}
   .pizza-story-copy{
     left:22px;
     right:22px;
@@ -240,7 +264,7 @@
   .pizza-story-progress{bottom:18px}
 }
 
-/* A motion-safe fallback is a normal document flow instead of a 700vh animation. */
+/* Motion-safe fallback: normal document flow instead of a multi-screen animation. */
 @media(prefers-reduced-motion:reduce){
   .pizza-scroll-story,
   .pizza-scroll-story.is-scroll-ready{
@@ -265,6 +289,7 @@
     opacity:1!important;
     padding:48px 0;
   }
+  .pizza-story-stage:before{display:none}
   .pizza-story-slide{
     position:relative;
     inset:auto;
