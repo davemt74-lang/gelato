@@ -126,7 +126,16 @@ function pos_normalize_check_rows(array $rows): array
 
 function pos_open_checks(PDO $pdo,int $org,?int $locationId=null): array
 {
-    $sql="SELECT c.public_id,c.check_number,c.location_id,l.name location_name,c.service_mode,c.table_name,c.guest_count,c.subtotal,c.discount_amount,c.tax_amount,c.service_charge_amount,c.tip_amount,c.total_amount,c.amount_paid,c.opened_at,u.display_name opened_by_name FROM pos_checks c JOIN locations l ON l.id=c.location_id JOIN users u ON u.id=c.opened_by WHERE c.organization_id=? AND c.status='open'";$args=[$org];if($locationId){$sql.=' AND c.location_id=?';$args[]=$locationId;}$sql.=' ORDER BY c.opened_at DESC,c.id DESC LIMIT 100';$q=$pdo->prepare($sql);$q->execute($args);return pos_normalize_check_rows($q->fetchAll());
+    $hasServiceTables=false;
+    try{
+        $q=$pdo->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='service_tables'");
+        $q->execute();
+        $hasServiceTables=(int)$q->fetchColumn()===1;
+    }catch(Throwable){}
+    $tableSelect=$hasServiceTables?',t.id table_id':',NULL table_id';
+    $tableJoin=$hasServiceTables?' LEFT JOIN service_tables t ON t.organization_id=c.organization_id AND t.location_id=c.location_id AND t.active_check_id=c.id':'';
+    $sql="SELECT c.public_id,c.check_number,c.location_id,l.name location_name,c.service_mode,c.table_name,c.guest_count,c.subtotal,c.discount_amount,c.tax_amount,c.service_charge_amount,c.tip_amount,c.total_amount,c.amount_paid,c.opened_at,u.display_name opened_by_name".$tableSelect." FROM pos_checks c JOIN locations l ON l.id=c.location_id JOIN users u ON u.id=c.opened_by".$tableJoin." WHERE c.organization_id=? AND c.status='open'";
+    $args=[$org];if($locationId){$sql.=' AND c.location_id=?';$args[]=$locationId;}$sql.=' ORDER BY c.opened_at DESC,c.id DESC LIMIT 100';$q=$pdo->prepare($sql);$q->execute($args);return pos_normalize_check_rows($q->fetchAll());
 }
 
 function pos_recent_checks(PDO $pdo,int $org,?int $locationId=null,int $limit=30): array
