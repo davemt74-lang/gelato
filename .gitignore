@@ -2,6 +2,7 @@
 /storage/private/*
 !/storage/private/.gitkeep
 /storage/keys/*
+/uploads/*
 *.key
 *.log
 error_log
