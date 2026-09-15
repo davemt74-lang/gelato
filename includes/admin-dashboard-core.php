@@ -231,13 +231,14 @@ function admin_dashboard_snapshot(PDO $pdo,array $user,?int $locationId=null): a
     $canWholesale=admin_dashboard_can($user,'wholesale.view');
     $canCatering=admin_dashboard_can($user,'catering.view');
     $canCrm=admin_dashboard_can($user,'crm.view','customer_promotions.manage');
-    $pos=$canSales?admin_dashboard_pos_rollup($pdo,$org,$periods,$locationId):['salesToday'=>0.0,'salesWeek'=>0.0,'salesMonth'=>0.0,'ticketsToday'=>0,'coversToday'=>0,'avgCheckToday'=>0.0,'activeTickets'=>0,'openValue'=>0.0];
+    $emptyPos=['salesToday'=>0.0,'salesWeek'=>0.0,'salesMonth'=>0.0,'ticketsToday'=>0,'coversToday'=>0,'avgCheckToday'=>0.0,'activeTickets'=>0,'openValue'=>0.0];
+    $pos=$canSales?admin_dashboard_pos_rollup($pdo,$org,$periods,$locationId):$emptyPos;
     $pos['activeTables']=$canTables?admin_dashboard_active_tables($pdo,$org,$locationId):0;
     $pos['readyTickets']=$canKds?admin_dashboard_ready_tickets($pdo,$org,$locations,$locationId):0;
     $online=$canSales?admin_dashboard_online_orders($pdo,$org,$periods,$locationId):['open'=>0,'today'=>0];
     $locationRows=[];
     foreach($locations as $location){
-        $id=(int)$location['id'];$row=admin_dashboard_pos_rollup($pdo,$org,$periods,$id);
+        $id=(int)$location['id'];$row=$canSales?admin_dashboard_pos_rollup($pdo,$org,$periods,$id):$emptyPos;
         $row['id']=$id;$row['name']=(string)$location['name'];$row['city']=$location['city']??null;$row['state']=$location['state']??null;
         $row['activeTables']=$canTables?admin_dashboard_active_tables($pdo,$org,$id):0;
         $row['readyTickets']=$canKds?admin_dashboard_ready_tickets($pdo,$org,[$location],$id):0;
