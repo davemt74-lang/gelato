@@ -1,0 +1,182 @@
+name: Package Deals + Typed Discounts
+
+on:
+  pull_request:
+    paths:
+      - 'packages.php'
+      - 'packages-admin.php'
+      - 'api/packages.php'
+      - 'includes/package-deals-core.php'
+      - 'includes/discount-core.php'
+      - 'includes/admin-add-actions.php'
+      - 'database/20261007_package_deals_discounts.sql'
+      - 'assets/css/packages.css'
+      - 'assets/css/packages-admin.css'
+      - 'assets/js/packages.js'
+      - 'assets/js/packages-admin.js'
+      - 'tests/package-deals-contract.php'
+      - 'tests/global-add-action-canvas-contract.php'
+      - '.github/workflows/package-deals.yml'
+  push:
+    branches: [main]
+
+jobs:
+  package-deals:
+    name: Package Deals PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.1','8.3']
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - name: Syntax checks
+        run: |
+          php -l packages.php
+          php -l packages-admin.php
+          php -l api/packages.php
+          php -l includes/package-deals-core.php
+          php -l includes/discount-core.php
+          php -l tests/package-deals-contract.php
+          php -l tests/global-add-action-canvas-contract.php
+          node --check assets/js/packages.js
+          node --check assets/js/packages-admin.js
+      - name: Architecture contract
+        run: |
+          grep -q 'CREATE TABLE package_deals' database/20261007_package_deals_discounts.sql
+          grep -q 'CREATE TABLE package_deal_groups' database/20261007_package_deals_discounts.sql
+          grep -q 'CREATE TABLE package_redemptions' database/20261007_package_deals_discounts.sql
+          grep -q 'CREATE TABLE pos_discounts' database/20261007_package_deals_discounts.sql
+          grep -q "'package_deal'=>'Package Deal'" includes/discount-core.php
+          grep -q "'make_good'=>'Make Good'" includes/discount-core.php
+          grep -q "'admin_discount'=>'Admin Discount'" includes/discount-core.php
+          grep -q 'function package_deal_duplicate' includes/package-deals-core.php
+          grep -q 'function package_deal_set_status' includes/package-deals-core.php
+          grep -q "'pause'=>'paused'" includes/package-deals-core.php
+          grep -q "'end'=>'ended'" includes/package-deals-core.php
+          grep -q "'archive'=>'archived'" includes/package-deals-core.php
+          grep -q "packages-admin.php?action=add" includes/admin-add-actions.php
+          grep -q 'Takeout Only · No Delivery' packages.php
+          grep -q '+ Add New Package' packages-admin.php
+          grep -q 'Duplicate Package' assets/js/packages-admin.js
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Package CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_package_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->ensureTrackingTables();
+          $s->bootstrapLegacyHistory(null);
+          $s->applyPending(null);
+          if($s->pendingMigrations()) exit(1);
+          PHP
+      - name: Verify package schema
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('pos_discounts','package_deals','package_deal_groups','package_deal_group_items','package_redemptions');")" = "5"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('packages.view','packages.manage','discounts.view','discounts.manage');")" = "4"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20261007_package_deals_discounts';")" = "1"
+      - name: Package deals behavioral contract
+        run: php tests/package-deals-contract.php
+      - name: Global Add Canvas regression
+        run: php tests/global-add-action-canvas-contract.php
+      - name: Restaurant lifecycle regression
+        run: php tests/restaurant-order-lifecycle-contract.php
+      - name: Online ordering regression
+        run: php tests/online-ordering-inbox-contract.php
+      - name: KDS regression
+        run: php tests/kds-contract.php
+      - name: Native POS regression
+        run: php tests/native-pos-contract.php
+      - name: Verify upgrader idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->assertAppliedChecksumsUnchanged();
+          if($s->pendingMigrations()) exit(2);
+          if($s->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP
+
+  deploy-package:
+    name: Package Deals Deploy Package
+    needs: package-deals
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build direct deploy ZIP
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq zip unzip
+          rm -rf deploy-patch stonefellows-package-deals-deploy.zip
+          mkdir -p deploy-patch/includes deploy-patch/api deploy-patch/assets/css deploy-patch/assets/js deploy-patch/js deploy-patch/database
+          cp packages.php packages-admin.php online-order.php customer-account.php upgrade.php deploy-patch/
+          cp api/packages.php api/admin-shell.php deploy-patch/api/
+          cp includes/*.php deploy-patch/includes/
+          cp assets/css/packages.css assets/css/packages-admin.css assets/css/site.css deploy-patch/assets/css/
+          cp assets/js/packages.js assets/js/packages-admin.js assets/js/site.js assets/js/public-shell.js deploy-patch/assets/js/
+          cp js/universal-admin-page-shell.js js/global-add-canvas.js deploy-patch/js/
+          cp css/global-add-canvas.css deploy-patch/ 2>/dev/null || true
+          for migration in database/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_*.sql; do
+            name="$(basename "$migration")"
+            case "$name" in *_demo_*|*_sample_*|*_seed_*) continue ;; esac
+            cp "$migration" deploy-patch/database/
+          done
+          test -f deploy-patch/packages.php
+          test -f deploy-patch/packages-admin.php
+          test -f deploy-patch/api/packages.php
+          test -f deploy-patch/includes/package-deals-core.php
+          test -f deploy-patch/includes/discount-core.php
+          test -f deploy-patch/database/20261007_package_deals_discounts.sql
+          cat > deploy-patch/README-DEPLOY.txt <<'EOF'
+          Stonefellows / Gelato Package Deals deploy
+
+          Extract directly into the application web root, preserving folders and
+          overwriting the included files. Then sign in as owner/admin and run
+          upgrade.php -> Upgrade once.
+
+          This phase adds pickup-only Package Deals, a menu-backed package builder,
+          Add New Package, Duplicate Package, Pause/Resume/End/Archive lifecycle,
+          a public Specials/package ordering page, package redemption tracking, and
+          typed POS discounts including Package Deal, Coupon/Promo, Make Good,
+          Admin Discount, Loyalty/Reward, Catering/Wholesale Adjustment and Other.
+          Package checkout expands into real menu lines and uses the existing
+          Online Ordering -> POS -> KDS -> lifecycle flow. Package deals never use
+          dine-in or delivery fulfillment.
+          EOF
+          (cd deploy-patch && zip -qr ../stonefellows-package-deals-deploy.zip .)
+          unzip -t stonefellows-package-deals-deploy.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stonefellows-package-deals-deploy
+          path: stonefellows-package-deals-deploy.zip
+          if-no-files-found: error
+          retention-days: 30
