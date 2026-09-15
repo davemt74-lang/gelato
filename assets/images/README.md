@@ -3,6 +3,7 @@
 Production presentation assets belong at the root public path `/assets/images/`:
 
 - `hero.jpg`
+- `pizza-scroll-feature.webp`
 - `card-pizza.jpg`
 - `card-drinks.jpg`
 - `card-music.jpg`
