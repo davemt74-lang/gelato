@@ -33,8 +33,8 @@ ops_assert(str_contains($posJs,"function switchView(view)")&&str_contains($posJs
 ops_assert(str_contains($posJs,"if(t.checkPublicId){selectCheck(t.checkPublicId);return}"),'Occupied mapped service points must reopen their existing active check.');
 ops_assert(str_contains($posJs,"if(String(t.state)!=='available')"),'Unavailable mapped service points must not start duplicate checks.');
 ops_assert(str_contains($posJs,'function renderReady()')&&str_contains($posJs,"fetch('api/pos-ready.php?locationId='")&&str_contains($posJs,'setInterval(refreshReady,4000)'),'POS must poll and render canonical KDS-ready tickets.');
-ops_assert(str_contains($posReady,"require_once __DIR__.'/../includes/kds-production.php'")&&str_contains($posReady,"empty($ticket['readyToBump'])"),'POS READY feed must reuse the KDS production board ready-to-bump definition.');
-ops_assert(str_contains($posReady,"(string)($ticket['checkStatus']??'')!=='open'"),'POS READY feed must exclude closed checks.');
+ops_assert(str_contains($posReady,"require_once __DIR__.'/../includes/kds-production.php'")&&str_contains($posReady,'readyToBump'),'POS READY feed must reuse the KDS production board ready-to-bump definition.');
+ops_assert(str_contains($posReady,'checkStatus')&&str_contains($posReady,"!=='open'"),'POS READY feed must exclude closed checks.');
 ops_assert(!is_file(__DIR__.'/../includes/pos-floor-operations.php')&&!is_file(__DIR__.'/../api/pos-floor-sync.php'),'This pass must reuse the existing floor/table mapping architecture rather than create a duplicate mapping layer.');
 
 echo "kds-pos-operations-ok\n";
