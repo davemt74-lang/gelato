@@ -35,12 +35,15 @@ gac_assert(count($discount)===1,'Discount must exist as one live Add action.');
 gac_assert(($discount[0]['href']??'')==='discounts-admin.php?action=add','Add Discount must open the typed discount manager.');
 gac_assert(($discount[0]['status']??'')!=='planned','Add Discount must be a live action.');
 
-$planned=array_values(array_filter($ownerActions,static fn(array $action): bool=>in_array((string)$action['id'],['food','drink'],true)));
-gac_assert(count($planned)===2,'Food and Drink must remain visible as planned builders.');
-foreach($planned as $action){
-    gac_assert(($action['status']??'')==='planned','Future builder actions must be marked planned.');
-    gac_assert(($action['href']??'')==='','Future builder actions must not navigate to unfinished routes.');
-}
+$food=array_values(array_filter($ownerActions,static fn(array $action): bool=>(string)$action['id']==='food'));
+gac_assert(count($food)===1,'Food must exist as one live builder action.');
+gac_assert(($food[0]['href']??'')==='menu-manager.php?action=add-food','Add Food must open the Menu Manager Food builder.');
+gac_assert(($food[0]['status']??'')!=='planned','Add Food must be live.');
+
+$drink=array_values(array_filter($ownerActions,static fn(array $action): bool=>(string)$action['id']==='drink'));
+gac_assert(count($drink)===1,'Drink must remain visible for the next builder phase.');
+gac_assert(($drink[0]['status']??'')==='planned','Add Drink must remain marked planned.');
+gac_assert(($drink[0]['href']??'')==='','Add Drink must not navigate to an unfinished route.');
 
 $operator=['is_owner_role'=>0,'permissions'=>[
     'users.edit','schedule.manage','recipes.edit','locations.manage','tasks.manage','catering.manage','wholesale.manage',
@@ -53,7 +56,7 @@ gac_assert(in_array('Add Recipe',$operatorLabels,true),'Recipe editors must rece
 gac_assert(in_array('Add Receipt',$operatorLabels,true),'Purchasing managers must receive Add Receipt.');
 gac_assert(!in_array('Add Package',$operatorLabels,true),'Accounts without packages.manage must not receive Add Package.');
 gac_assert(!in_array('Add Discount',$operatorLabels,true),'Accounts without discounts.manage must not receive Add Discount.');
-gac_assert(!in_array('Add Food',$operatorLabels,true),'Owner-only future Food builder must not leak to non-owner accounts.');
+gac_assert(!in_array('Add Food',$operatorLabels,true),'Accounts without menu.manage must not receive Add Food.');
 gac_assert(!in_array('Add Drink',$operatorLabels,true),'Owner-only future Drink builder must not leak to non-owner accounts.');
 
 $packageManager=['is_owner_role'=>0,'permissions'=>['packages.view','packages.manage']];
@@ -63,6 +66,7 @@ gac_assert(in_array('Add Package',$packageManagerLabels,true),'Package managers 
 $packageAction=array_values(array_filter($packageManagerActions,static fn(array $action):bool=>(string)$action['id']==='package'))[0]??[];
 gac_assert(($packageAction['href']??'')==='packages-admin.php?action=add','Package managers must navigate to the package builder.');
 gac_assert(!in_array('Add Discount',$packageManagerLabels,true),'Package managers without discounts.manage must not receive Add Discount.');
+gac_assert(!in_array('Add Food',$packageManagerLabels,true),'Package managers without menu.manage must not receive Add Food.');
 
 $discountManager=['is_owner_role'=>0,'permissions'=>['discounts.view','discounts.manage']];
 $discountManagerActions=admin_add_filtered_actions($discountManager);
@@ -72,12 +76,21 @@ $discountAction=array_values(array_filter($discountManagerActions,static fn(arra
 gac_assert(($discountAction['href']??'')==='discounts-admin.php?action=add','Discount managers must navigate to the typed discount manager.');
 gac_assert(!in_array('Add Package',$discountManagerLabels,true),'Discount managers without packages.manage must not receive Add Package.');
 
-$viewer=['is_owner_role'=>0,'permissions'=>['equipment.view','recipes.view','crm.view','packages.view','discounts.view']];
+$menuManager=['is_owner_role'=>0,'permissions'=>['menu.view','menu.manage']];
+$menuManagerActions=admin_add_filtered_actions($menuManager);
+$menuManagerLabels=gac_labels($menuManagerActions);
+gac_assert(in_array('Add Food',$menuManagerLabels,true),'Menu managers must receive Add Food.');
+$foodAction=array_values(array_filter($menuManagerActions,static fn(array $action):bool=>(string)$action['id']==='food'))[0]??[];
+gac_assert(($foodAction['href']??'')==='menu-manager.php?action=add-food','Menu managers must navigate to the Food builder.');
+gac_assert(!in_array('Add Drink',$menuManagerLabels,true),'Future Add Drink remains owner-visible until built.');
+
+$viewer=['is_owner_role'=>0,'permissions'=>['equipment.view','recipes.view','crm.view','packages.view','discounts.view','menu.view']];
 $viewerLabels=gac_labels(admin_add_filtered_actions($viewer));
 gac_assert(!in_array('Add Equipment',$viewerLabels,true),'View-only equipment access must not expose Add Equipment.');
 gac_assert(!in_array('Add Recipe',$viewerLabels,true),'View-only recipe access must not expose Add Recipe.');
 gac_assert(!in_array('Add Customer',$viewerLabels,true),'View-only CRM access must not expose Add Customer.');
 gac_assert(!in_array('Add Package',$viewerLabels,true),'View-only package access must not expose Add Package.');
 gac_assert(!in_array('Add Discount',$viewerLabels,true),'View-only discount access must not expose Add Discount.');
+gac_assert(!in_array('Add Food',$viewerLabels,true),'View-only menu access must not expose Add Food.');
 
 echo "global-add-action-canvas=ok\n";
