@@ -18,6 +18,8 @@ foreach($files as $name=>$path){
 
 $checks=[
     'workspace gates command dashboard by permission'=>str_contains($files['workspace'],'$adminDashboardAllowed = admin_dashboard_allowed($user);'),
+    'command dashboard entry uses canonical admin control gate'=>str_contains($files['core'],'return admin_control_allowed($user);'),
+    'sales capability requires sales view or POS management'=>str_contains($files['core'],"\$canSales=admin_dashboard_can(\$user,'sales.view','pos.manage');"),
     'workspace loads command dashboard stylesheet'=>str_contains($files['workspace'],'css/admin-command-dashboard.css'),
     'workspace loads command dashboard runtime'=>str_contains($files['workspace'],'js/admin-command-dashboard.js'),
     'legacy training dashboard stays available for compatibility'=>str_contains($files['js'],"legacy.id = 'page-training-dashboard-legacy'"),
@@ -45,7 +47,9 @@ $checks=[
     'agent endpoint uses live dashboard snapshot'=>str_contains($files['agent'],'admin_dashboard_snapshot'),
     'agent answers wholesale context'=>str_contains($files['agent'],"preg_match('/\\bwholesale\\b/u'"),
     'agent answers location comparison'=>str_contains($files['agent'],'compare locations?'),
+    'agent refuses sales answers without sales capability'=>str_contains($files['agent'],'Your account does not have Sales dashboard access.'),
     'shared Agent router sends dashboard requests to dashboard skill'=>str_contains($files['router'],"'route'=>'api/admin-dashboard-agent.php'"),
+    'shared Agent router uses canonical admin control gate'=>str_contains($files['router'],'$dashboardAccess=admin_control_allowed($user);'),
     'shared Agent router preserves detailed thread history'=>str_contains($files['router'],'gaw_messages($pdo,$org,$uid,$id,220)'),
     'dashboard layout is responsive'=>str_contains($files['css'],'@media(max-width:720px)'),
 ];
