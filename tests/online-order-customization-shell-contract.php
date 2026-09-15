@@ -9,9 +9,11 @@ $read=static function(string $path)use($root): string{
 };
 
 $core=$read('includes/online-order-core.php');
+$integration=$read('includes/menu-order-integration.php');
 $endpoint=$read('api/online-order-customizations.php');
-$orderJs=$read('assets/js/online-order.js');
 $orderPage=$read('online-order.php');
+$foodCartActive=str_contains($orderPage,'assets/js/online-order-food.js?v=20260915-1');
+$orderJs=$read($foodCartActive?'assets/js/online-order-food.js':'assets/js/online-order.js');
 $posJs=$read('js/pos.js');
 $kdsJs=$read('js/kds.js');
 $shell=$read('js/universal-admin-page-shell.js');
@@ -26,17 +28,21 @@ $checks=[
     'substitutions are server rendered into POS instructions'=>str_contains($core,"'SUBSTITUTE: '")&&str_contains($core,' → '),
     'item note is server rendered into POS instructions'=>str_contains($core,"'ITEM NOTE: '"),
     'order note remains visible to fulfillment'=>str_contains($core,"'ORDER NOTE: '")&&str_contains($core,"'notes'=>\$note!==''?'Online pickup: '.\$note:'Online pickup order'"),
-    'validated line instructions enter canonical POS'=>str_contains($core,'pos_add_item($pdo,$organizationId')&&str_contains($core,'$validated[$index]'),
+    'validated line instructions enter canonical POS'=>str_contains($integration,'pos_add_item($pdo,$organizationId')&&str_contains($integration,"\$validated[\$index]['instructions']"),
     'customization endpoint returns canonical context'=>str_contains($endpoint,'online_order_customization_context')&&str_contains($endpoint,'public_site_context($pdo)'),
-    'customer cart exposes customize action'=>str_contains($orderJs,"data-cart-action=\"customize\"")&&str_contains($orderJs,'Customize item'),
+    'customization endpoint augments context with paid add-ons'=>str_contains($endpoint,"'addOnGroups'")&&str_contains($endpoint,'menu_manager_customization_addons'),
+    'customer cart exposes customize action'=>(str_contains($orderJs,'data-customize=')||str_contains($orderJs,"data-cart-action=\"customize\""))&&str_contains($orderJs,'Customize item'),
     'customer cart fetches server catalog'=>str_contains($orderJs,'api/online-order-customizations.php?priceId='),
     'customer cart submits removals and substitutions'=>str_contains($orderJs,'removals')&&str_contains($orderJs,'substitutions')&&str_contains($orderJs,'fromIngredientId')&&str_contains($orderJs,'toIngredientId'),
-    'customer customization labels are display only'=>str_contains($orderJs,'customizationLabels')&&str_contains($orderJs,'submitPayload'),
-    'online order JavaScript cache key was advanced'=>str_contains($orderPage,'assets/js/online-order.js?v=20260915-2'),
+    'customer cart submits paid add-ons by server identity'=>str_contains($orderJs,'addOns')&&str_contains($orderJs,'optionId')&&str_contains($orderJs,'quantity'),
+    'customer customization labels stay display-only'=>str_contains($orderJs,'submitPayload')&&(str_contains($orderJs,'customizationLabels')||str_contains($orderJs,'row.labels')),
+    'paid add-ons are server validated before POS pricing'=>str_contains($integration,'menu_manager_validate_addons')&&str_contains($integration,'menu_manager_apply_pos_addons'),
+    'online order page loads current Food cart implementation'=>$foodCartActive,
+    'online order page keeps universal public shell'=>str_contains($orderPage,'assets/js/public-shell.js?v=20260915-1'),
     'native POS renders line special instructions'=>str_contains($posJs,'special_instructions'),
     'KDS renders line special instructions'=>str_contains($kdsJs,'special_instructions'),
 
-    // The shell model is now server-owned. Browser code consumes one canonical role-aware model.
+    // The shell model is server-owned. Browser code consumes one canonical role-aware model.
     'universal shell consumes canonical server model'=>str_contains($shell,'api/admin-shell.php?page=')&&str_contains($shell,"shell.type !== 'standard'"),
     'canonical shell provides fallback page metadata'=>str_contains($shellCore,"??[ucwords(str_replace")&&str_contains($shellCore,"'Gelato restaurant administration','standard'"),
     'universal shell no longer rejects unlisted admin pages'=>!str_contains($shell,'if (!pageTitles[path]) return;')&&!str_contains($shell,'if(!pageTitles[path])return;'),
@@ -66,4 +72,4 @@ if($failed){
     exit(1);
 }
 
-echo 'PASS: '.count($checks)." customization, POS/KDS propagation, customer UI separation, and canonical role-aware admin shell checks.\n";
+echo 'PASS: '.count($checks)." customization, paid add-on, POS/KDS propagation, customer UI separation, and canonical role-aware admin shell checks.\n";
