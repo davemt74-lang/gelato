@@ -6,11 +6,13 @@ on:
       - 'order-recovery.php'
       - 'api/order-recovery.php'
       - 'includes/order-recovery-core.php'
+      - 'includes/order-recovery-reporting.php'
       - 'database/20261006_order_exceptions_recovery.sql'
       - 'js/order-recovery.js'
       - 'assets/css/order-recovery.css'
       - 'pickup-fulfillment.php'
       - 'js/pickup-fulfillment.js'
+      - 'online-orders-admin.php'
       - 'tests/order-recovery-contract.php'
       - '.github/workflows/order-recovery.yml'
   push:
@@ -45,6 +47,7 @@ jobs:
           php -l order-recovery.php
           php -l api/order-recovery.php
           php -l includes/order-recovery-core.php
+          php -l includes/order-recovery-reporting.php
           php -l tests/order-recovery-contract.php
           php -l pickup-fulfillment.php
           node --check js/order-recovery.js
@@ -54,11 +57,15 @@ jobs:
           grep -q 'CREATE TABLE order_exceptions' database/20261006_order_exceptions_recovery.sql
           grep -q 'CREATE TABLE pos_refunds' database/20261006_order_exceptions_recovery.sql
           grep -q "'order_recovery.refund'" database/20261006_order_exceptions_recovery.sql
+          grep -q 'trg_sales_periods_native_refunds_bi' database/20261006_order_exceptions_recovery.sql
+          grep -q 'trg_sales_hourly_native_refunds_bu' database/20261006_order_exceptions_recovery.sql
           grep -q 'function order_recovery_delay' includes/order-recovery-core.php
           grep -q 'function order_recovery_remake' includes/order-recovery-core.php
           grep -q 'function order_recovery_refund' includes/order-recovery-core.php
+          grep -q 'function order_recovery_sync_native_sales_day' includes/order-recovery-reporting.php
           grep -q "event_type='recovery_remake'\|recovery_remake" includes/order-recovery-core.php
           grep -q "action==='refund.record'" api/order-recovery.php
+          grep -q 'order_recovery_sync_native_sales_for_check' api/order-recovery.php
           grep -q 'order-recovery.php?order=' js/pickup-fulfillment.js
       - name: Install and upgrade schema
         run: |
@@ -87,6 +94,7 @@ jobs:
         run: |
           test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('order_exceptions','pos_refunds');")" = "2"
           test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('order_recovery.view','order_recovery.manage','order_recovery.refund');")" = "3"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_schema='gelato_restaurant_ai_ci' AND trigger_name IN ('trg_sales_periods_native_refunds_bi','trg_sales_periods_native_refunds_bu','trg_sales_hourly_native_refunds_bi','trg_sales_hourly_native_refunds_bu');")" = "4"
           test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20261006_order_exceptions_recovery';")" = "1"
       - name: Order recovery behavioral contract
         run: php tests/order-recovery-contract.php
@@ -139,6 +147,7 @@ jobs:
           test -f deploy-patch/order-recovery.php
           test -f deploy-patch/api/order-recovery.php
           test -f deploy-patch/includes/order-recovery-core.php
+          test -f deploy-patch/includes/order-recovery-reporting.php
           test -f deploy-patch/database/20261006_order_exceptions_recovery.sql
           cat > deploy-patch/README-DEPLOY.txt <<'EOF'
           Stonefellows / Gelato order exceptions + recovery deploy
@@ -152,7 +161,8 @@ jobs:
           resolution and recorded refunds. Remakes preserve the canonical POS sale
           line and rewind only KDS production. Refund entries are an audited ledger
           for cash/external-terminal/manual refunds; this code does not contact an
-          external payment processor.
+          external payment processor. Recorded refunds immediately flow into Gelato
+          Native POS daily/hourly net-sales reporting and survive later POS rebuilds.
           EOF
           (cd deploy-patch && zip -qr ../stonefellows-order-recovery-deploy.zip .)
           unzip -t stonefellows-order-recovery-deploy.zip
