@@ -23,14 +23,7 @@
   slides.forEach(slide => {
     const image = slide.querySelector('.pizza-story-image');
     if (!image) return;
-    image.addEventListener('error', () => {
-      const fallback = image.dataset.fallback || '';
-      if (fallback && image.src !== new URL(fallback, document.baseURI).href) {
-        image.src = fallback;
-        return;
-      }
-      image.classList.add('image-missing');
-    }, {once: true});
+    image.addEventListener('error', () => image.classList.add('image-missing'), {once: true});
   });
 
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -43,6 +36,20 @@
   story.classList.add('is-scroll-ready');
 
   let ticking = false;
+
+  const imageTransform = (image, x, rotation, scale, opacity) => {
+    if (!image) return;
+    image.style.opacity = String(opacity);
+    image.style.transform = `translate3d(${x}vw,0,0) rotate(${rotation}deg) scale(${scale})`;
+  };
+
+  const copyTransform = (copy, opacity, offsetX, offsetY = 0) => {
+    if (!copy) return;
+    copy.style.opacity = String(opacity);
+    copy.style.transform = window.innerWidth <= 700
+      ? `translate3d(0,${offsetY}px,0)`
+      : `translate3d(${offsetX}px,-50%,0)`;
+  };
 
   const render = () => {
     ticking = false;
@@ -74,50 +81,34 @@
       const image = slide.querySelector('.pizza-story-image');
       const copy = slide.querySelector('.pizza-story-copy');
       const isActive = index === activeIndex;
-      const isPrevious = index === activeIndex - 1 && local < 0.24;
+      const isPrevious = index === activeIndex - 1 && local < 0.30;
 
       slide.classList.toggle('is-active', isActive || isPrevious);
 
       if (isActive) {
-        const entry = smoothstep(0.01, 0.30, local);
-        const exit = index === slides.length - 1 ? 1 : 1 - smoothstep(0.82, 0.995, local);
-        const opacity = entry * exit;
-        const copyEntry = smoothstep(0.22, 0.50, local);
-        const copyExit = index === slides.length - 1 ? 1 : 1 - smoothstep(0.76, 0.98, local);
-        const x = (1 - entry) * 112;
-        const rotate = (1 - entry) * 190;
-        const scale = 0.88 + entry * 0.12;
+        const entry = smoothstep(0.00, 0.30, local);
+        const exit = index === slides.length - 1 ? 0 : smoothstep(0.72, 0.995, local);
+        const opacity = entry * (1 - exit);
+        const x = (1 - entry) * 108 - exit * 24;
+        const rotation = (1 - entry) * 320 - exit * 110;
+        const scale = 0.82 + entry * 0.18 - exit * 0.05;
+
+        const copyEntry = smoothstep(0.18, 0.44, local);
+        const copyExit = index === slides.length - 1 ? 0 : smoothstep(0.68, 0.95, local);
+        const copyOpacity = copyEntry * (1 - copyExit);
 
         slide.style.opacity = String(opacity);
-        if (image) {
-          image.style.opacity = String(opacity);
-          image.style.transform = `translate3d(${x}vw,0,0) rotate(${rotate}deg) scale(${scale})`;
-        }
-        if (copy) {
-          copy.style.opacity = String(copyEntry * copyExit);
-          copy.style.transform = window.innerWidth <= 700
-            ? `translate3d(0,${(1 - copyEntry) * 22}px,0)`
-            : `translate3d(${(1 - copyEntry) * 34}px,-50%,0)`;
-        }
+        imageTransform(image, x, rotation, scale, opacity);
+        copyTransform(copy, copyOpacity, (1 - copyEntry) * 36 + copyExit * -18, (1 - copyEntry) * 24 + copyExit * -12);
       } else if (isPrevious) {
-        const fade = 1 - smoothstep(0, 0.24, local);
-        slide.style.opacity = String(fade);
-        if (image) {
-          image.style.opacity = String(fade);
-          image.style.transform = 'translate3d(0,0,0) rotate(0deg) scale(1)';
-        }
-        if (copy) {
-          copy.style.opacity = String(fade);
-          copy.style.transform = window.innerWidth <= 700
-            ? 'translate3d(0,0,0)'
-            : 'translate3d(0,-50%,0)';
-        }
+        const exit = smoothstep(0.00, 0.30, local);
+        const opacity = 1 - exit;
+        slide.style.opacity = String(opacity);
+        imageTransform(image, -24 * exit, -110 * exit, 1 - 0.05 * exit, opacity);
+        copyTransform(copy, opacity, -18 * exit, -12 * exit);
       } else {
         slide.style.opacity = '0';
-        if (image) {
-          image.style.opacity = '0';
-          image.style.transform = 'translate3d(112vw,0,0) rotate(190deg) scale(.88)';
-        }
+        imageTransform(image, 108, 320, 0.82, 0);
         if (copy) copy.style.opacity = '0';
       }
     });
