@@ -1,0 +1,157 @@
+name: Pickup Fulfillment Operations
+
+on:
+  pull_request:
+    paths:
+      - 'pickup-fulfillment.php'
+      - 'api/pickup-fulfillment.php'
+      - 'includes/pickup-fulfillment-core.php'
+      - 'database/20261005_pickup_fulfillment_operations.sql'
+      - 'js/pickup-fulfillment.js'
+      - 'assets/css/pickup-fulfillment.css'
+      - 'tests/pickup-fulfillment-contract.php'
+      - '.github/workflows/pickup-fulfillment.yml'
+  push:
+    branches: [main]
+
+jobs:
+  pickup-fulfillment:
+    name: Pickup Fulfillment PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.1', '8.3']
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - name: Syntax checks
+        run: |
+          php -l pickup-fulfillment.php
+          php -l api/pickup-fulfillment.php
+          php -l includes/pickup-fulfillment-core.php
+          php -l tests/pickup-fulfillment-contract.php
+          node --check js/pickup-fulfillment.js
+      - name: Architecture contract
+        run: |
+          grep -q 'fulfilled_at' database/20261005_pickup_fulfillment_operations.sql
+          grep -q "'online_orders.fulfill'" database/20261005_pickup_fulfillment_operations.sql
+          grep -q 'function pickup_fulfillment_mark_handed' includes/pickup-fulfillment-core.php
+          grep -q 'pickup_fulfillment_is_physically_ready' includes/pickup-fulfillment-core.php
+          grep -q 'Payment is still due' includes/pickup-fulfillment-core.php
+          grep -q "action!=='order.fulfill'" api/pickup-fulfillment.php
+          grep -q "operational_location_allowed(\$pdo,\$user,'online_orders.fulfill'" api/pickup-fulfillment.php
+          grep -q 'Handed to Customer' pickup-fulfillment.php
+          grep -q 'Complete payment first' js/pickup-fulfillment.js
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_pickup_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->ensureTrackingTables();
+          $s->bootstrapLegacyHistory(null);
+          $s->applyPending(null);
+          if($s->pendingMigrations()) exit(1);
+          PHP
+      - name: Verify fulfillment schema
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='online_orders' AND column_name IN ('fulfilled_at','fulfilled_by_user_id','fulfillment_note');")" = "3"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key='online_orders.fulfill';")" = "1"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20261005_pickup_fulfillment_operations';")" = "1"
+      - name: Pickup fulfillment behavioral contract
+        run: php tests/pickup-fulfillment-contract.php
+      - name: Restaurant lifecycle regression
+        run: php tests/restaurant-order-lifecycle-contract.php
+      - name: Online ordering regression
+        run: php tests/online-ordering-inbox-contract.php
+      - name: KDS regression
+        run: php tests/kds-contract.php
+      - name: Native POS regression
+        run: php tests/native-pos-contract.php
+      - name: Verify upgrader idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->assertAppliedChecksumsUnchanged();
+          if($s->pendingMigrations()) exit(2);
+          if($s->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP
+
+  deploy-package:
+    name: Pickup Fulfillment Deploy Package
+    needs: pickup-fulfillment
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build direct deploy ZIP
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq zip unzip
+          rm -rf deploy-patch stonefellows-pickup-fulfillment-deploy.zip
+          mkdir -p deploy-patch/includes deploy-patch/api deploy-patch/js deploy-patch/assets/css deploy-patch/assets/js deploy-patch/database
+          cp pickup-fulfillment.php online-orders-admin.php online-order.php customer-account.php upgrade.php deploy-patch/
+          cp api/pickup-fulfillment.php api/pos.php api/kds.php api/online-order-customizations.php deploy-patch/api/
+          cp includes/*.php deploy-patch/includes/
+          cp js/pickup-fulfillment.js deploy-patch/js/
+          cp assets/css/pickup-fulfillment.css assets/css/admin-control.css assets/css/online-order.css assets/css/customer-account.css assets/css/customer-inbox.css deploy-patch/assets/css/
+          cp assets/js/online-order.js deploy-patch/assets/js/
+          for migration in database/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_*.sql; do
+            name="$(basename "$migration")"
+            case "$name" in *_demo_*|*_sample_*|*_seed_*) continue ;; esac
+            cp "$migration" deploy-patch/database/
+          done
+          test -f deploy-patch/pickup-fulfillment.php
+          test -f deploy-patch/api/pickup-fulfillment.php
+          test -f deploy-patch/includes/pickup-fulfillment-core.php
+          test -f deploy-patch/database/20261005_pickup_fulfillment_operations.sql
+          cat > deploy-patch/README-DEPLOY.txt <<'EOF'
+          Stonefellows / Gelato pickup fulfillment operations deploy
+
+          Extract directly into the application web root, preserving folders and
+          overwriting the included files. Then sign in as owner/admin and run
+          upgrade.php -> Upgrade once.
+
+          This phase adds a staff pickup counter with promised-time tracking, Ready
+          aging, payment-state visibility, and an explicit Handed to Customer action.
+          Physical fulfillment is tracked independently from POS payment and kitchen
+          lifecycle status. Pay-at-pickup orders cannot be handed off until paid, and
+          the full live kitchen ticket must be ready/completed first.
+          EOF
+          (cd deploy-patch && zip -qr ../stonefellows-pickup-fulfillment-deploy.zip .)
+          unzip -t stonefellows-pickup-fulfillment-deploy.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stonefellows-pickup-fulfillment-deploy
+          path: stonefellows-pickup-fulfillment-deploy.zip
+          if-no-files-found: error
+          retention-days: 30
