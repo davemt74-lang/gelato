@@ -5,6 +5,7 @@ on:
     paths:
       - 'api/pos.php'
       - 'api/kds.php'
+      - 'includes/admin-control-core.php'
       - 'includes/online-order-core.php'
       - 'includes/online-order-lifecycle.php'
       - 'includes/customer-inbox-core.php'
@@ -45,6 +46,7 @@ jobs:
         run: |
           php -l api/pos.php
           php -l api/kds.php
+          php -l includes/admin-control-core.php
           php -l includes/online-order-core.php
           php -l includes/online-order-lifecycle.php
           php -l tests/restaurant-order-lifecycle-contract.php
@@ -53,10 +55,13 @@ jobs:
           grep -q 'function online_order_lifecycle_derive' includes/online-order-lifecycle.php
           grep -q 'function online_order_lifecycle_sync' includes/online-order-lifecycle.php
           grep -q '\$progress>0 || \$ready>0 || \$completed>0' includes/online-order-lifecycle.php
+          grep -q 'online_order_lifecycle_notification_exists' includes/online-order-lifecycle.php
           grep -q 'online_order_lifecycle_sync_safe' api/pos.php
           grep -q 'online_order_lifecycle_sync_by_check_id_safe' api/kds.php
           grep -q 'online_order_lifecycle_sync_safe' api/kds.php
           grep -q 'online_order_lifecycle_display_status(online_order_lifecycle_derive' includes/online-order-core.php
+          grep -q 'online_order_lifecycle_display_status(online_order_lifecycle_derive' includes/admin-control-core.php
+          grep -q "oo.status='ready'" includes/admin-control-core.php
       - name: Install and upgrade schema
         run: |
           sudo apt-get update -qq
@@ -90,6 +95,8 @@ jobs:
         run: php tests/native-pos-contract.php
       - name: Customer CRM regression
         run: php tests/customer-crm-contract.php
+      - name: Admin control regression
+        run: php tests/admin-control-center-contract.php
       - name: Verify upgrader idempotence
         run: |
           php <<'PHP'
@@ -129,6 +136,7 @@ jobs:
           done
           test -f deploy-patch/api/pos.php
           test -f deploy-patch/api/kds.php
+          test -f deploy-patch/includes/admin-control-core.php
           test -f deploy-patch/includes/online-order-core.php
           test -f deploy-patch/includes/online-order-lifecycle.php
           test -f deploy-patch/includes/customer-inbox-core.php
@@ -142,13 +150,14 @@ jobs:
           and run upgrade.php -> Upgrade once.
 
           This package keeps one canonical POS check across online ordering, KDS,
-          CRM, Sales Intelligence, and customer order history. Online order status
-          now advances through Submitted, In kitchen, Preparing, Ready, Kitchen
-          complete, Completed, or Cancelled from the live POS/KDS state.
+          CRM, Sales Intelligence, staff/admin monitoring, and customer order history.
+          Online order status now advances through Submitted, In kitchen, Preparing,
+          Ready, Kitchen complete, Completed, or Cancelled from the live POS/KDS state.
 
           Ready is an all-live-lines milestone: one ready item cannot make a
           partially cooking ticket appear ready. Transactional customer Inbox
-          updates are deduplicated across Preparing, Ready, Completed, and Cancelled.
+          updates are deduplicated across Preparing, Ready, Completed, and Cancelled,
+          including recall/rework cycles.
           EOF
           (cd deploy-patch && zip -qr ../stonefellows-order-lifecycle-deploy.zip .)
           unzip -t stonefellows-order-lifecycle-deploy.zip
