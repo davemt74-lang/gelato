@@ -5,6 +5,7 @@ require_once __DIR__.'/../includes/operational-access.php';
 require_once __DIR__.'/../includes/kds-core.php';
 require_once __DIR__.'/../includes/kds-production.php';
 require_once __DIR__.'/../includes/pos-core.php';
+require_once __DIR__.'/../includes/online-order-lifecycle.php';
 
 $user=app_require_auth();
 $pdo=app_pdo();
@@ -109,6 +110,7 @@ try{
         kds_api_assert_item_location($pdo,$org,$public,$locationId);
         $to=(string)($in['status']??'');
         $item=kds_transition($pdo,$org,$public,$to,$uid,(string)($in['note']??''));
+        online_order_lifecycle_sync_by_check_id_safe($pdo,$org,(int)($item['check_id']??0),$uid);
         app_audit($pdo,$org,$uid,'kds.item_status_changed','kds_order_item',$public,null,['toStatus'=>$to,'locationId'=>$locationId]);
         app_json_response(['ok'=>true,'item'=>$item,'board'=>kds_api_board($pdo,$org,$locationId,$in)]);
     }
@@ -119,6 +121,7 @@ try{
         if($public==='')throw new InvalidArgumentException('Choose a kitchen item.');
         kds_api_assert_item_location($pdo,$org,$public,$locationId);
         $item=kds_production_recall_item($pdo,$org,$public,$uid);
+        online_order_lifecycle_sync_by_check_id_safe($pdo,$org,(int)($item['check_id']??0),$uid);
         app_audit($pdo,$org,$uid,'kds.item_recalled','kds_order_item',$public,null,['locationId'=>$locationId]);
         app_json_response(['ok'=>true,'item'=>$item,'board'=>kds_api_board($pdo,$org,$locationId,$in)]);
     }
@@ -137,6 +140,7 @@ try{
             kds_api_station($in),
             $uid
         );
+        online_order_lifecycle_sync_safe($pdo,$org,$checkPublicId,$uid);
         app_audit($pdo,$org,$uid,'kds.ticket_action','pos_check',$checkPublicId,null,[
             'locationId'=>$locationId,
             'ticketAction'=>$ticketAction,
