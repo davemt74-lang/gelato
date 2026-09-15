@@ -6,6 +6,7 @@ on:
       - 'index.html'
       - 'js/admin-shell-consolidation.js'
       - 'js/floor-planner-module.js'
+      - 'js/employee-home-module.js'
       - 'tests/admin-shell-consolidation-contract.php'
       - '.github/workflows/admin-shell-consolidation.yml'
   push:
@@ -15,6 +16,7 @@ on:
       - 'index.html'
       - 'js/admin-shell-consolidation.js'
       - 'js/floor-planner-module.js'
+      - 'js/employee-home-module.js'
       - 'tests/admin-shell-consolidation-contract.php'
       - '.github/workflows/admin-shell-consolidation.yml'
 
@@ -38,5 +40,6 @@ jobs:
         run: |
           node --check js/admin-shell-consolidation.js
           node --check js/floor-planner-module.js
+          node --check js/employee-home-module.js
       - name: Admin shell contract
         run: php tests/admin-shell-consolidation-contract.php
