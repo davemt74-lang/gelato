@@ -114,7 +114,7 @@ mop_assert(str_contains($manager,'menu-operations')&&str_contains($opsJs,'soldOu
 $api=(string)file_get_contents(__DIR__.'/../api/menu-manager.php');foreach(['operations.bulk_move','operations.bulk_distribution','operations.bulk_status','operations.schedule_save'] as $action)mop_assert(str_contains($api,$action),'Menu Manager API must expose '.$action.'.');
 
 $shell=(string)file_get_contents(__DIR__.'/../includes/admin-shell-core.php');
-$kdsNeedle="if(app_has_permission('kds.view',$user)) $links[]=['label'=>'KDS'";$posNeedle="if(app_has_permission('pos.use',$user)) $links[]=['label'=>'POS'";
+$kdsNeedle="if(app_has_permission('kds.view',\$user)) \$links[]=['label'=>'KDS'";$posNeedle="if(app_has_permission('pos.use',\$user)) \$links[]=['label'=>'POS'";
 $kdsAt=strpos($shell,$kdsNeedle);$posAt=strpos($shell,$posNeedle);
 mop_assert($kdsAt!==false&&$posAt!==false&&$kdsAt<$posAt,'Canonical header must render KDS followed by POS.');
 $addCss=(string)file_get_contents(__DIR__.'/../css/global-add-canvas.css');
