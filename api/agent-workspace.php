@@ -12,7 +12,7 @@ if($_SERVER['REQUEST_METHOD']==='GET'){
         if(!$active){$thread=gaw_create_thread($pdo,$org,$uid);$threads=gaw_threads($pdo,$org,$uid,40);$active=$thread['public_id']??null;}
         app_json_response(['ok'=>true,'csrf'=>app_csrf_token(),'threads'=>$threads,'activeThread'=>$active,'messages'=>$active?gaw_messages($pdo,$org,$uid,(string)$active,120):[],'user'=>['id'=>$uid,'name'=>$user['display_name'],'firstName'=>$user['first_name'],'role'=>$user['role_slug']],'permissions'=>$user['permissions']]);
     }
-    if($action==='thread'){$id=trim((string)($_GET['id']??''));app_json_response(['ok'=>true,'thread'=>gaw_thread($pdo,$org,$uid,$id),'messages'=>gaw_messages($pdo,$org,$uid,$id,220)]);}
+    if($action==='thread'){$id=trim((string)($_GET['id']??''));app_json_response(['ok'=>true,'thread'=>gaw_thread($pdo,$org,$uid,$id),'messages'=>gaw_messages($pdo,$org,$uid,$id,120)]);}
     if($action==='threads')app_json_response(['ok'=>true,'threads'=>gaw_threads($pdo,$org,$uid,80)]);
     app_json_response(['ok'=>false,'message'=>'Unsupported Agent Workspace action.'],422);
 }
@@ -24,6 +24,9 @@ try{
     if($action==='route'){
         $message=trim((string)($in['message']??''));if($message==='')throw new InvalidArgumentException('Enter an Agent request.');
         $text=mb_strtolower(preg_replace('/^hey\s+gelato[,\s]*/iu','',$message)??$message,'UTF-8');
+        $dashboardIntent=preg_match('/\b(command center|command centre|dashboard|restaurant overview|operating snapshot|operations snapshot|location performance|compare locations?|active tables?|open (?:pos )?(?:tickets?|checks?)|ready tickets?|kds ready|online orders?|what needs attention|what is happening right now|what\x27s happening right now|how is wholesale doing|wholesale (?:status|overview|pipeline|orders?|receivables?|accounts?|sales)|catering (?:status|overview|readiness|events?))\b/u',$text)===1;
+        $dashboardAccess=app_has_permission('sales.view',$user)||app_has_permission('pos.use',$user)||app_has_permission('pos.manage',$user)||app_has_permission('kds.view',$user)||app_has_permission('table_service.view',$user)||app_has_permission('wholesale.view',$user)||app_has_permission('catering.view',$user)||app_has_permission('crm.view',$user)||app_has_permission('customer_promotions.manage',$user);
+        if($dashboardIntent&&$dashboardAccess)app_json_response(['ok'=>true,'route'=>'api/admin-dashboard-agent.php','domain'=>'admin_dashboard']);
         $managerIntent=preg_match('/\b(gm brief|manager brief|daily brief|opening brief|morning brief|closing brief|manager recap|daily manager|restaurant status|how is (?:the )?restaurant doing|how are we doing today|what needs manager attention)\b/u',$text)===1;
         if($managerIntent&&app_has_permission('manager.brief.view',$user)&&app_has_permission('manager.brief.agent',$user))app_json_response(['ok'=>true,'route'=>'api/daily-manager-agent.php','domain'=>'daily_manager_brief']);
         $costIntent=preg_match('/\b(food cost|food costs|cogs|cost of goods|gross margin|gross profit|item margin|item margins|profitability|most profitable|best margin|waste cost|purchase spend|purchase receipts|vendor price|price drift|cost drift|cost coverage)\b/u',$text)===1;
