@@ -9,18 +9,32 @@
   const path = (location.pathname.split('/').pop() || '').toLowerCase();
 
   const pageTitles = {
+    'admin.php': ['Restaurant Admin', 'Restaurant configuration and operating controls'],
+    'admin-menu-import.php': ['Menu Import', 'Owner menu synchronization and canonical menu data'],
     'locations-admin.php': ['Locations', 'Restaurant locations, hours and service configuration'],
     'operations.php': ['Operations', 'Tasks, prep, inventory and restaurant work management'],
+    'timeclock.php': ['Time Clock + Attendance', 'Attendance, labor and employee voice Agent'],
+    'scheduling.php': ['Staff Scheduling', 'Shifts, availability, coverage and labor planning'],
+    'purchasing.php': ['Purchasing + Receiving', 'Vendors, purchase orders, receiving and cost intelligence'],
+    'equipment.php': ['Equipment Catalog', 'Restaurant assets, service history and maintenance intelligence'],
+    'recipes.php': ['Recipe Library + Builder', 'Restaurant recipes, images and AI mapping'],
+    'prep-intelligence.php': ['Prep Intelligence', 'Prep demand, restock pressure and production planning'],
+    'floor-planner-v2.php': ['Floor Planner', 'Restaurant floor layout and service points'],
     'catering-operations.php': ['Catering Operations', 'Production, fulfillment and event execution'],
     'catering-pipeline.php': ['Catering Pipeline', 'Catering leads, quotes and customer pipeline'],
     'sales-intelligence.php': ['Sales Intelligence', 'Sales performance, demand and source health'],
+    'sales-cost-intelligence.php': ['Cost Intelligence', 'Food cost, margin and sales-cost performance'],
     'customer-promotions.php': ['Customer Promotions', 'Customer campaigns and account Inbox promotions'],
     'customer-crm.php': ['Customer CRM', 'Identity, consent and transaction relationships'],
     'online-orders-admin.php': ['Online Orders', 'Customer pickup and online-order operations'],
-    'recipes.php': ['Recipe Library + Builder', 'Restaurant recipes, images and AI mapping'],
+    'wholesale-pipeline.php': ['Wholesale', 'Wholesale pipeline, accounts and growth'],
+    'wholesale-accounts.php': ['Wholesale Customers', 'Wholesale customer accounts and order relationships'],
+    'agent-canvas.php': ['Agent Canvas', 'Restaurant Agent tools and operating context'],
+    'public-site-settings.php': ['Public Site Settings', 'Public website contact, location and brand settings'],
   };
 
-  if (!pageTitles[path]) return;
+  const fallbackTitle = (document.title || 'Gelato Admin').replace(/\s*[|·-]\s*Gelato.*$/i, '').trim() || 'Gelato Admin';
+  const [title, subtitle] = pageTitles[path] || [fallbackTitle, 'Gelato restaurant administration'];
 
   const groups = [
     {
@@ -46,6 +60,7 @@
         ['↗', 'Online Orders', 'online-orders-admin.php'],
         ['✓', 'Operations', 'operations.php'],
         ['▤', 'Recipe Library + Builder', 'recipes.php'],
+        ['▤', 'Prep Intelligence', 'prep-intelligence.php'],
         ['▦', 'Floor Planner', 'floor-planner-v2.php'],
         ['⚙', 'Equipment Catalog', 'equipment.php'],
         ['▣', 'Purchasing + Receiving', 'purchasing.php'],
@@ -54,6 +69,7 @@
     {
       id: 'sales', label: 'Sales & Events', items: [
         ['↗', 'Sales Intelligence', 'sales-intelligence.php'],
+        ['$', 'Cost Intelligence', 'sales-cost-intelligence.php'],
         ['◎', 'Customer CRM', 'customer-crm.php'],
         ['✦', 'Customer Promotions', 'customer-promotions.php'],
         ['◈', 'Catering Operations', 'catering-operations.php'],
@@ -110,7 +126,8 @@
       :root{--uas-sidebar:244px;--uas-header:64px}
       body.gelato-universal-admin-page{padding-left:var(--uas-sidebar)!important;padding-top:var(--uas-header)!important;min-height:100vh!important}
       body.gelato-universal-admin-page>header.top,
-      body.gelato-universal-admin-page>header.topbar{display:none!important}
+      body.gelato-universal-admin-page>header.topbar,
+      body.gelato-universal-admin-page>header.admin-top{display:none!important}
       .uas-header{position:fixed;z-index:10020;top:0;right:0;left:var(--uas-sidebar);height:var(--uas-header);display:flex;align-items:center;justify-content:space-between;gap:14px;padding:0 16px 0 20px;border-bottom:1px solid #dddcd5;background:rgba(255,255,255,.96);backdrop-filter:blur(14px);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#171815}
       .uas-title{min-width:0;display:flex;align-items:center;gap:11px}.uas-mobile{display:none;width:36px;height:36px;border:1px solid #dddcd5;border-radius:10px;background:#fff;font-size:17px}.uas-title-copy{min-width:0}.uas-title strong{display:block;font-size:15px;line-height:1.1}.uas-title small{display:block;margin-top:3px;color:#73766f;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:min(44vw,620px)}
       .uas-header-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;min-width:0;overflow-x:auto;scrollbar-width:none}.uas-header-actions::-webkit-scrollbar{display:none}.uas-header-link,.uas-page-action{min-height:36px;display:inline-flex;align-items:center;justify-content:center;border:1px solid #dddcd5;border-radius:10px;background:#fff;color:#171815;padding:7px 11px;text-decoration:none;font:800 10px/1 Inter,ui-sans-serif,system-ui;white-space:nowrap}.uas-header-link.dark{background:#171b1a;border-color:#171b1a;color:#fff}.uas-header-link.kds{background:#fff7f3;border-color:#efc6b9;color:#9a351f}.uas-header-actions>.btn,.uas-header-actions>button:not(.uas-account-button){min-height:36px!important;margin:0!important;white-space:nowrap}
@@ -166,13 +183,13 @@
     if (!href) return false;
     const normalized = href.split('?')[0].split('#')[0].split('/').pop().toLowerCase();
     return new Set([
-      'workspace.php','index.php','admin.php','pos.php','kds.php','online-orders-admin.php','operations.php','catering-operations.php','catering-pipeline.php','sales-intelligence.php','customer-promotions.php','customer-crm.php','locations-admin.php','recipes.php','floor-planner.php','floor-planner-v2.php','equipment.php','purchasing.php','scheduling.php','timeclock.php','public-site-settings.php','wholesale-pipeline.php','wholesale-accounts.php','agent-canvas.php'
+      'workspace.php','index.php','admin.php','pos.php','kds.php','online-orders-admin.php','operations.php','catering-operations.php','catering-pipeline.php','sales-intelligence.php','sales-cost-intelligence.php','customer-promotions.php','customer-crm.php','locations-admin.php','recipes.php','prep-intelligence.php','floor-planner.php','floor-planner-v2.php','equipment.php','purchasing.php','scheduling.php','timeclock.php','public-site-settings.php','wholesale-pipeline.php','wholesale-accounts.php','agent-canvas.php'
     ]).has(normalized);
   }
 
   function movePageActions(header, target) {
     if (!header) return;
-    const actionBox = header.querySelector('.actions,.top-actions');
+    const actionBox = header.querySelector('.actions,.top-actions,.admin-top-actions');
     if (!actionBox) return;
     Array.from(actionBox.children).forEach((node) => {
       if (node.matches('a') && duplicateDestination(node.getAttribute('href') || '')) {
@@ -187,14 +204,13 @@
   }
 
   function renderHeader(sidebar) {
-    const [title, subtitle] = pageTitles[path];
     const account = currentAccount();
     const header = document.createElement('header');
     header.className = 'uas-header';
     header.id = 'uasHeader';
     header.innerHTML = `<div class="uas-title"><button class="uas-mobile" type="button" aria-label="Open navigation">☰</button><div class="uas-title-copy"><strong>${esc(title)}</strong><small>${esc(subtitle)}</small></div></div><div class="uas-header-actions"><a class="uas-header-link dark" href="pos.php">POS</a><a class="uas-header-link kds" href="kds.php">KDS</a></div>`;
     const actions = header.querySelector('.uas-header-actions');
-    const localHeader = document.querySelector('body > header.top, body > header.topbar');
+    const localHeader = document.querySelector('body > header.top, body > header.topbar, body > header.admin-top');
     movePageActions(localHeader, actions);
 
     const accountWrap = document.createElement('div');

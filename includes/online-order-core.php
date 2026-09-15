@@ -26,6 +26,20 @@ function online_order_ready(PDO $pdo): bool
     return online_order_missing_requirements($pdo)===[];
 }
 
+function online_order_table_exists(PDO $pdo,string $table): bool
+{
+    static $cache=[];
+    $key=spl_object_id($pdo).':'.$table;
+    if(array_key_exists($key,$cache)) return $cache[$key];
+    try{
+        $q=$pdo->prepare('SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?');
+        $q->execute([$table]);
+        return $cache[$key]=(int)$q->fetchColumn()===1;
+    }catch(Throwable){
+        return $cache[$key]=false;
+    }
+}
+
 function online_order_locations(PDO $pdo,int $organizationId): array
 {
     return array_values(array_filter(location_list($pdo,$organizationId,false),static fn(array $location):bool=>
@@ -47,12 +61,75 @@ function online_order_menu(PDO $pdo,int $organizationId): array
     return pos_menu($pdo,$organizationId);
 }
 
+function online_order_price_item(PDO $pdo,int $organizationId,int $priceId): array
+{
+    $q=$pdo->prepare("SELECT p.id price_id,p.menu_item_id,i.name item_name,i.description,s.name section_name
+        FROM menu_item_prices p
+        JOIN menu_items i ON i.id=p.menu_item_id AND i.organization_id=? AND i.is_active=1
+        JOIN menu_sections s ON s.id=i.section_id AND s.organization_id=i.organization_id AND s.status='active'
+        WHERE p.id=? AND (p.active_from IS NULL OR p.active_from<=NOW(6)) AND (p.active_until IS NULL OR p.active_until>NOW(6)) LIMIT 1");
+    $q->execute([$organizationId,$priceId]);
+    $row=$q->fetch();
+    if(!$row) throw new InvalidArgumentException('That menu option is no longer available. Refresh the menu and try again.');
+    return $row;
+}
+
+function online_order_customization_context(PDO $pdo,int $organizationId,int $priceId): array
+{
+    $item=online_order_price_item($pdo,$organizationId,$priceId);
+    $ingredients=[];
+    $substitutions=[];
+    if(online_order_table_exists($pdo,'menu_item_ingredients')&&online_order_table_exists($pdo,'ingredients')){
+        $q=$pdo->prepare("SELECT ing.id,COALESCE(NULLIF(mii.display_name,''),ing.canonical_name) name,mii.is_optional,mii.can_remove
+            FROM menu_item_ingredients mii JOIN ingredients ing ON ing.id=mii.ingredient_id AND ing.organization_id=?
+            WHERE mii.menu_item_id=? ORDER BY mii.sort_order,ing.canonical_name,ing.id");
+        $q->execute([$organizationId,(int)$item['menu_item_id']]);
+        foreach($q->fetchAll() as $row){
+            $ingredients[]=['id'=>(int)$row['id'],'name'=>(string)$row['name'],'optional'=>(bool)$row['is_optional'],'canRemove'=>(bool)$row['can_remove']];
+        }
+        $q=$pdo->prepare("SELECT DISTINCT ing.id,ing.canonical_name name
+            FROM ingredients ing
+            JOIN menu_item_ingredients mii ON mii.ingredient_id=ing.id
+            JOIN menu_items mi ON mi.id=mii.menu_item_id AND mi.organization_id=ing.organization_id AND mi.is_active=1
+            JOIN menu_sections ms ON ms.id=mi.section_id AND ms.organization_id=mi.organization_id AND ms.status='active'
+            WHERE ing.organization_id=? ORDER BY ing.canonical_name,ing.id LIMIT 300");
+        $q->execute([$organizationId]);
+        foreach($q->fetchAll() as $row)$substitutions[]=['id'=>(int)$row['id'],'name'=>(string)$row['name']];
+    }
+    return [
+        'priceId'=>(int)$item['price_id'],'itemId'=>(int)$item['menu_item_id'],'itemName'=>(string)$item['item_name'],
+        'description'=>$item['description'],'sectionName'=>(string)$item['section_name'],
+        'ingredients'=>$ingredients,'substitutions'=>$substitutions,
+    ];
+}
+
 function online_order_idempotency_key(?string $value): string
 {
     $value=trim((string)$value);
     if($value==='') return bin2hex(random_bytes(20));
     if(!preg_match('/^[A-Za-z0-9_-]{16,80}$/',$value)) throw new InvalidArgumentException('Order submission token is invalid. Refresh the ordering page and try again.');
     return $value;
+}
+
+function online_order_customizations(array $row): array
+{
+    $raw=is_array($row['customizations']??null)?$row['customizations']:[];
+    $removals=[];
+    foreach(is_array($raw['removals']??null)?$raw['removals']:[] as $value){
+        $id=(int)$value;
+        if($id>0)$removals[$id]=$id;
+        if(count($removals)>12)throw new InvalidArgumentException('Too many ingredient removals were selected for one item.');
+    }
+    $substitutions=[];
+    foreach(is_array($raw['substitutions']??null)?$raw['substitutions']:[] as $value){
+        if(!is_array($value))continue;
+        $from=(int)($value['fromIngredientId']??0);$to=(int)($value['toIngredientId']??0);
+        if($from<1||$to<1||$from===$to)continue;
+        $substitutions[$from]=['fromIngredientId'=>$from,'toIngredientId'=>$to];
+        if(count($substitutions)>8)throw new InvalidArgumentException('Too many substitutions were selected for one item.');
+    }
+    $note=mb_substr(trim((string)($raw['note']??'')),0,300,'UTF-8');
+    return ['removals'=>array_values($removals),'substitutions'=>array_values($substitutions),'note'=>$note];
 }
 
 function online_order_cart(array $raw): array
@@ -63,18 +140,57 @@ function online_order_cart(array $raw): array
         if(!is_array($row)) continue;
         $priceId=max(0,(int)($row['priceId']??0));
         $quantity=round((float)($row['quantity']??0),3);
-        $instructions=mb_substr(trim((string)($row['instructions']??'')),0,1000,'UTF-8');
+        $instructions=mb_substr(trim((string)($row['instructions']??'')),0,300,'UTF-8');
+        $customizations=online_order_customizations($row);
         if($priceId<1 || $quantity<=0 || $quantity>20) throw new InvalidArgumentException('One of the cart items has an invalid quantity or menu option.');
-        $key=$priceId.'|'.$instructions;
+        $signature=json_encode([$customizations,$instructions],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
+        $key=$priceId.'|'.hash('sha256',$signature);
         if(isset($items[$key])){
             $items[$key]['quantity']=round($items[$key]['quantity']+$quantity,3);
             if($items[$key]['quantity']>20) throw new InvalidArgumentException('A menu item quantity cannot exceed 20.');
         }else{
-            $items[$key]=['priceId'=>$priceId,'quantity'=>$quantity,'instructions'=>$instructions];
+            $items[$key]=['priceId'=>$priceId,'quantity'=>$quantity,'instructions'=>$instructions,'customizations'=>$customizations];
         }
     }
     if(!$items) throw new InvalidArgumentException('Add at least one item before placing the order.');
     return array_values($items);
+}
+
+function online_order_line_instructions(PDO $pdo,int $organizationId,array $item,string $orderNote='',bool $includeOrderNote=false): string
+{
+    $context=online_order_customization_context($pdo,$organizationId,(int)$item['priceId']);
+    $custom=is_array($item['customizations']??null)?$item['customizations']:['removals'=>[],'substitutions'=>[],'note'=>''];
+    $base=[];
+    foreach($context['ingredients'] as $ingredient)$base[(int)$ingredient['id']]=$ingredient;
+    $catalog=[];
+    foreach($context['substitutions'] as $ingredient)$catalog[(int)$ingredient['id']]=$ingredient;
+    $removed=[];$subbed=[];$parts=[];
+    foreach($custom['removals']??[] as $ingredientId){
+        $id=(int)$ingredientId;
+        if(!isset($base[$id])||empty($base[$id]['canRemove']))throw new InvalidArgumentException('One of the selected ingredient removals is not available for '.$context['itemName'].'.');
+        $removed[$id]=true;
+    }
+    $subs=[];
+    foreach($custom['substitutions']??[] as $sub){
+        $from=(int)($sub['fromIngredientId']??0);$to=(int)($sub['toIngredientId']??0);
+        if(!isset($base[$from])||empty($base[$from]['canRemove']))throw new InvalidArgumentException('One of the selected substitutions is not available for '.$context['itemName'].'.');
+        if(!isset($catalog[$to])||$from===$to)throw new InvalidArgumentException('One of the selected substitute ingredients is not available.');
+        if(isset($removed[$from]))throw new InvalidArgumentException('An ingredient cannot be removed and substituted on the same item.');
+        $subbed[$from]=true;
+        $subs[]=$base[$from]['name'].' → '.$catalog[$to]['name'];
+    }
+    if($removed){
+        $names=[];
+        foreach(array_keys($removed) as $id)$names[]=(string)$base[$id]['name'];
+        $parts[]='REMOVE: '.implode(', ',$names);
+    }
+    if($subs)$parts[]='SUBSTITUTE: '.implode('; ',$subs);
+    $itemNote=mb_substr(trim((string)($custom['note']??'')),0,300,'UTF-8');
+    if($itemNote!=='')$parts[]='ITEM NOTE: '.$itemNote;
+    $legacy=mb_substr(trim((string)($item['instructions']??'')),0,300,'UTF-8');
+    if($legacy!=='')$parts[]='SPECIAL REQUEST: '.$legacy;
+    if($includeOrderNote&&trim($orderNote)!=='')$parts[]='ORDER NOTE: '.mb_substr(trim($orderNote),0,500,'UTF-8');
+    return mb_substr(implode(' • ',$parts),0,1000,'UTF-8');
 }
 
 function online_order_existing(PDO $pdo,int $organizationId,int $customerId,string $idempotencyKey): ?array
@@ -115,6 +231,11 @@ function online_order_submit_pickup(PDO $pdo,int $organizationId,array $account,
     $note=mb_substr(trim((string)($input['note']??'')),0,1000,'UTF-8');
     $readyAt=online_order_requested_ready_at($pdo,$organizationId,$location);
 
+    $validated=[];
+    foreach($cart as $index=>$item){
+        $validated[$index]=online_order_line_instructions($pdo,$organizationId,$item,$note,$index===0);
+    }
+
     $owns=!$pdo->inTransaction();
     if($owns)$pdo->beginTransaction();
     try{
@@ -123,8 +244,8 @@ function online_order_submit_pickup(PDO $pdo,int $organizationId,array $account,
             'notes'=>$note!==''?'Online pickup: '.$note:'Online pickup order',
         ],$userId);
         $pdo->prepare('UPDATE pos_checks SET customer_id=? WHERE organization_id=? AND id=?')->execute([$customerId,$organizationId,(int)$check['id']]);
-        foreach($cart as $item){
-            $check=pos_add_item($pdo,$organizationId,(string)$check['publicId'],(int)$item['priceId'],(float)$item['quantity'],(string)$item['instructions'],$userId);
+        foreach($cart as $index=>$item){
+            $check=pos_add_item($pdo,$organizationId,(string)$check['publicId'],(int)$item['priceId'],(float)$item['quantity'],$validated[$index],$userId);
         }
         $orderPublic=customer_inbox_public_id('online-order');
         $pdo->prepare("INSERT INTO online_orders (organization_id,location_id,customer_id,user_id,pos_check_id,public_id,idempotency_key,service_mode,payment_mode,status,requested_ready_at,customer_note) VALUES (?,?,?,?,?,?,?,'pickup','pay_at_pickup','submitted',?,?)")
@@ -135,15 +256,12 @@ function online_order_submit_pickup(PDO $pdo,int $organizationId,array $account,
 
         $readyDisplay=(new DateTimeImmutable($readyAt))->format('g:i A');
         customer_inbox_send_direct($pdo,$organizationId,$customerId,[
-            'messageType'=>'order_update',
-            'locationId'=>$locationId,
-            'title'=>'Order received — '.$check['checkNumber'],
-            'previewText'=>'Your pickup order is in the restaurant workflow.',
+            'messageType'=>'order_update','locationId'=>$locationId,
+            'title'=>'Order received — '.$check['checkNumber'],'previewText'=>'Your pickup order is in the restaurant workflow.',
             'bodyText'=>'We received your pickup order for '.$location['name'].'. Estimated ready time: '.$readyDisplay.'. Payment is due when you pick up the order.',
-            'ctaLabel'=>'View order history',
-            'ctaUrl'=>'customer-account.php#orders',
+            'ctaLabel'=>'View order history','ctaUrl'=>'customer-account.php#orders',
         ],$userId);
-        try{app_audit($pdo,$organizationId,$userId,'online_order.submitted','online_order',$orderPublic,null,['checkPublicId'=>$check['publicId'],'customerId'=>$customerId,'locationId'=>$locationId,'total'=>$check['totalAmount'],'paymentMode'=>'pay_at_pickup']);}catch(Throwable){}
+        try{app_audit($pdo,$organizationId,$userId,'online_order.submitted','online_order',$orderPublic,null,['checkPublicId'=>$check['publicId'],'customerId'=>$customerId,'locationId'=>$locationId,'total'=>$check['totalAmount'],'paymentMode'=>'pay_at_pickup','customizedLines'=>count(array_filter($validated))]);}catch(Throwable){}
         if($owns)$pdo->commit();
         return [
             'public_id'=>$orderPublic,'status'=>'submitted','payment_mode'=>'pay_at_pickup','requested_ready_at'=>$readyAt,'submitted_at'=>(new DateTimeImmutable())->format('Y-m-d H:i:s.u'),
