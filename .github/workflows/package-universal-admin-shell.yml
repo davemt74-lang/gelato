@@ -1,0 +1,59 @@
+name: Package Universal Admin Shell
+
+on:
+  push:
+    branches:
+      - build/universal-admin-shell-package
+    paths:
+      - '.github/workflows/package-universal-admin-shell.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: c1b916111887e86612a37cbf5ea660fb0f30da5c
+      - name: Build direct deploy zip
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p deploy/js
+          cp locations-admin.php deploy/
+          cp operations.php deploy/
+          cp catering-operations.php deploy/
+          cp catering-pipeline.php deploy/
+          cp sales-intelligence.php deploy/
+          cp customer-promotions.php deploy/
+          cp customer-crm.php deploy/
+          cp online-orders-admin.php deploy/
+          cp recipes.php deploy/
+          cp js/universal-admin-page-shell.js deploy/js/
+          cp js/floor-planner-module.js deploy/js/
+          cp js/admin-shell-consolidation.js deploy/js/
+          cat > deploy/README-DEPLOY.txt <<'EOF'
+          Stonefellows / Gelato Universal Admin Shell deploy
+          Exact merged main: c1b916111887e86612a37cbf5ea660fb0f30da5c
+
+          Deploy:
+          1. Extract this ZIP directly into the application web root.
+          2. Allow the included PHP files and js/ files to overwrite existing files.
+          3. Hard-refresh the browser after deployment.
+
+          No SQL/database migration and no upgrade.php run are required for this patch.
+          EOF
+          (cd deploy && zip -9 -r ../stonefellows-universal-admin-shell-deploy.zip .)
+          unzip -t stonefellows-universal-admin-shell-deploy.zip
+          sha256sum stonefellows-universal-admin-shell-deploy.zip > stonefellows-universal-admin-shell-deploy.sha256
+      - name: Upload deploy artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: stonefellows-universal-admin-shell-deploy
+          path: |
+            stonefellows-universal-admin-shell-deploy.zip
+            stonefellows-universal-admin-shell-deploy.sha256
+          if-no-files-found: error
+          retention-days: 7
