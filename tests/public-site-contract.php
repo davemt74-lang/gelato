@@ -19,7 +19,7 @@ $workspace=file_get_contents($root.'/workspace.php')?:'';if(!str_contains($works
 $login=file_get_contents($root.'/login.php')?:'';if(!str_contains($login,'workspace.php'))throw new RuntimeException('Login must return staff to workspace.php.');if(!str_contains($login,'stonefellows-public-v2.css'))throw new RuntimeException('Login must load the explicit Stonefellows v2 theme.');
 
 $signup=file_get_contents($root.'/customer-signup.php')?:'';
-foreach(['customer_account_register','app_verify_csrf','email_marketing','sms_marketing','customer-account.php?welcome=1'] as $needle)if(!str_contains($signup,$needle))throw new RuntimeException('Customer signup contract missing: '.$needle);
+foreach(['customer_account_register','app_verify_csrf','email_marketing','sms_marketing','$return=customer_account_safe_return','name="return"','app_redirect($return)'] as $needle)if(!str_contains($signup,$needle))throw new RuntimeException('Customer signup contract missing: '.$needle);
 $customerLogin=file_get_contents($root.'/customer-login.php')?:'';
 foreach(['customer_account_authenticate','app_verify_csrf','customer-signup.php'] as $needle)if(!str_contains($customerLogin,$needle))throw new RuntimeException('Customer login contract missing: '.$needle);
 $customerAccount=file_get_contents($root.'/customer-account.php')?:'';

@@ -1,6 +1,8 @@
 (()=>{
   const cfg=window.STONEFELLOWS_ORDER||{};
   const locationId=Number(cfg.locationId||0);
+  const authenticated=Boolean(cfg.authenticated);
+  const signupUrl=String(cfg.signupUrl||'customer-signup.php?return=online-order.php%3Fcheckout%3D1');
   const key=`stonefellows.onlineCart.v1.${locationId}`;
   const linesEl=document.getElementById('cartLines');
   const countEl=document.getElementById('cartCount');
@@ -9,7 +11,9 @@
   const form=document.getElementById('checkoutForm');
   const submit=document.getElementById('placeOrder');
   const token=document.getElementById('idempotencyKey');
+  const note=form?form.querySelector('textarea[name="order_note"]'):null;
   if(!linesEl||!countEl||!subtotalEl||!cartJson||!form||!submit||!token)return;
+  const noteKey=`${key}.note`;
 
   const makeToken=()=>{
     if(window.crypto&&crypto.getRandomValues){const bytes=new Uint8Array(20);crypto.getRandomValues(bytes);return Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');}
@@ -19,6 +23,7 @@
 
   let cart=[];
   try{const parsed=JSON.parse(sessionStorage.getItem(key)||'[]');if(Array.isArray(parsed))cart=parsed.filter(row=>row&&Number(row.priceId)>0&&Number(row.quantity)>0);}catch(_){cart=[];}
+  if(note){try{note.value=sessionStorage.getItem(noteKey)||note.value||'';}catch(_){}}
 
   const money=value=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(value||0));
   const persist=()=>{try{sessionStorage.setItem(key,JSON.stringify(cart));}catch(_){};};
@@ -33,6 +38,7 @@
     subtotalEl.textContent=money(subtotal);
     cartJson.value=JSON.stringify(submitPayload());
     submit.disabled=!locationId||cart.length===0;
+    submit.textContent=authenticated?'Place pickup order':'Continue to checkout';
     if(!cart.length){linesEl.innerHTML='<div class="customer-empty">Your cart is empty.</div>';persist();return;}
     linesEl.innerHTML=cart.map((row,index)=>`<article class="cart-line"><div><strong>${escapeHtml(row.name)}</strong><small>${escapeHtml(row.option)}</small><em>${money(row.price)}</em></div><div class="cart-stepper"><button type="button" data-cart-action="minus" data-index="${index}" aria-label="Decrease quantity">−</button><span>${Number(row.quantity)}</span><button type="button" data-cart-action="plus" data-index="${index}" aria-label="Increase quantity">+</button></div><button class="cart-remove" type="button" data-cart-action="remove" data-index="${index}">Remove</button></article>`).join('');
     persist();
@@ -56,9 +62,18 @@
     render();
   });
 
+  if(note)note.addEventListener('input',()=>{try{sessionStorage.setItem(noteKey,note.value||'');}catch(_){}});
+
   form.addEventListener('submit',event=>{
     if(!cart.length){event.preventDefault();return;}
     cartJson.value=JSON.stringify(submitPayload());
+    persist();
+    if(note){try{sessionStorage.setItem(noteKey,note.value||'');}catch(_){}}
+    if(!authenticated){
+      event.preventDefault();
+      window.location.assign(signupUrl);
+      return;
+    }
     submit.disabled=true;submit.textContent='Sending order…';
   });
   render();
