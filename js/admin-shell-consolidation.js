@@ -51,7 +51,10 @@
       .admin-nav-section-items[hidden]{display:none!important}
       .admin-nav-section-items>.nav-btn,
       .admin-nav-section-items>.nav-item{width:100%;box-sizing:border-box}
-      @media(max-width:840px){#page-workspace .chat-canvas{padding-bottom:96px}.standard-page.admin-page{padding-bottom:96px}}
+      .top-actions .gelato-header-shortcut{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:7px 11px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font-size:10px;font-weight:900;text-decoration:none;white-space:nowrap}
+      .top-actions .gelato-header-shortcut.pos{background:var(--dark);border-color:var(--dark);color:#fff}
+      .top-actions .gelato-header-shortcut.kds{background:#fff7f3;border-color:#efc6b9;color:#9a351f}
+      @media(max-width:840px){#page-workspace .chat-canvas{padding-bottom:96px}.standard-page.admin-page{padding-bottom:96px}.top-actions .gelato-header-shortcut{display:none}}
     `;
     document.head.appendChild(style);
   }
@@ -85,12 +88,18 @@
       node.dataset?.nav || '',
       node.dataset?.employeeHomeLink ? 'employee home' : '',
       node.dataset?.locationsNav ? 'locations' : '',
+      node.dataset?.onlineOrdersNav ? 'online orders' : '',
+      node.dataset?.operationsNav ? 'operations' : '',
       node.dataset?.floorPlannerNav ? 'floor planner' : '',
       node.dataset?.equipmentNav ? 'equipment catalog' : '',
       node.dataset?.wholesaleNav ? 'wholesale' : '',
       node.dataset?.wholesaleAccountsNav ? 'wholesale customers' : '',
-      node.dataset?.cateringNav ? 'catering' : '',
-      node.dataset?.recipesNav ? 'recipe library' : '',
+      node.dataset?.cateringNav ? 'catering pipeline' : '',
+      node.dataset?.cateringOperationsNav ? 'catering operations' : '',
+      node.dataset?.salesIntelligenceNav ? 'sales intelligence' : '',
+      node.dataset?.customerCrmNav ? 'customer crm' : '',
+      node.dataset?.customerPromotionsNav ? 'customer promotions' : '',
+      node.dataset?.recipesNav ? 'recipe library builder' : '',
       node.dataset?.purchasingNav ? 'purchasing receiving' : '',
       node.dataset?.schedulingNav ? 'staff scheduling' : '',
       node.dataset?.timeclockNav ? 'time clock attendance' : '',
@@ -103,7 +112,7 @@
   function adminNavCategory(node) {
     const signature = adminNavSignature(node);
     if (/owner agent|agent canvas|public ai agent|knowledge center|llm/.test(signature)) return 'ai';
-    if (/wholesale|catering/.test(signature)) return 'sales';
+    if (/sales intelligence|customer crm|customer promotions|wholesale|catering/.test(signature)) return 'sales';
     if (/landing page|public site|locations?|brand settings?/.test(signature)) return 'website';
     if (/employee home|user accounts?|account types?|resume|jobs?|form builder|staff scheduling|my schedule|time clock|my time/.test(signature)) return 'team';
     return 'operations';
@@ -114,8 +123,8 @@
     const rules = [
       [/employee home/, 10], [/user accounts?/, 20], [/account types?/, 30], [/resume/, 40], [/jobs?/, 50], [/form builder/, 60], [/staff scheduling|my schedule/, 70], [/time clock|my time/, 80],
       [/landing page/, 110], [/public site/, 120], [/locations?/, 130], [/brand settings?/, 140],
-      [/floor planner/, 210], [/equipment catalog/, 220], [/recipe library/, 230], [/purchasing|receiving/, 240],
-      [/wholesale(?!.*customer)/, 310], [/wholesale customers?/, 320], [/catering/, 330],
+      [/online orders/, 200], [/\boperations\b/, 210], [/floor planner/, 220], [/equipment catalog/, 230], [/recipe library/, 240], [/purchasing|receiving/, 250],
+      [/sales intelligence/, 300], [/customer crm/, 310], [/customer promotions/, 320], [/catering operations/, 330], [/catering pipeline/, 340], [/wholesale(?!.*customer)/, 350], [/wholesale customers?/, 360],
       [/owner agent/, 410], [/agent canvas/, 420], [/public ai agent/, 430], [/knowledge center/, 440], [/llm/, 450],
     ];
     for (const [pattern, rank] of rules) {
@@ -217,9 +226,85 @@
     if (!adminNav) return;
     const wholesale = $('[data-wholesale-nav]', adminNav);
     const catering = $('[data-catering-nav]', adminNav);
+    const recipes = $('[data-recipes-nav]', adminNav);
     if (wholesale) wholesale.innerHTML = '<span class="nav-ico">◇</span>Wholesale';
-    if (catering) catering.innerHTML = '<span class="nav-ico">◈</span>Catering';
+    if (catering) catering.innerHTML = '<span class="nav-ico">◈</span>Catering Pipeline';
+    if (recipes) recipes.innerHTML = '<span class="nav-ico">▤</span>Recipe Library + Builder';
     scheduleAdminNavOrganization();
+  }
+
+  function installHeaderShortcuts() {
+    const actions = $('.topbar .top-actions');
+    if (!actions) return;
+    const notifications = $('.notification-wrap', actions);
+    const before = notifications || actions.firstChild;
+    const can = (permission) => !window.RestaurantAuth || window.RestaurantAuth.has(permission);
+    if (can('pos.use') && !$('#gelatoHeaderPos')) {
+      const link = document.createElement('a');
+      link.id = 'gelatoHeaderPos';
+      link.className = 'gelato-header-shortcut pos';
+      link.href = 'pos.php';
+      link.textContent = 'POS';
+      actions.insertBefore(link, before);
+    }
+    if (can('kds.view') && !$('#gelatoHeaderKds')) {
+      const link = document.createElement('a');
+      link.id = 'gelatoHeaderKds';
+      link.className = 'gelato-header-shortcut kds';
+      link.href = 'kds.php';
+      link.textContent = 'KDS';
+      const pos = $('#gelatoHeaderPos');
+      if (pos?.nextSibling) actions.insertBefore(link, pos.nextSibling);
+      else if (pos) actions.appendChild(link);
+      else actions.insertBefore(link, before);
+    }
+  }
+
+  function cleanProfileMenu() {
+    const list = $('.profile-menu-list');
+    if (!list) return;
+
+    list.querySelectorAll('a[href="landing.html"],a[href="apply.html"]').forEach((node) => node.remove());
+    const adminLink = $('#restaurantAdminControlLink', list);
+    const settings = $('#profileSettingsLink', list);
+    if (adminLink && settings) settings.remove();
+
+    if (!list.querySelector('a[data-public-website-link]')) {
+      const anchor = document.createElement('a');
+      anchor.href = 'index.php';
+      anchor.target = '_blank';
+      anchor.dataset.publicWebsiteLink = '1';
+      anchor.textContent = '◇ Public website ↗';
+      const logout = $('#logoutButton', list);
+      const separator = document.createElement('hr');
+      if (logout) {
+        const existingSeparator = logout.previousElementSibling?.tagName === 'HR' ? logout.previousElementSibling : null;
+        list.insertBefore(anchor, existingSeparator || logout);
+        if (!existingSeparator) list.insertBefore(separator, logout);
+      } else list.appendChild(anchor);
+    }
+
+    const seen = new Set();
+    list.querySelectorAll('a,button').forEach((node) => {
+      const key = node.matches('a')
+        ? `href:${(node.getAttribute('href') || '').replace(/^\.\//, '')}`
+        : node.dataset.nav
+          ? `nav:${node.dataset.nav}`
+          : node.id
+            ? `id:${node.id}`
+            : `text:${node.textContent.trim().toLowerCase()}`;
+      if (seen.has(key)) node.remove();
+      else seen.add(key);
+    });
+  }
+
+  function watchProfileMenu() {
+    cleanProfileMenu();
+    const list = $('.profile-menu-list');
+    if (!list || list.dataset.shellMenuObserver === '1') return;
+    list.dataset.shellMenuObserver = '1';
+    const observer = new MutationObserver(() => cleanProfileMenu());
+    observer.observe(list, {childList: true, subtree: false});
   }
 
   function appendCanvasMessage(role, text) {
@@ -313,6 +398,8 @@
     removeEmployeeHomeHeaderLink();
     normalizeOperationsNavigation();
     installAdminNavAccordion();
+    installHeaderShortcuts();
+    watchProfileMenu();
     installGlobalAgentCanvasBridge();
     window.addEventListener('gelato-agent-ready', setGlobalAgentReady, {once: true});
     if (document.getElementById('gelato-agent-bar')) setGlobalAgentReady();
@@ -320,11 +407,15 @@
       removeEmployeeHomeHeaderLink();
       normalizeOperationsNavigation();
       organizeAdminNavigation();
+      installHeaderShortcuts();
+      cleanProfileMenu();
     });
     requestAnimationFrame(() => {
       removeEmployeeHomeHeaderLink();
       normalizeOperationsNavigation();
       organizeAdminNavigation();
+      installHeaderShortcuts();
+      cleanProfileMenu();
     });
   }
 

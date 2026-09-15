@@ -4,20 +4,42 @@ on:
   pull_request:
     paths:
       - 'index.html'
+      - 'locations-admin.php'
+      - 'operations.php'
+      - 'catering-operations.php'
+      - 'catering-pipeline.php'
+      - 'sales-intelligence.php'
+      - 'customer-promotions.php'
+      - 'customer-crm.php'
+      - 'online-orders-admin.php'
+      - 'recipes.php'
       - 'js/admin-shell-consolidation.js'
+      - 'js/universal-admin-page-shell.js'
       - 'js/floor-planner-module.js'
       - 'js/employee-home-module.js'
       - 'tests/admin-shell-consolidation-contract.php'
+      - 'tests/universal-admin-page-shell-contract.php'
       - '.github/workflows/admin-shell-consolidation.yml'
   push:
     branches:
       - main
     paths:
       - 'index.html'
+      - 'locations-admin.php'
+      - 'operations.php'
+      - 'catering-operations.php'
+      - 'catering-pipeline.php'
+      - 'sales-intelligence.php'
+      - 'customer-promotions.php'
+      - 'customer-crm.php'
+      - 'online-orders-admin.php'
+      - 'recipes.php'
       - 'js/admin-shell-consolidation.js'
+      - 'js/universal-admin-page-shell.js'
       - 'js/floor-planner-module.js'
       - 'js/employee-home-module.js'
       - 'tests/admin-shell-consolidation-contract.php'
+      - 'tests/universal-admin-page-shell-contract.php'
       - '.github/workflows/admin-shell-consolidation.yml'
 
 permissions:
@@ -35,11 +57,25 @@ jobs:
           php-version: '8.1'
           coverage: none
       - name: PHP syntax
-        run: php -l tests/admin-shell-consolidation-contract.php
+        run: |
+          php -l tests/admin-shell-consolidation-contract.php
+          php -l tests/universal-admin-page-shell-contract.php
+          php -l locations-admin.php
+          php -l operations.php
+          php -l catering-operations.php
+          php -l catering-pipeline.php
+          php -l sales-intelligence.php
+          php -l customer-promotions.php
+          php -l customer-crm.php
+          php -l online-orders-admin.php
+          php -l recipes.php
       - name: JavaScript syntax
         run: |
           node --check js/admin-shell-consolidation.js
+          node --check js/universal-admin-page-shell.js
           node --check js/floor-planner-module.js
           node --check js/employee-home-module.js
       - name: Admin shell contract
-        run: php tests/admin-shell-consolidation-contract.php
+        run: |
+          php tests/admin-shell-consolidation-contract.php
+          php tests/universal-admin-page-shell-contract.php

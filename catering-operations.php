@@ -20,4 +20,5 @@ $canManage=app_has_permission('catering.manage',$user);
 <div class="toast hidden" id="toast"></div>
 <script>window.CATERING_OPERATIONS_CONFIG={csrf:<?= json_encode(app_csrf_token(),JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT) ?>,canManage:<?= $canManage?'true':'false' ?>};</script>
 <script src="js/catering-operations.js?v=20260913-1"></script>
+<script src="js/universal-admin-page-shell.js?v=20260915-1"></script>
 </body></html>
