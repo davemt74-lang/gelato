@@ -1,0 +1,36 @@
+name: Universal Admin Shell Apply
+
+on:
+  push:
+    branches:
+      - feature/universal-admin-shell
+    paths:
+      - scripts/apply-universal-admin-page-shell.py
+      - .github/workflows/universal-admin-shell-apply.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/universal-admin-shell
+          fetch-depth: 0
+      - name: Apply shell integration
+        run: python3 scripts/apply-universal-admin-page-shell.py
+      - name: Commit integrated pages
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No page changes required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add locations-admin.php operations.php catering-operations.php catering-pipeline.php sales-intelligence.php customer-promotions.php customer-crm.php online-orders-admin.php recipes.php
+          git commit -m "Integrate universal admin shell across management pages"
+          git push origin HEAD:feature/universal-admin-shell
