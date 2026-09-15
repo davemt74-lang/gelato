@@ -1,0 +1,296 @@
+/* Stonefellows homepage pizza scroll story */
+.pizza-scroll-story{
+  --pizza-count:5;
+  position:relative;
+  z-index:1;
+  height:100svh;
+  min-height:640px;
+  background:#050504;
+}
+.pizza-scroll-story.is-scroll-ready{
+  height:calc((var(--pizza-count) + 2) * 100svh);
+}
+.pizza-story-sticky{
+  position:sticky;
+  top:0;
+  height:100svh;
+  min-height:640px;
+  overflow:hidden;
+  isolation:isolate;
+  background:#050504;
+}
+.pizza-story-hero{
+  position:absolute;
+  inset:0;
+  z-index:1;
+  width:100%;
+  height:100%;
+  min-height:0;
+  transition:none;
+  will-change:opacity,transform;
+}
+.pizza-story-hero .hero-inner{padding-bottom:72px}
+.pizza-story-blackout{
+  position:absolute;
+  inset:0;
+  z-index:2;
+  background:#050504;
+  opacity:0;
+  pointer-events:none;
+  will-change:opacity;
+}
+.pizza-story-stage{
+  position:absolute;
+  inset:0;
+  z-index:3;
+  opacity:0;
+  pointer-events:none;
+  will-change:opacity;
+}
+.pizza-story-slide{
+  position:absolute;
+  inset:0;
+  opacity:0;
+  visibility:hidden;
+  overflow:hidden;
+}
+.pizza-story-slide.is-active{
+  visibility:visible;
+}
+.pizza-story-visual{
+  position:absolute;
+  left:max(-2vw,-24px);
+  top:50%;
+  width:min(55vw,760px);
+  transform:translateY(-50%);
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  perspective:1100px;
+}
+.pizza-story-image{
+  width:min(52vw,720px);
+  max-width:none;
+  aspect-ratio:1/1;
+  object-fit:contain;
+  transform-origin:50% 50%;
+  filter:drop-shadow(0 30px 44px rgba(0,0,0,.54));
+  will-change:transform,opacity;
+  backface-visibility:hidden;
+}
+.pizza-story-copy{
+  position:absolute;
+  left:56%;
+  right:max(5vw,42px);
+  top:50%;
+  max-width:540px;
+  transform:translateY(-50%);
+  opacity:0;
+  will-change:opacity,transform;
+}
+.pizza-story-count{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  margin-bottom:16px;
+  color:#b7a98e;
+  font-size:.67rem;
+  font-weight:800;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+}
+.pizza-story-count:after{
+  content:"";
+  width:62px;
+  height:1px;
+  background:rgba(242,219,159,.42);
+}
+.pizza-story-copy h2{
+  margin:0 0 18px;
+  font-size:clamp(2.55rem,5vw,5rem);
+  line-height:.92;
+  color:#fffaf0;
+}
+.pizza-story-description{
+  max-width:520px;
+  margin:0 0 22px;
+  color:#d4cec3;
+  font-size:clamp(.92rem,1.35vw,1.08rem);
+  line-height:1.65;
+}
+.pizza-story-price{
+  display:inline-flex;
+  margin:0 0 24px;
+  color:var(--gold2);
+  font-family:var(--serif);
+  font-size:1.25rem;
+}
+.pizza-story-meta{
+  display:grid;
+  gap:18px;
+  max-width:540px;
+}
+.pizza-story-meta-block{
+  padding-top:14px;
+  border-top:1px solid rgba(255,255,255,.12);
+}
+.pizza-story-meta-title{
+  display:block;
+  margin-bottom:9px;
+  color:#8f8677;
+  font-size:.62rem;
+  font-weight:850;
+  letter-spacing:.19em;
+  text-transform:uppercase;
+}
+.pizza-story-toppings{
+  display:flex;
+  flex-wrap:wrap;
+  gap:7px;
+}
+.pizza-story-toppings span{
+  padding:6px 9px;
+  border:1px solid rgba(255,255,255,.13);
+  background:rgba(255,255,255,.035);
+  color:#ece4d7;
+  font-size:.72rem;
+  line-height:1.2;
+}
+.pizza-story-note{
+  margin:0;
+  color:#c7bba6;
+  font-size:.8rem;
+  line-height:1.55;
+}
+.pizza-story-progress{
+  position:absolute;
+  left:50%;
+  bottom:28px;
+  z-index:5;
+  display:flex;
+  gap:9px;
+  transform:translateX(-50%);
+  opacity:0;
+  will-change:opacity;
+}
+.pizza-story-progress span{
+  width:28px;
+  height:2px;
+  background:rgba(255,255,255,.18);
+  overflow:hidden;
+}
+.pizza-story-progress span:after{
+  content:"";
+  display:block;
+  width:100%;
+  height:100%;
+  background:var(--gold2);
+  transform:scaleX(0);
+  transform-origin:left center;
+  transition:transform .22s ease;
+}
+.pizza-story-progress span.is-past:after,
+.pizza-story-progress span.is-active:after{transform:scaleX(1)}
+.pizza-scroll-story.is-ending .pizza-story-progress{opacity:0!important}
+
+@media(max-width:900px){
+  .pizza-story-visual{
+    left:-8vw;
+    top:38%;
+    width:72vw;
+  }
+  .pizza-story-image{width:72vw}
+  .pizza-story-copy{
+    left:48%;
+    right:24px;
+    top:52%;
+    max-width:46vw;
+  }
+  .pizza-story-copy h2{font-size:clamp(2.15rem,7vw,4rem)}
+}
+@media(max-width:700px){
+  .pizza-scroll-story,
+  .pizza-story-sticky{min-height:620px}
+  .pizza-story-visual{
+    left:50%;
+    top:32%;
+    width:min(94vw,560px);
+    transform:translate(-50%,-50%);
+    justify-content:center;
+  }
+  .pizza-story-image{width:min(91vw,540px)}
+  .pizza-story-copy{
+    left:22px;
+    right:22px;
+    top:auto;
+    bottom:44px;
+    max-width:none;
+    transform:none;
+    padding:88px 0 0;
+    background:linear-gradient(180deg,transparent,rgba(5,5,4,.86) 28%,#050504 68%);
+  }
+  .pizza-story-copy h2{font-size:clamp(2.1rem,11vw,3.25rem);margin-bottom:10px}
+  .pizza-story-description{font-size:.86rem;line-height:1.5;margin-bottom:12px}
+  .pizza-story-price{font-size:1.02rem;margin-bottom:12px}
+  .pizza-story-meta{gap:10px}
+  .pizza-story-meta-block{padding-top:8px}
+  .pizza-story-toppings{gap:5px}
+  .pizza-story-toppings span{font-size:.64rem;padding:5px 7px}
+  .pizza-story-note{font-size:.7rem}
+  .pizza-story-progress{bottom:18px}
+}
+
+/* A motion-safe fallback is a normal document flow instead of a 700vh animation. */
+@media(prefers-reduced-motion:reduce){
+  .pizza-scroll-story,
+  .pizza-scroll-story.is-scroll-ready{
+    height:auto!important;
+    min-height:0;
+    background:#050504;
+  }
+  .pizza-story-sticky{
+    position:relative;
+    height:auto;
+    min-height:0;
+    overflow:visible;
+  }
+  .pizza-story-hero{
+    position:relative;
+    height:auto;
+    min-height:570px;
+  }
+  .pizza-story-blackout{display:none}
+  .pizza-story-stage{
+    position:relative;
+    opacity:1!important;
+    padding:48px 0;
+  }
+  .pizza-story-slide{
+    position:relative;
+    inset:auto;
+    visibility:visible;
+    opacity:1!important;
+    min-height:0;
+    display:grid;
+    grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);
+    align-items:center;
+    gap:28px;
+    width:var(--content);
+    margin:0 auto 44px;
+  }
+  .pizza-story-visual,
+  .pizza-story-copy{
+    position:relative;
+    inset:auto;
+    transform:none!important;
+    opacity:1!important;
+    width:auto;
+    max-width:none;
+  }
+  .pizza-story-image{width:100%;transform:none!important}
+  .pizza-story-progress{display:none}
+}
+@media(prefers-reduced-motion:reduce) and (max-width:700px){
+  .pizza-story-slide{grid-template-columns:1fr}
+  .pizza-story-copy{padding:0;background:none}
+}
