@@ -1,0 +1,86 @@
+name: Recover Menu Operations Bundle
+
+on:
+  push:
+    branches:
+      - feature/menu-manager-operations-location-overrides
+    paths:
+      - '.github/workflows/recover-menu-ops-bundle.yml'
+      - '.pr111/**'
+
+permissions:
+  contents: write
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Decode and safely extract staged bundle
+        run: |
+          python3 <<'PY'
+          from pathlib import Path, PurePosixPath
+          import base64, gzip, io, tarfile, zipfile, shutil, sys
+
+          chunks = sorted(Path('.pr111').glob('chunk-*'))
+          if not chunks:
+              raise SystemExit('No staged chunks found.')
+          encoded = ''.join(p.read_text(encoding='utf-8').strip() for p in chunks)
+          raw = base64.b64decode(encoded, validate=True)
+          if raw[:2] == b'\x1f\x8b':
+              payload = gzip.decompress(raw)
+          else:
+              payload = raw
+
+          def safe_name(name: str) -> str:
+              p = PurePosixPath(name)
+              if p.is_absolute() or '..' in p.parts or name.startswith(('/', '\\')):
+                  raise SystemExit(f'Unsafe archive path: {name}')
+              return str(p)
+
+          extracted = []
+          bio = io.BytesIO(payload)
+          try:
+              with tarfile.open(fileobj=bio, mode='r:*') as tf:
+                  members = tf.getmembers()
+                  for m in members:
+                      safe_name(m.name)
+                      if m.issym() or m.islnk():
+                          raise SystemExit(f'Archive links are not allowed: {m.name}')
+                  tf.extractall('.', members=members, filter='data')
+                  extracted = [m.name for m in members if m.isfile()]
+          except tarfile.ReadError:
+              bio.seek(0)
+              if not zipfile.is_zipfile(bio):
+                  print('Decoded payload prefix:', payload[:120])
+                  raise SystemExit('Decoded bundle is neither tar nor zip.')
+              bio.seek(0)
+              with zipfile.ZipFile(bio) as zf:
+                  for name in zf.namelist():
+                      safe_name(name)
+                  zf.extractall('.')
+                  extracted = [n for n in zf.namelist() if not n.endswith('/')]
+
+          print('Recovered files:')
+          for name in extracted:
+              print(name)
+          if not extracted:
+              raise SystemExit('Bundle extracted no files.')
+          PY
+
+      - name: Commit recovered implementation
+        run: |
+          rm -rf .pr111
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git status --short
+          if git diff --cached --quiet; then
+            echo 'Nothing to commit.'
+            exit 0
+          fi
+          git commit -m 'Recover staged Menu Operations implementation'
+          git push origin HEAD:feature/menu-manager-operations-location-overrides
