@@ -22,7 +22,7 @@ $needles('Lifecycle hardening',$lifecycle,[
     'Kitchen lifecycle state could not be read safely.',
     'return in_array($current,online_order_lifecycle_statuses(),true)?$current',
 ]);
-if(str_contains($lifecycle,"catch(Throwable){}\n\n    $row=array_merge($row,$counts)")){
+if(str_contains($lifecycle,'catch(Throwable){}'."\n\n    \$row=array_merge(\$row,\$counts)")){
     throw new RuntimeException('KDS aggregate failures must not be swallowed as zero kitchen state.');
 }
 
@@ -63,7 +63,7 @@ $order=$read('online-order.php');
 $needles('Online ordering media',$order,[
     "require_once __DIR__.'/includes/media-core.php'",
     'media_location_cover_map',
-    "media_enrich_channel_menu($pdo,$organizationId,$menu)",
+    'media_enrich_channel_menu($pdo,$organizationId,$menu)',
     'class="order-location-cover"',
     'class="order-item-image"',
 ]);
