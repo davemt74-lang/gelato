@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__.'/menu-sync.php';
 require_once __DIR__.'/pos-core.php';
+require_once __DIR__.'/menu-operations-core.php';
 
 function menu_manager_tables(): array
 {
@@ -117,7 +118,7 @@ function menu_manager_list_items(PDO $pdo,int $org,string $query='',?int $catego
     if($categoryId){$where[]='i.section_id=?';$args[]=$categoryId;}
     if(trim($query)!==''){$where[]='(i.name LIKE ? OR s.name LIKE ? OR i.description LIKE ?)';$like='%'.trim($query).'%';array_push($args,$like,$like,$like);}
     if(!$includeArchived)$where[]="COALESCE(mp.lifecycle_status,IF(i.is_active=1,'published','paused'))<>'archived'";
-    $sql="SELECT i.id,i.name,i.slug,i.description,i.is_active,i.version,i.section_id,s.name category_name,s.status category_status,
+    $sql="SELECT i.id,i.name,i.slug,i.description,i.is_active,i.version,i.sort_order,i.section_id,s.name category_name,s.status category_status,
                  mp.item_type,mp.lifecycle_status,mp.kitchen_station,mp.public_menu_enabled,mp.online_order_enabled,mp.pos_enabled,mp.packages_enabled,mp.catering_enabled,
                  MIN(CASE WHEN p.active_until IS NULL OR p.active_until>NOW(6) THEN p.amount END) min_price,
                  MAX(CASE WHEN p.active_until IS NULL OR p.active_until>NOW(6) THEN p.amount END) max_price,
@@ -125,14 +126,14 @@ function menu_manager_list_items(PDO $pdo,int $org,string $query='',?int $catego
           FROM menu_items i JOIN menu_sections s ON s.id=i.section_id AND s.organization_id=i.organization_id
           LEFT JOIN menu_item_profiles mp ON mp.menu_item_id=i.id AND mp.organization_id=i.organization_id
           LEFT JOIN menu_item_prices p ON p.menu_item_id=i.id
-          WHERE ".implode(' AND ',$where)." GROUP BY i.id,s.id,mp.id ORDER BY s.sort_order,s.name,i.name,i.id";
+          WHERE ".implode(' AND ',$where)." GROUP BY i.id,s.id,mp.id ORDER BY s.sort_order,s.name,i.sort_order,i.name,i.id";
     $q=$pdo->prepare($sql);$q->execute($args);$out=[];
     foreach($q->fetchAll() as $r){
         $legacy=$r['lifecycle_status']===null;
         $out[]=[
             'id'=>(int)$r['id'],'name'=>(string)$r['name'],'slug'=>(string)$r['slug'],'description'=>(string)($r['description']??''),'categoryId'=>(int)$r['section_id'],'categoryName'=>(string)$r['category_name'],
             'itemType'=>$legacy?'legacy':(string)$r['item_type'],'lifecycleStatus'=>$legacy?((int)$r['is_active']===1?'published':'paused'):(string)$r['lifecycle_status'],
-            'active'=>(bool)$r['is_active'],'version'=>(int)$r['version'],'priceCount'=>(int)$r['price_count'],'minPrice'=>$r['min_price']!==null?(float)$r['min_price']:null,'maxPrice'=>$r['max_price']!==null?(float)$r['max_price']:null,
+            'active'=>(bool)$r['is_active'],'version'=>(int)$r['version'],'sortOrder'=>(int)($r['sort_order']??0),'priceCount'=>(int)$r['price_count'],'minPrice'=>$r['min_price']!==null?(float)$r['min_price']:null,'maxPrice'=>$r['max_price']!==null?(float)$r['max_price']:null,
             'distribution'=>[
                 'publicMenu'=>$legacy?true:(bool)$r['public_menu_enabled'],'onlineOrder'=>$legacy?true:(bool)$r['online_order_enabled'],'pos'=>$legacy?true:(bool)$r['pos_enabled'],
                 'packages'=>$legacy?true:(bool)$r['packages_enabled'],'catering'=>$legacy?false:(bool)$r['catering_enabled'],
@@ -209,10 +210,13 @@ function menu_manager_save_item(PDO $pdo,int $org,?int $itemId,array $input,int 
         $lifecycle=$existingProfile['lifecycleStatus']??'draft';$active=$lifecycle==='published'?1:0;$slug=menu_manager_slug_unique($pdo,$org,(string)($input['slug']??$name),$itemId);
         $metadata=[];if($existing){try{$metadata=json_decode((string)($existing['behavior_tags_json']??'{}'),true,64,JSON_THROW_ON_ERROR);if(!is_array($metadata))$metadata=[];}catch(Throwable){$metadata=[];}}
         $metadata['source']='menu-manager';$metadata['itemType']='food';$metadata['managed']=true;$metadataJson=json_encode($metadata,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
+        $sortOrder=$existing?(int)($existing['sort_order']??0):0;
+        if($existing && (int)$existing['section_id']!==$categoryId){$q=$pdo->prepare('SELECT COALESCE(MAX(sort_order),0)+10 FROM menu_items WHERE organization_id=? AND section_id=?');$q->execute([$org,$categoryId]);$sortOrder=(int)$q->fetchColumn();}
         if($existing){
-            $pdo->prepare('UPDATE menu_items SET section_id=?,name=?,slug=?,description=?,preparation_notes=?,behavior_tags_json=?,is_active=?,version=version+1,updated_at=NOW(6) WHERE organization_id=? AND id=?')->execute([$categoryId,$name,$slug,$description,$prep,$metadataJson,$active,$org,$itemId]);
+            $pdo->prepare('UPDATE menu_items SET section_id=?,name=?,slug=?,description=?,preparation_notes=?,behavior_tags_json=?,is_active=?,sort_order=?,version=version+1,updated_at=NOW(6) WHERE organization_id=? AND id=?')->execute([$categoryId,$name,$slug,$description,$prep,$metadataJson,$active,$sortOrder,$org,$itemId]);
         }else{
-            $pdo->prepare('INSERT INTO menu_items (organization_id,section_id,name,slug,description,preparation_notes,behavior_tags_json,is_active,version) VALUES (?,?,?,?,?,?,?,0,1)')->execute([$org,$categoryId,$name,$slug,$description,$prep,$metadataJson]);$itemId=(int)$pdo->lastInsertId();
+            $q=$pdo->prepare('SELECT COALESCE(MAX(sort_order),0)+10 FROM menu_items WHERE organization_id=? AND section_id=?');$q->execute([$org,$categoryId]);$sortOrder=(int)$q->fetchColumn();
+            $pdo->prepare('INSERT INTO menu_items (organization_id,section_id,name,slug,description,preparation_notes,behavior_tags_json,is_active,version,sort_order) VALUES (?,?,?,?,?,?,?,0,1,?)')->execute([$org,$categoryId,$name,$slug,$description,$prep,$metadataJson,$sortOrder]);$itemId=(int)$pdo->lastInsertId();
         }
         $public=!empty($profileInput['publicMenu'])?1:0;$online=!empty($profileInput['onlineOrder'])?1:0;$pos=!empty($profileInput['pos'])?1:0;$packages=!empty($profileInput['packages'])?1:0;$catering=!empty($profileInput['catering'])?1:0;
         $pdo->prepare("INSERT INTO menu_item_profiles (organization_id,menu_item_id,item_type,lifecycle_status,kitchen_station,public_menu_enabled,online_order_enabled,pos_enabled,packages_enabled,catering_enabled,created_by,updated_by) VALUES (?,?,'food',?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE item_type='food',kitchen_station=VALUES(kitchen_station),public_menu_enabled=VALUES(public_menu_enabled),online_order_enabled=VALUES(online_order_enabled),pos_enabled=VALUES(pos_enabled),packages_enabled=VALUES(packages_enabled),catering_enabled=VALUES(catering_enabled),updated_by=VALUES(updated_by),updated_at=NOW(6)")
@@ -276,26 +280,36 @@ function menu_manager_item_channel_enabled(PDO $pdo,int $org,int $itemId,string 
     $q=$pdo->prepare("SELECT i.is_active,s.status section_status,mp.lifecycle_status,mp.$column channel_enabled FROM menu_items i JOIN menu_sections s ON s.id=i.section_id AND s.organization_id=i.organization_id LEFT JOIN menu_item_profiles mp ON mp.organization_id=i.organization_id AND mp.menu_item_id=i.id WHERE i.organization_id=? AND i.id=? LIMIT 1");$q->execute([$org,$itemId]);$r=$q->fetch();if(!$r||(int)$r['is_active']!==1||(string)$r['section_status']!=='active')return false;
     if($r['lifecycle_status']!==null&&((string)$r['lifecycle_status']!=='published'||!(bool)$r['channel_enabled']))return false;
     if($locationId&&menu_manager_ready($pdo)){$q=$pdo->prepare('SELECT COUNT(*) total,COALESCE(MAX(CASE WHEN location_id=? THEN is_available END),0) available FROM menu_item_location_availability WHERE organization_id=? AND menu_item_id=?');$q->execute([$locationId,$org,$itemId]);$a=$q->fetch();if((int)($a['total']??0)>0&&!(bool)($a['available']??0))return false;}
+    if(function_exists('menu_operations_item_sellable')&&!menu_operations_item_sellable($pdo,$org,$itemId,$channel,$locationId))return false;
     return true;
 }
 
 function menu_manager_price_channel_enabled(PDO $pdo,int $org,int $priceId,string $channel,?int $locationId=null): bool
 {
-    $q=$pdo->prepare("SELECT p.menu_item_id FROM menu_item_prices p JOIN menu_items i ON i.id=p.menu_item_id AND i.organization_id=? WHERE p.id=? AND (p.active_from IS NULL OR p.active_from<=NOW(6)) AND (p.active_until IS NULL OR p.active_until>NOW(6)) LIMIT 1");$q->execute([$org,$priceId]);$itemId=(int)($q->fetchColumn()?:0);return $itemId>0&&menu_manager_item_channel_enabled($pdo,$org,$itemId,$channel,$locationId);
+    $q=$pdo->prepare("SELECT p.menu_item_id FROM menu_item_prices p JOIN menu_items i ON i.id=p.menu_item_id AND i.organization_id=? WHERE p.id=? AND (p.active_from IS NULL OR p.active_from<=NOW(6)) AND (p.active_until IS NULL OR p.active_until>NOW(6)) LIMIT 1");$q->execute([$org,$priceId]);$itemId=(int)($q->fetchColumn()?:0);
+    if($itemId<1||!menu_manager_item_channel_enabled($pdo,$org,$itemId,$channel,$locationId))return false;
+    return !function_exists('menu_operations_price_sellable')||menu_operations_price_sellable($pdo,$org,$priceId,$channel,$locationId);
 }
 
 function menu_manager_channel_menu(PDO $pdo,int $org,string $channel,?int $locationId=null): array
 {
     $column=menu_manager_channels()[$channel]??null;if($column===null)return [];$args=[$org];$locationJoin='';$locationClause='';
     if($locationId){$locationJoin=' LEFT JOIN (SELECT menu_item_id,COUNT(*) total,MAX(CASE WHEN location_id=? THEN is_available ELSE 0 END) available FROM menu_item_location_availability WHERE organization_id=? GROUP BY menu_item_id) la ON la.menu_item_id=i.id';$args=[$locationId,$org,$org];$locationClause=' AND (la.total IS NULL OR la.total=0 OR la.available=1)';}
-    $sql="SELECT s.id section_id,s.name section_name,s.sort_order section_sort,i.id item_id,i.name item_name,i.description,p.id price_id,p.option_name,p.size_code,p.amount,p.currency,p.sort_order price_sort
+    $sql="SELECT s.id section_id,s.name section_name,s.sort_order section_sort,i.id item_id,i.name item_name,i.description,i.sort_order item_sort,p.id price_id,p.option_name,p.size_code,p.amount,p.currency,p.sort_order price_sort
           FROM menu_sections s JOIN menu_items i ON i.section_id=s.id AND i.organization_id=s.organization_id AND i.is_active=1
           LEFT JOIN menu_item_profiles mp ON mp.organization_id=i.organization_id AND mp.menu_item_id=i.id
           $locationJoin
           JOIN menu_item_prices p ON p.menu_item_id=i.id AND (p.active_from IS NULL OR p.active_from<=NOW(6)) AND (p.active_until IS NULL OR p.active_until>NOW(6))
           WHERE s.organization_id=? AND s.status='active' AND (mp.id IS NULL OR (mp.lifecycle_status='published' AND mp.$column=1)) $locationClause
-          ORDER BY s.sort_order,s.name,i.name,p.sort_order,p.amount,p.id";
-    $q=$pdo->prepare($sql);$q->execute($args);$sections=[];foreach($q->fetchAll() as $r){$sid=(int)$r['section_id'];$iid=(int)$r['item_id'];if(!isset($sections[$sid]))$sections[$sid]=['id'=>$sid,'name'=>(string)$r['section_name'],'items'=>[]];if(!isset($sections[$sid]['items'][$iid]))$sections[$sid]['items'][$iid]=['id'=>$iid,'name'=>(string)$r['item_name'],'description'=>$r['description'],'prices'=>[]];$sections[$sid]['items'][$iid]['prices'][]=['id'=>(int)$r['price_id'],'optionName'=>(string)$r['option_name'],'sizeCode'=>$r['size_code'],'amount'=>(float)$r['amount'],'currency'=>(string)$r['currency']];}foreach($sections as &$section)$section['items']=array_values($section['items']);unset($section);return array_values($sections);
+          ORDER BY s.sort_order,s.name,i.sort_order,i.name,p.sort_order,p.amount,p.id";
+    $q=$pdo->prepare($sql);$q->execute($args);$sections=[];
+    foreach($q->fetchAll() as $r){
+        $iid=(int)$r['item_id'];$pid=(int)$r['price_id'];
+        if(function_exists('menu_operations_item_sellable')&&!menu_operations_item_sellable($pdo,$org,$iid,$channel,$locationId))continue;
+        if(function_exists('menu_operations_price_sellable')&&!menu_operations_price_sellable($pdo,$org,$pid,$channel,$locationId))continue;
+        $sid=(int)$r['section_id'];if(!isset($sections[$sid]))$sections[$sid]=['id'=>$sid,'name'=>(string)$r['section_name'],'items'=>[]];if(!isset($sections[$sid]['items'][$iid]))$sections[$sid]['items'][$iid]=['id'=>$iid,'name'=>(string)$r['item_name'],'description'=>$r['description'],'prices'=>[]];$sections[$sid]['items'][$iid]['prices'][]=['id'=>$pid,'optionName'=>(string)$r['option_name'],'sizeCode'=>$r['size_code'],'amount'=>(float)$r['amount'],'currency'=>(string)$r['currency']];
+    }
+    foreach($sections as $sid=>&$section){$section['items']=array_values(array_filter($section['items'],static fn(array $item):bool=>!empty($item['prices'])));if(!$section['items'])unset($sections[$sid]);}unset($section);return array_values($sections);
 }
 
 function menu_manager_public_sections(PDO $pdo,int $org): array

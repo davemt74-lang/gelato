@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/media-core.php';
+require_once __DIR__.'/../includes/menu-operations-core.php';
 
 $user=app_require_auth();
 $pdo=app_pdo();
@@ -29,6 +30,7 @@ try{
     if($action==='remove'){
         $media=media_remove_target($pdo,$org,$target,$id);
         app_audit($pdo,$org,$userId,'media.removed',$target,(string)$id,null,['target'=>$target]);
+        if(menu_operations_ready($pdo)&&in_array($target,['menu_item','ingredient','location'],true)){menu_operations_event($pdo,$org,'media.removed',ucfirst(str_replace('_',' ',$target)).' image removed',$target==='menu_item'?$id:null,null,$target==='location'?$id:null,$userId,['target'=>$target,'id'=>$id]);menu_operations_sync_brain($pdo,$org,$userId);}
         app_json_response(['ok'=>true,'media'=>$media]);
     }
     if($action!=='upload')app_json_response(['ok'=>false,'message'=>'Unknown media action.'],400);
@@ -37,6 +39,7 @@ try{
     try{$media=media_assign_target($pdo,$org,$target,$id,(int)$stored['id']);}
     catch(Throwable $e){media_retire_if_unreferenced($pdo,$org,(int)$stored['id']);throw $e;}
     app_audit($pdo,$org,$userId,'media.uploaded',$target,(string)$id,null,['target'=>$target,'fileId'=>$stored['id'],'mimeType'=>$stored['mimeType'],'fileSize'=>$stored['fileSize']]);
+    if(menu_operations_ready($pdo)&&in_array($target,['menu_item','ingredient','location'],true)){menu_operations_event($pdo,$org,'media.uploaded',ucfirst(str_replace('_',' ',$target)).' image updated',$target==='menu_item'?$id:null,null,$target==='location'?$id:null,$userId,['target'=>$target,'id'=>$id]);menu_operations_sync_brain($pdo,$org,$userId);}
     app_json_response(['ok'=>true,'media'=>$media]);
 }catch(InvalidArgumentException $e){
     app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);
