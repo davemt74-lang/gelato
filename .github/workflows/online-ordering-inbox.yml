@@ -9,6 +9,7 @@ on:
       - 'customer-signup.php'
       - 'customer-promotions.php'
       - 'upgrade.php'
+      - 'api/online-order-customizations.php'
       - 'includes/*.php'
       - 'assets/js/online-order.js'
       - 'assets/css/online-order.css'
@@ -17,6 +18,7 @@ on:
       - 'database/*.sql'
       - 'tests/online-ordering-inbox-contract.php'
       - 'tests/online-order-runtime-gate-contract.php'
+      - 'tests/online-order-customization-shell-contract.php'
       - '.github/workflows/online-ordering-inbox.yml'
   push:
     branches: [main]
@@ -48,6 +50,7 @@ jobs:
           php -l customer-signup.php
           php -l customer-promotions.php
           php -l upgrade.php
+          php -l api/online-order-customizations.php
           php -l includes/public-site.php
           php -l includes/online-order-core.php
           php -l includes/customer-account-core.php
@@ -59,6 +62,7 @@ jobs:
           php -l includes/UpgradeService.php
           php -l tests/online-ordering-inbox-contract.php
           php -l tests/online-order-runtime-gate-contract.php
+          php -l tests/online-order-customization-shell-contract.php
           node --check assets/js/online-order.js
       - name: Static commerce and privacy contract
         run: |
@@ -74,6 +78,8 @@ jobs:
           grep -q 'kds_send_check' includes/online-order-core.php
           grep -q 'customer_inbox_send_direct' includes/online-order-core.php
           grep -q 'online_order_missing_requirements' includes/online-order-core.php
+          grep -q 'menu_item_ingredients' includes/online-order-core.php
+          grep -q 'SUBSTITUTE:' includes/online-order-core.php
           ! grep -q 'pos_ready($pdo)' includes/online-order-core.php
           grep -q 'COALESCE(pref.promotions_enabled,1)=1' includes/customer-inbox-core.php
           grep -q 'Turning this off does not block transactional order updates' customer-account.php
@@ -81,6 +87,8 @@ jobs:
           ! grep -Eqi 'card_number|cvv|track_data|magstripe' database/20261004_online_ordering_customer_inbox.sql
       - name: Production runtime gate contract
         run: php tests/online-order-runtime-gate-contract.php
+      - name: Customization and admin shell contract
+        run: php tests/online-order-customization-shell-contract.php
       - name: Install and upgrade schema
         run: |
           sudo apt-get update -qq
@@ -136,8 +144,9 @@ jobs:
       - name: Build dependency-complete direct deploy ZIP
         run: |
           rm -rf deploy-patch stonefellows-online-ordering-recovery-deploy.zip
-          mkdir -p deploy-patch/includes deploy-patch/assets/js deploy-patch/assets/css deploy-patch/database
+          mkdir -p deploy-patch/includes deploy-patch/api deploy-patch/assets/js deploy-patch/assets/css deploy-patch/database
           cp online-order.php customer-account.php customer-login.php customer-signup.php customer-promotions.php upgrade.php deploy-patch/
+          cp api/online-order-customizations.php deploy-patch/api/
           cp includes/*.php deploy-patch/includes/
           cp assets/js/online-order.js deploy-patch/assets/js/
           cp assets/css/online-order.css assets/css/customer-account.css assets/css/customer-inbox.css deploy-patch/assets/css/
@@ -148,6 +157,7 @@ jobs:
             esac
             cp "$migration" deploy-patch/database/
           done
+          test -f deploy-patch/api/online-order-customizations.php
           test -f deploy-patch/includes/public-site.php
           test -f deploy-patch/includes/online-order-core.php
           test -f deploy-patch/includes/customer-account-core.php
@@ -176,16 +186,8 @@ jobs:
           The package also includes the current /includes runtime as a unit so the
           ordering page cannot be paired with stale helper/core files from an older deploy.
 
-          Online ordering requires:
-          - sales integration foundation used by native POS
-          - native POS tables
-          - customer CRM + POS customer linkage
-          - Customer system role and customer-facing permissions
-          - canonical location ordering fields
-          - online order + customer Inbox tables
-
-          KDS remains optional at runtime; when installed, online pickup orders are routed
-          into the kitchen workflow automatically.
+          Online ordering supports server-validated item removals, substitutions, and
+          item/order notes. These flow into native POS line instructions and KDS tickets.
 
           Online payment capture and delivery checkout are intentionally not included yet.
           EOF
