@@ -515,3 +515,43 @@ function app_public_asset_url(?string $storagePath): ?string
     }
     return app_url(ltrim($storagePath, '/'));
 }
+
+function app_standard_admin_shell_pages(): array
+{
+    return [
+        'admin.php','admin-menu-import.php','locations-admin.php','operations.php','timeclock.php','scheduling.php',
+        'purchasing.php','equipment.php','equipment-detail.php','recipes.php','prep-intelligence.php','catering-operations.php',
+        'catering-pipeline.php','sales-intelligence.php','sales-import-center.php','sales-cost-intelligence.php',
+        'customer-promotions.php','customer-crm.php','online-orders-admin.php','public-site-settings.php',
+        'wholesale-pipeline.php','wholesale-accounts.php','wholesale-acquisition.php','wholesale-commerce.php',
+        'wholesale-customer-360.php','wholesale-demand.php','wholesale-fulfillment.php','wholesale-order-entry.php',
+        'wholesale-purchasing.php','wholesale-receivables.php',
+    ];
+}
+
+function app_boot_admin_shell_injection(): void
+{
+    if (PHP_SAPI === 'cli') return;
+    $script = basename((string)($_SERVER['SCRIPT_NAME'] ?? ''));
+    if (!in_array($script, app_standard_admin_shell_pages(), true)) return;
+
+    ob_start(static function (string $html): string {
+        if ($html === '' || stripos($html, '</body>') === false) return $html;
+        $asset = 'js/universal-admin-page-shell.js?v=20260915-shell2';
+        if (str_contains($html, 'js/universal-admin-page-shell.js')) {
+            return (string)preg_replace(
+                '#js/universal-admin-page-shell\.js(?:\?v=[^"\']*)?#',
+                $asset,
+                $html
+            );
+        }
+        return (string)preg_replace(
+            '#</body>#i',
+            '<script src="'.$asset.'"></script></body>',
+            $html,
+            1
+        );
+    });
+}
+
+app_boot_admin_shell_injection();
