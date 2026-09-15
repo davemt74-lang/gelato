@@ -25,7 +25,7 @@ function admin_add_action_catalog(): array
         ['id'=>'recipe','group'=>'Menu & Products','icon'=>'▤','label'=>'Add Recipe','description'=>'Create a recipe, costing record and production instructions.','href'=>'recipes.php?action=add','permissions'=>['recipes.edit','recipes.ai_map']],
         ['id'=>'food','group'=>'Menu & Products','icon'=>'◉','label'=>'Add Food','description'=>'Create a food item through the upcoming guided food builder.','href'=>'','ownerOnly'=>true,'status'=>'planned','badge'=>'Next phase'],
         ['id'=>'drink','group'=>'Menu & Products','icon'=>'◌','label'=>'Add Drink','description'=>'Create a drink item through the upcoming guided drink builder.','href'=>'','ownerOnly'=>true,'status'=>'planned','badge'=>'Next phase'],
-        ['id'=>'package','group'=>'Menu & Products','icon'=>'◇','label'=>'Add Package','description'=>'Build a bundled package with products, pricing and fulfillment rules.','href'=>'','ownerOnly'=>true,'status'=>'planned','badge'=>'Next build'],
+        ['id'=>'package','group'=>'Menu & Products','icon'=>'◇','label'=>'Add Package','description'=>'Build a pickup-only bundled package from live menu items with tracked package pricing.','href'=>'packages-admin.php?action=add','permissions'=>['packages.manage']],
 
         ['id'=>'location','group'=>'Operations','icon'=>'⌖','label'=>'Add Location','description'=>'Create a restaurant location with service and ordering settings.','href'=>'locations-admin.php?action=add','permissions'=>['locations.manage']],
         ['id'=>'task','group'=>'Operations','icon'=>'✓','label'=>'Add Task','description'=>'Create operational work for the restaurant team.','href'=>'operations.php?action=task','permissions'=>['tasks.manage']],
@@ -34,6 +34,7 @@ function admin_add_action_catalog(): array
 
         ['id'=>'customer','group'=>'Sales & Customers','icon'=>'◎','label'=>'Add Customer','description'=>'Open the CRM to create or manage a customer relationship.','href'=>'customer-crm.php?action=add','permissions'=>['crm.manage']],
         ['id'=>'promotion','group'=>'Sales & Customers','icon'=>'✦','label'=>'Add Promotion','description'=>'Create a customer promotion or account Inbox campaign.','href'=>'customer-promotions.php?action=add','permissions'=>['customer_promotions.manage']],
+        ['id'=>'discount','group'=>'Sales & Customers','icon'=>'%','label'=>'Add Discount','description'=>'Apply a tracked coupon, make-good, manager, loyalty or other discount to an open POS check.','href'=>'discounts-admin.php?action=add','permissions'=>['discounts.manage']],
         ['id'=>'invoice','group'=>'Sales & Customers','icon'=>'$','label'=>'Add Invoice','description'=>'Create or manage a wholesale invoice and receivable.','href'=>'wholesale-receivables.php?action=add','permissions'=>['wholesale.receivables','wholesale.manage']],
 
         ['id'=>'equipment','group'=>'Purchasing & Assets','icon'=>'⚙','label'=>'Add Equipment','description'=>'Add a restaurant asset, appliance or serviceable equipment record.','href'=>'equipment.php?action=add','permissions'=>['equipment.edit','equipment.service']],
