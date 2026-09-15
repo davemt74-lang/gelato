@@ -28,7 +28,7 @@ if(!pickup_fulfillment_ready($pdo)){
 <header class="admin-top"><a class="admin-brand" href="admin.php"><span class="admin-logo">SF</span><span><strong>Pickup Fulfillment</strong><small><?=app_escape((string)$user['organization_name'])?> handoff operations</small></span></a><nav class="admin-top-actions"><a class="admin-button" href="online-orders-admin.php">Online Orders</a><?php if(app_has_permission('pos.use',$user)):?><a class="admin-button dark" href="pos.php">POS</a><?php endif;?></nav></header>
 <main class="admin-shell">
 <section class="pickup-hero">
-    <div><div class="admin-eyebrow">Pickup Operations</div><h1>Ready counter</h1><p>Track promised pickup times, kitchen readiness, payment and physical handoff from one live queue.</p></div>
+    <div><div class="admin-eyebrow">Pickup Operations</div><h1>Ready counter</h1><p>Track promised pickup times, kitchen readiness, payment and physical handoff from one live queue. Use <strong>Handed to Customer</strong> only when the complete ticket is ready and payment is complete.</p></div>
     <div class="pickup-live"><span class="pickup-live-dot"></span><strong>Live queue</strong><small id="lastUpdated">Loading…</small></div>
 </section>
 <section class="pickup-summary" id="pickupSummary" aria-live="polite">
