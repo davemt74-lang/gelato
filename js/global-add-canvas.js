@@ -15,7 +15,7 @@
     }
     if (!document.querySelector('script[data-dynamic-agent-canvas-loader]')) {
       const canvas = document.createElement('script');
-      canvas.src = 'js/dynamic-agent-canvas.js?v=20260915-canvas1';
+      canvas.src = 'js/dynamic-agent-canvas.js?v=20260915-drawer1';
       canvas.dataset.dynamicAgentCanvasLoader = '1';
       document.head.appendChild(canvas);
     }
