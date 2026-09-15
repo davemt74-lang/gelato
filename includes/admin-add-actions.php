@@ -23,7 +23,7 @@ function admin_add_action_catalog(): array
         ['id'=>'job','group'=>'People','icon'=>'▣','label'=>'Add Job','description'=>'Create a hiring position for the public careers workflow.','href'=>'workspace.php#jobs','permissions'=>['jobs.edit']],
 
         ['id'=>'recipe','group'=>'Menu & Products','icon'=>'▤','label'=>'Add Recipe','description'=>'Create a recipe, costing record and production instructions.','href'=>'recipes.php?action=add','permissions'=>['recipes.edit','recipes.ai_map']],
-        ['id'=>'food','group'=>'Menu & Products','icon'=>'◉','label'=>'Add Food','description'=>'Create a food item through the upcoming guided food builder.','href'=>'','ownerOnly'=>true,'status'=>'planned','badge'=>'Next phase'],
+        ['id'=>'food','group'=>'Menu & Products','icon'=>'◉','label'=>'Add Food','description'=>'Create and publish a food item with sizes, ingredients, paid add-ons and channel distribution.','href'=>'menu-manager.php?action=add-food','permissions'=>['menu.manage']],
         ['id'=>'drink','group'=>'Menu & Products','icon'=>'◌','label'=>'Add Drink','description'=>'Create a drink item through the upcoming guided drink builder.','href'=>'','ownerOnly'=>true,'status'=>'planned','badge'=>'Next phase'],
         ['id'=>'package','group'=>'Menu & Products','icon'=>'◇','label'=>'Add Package','description'=>'Build a pickup-only bundled package from live menu items with tracked package pricing.','href'=>'packages-admin.php?action=add','permissions'=>['packages.manage']],
 
