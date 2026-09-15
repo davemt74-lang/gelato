@@ -10,6 +10,7 @@ require_once __DIR__.'/catering-operations.php';
 require_once __DIR__.'/wholesale-portal.php';
 require_once __DIR__.'/wholesale-acquisition.php';
 require_once __DIR__.'/wholesale-receivables.php';
+require_once __DIR__.'/admin-control-core.php';
 
 function admin_dashboard_table_ready(PDO $pdo,string $table): bool
 {
@@ -22,13 +23,7 @@ function admin_dashboard_table_ready(PDO $pdo,string $table): bool
 
 function admin_dashboard_allowed(array $user): bool
 {
-    foreach([
-        'sales.view','pos.use','pos.manage','kds.view','table_service.view','floorplans.view',
-        'wholesale.view','catering.view','crm.view','customer_promotions.manage','tasks.view','inventory.view'
-    ] as $permission){
-        if(app_has_permission($permission,$user))return true;
-    }
-    return false;
+    return admin_control_allowed($user);
 }
 
 function admin_dashboard_can(array $user,string ...$permissions): bool
@@ -225,9 +220,9 @@ function admin_dashboard_snapshot(PDO $pdo,array $user,?int $locationId=null): a
 {
     $org=(int)$user['organization_id'];$periods=admin_dashboard_periods($pdo,$org);$locations=admin_dashboard_locations($pdo,$org);
     if($locationId&&!admin_dashboard_location($pdo,$org,$locationId))throw new InvalidArgumentException('That dashboard location is not active.');
-    $canSales=admin_dashboard_can($user,'sales.view','pos.use','pos.manage');
-    $canTables=admin_dashboard_can($user,'table_service.view','pos.use','pos.manage');
-    $canKds=admin_dashboard_can($user,'kds.view','pos.use','pos.manage');
+    $canSales=admin_dashboard_can($user,'sales.view','pos.manage');
+    $canTables=admin_dashboard_can($user,'table_service.view','pos.manage');
+    $canKds=admin_dashboard_can($user,'kds.view','kds.configure','pos.manage');
     $canWholesale=admin_dashboard_can($user,'wholesale.view');
     $canCatering=admin_dashboard_can($user,'catering.view');
     $canCrm=admin_dashboard_can($user,'crm.view','customer_promotions.manage');
