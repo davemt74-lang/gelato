@@ -5,6 +5,7 @@ on:
     paths:
       - 'packages.php'
       - 'packages-admin.php'
+      - 'discounts-admin.php'
       - 'api/packages.php'
       - 'includes/package-deals-core.php'
       - 'includes/discount-core.php'
@@ -14,6 +15,8 @@ on:
       - 'assets/css/packages-admin.css'
       - 'assets/js/packages.js'
       - 'assets/js/packages-admin.js'
+      - 'assets/images/packages-hero.webp'
+      - 'assets/images/packages-footer.webp'
       - 'tests/package-deals-contract.php'
       - 'tests/global-add-action-canvas-contract.php'
       - '.github/workflows/package-deals.yml'
@@ -48,6 +51,7 @@ jobs:
         run: |
           php -l packages.php
           php -l packages-admin.php
+          php -l discounts-admin.php
           php -l api/packages.php
           php -l includes/package-deals-core.php
           php -l includes/discount-core.php
@@ -70,7 +74,13 @@ jobs:
           grep -q "'end'=>'ended'" includes/package-deals-core.php
           grep -q "'archive'=>'archived'" includes/package-deals-core.php
           grep -q "packages-admin.php?action=add" includes/admin-add-actions.php
+          grep -q "discounts-admin.php?action=add" includes/admin-add-actions.php
+          grep -q 'Add Discount' includes/admin-add-actions.php
           grep -q 'Takeout Only · No Delivery' packages.php
+          grep -q 'packages-hero.webp' packages.php
+          grep -q 'packages-footer.webp' assets/css/packages.css
+          test -s assets/images/packages-hero.webp
+          test -s assets/images/packages-footer.webp
           grep -q '+ Add New Package' packages-admin.php
           grep -q 'Duplicate Package' assets/js/packages-admin.js
       - name: Install and upgrade schema
@@ -137,14 +147,15 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq zip unzip
           rm -rf deploy-patch stonefellows-package-deals-deploy.zip
-          mkdir -p deploy-patch/includes deploy-patch/api deploy-patch/assets/css deploy-patch/assets/js deploy-patch/js deploy-patch/database
-          cp packages.php packages-admin.php online-order.php customer-account.php upgrade.php deploy-patch/
+          mkdir -p deploy-patch/includes deploy-patch/api deploy-patch/assets/css deploy-patch/assets/js deploy-patch/assets/images deploy-patch/js deploy-patch/css deploy-patch/database
+          cp packages.php packages-admin.php discounts-admin.php online-order.php customer-account.php upgrade.php deploy-patch/
           cp api/packages.php api/admin-shell.php deploy-patch/api/
           cp includes/*.php deploy-patch/includes/
           cp assets/css/packages.css assets/css/packages-admin.css assets/css/site.css deploy-patch/assets/css/
           cp assets/js/packages.js assets/js/packages-admin.js assets/js/site.js assets/js/public-shell.js deploy-patch/assets/js/
+          cp assets/images/packages-hero.webp assets/images/packages-footer.webp deploy-patch/assets/images/
           cp js/universal-admin-page-shell.js js/global-add-canvas.js deploy-patch/js/
-          cp css/global-add-canvas.css deploy-patch/ 2>/dev/null || true
+          cp css/global-add-canvas.css deploy-patch/css/
           for migration in database/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_*.sql; do
             name="$(basename "$migration")"
             case "$name" in *_demo_*|*_sample_*|*_seed_*) continue ;; esac
@@ -152,12 +163,15 @@ jobs:
           done
           test -f deploy-patch/packages.php
           test -f deploy-patch/packages-admin.php
+          test -f deploy-patch/discounts-admin.php
           test -f deploy-patch/api/packages.php
           test -f deploy-patch/includes/package-deals-core.php
           test -f deploy-patch/includes/discount-core.php
+          test -s deploy-patch/assets/images/packages-hero.webp
+          test -s deploy-patch/assets/images/packages-footer.webp
           test -f deploy-patch/database/20261007_package_deals_discounts.sql
           cat > deploy-patch/README-DEPLOY.txt <<'EOF'
-          Stonefellows / Gelato Package Deals deploy
+          Stonefellows / Gelato Package Deals + Typed Discounts deploy
 
           Extract directly into the application web root, preserving folders and
           overwriting the included files. Then sign in as owner/admin and run
@@ -165,9 +179,11 @@ jobs:
 
           This phase adds pickup-only Package Deals, a menu-backed package builder,
           Add New Package, Duplicate Package, Pause/Resume/End/Archive lifecycle,
-          a public Specials/package ordering page, package redemption tracking, and
-          typed POS discounts including Package Deal, Coupon/Promo, Make Good,
-          Admin Discount, Loyalty/Reward, Catering/Wholesale Adjustment and Other.
+          a public Specials/package ordering page with dedicated hero/footer artwork,
+          package redemption tracking, Add Discount in the global + menu, and typed
+          POS discounts including Package Deal, Coupon/Promo, Make Good, Admin
+          Discount, Loyalty/Reward, Catering/Wholesale Adjustment and Other.
+
           Package checkout expands into real menu lines and uses the existing
           Online Ordering -> POS -> KDS -> lifecycle flow. Package deals never use
           dine-in or delivery fulfillment.
