@@ -10,7 +10,8 @@ const el={
 const state={orders:[],csrf:'',canFulfill:!!app.canFulfill,loading:false};
 const esc=value=>String(value??'').replace(/[&<>'"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
 const money=value=>new Intl.NumberFormat(undefined,{style:'currency',currency:'USD'}).format(Number(value||0));
-const dateTime=value=>{if(!value)return '—';const d=new Date(String(value).replace(' ','T'));return Number.isNaN(d.getTime())?String(value):d.toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});};
+const normalizeDbTime=value=>String(value??'').trim().replace(' ','T').replace(/(\.\d{3})\d+$/,'$1');
+const dateTime=value=>{if(!value)return '—';const d=new Date(normalizeDbTime(value));return Number.isNaN(d.getTime())?String(value):d.toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});};
 const age=seconds=>{if(seconds===null||seconds===undefined)return '—';seconds=Math.max(0,Number(seconds)||0);const m=Math.floor(seconds/60);if(m<1)return '<1 min';if(m<60)return `${m} min`;const h=Math.floor(m/60),r=m%60;return r?`${h}h ${r}m`:`${h}h`;};
 const promiseLabel=order=>{const s=Number(order.promiseDeltaSeconds);if(!Number.isFinite(s))return 'No promise time';if(s<0)return `${age(Math.abs(s))} past promise`;if(s<60)return 'Due now';return `${age(s)} until promise`;};
 const setMessage=(text,type='info')=>{el.message.hidden=!text;el.message.className=`pickup-message ${type}`;el.message.textContent=text||'';};
