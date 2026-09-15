@@ -275,7 +275,6 @@ function public_site_render_header(array $settings, string $active = ''): void
         'gelato' => ['gelato.php', 'Gelato'],
         'about' => ['about.php', 'About'],
         'locations' => ['locations.php', 'Locations'],
-        'contact' => ['contact.php', 'Contact'],
     ];
     echo '<header class="site-header' . ($active === 'home' ? '' : ' inner') . '"><div class="shell nav" id="nav">';
     echo '<a class="brand" href="index.php"><strong>' . $name . '</strong><span>Pizzeria + Bar</span></a>';
@@ -294,16 +293,10 @@ function public_site_render_footer(array $settings): void
     $address = public_site_format_address($settings);
     $socials = public_site_social_links($settings);
     $footerLinks = [
-        'Menu' => 'menu.php',
-        'Gelato' => 'gelato.php',
-        'About' => 'about.php',
-        'Locations' => 'locations.php',
         'Contact' => 'contact.php',
-        'Account' => 'customer-account.php',
-        'Jobs' => 'jobs.html',
-        'Catering' => 'catering.php',
         'Wholesale' => 'wholesale.php',
-        'Staff Login' => 'login.php',
+        'Catering' => 'catering.php',
+        'Admin / Employee Login' => 'login.php',
     ];
 
     echo '<footer><div class="shell footer-grid">';

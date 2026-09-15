@@ -65,7 +65,7 @@ jobs:
           grep -q 'customer-logout.php' customer-account.php
           grep -q 'Internal CRM notes and staff-only tags are never exposed' customer-account.php
           grep -q 'customer-account.php">Account' includes/public-site.php
-          grep -q "'Staff Login' => 'login.php'" includes/public-site.php
+          grep -q "'Admin / Employee Login' => 'login.php'" includes/public-site.php
       - name: Install and upgrade schema
         run: |
           sudo apt-get update -qq

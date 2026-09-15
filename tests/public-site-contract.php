@@ -8,9 +8,16 @@ if(is_dir($root.'/public'))throw new RuntimeException('Legacy /public directory 
 $helper=file_get_contents($root.'/includes/public-site.php')?:'';
 if(!str_contains($helper,'menu_database_sections'))throw new RuntimeException('Public site must use canonical menu database helper.');
 if(!str_contains($helper,'href="customer-account.php">Account</a>'))throw new RuntimeException('Public header must expose the customer Account CTA.');
-if(!str_contains($helper,"'Staff Login' => 'login.php'"))throw new RuntimeException('Public footer must retain a separate Staff Login path.');
+$headerStart=strpos($helper,'function public_site_render_header');
+$footerStart=strpos($helper,'function public_site_render_footer');
+if($headerStart===false||$footerStart===false||$footerStart<=$headerStart)throw new RuntimeException('Public header/footer renderers are missing or out of order.');
+$headerSection=substr($helper,$headerStart,$footerStart-$headerStart);
+$footerSection=substr($helper,$footerStart);
+if(str_contains($headerSection,"'contact' => ['contact.php', 'Contact']"))throw new RuntimeException('Contact must not be duplicated in the primary header navigation.');
+if(!str_contains($footerSection,"'Admin / Employee Login' => 'login.php'"))throw new RuntimeException('Public footer must retain the Admin / Employee Login path.');
+foreach(["'Contact' => 'contact.php'","'Wholesale' => 'wholesale.php'","'Catering' => 'catering.php'","'Admin / Employee Login' => 'login.php'"] as $needle)if(!str_contains($footerSection,$needle))throw new RuntimeException('Required footer link missing: '.$needle);
+foreach(["'Menu' => 'menu.php'","'Gelato' => 'gelato.php'","'About' => 'about.php'","'Locations' => 'locations.php'","'Account' => 'customer-account.php'","'Jobs' => 'jobs.html'","'Staff Login' => 'login.php'"] as $needle)if(str_contains($footerSection,$needle))throw new RuntimeException('Footer must not duplicate or retain retired link: '.$needle);
 if(str_contains($helper,'href="contact.php">Get in Touch</a>'))throw new RuntimeException('Legacy Get in Touch header CTA must not remain.');
-foreach(['menu.php','gelato.php','about.php','locations.php','contact.php','customer-account.php','jobs.html','catering.php','wholesale.php','login.php'] as $href)if(!str_contains($helper,"'".$href."'"))throw new RuntimeException('Footer link missing: '.$href);
 foreach(['footer-column-title','footer-links','Links','Follow'] as $needle)if(!str_contains($helper,$needle))throw new RuntimeException('Footer column contract missing: '.$needle);
 
 foreach(['index.php','menu.php','gelato.php'] as $path){$source=file_get_contents($root.'/'.$path)?:'';if(str_contains($source,'api/menu.php')||preg_match('/fetch\s*\(/',$source))throw new RuntimeException($path.' must not use authenticated menu API.');if(!str_contains($source,"__DIR__ . '/includes/public-site.php'"))throw new RuntimeException($path.' must load root public-site helper.');}
