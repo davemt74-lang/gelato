@@ -152,4 +152,8 @@ if ($adminDashboardAllowed) {
     $html = str_replace('</head>', "  <link rel=\"stylesheet\" href=\"css/admin-command-dashboard.css?v=20260914-command1\">\n</head>", $html);
     $html = str_replace('</body>', "  <script src=\"js/admin-command-dashboard.js?v=20260914-command1\"></script>\n</body>", $html);
 }
+if ($adminControlAllowed) {
+    $html = str_replace('</head>', "  <link rel=\"stylesheet\" href=\"css/admin-tech-theme.css?v=20260915-tech1\">\n</head>", $html);
+    $html = str_replace('<body>', '<body class="gelato-admin-tech-theme">', $html);
+}
 echo $html;

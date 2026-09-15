@@ -92,6 +92,15 @@
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
   }[character]));
 
+  function ensureTheme() {
+    if (document.querySelector('link[data-admin-tech-theme]')) return;
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'css/admin-tech-theme.css?v=20260915-tech1';
+    link.dataset.adminTechTheme = '1';
+    document.head.appendChild(link);
+  }
+
   function readState() {
     const defaults = Object.fromEntries(groups.map((group) => [group.id, true]));
     try {
@@ -241,6 +250,7 @@
 
   function install() {
     installStyles();
+    ensureTheme();
     document.body.classList.add('gelato-universal-admin-page');
     const sidebar = renderSidebar();
     renderHeader(sidebar);

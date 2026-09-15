@@ -1,0 +1,413 @@
+:root{
+  --tech-canvas:#ffffff;
+  --tech-surface:#f7f8fa;
+  --tech-surface-2:#fbfcfd;
+  --tech-border:#e5e7eb;
+  --tech-border-strong:#d1d5db;
+  --tech-ink:#111827;
+  --tech-muted:#6b7280;
+  --tech-subtle:#9ca3af;
+  --tech-accent:#e85d37;
+  --tech-accent-soft:#fff2ed;
+  --tech-good:#17845d;
+  --tech-warn:#b7791f;
+  --tech-bad:#c2413b;
+  --tech-dark:#111827;
+  --tech-shadow:0 1px 2px rgba(15,23,42,.04),0 10px 28px rgba(15,23,42,.055);
+  --tech-shadow-hover:0 2px 4px rgba(15,23,42,.06),0 16px 36px rgba(15,23,42,.08);
+  --tech-radius:14px;
+}
+
+html{background:var(--tech-canvas)}
+body.gelato-universal-admin-page,
+body.gelato-admin-tech-theme{
+  background:var(--tech-canvas)!important;
+  color:var(--tech-ink)!important;
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important;
+}
+body.gelato-universal-admin-page *,
+body.gelato-admin-tech-theme *{box-sizing:border-box}
+body.gelato-universal-admin-page ::selection,
+body.gelato-admin-tech-theme ::selection{background:#111827;color:#fff}
+
+/* Universal shell */
+body.gelato-universal-admin-page .uas-sidebar{
+  background:var(--tech-canvas)!important;
+  color:var(--tech-ink)!important;
+  border-right:1px solid var(--tech-border)!important;
+  box-shadow:none!important;
+}
+body.gelato-universal-admin-page .uas-brand{
+  border-bottom:1px solid var(--tech-border);
+  margin:0 2px 8px;
+  padding:4px 6px 13px!important;
+}
+body.gelato-universal-admin-page .uas-logo{
+  background:var(--tech-dark)!important;
+  color:#fff!important;
+  border-radius:10px!important;
+  box-shadow:none!important;
+}
+body.gelato-universal-admin-page .uas-brand h1{color:var(--tech-ink)!important;font-weight:800;letter-spacing:-.015em}
+body.gelato-universal-admin-page .uas-brand p{color:var(--tech-muted)!important}
+body.gelato-universal-admin-page .uas-section{border-top:1px solid var(--tech-border)!important}
+body.gelato-universal-admin-page .uas-section:first-child{border-top:0!important}
+body.gelato-universal-admin-page .uas-section-toggle{
+  color:var(--tech-subtle)!important;
+  padding:12px 9px 7px!important;
+  letter-spacing:.1em!important;
+}
+body.gelato-universal-admin-page .uas-section-toggle:hover{color:var(--tech-ink)!important}
+body.gelato-universal-admin-page .uas-chevron{color:var(--tech-subtle)!important}
+body.gelato-universal-admin-page .uas-link{
+  color:#59616d!important;
+  border:1px solid transparent!important;
+  border-radius:9px!important;
+  min-height:34px!important;
+  padding:7px 9px!important;
+  transition:background .16s ease,color .16s ease,border-color .16s ease,transform .16s ease;
+}
+body.gelato-universal-admin-page .uas-link:hover{
+  color:var(--tech-ink)!important;
+  background:var(--tech-surface)!important;
+  border-color:var(--tech-border)!important;
+}
+body.gelato-universal-admin-page .uas-link.active{
+  color:#fff!important;
+  background:var(--tech-dark)!important;
+  border-color:var(--tech-dark)!important;
+  box-shadow:0 6px 16px rgba(17,24,39,.12)!important;
+}
+body.gelato-universal-admin-page .uas-foot{
+  color:var(--tech-muted)!important;
+  border-top:1px solid var(--tech-border);
+  margin-top:auto;
+  padding-top:12px!important;
+}
+body.gelato-universal-admin-page .uas-status{background:#22c55e!important;box-shadow:0 0 0 3px rgba(34,197,94,.12)!important}
+body.gelato-universal-admin-page .uas-header{
+  background:rgba(255,255,255,.96)!important;
+  color:var(--tech-ink)!important;
+  border-bottom:1px solid var(--tech-border)!important;
+  box-shadow:0 1px 0 rgba(15,23,42,.02)!important;
+  backdrop-filter:blur(18px)!important;
+}
+body.gelato-universal-admin-page .uas-title strong{font-size:14px!important;font-weight:800!important;letter-spacing:-.015em}
+body.gelato-universal-admin-page .uas-title small{color:var(--tech-muted)!important}
+body.gelato-universal-admin-page .uas-mobile,
+body.gelato-universal-admin-page .uas-header-link,
+body.gelato-universal-admin-page .uas-page-action,
+body.gelato-universal-admin-page .uas-account-button{
+  border-color:var(--tech-border)!important;
+  background:#fff!important;
+  color:var(--tech-ink)!important;
+  border-radius:9px!important;
+  box-shadow:none!important;
+}
+body.gelato-universal-admin-page .uas-header-link:hover,
+body.gelato-universal-admin-page .uas-page-action:hover,
+body.gelato-universal-admin-page .uas-account-button:hover{background:var(--tech-surface)!important;border-color:var(--tech-border-strong)!important}
+body.gelato-universal-admin-page .uas-header-link.dark{background:var(--tech-dark)!important;border-color:var(--tech-dark)!important;color:#fff!important}
+body.gelato-universal-admin-page .uas-header-link.kds{background:var(--tech-accent-soft)!important;border-color:#f4c6b7!important;color:#a63d21!important}
+body.gelato-universal-admin-page .uas-avatar{background:var(--tech-dark)!important;border-radius:8px!important}
+body.gelato-universal-admin-page .uas-account-copy small{color:var(--tech-muted)!important}
+body.gelato-universal-admin-page .uas-account-menu{
+  background:#fff!important;
+  border-color:var(--tech-border)!important;
+  border-radius:12px!important;
+  box-shadow:var(--tech-shadow-hover)!important;
+}
+body.gelato-universal-admin-page .uas-account-menu a{color:var(--tech-ink)!important}
+body.gelato-universal-admin-page .uas-account-menu a:hover{background:var(--tech-surface)!important}
+
+/* Main admin canvas */
+body.gelato-universal-admin-page main,
+body.gelato-universal-admin-page .admin-shell,
+body.gelato-universal-admin-page .shell,
+body.gelato-universal-admin-page .editor,
+body.gelato-universal-admin-page .detail{
+  background:var(--tech-canvas)!important;
+}
+body.gelato-universal-admin-page .admin-shell{padding-top:22px!important}
+body.gelato-universal-admin-page .hero,
+body.gelato-universal-admin-page .admin-hero-main,
+body.gelato-universal-admin-page .admin-hero-side,
+body.gelato-universal-admin-page .card,
+body.gelato-universal-admin-page .panel,
+body.gelato-universal-admin-page .workspace,
+body.gelato-universal-admin-page .kpi,
+body.gelato-universal-admin-page .stat,
+body.gelato-universal-admin-page .admin-panel,
+body.gelato-universal-admin-page .admin-module,
+body.gelato-universal-admin-page .admin-kpi,
+body.gelato-universal-admin-page .admin-health,
+body.gelato-universal-admin-page .admin-order-card{
+  background:#fff!important;
+  border-color:var(--tech-border)!important;
+  box-shadow:var(--tech-shadow)!important;
+}
+body.gelato-universal-admin-page .hero,
+body.gelato-universal-admin-page .admin-hero-main{background:#fff!important}
+body.gelato-universal-admin-page .card,
+body.gelato-universal-admin-page .panel,
+body.gelato-universal-admin-page .workspace,
+body.gelato-universal-admin-page .admin-panel,
+body.gelato-universal-admin-page .admin-module,
+body.gelato-universal-admin-page .admin-kpi,
+body.gelato-universal-admin-page .admin-health,
+body.gelato-universal-admin-page .admin-order-card{border-radius:var(--tech-radius)!important}
+body.gelato-universal-admin-page .admin-module:hover,
+body.gelato-universal-admin-page .card:hover[data-clickable],
+body.gelato-universal-admin-page .panel:hover[data-clickable]{box-shadow:var(--tech-shadow-hover)!important;border-color:var(--tech-border-strong)!important}
+body.gelato-universal-admin-page h1,
+body.gelato-universal-admin-page h2,
+body.gelato-universal-admin-page h3,
+body.gelato-universal-admin-page h4{color:var(--tech-ink)!important;letter-spacing:-.025em}
+body.gelato-universal-admin-page p,
+body.gelato-universal-admin-page small,
+body.gelato-universal-admin-page .muted,
+body.gelato-universal-admin-page .meta{color:var(--tech-muted)!important}
+body.gelato-universal-admin-page .eyebrow,
+body.gelato-universal-admin-page .admin-eyebrow{color:var(--tech-accent)!important}
+
+/* Inputs and controls */
+body.gelato-universal-admin-page input,
+body.gelato-universal-admin-page select,
+body.gelato-universal-admin-page textarea,
+body.gelato-admin-tech-theme input,
+body.gelato-admin-tech-theme select,
+body.gelato-admin-tech-theme textarea{
+  color:var(--tech-ink)!important;
+  background:#fff!important;
+  border-color:var(--tech-border)!important;
+  border-radius:9px!important;
+  box-shadow:none!important;
+}
+body.gelato-universal-admin-page input:focus,
+body.gelato-universal-admin-page select:focus,
+body.gelato-universal-admin-page textarea:focus,
+body.gelato-admin-tech-theme input:focus,
+body.gelato-admin-tech-theme select:focus,
+body.gelato-admin-tech-theme textarea:focus{
+  outline:none!important;
+  border-color:#9ca3af!important;
+  box-shadow:0 0 0 3px rgba(17,24,39,.08)!important;
+}
+body.gelato-universal-admin-page .btn,
+body.gelato-universal-admin-page .admin-button,
+body.gelato-universal-admin-page .mini,
+body.gelato-universal-admin-page button:not(.uas-section-toggle):not(.uas-mobile):not(.uas-account-button),
+body.gelato-admin-tech-theme .btn{
+  border-radius:9px!important;
+  box-shadow:none!important;
+}
+body.gelato-universal-admin-page .btn.dark,
+body.gelato-universal-admin-page .btn-primary,
+body.gelato-universal-admin-page .admin-button.dark,
+body.gelato-admin-tech-theme .btn-dark{
+  background:var(--tech-dark)!important;
+  border-color:var(--tech-dark)!important;
+  color:#fff!important;
+}
+body.gelato-universal-admin-page .btn.accent,
+body.gelato-universal-admin-page .admin-button.accent,
+body.gelato-admin-tech-theme .btn-primary{
+  background:var(--tech-accent)!important;
+  border-color:var(--tech-accent)!important;
+  color:#fff!important;
+}
+
+/* Tables and data surfaces */
+body.gelato-universal-admin-page table{border-color:var(--tech-border)!important}
+body.gelato-universal-admin-page th{
+  background:var(--tech-surface)!important;
+  color:var(--tech-muted)!important;
+  border-color:var(--tech-border)!important;
+}
+body.gelato-universal-admin-page td{border-color:#edf0f2!important}
+body.gelato-universal-admin-page tbody tr:hover td{background:#fbfcfd!important}
+body.gelato-universal-admin-page .toolbar,
+body.gelato-universal-admin-page .tabs,
+body.gelato-universal-admin-page .admin-panel-head,
+body.gelato-universal-admin-page .panel-head,
+body.gelato-universal-admin-page .head{background:var(--tech-surface-2)!important;border-color:var(--tech-border)!important}
+body.gelato-universal-admin-page .pill,
+body.gelato-universal-admin-page .status,
+body.gelato-universal-admin-page .admin-status,
+body.gelato-universal-admin-page .badge{border-radius:999px!important}
+
+/* Workspace native shell */
+body.gelato-admin-tech-theme{
+  --bg:var(--tech-canvas);
+  --panel:#fff;
+  --panel2:var(--tech-surface);
+  --ink:var(--tech-ink);
+  --muted:var(--tech-muted);
+  --line:var(--tech-border);
+  --dark:var(--tech-dark);
+  --accent:var(--tech-accent);
+  --accent-soft:var(--tech-accent-soft);
+  --shadow:var(--tech-shadow);
+}
+body.gelato-admin-tech-theme .app,
+body.gelato-admin-tech-theme .main,
+body.gelato-admin-tech-theme .content,
+body.gelato-admin-tech-theme .page,
+body.gelato-admin-tech-theme .standard-page,
+body.gelato-admin-tech-theme .workspace-page,
+body.gelato-admin-tech-theme .admin-command-dashboard{background:var(--tech-canvas)!important}
+body.gelato-admin-tech-theme .sidebar{
+  background:var(--tech-canvas)!important;
+  color:var(--tech-ink)!important;
+  border-right:1px solid var(--tech-border)!important;
+  box-shadow:none!important;
+}
+body.gelato-admin-tech-theme .sidebar .brand{
+  border-bottom:1px solid var(--tech-border);
+  margin:0 2px 8px;
+  padding:4px 6px 13px!important;
+}
+body.gelato-admin-tech-theme .sidebar .logo{
+  background:var(--tech-dark)!important;
+  color:#fff!important;
+  border-radius:10px!important;
+  box-shadow:none!important;
+}
+body.gelato-admin-tech-theme .sidebar .brand h1{color:var(--tech-ink)!important}
+body.gelato-admin-tech-theme .sidebar .brand p,
+body.gelato-admin-tech-theme .side-foot{color:var(--tech-muted)!important}
+body.gelato-admin-tech-theme .role-card{
+  background:var(--tech-surface)!important;
+  border-color:var(--tech-border)!important;
+  color:var(--tech-ink)!important;
+}
+body.gelato-admin-tech-theme .role-card small{color:var(--tech-muted)!important}
+body.gelato-admin-tech-theme .role-card button{color:var(--tech-accent)!important}
+body.gelato-admin-tech-theme .workspace-switch{
+  background:var(--tech-surface)!important;
+  border:1px solid var(--tech-border)!important;
+}
+body.gelato-admin-tech-theme .workspace-switch button{color:var(--tech-muted)!important;background:transparent!important}
+body.gelato-admin-tech-theme .workspace-switch button.active{background:#fff!important;color:var(--tech-ink)!important;box-shadow:0 1px 2px rgba(15,23,42,.06)!important}
+body.gelato-admin-tech-theme .nav-btn,
+body.gelato-admin-tech-theme [data-nav-group="admin"] .nav-btn,
+body.gelato-admin-tech-theme [data-nav-group="admin"] .nav-item{
+  color:#59616d!important;
+  background:transparent!important;
+  border-color:transparent!important;
+}
+body.gelato-admin-tech-theme .nav-btn:hover,
+body.gelato-admin-tech-theme [data-nav-group="admin"] .nav-btn:hover,
+body.gelato-admin-tech-theme [data-nav-group="admin"] .nav-item:hover{
+  color:var(--tech-ink)!important;
+  background:var(--tech-surface)!important;
+  border-color:var(--tech-border)!important;
+}
+body.gelato-admin-tech-theme .nav-btn.active,
+body.gelato-admin-tech-theme [data-nav-group="admin"] .nav-btn.active,
+body.gelato-admin-tech-theme [data-nav-group="admin"] .nav-item.active{
+  color:#fff!important;
+  background:var(--tech-dark)!important;
+  border-color:var(--tech-dark)!important;
+}
+body.gelato-admin-tech-theme .admin-nav-accordion{border-top-color:var(--tech-border)!important}
+body.gelato-admin-tech-theme .admin-nav-section-toggle{color:var(--tech-subtle)!important}
+body.gelato-admin-tech-theme .admin-nav-section-toggle:hover{color:var(--tech-ink)!important}
+body.gelato-admin-tech-theme .admin-nav-chevron{color:var(--tech-subtle)!important}
+body.gelato-admin-tech-theme .side-foot{border-top:1px solid var(--tech-border);padding-top:12px!important}
+body.gelato-admin-tech-theme .topbar{
+  background:rgba(255,255,255,.96)!important;
+  border-bottom-color:var(--tech-border)!important;
+  box-shadow:0 1px 0 rgba(15,23,42,.02)!important;
+}
+body.gelato-admin-tech-theme .top-title h2{color:var(--tech-ink)!important;font-weight:800!important}
+body.gelato-admin-tech-theme .top-title span{color:var(--tech-muted)!important}
+body.gelato-admin-tech-theme .header-link,
+body.gelato-admin-tech-theme .notification-button,
+body.gelato-admin-tech-theme .profile-button,
+body.gelato-admin-tech-theme .badge{
+  background:#fff!important;
+  color:var(--tech-ink)!important;
+  border-color:var(--tech-border)!important;
+  box-shadow:none!important;
+}
+body.gelato-admin-tech-theme .profile-menu,
+body.gelato-admin-tech-theme .notification-dropdown{background:#fff!important;border-color:var(--tech-border)!important;box-shadow:var(--tech-shadow-hover)!important}
+body.gelato-admin-tech-theme .card,
+body.gelato-admin-tech-theme .dashboard-kpi,
+body.gelato-admin-tech-theme .dashboard-hero,
+body.gelato-admin-tech-theme .context-block,
+body.gelato-admin-tech-theme .agent-hero,
+body.gelato-admin-tech-theme .bubble,
+body.gelato-admin-tech-theme .cmd-kpi,
+body.gelato-admin-tech-theme .cmd-panel,
+body.gelato-admin-tech-theme .cmd-mini,
+body.gelato-admin-tech-theme .cmd-wholesale-stat,
+body.gelato-admin-tech-theme .cmd-pulse,
+body.gelato-admin-tech-theme .cmd-agent-copy,
+body.gelato-admin-tech-theme .cmd-hero{
+  background:#fff!important;
+  border-color:var(--tech-border)!important;
+  box-shadow:var(--tech-shadow)!important;
+}
+body.gelato-admin-tech-theme .dashboard-hero,
+body.gelato-admin-tech-theme .agent-hero,
+body.gelato-admin-tech-theme .cmd-hero,
+body.gelato-admin-tech-theme .cmd-agent-copy{background:#fff!important}
+body.gelato-admin-tech-theme .context-panel{background:var(--tech-surface-2)!important;border-left-color:var(--tech-border)!important}
+body.gelato-admin-tech-theme .cmd-location-table th,
+body.gelato-admin-tech-theme .cmd-ticket-age,
+body.gelato-admin-tech-theme .training-progress,
+body.gelato-admin-tech-theme .review-summary div,
+body.gelato-admin-tech-theme .position-progress-card{background:var(--tech-surface)!important}
+body.gelato-admin-tech-theme .cmd-link.dark,
+body.gelato-admin-tech-theme .cmd-agent-form button{background:var(--tech-dark)!important;color:#fff!important}
+body.gelato-admin-tech-theme .cmd-eyebrow,
+body.gelato-admin-tech-theme .eyebrow{color:var(--tech-accent)!important}
+body.gelato-admin-tech-theme .composer-box,
+body.gelato-admin-tech-theme .agent-bar{background:#fff!important;border-color:var(--tech-border)!important;box-shadow:var(--tech-shadow-hover)!important}
+
+/* Mobile */
+@media(max-width:900px){
+  body.gelato-universal-admin-page{padding-left:0!important}
+  body.gelato-universal-admin-page .uas-sidebar{
+    background:#fff!important;
+    border-right:1px solid var(--tech-border)!important;
+    box-shadow:18px 0 44px rgba(15,23,42,.14)!important;
+  }
+  body.gelato-universal-admin-page .uas-header{left:0!important}
+  body.gelato-universal-admin-page .uas-title small{display:none!important}
+  body.gelato-universal-admin-page .uas-header-actions{gap:5px!important}
+  body.gelato-universal-admin-page main,
+  body.gelato-universal-admin-page .admin-shell,
+  body.gelato-universal-admin-page .shell{max-width:100%!important;width:100%!important}
+  body.gelato-admin-tech-theme .sidebar{
+    background:#fff!important;
+    border-right:1px solid var(--tech-border)!important;
+    box-shadow:18px 0 44px rgba(15,23,42,.14)!important;
+  }
+}
+@media(max-width:720px){
+  body.gelato-universal-admin-page .admin-shell,
+  body.gelato-universal-admin-page .shell,
+  body.gelato-universal-admin-page .editor,
+  body.gelato-universal-admin-page .detail{padding-left:12px!important;padding-right:12px!important}
+  body.gelato-universal-admin-page .card,
+  body.gelato-universal-admin-page .panel,
+  body.gelato-universal-admin-page .workspace,
+  body.gelato-universal-admin-page .admin-panel,
+  body.gelato-universal-admin-page .admin-kpi,
+  body.gelato-universal-admin-page .admin-health,
+  body.gelato-universal-admin-page .admin-order-card{border-radius:12px!important}
+  body.gelato-universal-admin-page .uas-header{padding-right:8px!important}
+  body.gelato-universal-admin-page .uas-account-copy{display:none!important}
+  body.gelato-admin-tech-theme .standard-page,
+  body.gelato-admin-tech-theme .admin-command-dashboard{padding-left:12px!important;padding-right:12px!important}
+  body.gelato-admin-tech-theme .topbar{padding-left:12px!important;padding-right:12px!important}
+}
+@media(max-width:520px){
+  body.gelato-universal-admin-page .uas-header-link:not(.dark):not(.kds){display:none!important}
+  body.gelato-universal-admin-page .uas-header-link{padding:7px 8px!important}
+  body.gelato-universal-admin-page .uas-account-button{padding:5px 7px!important}
+  body.gelato-admin-tech-theme .top-title span{display:none!important}
+}
