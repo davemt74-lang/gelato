@@ -4,6 +4,8 @@ require __DIR__ . '/../includes/bootstrap.php';
 require __DIR__ . '/../includes/equipment-brain.php';
 require __DIR__ . '/../includes/floor-equipment-brain.php';
 require __DIR__ . '/../includes/restaurant-brain.php';
+require __DIR__ . '/../includes/menu-operations-core.php';
+require_once __DIR__ . '/../includes/menu-manager-core.php';
 
 $user = app_require_auth();
 $pdo = app_pdo();
@@ -21,9 +23,13 @@ function brain_can_recipes(array $user): bool
 {
     return app_has_permission('recipes.agent', $user) && app_has_permission('recipes.view', $user);
 }
+function brain_can_menu(array $user): bool
+{
+    return app_has_permission('menu.view', $user);
+}
 function brain_require_any(array $user): void
 {
-    if (!brain_can_equipment($user) && !brain_can_wholesale($user) && !brain_can_recipes($user)) {
+    if (!brain_can_menu($user) && !brain_can_equipment($user) && !brain_can_wholesale($user) && !brain_can_recipes($user)) {
         app_json_response(['ok'=>false,'message'=>'You do not have permission to use restaurant Agent skills.'],403);
     }
 }
@@ -100,15 +106,85 @@ function brain_equipment_answer(PDO $pdo,int $organizationId,string $message):ar
     return ['skill'=>'equipment.search','answer'=>'I could not find a matching equipment record.','data'=>[],'sources'=>[]];
 }
 
+
+function brain_menu_location(PDO $pdo,int $organizationId,string $message): ?array
+{
+    if(!restaurant_brain_table_ready($pdo,'locations'))return null;
+    $q=$pdo->prepare("SELECT id,name,status,timezone FROM locations WHERE organization_id=? AND status='active' ORDER BY name,id");
+    $q->execute([$organizationId]);$rows=$q->fetchAll();
+    if(count($rows)===1)return $rows[0];
+    $lower=mb_strtolower($message,'UTF-8');
+    foreach($rows as $row){$name=mb_strtolower(trim((string)$row['name']),'UTF-8');if($name!==''&&str_contains($lower,$name))return $row;}
+    return null;
+}
+
+function brain_menu_answer(PDO $pdo,int $organizationId,string $message): array
+{
+    if(!menu_operations_ready($pdo))return ['skill'=>'menu.summary','answer'=>'Menu Operations is not installed yet. Run Upgrade once to activate live menu availability and Agent Brain context.','data'=>[],'sources'=>[]];
+    $normalized=mb_strtolower(trim($message),'UTF-8');$location=brain_menu_location($pdo,$organizationId,$message);$locationId=$location?(int)$location['id']:null;
+    if(preg_match('/\b(recent|changed|changes|history|updated|who changed)\b/u',$normalized)){
+        $events=menu_operations_recent_events($pdo,$organizationId,20);$lines=[];foreach($events as $event)$lines[]=$event['createdAt'].' — '.$event['summary'];
+        return ['skill'=>'menu.recent_changes','answer'=>$events?"Recent menu changes:\n- ".implode("\n- ",$lines):'No Menu Operations changes have been recorded yet.','data'=>$events,'sources'=>array_column($events,'id')];
+    }
+    if(preg_match('/\b(sold.?out|86(?:d)?|eighty.?six|availability|available|unavailable)\b/u',$normalized)){
+        if(!$location)return ['skill'=>'menu.availability','answer'=>'Tell me which restaurant location you mean so I can check its live item and size availability.','data'=>[],'sources'=>[]];
+        $state=menu_operations_location_state($pdo,$organizationId,$locationId);$blocked=[];
+        foreach($state as $item){
+            if(!empty($item['status']['soldOut']))$blocked[]=$item['name'].' — item sold out'.(!empty($item['status']['reason'])?' ('.$item['status']['reason'].')':'');
+            foreach($item['sizes'] as $size)if(!empty($size['status']['soldOut']))$blocked[]=$item['name'].' / '.$size['label'].' — sold out'.(!empty($size['status']['reason'])?' ('.$size['status']['reason'].')':'');
+        }
+        return ['skill'=>'menu.availability','answer'=>$blocked?('Live menu availability at '.$location['name'].":\n- ".implode("\n- ",$blocked)):('No item- or size-level 86s are active at '.$location['name'].'.'),'data'=>$state,'sources'=>['menu_operations-current']];
+    }
+    if(preg_match('/\b(summary|status|overview|how many|missing image|images)\b/u',$normalized)){
+        $summary=menu_operations_summary($pdo,$organizationId,$locationId);$answer='Menu summary: '.$summary['published'].' published, '.$summary['draft'].' draft, '.$summary['paused'].' paused, '.$summary['soldOutItems'].' item-level 86(s), '.$summary['soldOutSizes'].' size-level 86(s), '.$summary['scheduledItems'].' scheduled item(s).';
+        $img=$summary['missingImages'];$answer.=' Missing images: '.$img['menuItems']['missing'].' menu items, '.$img['ingredients']['missing'].' ingredients, '.$img['locations']['missing'].' locations.';
+        return ['skill'=>'menu.summary','answer'=>$answer,'data'=>$summary,'sources'=>['menu_operations-current']];
+    }
+    $items=menu_operations_search($pdo,$organizationId,$message,20,$locationId);
+    if(!$items)$items=menu_operations_search($pdo,$organizationId,'',20,$locationId);
+    $lines=[];foreach($items as $item){$price=$item['minPrice']===null?'no active price':('$'.number_format((float)$item['minPrice'],2).(($item['maxPrice']!==null&&(float)$item['maxPrice']!==(float)$item['minPrice'])?'–$'.number_format((float)$item['maxPrice'],2):''));$lines[]=$item['name'].' — '.$item['category'].' — '.$price.(isset($item['operationalStatus'])&&!empty($item['operationalStatus']['soldOut'])?' — SOLD OUT':'');}
+    return ['skill'=>'menu.search','answer'=>$lines?"Matching menu items:\n- ".implode("\n- ",$lines):'No matching menu items were found.','data'=>$items,'sources'=>['menu_operations-current']];
+}
+
+function brain_menu_ids(array $raw): array
+{
+    return array_values(array_unique(array_filter(array_map('intval',$raw),static fn(int $v):bool=>$v>0)));
+}
+
+function brain_menu_bulk_move(PDO $pdo,int $org,array $itemIds,int $categoryId,int $userId): int
+{
+    $ids=brain_menu_ids($itemIds);if(!$ids)throw new InvalidArgumentException('Select at least one menu item.');
+    $q=$pdo->prepare("SELECT id,name FROM menu_sections WHERE organization_id=? AND id=? AND status='active' LIMIT 1");$q->execute([$org,$categoryId]);$category=$q->fetch();if(!$category)throw new InvalidArgumentException('Choose an active destination category.');
+    $q=$pdo->prepare('SELECT COALESCE(MAX(sort_order),0) FROM menu_items WHERE organization_id=? AND section_id=?');$q->execute([$org,$categoryId]);$sort=(int)$q->fetchColumn();
+    $pdo->beginTransaction();try{foreach($ids as $id){menu_operations_item_row($pdo,$org,$id);$sort+=10;$pdo->prepare('UPDATE menu_items SET section_id=?,sort_order=?,version=version+1,updated_at=NOW(6) WHERE organization_id=? AND id=?')->execute([$categoryId,$sort,$org,$id]);}$pdo->commit();}catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
+    menu_operations_event($pdo,$org,'items.bulk_moved','Selected menu items moved to '.$category['name'],null,null,null,$userId,['itemIds'=>$ids,'categoryId'=>$categoryId]);menu_operations_sync_brain($pdo,$org,$userId);return count($ids);
+}
+
+function brain_menu_bulk_distribution(PDO $pdo,int $org,array $itemIds,string $channel,bool $enabled,int $userId): int
+{
+    $ids=brain_menu_ids($itemIds);if(!$ids)throw new InvalidArgumentException('Select at least one menu item.');$column=menu_manager_channels()[$channel]??null;if($column===null)throw new InvalidArgumentException('Unknown distribution channel.');
+    $pdo->beginTransaction();try{foreach($ids as $id){menu_operations_item_row($pdo,$org,$id);$pdo->prepare("UPDATE menu_item_profiles SET {$column}=?,updated_by=?,updated_at=NOW(6) WHERE organization_id=? AND menu_item_id=?")->execute([$enabled?1:0,$userId,$org,$id]);}$pdo->commit();}catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
+    menu_operations_event($pdo,$org,'distribution.bulk_updated','Bulk menu distribution updated',null,null,null,$userId,['itemIds'=>$ids,'channel'=>$channel,'enabled'=>$enabled]);menu_operations_sync_brain($pdo,$org,$userId);return count($ids);
+}
+
+function brain_menu_bulk_status(PDO $pdo,int $org,array $itemIds,string $status,int $userId): int
+{
+    $ids=brain_menu_ids($itemIds);if(!$ids)throw new InvalidArgumentException('Select at least one menu item.');if(!in_array($status,['publish','pause','resume','archive','draft'],true))throw new InvalidArgumentException('Unknown lifecycle status.');
+    foreach($ids as $id)menu_manager_set_status($pdo,$org,$id,$status,$userId);menu_operations_event($pdo,$org,'lifecycle.bulk_updated','Bulk menu lifecycle changed to '.$status,null,null,null,$userId,['itemIds'=>$ids]);menu_operations_sync_brain($pdo,$org,$userId);return count($ids);
+}
+
 function brain_answer(PDO $pdo,int $organizationId,string $message,array $user):array
 {
-    $normalized=mb_strtolower(trim($message),'UTF-8');if($normalized==='')return ['skill'=>'none','answer'=>'Ask me about wholesale opportunities, recipes, online recipe mappings, equipment, maintenance, service contacts, or floor plans.','data'=>[],'sources'=>[]];
+    $normalized=mb_strtolower(trim($message),'UTF-8');if($normalized==='')return ['skill'=>'none','answer'=>'Ask me about the menu, sold-outs, pricing, recent menu changes, wholesale opportunities, recipes, equipment, maintenance, service contacts, or floor plans.','data'=>[],'sources'=>[]];
+    $menuIntent=preg_match('/\b(menu|menu item|sold.?out|86(?:d)?|eighty.?six|food item|drink item|menu price|pizza size|modifier|topping|add.?on)\b/u',$normalized)===1;
     $wholesaleIntent=preg_match('/\b(wholesale|buyer|lead|prospect|sample|quote|private label|foodservice|pipeline|follow.?up|account opportunity)\b/u',$normalized)===1;
     $recipeIntent=preg_match('/\b(recipe|formula|ingredient|yield|method|instructions|online recipe|recipe image|recipe source|mapped recipe|unmapped)\b/u',$normalized)===1;
     $equipmentIntent=preg_match('/\b(equipment|oven|mixer|freezer|cooler|dish|machine|maintenance|repair|warranty|service|floor\s*plan|layout|located|placement)\b/u',$normalized)===1;
+    if($menuIntent&&brain_can_menu($user))return brain_menu_answer($pdo,$organizationId,$message);
     if($wholesaleIntent&&brain_can_wholesale($user))return brain_wholesale_answer($pdo,$organizationId,$message);
     if($recipeIntent&&brain_can_recipes($user))return brain_recipe_answer($pdo,$organizationId,$message);
     if($equipmentIntent&&brain_can_equipment($user))return brain_equipment_answer($pdo,$organizationId,$message);
+    if(brain_can_menu($user)){ $result=brain_menu_answer($pdo,$organizationId,$message); if(!empty($result['data']))return $result; }
     if(brain_can_wholesale($user)){ $result=brain_wholesale_answer($pdo,$organizationId,$message); if(!empty($result['data']))return $result; }
     if(brain_can_recipes($user)){ $result=brain_recipe_answer($pdo,$organizationId,$message); if(!empty($result['data']))return $result; }
     if(brain_can_equipment($user)){ $result=brain_equipment_answer($pdo,$organizationId,$message); if(!empty($result['data']))return $result; }
@@ -123,6 +199,7 @@ if($_SERVER['REQUEST_METHOD']==='GET'){
     $action=(string)($_GET['action']??'summary');
     if($action==='summary'){
         $payload=['ok'=>true,'skill'=>'restaurant.summary','domains'=>[]];
+        if(brain_can_menu($user)&&menu_operations_ready($pdo)){$payload['domains']['menu']=['summary'=>menu_operations_summary($pdo,$organizationId),'recentChanges'=>menu_operations_recent_events($pdo,$organizationId,8)];}
         if(brain_can_equipment($user)&&equipment_brain_table_ready($pdo,'equipment_assets')){$payload['domains']['equipment']=['summary'=>equipment_brain_summary($pdo,$organizationId),'maintenanceDue'=>equipment_brain_maintenance_due($pdo,$organizationId,30)];}
         if(brain_can_wholesale($user)&&restaurant_brain_table_ready($pdo,'wholesale_leads')){$payload['domains']['wholesale']=['pipeline'=>restaurant_brain_wholesale_summary($pdo,$organizationId)];}
         if(brain_can_recipes($user)&&restaurant_brain_table_ready($pdo,'recipes')){$payload['domains']['recipes']=['count'=>count(restaurant_brain_recipe_search($pdo,$organizationId,'',100))];}
@@ -132,6 +209,7 @@ if($_SERVER['REQUEST_METHOD']==='GET'){
     if($action==='floor_plan'&&brain_can_equipment($user))app_json_response(['ok'=>true,'skill'=>'equipment.floor_plan','plans'=>brain_floor_plan($pdo,$organizationId,(string)($_GET['planId']??''))]);
     if($action==='wholesale'&&brain_can_wholesale($user))app_json_response(['ok'=>true,'skill'=>'wholesale.search','leads'=>restaurant_brain_wholesale_search($pdo,$organizationId,(string)($_GET['q']??''),30)]);
     if($action==='recipes'&&brain_can_recipes($user))app_json_response(['ok'=>true,'skill'=>'recipe.search','recipes'=>restaurant_brain_recipe_search($pdo,$organizationId,(string)($_GET['q']??''),30)]);
+    if($action==='menu'&&brain_can_menu($user))app_json_response(['ok'=>true,'skill'=>'menu.search','items'=>menu_operations_search($pdo,$organizationId,(string)($_GET['q']??''),30,((int)($_GET['locationId']??0))?:null)]);
     app_json_response(['ok'=>false,'message'=>'Unsupported Agent skill.'],422);
 }
 if($_SERVER['REQUEST_METHOD']!=='POST'){header('Allow: GET, POST');app_json_response(['ok'=>false,'message'=>'Method not allowed.'],405);}
@@ -139,10 +217,25 @@ $input=app_json_input();app_verify_request_csrf($input);$action=(string)($input[
 if($action==='ask'){$message=trim((string)($input['message']??''));if($message===''||mb_strlen($message,'UTF-8')>1600)app_json_response(['ok'=>false,'message'=>'Enter a restaurant operations question no longer than 1,600 characters.'],422);$result=brain_answer($pdo,$organizationId,$message,$user);app_audit($pdo,$organizationId,(int)$user['id'],'agent.restaurant_skill_used','agent_skill',$result['skill'],null,['message'=>mb_substr($message,0,300,'UTF-8'),'sources'=>$result['sources']]);app_json_response(['ok'=>true]+$result);}
 if($action==='run_skill'){
     $skill=(string)($input['skill']??'');$args=(array)($input['arguments']??[]);
+    if(str_starts_with($skill,'menu.')&&!brain_can_menu($user))app_json_response(['ok'=>false,'message'=>'Menu view permission required.'],403);
     if(str_starts_with($skill,'equipment.')&&!brain_can_equipment($user))app_json_response(['ok'=>false,'message'=>'Equipment Agent permission required.'],403);
     if(str_starts_with($skill,'wholesale.')&&!brain_can_wholesale($user))app_json_response(['ok'=>false,'message'=>'Wholesale Agent permission required.'],403);
     if(str_starts_with($skill,'recipe.')&&!brain_can_recipes($user))app_json_response(['ok'=>false,'message'=>'Recipe Agent permission required.'],403);
-    if($skill==='equipment.search')$result=['skill'=>$skill,'data'=>brain_asset_search($pdo,$organizationId,(string)($args['query']??''),(int)($args['limit']??12))];
+    if($skill==='menu.summary')$result=['skill'=>$skill,'data'=>menu_operations_summary($pdo,$organizationId,((int)($args['locationId']??0))?:null)];
+    elseif($skill==='menu.search')$result=['skill'=>$skill,'data'=>menu_operations_search($pdo,$organizationId,(string)($args['query']??''),(int)($args['limit']??20),((int)($args['locationId']??0))?:null)];
+    elseif($skill==='menu.availability'){ $locationId=(int)($args['locationId']??0); if($locationId<1)throw new InvalidArgumentException('locationId is required.'); $result=['skill'=>$skill,'data'=>menu_operations_location_state($pdo,$organizationId,$locationId)]; }
+    elseif($skill==='menu.recent_changes')$result=['skill'=>$skill,'data'=>menu_operations_recent_events($pdo,$organizationId,(int)($args['limit']??20))];
+    elseif($skill==='menu.set_item_availability'){if(!app_has_permission('menu.manage',$user))app_json_response(['ok'=>false,'message'=>'Menu manage permission required.'],403);$result=['skill'=>$skill,'data'=>menu_operations_set_item_status($pdo,$organizationId,(int)($args['itemId']??0),(int)($args['locationId']??0),!empty($args['soldOut']),(string)($args['reason']??''),isset($args['resumeAt'])?(string)$args['resumeAt']:null,(int)$user['id'])];}
+    elseif($skill==='menu.set_size_availability'){if(!app_has_permission('menu.manage',$user))app_json_response(['ok'=>false,'message'=>'Menu manage permission required.'],403);$result=['skill'=>$skill,'data'=>menu_operations_set_price_status($pdo,$organizationId,(int)($args['priceId']??0),(int)($args['locationId']??0),!empty($args['soldOut']),(string)($args['reason']??''),isset($args['resumeAt'])?(string)$args['resumeAt']:null,(int)$user['id'])];}
+    elseif($skill==='menu.update_price'){if(!app_has_permission('menu.manage',$user))app_json_response(['ok'=>false,'message'=>'Menu manage permission required.'],403);$result=['skill'=>$skill,'data'=>menu_operations_update_price($pdo,$organizationId,(int)($args['priceId']??0),(float)($args['amount']??-1),(int)$user['id'])];}
+    elseif($skill==='menu.bulk_price'){if(!app_has_permission('menu.manage',$user))app_json_response(['ok'=>false,'message'=>'Menu manage permission required.'],403);$result=['skill'=>$skill,'data'=>['updatedPrices'=>menu_operations_bulk_price($pdo,$organizationId,is_array($args['itemIds']??null)?$args['itemIds']:[],(string)($args['mode']??''),(float)($args['value']??0),(int)$user['id'])]];}
+    elseif($skill==='menu.schedule_save'){if(!app_has_permission('menu.manage',$user))app_json_response(['ok'=>false,'message'=>'Menu manage permission required.'],403);$result=['skill'=>$skill,'data'=>menu_operations_save_schedule($pdo,$organizationId,(int)($args['itemId']??0),((int)($args['locationId']??0))?:null,(string)($args['channel']??'online_order'),is_array($args['rows']??null)?$args['rows']:[],(int)$user['id'])];}
+    elseif($skill==='menu.reorder_categories'){if(!app_has_permission('menu.manage',$user))app_json_response(['ok'=>false,'message'=>'Menu manage permission required.'],403);menu_operations_reorder_categories($pdo,$organizationId,is_array($args['ids']??null)?$args['ids']:[],(int)$user['id']);$result=['skill'=>$skill,'data'=>['updated'=>true]];}
+    elseif($skill==='menu.reorder_items'){if(!app_has_permission('menu.manage',$user))app_json_response(['ok'=>false,'message'=>'Menu manage permission required.'],403);menu_operations_reorder_items($pdo,$organizationId,(int)($args['categoryId']??0),is_array($args['ids']??null)?$args['ids']:[],(int)$user['id']);$result=['skill'=>$skill,'data'=>['updated'=>true]];}
+    elseif($skill==='menu.bulk_move'){if(!app_has_permission('menu.manage',$user))app_json_response(['ok'=>false,'message'=>'Menu manage permission required.'],403);$result=['skill'=>$skill,'data'=>['updatedItems'=>brain_menu_bulk_move($pdo,$organizationId,is_array($args['itemIds']??null)?$args['itemIds']:[],(int)($args['categoryId']??0),(int)$user['id'])]];}
+    elseif($skill==='menu.bulk_distribution'){if(!app_has_permission('menu.manage',$user))app_json_response(['ok'=>false,'message'=>'Menu manage permission required.'],403);$result=['skill'=>$skill,'data'=>['updatedItems'=>brain_menu_bulk_distribution($pdo,$organizationId,is_array($args['itemIds']??null)?$args['itemIds']:[],(string)($args['channel']??''),!empty($args['enabled']),(int)$user['id'])]];}
+    elseif($skill==='menu.bulk_status'){if(!app_has_permission('menu.manage',$user))app_json_response(['ok'=>false,'message'=>'Menu manage permission required.'],403);$result=['skill'=>$skill,'data'=>['updatedItems'=>brain_menu_bulk_status($pdo,$organizationId,is_array($args['itemIds']??null)?$args['itemIds']:[],(string)($args['status']??''),(int)$user['id'])]];}
+    elseif($skill==='equipment.search')$result=['skill'=>$skill,'data'=>brain_asset_search($pdo,$organizationId,(string)($args['query']??''),(int)($args['limit']??12))];
     elseif($skill==='equipment.maintenance_due')$result=['skill'=>$skill,'data'=>equipment_brain_maintenance_due($pdo,$organizationId,(int)($args['days']??30))];
     elseif($skill==='equipment.service_contacts')$result=['skill'=>$skill,'data'=>brain_service_contacts($pdo,$organizationId,(string)($args['assetId']??''),(string)($args['specialty']??''))];
     elseif($skill==='equipment.asset_context')$result=['skill'=>$skill,'data'=>brain_asset_context($pdo,$organizationId,(string)($args['assetId']??''))];

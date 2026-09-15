@@ -165,8 +165,8 @@ function admin_shell_filtered_navigation(array $user): array
 function admin_shell_header_links(array $user): array
 {
     $links=[];
-    if(app_has_permission('pos.use',$user)) $links[]=['label'=>'POS','href'=>'pos.php','style'=>'dark'];
     if(app_has_permission('kds.view',$user)) $links[]=['label'=>'KDS','href'=>'kds.php','style'=>'kds'];
+    if(app_has_permission('pos.use',$user)) $links[]=['label'=>'POS','href'=>'pos.php','style'=>'dark'];
     return $links;
 }
 

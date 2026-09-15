@@ -69,7 +69,7 @@ jobs:
           grep -q "prep.plan_missing" api/proactive-agent.php
           grep -q "inventory.shortage_forecast" api/proactive-agent.php
           grep -q "app_verify_request_csrf" api/prep-intelligence.php
-          if grep -Eiq 'ADD[[:space:]]+COLUMN[[:space:]]+IF[[:space:]]+NOT[[:space:]]+EXISTS' database/20261008_menu_manager_food_builder.sql; then
+          if grep -Ev '^[[:space:]]*--' database/20261008_menu_manager_food_builder.sql | grep -Eiq 'ADD[[:space:]]+COLUMN[[:space:]]+IF[[:space:]]+NOT[[:space:]]+EXISTS'; then
             echo 'Menu Manager migration uses ADD COLUMN IF NOT EXISTS, which is not portable to the production MySQL target.' >&2
             exit 1
           fi
