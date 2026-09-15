@@ -5,7 +5,9 @@ $root = dirname(__DIR__);
 $source = file_get_contents($root . '/online-order.php') ?: '';
 $core = file_get_contents($root . '/includes/online-order-core.php') ?: '';
 $orderJs = file_get_contents($root . '/assets/js/online-order.js') ?: '';
+$orderCss = file_get_contents($root . '/assets/css/online-order.css') ?: '';
 $signup = file_get_contents($root . '/customer-signup.php') ?: '';
+$locationsAdmin = file_get_contents($root . '/locations-admin.php') ?: '';
 $workflow = file_get_contents($root . '/.github/workflows/online-ordering-inbox.yml') ?: '';
 
 foreach ([
@@ -78,6 +80,54 @@ foreach ([
 }
 
 foreach ([
+    'id="orderCartDrawer"',
+    'id="orderCartBackdrop"',
+    'id="orderCartClose"',
+    'role="dialog"',
+    'aria-modal="true"',
+] as $needle) {
+    if (!str_contains($source, $needle)) {
+        throw new RuntimeException('Slide-out order cart markup missing: ' . $needle);
+    }
+}
+foreach ([
+    'orderCartToggle',
+    'orderCartDrawer',
+    'cartHeaderCount',
+    "classList.add('order-cart-open')",
+    "params.get('checkout')==='1'",
+] as $needle) {
+    if (!str_contains($orderJs, $needle)) {
+        throw new RuntimeException('Header cart/drawer behavior missing: ' . $needle);
+    }
+}
+foreach ([
+    '.online-order-page .order-shell{display:block',
+    '.order-cart-trigger',
+    '.order-cart-backdrop',
+    '.order-cart{position:fixed',
+    '.order-cart-open .order-cart',
+] as $needle) {
+    if (!str_contains($orderCss, $needle)) {
+        throw new RuntimeException('Full-width ordering/cart drawer CSS missing: ' . $needle);
+    }
+}
+if (str_contains($orderCss, 'grid-template-columns:minmax(0,1fr) 360px')) {
+    throw new RuntimeException('Ordering menu must not retain the old permanent cart column.');
+}
+
+foreach ([
+    '+ Add location',
+    'name="pickup_enabled"',
+    'name="online_ordering_enabled"',
+    'Save Location',
+] as $needle) {
+    if (!str_contains($locationsAdmin, $needle)) {
+        throw new RuntimeException('Location online-ordering setup control missing: ' . $needle);
+    }
+}
+
+foreach ([
     'online_order_missing_requirements',
     "'online_orders'",
     "'pos_settings'",
@@ -116,4 +166,4 @@ foreach ([
     }
 }
 
-echo "PASS: online ordering supports guest cart building, account-at-checkout handoff, direct readiness, and dependency-complete recovery deployment.\n";
+echo "PASS: online ordering supports full-width menu browsing, a header-triggered cart drawer, guest account-at-checkout handoff, location enablement, direct readiness, and dependency-complete recovery deployment.\n";
