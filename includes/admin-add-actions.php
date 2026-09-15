@@ -34,6 +34,7 @@ function admin_add_action_catalog(): array
 
         ['id'=>'customer','group'=>'Sales & Customers','icon'=>'◎','label'=>'Add Customer','description'=>'Open the CRM to create or manage a customer relationship.','href'=>'customer-crm.php?action=add','permissions'=>['crm.manage']],
         ['id'=>'promotion','group'=>'Sales & Customers','icon'=>'✦','label'=>'Add Promotion','description'=>'Create a customer promotion or account Inbox campaign.','href'=>'customer-promotions.php?action=add','permissions'=>['customer_promotions.manage']],
+        ['id'=>'discount','group'=>'Sales & Customers','icon'=>'%','label'=>'Add Discount','description'=>'Apply a tracked coupon, make-good, manager, loyalty or other discount to an open POS check.','href'=>'discounts-admin.php?action=add','permissions'=>['discounts.manage']],
         ['id'=>'invoice','group'=>'Sales & Customers','icon'=>'$','label'=>'Add Invoice','description'=>'Create or manage a wholesale invoice and receivable.','href'=>'wholesale-receivables.php?action=add','permissions'=>['wholesale.receivables','wholesale.manage']],
 
         ['id'=>'equipment','group'=>'Purchasing & Assets','icon'=>'⚙','label'=>'Add Equipment','description'=>'Add a restaurant asset, appliance or serviceable equipment record.','href'=>'equipment.php?action=add','permissions'=>['equipment.edit','equipment.service']],
