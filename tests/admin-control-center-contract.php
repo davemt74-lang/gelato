@@ -13,13 +13,18 @@ acc_assert(!admin_online_orders_allowed($customerUser),'Customer portal users mu
 $managerUser=['is_owner_role'=>0,'permissions'=>['locations.manage','crm.view','pos.use']];
 acc_assert(admin_control_allowed($managerUser),'A restaurant manager permission must allow the admin control center.');
 acc_assert(admin_online_orders_allowed($managerUser),'Authorized POS/CRM staff must be able to monitor online orders.');
-$managerModules=array_column(admin_modules($managerUser),'name');
+$managerModuleRows=admin_modules($managerUser);
+$managerModules=array_column($managerModuleRows,'name');
 acc_assert(in_array('Locations',$managerModules,true),'Location managers must see Locations in Admin.');
 acc_assert(in_array('Customer CRM',$managerModules,true),'CRM viewers must see Customer CRM in Admin.');
 acc_assert(in_array('POS',$managerModules,true),'POS users must see POS in Admin.');
 acc_assert(!in_array('Menu Import',$managerModules,true),'Menu Import must remain owner-only.');
 $ownerModules=array_column(admin_modules(['is_owner_role'=>1,'permissions'=>['*']]),'name');
 acc_assert(in_array('Menu Import',$ownerModules,true),'Owners must see the owner-only menu import tool.');
+$adminSource=file_get_contents(__DIR__.'/../admin.php')?:'';
+acc_assert(str_contains($adminSource,'href="locations-admin.php">Locations</a>'),'Restaurant Admin top navigation must expose Locations to authorized managers.');
+$workspaceModule=null; foreach($managerModuleRows as $row){if(($row['name']??'')==='Workspace'){$workspaceModule=$row;break;}}
+acc_assert(is_array($workspaceModule)&&($workspaceModule['href']??'')==='workspace.php','Admin Workspace module must return to authenticated workspace.php, never public index.php.');
 
 $slug='admin-ci-'.bin2hex(random_bytes(4));
 $pdo->prepare("INSERT INTO organizations (name,status,timezone) VALUES (?,'active','America/Phoenix')")->execute(['Admin CI '.$slug]);

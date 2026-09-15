@@ -676,7 +676,7 @@
   }
 
   function bind() {
-    $('backBtn').onclick = () => { location.href = 'index.php'; };
+    $('backBtn').onclick = () => { location.href = 'admin.php'; };
     $('equipmentCatalogBtn').onclick = () => { location.href = 'equipment.php'; };
     $('newPlanBtn').onclick = () => newBlankPlan();
     $('savePlanBtn').onclick = savePlan;

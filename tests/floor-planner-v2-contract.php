@@ -7,6 +7,7 @@ function fpv2_source(string $path): string { $value=file_get_contents(__DIR__.'/
 $entry=fpv2_source('floor-planner.php');
 $redirect=fpv2_source('floor-planner-ops.php');
 $legacy=fpv2_source('floor-planner-ops-legacy.php');
+$ops=fpv2_source('js/floor-planner-ops.js');
 $shell=fpv2_source('floor-planner-v2.php');
 $api=fpv2_source('floor-plan-api.php');
 $module=fpv2_source('js/floor-planner-module.js');
@@ -19,6 +20,9 @@ $equipmentCreate=fpv2_source('api/floor-planner-equipment-create.php');
 fpv2_assert(str_contains($entry,'floor-planner-v2.php'),'Primary Floor Planner entry must route to v2.');
 fpv2_assert(str_contains($redirect,'floor-planner-v2.php'),'Legacy operational planner URL must redirect to v2.');
 fpv2_assert(str_contains($legacy,'Operational Floor Planner'),'Internal canonical planner shell must remain available to the v2 wrapper.');
+fpv2_assert(str_contains($legacy,'<button id="backBtn">← Admin</button>'),'Floor Planner exit control must be labeled for Admin.');
+fpv2_assert(str_contains($ops,"location.href = 'admin.php'"),'Floor Planner exit must return to Restaurant Admin.');
+fpv2_assert(!str_contains($ops,"$('backBtn').onclick = () => { location.href = 'index.php'; };"),'Floor Planner exit must never return to the public landing page.');
 fpv2_assert(str_contains($shell,'floor-planner-ops-legacy.php'),'V2 shell must wrap the internal canonical operational planner.');
 fpv2_assert(str_contains($shell,'floor-planner-v2.js?v=20260914-3'),'V2 shell must load the current interaction layer.');
 fpv2_assert(str_contains($shell,'. $needle'),'V2 shell must preserve the canonical planner script between its preloader and post-runtime hardening.');

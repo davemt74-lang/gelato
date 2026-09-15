@@ -44,7 +44,7 @@ function admin_modules(array $user): array
         ['category'=>'Operations','name'=>'Equipment','description'=>'Restaurant equipment records, service history and operational assets.','href'=>'equipment.php','permissions'=>['equipment.view','equipment.manage'],'icon'=>'◇'],
         ['category'=>'Intelligence','name'=>'Sales Intelligence','description'=>'Sales performance, demand trends, location rollups and source health.','href'=>'sales-intelligence.php','permissions'=>['sales.view'],'icon'=>'↗'],
         ['category'=>'Intelligence','name'=>'Cost Intelligence','description'=>'Food-cost and sales-cost analysis tied to the restaurant data model.','href'=>'sales-cost-intelligence.php','permissions'=>['sales.view','inventory.view'],'icon'=>'$'],
-        ['category'=>'Workspace','name'=>'Workspace','description'=>'Return to the broader Gelato restaurant workspace and training system.','href'=>'index.php','permissions'=>[],'always'=>true,'icon'=>'G'],
+        ['category'=>'Workspace','name'=>'Workspace','description'=>'Return to the broader Gelato restaurant workspace and training system.','href'=>'workspace.php','permissions'=>[],'always'=>true,'icon'=>'G'],
     ];
     $modules=[];
     foreach($definitions as $module){

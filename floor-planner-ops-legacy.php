@@ -20,7 +20,7 @@ $csrf = app_csrf_token();
 </head>
 <body class="<?= $canEdit ? '' : 'viewonly' ?>">
 <div class="app">
-<header class="top"><strong>Operational Floor Planner</strong><button id="backBtn">← Workspace</button><select id="planSelect"><option value="">Choose saved plan…</option></select><input id="planName" value="Main Pizzeria Layout" maxlength="160"><button id="newPlanBtn">New</button><button id="savePlanBtn">Save</button><button id="archivePlanBtn">Archive</button><div class="spacer"></div><button id="equipmentCatalogBtn">Equipment Catalog</button><label style="font-size:10px">Zoom <input id="zoom" type="range" min="50" max="140" value="100" style="width:90px"></label><span id="status" class="status">Ready</span></header>
+<header class="top"><strong>Operational Floor Planner</strong><button id="backBtn">← Admin</button><select id="planSelect"><option value="">Choose saved plan…</option></select><input id="planName" value="Main Pizzeria Layout" maxlength="160"><button id="newPlanBtn">New</button><button id="savePlanBtn">Save</button><button id="archivePlanBtn">Archive</button><div class="spacer"></div><button id="equipmentCatalogBtn">Equipment Catalog</button><label style="font-size:10px">Zoom <input id="zoom" type="range" min="50" max="140" value="100" style="width:90px"></label><span id="status" class="status">Ready</span></header>
 <?php if (!$canEdit): ?><div class="readonly">View-only floor-plan access. Equipment and structure positions cannot be changed.</div><?php endif; ?>
 <div class="workspace">
 <aside class="side">
