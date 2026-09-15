@@ -4,6 +4,22 @@ declare(strict_types=1);
 require_once __DIR__.'/bootstrap.php';
 require_once __DIR__.'/admin-control-core.php';
 
+function admin_pickup_fulfillment_allowed(array $user): bool
+{
+    foreach(['online_orders.fulfill','pos.use','pos.manage','kds.view','kds.update','kds.configure','crm.view','crm.manage'] as $permission){
+        if(app_has_permission($permission,$user)) return true;
+    }
+    return false;
+}
+
+function admin_order_recovery_allowed(array $user): bool
+{
+    foreach(['order_recovery.view','order_recovery.manage','order_recovery.refund'] as $permission){
+        if(app_has_permission($permission,$user)) return true;
+    }
+    return false;
+}
+
 /**
  * Canonical direct-route access for staff/admin pages.
  *
@@ -18,6 +34,9 @@ function admin_route_access_catalog(): array
         'admin.php'=>['callback'=>'admin_control_allowed'],
         'admin-menu-import.php'=>['ownerOnly'=>true],
         'locations-admin.php'=>['any'=>['locations.manage']],
+        'menu-manager.php'=>['any'=>['menu.view']],
+        'packages-admin.php'=>['any'=>['packages.view']],
+        'discounts-admin.php'=>['any'=>['discounts.view']],
         'operations.php'=>['any'=>['tasks.view','inventory.view']],
         'timeclock.php'=>['any'=>['timeclock.self','timeclock.view','attendance.view','voice.self']],
         'scheduling.php'=>['any'=>['schedule.view','schedule.manage','schedule.self','staff.view','staff.manage']],
@@ -34,6 +53,8 @@ function admin_route_access_catalog(): array
         'customer-promotions.php'=>['any'=>['customer_promotions.manage']],
         'customer-crm.php'=>['any'=>['crm.view']],
         'online-orders-admin.php'=>['callback'=>'admin_online_orders_allowed'],
+        'pickup-fulfillment.php'=>['callback'=>'admin_pickup_fulfillment_allowed'],
+        'order-recovery.php'=>['callback'=>'admin_order_recovery_allowed'],
         'public-site-settings.php'=>['any'=>['public_pages.edit','settings.organization_edit']],
         'wholesale-pipeline.php'=>['any'=>['wholesale.view']],
         'wholesale-accounts.php'=>['any'=>['wholesale.view']],
