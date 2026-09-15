@@ -53,8 +53,8 @@ function online_order_lifecycle_derive(array $state): string
 
     if($live>0 && $completed===$live) return 'kitchen_complete';
     if($live>0 && ($ready+$completed)===$live && $queued===0 && $held===0 && $progress===0) return 'ready';
-    if($progress>0) return 'preparing';
-    if(($queued+$held+$ready)>0) return 'in_kitchen';
+    if($progress>0 || $ready>0 || $completed>0) return 'preparing';
+    if(($queued+$held)>0) return 'in_kitchen';
     return 'submitted';
 }
 
