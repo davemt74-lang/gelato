@@ -1,7 +1,8 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/includes/public-site.php';
-$context=public_site_fallback_context(); try{$context=public_site_context(app_pdo());}catch(Throwable $e){error_log('Public menu load failed: '.$e->getMessage());}
+require_once __DIR__ . '/includes/menu-manager-core.php';
+$context=public_site_fallback_context(); try{$context=public_site_context(app_pdo());if($context['organizationId']>0&&menu_manager_ready(app_pdo()))$context['menuSections']=menu_manager_public_sections(app_pdo(),(int)$context['organizationId']);}catch(Throwable $e){error_log('Public menu load failed: '.$e->getMessage());}
 $settings=$context['settings'];
 $sections=array_values(array_filter($context['menuSections'],static function(array $section):bool{$id=mb_strtolower((string)($section['id']??''),'UTF-8');$name=mb_strtolower((string)($section['name']??''),'UTF-8');return !str_contains($id,'gelato')&&!str_contains($name,'gelato');}));
 ?>
