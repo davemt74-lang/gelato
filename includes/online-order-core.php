@@ -6,6 +6,7 @@ require_once __DIR__.'/customer-inbox-core.php';
 require_once __DIR__.'/location-core.php';
 require_once __DIR__.'/pos-core.php';
 require_once __DIR__.'/kds-core.php';
+require_once __DIR__.'/online-order-lifecycle.php';
 
 function online_order_missing_requirements(PDO $pdo): array
 {
@@ -253,6 +254,7 @@ function online_order_submit_pickup(PDO $pdo,int $organizationId,array $account,
 
         $kitchen=['ready'=>false,'sent'=>0,'unsent'=>count($cart),'unrouted'=>0,'items'=>[]];
         if(kds_ready($pdo)) $kitchen=kds_send_check($pdo,$organizationId,(string)$check['publicId'],$userId,false);
+        $lifecycle=online_order_lifecycle_sync($pdo,$organizationId,(string)$check['publicId'],$userId);
 
         $readyDisplay=(new DateTimeImmutable($readyAt))->format('g:i A');
         customer_inbox_send_direct($pdo,$organizationId,$customerId,[
@@ -264,7 +266,7 @@ function online_order_submit_pickup(PDO $pdo,int $organizationId,array $account,
         try{app_audit($pdo,$organizationId,$userId,'online_order.submitted','online_order',$orderPublic,null,['checkPublicId'=>$check['publicId'],'customerId'=>$customerId,'locationId'=>$locationId,'total'=>$check['totalAmount'],'paymentMode'=>'pay_at_pickup','customizedLines'=>count(array_filter($validated))]);}catch(Throwable){}
         if($owns)$pdo->commit();
         return [
-            'public_id'=>$orderPublic,'status'=>'submitted','payment_mode'=>'pay_at_pickup','requested_ready_at'=>$readyAt,'submitted_at'=>(new DateTimeImmutable())->format('Y-m-d H:i:s.u'),
+            'public_id'=>$orderPublic,'status'=>(string)($lifecycle['order_status']??'submitted'),'payment_mode'=>'pay_at_pickup','requested_ready_at'=>$readyAt,'submitted_at'=>(new DateTimeImmutable())->format('Y-m-d H:i:s.u'),
             'check_public_id'=>$check['publicId'],'check_number'=>$check['checkNumber'],'subtotal'=>$check['subtotal'],'tax_amount'=>$check['taxAmount'],
             'service_charge_amount'=>$check['serviceChargeAmount'],'total_amount'=>$check['totalAmount'],'check_status'=>$check['status'],'location_name'=>$location['name'],
             'kitchen'=>$kitchen,'duplicate'=>false,
@@ -280,20 +282,14 @@ function online_order_customer_orders(PDO $pdo,int $organizationId,int $customer
     $limit=max(1,min(100,$limit));
     $hasKds=kds_ready($pdo);
     $kdsJoin=$hasKds?' LEFT JOIN kds_order_items k ON k.organization_id=oo.organization_id AND k.check_id=oo.pos_check_id ':'';
-    $kdsSelect=$hasKds?",SUM(CASE WHEN k.status='ready' THEN 1 ELSE 0 END) kds_ready_count,SUM(CASE WHEN k.status='in_progress' THEN 1 ELSE 0 END) kds_progress_count,SUM(CASE WHEN k.status IN ('queued','held') THEN 1 ELSE 0 END) kds_waiting_count,SUM(CASE WHEN k.status='completed' THEN 1 ELSE 0 END) kds_completed_count,COUNT(k.id) kds_count":",0 kds_ready_count,0 kds_progress_count,0 kds_waiting_count,0 kds_completed_count,0 kds_count";
+    $kdsSelect=$hasKds?",SUM(CASE WHEN k.status='queued' THEN 1 ELSE 0 END) kds_queued_count,SUM(CASE WHEN k.status='held' THEN 1 ELSE 0 END) kds_held_count,SUM(CASE WHEN k.status='in_progress' THEN 1 ELSE 0 END) kds_progress_count,SUM(CASE WHEN k.status='ready' THEN 1 ELSE 0 END) kds_ready_count,SUM(CASE WHEN k.status='completed' THEN 1 ELSE 0 END) kds_completed_count,SUM(CASE WHEN k.status='cancelled' THEN 1 ELSE 0 END) kds_cancelled_count,COUNT(k.id) kds_count":",0 kds_queued_count,0 kds_held_count,0 kds_progress_count,0 kds_ready_count,0 kds_completed_count,0 kds_cancelled_count,0 kds_count";
     $q=$pdo->prepare("SELECT oo.public_id order_public_id,oo.status order_status,oo.payment_mode,oo.requested_ready_at,oo.submitted_at,c.public_id check_public_id,c.check_number,c.status check_status,c.total_amount,c.amount_paid,l.name location_name{$kdsSelect}
         FROM online_orders oo JOIN pos_checks c ON c.id=oo.pos_check_id AND c.organization_id=oo.organization_id JOIN locations l ON l.id=oo.location_id AND l.organization_id=oo.organization_id {$kdsJoin}
         WHERE oo.organization_id=? AND oo.customer_id=? GROUP BY oo.id ORDER BY oo.submitted_at DESC,oo.id DESC LIMIT {$limit}");
     $q->execute([$organizationId,$customerId]);
     $rows=$q->fetchAll();
     foreach($rows as &$row){
-        if((string)$row['check_status']==='cancelled') $state='Cancelled';
-        elseif((string)$row['check_status']==='paid') $state='Completed';
-        elseif((int)$row['kds_ready_count']>0) $state='Ready';
-        elseif((int)$row['kds_progress_count']>0) $state='Preparing';
-        elseif((int)$row['kds_waiting_count']>0) $state='In kitchen';
-        else $state='Submitted';
-        $row['displayStatus']=$state;
+        $row['displayStatus']=online_order_lifecycle_display_status(online_order_lifecycle_derive($row));
     }
     unset($row);
     return $rows;
