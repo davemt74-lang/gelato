@@ -76,6 +76,7 @@ function gaw_route(array $user,string $message): array
 {
     $text=mb_strtolower(preg_replace('/^hey\s+gelato[,\s]*/iu','',trim($message))??trim($message),'UTF-8');
     $menu='/\b(menu|menu item|sold.?out|86(?:d)?|eighty.?six|food item|drink item|menu price|pizza size|modifier|topping|add.?on)\b/u';
+    $workforce='/\b(resume|resumes|applicant|applicants|candidate|candidates|hiring|hire|new hires?|employee activity|staff activity|recent activity|workforce overview|workforce summary)\b/u';
     if(($user['role_slug']??'')==='wholesale_customer')return ['route'=>'api/wholesale-portal-agent.php','domain'=>'wholesale_portal'];
     $time='/\b(clock(?:ed)?\s+(?:me\s+)?(?:in|out)|time\s*clock|break|attendance|no.?show|late|actual labor|on clock|clock status)\b/u';
     $schedule='/\b(schedule|scheduled|shift|shifts|availability|time off|swap|coverage|staffing|short.?staffed|who works|who is working|when do i work|next shift)\b/u';
@@ -84,6 +85,7 @@ function gaw_route(array $user,string $message): array
     $purchasing='/\b(purchase order|purchase orders|\bpo\b|vendor|vendors|supplier|suppliers|receiving|receipt|receipts|invoice|invoices|order cutoff|delivery day|price comparison|compare price|cheapest|best price|what.*need.*order|need to order|what should.*buy)\b/u';
     $prepIntel='/\b(prep plan|prep list|what should (?:we|i) prep|prep recommendations?|prep history|normally prep|usually prep|inventory forecast|shortage forecast|forecast.*shortage|publish.*prep|build.*prep|generate.*prep)\b/u';
     $ops='/\b(inventory|stock|par|reorder|shortage|prep|task|tasks|opening|closing|cleaning|assigned|overdue|fulfillment|delivery|order|orders)\b/u';
+    if(preg_match($workforce,$text)&&(app_has_permission('resumes.view',$user)||app_has_permission('audit.view',$user)||app_has_permission('schedule.view',$user)))return ['route'=>'api/workspace-workforce-agent.php','domain'=>'workspace_workforce'];
     if(preg_match($menu,$text)&&app_has_permission('menu.view',$user))return ['route'=>'api/agent-brain.php','domain'=>'restaurant_brain'];
     if(preg_match($time,$text)&&(app_has_permission('timeclock.agent',$user)||app_has_permission('timeclock.self',$user)||app_has_permission('attendance.view',$user)))return ['route'=>'api/timeclock-agent.php','domain'=>'timeclock'];
     if(preg_match($schedule,$text)&&(app_has_permission('schedule.agent',$user)||app_has_permission('schedule.view',$user)||app_has_permission('schedule.self',$user)))return ['route'=>'api/scheduling-agent.php','domain'=>'scheduling'];
