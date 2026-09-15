@@ -3,8 +3,23 @@
   if (window.GelatoGlobalAddCanvas) return;
 
   const state = {shell: null, overlay: null, launcher: null, lastFocus: null};
-  const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[ch]));
+  const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#039;'}[ch]));
   const groups = ['People','Menu & Products','Operations','Sales & Customers','Purchasing & Assets'];
+
+  function ensureAgentExperience() {
+    if (!window.GelatoGlobalAgent && !document.querySelector('script[data-gelato-global-agent-loader]')) {
+      const globalAgent = document.createElement('script');
+      globalAgent.src = 'js/global-agent.js?v=20260915-agent2';
+      globalAgent.dataset.gelatoGlobalAgentLoader = '1';
+      document.head.appendChild(globalAgent);
+    }
+    if (!document.querySelector('script[data-dynamic-agent-canvas-loader]')) {
+      const canvas = document.createElement('script');
+      canvas.src = 'js/dynamic-agent-canvas.js?v=20260915-canvas1';
+      canvas.dataset.dynamicAgentCanvasLoader = '1';
+      document.head.appendChild(canvas);
+    }
+  }
 
   function ensureStyles() {
     if (document.querySelector('link[data-global-add-canvas]')) return;
@@ -76,9 +91,7 @@
     overlay.querySelector('.gac-search').addEventListener('input', (event) => renderCards(event.currentTarget.value));
     overlay.addEventListener('click', (event) => {
       const planned = event.target.closest('[data-planned="1"]');
-      if (planned) {
-        planned.animate([{transform:'scale(1)'},{transform:'scale(.985)'},{transform:'scale(1)'}], {duration:180});
-      }
+      if (planned) planned.animate([{transform:'scale(1)'},{transform:'scale(.985)'},{transform:'scale(1)'}], {duration:180});
     });
     document.body.appendChild(overlay);
     state.overlay = overlay;
@@ -127,6 +140,7 @@
   }
 
   function install(shell) {
+    ensureAgentExperience();
     if (!shell || !Array.isArray(shell.addActions) || shell.addActions.length === 0) return;
     state.shell = shell;
     ensureStyles();
@@ -137,6 +151,7 @@
     document.addEventListener('keydown', keydown);
   }
 
+  ensureAgentExperience();
   window.GelatoGlobalAddCanvas = {install, open, close};
   window.addEventListener('gelato-admin-shell-config', (event) => install(event.detail));
   if (window.GELATO_ADMIN_SHELL) install(window.GELATO_ADMIN_SHELL);
