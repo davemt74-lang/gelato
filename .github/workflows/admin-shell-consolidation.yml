@@ -4,15 +4,30 @@ on:
   pull_request:
     paths:
       - 'index.html'
+      - 'workspace.php'
+      - 'admin.php'
+      - 'admin-menu-import.php'
       - 'locations-admin.php'
       - 'operations.php'
       - 'catering-operations.php'
       - 'catering-pipeline.php'
       - 'sales-intelligence.php'
+      - 'sales-import-center.php'
+      - 'sales-cost-intelligence.php'
       - 'customer-promotions.php'
       - 'customer-crm.php'
       - 'online-orders-admin.php'
       - 'recipes.php'
+      - 'scheduling.php'
+      - 'timeclock.php'
+      - 'public-site-settings.php'
+      - 'prep-intelligence.php'
+      - 'equipment.php'
+      - 'purchasing.php'
+      - 'wholesale-pipeline.php'
+      - 'wholesale-accounts.php'
+      - 'includes/admin-shell-core.php'
+      - 'api/admin-shell.php'
       - 'js/admin-shell-consolidation.js'
       - 'js/universal-admin-page-shell.js'
       - 'js/floor-planner-module.js'
@@ -25,15 +40,30 @@ on:
       - main
     paths:
       - 'index.html'
+      - 'workspace.php'
+      - 'admin.php'
+      - 'admin-menu-import.php'
       - 'locations-admin.php'
       - 'operations.php'
       - 'catering-operations.php'
       - 'catering-pipeline.php'
       - 'sales-intelligence.php'
+      - 'sales-import-center.php'
+      - 'sales-cost-intelligence.php'
       - 'customer-promotions.php'
       - 'customer-crm.php'
       - 'online-orders-admin.php'
       - 'recipes.php'
+      - 'scheduling.php'
+      - 'timeclock.php'
+      - 'public-site-settings.php'
+      - 'prep-intelligence.php'
+      - 'equipment.php'
+      - 'purchasing.php'
+      - 'wholesale-pipeline.php'
+      - 'wholesale-accounts.php'
+      - 'includes/admin-shell-core.php'
+      - 'api/admin-shell.php'
       - 'js/admin-shell-consolidation.js'
       - 'js/universal-admin-page-shell.js'
       - 'js/floor-planner-module.js'
@@ -58,17 +88,11 @@ jobs:
           coverage: none
       - name: PHP syntax
         run: |
+          php -l includes/admin-shell-core.php
+          php -l api/admin-shell.php
           php -l tests/admin-shell-consolidation-contract.php
           php -l tests/universal-admin-page-shell-contract.php
-          php -l locations-admin.php
-          php -l operations.php
-          php -l catering-operations.php
-          php -l catering-pipeline.php
-          php -l sales-intelligence.php
-          php -l customer-promotions.php
-          php -l customer-crm.php
-          php -l online-orders-admin.php
-          php -l recipes.php
+          for file in admin.php admin-menu-import.php locations-admin.php operations.php catering-operations.php catering-pipeline.php sales-intelligence.php sales-import-center.php sales-cost-intelligence.php customer-promotions.php customer-crm.php online-orders-admin.php recipes.php scheduling.php timeclock.php public-site-settings.php prep-intelligence.php equipment.php purchasing.php wholesale-pipeline.php wholesale-accounts.php; do php -l "$file"; done
       - name: JavaScript syntax
         run: |
           node --check js/admin-shell-consolidation.js
