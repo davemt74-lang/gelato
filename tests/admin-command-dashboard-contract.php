@@ -38,6 +38,7 @@ $checks=[
     'dashboard includes CRM pulse'=>str_contains($files['js'],'Active customers'),
     'core returns sales today week month'=>str_contains($files['core'],"'salesToday'")&&str_contains($files['core'],"'salesWeek'")&&str_contains($files['core'],"'salesMonth'"),
     'core returns active tables and KDS ready'=>str_contains($files['core'],"\$pos['activeTables']")&&str_contains($files['core'],"\$pos['readyTickets']"),
+    'core gates per-location POS rollups behind sales permission'=>str_contains($files['core'],"\$row=\$canSales?admin_dashboard_pos_rollup(\$pdo,\$org,\$periods,\$id):\$emptyPos;"),
     'core returns per-location online order load'=>str_contains($files['core'],"\$row['onlineOrdersOpen']"),
     'core restricts catering rollup to catering operations'=>str_contains($files['core'],"source_type='catering'"),
     'core returns wholesale pipeline and receivables'=>str_contains($files['core'],"'pipelineLeads'")&&str_contains($files['core'],"'outstandingReceivables'"),
