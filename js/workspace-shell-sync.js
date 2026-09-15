@@ -35,6 +35,8 @@
       const link = document.createElement('a');
       link.dataset.canonicalShellShortcut = '1';
       link.className = `gelato-header-shortcut ${item.style === 'dark' ? 'pos' : item.style || ''}`.trim();
+      if (item.label === 'POS') link.id = 'gelatoHeaderPos';
+      if (item.label === 'KDS') link.id = 'gelatoHeaderKds';
       link.href = item.href;
       link.textContent = item.label;
       actions.insertBefore(link, notification || actions.firstChild);
