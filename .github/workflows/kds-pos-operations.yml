@@ -6,6 +6,7 @@ on:
       - 'kds.php'
       - 'kds-dashboard.php'
       - 'api/kds-history.php'
+      - 'api/pos-ready.php'
       - 'js/kds.js'
       - 'js/kds-dashboard.js'
       - 'pos.php'
@@ -29,6 +30,7 @@ jobs:
           php -l kds.php
           php -l kds-dashboard.php
           php -l api/kds-history.php
+          php -l api/pos-ready.php
           php -l pos.php
           php -l tests/kds-pos-operations-contract.php
           node --check js/kds.js
