@@ -487,7 +487,7 @@ function menu_database_sections(PDO $pdo, int $organizationId): array
     }
 
     $itemStatement = $pdo->prepare(
-        "SELECT id, section_id, name, slug, description, behavior_tags_json
+        "SELECT id, section_id, name, slug, description, preparation_notes, behavior_tags_json
          FROM menu_items
          WHERE organization_id = ? AND is_active = 1
          ORDER BY section_id ASC, id ASC"
@@ -548,6 +548,7 @@ function menu_database_sections(PDO $pdo, int $organizationId): array
         $itemsBySection[(int)$item['section_id']][] = [
             'name' => (string)$item['name'],
             'description' => (string)($item['description'] ?? ''),
+            'specialNotes' => (string)($item['preparation_notes'] ?? ''),
             'ingredients' => $ingredientsByItem[$itemId] ?? [],
             'prices' => $pricesByItem[$itemId] ?? [],
             'facts' => $facts,

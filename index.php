@@ -13,6 +13,8 @@ $sections = $context['menuSections'];
 $pizzaSection = public_site_section($sections, 'pizza');
 $gelatoSection = public_site_section($sections, 'gelato');
 $featuredPizzas = $pizzaSection ? public_site_featured_items($pizzaSection, 4) : [];
+$pizzaStoryItems = $pizzaSection ? public_site_featured_items($pizzaSection, 5) : [];
+$pizzaStoryFallbackImages = ['pizza-scroll-feature.webp', 'favorite-stonefellow.jpg', 'favorite-funghi.jpg', 'favorite-spicy.jpg', 'favorite-burrata.jpg'];
 $gelatoItems = $gelatoSection ? public_site_featured_items($gelatoSection, 4) : [];
 $favoriteImages = ['favorite-stonefellow.jpg', 'favorite-funghi.jpg', 'favorite-spicy.jpg', 'favorite-burrata.jpg'];
 $address = public_site_format_address($settings);
@@ -35,6 +37,7 @@ if (str_contains($homeHeader, $accountCta)) {
 <meta name="description" content="<?= app_escape((string)$settings['tagline']) ?>">
 <title><?= app_escape((string)$settings['restaurant_name']) ?> | Pizzeria + Bar</title>
 <link rel="stylesheet" href="assets/css/site.css?v=20260914-2">
+<link rel="stylesheet" href="assets/css/home-pizza-scroll.css?v=20260915-1">
 <style>
 .home-order-cta{background:var(--gold2);color:#17130b;border-color:var(--gold2);box-shadow:0 8px 24px rgba(0,0,0,.16);white-space:nowrap}.home-order-cta:hover{background:#fff0c8;border-color:#fff0c8;color:#17130b}@media(max-width:760px){.site-header .nav{gap:10px}.site-header .home-order-cta{display:inline-flex;padding:8px 10px;font-size:.58rem}.site-header .menu-toggle{margin-left:0}}@media(max-width:430px){.site-header .home-order-cta{padding:8px;letter-spacing:.08em}.site-header .brand span{display:none}}
 </style>
@@ -42,7 +45,47 @@ if (str_contains($homeHeader, $accountCta)) {
 <body>
 <?= $homeHeader ?>
 <main id="top">
-<section class="hero"><img class="hero-bg" src="<?= app_escape(public_site_asset('hero.jpg')) ?>" alt="Wood-fired pizza, beer and cocktails at <?= app_escape((string)$settings['restaurant_name']) ?>"><div class="shell hero-inner"><div class="hero-copy" data-reveal><div class="eyebrow">Neighborhood Pizzeria · Exceptional Nights</div><h1>Wood-Fired Pizza.<br>Craft Drinks.<br>Good Company.</h1><p><?= app_escape((string)$settings['tagline']) ?></p><div class="hero-actions"><a class="btn btn-primary" href="online-order.php">Order Online</a><a class="btn btn-secondary" href="menu.php">View Our Menu</a><a class="btn btn-secondary" href="locations.php">Visit Us</a></div></div></div></section>
+<section class="pizza-scroll-story" id="pizzaStory" style="--pizza-count:<?= max(1, count($pizzaStoryItems)) ?>">
+  <div class="pizza-story-sticky">
+    <div class="hero pizza-story-hero">
+      <img class="hero-bg" src="<?= app_escape(public_site_asset('hero.jpg')) ?>" alt="Wood-fired pizza, beer and cocktails at <?= app_escape((string)$settings['restaurant_name']) ?>">
+      <div class="shell hero-inner"><div class="hero-copy" data-reveal>
+        <div class="eyebrow">Neighborhood Pizzeria · Exceptional Nights</div>
+        <h1>Wood-Fired Pizza.<br>Craft Drinks.<br>Good Company.</h1>
+        <p><?= app_escape((string)$settings['tagline']) ?></p>
+        <div class="hero-actions"><a class="btn btn-primary" href="online-order.php">Order Online</a><a class="btn btn-secondary" href="menu.php">View Our Menu</a><a class="btn btn-secondary" href="locations.php">Visit Us</a></div>
+      </div></div>
+    </div>
+    <div class="pizza-story-blackout" aria-hidden="true"></div>
+    <div class="pizza-story-stage" aria-label="Featured pizzas">
+      <?php foreach ($pizzaStoryItems as $storyIndex => $item):
+        $storyLocalImage = $pizzaStoryFallbackImages[$storyIndex] ?? $pizzaStoryFallbackImages[0];
+        $storyFallback = public_site_asset($storyLocalImage);
+        $storyRemote = trim((string)($item['imageUrl'] ?? ''));
+        $storyImage = ($storyIndex > 0 && preg_match('#^https://#i', $storyRemote)) ? $storyRemote : $storyFallback;
+        $storyPrice = public_site_price($item);
+        $storyNotes = trim((string)($item['specialNotes'] ?? ''));
+      ?>
+      <article class="pizza-story-slide" data-pizza-slide data-pizza-index="<?= (int)$storyIndex ?>" aria-label="<?= app_escape((string)$item['name']) ?>">
+        <div class="pizza-story-visual">
+          <img class="pizza-story-image" src="<?= app_escape($storyImage) ?>" data-fallback="<?= app_escape($storyFallback) ?>" alt="<?= app_escape((string)$item['name']) ?>" <?= $storyIndex === 0 ? 'loading="eager" fetchpriority="high"' : 'loading="lazy"' ?>>
+        </div>
+        <div class="pizza-story-copy">
+          <div class="pizza-story-count">Product <?= str_pad((string)($storyIndex + 1), 2, '0', STR_PAD_LEFT) ?> / <?= str_pad((string)count($pizzaStoryItems), 2, '0', STR_PAD_LEFT) ?></div>
+          <h2><?= app_escape((string)$item['name']) ?></h2>
+          <?php if (trim((string)$item['description']) !== ''): ?><p class="pizza-story-description"><?= app_escape((string)$item['description']) ?></p><?php endif; ?>
+          <?php if ($storyPrice !== ''): ?><span class="pizza-story-price"><?= app_escape($storyPrice) ?></span><?php endif; ?>
+          <div class="pizza-story-meta">
+            <?php if (!empty($item['ingredients'])): ?><div class="pizza-story-meta-block"><span class="pizza-story-meta-title">Toppings</span><div class="pizza-story-toppings"><?php foreach ($item['ingredients'] as $ingredient): ?><span><?= app_escape((string)$ingredient) ?></span><?php endforeach; ?></div></div><?php endif; ?>
+            <?php if ($storyNotes !== ''): ?><div class="pizza-story-meta-block"><span class="pizza-story-meta-title">Special notes</span><p class="pizza-story-note"><?= app_escape($storyNotes) ?></p></div><?php endif; ?>
+          </div>
+        </div>
+      </article>
+      <?php endforeach; ?>
+    </div>
+    <?php if ($pizzaStoryItems): ?><div class="pizza-story-progress" aria-hidden="true"><?php foreach ($pizzaStoryItems as $_storyItem): ?><span></span><?php endforeach; ?></div><?php endif; ?>
+  </div>
+</section>
 <div class="feature-wrap"><div class="shell feature-grid">
 <article class="feature-card" data-reveal><img src="<?= app_escape(public_site_asset('card-pizza.jpg')) ?>" alt="Stonefellows wood-fired pizza"><div class="feature-content"><div class="eyebrow">Our Pizza</div><h3>Fire, Flour, Patience.</h3><p>Browse the current restaurant menu, pulled directly from the same menu data used by the restaurant system.</p><a class="btn-link" href="menu.php">View Menu →</a></div></article>
 <article class="feature-card" data-reveal><img src="<?= app_escape(public_site_asset('card-drinks.jpg')) ?>" alt="Drinks at the Stonefellows bar"><div class="feature-content"><div class="eyebrow">Beer + Wine</div><h3>Stay Awhile.</h3><p>Pizza, drinks and a neighborhood room designed for lunch, dinner and the evening after.</p><a class="btn-link" href="menu.php">See the Menu →</a></div></article>
@@ -55,6 +98,7 @@ if (str_contains($homeHeader, $accountCta)) {
 <section class="section" id="visit"><div class="shell bottom-grid"><article class="info-panel" data-reveal><div class="eyebrow">Visit Stonefellows</div><h3><?= $address !== '' ? app_escape($address) : 'Location details coming soon' ?></h3><a class="btn-link" href="locations.php">All Location Details →</a></article><article class="info-panel" data-reveal><div class="eyebrow">Hours</div><h3><?= $settings['hours_text'] !== '' ? nl2br(app_escape((string)$settings['hours_text'])) : 'Hours coming soon' ?></h3><a class="btn-link" href="contact.php">Contact Us →</a></article><article class="info-panel" data-reveal><div class="eyebrow">Questions?</div><h3>Talk to the restaurant.</h3><?php if($settings['phone']!==''): ?><p><a class="contact-link" href="tel:<?= app_escape(preg_replace('/[^+0-9]/','',(string)$settings['phone']) ?? '') ?>"><?= app_escape((string)$settings['phone']) ?></a></p><?php endif; ?><?php if($settings['email']!==''): ?><p><a class="contact-link" href="mailto:<?= app_escape((string)$settings['email']) ?>"><?= app_escape((string)$settings['email']) ?></a></p><?php endif; ?></article></div></section>
 </main>
 <?php public_site_render_footer($settings); ?>
+<script src="assets/js/home-pizza-scroll.js?v=20260915-1"></script>
 <script src="assets/js/site.js?v=20260914"></script>
 <script src="assets/js/public-shell.js?v=20260915-1"></script>
 </body>
