@@ -102,6 +102,27 @@ function online_order_lifecycle_check_public_id(PDO $pdo,int $organizationId,int
     return $value!==false?(string)$value:null;
 }
 
+function online_order_lifecycle_notification_milestone(string $status): string
+{
+    return $status==='kitchen_complete'?'ready':$status;
+}
+
+function online_order_lifecycle_notification_cta(array $state,string $status): string
+{
+    $milestone=online_order_lifecycle_notification_milestone($status);
+    return 'customer-account.php?order='.rawurlencode((string)$state['order_public_id']).'&status='.rawurlencode($milestone).'#orders';
+}
+
+function online_order_lifecycle_notification_exists(PDO $pdo,int $organizationId,int $customerId,array $state,string $status): bool
+{
+    $q=$pdo->prepare("SELECT COUNT(*)
+        FROM customer_inbox_recipients r
+        JOIN customer_inbox_messages m ON m.id=r.message_id AND m.organization_id=r.organization_id
+        WHERE r.organization_id=? AND r.customer_id=? AND m.message_type='order_update' AND m.cta_url=?");
+    $q->execute([$organizationId,$customerId,online_order_lifecycle_notification_cta($state,$status)]);
+    return (int)$q->fetchColumn()>0;
+}
+
 function online_order_lifecycle_notification(string $status,array $state): ?array
 {
     $check=(string)($state['check_number']??'your order');
@@ -133,11 +154,25 @@ function online_order_lifecycle_notification(string $status,array $state): ?arra
 
 function online_order_lifecycle_should_notify(string $previous,string $next): bool
 {
-    if($previous===$next) return false;
     if($next==='cancelled') return true;
     if(!in_array($next,['preparing','ready','kitchen_complete','completed'],true)) return false;
-    if($next==='kitchen_complete' && in_array($previous,['ready','kitchen_complete'],true)) return false;
-    return online_order_lifecycle_rank($next)>online_order_lifecycle_rank($previous);
+    return online_order_lifecycle_rank($next)>=online_order_lifecycle_rank($previous);
+}
+
+function online_order_lifecycle_notify_once(PDO $pdo,int $organizationId,array $state,string $status,?int $actorUserId): bool
+{
+    $message=online_order_lifecycle_notification($status,$state);
+    if($message===null) return false;
+    $customerId=(int)$state['customer_id'];
+    if(online_order_lifecycle_notification_exists($pdo,$organizationId,$customerId,$state,$status)) return false;
+    customer_inbox_send_direct($pdo,$organizationId,$customerId,[
+        ...$message,
+        'messageType'=>'order_update',
+        'locationId'=>(int)$state['location_id'],
+        'ctaLabel'=>'View order history',
+        'ctaUrl'=>online_order_lifecycle_notification_cta($state,$status),
+    ],$actorUserId);
+    return true;
 }
 
 function online_order_lifecycle_sync(PDO $pdo,int $organizationId,string $checkPublicId,?int $actorUserId=null): ?array
@@ -152,44 +187,35 @@ function online_order_lifecycle_sync(PDO $pdo,int $organizationId,string $checkP
         }
         $previous=(string)($state['order_status']??'submitted');
         $next=(string)$state['derived_status'];
-        if($previous===$next){
-            if($owns)$pdo->commit();
-            return $state+['changed'=>false,'notified'=>false];
-        }
-
-        $q=$pdo->prepare('UPDATE online_orders SET status=?,updated_at=NOW(6) WHERE organization_id=? AND id=? AND status=?');
-        $q->execute([$next,$organizationId,(int)$state['online_order_id'],$previous]);
-        if($q->rowCount()!==1){
-            $fresh=online_order_lifecycle_snapshot($pdo,$organizationId,$checkPublicId,false);
-            if($owns)$pdo->commit();
-            return $fresh?($fresh+['changed'=>false,'notified'=>false]):null;
+        $changed=false;
+        if($previous!==$next){
+            $q=$pdo->prepare('UPDATE online_orders SET status=?,updated_at=NOW(6) WHERE organization_id=? AND id=? AND status=?');
+            $q->execute([$next,$organizationId,(int)$state['online_order_id'],$previous]);
+            if($q->rowCount()!==1){
+                $fresh=online_order_lifecycle_snapshot($pdo,$organizationId,$checkPublicId,false);
+                if($owns)$pdo->commit();
+                return $fresh?($fresh+['changed'=>false,'notified'=>false]):null;
+            }
+            $changed=true;
         }
 
         $notified=false;
         if(online_order_lifecycle_should_notify($previous,$next)){
-            $message=online_order_lifecycle_notification($next,$state);
-            if($message!==null){
-                customer_inbox_send_direct($pdo,$organizationId,(int)$state['customer_id'],[
-                    ...$message,
-                    'messageType'=>'order_update',
-                    'locationId'=>(int)$state['location_id'],
-                    'ctaLabel'=>'View order history',
-                    'ctaUrl'=>'customer-account.php#orders',
-                ],$actorUserId);
-                $notified=true;
-            }
+            $notified=online_order_lifecycle_notify_once($pdo,$organizationId,$state,$next,$actorUserId);
         }
 
-        try{
-            app_audit($pdo,$organizationId,$actorUserId,'online_order.status_changed','online_order',(string)$state['order_public_id'],null,[
-                'checkPublicId'=>$checkPublicId,'fromStatus'=>$previous,'toStatus'=>$next,'customerId'=>(int)$state['customer_id'],
-            ]);
-        }catch(Throwable){}
+        if($changed){
+            try{
+                app_audit($pdo,$organizationId,$actorUserId,'online_order.status_changed','online_order',(string)$state['order_public_id'],null,[
+                    'checkPublicId'=>$checkPublicId,'fromStatus'=>$previous,'toStatus'=>$next,'customerId'=>(int)$state['customer_id'],
+                ]);
+            }catch(Throwable){}
+        }
 
         if($owns)$pdo->commit();
         $state['order_status']=$next;
         $state['display_status']=online_order_lifecycle_display_status($next);
-        return $state+['changed'=>true,'notified'=>$notified,'previous_status'=>$previous];
+        return $state+['changed'=>$changed,'notified'=>$notified,'previous_status'=>$previous];
     }catch(Throwable $e){
         if($owns&&$pdo->inTransaction())$pdo->rollBack();
         throw $e;
