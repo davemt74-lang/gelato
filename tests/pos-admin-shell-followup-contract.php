@@ -22,14 +22,20 @@ require_text($root.'/includes/pos-core.php',"table_name='service_tables'",'POS o
 require_text($root.'/includes/pos-core.php','t.id table_id','POS open-check feed must expose the service table ID',$failures);
 require_text($root.'/js/pos.js','Table ID #${tableId}','Active Tickets must display the canonical Table ID number',$failures);
 
+$bootstrap=$root.'/includes/bootstrap.php';
+$core=$root.'/includes/admin-shell-core.php';
+$shell=$root.'/js/universal-admin-page-shell.js';
 $pages=['sales-import-center.php','timeclock.php','public-site-settings.php','prep-intelligence.php','equipment.php','purchasing.php','scheduling.php'];
 foreach($pages as $page){
-    require_text($root.'/'.$page,'js/universal-admin-page-shell.js?v=20260915-3',$page.' must load the current universal admin shell',$failures);
+    require_text($bootstrap,"'{$page}'",$page.' must be centrally registered for the universal admin shell',$failures);
+    require_text($core,"'{$page}'",$page.' must be classified by the canonical server shell model',$failures);
 }
 
-require_text($root.'/js/universal-admin-page-shell.js',"'sales-import-center.php': ['Sales Import Center'",'Universal shell must know the Sales Import Center title',$failures);
-require_text($root.'/js/universal-admin-page-shell.js',"['⇩', 'Sales Import Center', 'sales-import-center.php']",'Universal sidebar must link Sales Import Center',$failures);
-require_text($root.'/js/universal-admin-page-shell.js',"'public-site-settings.php': ['Public Site Settings'",'Universal shell must know Public Site Settings',$failures);
+require_text($shell,'const groups = Array.isArray(shell.navigation)','Universal shell must render server-provided navigation',$failures);
+require_text($core,"'sales-import-center.php'=>['Sales Import Center'",'Canonical shell must know the Sales Import Center title',$failures);
+require_text($core,"['icon'=>'⇩','label'=>'Sales Import Center','href'=>'sales-import-center.php'",'Canonical sidebar must link Sales Import Center',$failures);
+require_text($core,"'public-site-settings.php'=>['Public Site Settings'",'Canonical shell must know Public Site Settings',$failures);
+reject_text($shell,"'sales-import-center.php': ['Sales Import Center'",'Browser shell must not own page-title metadata',$failures);
 
 if($failures){
     fwrite(STDERR,"POS/admin shell follow-up contract failed:\n - ".implode("\n - ",$failures)."\n");
