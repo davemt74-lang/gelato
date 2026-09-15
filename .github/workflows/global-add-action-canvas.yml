@@ -44,7 +44,8 @@ jobs:
           grep -q "Add Package" includes/admin-add-actions.php
           grep -q "Add Food" includes/admin-add-actions.php
           grep -q "Add Drink" includes/admin-add-actions.php
-          grep -q "status'=>'planned'" includes/admin-add-actions.php
+          grep -q "menu-manager.php?action=add-drink" includes/admin-add-actions.php
+          ! grep -q "'id'=>'drink'.*status'=>'planned'" includes/admin-add-actions.php
           grep -q "global-add-canvas.js" js/universal-admin-page-shell.js
           grep -q "global-add-canvas.js" js/workspace-shell-sync.js
           grep -q "gac-overlay" css/global-add-canvas.css
@@ -74,9 +75,8 @@ jobs:
           overwriting the included files. No database migration is required.
 
           The + button is permission scoped and appears in Workspace and standard
-          restaurant admin pages. Add Package, Add Food and Add Drink are visible
-          owner roadmap actions and intentionally do not navigate until their
-          dedicated builders are implemented.
+          restaurant admin pages. Add Package, Add Food and Add Drink are live actions;
+          their builders are delivered by the corresponding feature deploy packages.
           EOF
           (cd deploy-patch && zip -qr ../stonefellows-global-add-canvas-deploy.zip .)
           unzip -t stonefellows-global-add-canvas-deploy.zip
