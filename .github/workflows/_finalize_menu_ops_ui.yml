@@ -1,0 +1,43 @@
+name: Finalize Menu Operations UI
+
+on:
+  push:
+    branches:
+      - feature/menu-operations-agent-brain
+    paths:
+      - '.github/workflows/_finalize_menu_ops_ui.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/menu-operations-agent-brain
+          fetch-depth: 0
+      - name: Apply final UI integration
+        run: python3 scripts/_finalize_menu_ops_ui.py
+      - name: Validate edited source
+        run: |
+          php -l includes/admin-shell-core.php
+          node --check js/workspace-shell-sync.js
+          node --check js/universal-admin-page-shell.js
+      - name: Remove temporary patch machinery
+        run: |
+          rm -f .github/workflows/_menu_agent_brain_patch.yml
+          rm -f .github/workflows/_menu_ops_source_patch.yml
+          rm -f .github/workflows/_finalize_menu_ops_ui.yml
+          rm -f scripts/_menu_agent_brain_patch.py
+          rm -f scripts/_menu_ops_patch.py
+          rm -f scripts/_finalize_menu_ops_ui.py
+      - name: Commit final integration
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git status --short
+          git commit -m 'Finalize Menu Operations, header shortcuts and dashboard brand links'
+          git push origin HEAD:feature/menu-operations-agent-brain
