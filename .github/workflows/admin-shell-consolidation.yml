@@ -26,6 +26,7 @@ on:
       - 'purchasing.php'
       - 'wholesale-pipeline.php'
       - 'wholesale-accounts.php'
+      - 'includes/bootstrap.php'
       - 'includes/admin-shell-core.php'
       - 'api/admin-shell.php'
       - 'js/admin-shell-consolidation.js'
@@ -63,6 +64,7 @@ on:
       - 'purchasing.php'
       - 'wholesale-pipeline.php'
       - 'wholesale-accounts.php'
+      - 'includes/bootstrap.php'
       - 'includes/admin-shell-core.php'
       - 'api/admin-shell.php'
       - 'js/admin-shell-consolidation.js'
@@ -90,6 +92,7 @@ jobs:
           coverage: none
       - name: PHP syntax
         run: |
+          php -l includes/bootstrap.php
           php -l includes/admin-shell-core.php
           php -l api/admin-shell.php
           php -l tests/admin-shell-consolidation-contract.php
