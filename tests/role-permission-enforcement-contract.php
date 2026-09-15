@@ -98,6 +98,11 @@ rpe_assert(!admin_route_access_allowed(rpe_user(['tasks.manage']),'operations.ph
 rpe_assert(admin_route_access_allowed(rpe_user(['schedule.self']),'scheduling.php'),'Schedule self should open Scheduling',42);
 rpe_assert(admin_route_access_allowed(rpe_user(['staff.manage']),'scheduling.php'),'Staff manager should open Scheduling',43);
 
+// Specialized workstations linked from the canonical shell must also match their own route guards.
+rpe_assert(admin_route_access_allowed(rpe_user(['floorplans.view']),'floor-planner-v2.php'),'Floor Planner view should open the workstation',44);
+rpe_assert(!admin_route_access_allowed(rpe_user(['floorplans.edit']),'floor-planner-v2.php'),'Floor Planner edit-only must not imply workstation access',45);
+rpe_assert(!rpe_nav_has(rpe_user(['floorplans.edit']),'floor-planner-v2.php'),'Shell exposes Floor Planner to an edit-only account',46);
+
 $guards=[
     'locations-admin.php'=>['locations.manage'],
     'operations.php'=>['tasks.view','inventory.view'],
@@ -125,6 +130,7 @@ $guards=[
     'wholesale-order-entry.php'=>['wholesale.manage'],
     'wholesale-purchasing.php'=>['wholesale.manage'],
     'wholesale-receivables.php'=>['wholesale.receivables.view'],
+    'floor-planner-ops-legacy.php'=>['floorplans.view'],
 ];
 foreach($guards as $page=>$permissions){
     $content=file_get_contents($root.'/'.$page);
