@@ -23,6 +23,14 @@
     document.head.appendChild(script);
   }
 
+  function ensureWorkspaceEnhancements() {
+    if (document.querySelector('script[data-workspace-command-enhancements]')) return;
+    const script = document.createElement('script');
+    script.src = 'js/workspace-command-enhancements.js?v=20260915-workforce1';
+    script.dataset.workspaceCommandEnhancements = '1';
+    document.head.appendChild(script);
+  }
+
   function syncHeader(shell) {
     const actions = document.querySelector('.topbar .top-actions');
     if (!actions) return;
@@ -81,6 +89,7 @@
       syncHeader(shell);
       syncProfileMenu(shell);
       ensureAddCanvas();
+      ensureWorkspaceEnhancements();
       window.dispatchEvent(new CustomEvent('gelato-admin-shell-config', {detail: shell}));
     } catch (error) {
       console.error('[Gelato workspace shell]', error);

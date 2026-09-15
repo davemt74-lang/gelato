@@ -6,13 +6,21 @@ on:
       - 'agent-canvas.php'
       - 'api/agent-workspace.php'
       - 'api/employee-agent.php'
+      - 'api/workspace-workforce.php'
+      - 'api/workspace-workforce-agent.php'
       - 'includes/agent-workspace-core.php'
+      - 'includes/workspace-workforce-core.php'
       - 'js/global-agent.js'
       - 'js/agent-canvas.js'
+      - 'js/dynamic-agent-canvas.js'
+      - 'js/global-add-canvas.js'
+      - 'js/workspace-command-enhancements.js'
+      - 'js/workspace-shell-sync.js'
       - 'js/auth-guard.js'
       - 'js/floor-planner-module.js'
       - 'database/20260913_zzzzzz_agent_workspace.sql'
       - 'tests/agent-workspace-contract.php'
+      - 'tests/workspace-dynamic-agent-canvas-contract.php'
       - '.github/workflows/agent-workspace.yml'
   push:
     branches: [main]
@@ -20,13 +28,21 @@ on:
       - 'agent-canvas.php'
       - 'api/agent-workspace.php'
       - 'api/employee-agent.php'
+      - 'api/workspace-workforce.php'
+      - 'api/workspace-workforce-agent.php'
       - 'includes/agent-workspace-core.php'
+      - 'includes/workspace-workforce-core.php'
       - 'js/global-agent.js'
       - 'js/agent-canvas.js'
+      - 'js/dynamic-agent-canvas.js'
+      - 'js/global-add-canvas.js'
+      - 'js/workspace-command-enhancements.js'
+      - 'js/workspace-shell-sync.js'
       - 'js/auth-guard.js'
       - 'js/floor-planner-module.js'
       - 'database/20260913_zzzzzz_agent_workspace.sql'
       - 'tests/agent-workspace-contract.php'
+      - 'tests/workspace-dynamic-agent-canvas-contract.php'
       - '.github/workflows/agent-workspace.yml'
 
 jobs:
@@ -53,10 +69,18 @@ jobs:
           php -l agent-canvas.php
           php -l api/agent-workspace.php
           php -l api/employee-agent.php
+          php -l api/workspace-workforce.php
+          php -l api/workspace-workforce-agent.php
           php -l includes/agent-workspace-core.php
+          php -l includes/workspace-workforce-core.php
           php -l tests/agent-workspace-contract.php
+          php -l tests/workspace-dynamic-agent-canvas-contract.php
           node --check js/global-agent.js
           node --check js/agent-canvas.js
+          node --check js/dynamic-agent-canvas.js
+          node --check js/global-add-canvas.js
+          node --check js/workspace-command-enhancements.js
+          node --check js/workspace-shell-sync.js
           node --check js/auth-guard.js
           node --check js/floor-planner-module.js
       - name: Architecture and security contract
@@ -73,15 +97,22 @@ jobs:
           grep -q "api/scheduling-agent.php" includes/agent-workspace-core.php
           grep -q "api/operations-agent.php" includes/agent-workspace-core.php
           grep -q "api/catering-agent.php" includes/agent-workspace-core.php
+          grep -q "api/workspace-workforce-agent.php" includes/agent-workspace-core.php
           grep -q "api/agent-brain.php" includes/agent-workspace-core.php
           grep -q "app_verify_request_csrf" api/agent-workspace.php
+          grep -q "app_verify_request_csrf" api/workspace-workforce-agent.php
           grep -q "voice-identity.php" js/global-agent.js
           grep -q "proactive-agent.php" js/global-agent.js
           grep -q "Hey Gelato" js/global-agent.js
-          grep -q "agent-canvas.php" js/global-agent.js
           grep -q "global-agent.js" js/auth-guard.js
           grep -q "global-agent.js" js/floor-planner-module.js
           grep -q "data-agent-canvas" agent-canvas.php
+          grep -q "removeLegacyCanvasButton" js/dynamic-agent-canvas.js
+          grep -q "GelatoGlobalAgent.send" js/dynamic-agent-canvas.js
+          grep -q "workspace-command-enhancements.js" js/workspace-shell-sync.js
+          grep -q "workspace-workforce.php" js/workspace-command-enhancements.js
+          grep -q "dynamic-agent-canvas.js" js/global-add-canvas.js
+          php tests/workspace-dynamic-agent-canvas-contract.php
       - name: Install and upgrade schema
         run: |
           sudo apt-get update -qq
