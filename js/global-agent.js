@@ -14,7 +14,10 @@
     listening: false,
     rec: null,
     poll: null,
+    pageContext: null,
+    contextActions: [],
   };
+  let pageContextLoader = null;
 
   const has = (permission) => S.permissions.includes('*') || S.permissions.includes(permission);
 
@@ -38,6 +41,32 @@
       method: 'POST',
       body: JSON.stringify({...body, csrf_token: S.csrf}),
     });
+  }
+
+  function ensurePageContext() {
+    if (window.GelatoAgentPageContext) return Promise.resolve(window.GelatoAgentPageContext);
+    if (pageContextLoader) return pageContextLoader;
+    pageContextLoader = new Promise((resolve) => {
+      const existing = document.querySelector('script[data-gelato-agent-page-context-loader]');
+      if (existing) {
+        existing.addEventListener('load', () => resolve(window.GelatoAgentPageContext || null), {once:true});
+        existing.addEventListener('error', () => resolve(null), {once:true});
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'js/agent-page-context.js?v=20260915-context1';
+      script.dataset.gelatoAgentPageContextLoader = '1';
+      script.onload = () => resolve(window.GelatoAgentPageContext || null);
+      script.onerror = () => resolve(null);
+      document.head.appendChild(script);
+    });
+    return pageContextLoader;
+  }
+
+  async function currentPageContext() {
+    await ensurePageContext();
+    try { return window.GelatoAgentPageContext?.snapshot?.() || {}; }
+    catch { return {}; }
   }
 
   function installCss() {
@@ -128,15 +157,20 @@
     status('Gelato is checking your restaurant context…');
 
     try {
+      const pageContext = await currentPageContext();
       await append('user', text, {
         channel: voice ? 'voice' : 'text',
         voiceEventId: voice ? S.voiceEventId : '',
       });
 
-      const route = await post('api/agent-workspace.php', {action: 'route', message: text});
+      const route = await post('api/agent-workspace.php', {action: 'route', message: text, pageContext});
+      S.pageContext = route.pageContext || pageContext;
+      S.contextActions = Array.isArray(route.contextActions) ? route.contextActions : [];
       let result;
 
       if (route.route) {
+        const toolMessage = text + String(route.contextPrompt || '');
+        const toolArgs = route.toolArgs && typeof route.toolArgs === 'object' ? route.toolArgs : {};
         const response = await fetch(route.route, {
           method: 'POST',
           cache: 'no-store',
@@ -146,8 +180,10 @@
             'X-CSRF-Token': S.csrf,
           },
           body: JSON.stringify({
+            ...toolArgs,
             action: 'ask',
-            message: text,
+            message: toolMessage,
+            pageContext: S.pageContext,
             voice: Boolean(voice),
             voiceEventId: voice ? S.voiceEventId : '',
             csrf_token: S.csrf,
@@ -180,13 +216,13 @@
         messageDatabaseId: agentMessage.message.databaseId,
         skill: result.skill || route.domain,
         route: route.route || 'capabilities',
-        request: {message: text, voice: Boolean(voice)},
+        request: {message: text, voice: Boolean(voice), pageContext: S.pageContext},
         result: {answer, data: result.data ?? null, sources: result.sources ?? []},
       });
 
       status(answer, 7000);
       window.dispatchEvent(new CustomEvent('gelato-agent-response', {
-        detail: {answer, result, threadId: S.thread},
+        detail: {answer, result, threadId: S.thread, pageContext: S.pageContext, contextActions: S.contextActions},
       }));
       if (voice && window.speechSynthesis && has('voice.agent')) speak(answer);
       return result;
@@ -392,6 +428,8 @@
             answer: event.message,
             result: {skill: event.event_type, data: {priority: event.priority, actionUrl: event.action_url}},
             threadId: S.thread,
+            pageContext: S.pageContext,
+            contextActions: S.contextActions,
           },
         }));
         if (has('voice.agent')) speak(event.message);
@@ -416,6 +454,7 @@
 
   async function init() {
     try {
+      ensurePageContext();
       const data = await req('api/agent-workspace.php?action=bootstrap');
       S.csrf = data.csrf;
       S.thread = data.activeThread;
@@ -438,6 +477,8 @@
     get threadId() { return S.thread; },
     get user() { return S.user; },
     get permissions() { return [...S.permissions]; },
+    get pageContext() { return S.pageContext; },
+    get contextActions() { return [...S.contextActions]; },
   };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, {once: true});
