@@ -1,0 +1,52 @@
+name: Universal Public Header + Footer
+
+on:
+  pull_request:
+    paths:
+      - 'index.php'
+      - 'menu.php'
+      - 'gelato.php'
+      - 'about.php'
+      - 'contact.php'
+      - 'locations.php'
+      - 'online-order.php'
+      - 'customer-signup.php'
+      - 'customer-login.php'
+      - 'customer-account.php'
+      - 'jobs.html'
+      - 'job.php'
+      - 'apply.html'
+      - 'catering.php'
+      - 'wholesale.php'
+      - 'login.php'
+      - 'forgot-password.php'
+      - 'reset-password.php'
+      - 'assets/js/public-shell.js'
+      - 'assets/css/public-shell.css'
+      - 'api/public-shell.php'
+      - 'assets/js/site.js'
+      - 'js/public-account-menu.js'
+      - 'js/public-jobs.js'
+      - 'tests/public-shell-contract.php'
+      - '.github/workflows/public-shell-contract.yml'
+  push:
+    branches: [main]
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+      - name: Syntax checks
+        run: |
+          php -l api/public-shell.php
+          php -l tests/public-shell-contract.php
+          node --check assets/js/public-shell.js
+          node --check assets/js/site.js
+          node --check js/public-account-menu.js
+          node --check js/public-jobs.js
+      - name: Enforce universal public shell contract
+        run: php tests/public-shell-contract.php

@@ -149,5 +149,6 @@ try {
     </section>
   </main>
   <script src="js/public-account-menu.js"></script>
+<script src="assets/js/public-shell.js?v=20260915-1"></script>
 </body>
 </html>

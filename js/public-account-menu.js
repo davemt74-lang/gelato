@@ -1,109 +1,20 @@
 (() => {
-  function installStonefellowsTheme() {
-    if (document.querySelector('link[data-stonefellows-public-theme]')) return;
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = 'css/stonefellows-public-v2.css?v=20260914-2';
-    link.dataset.stonefellowsPublicTheme = 'true';
-    document.head.appendChild(link);
+  'use strict';
+
+  document.querySelectorAll('a[href="landing.html"]').forEach((link) => link.setAttribute('href', 'index.php'));
+
+  if (!document.querySelector('script[data-public-shell-script],script[src*="assets/js/public-shell.js"]')) {
+    const shell = document.createElement('script');
+    shell.src = 'assets/js/public-shell.js?v=20260915-1';
+    shell.dataset.publicShellScript = 'true';
+    document.head.appendChild(shell);
   }
 
-  function normalizeLegacyLinks() {
-    document.querySelectorAll('a[href="landing.html"]').forEach((link) => {
-      link.setAttribute('href', 'index.php');
-    });
-  }
-
-  function installServiceLinks() {
-    const services = [
-      { href: 'wholesale.php', label: 'Wholesale' },
-      { href: 'catering.php', label: 'Catering' },
-    ];
-    document.querySelectorAll('.public-nav').forEach((nav) => {
-      const account = nav.querySelector('[data-public-account-menu]');
-      services.forEach((service) => {
-        if (nav.querySelector(`a[href="${service.href}"]`)) return;
-        const link = document.createElement('a');
-        link.href = service.href;
-        link.textContent = service.label;
-        if (account) nav.insertBefore(link, account); else nav.appendChild(link);
-      });
-    });
-  }
-
-  function replaceGuestMenuWithLogin() {
-    document.querySelectorAll('.public-nav [data-public-account-menu]').forEach((account) => {
-      const login = document.createElement('a');
-      login.className = 'primary';
-      login.href = 'login.php';
-      login.textContent = 'Login';
-      account.replaceWith(login);
-    });
-  }
-
-  function installUnifiedFooter() {
-    if (document.querySelector('.auth-shell') || document.querySelector('.sf-public-footer')) return;
-    const oldFooter = document.querySelector('footer.public-footer');
-    if (oldFooter) oldFooter.remove();
-    const footer = document.createElement('footer');
-    footer.className = 'sf-public-footer';
-    footer.innerHTML = `
-      <div class="sf-footer-grid">
-        <div class="sf-brand"><strong>Stonefellows</strong><span>Pizzeria + Bar</span></div>
-        <div><strong>Links</strong><nav><a href="menu.php">Menu</a><a href="gelato.php">Gelato</a><a href="about.php">About</a><a href="locations.php">Locations</a><a href="contact.php">Contact</a><a href="jobs.html">Jobs</a><a href="catering.php">Catering</a><a href="wholesale.php">Wholesale</a></nav></div>
-        <div><strong>Account</strong><nav><a href="login.php">Login</a><a href="forgot-password.php">Forgot Password</a></nav></div>
-        <div><strong>Visit</strong><nav><a href="locations.php">Location details</a><a href="contact.php">Hours + contact</a></nav></div>
-        <div><strong>Explore</strong><nav><a href="index.php">Home</a><a href="jobs.html">Careers</a><a href="apply.html">Apply</a></nav></div>
-      </div>`;
-    document.body.appendChild(footer);
-  }
-
-  function loadPublicAgent() {
-    const page = (location.pathname.split('/').pop() || 'index.php').toLowerCase();
-    if (!['index.php', 'landing.html', ''].includes(page) || document.querySelector('script[data-public-agent]')) return;
+  const page = (location.pathname.split('/').pop() || 'index.php').toLowerCase();
+  if (['index.php', 'landing.html', ''].includes(page) && !document.querySelector('script[data-public-agent]')) {
     const script = document.createElement('script');
     script.src = 'js/public-agent.js?v=20260804-agent1';
     script.dataset.publicAgent = 'true';
     document.head.appendChild(script);
   }
-
-  installStonefellowsTheme();
-  normalizeLegacyLinks();
-  installServiceLinks();
-  replaceGuestMenuWithLogin();
-
-  const menus = document.querySelectorAll('[data-public-account-menu]');
-  if (menus.length) {
-    function closeAll(except = null) {
-      menus.forEach((wrap) => {
-        if (wrap === except) return;
-        const button = wrap.querySelector('[data-guest-menu-button]');
-        const menu = wrap.querySelector('[data-guest-menu]');
-        if (!button || !menu) return;
-        menu.classList.add('hidden');
-        button.setAttribute('aria-expanded', 'false');
-      });
-    }
-
-    menus.forEach((wrap) => {
-      const button = wrap.querySelector('[data-guest-menu-button]');
-      const menu = wrap.querySelector('[data-guest-menu]');
-      if (!button || !menu) return;
-      button.addEventListener('click', (event) => {
-        event.stopPropagation();
-        const opening = menu.classList.contains('hidden');
-        closeAll(wrap);
-        menu.classList.toggle('hidden', !opening);
-        button.setAttribute('aria-expanded', String(opening));
-      });
-      menu.addEventListener('click', (event) => event.stopPropagation());
-    });
-    document.addEventListener('click', () => closeAll());
-    document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') closeAll();
-    });
-  }
-
-  installUnifiedFooter();
-  loadPublicAgent();
 })();

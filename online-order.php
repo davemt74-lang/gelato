@@ -111,6 +111,7 @@ if($bootstrapError!==null || !$pdo instanceof PDO || $organizationId<1){
 <main class="order-unavailable"><div class="shell"><section class="order-unavailable-card"><div class="eyebrow">Stonefellows Online Ordering</div><h1>Online ordering is temporarily unavailable.</h1><p>The ordering system is being prepared for service. The restaurant website and menu are still available.</p><div class="order-unavailable-actions"><a class="btn btn-primary" href="menu.php">View Menu</a><a class="btn btn-secondary" href="locations.php">Locations</a><a class="btn btn-secondary" href="index.php">Back Home</a></div></section></div></main>
 <?php $renderFooter($settings); ?>
 <script src="assets/js/site.js?v=20260914"></script>
+<script src="assets/js/public-shell.js?v=20260915-1"></script>
 </body>
 </html>
 <?php

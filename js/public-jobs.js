@@ -1,6 +1,13 @@
 (() => {
   'use strict';
 
+  if (!document.querySelector('script[data-public-shell-script],script[src*="assets/js/public-shell.js"]')) {
+    const shell = document.createElement('script');
+    shell.src = 'assets/js/public-shell.js?v=20260915-1';
+    shell.dataset.publicShellScript = 'true';
+    document.head.appendChild(shell);
+  }
+
   function isActive(job) {
     if (!job || job.status !== 'published') return false;
     if (!job.closesAt) return true;
