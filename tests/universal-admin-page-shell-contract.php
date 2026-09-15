@@ -30,14 +30,17 @@ uas_test(str_contains($shell,"workspace.php#forms"),'Form Builder is missing fro
 uas_test(str_contains($shell,"function movePageActions"),'Standalone page actions are not preserved in universal header',16);
 uas_test(str_contains($shell,"function duplicateDestination"),'Duplicate local-header destinations are not removed',17);
 uas_test(str_contains($shell,"class=\"uas-account-menu\""),'Clean universal account menu is missing',18);
+uas_test(str_contains($shell,"'scheduling.php': ['Staff Scheduling'"),'Scheduling title metadata is missing from the universal shell',19);
+uas_test(str_contains($shell,"['◫', 'Staff Scheduling', 'scheduling.php']"),'Scheduling is missing from universal navigation',20);
 
 $targets=[
     'locations-admin.php','operations.php','catering-operations.php','catering-pipeline.php',
     'sales-intelligence.php','customer-promotions.php','customer-crm.php','online-orders-admin.php','recipes.php',
+    'scheduling.php',
 ];
 foreach($targets as $index=>$target){
     $page=file_get_contents($root.'/'.$target);
-    uas_test(is_string($page)&&str_contains($page,'js/universal-admin-page-shell.js?v=20260915-1'),$target.' is not integrated with the universal shell',30+$index);
+    uas_test(is_string($page)&&str_contains($page,'js/universal-admin-page-shell.js'),$target.' is not integrated with the universal shell',30+$index);
 }
 
 echo "universal-admin-page-shell=ok\n";

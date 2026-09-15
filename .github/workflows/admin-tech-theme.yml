@@ -5,8 +5,10 @@ on:
     paths:
       - 'css/admin-tech-theme.css'
       - 'js/universal-admin-page-shell.js'
+      - 'scheduling.php'
       - 'workspace.php'
       - 'tests/admin-tech-theme-contract.php'
+      - 'tests/universal-admin-page-shell-contract.php'
       - '.github/workflows/admin-tech-theme.yml'
   push:
     branches: [main]
@@ -24,8 +26,12 @@ jobs:
           php-version: ${{ matrix.php }}
       - name: Syntax checks
         run: |
+          php -l scheduling.php
           php -l workspace.php
           php -l tests/admin-tech-theme-contract.php
+          php -l tests/universal-admin-page-shell-contract.php
           node --check js/universal-admin-page-shell.js
       - name: Theme contract
         run: php tests/admin-tech-theme-contract.php
+      - name: Universal admin shell contract
+        run: php tests/universal-admin-page-shell-contract.php
