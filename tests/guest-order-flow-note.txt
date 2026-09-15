@@ -1,0 +1,1 @@
+Guest ordering flow contract is enforced by tests/online-order-runtime-gate-contract.php.
