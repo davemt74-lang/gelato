@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/package-deals-core.php';
+require_once __DIR__.'/../includes/menu-manager-core.php';
 
 $user=app_require_auth();
 $pdo=app_pdo();
@@ -21,7 +22,9 @@ if($_SERVER['REQUEST_METHOD']==='GET'){
     $action=(string)($_GET['action']??'list');
     if($action==='menu.search'){
         package_api_require($user,'packages.manage');
-        app_json_response(['ok'=>true,'items'=>package_deal_menu_search($pdo,$org,(string)($_GET['q']??''))]);
+        $items=package_deal_menu_search($pdo,$org,(string)($_GET['q']??''));
+        if(menu_manager_ready($pdo))$items=array_values(array_filter($items,static fn(array $item):bool=>menu_manager_item_channel_enabled($pdo,$org,(int)$item['itemId'],'packages')));
+        app_json_response(['ok'=>true,'items'=>$items]);
     }
     $includeArchived=!empty($_GET['archived'])&&app_has_permission('packages.manage',$user);
     app_json_response(['ok'=>true,'packages'=>package_deal_list($pdo,$org,$includeArchived),'discountTypes'=>discount_types(),'discountMethods'=>discount_methods()]);
