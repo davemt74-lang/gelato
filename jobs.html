@@ -30,5 +30,6 @@
   try{const response=await fetch('api/public-brand.php',{cache:'no-store'}),data=await response.json();if(response.ok&&data.brand){const b=data.brand;const logo=document.getElementById('jobsLogo');if(b.logoUrl)logo.innerHTML=`<img src="${b.logoUrl}" alt="${esc(b.restaurantName||'Stonefellows')} logo">`;else logo.textContent=b.logoText||'SF';document.getElementById('jobsBrand').textContent=b.restaurantName||'Stonefellows';document.title=`Available Jobs · ${b.restaurantName||'Stonefellows'}`}}catch{}
 })();
 </script>
+<script src="assets/js/public-shell.js?v=20260915-1"></script>
 </body>
 </html>
