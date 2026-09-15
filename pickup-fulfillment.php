@@ -12,6 +12,7 @@ if(!pickup_fulfillment_ready($pdo)){
     http_response_code(503);
     exit('Pickup fulfillment is not installed. Run upgrade.php first.');
 }
+$canRecover=app_has_permission('order_recovery.view',$user)||app_has_permission('order_recovery.manage',$user)||app_has_permission('order_recovery.refund',$user);
 ?>
 <!doctype html>
 <html lang="en">
@@ -25,7 +26,7 @@ if(!pickup_fulfillment_ready($pdo)){
 <link rel="stylesheet" href="assets/css/pickup-fulfillment.css?v=20260915-1">
 </head>
 <body class="admin-control pickup-ops">
-<header class="admin-top"><a class="admin-brand" href="workspace.php"><span class="admin-logo">SF</span><span><strong>Pickup Fulfillment</strong><small><?=app_escape((string)$user['organization_name'])?> handoff operations</small></span></a><nav class="admin-top-actions"><a class="admin-button" href="online-orders-admin.php">Online Orders</a><?php if(app_has_permission('pos.use',$user)):?><a class="admin-button dark" href="pos.php">POS</a><?php endif;?></nav></header>
+<header class="admin-top"><a class="admin-brand" href="workspace.php"><span class="admin-logo">SF</span><span><strong>Pickup Fulfillment</strong><small><?=app_escape((string)$user['organization_name'])?> handoff operations</small></span></a><nav class="admin-top-actions"><?php if($canRecover):?><a class="admin-button" href="order-recovery.php">Recovery</a><?php endif;?><a class="admin-button" href="online-orders-admin.php">Online Orders</a><?php if(app_has_permission('pos.use',$user)):?><a class="admin-button dark" href="pos.php">POS</a><?php endif;?></nav></header>
 <main class="admin-shell">
 <section class="pickup-hero">
     <div><div class="admin-eyebrow">Pickup Operations</div><h1>Ready counter</h1><p>Track promised pickup times, kitchen readiness, payment and physical handoff from one live queue. Use <strong>Handed to Customer</strong> only when the complete ticket is ready and payment is complete.</p></div>
@@ -46,9 +47,9 @@ if(!pickup_fulfillment_ready($pdo)){
 <div class="pickup-message" id="pickupMessage" hidden></div>
 <section class="pickup-board" id="pickupBoard" aria-live="polite" aria-busy="true"></section>
 <section class="pickup-empty" id="pickupEmpty" hidden><strong>No pickup orders match this view.</strong><span>Orders will appear here as online pickup tickets enter the restaurant workflow.</span></section>
-<section class="admin-section pickup-links"><div class="admin-section-head"><div><div class="admin-eyebrow">Related Workspaces</div><h2>Restaurant workflow</h2></div></div><div class="admin-modules"><a class="admin-module" href="online-orders-admin.php"><span class="admin-module-icon">↗</span><span><strong>Online Orders</strong><p>Management history and customer order records.</p></span></a><?php if(app_has_permission('pos.use',$user)):?><a class="admin-module" href="pos.php"><span class="admin-module-icon">▦</span><span><strong>POS</strong><p>Collect payment before pay-at-pickup handoff.</p></span></a><?php endif;?><?php if(app_has_permission('kds.view',$user)):?><a class="admin-module" href="kds.php"><span class="admin-module-icon">⌁</span><span><strong>Kitchen</strong><p>Preparation, Expo and Ready state.</p></span></a><?php endif;?></div></section>
+<section class="admin-section pickup-links"><div class="admin-section-head"><div><div class="admin-eyebrow">Related Workspaces</div><h2>Restaurant workflow</h2></div></div><div class="admin-modules"><?php if($canRecover):?><a class="admin-module" href="order-recovery.php"><span class="admin-module-icon">!</span><span><strong>Order Recovery</strong><p>Delays, remakes, substitutions, no-shows, escalation and refunds.</p></span></a><?php endif;?><a class="admin-module" href="online-orders-admin.php"><span class="admin-module-icon">↗</span><span><strong>Online Orders</strong><p>Management history and customer order records.</p></span></a><?php if(app_has_permission('pos.use',$user)):?><a class="admin-module" href="pos.php"><span class="admin-module-icon">▦</span><span><strong>POS</strong><p>Collect payment before pay-at-pickup handoff.</p></span></a><?php endif;?><?php if(app_has_permission('kds.view',$user)):?><a class="admin-module" href="kds.php"><span class="admin-module-icon">⌁</span><span><strong>Kitchen</strong><p>Preparation, Expo and Ready state.</p></span></a><?php endif;?></div></section>
 </main>
-<script>window.PICKUP_FULFILLMENT={canFulfill:<?=pickup_fulfillment_can_fulfill($user)?'true':'false'?>};</script>
-<script src="js/pickup-fulfillment.js?v=20260915-1"></script>
+<script>window.PICKUP_FULFILLMENT={canFulfill:<?=pickup_fulfillment_can_fulfill($user)?'true':'false'?>,canRecover:<?=$canRecover?'true':'false'?>};</script>
+<script src="js/pickup-fulfillment.js?v=20260915-2"></script>
 </body>
 </html>
