@@ -86,12 +86,12 @@
       slide.classList.toggle('is-active', isActive || isPrevious);
 
       if (isActive) {
-        const entry = smoothstep(0.00, 0.30, local);
-        const exit = index === slides.length - 1 ? 0 : smoothstep(0.72, 0.995, local);
+        const entry = smoothstep(0.00, 0.32, local);
+        const exit = index === slides.length - 1 ? 0 : smoothstep(0.73, 0.995, local);
         const opacity = entry * (1 - exit);
-        const x = (1 - entry) * 108 - exit * 24;
-        const rotation = (1 - entry) * 320 - exit * 110;
-        const scale = 0.82 + entry * 0.18 - exit * 0.05;
+        const x = (1 - entry) * 116 - exit * 27;
+        const rotation = (1 - entry) * 360 - exit * 115;
+        const scale = 0.80 + entry * 0.20 - exit * 0.045;
 
         const copyEntry = smoothstep(0.18, 0.44, local);
         const copyExit = index === slides.length - 1 ? 0 : smoothstep(0.68, 0.95, local);
@@ -104,11 +104,11 @@
         const exit = smoothstep(0.00, 0.30, local);
         const opacity = 1 - exit;
         slide.style.opacity = String(opacity);
-        imageTransform(image, -24 * exit, -110 * exit, 1 - 0.05 * exit, opacity);
+        imageTransform(image, -27 * exit, -115 * exit, 1 - 0.045 * exit, opacity);
         copyTransform(copy, opacity, -18 * exit, -12 * exit);
       } else {
         slide.style.opacity = '0';
-        imageTransform(image, 108, 320, 0.82, 0);
+        imageTransform(image, 116, 360, 0.80, 0);
         if (copy) copy.style.opacity = '0';
       }
     });
