@@ -7,6 +7,7 @@ require_once __DIR__.'/../includes/customer-inbox-core.php';
 require_once __DIR__.'/../includes/online-order-core.php';
 require_once __DIR__.'/../includes/online-order-lifecycle.php';
 require_once __DIR__.'/../includes/order-recovery-core.php';
+require_once __DIR__.'/../includes/order-recovery-reporting.php';
 require_once __DIR__.'/../includes/kds-core.php';
 require_once __DIR__.'/../includes/pos-core.php';
 
@@ -16,6 +17,7 @@ function orc_updates(PDO $pdo,int $org,int $customerId): int {return (int)orc_on
 
 $pdo=app_pdo();
 orc_assert(order_recovery_ready($pdo),'Order recovery schema must be installed.');
+orc_assert(order_recovery_reporting_ready($pdo),'Order recovery reporting dependencies must be installed.');
 orc_assert(online_order_ready($pdo),'Online ordering must be installed.');
 orc_assert(kds_ready($pdo),'KDS must be installed.');
 orc_assert(pos_ready($pdo),'POS must be installed.');
@@ -70,9 +72,20 @@ $check=pos_check_details($pdo,$org,$checkPublic);$check=pos_record_tender($pdo,$
 online_order_lifecycle_sync($pdo,$org,$checkPublic,$userId);
 
 $refund=order_recovery_refund($pdo,$org,$orderPublic,5.00,'cash','Service recovery refund','',$userId);
+order_recovery_sync_native_sales_for_check($pdo,$org,$checkId);
 orc_assert(abs((float)$refund['amount']-5.00)<0.001,'Refund amount must persist.');
-orc_assert((float)orc_one($pdo,"SELECT COALESCE(SUM(amount),0) FROM pos_refunds WHERE organization_id=? AND online_order_id=? AND status='recorded'",[$org,(int)$refund['order']['online_order_id']])===5.0,'Refund ledger must total recorded refunds.');
+orc_assert(abs((float)orc_one($pdo,"SELECT COALESCE(SUM(amount),0) FROM pos_refunds WHERE organization_id=? AND online_order_id=? AND status='recorded'",[$org,(int)$refund['order']['online_order_id']])-5.0)<0.001,'Refund ledger must total recorded refunds.');
 $detail=order_recovery_detail($pdo,$org,$orderPublic);orc_assert(abs((float)$detail['refundable_amount']-((float)$detail['amount_paid']-5.0))<0.01,'Refundable amount must decrease after refund.');
+$businessDate=(string)orc_one($pdo,'SELECT business_date FROM pos_checks WHERE organization_id=? AND id=?',[$org,$checkId]);
+$periodRefunds=(float)orc_one($pdo,"SELECT refunds_amount FROM sales_periods WHERE organization_id=? AND location_key=? AND source_provider='gelato_pos' AND granularity='daily' AND service_period='all' AND period_start=? LIMIT 1",[$org,'id:'.$locationId,$businessDate]);
+orc_assert(abs($periodRefunds-5.0)<0.001,'Native Sales Intelligence must expose the recorded refund.');
+$baseNet=(float)orc_one($pdo,"SELECT COALESCE(SUM(GREATEST(0,subtotal-discount_amount)),0) FROM pos_checks WHERE organization_id=? AND location_id=? AND business_date=? AND status='paid'",[$org,$locationId,$businessDate]);
+$reportedNet=(float)orc_one($pdo,"SELECT net_sales FROM sales_periods WHERE organization_id=? AND location_key=? AND source_provider='gelato_pos' AND granularity='daily' AND service_period='all' AND period_start=? LIMIT 1",[$org,'id:'.$locationId,$businessDate]);
+orc_assert(abs($reportedNet-max(0,$baseNet-5.0))<0.01,'Native Sales Intelligence net sales must subtract recorded refunds.');
+pos_rebuild_sales_day($pdo,$org,$locationId,$businessDate);
+$periodRefundsAfterRebuild=(float)orc_one($pdo,"SELECT refunds_amount FROM sales_periods WHERE organization_id=? AND location_key=? AND source_provider='gelato_pos' AND granularity='daily' AND service_period='all' AND period_start=? LIMIT 1",[$org,'id:'.$locationId,$businessDate]);
+$reportedNetAfterRebuild=(float)orc_one($pdo,"SELECT net_sales FROM sales_periods WHERE organization_id=? AND location_key=? AND source_provider='gelato_pos' AND granularity='daily' AND service_period='all' AND period_start=? LIMIT 1",[$org,'id:'.$locationId,$businessDate]);
+orc_assert(abs($periodRefundsAfterRebuild-5.0)<0.001&&abs($reportedNetAfterRebuild-max(0,$baseNet-5.0))<0.01,'Later Native POS rebuilds must preserve refund-adjusted reporting.');
 $blocked=false;try{order_recovery_refund($pdo,$org,$orderPublic,(float)$detail['refundable_amount']+1,'cash','Too much','',$userId);}catch(InvalidArgumentException){$blocked=true;}orc_assert($blocked,'Refunds above the remaining paid amount must be blocked.');
 
 $noShow=order_recovery_create_exception($pdo,$org,$orderPublic,'no_show','Customer did not arrive','Order remained unclaimed past pickup window','high',$userId,['requiresManager'=>true]);orc_assert((string)$noShow['exception_type']==='no_show','No-show must become a first-class exception.');
