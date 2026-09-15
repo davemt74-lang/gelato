@@ -1,0 +1,88 @@
+name: Apply Admin Navigation Fix
+
+on:
+  push:
+    branches:
+      - fix/admin-floor-planner-location-nav
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[admin-nav-patched]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/admin-floor-planner-location-nav
+          fetch-depth: 0
+      - name: Patch navigation and regression contracts
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new):
+              p = Path(path)
+              text = p.read_text(encoding='utf-8')
+              if old not in text:
+                  raise SystemExit(f'Expected text not found in {path}: {old[:120]}')
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          replace(
+              'floor-planner-ops-legacy.php',
+              '<button id="backBtn">← Workspace</button>',
+              '<button id="backBtn">← Admin</button>'
+          )
+          replace(
+              'js/floor-planner-ops.js',
+              "$('backBtn').onclick = () => { location.href = 'index.php'; };",
+              "$('backBtn').onclick = () => { location.href = 'admin.php'; };"
+          )
+          replace(
+              'admin.php',
+              '<nav class="admin-top-actions"><a class="admin-button hide-mobile" href="index.php" target="_blank" rel="noopener">Public site ↗</a>',
+              '<nav class="admin-top-actions"><?php if(app_has_permission(\'locations.manage\',$user)):?><a class="admin-button" href="locations-admin.php">Locations</a><?php endif;?><a class="admin-button hide-mobile" href="index.php" target="_blank" rel="noopener">Public site ↗</a>'
+          )
+          replace(
+              'includes/admin-control-core.php',
+              "['category'=>'Workspace','name'=>'Workspace','description'=>'Return to the broader Gelato restaurant workspace and training system.','href'=>'index.php','permissions'=>[],'always'=>true,'icon'=>'G'],",
+              "['category'=>'Workspace','name'=>'Workspace','description'=>'Return to the broader Gelato restaurant workspace and training system.','href'=>'workspace.php','permissions'=>[],'always'=>true,'icon'=>'G'],"
+          )
+          replace(
+              'tests/floor-planner-v2-contract.php',
+              "$legacy=fpv2_source('floor-planner-ops-legacy.php');\n$shell=fpv2_source('floor-planner-v2.php');",
+              "$legacy=fpv2_source('floor-planner-ops-legacy.php');\n$ops=fpv2_source('js/floor-planner-ops.js');\n$shell=fpv2_source('floor-planner-v2.php');"
+          )
+          replace(
+              'tests/floor-planner-v2-contract.php',
+              "fpv2_assert(str_contains($legacy,'Operational Floor Planner'),'Internal canonical planner shell must remain available to the v2 wrapper.');",
+              "fpv2_assert(str_contains($legacy,'Operational Floor Planner'),'Internal canonical planner shell must remain available to the v2 wrapper.');\nfpv2_assert(str_contains($legacy,'<button id=\"backBtn\">← Admin</button>'),'Floor Planner exit control must be labeled for Admin.');\nfpv2_assert(str_contains($ops,\"location.href = 'admin.php'\"),'Floor Planner exit must return to Restaurant Admin.');\nfpv2_assert(!str_contains($ops,\"$('backBtn').onclick = () => { location.href = 'index.php'; };\"),'Floor Planner exit must never return to the public landing page.');"
+          )
+          replace(
+              'tests/admin-control-center-contract.php',
+              "$managerModules=array_column(admin_modules($managerUser),'name');",
+              "$managerModuleRows=admin_modules($managerUser);\n$managerModules=array_column($managerModuleRows,'name');"
+          )
+          replace(
+              'tests/admin-control-center-contract.php',
+              "acc_assert(in_array('Menu Import',$ownerModules,true),'Owners must see the owner-only menu import tool.');",
+              "acc_assert(in_array('Menu Import',$ownerModules,true),'Owners must see the owner-only menu import tool.');\n$adminSource=file_get_contents(__DIR__.'/../admin.php')?:'';\nacc_assert(str_contains($adminSource,'href=\"locations-admin.php\">Locations</a>'),'Restaurant Admin top navigation must expose Locations to authorized managers.');\n$workspaceModule=null; foreach($managerModuleRows as $row){if(($row['name']??'')==='Workspace'){$workspaceModule=$row;break;}}\nacc_assert(is_array($workspaceModule)&&($workspaceModule['href']??'')==='workspace.php','Admin Workspace module must return to authenticated workspace.php, never public index.php.');"
+          )
+          PY
+      - name: Verify patched files
+        run: |
+          php -l floor-planner-ops-legacy.php
+          php -l admin.php
+          php -l includes/admin-control-core.php
+          php -l tests/floor-planner-v2-contract.php
+          php -l tests/admin-control-center-contract.php
+          node --check js/floor-planner-ops.js
+          php tests/floor-planner-v2-contract.php
+      - name: Commit patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add floor-planner-ops-legacy.php js/floor-planner-ops.js admin.php includes/admin-control-core.php tests/floor-planner-v2-contract.php tests/admin-control-center-contract.php
+          git commit -m 'Fix admin floor planner and location navigation [admin-nav-patched]'
+          git push origin HEAD:fix/admin-floor-planner-location-nav
