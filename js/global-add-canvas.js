@@ -3,7 +3,7 @@
   if (window.GelatoGlobalAddCanvas) return;
 
   const state = {shell: null, overlay: null, launcher: null, lastFocus: null};
-  const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#039;'}[ch]));
+  const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[ch]));
   const groups = ['People','Menu & Products','Operations','Sales & Customers','Purchasing & Assets'];
 
   function ensureAgentExperience() {
