@@ -77,8 +77,6 @@ function admin_dashboard_pos_rollup(PDO $pdo,int $organizationId,array $periods,
     $zero=['salesToday'=>0.0,'salesWeek'=>0.0,'salesMonth'=>0.0,'ticketsToday'=>0,'coversToday'=>0,'avgCheckToday'=>0.0,'activeTickets'=>0,'openValue'=>0.0];
     if(!admin_dashboard_table_ready($pdo,'pos_checks'))return $zero;
     $locationSql=$locationId?' AND location_id=?':'';
-    $args=[$organizationId,$periods['today'],$periods['weekStart'],$periods['monthStart']];
-    if($locationId)$args[]=$locationId;
     $sql="SELECT
       COALESCE(SUM(CASE WHEN status='paid' AND business_date=? THEN subtotal-discount_amount+tax_amount+service_charge_amount ELSE 0 END),0) sales_today,
       COALESCE(SUM(CASE WHEN status='paid' AND business_date>=? THEN subtotal-discount_amount+tax_amount+service_charge_amount ELSE 0 END),0) sales_week,
@@ -88,7 +86,6 @@ function admin_dashboard_pos_rollup(PDO $pdo,int $organizationId,array $periods,
       SUM(status='open') active_tickets,
       COALESCE(SUM(CASE WHEN status='open' THEN subtotal-discount_amount+tax_amount+service_charge_amount ELSE 0 END),0) open_value
       FROM pos_checks WHERE organization_id=?{$locationSql}";
-    // Keep date parameters explicit so this query works on strict SQL modes without aliases.
     $bind=[$periods['today'],$periods['weekStart'],$periods['monthStart'],$periods['today'],$periods['today'],$organizationId];
     if($locationId)$bind[]=$locationId;
     try{
@@ -189,7 +186,7 @@ function admin_dashboard_catering(PDO $pdo,int $organizationId): array
     if(!admin_dashboard_table_ready($pdo,'restaurant_operations'))return $out;
     $out['available']=true;
     try{
-        $q=$pdo->prepare("SELECT COUNT(*) active_events,SUM(service_start_at BETWEEN NOW() AND DATE_ADD(NOW(),INTERVAL 7 DAY)) next7, SUM(COALESCE(readiness_percent,0)<80 AND service_start_at IS NOT NULL AND service_start_at<=DATE_ADD(NOW(),INTERVAL 7 DAY)) at_risk, COALESCE(AVG(COALESCE(readiness_percent,0)),0) avg_ready FROM restaurant_operations WHERE organization_id=? AND archived_at IS NULL AND status NOT IN ('completed','cancelled')");
+        $q=$pdo->prepare("SELECT COUNT(*) active_events,SUM(service_start_at BETWEEN NOW() AND DATE_ADD(NOW(),INTERVAL 7 DAY)) next7, SUM(COALESCE(readiness_percent,0)<80 AND service_start_at IS NOT NULL AND service_start_at<=DATE_ADD(NOW(),INTERVAL 7 DAY)) at_risk, COALESCE(AVG(COALESCE(readiness_percent,0)),0) avg_ready FROM restaurant_operations WHERE organization_id=? AND source_type='catering' AND archived_at IS NULL AND status NOT IN ('completed','cancelled')");
         $q->execute([$organizationId]);$r=$q->fetch()?:[];
         return ['available'=>true,'activeEvents'=>(int)($r['active_events']??0),'next7Days'=>(int)($r['next7']??0),'atRisk'=>(int)($r['at_risk']??0),'averageReadiness'=>(int)round((float)($r['avg_ready']??0))];
     }catch(Throwable){return $out;}
@@ -227,7 +224,7 @@ function admin_dashboard_priorities(array $snapshot): array
 function admin_dashboard_snapshot(PDO $pdo,array $user,?int $locationId=null): array
 {
     $org=(int)$user['organization_id'];$periods=admin_dashboard_periods($pdo,$org);$locations=admin_dashboard_locations($pdo,$org);
-    if($locationId&& !admin_dashboard_location($pdo,$org,$locationId))throw new InvalidArgumentException('That dashboard location is not active.');
+    if($locationId&&!admin_dashboard_location($pdo,$org,$locationId))throw new InvalidArgumentException('That dashboard location is not active.');
     $canSales=admin_dashboard_can($user,'sales.view','pos.use','pos.manage');
     $canTables=admin_dashboard_can($user,'table_service.view','pos.use','pos.manage');
     $canKds=admin_dashboard_can($user,'kds.view','pos.use','pos.manage');
