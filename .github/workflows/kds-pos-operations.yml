@@ -1,0 +1,38 @@
+name: KDS + POS Operations
+
+on:
+  pull_request:
+    paths:
+      - 'kds.php'
+      - 'kds-dashboard.php'
+      - 'api/kds-history.php'
+      - 'js/kds.js'
+      - 'js/kds-dashboard.js'
+      - 'pos.php'
+      - 'js/pos.js'
+      - 'tests/kds-pos-operations-contract.php'
+      - '.github/workflows/kds-pos-operations.yml'
+  push:
+    branches: [main]
+
+jobs:
+  operations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring
+      - name: Syntax checks
+        run: |
+          php -l kds.php
+          php -l kds-dashboard.php
+          php -l api/kds-history.php
+          php -l pos.php
+          php -l tests/kds-pos-operations-contract.php
+          node --check js/kds.js
+          node --check js/kds-dashboard.js
+          node --check js/pos.js
+      - name: KDS + POS operations contract
+        run: php tests/kds-pos-operations-contract.php
