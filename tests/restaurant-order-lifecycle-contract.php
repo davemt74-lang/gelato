@@ -132,6 +132,24 @@ online_order_lifecycle_sync($pdo,$org,$checkPublic,$userId);
 rol_assert(rol_order_status($pdo,$org,$orderPublic)==='kitchen_complete','Expo bump must persist Kitchen complete.');
 rol_assert(rol_order_updates($pdo,$org,$customerId)===3,'Kitchen complete after Ready must not duplicate the Ready notification.');
 
+$recalled=kds_production_recall_item($pdo,$org,$first,$userId);
+online_order_lifecycle_sync_by_check_id($pdo,$org,(int)$recalled['check_id'],$userId);
+rol_assert(rol_order_status($pdo,$org,$orderPublic)==='ready','Recalling one completed line must return the order to Ready.');
+rol_assert(rol_order_updates($pdo,$org,$customerId)===3,'Recall must not duplicate the original Ready notification.');
+$reworked=kds_transition($pdo,$org,$first,'in_progress',$userId,'Lifecycle CI rework');
+online_order_lifecycle_sync_by_check_id($pdo,$org,(int)$reworked['check_id'],$userId);
+rol_assert(rol_order_status($pdo,$org,$orderPublic)==='preparing','Reworking a recalled line must move the live status back to Preparing.');
+rol_assert(rol_order_updates($pdo,$org,$customerId)===3,'Rework must not duplicate the Preparing notification.');
+$reworked=kds_transition($pdo,$org,$first,'ready',$userId,'Lifecycle CI rework ready');
+online_order_lifecycle_sync_by_check_id($pdo,$org,(int)$reworked['check_id'],$userId);
+rol_assert(rol_order_status($pdo,$org,$orderPublic)==='ready','Reworked line can return the order to Ready.');
+rol_assert(rol_order_updates($pdo,$org,$customerId)===3,'Ready after recall/rework must remain notification-idempotent.');
+$rebump=kds_production_ticket_action($pdo,$org,$locationId,$checkPublic,'bump',null,$userId);
+rol_assert((int)$rebump['affected']===1,'Second Expo bump must complete only the recalled line.');
+online_order_lifecycle_sync($pdo,$org,$checkPublic,$userId);
+rol_assert(rol_order_status($pdo,$org,$orderPublic)==='kitchen_complete','Reworked ticket must return to Kitchen complete.');
+rol_assert(rol_order_updates($pdo,$org,$customerId)===3,'Second Kitchen complete must not duplicate Ready messaging.');
+
 $check=pos_check_details($pdo,$org,$checkPublic);
 $check=pos_record_tender($pdo,$org,$checkPublic,['tenderType'=>'cash','amount'=>(float)$check['balanceDue'],'tipAmount'=>0],$userId);
 rol_assert((string)$check['status']==='paid','Final tender must close the canonical POS check.');
