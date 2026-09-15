@@ -67,7 +67,7 @@ foreach ([
     }
 }
 foreach ([
-    "customer_account_safe_return($_GET['return']??$_POST['return']??'customer-account.php')",
+    '$return=customer_account_safe_return',
     'name="return"',
     'app_redirect($return)',
     'customer-login.php?return=',
