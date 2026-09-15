@@ -39,8 +39,8 @@ uas_test(str_contains($api,'admin_shell_page_context($user,$page)'),'Shell API i
 
 uas_test(str_contains($bootstrap,'function app_standard_admin_shell_pages()'),'Standard admin shell allowlist is not centralized in bootstrap',19);
 uas_test(str_contains($bootstrap,'function app_boot_admin_shell_injection()'),'Standard admin pages are not auto-bound to the canonical shell',20);
-uas_test(str_contains($bootstrap,"js/universal-admin-page-shell.js?v=20260915-shell2"),'Canonical shell asset is not centrally cache-busted',21);
-uas_test(str_contains($bootstrap,"str_contains($html, 'js/universal-admin-page-shell.js')"),'Existing page-level shell includes are not deduplicated',22);
+uas_test(str_contains($bootstrap,'js/universal-admin-page-shell.js?v=20260915-shell2'),'Canonical shell asset is not centrally cache-busted',21);
+uas_test(str_contains($bootstrap,"str_contains(\$html, 'js/universal-admin-page-shell.js')"),'Existing page-level shell includes are not deduplicated',22);
 
 $standardPages=[
     'admin.php','admin-menu-import.php','locations-admin.php','operations.php','catering-operations.php','catering-pipeline.php',
