@@ -172,7 +172,7 @@ function pickup_fulfillment_mark_handed(PDO $pdo,int $organizationId,string $ord
         if((string)$order['check_status']==='cancelled') throw new InvalidArgumentException('A cancelled order cannot be fulfilled.');
         if(!empty($order['fulfilled_at'])){
             if($owns)$pdo->commit();
-            return $order+['duplicate'=>true,'fulfillmentState'=>'fulfilled'];
+            return $order+['duplicate'=>true,'fulfillmentState'=>'fulfilled','notified'=>false];
         }
         if(empty($order['physicalReady'])) throw new InvalidArgumentException('The complete kitchen ticket must be ready before customer handoff.');
         if((string)$order['payment_mode']==='pay_at_pickup'&&empty($order['paymentComplete'])) throw new InvalidArgumentException('Payment is still due. Complete the POS tender before customer handoff.');
@@ -181,19 +181,27 @@ function pickup_fulfillment_mark_handed(PDO $pdo,int $organizationId,string $ord
         $q->execute([$actorUserId,$note!==''?$note:null,$organizationId,(int)$order['online_order_id']]);
         if($q->rowCount()!==1) throw new RuntimeException('Pickup fulfillment changed while this request was being processed. Refresh and try again.');
 
-        customer_inbox_send_direct($pdo,$organizationId,(int)$order['customer_id'],[
-            'messageType'=>'order_update','locationId'=>(int)$order['location_id'],
-            'title'=>'Order '.$order['check_number'].' picked up','previewText'=>'Your pickup order has been handed off.',
-            'bodyText'=>'Your order from '.$order['location_name'].' was handed to you. Thanks for visiting us.',
-            'ctaLabel'=>'View order history','ctaUrl'=>'customer-account.php#orders',
-        ],$actorUserId);
+        $notified=false;
+        try{
+            customer_inbox_send_direct($pdo,$organizationId,(int)$order['customer_id'],[
+                'messageType'=>'order_update','locationId'=>(int)$order['location_id'],
+                'title'=>'Order '.$order['check_number'].' picked up','previewText'=>'Your pickup order has been handed off.',
+                'bodyText'=>'Your order from '.$order['location_name'].' was handed to you. Thanks for visiting us.',
+                'ctaLabel'=>'View order history','ctaUrl'=>'customer-account.php#orders',
+            ],$actorUserId);
+            $notified=true;
+        }catch(Throwable $notificationError){
+            try{app_audit($pdo,$organizationId,$actorUserId,'online_order.fulfillment_notification_failed','online_order',(string)$order['order_public_id'],null,[
+                'checkPublicId'=>(string)$order['check_public_id'],'error'=>mb_substr($notificationError->getMessage(),0,500,'UTF-8'),
+            ]);}catch(Throwable){}
+        }
         try{app_audit($pdo,$organizationId,$actorUserId,'online_order.fulfilled','online_order',(string)$order['order_public_id'],null,[
-            'checkPublicId'=>(string)$order['check_public_id'],'locationId'=>(int)$order['location_id'],'customerId'=>(int)$order['customer_id'],'note'=>$note!==''?$note:null,
+            'checkPublicId'=>(string)$order['check_public_id'],'locationId'=>(int)$order['location_id'],'customerId'=>(int)$order['customer_id'],'note'=>$note!==''?$note:null,'notified'=>$notified,
         ]);}catch(Throwable){}
 
         $fresh=pickup_fulfillment_order($pdo,$organizationId,$orderPublicId,false)??$order;
         if($owns)$pdo->commit();
-        return $fresh+['duplicate'=>false,'fulfillmentState'=>'fulfilled'];
+        return $fresh+['duplicate'=>false,'fulfillmentState'=>'fulfilled','notified'=>$notified];
     }catch(Throwable $e){
         if($owns&&$pdo->inTransaction())$pdo->rollBack();
         throw $e;
