@@ -69,6 +69,11 @@ jobs:
           grep -q "prep.plan_missing" api/proactive-agent.php
           grep -q "inventory.shortage_forecast" api/proactive-agent.php
           grep -q "app_verify_request_csrf" api/prep-intelligence.php
+          if grep -Eiq 'ADD[[:space:]]+COLUMN[[:space:]]+IF[[:space:]]+NOT[[:space:]]+EXISTS' database/20261008_menu_manager_food_builder.sql; then
+            echo 'Menu Manager migration uses ADD COLUMN IF NOT EXISTS, which is not portable to the production MySQL target.' >&2
+            exit 1
+          fi
+          grep -Eiq 'ALTER[[:space:]]+TABLE[[:space:]]+pos_check_items[[:space:]]+ADD[[:space:]]+COLUMN[[:space:]]+modifier_amount' database/20261008_menu_manager_food_builder.sql
 
       - name: Install MariaDB client and base schema
         run: |
@@ -119,6 +124,32 @@ jobs:
           test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_upgrade_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_upgrade_ci' AND table_name IN ('prep_plans','prep_recommendations','prep_plan_tasks','prep_plan_events','prep_demand_signals','inventory_forecasts');")" = "6"
           test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_upgrade_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('prep.intelligence.view','prep.intelligence.manage','prep.intelligence.agent','inventory.forecast.view');")" = "4"
           test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_upgrade_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260913_zzzzzzzz_prep_inventory_intelligence';")" = "1"
+
+      - name: Verify Menu Manager partial-upgrade recovery
+        run: |
+          mariadb -h 127.0.0.1 -uroot -proot gelato_upgrade_ci <<'SQL'
+          DELETE FROM schema_migrations WHERE migration_key='20261008_menu_manager_food_builder';
+          DROP TABLE IF EXISTS pos_check_item_modifiers;
+          ALTER TABLE pos_check_items DROP COLUMN modifier_amount;
+          SQL
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $service = new UpgradeService(app_pdo(), __DIR__);
+          $results = $service->applyPending(null);
+          if (count($results) !== 1 || ($results[0]['key'] ?? '') !== '20261008_menu_manager_food_builder') {
+              fwrite(STDERR, 'Expected only the Menu Manager migration to recover from the simulated partial install.' . PHP_EOL);
+              exit(1);
+          }
+          if ($service->pendingMigrations()) {
+              fwrite(STDERR, 'Pending migrations remain after partial Menu Manager recovery.' . PHP_EOL);
+              exit(1);
+          }
+          echo "Menu Manager partial migration recovery: ok\n";
+          PHP
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_upgrade_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_upgrade_ci' AND table_name='pos_check_items' AND column_name='modifier_amount';")" = "1"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_upgrade_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_upgrade_ci' AND table_name='pos_check_item_modifiers';")" = "1"
 
       - name: Verify Prep + Inventory Intelligence behavior
         run: php tests/prep-inventory-intelligence-contract.php

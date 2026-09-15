@@ -103,7 +103,10 @@ CREATE TABLE menu_modifier_option_prices (
   CONSTRAINT fk_menu_modifier_option_price_price FOREIGN KEY (menu_item_price_id) REFERENCES menu_item_prices(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
-ALTER TABLE pos_check_items ADD COLUMN IF NOT EXISTS modifier_amount DECIMAL(14,2) NOT NULL DEFAULT 0.00 AFTER gross_amount;
+-- Deliberately omit ADD COLUMN IF NOT EXISTS for compatibility with older MySQL.
+-- UpgradeService already treats duplicate-column error 1060 as an idempotent DDL retry,
+-- which makes this safe after a partially applied migration.
+ALTER TABLE pos_check_items ADD COLUMN modifier_amount DECIMAL(14,2) NOT NULL DEFAULT 0.00 AFTER gross_amount;
 
 CREATE TABLE pos_check_item_modifiers (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
