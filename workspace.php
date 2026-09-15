@@ -156,4 +156,5 @@ if ($adminControlAllowed) {
     $html = str_replace('</head>', "  <link rel=\"stylesheet\" href=\"css/admin-tech-theme.css?v=20260915-tech1\">\n</head>", $html);
     $html = str_replace('<body>', '<body class="gelato-admin-tech-theme">', $html);
 }
+$html = str_replace('</body>', "  <script src=\"js/workspace-shell-sync.js?v=20260915-shell1\"></script>\n</body>", $html);
 echo $html;
