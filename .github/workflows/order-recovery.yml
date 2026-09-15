@@ -1,0 +1,174 @@
+name: Order Exceptions + Recovery
+
+on:
+  pull_request:
+    paths:
+      - 'order-recovery.php'
+      - 'api/order-recovery.php'
+      - 'includes/order-recovery-core.php'
+      - 'includes/order-recovery-reporting.php'
+      - 'database/20261006_order_exceptions_recovery.sql'
+      - 'js/order-recovery.js'
+      - 'assets/css/order-recovery.css'
+      - 'pickup-fulfillment.php'
+      - 'js/pickup-fulfillment.js'
+      - 'online-orders-admin.php'
+      - 'tests/order-recovery-contract.php'
+      - '.github/workflows/order-recovery.yml'
+  push:
+    branches: [main]
+
+jobs:
+  recovery:
+    name: Order Recovery PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.1','8.3']
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - name: Syntax checks
+        run: |
+          php -l order-recovery.php
+          php -l api/order-recovery.php
+          php -l includes/order-recovery-core.php
+          php -l includes/order-recovery-reporting.php
+          php -l tests/order-recovery-contract.php
+          php -l pickup-fulfillment.php
+          node --check js/order-recovery.js
+          node --check js/pickup-fulfillment.js
+      - name: Architecture contract
+        run: |
+          grep -q 'CREATE TABLE order_exceptions' database/20261006_order_exceptions_recovery.sql
+          grep -q 'CREATE TABLE pos_refunds' database/20261006_order_exceptions_recovery.sql
+          grep -q "'order_recovery.refund'" database/20261006_order_exceptions_recovery.sql
+          grep -q 'trg_sales_periods_native_refunds_bi' database/20261006_order_exceptions_recovery.sql
+          grep -q 'trg_sales_hourly_native_refunds_bu' database/20261006_order_exceptions_recovery.sql
+          grep -q 'function order_recovery_delay' includes/order-recovery-core.php
+          grep -q 'function order_recovery_remake' includes/order-recovery-core.php
+          grep -q 'function order_recovery_refund' includes/order-recovery-core.php
+          grep -q 'function order_recovery_sync_native_sales_day' includes/order-recovery-reporting.php
+          grep -q "event_type='recovery_remake'\|recovery_remake" includes/order-recovery-core.php
+          grep -q "action==='refund.record'" api/order-recovery.php
+          grep -q 'order_recovery_sync_native_sales_for_check' api/order-recovery.php
+          grep -q 'order-recovery.php?order=' js/pickup-fulfillment.js
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_recovery_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->ensureTrackingTables();
+          $s->bootstrapLegacyHistory(null);
+          $s->applyPending(null);
+          if($s->pendingMigrations()) exit(1);
+          PHP
+      - name: Verify recovery schema
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('order_exceptions','pos_refunds');")" = "2"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('order_recovery.view','order_recovery.manage','order_recovery.refund');")" = "3"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_schema='gelato_restaurant_ai_ci' AND trigger_name IN ('trg_sales_periods_native_refunds_bi','trg_sales_periods_native_refunds_bu','trg_sales_hourly_native_refunds_bi','trg_sales_hourly_native_refunds_bu');")" = "4"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20261006_order_exceptions_recovery';")" = "1"
+      - name: Order recovery behavioral contract
+        run: php tests/order-recovery-contract.php
+      - name: Pickup fulfillment regression
+        run: php tests/pickup-fulfillment-contract.php
+      - name: Restaurant lifecycle regression
+        run: php tests/restaurant-order-lifecycle-contract.php
+      - name: Online ordering regression
+        run: php tests/online-ordering-inbox-contract.php
+      - name: KDS regression
+        run: php tests/kds-contract.php
+      - name: Native POS regression
+        run: php tests/native-pos-contract.php
+      - name: Verify upgrader idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->assertAppliedChecksumsUnchanged();
+          if($s->pendingMigrations()) exit(2);
+          if($s->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP
+
+  deploy-package:
+    name: Order Recovery Deploy Package
+    needs: recovery
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build direct deploy ZIP
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq zip unzip
+          rm -rf deploy-patch stonefellows-order-recovery-deploy.zip
+          mkdir -p deploy-patch/includes deploy-patch/api deploy-patch/js deploy-patch/assets/css deploy-patch/assets/js deploy-patch/database
+          cp order-recovery.php pickup-fulfillment.php online-orders-admin.php online-order.php customer-account.php upgrade.php deploy-patch/
+          cp api/order-recovery.php api/pickup-fulfillment.php api/pos.php api/kds.php api/online-order-customizations.php deploy-patch/api/
+          cp includes/*.php deploy-patch/includes/
+          cp js/order-recovery.js js/pickup-fulfillment.js deploy-patch/js/
+          cp assets/css/order-recovery.css assets/css/pickup-fulfillment.css assets/css/admin-control.css assets/css/online-order.css assets/css/customer-account.css assets/css/customer-inbox.css deploy-patch/assets/css/
+          cp assets/js/online-order.js deploy-patch/assets/js/
+          for migration in database/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_*.sql; do
+            name="$(basename "$migration")"
+            case "$name" in *_demo_*|*_sample_*|*_seed_*) continue ;; esac
+            cp "$migration" deploy-patch/database/
+          done
+          test -f deploy-patch/order-recovery.php
+          test -f deploy-patch/api/order-recovery.php
+          test -f deploy-patch/includes/order-recovery-core.php
+          test -f deploy-patch/includes/order-recovery-reporting.php
+          test -f deploy-patch/database/20261006_order_exceptions_recovery.sql
+          cat > deploy-patch/README-DEPLOY.txt <<'EOF'
+          Stonefellows / Gelato order exceptions + recovery deploy
+
+          Extract directly into the application web root, preserving folders and
+          overwriting the included files. Then sign in as owner/admin and run
+          upgrade.php -> Upgrade once.
+
+          This phase adds order recovery for delays, remakes/re-fire, substitutions,
+          missing items, quality/payment issues, no-shows, manager escalation,
+          resolution and recorded refunds. Remakes preserve the canonical POS sale
+          line and rewind only KDS production. Refund entries are an audited ledger
+          for cash/external-terminal/manual refunds; this code does not contact an
+          external payment processor. Recorded refunds immediately flow into Gelato
+          Native POS daily/hourly net-sales reporting and survive later POS rebuilds.
+          EOF
+          (cd deploy-patch && zip -qr ../stonefellows-order-recovery-deploy.zip .)
+          unzip -t stonefellows-order-recovery-deploy.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stonefellows-order-recovery-deploy
+          path: stonefellows-order-recovery-deploy.zip
+          if-no-files-found: error
+          retention-days: 30

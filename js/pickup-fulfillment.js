@@ -7,7 +7,7 @@ const el={
   refresh:document.getElementById('refreshQueue'),updated:document.getElementById('lastUpdated'),
   active:document.getElementById('sumActive'),ready:document.getElementById('sumReady'),payment:document.getElementById('sumPayment'),late:document.getElementById('sumLate')
 };
-const state={orders:[],csrf:'',canFulfill:!!app.canFulfill,loading:false};
+const state={orders:[],csrf:'',canFulfill:!!app.canFulfill,canRecover:!!app.canRecover,loading:false};
 const esc=value=>String(value??'').replace(/[&<>'"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
 const money=value=>new Intl.NumberFormat(undefined,{style:'currency',currency:'USD'}).format(Number(value||0));
 const normalizeDbTime=value=>String(value??'').trim().replace(' ','T').replace(/(\.\d{3})\d+$/,'$1');
@@ -26,12 +26,15 @@ function badge(order){
 }
 function paymentBadge(order){return `<span class="pickup-payment ${order.paymentComplete?'paid':'due'}">${order.paymentComplete?'Paid':'Payment due'}</span>`;}
 function action(order){
-  if(order.fulfillmentState==='fulfilled')return `<div class="pickup-handed"><strong>Handed off</strong><span>${esc(dateTime(order.fulfilled_at))}${order.fulfilled_by_name?` · ${esc(order.fulfilled_by_name)}`:''}</span></div>`;
-  if(order.fulfillmentState==='cancelled')return `<button class="pickup-action" disabled>Cancelled</button>`;
-  if(!order.physicalReady)return `<button class="pickup-action" disabled>Waiting on kitchen</button>`;
-  if(!order.paymentComplete)return `<button class="pickup-action payment-block" disabled>Complete payment first</button>`;
-  if(!state.canFulfill)return `<button class="pickup-action" disabled>View only</button>`;
-  return `<button class="pickup-action ready-action" data-fulfill="${esc(order.order_public_id)}">Handed to Customer</button>`;
+  const recover=state.canRecover?`<a class="admin-button" href="order-recovery.php?order=${encodeURIComponent(order.order_public_id)}">Recover</a>`:'';
+  let primary='';
+  if(order.fulfillmentState==='fulfilled')primary=`<div class="pickup-handed"><strong>Handed off</strong><span>${esc(dateTime(order.fulfilled_at))}${order.fulfilled_by_name?` · ${esc(order.fulfilled_by_name)}`:''}</span></div>`;
+  else if(order.fulfillmentState==='cancelled')primary='<button class="pickup-action" disabled>Cancelled</button>';
+  else if(!order.physicalReady)primary='<button class="pickup-action" disabled>Waiting on kitchen</button>';
+  else if(!order.paymentComplete)primary='<button class="pickup-action payment-block" disabled>Complete payment first</button>';
+  else if(!state.canFulfill)primary='<button class="pickup-action" disabled>View only</button>';
+  else primary=`<button class="pickup-action ready-action" data-fulfill="${esc(order.order_public_id)}">Handed to Customer</button>`;
+  return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${recover}${primary}</div>`;
 }
 function card(order){
   const past=Number(order.promiseDeltaSeconds)<0 && !['fulfilled','cancelled'].includes(order.fulfillmentState);
