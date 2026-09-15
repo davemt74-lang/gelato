@@ -1,0 +1,63 @@
+name: Normalize Universal Public Shell
+
+on:
+  push:
+    branches:
+      - fix/universal-public-header-footer
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    if: ${{ !contains(github.event.head_commit.message, '[public-shell-normalized]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/universal-public-header-footer
+          fetch-depth: 0
+      - name: Attach shared shell to standalone public pages
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          marker = '<script src="assets/js/public-shell.js?v=20260915-1"></script>'
+          targets = [
+              'jobs.html',
+              'job.php',
+              'apply.html',
+              'catering.php',
+              'wholesale.php',
+              'login.php',
+              'forgot-password.php',
+              'reset-password.php',
+          ]
+
+          changed = []
+          for target in targets:
+              path = Path(target)
+              if not path.is_file():
+                  raise SystemExit(f'Missing public page: {target}')
+              text = path.read_text(encoding='utf-8')
+              if marker in text:
+                  continue
+              if '</body>' not in text:
+                  raise SystemExit(f'Public page has no closing body tag: {target}')
+              text = text.replace('</body>', marker + '\n</body>', 1)
+              path.write_text(text, encoding='utf-8')
+              changed.append(target)
+
+          print('Updated:', ', '.join(changed) if changed else 'none')
+          PY
+      - name: Commit normalized public pages
+        run: |
+          if git diff --quiet; then
+            echo 'No normalization changes required.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add jobs.html job.php apply.html catering.php wholesale.php login.php forgot-password.php reset-password.php
+          git commit -m 'Attach universal shell to every public page [public-shell-normalized]'
+          git push origin HEAD:fix/universal-public-header-footer
