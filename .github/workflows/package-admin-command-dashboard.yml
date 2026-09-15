@@ -1,0 +1,55 @@
+name: Package Admin Command Dashboard
+
+on:
+  push:
+    branches:
+      - build/admin-command-dashboard-package
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+      - name: Validate runtime syntax
+        run: |
+          php -l workspace.php
+          php -l includes/admin-dashboard-core.php
+          php -l api/admin-dashboard.php
+          php -l api/admin-dashboard-agent.php
+          php -l api/agent-workspace.php
+          node --check js/admin-command-dashboard.js
+      - name: Build direct deploy ZIP
+        run: |
+          mkdir -p deploy/includes deploy/api deploy/js deploy/css
+          cp workspace.php deploy/
+          cp includes/admin-dashboard-core.php deploy/includes/
+          cp api/admin-dashboard.php api/admin-dashboard-agent.php api/agent-workspace.php deploy/api/
+          cp js/admin-command-dashboard.js deploy/js/
+          cp css/admin-command-dashboard.css deploy/css/
+          cat > deploy/README-DEPLOY.txt <<'EOF'
+          Stonefellows / Gelato Restaurant Command Center
+          Exact merged main: 06780ecba26ff75286b7b8143135247cfaa512b2
+
+          Deploy:
+          1. Extract this ZIP directly into the application web root.
+          2. Overwrite the included PHP/JS/CSS files.
+          3. Hard-refresh /workspace.php.
+
+          No SQL migration and no upgrade.php run are required.
+          EOF
+          (cd deploy && zip -qr ../stonefellows-admin-command-dashboard-deploy.zip .)
+          unzip -t stonefellows-admin-command-dashboard-deploy.zip
+          sha256sum stonefellows-admin-command-dashboard-deploy.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stonefellows-admin-command-dashboard-deploy
+          path: stonefellows-admin-command-dashboard-deploy.zip
+          if-no-files-found: error
+          retention-days: 7
