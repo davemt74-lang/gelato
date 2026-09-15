@@ -4,6 +4,8 @@ declare(strict_types=1);
 $root = dirname(__DIR__);
 $source = file_get_contents($root . '/online-order.php') ?: '';
 $core = file_get_contents($root . '/includes/online-order-core.php') ?: '';
+$orderJs = file_get_contents($root . '/assets/js/online-order.js') ?: '';
+$signup = file_get_contents($root . '/customer-signup.php') ?: '';
 $workflow = file_get_contents($root . '/.github/workflows/online-ordering-inbox.yml') ?: '';
 
 foreach ([
@@ -37,6 +39,41 @@ foreach ([
 ] as $needle) {
     if (!str_contains($source, $needle)) {
         throw new RuntimeException('Online-order partial-deploy protection missing: ' . $needle);
+    }
+}
+
+foreach ([
+    'customer_account_current($pdo,$organizationId)',
+    'Guest order',
+    'Account at checkout',
+    'Continue to checkout',
+    'Pay at pickup <em>Active</em>',
+] as $needle) {
+    if (!str_contains($source, $needle)) {
+        throw new RuntimeException('Guest-before-account ordering flow missing: ' . $needle);
+    }
+}
+if (str_contains($source, 'customer_account_require($pdo,$organizationId)')) {
+    throw new RuntimeException('Public online ordering must not require customer login before the menu and cart are shown.');
+}
+foreach ([
+    'sessionStorage.getItem(key)',
+    'sessionStorage.setItem(key',
+    'authenticated',
+    'window.location.assign(signupUrl)',
+] as $needle) {
+    if (!str_contains($orderJs, $needle)) {
+        throw new RuntimeException('Guest cart handoff contract missing: ' . $needle);
+    }
+}
+foreach ([
+    "customer_account_safe_return($_GET['return']??$_POST['return']??'customer-account.php')",
+    'name="return"',
+    'app_redirect($return)',
+    'customer-login.php?return=',
+] as $needle) {
+    if (!str_contains($signup, $needle)) {
+        throw new RuntimeException('Signup checkout-return contract missing: ' . $needle);
     }
 }
 
@@ -79,4 +116,4 @@ foreach ([
     }
 }
 
-echo "PASS: online-order runtime readiness uses direct dependencies and recovery deploy contains the complete runtime/migration closure.\n";
+echo "PASS: online ordering supports guest cart building, account-at-checkout handoff, direct readiness, and dependency-complete recovery deployment.\n";
