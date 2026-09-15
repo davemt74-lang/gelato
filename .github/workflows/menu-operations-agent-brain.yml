@@ -1,0 +1,190 @@
+name: Menu Operations + Agent Brain
+
+on:
+  pull_request:
+    paths:
+      - 'menu-manager.php'
+      - 'api/menu-manager.php'
+      - 'api/agent-brain.php'
+      - 'api/media.php'
+      - 'includes/menu-manager-core.php'
+      - 'includes/menu-operations-core.php'
+      - 'includes/agent-workspace-core.php'
+      - 'includes/admin-shell-core.php'
+      - 'assets/js/menu-operations.js'
+      - 'assets/css/menu-operations.css'
+      - 'js/workspace-shell-sync.js'
+      - 'js/universal-admin-page-shell.js'
+      - 'css/global-add-canvas.css'
+      - 'index.html'
+      - 'database/20261010_menu_operations_agent_brain.sql'
+      - 'tests/menu-operations-agent-brain-contract.php'
+      - '.github/workflows/menu-operations-agent-brain.yml'
+  push:
+    branches: [main]
+
+jobs:
+  menu-operations:
+    name: Menu Operations PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.1','8.3']
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_menu_ops_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+
+      - name: Syntax checks
+        run: |
+          php -l menu-manager.php
+          php -l api/menu-manager.php
+          php -l api/agent-brain.php
+          php -l api/media.php
+          php -l includes/menu-manager-core.php
+          php -l includes/menu-operations-core.php
+          php -l includes/agent-workspace-core.php
+          php -l includes/admin-shell-core.php
+          php -l tests/menu-operations-agent-brain-contract.php
+          node --check assets/js/menu-operations.js
+          node --check js/workspace-shell-sync.js
+          node --check js/universal-admin-page-shell.js
+
+      - name: Architecture and production-MySQL compatibility contract
+        run: |
+          grep -q 'CREATE TABLE menu_item_operational_status' database/20261010_menu_operations_agent_brain.sql
+          grep -q 'CREATE TABLE menu_price_operational_status' database/20261010_menu_operations_agent_brain.sql
+          grep -q 'CREATE TABLE menu_item_availability_schedules' database/20261010_menu_operations_agent_brain.sql
+          grep -q 'CREATE TABLE menu_operation_events' database/20261010_menu_operations_agent_brain.sql
+          grep -q 'ALTER TABLE menu_items ADD COLUMN sort_order' database/20261010_menu_operations_agent_brain.sql
+          if grep -Eqi 'ADD[[:space:]]+COLUMN[[:space:]]+IF[[:space:]]+NOT[[:space:]]+EXISTS' database/20261010_menu_operations_agent_brain.sql; then
+            echo 'Non-portable ADD COLUMN IF NOT EXISTS syntax is forbidden.' >&2
+            exit 1
+          fi
+          grep -q 'menu_operations_sync_brain' includes/menu-operations-core.php
+          grep -q "'menu.bulk_price'" api/agent-brain.php
+          grep -q "'menu.bulk_distribution'" api/agent-brain.php
+          grep -q "'menu.bulk_status'" api/agent-brain.php
+          grep -q "'menu.schedule_save'" api/agent-brain.php
+          grep -q "href=\\\"workspace.php\\\"" index.html
+          grep -q 'background:#fff;color:#111' css/global-add-canvas.css
+
+      - name: Install and upgrade full schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_menu_ops_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Menu Operations CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_menu_ops_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_menu_ops_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->ensureTrackingTables();
+          $s->bootstrapLegacyHistory(null);
+          $s->applyPending(null);
+          if($s->pendingMigrations()) exit(1);
+          PHP
+
+      - name: Verify Menu Operations schema
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_menu_ops_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_menu_ops_ci' AND table_name IN ('menu_item_operational_status','menu_price_operational_status','menu_item_availability_schedules','menu_operation_events');")" = "4"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_menu_ops_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_menu_ops_ci' AND table_name='menu_items' AND column_name='sort_order';")" = "1"
+
+      - name: Menu Operations + Agent Brain behavior
+        run: php tests/menu-operations-agent-brain-contract.php
+
+      - name: Core regressions
+        run: |
+          php tests/menu-manager-food-builder-contract.php
+          php tests/menu-manager-drink-builder-contract.php
+          php tests/agent-workspace-contract.php
+          php tests/global-add-action-canvas-contract.php
+          php tests/online-ordering-inbox-contract.php
+          php tests/native-pos-contract.php
+          php tests/kds-contract.php
+          php tests/package-deals-contract.php
+
+      - name: Verify upgrader idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->assertAppliedChecksumsUnchanged();
+          if($s->pendingMigrations()) exit(2);
+          if($s->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP
+
+  deploy-package:
+    name: Menu Operations Deploy Package
+    needs: menu-operations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build dependency-complete runtime ZIP
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq zip unzip rsync
+          rm -rf deploy-runtime stonefellows-menu-operations-agent-brain-deploy.zip
+          mkdir -p deploy-runtime
+          rsync -a ./ deploy-runtime/ \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='tests/' \
+            --exclude='deploy-runtime/' \
+            --exclude='config.php' \
+            --exclude='storage/' \
+            --exclude='uploads/' \
+            --exclude='*.zip'
+          test -f deploy-runtime/api/agent-brain.php
+          test -f deploy-runtime/includes/menu-operations-core.php
+          test -f deploy-runtime/assets/js/menu-operations.js
+          test -f deploy-runtime/database/20261010_menu_operations_agent_brain.sql
+          cat > deploy-runtime/README-DEPLOY.txt <<'EOF'
+          Stonefellows / Gelato — Menu Operations + Main Agent Brain
+
+          Extract directly into the application web root, preserving folders and
+          overwriting packaged files. Preserve the live config.php, uploads/ and
+          storage/ directories. Then sign in as owner/admin and run:
+
+            upgrade.php -> Upgrade once
+
+          This build adds location-specific item/size 86 controls, timed auto-resume,
+          day/time availability schedules, inline and bulk pricing, category/item
+          ordering, bulk lifecycle/distribution/move operations, image completeness,
+          operation history, and central Agent Brain menu knowledge/actions.
+
+          Header/UI updates: KDS + POS shortcuts, white global + button with black +,
+          and clickable Gelato sidebar brand linking to the default admin dashboard.
+          EOF
+          (cd deploy-runtime && zip -qr ../stonefellows-menu-operations-agent-brain-deploy.zip .)
+          unzip -t stonefellows-menu-operations-agent-brain-deploy.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stonefellows-menu-operations-agent-brain-deploy
+          path: stonefellows-menu-operations-agent-brain-deploy.zip
+          if-no-files-found: error
+          retention-days: 30
