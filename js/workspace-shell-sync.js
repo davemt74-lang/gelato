@@ -15,11 +15,18 @@
     return payload.shell;
   }
 
+  function ensureAddCanvas() {
+    if (document.querySelector('script[data-global-add-canvas]')) return;
+    const script = document.createElement('script');
+    script.src = 'js/global-add-canvas.js?v=20260915-add1';
+    script.dataset.globalAddCanvas = '1';
+    document.head.appendChild(script);
+  }
+
   function syncHeader(shell) {
     const actions = document.querySelector('.topbar .top-actions');
     if (!actions) return;
 
-    // The native workspace keeps its own topbar DOM, but the shortcut model is canonical.
     actions.querySelectorAll('#gelatoHeaderPos,#gelatoHeaderKds,[data-canonical-shell-shortcut]').forEach((node) => node.remove());
     actions.querySelectorAll('a.header-link[href="landing.html"],a.header-link[href="index.php"],a.header-link[href="workspace.php"]').forEach((node) => node.remove());
 
@@ -71,6 +78,7 @@
       window.GELATO_ADMIN_SHELL = shell;
       syncHeader(shell);
       syncProfileMenu(shell);
+      ensureAddCanvas();
       window.dispatchEvent(new CustomEvent('gelato-admin-shell-config', {detail: shell}));
     } catch (error) {
       console.error('[Gelato workspace shell]', error);

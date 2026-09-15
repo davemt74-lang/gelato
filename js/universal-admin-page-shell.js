@@ -31,6 +31,14 @@
     document.head.appendChild(link);
   }
 
+  function ensureAddCanvas() {
+    if (document.querySelector('script[data-global-add-canvas]')) return;
+    const script = document.createElement('script');
+    script.src = 'js/global-add-canvas.js?v=20260915-add1';
+    script.dataset.globalAddCanvas = '1';
+    document.head.appendChild(script);
+  }
+
   function readState(groups) {
     const defaults = Object.fromEntries(groups.map((group) => [group.id, true]));
     try {
@@ -58,7 +66,7 @@
       body.gelato-universal-admin-page>header.admin-top{display:none!important}
       .uas-header{position:fixed;z-index:10020;top:0;right:0;left:var(--uas-sidebar);height:var(--uas-header);display:flex;align-items:center;justify-content:space-between;gap:14px;padding:0 16px 0 20px;border-bottom:1px solid #e6e6e1;background:rgba(255,255,255,.97);backdrop-filter:blur(14px);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#171815}
       .uas-title{min-width:0;display:flex;align-items:center;gap:11px}.uas-mobile{display:none;width:36px;height:36px;border:1px solid #deded8;border-radius:10px;background:#fff;font-size:17px}.uas-title-copy{min-width:0}.uas-title strong{display:block;font-size:15px;line-height:1.1}.uas-title small{display:block;margin-top:3px;color:#73766f;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:min(44vw,620px)}
-      .uas-header-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;min-width:0;overflow-x:auto;scrollbar-width:none}.uas-header-actions::-webkit-scrollbar{display:none}.uas-header-link,.uas-page-action{min-height:36px;display:inline-flex;align-items:center;justify-content:center;border:1px solid #deded8;border-radius:10px;background:#fff;color:#171815;padding:7px 11px;text-decoration:none;font:800 10px/1 Inter,ui-sans-serif,system-ui;white-space:nowrap}.uas-header-link.dark{background:#171b1a;border-color:#171b1a;color:#fff}.uas-header-link.kds{background:#fff7f3;border-color:#efc6b9;color:#9a351f}.uas-header-actions>.btn,.uas-header-actions>button:not(.uas-account-button){min-height:36px!important;margin:0!important;white-space:nowrap}
+      .uas-header-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;min-width:0;overflow-x:auto;scrollbar-width:none}.uas-header-actions::-webkit-scrollbar{display:none}.uas-header-link,.uas-page-action{min-height:36px;display:inline-flex;align-items:center;justify-content:center;border:1px solid #deded8;border-radius:10px;background:#fff;color:#171815;padding:7px 11px;text-decoration:none;font:800 10px/1 Inter,ui-sans-serif,system-ui;white-space:nowrap}.uas-header-link.dark{background:#171b1a;border-color:#171b1a;color:#fff}.uas-header-link.kds{background:#fff7f3;border-color:#efc6b9;color:#9a351f}.uas-header-actions>.btn,.uas-header-actions>button:not(.uas-account-button):not(.gac-launch){min-height:36px!important;margin:0!important;white-space:nowrap}
       .uas-sidebar{position:fixed;z-index:10030;inset:0 auto 0 0;width:var(--uas-sidebar);display:flex;flex-direction:column;overflow:hidden;padding:13px 11px 9px;color:#171815;background:#f7f7f5;border-right:1px solid #e6e6e1;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
       .uas-brand{display:flex;align-items:center;gap:9px;padding:2px 7px 11px}.uas-logo{width:38px;height:38px;display:grid;place-items:center;border-radius:12px;background:#171b1a;color:#fff;font-size:18px;font-weight:900}.uas-brand h1{margin:0;font-size:14px;line-height:1.05}.uas-brand p{margin:2px 0 0;color:#777b76;font-size:9px}
       .uas-nav{min-height:0;overflow:auto;padding:2px 0 10px}.uas-section{border-top:1px solid #e8e8e4}.uas-section:first-child{border-top:0}.uas-section-toggle{appearance:none;width:100%;border:0;background:transparent;color:#737873;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 10px 7px;font:800 .58rem/1.2 Inter,ui-sans-serif,system-ui;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;text-align:left}.uas-section-toggle:hover{color:#171815}.uas-chevron{font-size:.78rem;color:#9a9e99;transition:transform .18s}.uas-section-toggle[aria-expanded="true"] .uas-chevron{transform:rotate(180deg)}.uas-items{display:grid;gap:1px;padding:0 0 6px}.uas-items[hidden]{display:none!important}.uas-link{width:100%;min-height:32px;display:flex;align-items:center;gap:7px;padding:6px 9px;border:1px solid transparent;border-radius:9px;color:#555a55;background:transparent;text-decoration:none;font-size:10px;font-weight:750;line-height:1.1}.uas-link:hover,.uas-link.active{color:#171815;border-color:#deded8;background:#fff;box-shadow:0 4px 14px rgba(20,22,18,.04)}.uas-ico{width:19px;flex:0 0 19px;text-align:center;font-size:12px}.uas-foot{margin-top:auto;padding:8px 7px 2px;color:#878b86;font-size:8px;line-height:1.35}.uas-status{display:inline-block;width:6px;height:6px;margin-right:5px;border-radius:99px;background:#2e9f68;box-shadow:0 0 0 3px rgba(46,159,104,.10)}
@@ -192,13 +200,17 @@
     try {
       const shell = await loadShell();
       window.GELATO_ADMIN_SHELL = shell;
-      window.dispatchEvent(new CustomEvent('gelato-admin-shell-config', {detail: shell}));
-      if (shell.type !== 'standard') return;
+      if (shell.type !== 'standard') {
+        window.dispatchEvent(new CustomEvent('gelato-admin-shell-config', {detail: shell}));
+        return;
+      }
       ensureTheme();
       installStyles();
       document.body.classList.add('gelato-universal-admin-page');
       const sidebar = renderSidebar(shell);
       renderHeader(shell, sidebar);
+      ensureAddCanvas();
+      window.dispatchEvent(new CustomEvent('gelato-admin-shell-config', {detail: shell}));
     } catch (error) {
       console.error('[Gelato shell]', error);
     }

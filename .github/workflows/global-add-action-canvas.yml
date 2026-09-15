@@ -1,0 +1,88 @@
+name: Global Add Action Canvas
+
+on:
+  pull_request:
+    paths:
+      - 'api/admin-shell.php'
+      - 'includes/admin-add-actions.php'
+      - 'js/global-add-canvas.js'
+      - 'css/global-add-canvas.css'
+      - 'js/universal-admin-page-shell.js'
+      - 'js/workspace-shell-sync.js'
+      - 'tests/global-add-action-canvas-contract.php'
+      - '.github/workflows/global-add-action-canvas.yml'
+  push:
+    branches: [main]
+
+jobs:
+  contract:
+    name: Add Canvas PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.1','8.3']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mbstring
+      - name: Syntax checks
+        run: |
+          php -l api/admin-shell.php
+          php -l includes/admin-add-actions.php
+          php -l tests/global-add-action-canvas-contract.php
+          node --check js/global-add-canvas.js
+          node --check js/universal-admin-page-shell.js
+          node --check js/workspace-shell-sync.js
+      - name: Permission and action contract
+        run: php tests/global-add-action-canvas-contract.php
+      - name: Canvas architecture contract
+        run: |
+          grep -q "Add Equipment" includes/admin-add-actions.php
+          grep -q "Add Package" includes/admin-add-actions.php
+          grep -q "Add Food" includes/admin-add-actions.php
+          grep -q "Add Drink" includes/admin-add-actions.php
+          grep -q "status'=>'planned'" includes/admin-add-actions.php
+          grep -q "global-add-canvas.js" js/universal-admin-page-shell.js
+          grep -q "global-add-canvas.js" js/workspace-shell-sync.js
+          grep -q "gac-overlay" css/global-add-canvas.css
+          grep -q "gac-launch" css/global-add-canvas.css
+          grep -q "addActions" api/admin-shell.php
+
+  deploy-package:
+    name: Add Canvas Deploy Package
+    needs: contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build direct deploy ZIP
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq zip unzip
+          rm -rf deploy-patch stonefellows-global-add-canvas-deploy.zip
+          mkdir -p deploy-patch/api deploy-patch/includes deploy-patch/js deploy-patch/css
+          cp api/admin-shell.php deploy-patch/api/
+          cp includes/admin-add-actions.php deploy-patch/includes/
+          cp js/global-add-canvas.js js/universal-admin-page-shell.js js/workspace-shell-sync.js deploy-patch/js/
+          cp css/global-add-canvas.css deploy-patch/css/
+          cat > deploy-patch/README-DEPLOY.txt <<'EOF'
+          Stonefellows / Gelato global Add action canvas deploy
+
+          Extract directly into the application web root, preserving folders and
+          overwriting the included files. No database migration is required.
+
+          The + button is permission scoped and appears in Workspace and standard
+          restaurant admin pages. Add Package, Add Food and Add Drink are visible
+          owner roadmap actions and intentionally do not navigate until their
+          dedicated builders are implemented.
+          EOF
+          (cd deploy-patch && zip -qr ../stonefellows-global-add-canvas-deploy.zip .)
+          unzip -t stonefellows-global-add-canvas-deploy.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stonefellows-global-add-canvas-deploy
+          path: stonefellows-global-add-canvas-deploy.zip
+          if-no-files-found: error
+          retention-days: 30
