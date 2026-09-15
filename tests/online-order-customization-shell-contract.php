@@ -15,6 +15,8 @@ $orderPage=$read('online-order.php');
 $posJs=$read('js/pos.js');
 $kdsJs=$read('js/kds.js');
 $shell=$read('js/universal-admin-page-shell.js');
+$shellCore=$read('includes/admin-shell-core.php');
+$bootstrap=$read('includes/bootstrap.php');
 
 $checks=[
     'customization context uses canonical menu ingredient mapping'=>str_contains($core,'menu_item_ingredients')&&str_contains($core,'can_remove'),
@@ -33,24 +35,28 @@ $checks=[
     'online order JavaScript cache key was advanced'=>str_contains($orderPage,'assets/js/online-order.js?v=20260915-2'),
     'native POS renders line special instructions'=>str_contains($posJs,'special_instructions'),
     'KDS renders line special instructions'=>str_contains($kdsJs,'special_instructions'),
-    'universal shell has fallback page title'=>str_contains($shell,'const fallbackTitle')&&str_contains($shell,'pageTitles[path] || [fallbackTitle'),
+
+    // The shell model is now server-owned. Browser code consumes one canonical role-aware model.
+    'universal shell consumes canonical server model'=>str_contains($shell,'api/admin-shell.php?page=')&&str_contains($shell,"shell.type !== 'standard'"),
+    'canonical shell provides fallback page metadata'=>str_contains($shellCore,"??[ucwords(str_replace")&&str_contains($shellCore,"'Gelato restaurant administration','standard'"),
     'universal shell no longer rejects unlisted admin pages'=>!str_contains($shell,'if (!pageTitles[path]) return;')&&!str_contains($shell,'if(!pageTitles[path])return;'),
     'shell hides legacy admin header'=>str_contains($shell,'header.admin-top{display:none!important}'),
     'shell migrates legacy admin header actions'=>str_contains($shell,'.admin-top-actions')&&str_contains($shell,'header.admin-top'),
-    'shell includes time clock navigation'=>str_contains($shell,'Time Clock + Attendance')&&str_contains($shell,'timeclock.php'),
-    'shell includes purchasing navigation'=>str_contains($shell,'Purchasing + Receiving')&&str_contains($shell,'purchasing.php'),
-    'shell includes equipment navigation'=>str_contains($shell,'Equipment Catalog')&&str_contains($shell,'equipment.php'),
+    'canonical shell includes time clock navigation'=>str_contains($shellCore,'Time Clock + Attendance')&&str_contains($shellCore,'timeclock.php'),
+    'canonical shell includes purchasing navigation'=>str_contains($shellCore,'Purchasing + Receiving')&&str_contains($shellCore,'purchasing.php'),
+    'canonical shell includes equipment navigation'=>str_contains($shellCore,'Equipment Catalog')&&str_contains($shellCore,'equipment.php'),
+    'standard admin shell is centrally auto-bound'=>str_contains($bootstrap,'function app_standard_admin_shell_pages()')&&str_contains($bootstrap,'function app_boot_admin_shell_injection()'),
 ];
 
 foreach([
     'admin.php','admin-menu-import.php','operations.php','timeclock.php','scheduling.php','purchasing.php','equipment.php',
     'recipes.php','prep-intelligence.php','sales-intelligence.php','customer-crm.php','online-orders-admin.php',
 ] as $page){
-    $checks[$page.' loads the universal admin shell']=str_contains($read($page),'js/universal-admin-page-shell.js');
+    $checks[$page.' is registered for the canonical admin shell']=str_contains($bootstrap,"'{$page}'")&&str_contains($shellCore,"'{$page}'");
 }
 
 foreach(['customer-account.php','online-order.php'] as $customerPage){
-    $checks[$customerPage.' keeps customer/public shell']=!str_contains($read($customerPage),'js/universal-admin-page-shell.js');
+    $checks[$customerPage.' keeps customer/public shell']=!str_contains($bootstrap,"'{$customerPage}'")&&str_contains($shellCore,"'{$customerPage}'")&&str_contains($shellCore,"'customer'");
 }
 
 $failed=[];
@@ -60,4 +66,4 @@ if($failed){
     exit(1);
 }
 
-echo 'PASS: '.count($checks)." customization, POS/KDS propagation, customer UI separation, and universal admin shell checks.\n";
+echo 'PASS: '.count($checks)." customization, POS/KDS propagation, customer UI separation, and canonical role-aware admin shell checks.\n";
