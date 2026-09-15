@@ -31,7 +31,7 @@ uas_test(str_contains($shell,"function movePageActions"),'Standalone page action
 uas_test(str_contains($shell,"function duplicateDestination"),'Duplicate local-header destinations are not removed',17);
 uas_test(str_contains($shell,"class=\"uas-account-menu\""),'Clean universal account menu is missing',18);
 uas_test(str_contains($shell,"'scheduling.php': ['Staff Scheduling'"),'Scheduling title metadata is missing from the universal shell',19);
-uas_test(str_contains($shell,"['◷', 'Staff Scheduling', 'scheduling.php']"),'Scheduling is missing from universal navigation',20);
+uas_test(str_contains($shell,"['◫', 'Staff Scheduling', 'scheduling.php']"),'Scheduling is missing from universal navigation',20);
 
 $targets=[
     'locations-admin.php','operations.php','catering-operations.php','catering-pipeline.php',
