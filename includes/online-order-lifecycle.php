@@ -42,6 +42,11 @@ function online_order_lifecycle_derive(array $state): string
     if($checkStatus==='cancelled') return 'cancelled';
     if($checkStatus==='paid') return 'completed';
 
+    if(empty($state['kds_state_known'])){
+        $current=(string)($state['order_status']??'submitted');
+        return in_array($current,online_order_lifecycle_statuses(),true)?$current:'submitted';
+    }
+
     $queued=(int)($state['kds_queued_count']??0);
     $held=(int)($state['kds_held_count']??0);
     $progress=(int)($state['kds_progress_count']??0);
@@ -73,21 +78,28 @@ function online_order_lifecycle_snapshot(PDO $pdo,int $organizationId,string $ch
     if(!$row) return null;
 
     $counts=['kds_count'=>0,'kds_queued_count'=>0,'kds_held_count'=>0,'kds_progress_count'=>0,'kds_ready_count'=>0,'kds_completed_count'=>0,'kds_cancelled_count'=>0];
-    try{
-        $q=$pdo->prepare("SELECT COUNT(*) kds_count,
-            SUM(status='queued') kds_queued_count,
-            SUM(status='held') kds_held_count,
-            SUM(status='in_progress') kds_progress_count,
-            SUM(status='ready') kds_ready_count,
-            SUM(status='completed') kds_completed_count,
-            SUM(status='cancelled') kds_cancelled_count
-            FROM kds_order_items WHERE organization_id=? AND check_id=?");
-        $q->execute([$organizationId,(int)$row['check_id']]);
-        $aggregate=$q->fetch()?:[];
-        foreach($counts as $key=>$zero)$counts[$key]=(int)($aggregate[$key]??0);
-    }catch(Throwable){}
+    $table=$pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='kds_order_items'");
+    $kdsStateKnown=(int)$table->fetchColumn()===1;
+    if($kdsStateKnown){
+        try{
+            $q=$pdo->prepare("SELECT COUNT(*) kds_count,
+                SUM(status='queued') kds_queued_count,
+                SUM(status='held') kds_held_count,
+                SUM(status='in_progress') kds_progress_count,
+                SUM(status='ready') kds_ready_count,
+                SUM(status='completed') kds_completed_count,
+                SUM(status='cancelled') kds_cancelled_count
+                FROM kds_order_items WHERE organization_id=? AND check_id=?");
+            $q->execute([$organizationId,(int)$row['check_id']]);
+            $aggregate=$q->fetch()?:[];
+            foreach($counts as $key=>$zero)$counts[$key]=(int)($aggregate[$key]??0);
+        }catch(Throwable $e){
+            throw new RuntimeException('Kitchen lifecycle state could not be read safely.',0,$e);
+        }
+    }
 
     $row=array_merge($row,$counts);
+    $row['kds_state_known']=$kdsStateKnown;
     $row['derived_status']=online_order_lifecycle_derive($row);
     $row['display_status']=online_order_lifecycle_display_status((string)$row['derived_status']);
     return $row;
