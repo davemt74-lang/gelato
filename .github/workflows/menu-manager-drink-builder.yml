@@ -1,0 +1,172 @@
+name: Menu Manager + Add Drink Builder
+
+on:
+  pull_request:
+    paths:
+      - 'menu-manager.php'
+      - 'api/menu-drink.php'
+      - 'includes/menu-drink-core.php'
+      - 'includes/admin-add-actions.php'
+      - 'assets/js/menu-manager-drink.js'
+      - 'tests/menu-manager-drink-builder-contract.php'
+      - 'tests/global-add-action-canvas-contract.php'
+      - '.github/workflows/menu-manager-drink-builder.yml'
+  push:
+    branches: [main]
+
+jobs:
+  drink-builder:
+    name: Menu Manager Drink PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.1','8.3']
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - name: Syntax checks
+        run: |
+          php -l menu-manager.php
+          php -l api/menu-drink.php
+          php -l includes/menu-drink-core.php
+          php -l includes/menu-manager-core.php
+          php -l includes/menu-order-integration.php
+          php -l tests/menu-manager-drink-builder-contract.php
+          php -l tests/global-add-action-canvas-contract.php
+          node --check assets/js/menu-manager-drink.js
+          node --check assets/js/menu-manager.js
+          node --check assets/js/online-order-food.js
+      - name: Architecture contract
+        run: |
+          grep -q 'function menu_drink_save' includes/menu-drink-core.php
+          grep -q 'function menu_drink_duplicate' includes/menu-drink-core.php
+          grep -q "item_type='drink'" includes/menu-drink-core.php
+          grep -q "drink.save" api/menu-drink.php
+          grep -q 'menu-manager.php?action=add-drink' includes/admin-add-actions.php
+          grep -q 'Flavor choices' assets/js/menu-manager-drink.js
+          grep -q 'Ice choices' assets/js/menu-manager-drink.js
+          grep -q 'Paid add-ons' assets/js/menu-manager-drink.js
+          grep -q 'Package Deals' assets/js/menu-manager-drink.js
+          grep -q 'menu-manager-drink.js' menu-manager.php
+          grep -q 'itemTypeFilter' menu-manager.php
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Drink Builder CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_drink_builder_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->ensureTrackingTables();
+          $s->bootstrapLegacyHistory(null);
+          $s->applyPending(null);
+          if($s->pendingMigrations()) exit(1);
+          PHP
+      - name: Verify shared Menu Manager schema
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('menu_item_profiles','menu_item_location_availability','menu_modifier_groups','menu_modifier_options','menu_modifier_option_prices','pos_check_item_modifiers');")" = "6"
+      - name: Drink builder behavioral contract
+        run: php tests/menu-manager-drink-builder-contract.php
+      - name: Food builder regression
+        run: php tests/menu-manager-food-builder-contract.php
+      - name: Global Add Canvas regression
+        run: php tests/global-add-action-canvas-contract.php
+      - name: Online ordering regression
+        run: php tests/online-ordering-inbox-contract.php
+      - name: Native POS regression
+        run: php tests/native-pos-contract.php
+      - name: KDS regression
+        run: php tests/kds-contract.php
+      - name: Package Deals regression
+        run: php tests/package-deals-contract.php
+      - name: Verify upgrader idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->assertAppliedChecksumsUnchanged();
+          if($s->pendingMigrations()) exit(2);
+          if($s->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP
+
+  deploy-package:
+    name: Menu Manager Drink Deploy Package
+    needs: drink-builder
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build direct deploy ZIP
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq zip unzip
+          rm -rf deploy-patch stonefellows-menu-manager-drink-deploy.zip
+          mkdir -p deploy-patch/includes deploy-patch/api deploy-patch/assets/css deploy-patch/assets/js deploy-patch/js deploy-patch/css deploy-patch/database
+          cp menu-manager.php menu.php online-order.php packages-admin.php packages.php upgrade.php deploy-patch/
+          cp api/menu-manager.php api/menu-drink.php api/online-order-customizations.php api/packages.php api/admin-shell.php deploy-patch/api/
+          cp includes/*.php deploy-patch/includes/
+          cp assets/css/menu-manager.css assets/css/site.css assets/css/online-order.css assets/css/customer-account.css assets/css/packages-admin.css assets/css/packages.css deploy-patch/assets/css/
+          cp assets/js/menu-manager.js assets/js/menu-manager-drink.js assets/js/online-order-food.js assets/js/site.js assets/js/public-shell.js assets/js/packages-admin.js assets/js/packages.js deploy-patch/assets/js/
+          cp js/universal-admin-page-shell.js js/global-add-canvas.js deploy-patch/js/
+          cp css/global-add-canvas.css deploy-patch/css/
+          for migration in database/[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]_*.sql; do
+            name="$(basename "$migration")"
+            case "$name" in *_demo_*|*_sample_*|*_seed_*) continue ;; esac
+            cp "$migration" deploy-patch/database/
+          done
+          test -f deploy-patch/menu-manager.php
+          test -f deploy-patch/api/menu-drink.php
+          test -f deploy-patch/includes/menu-drink-core.php
+          test -f deploy-patch/assets/js/menu-manager-drink.js
+          test -f deploy-patch/database/20261008_menu_manager_food_builder.sql
+          cat > deploy-patch/README-DEPLOY.txt <<'EOF'
+          Stonefellows / Gelato Menu Manager + Add Drink Builder
+
+          Extract directly into the application web root, preserving folders and
+          overwriting the included files. Then sign in as owner/admin and run
+          upgrade.php -> Upgrade once.
+
+          PR #108 adds a Drink builder to the existing canonical Menu Manager. Drinks
+          share the same menu, POS, KDS, Online Ordering, Package Deals and location
+          distribution model as Food items. The builder supports Fountain, Bottle/Can,
+          Coffee/Tea, Specialty and Other drinks; size/price variants; required choices
+          such as Flavor and Ice; paid add-ons with size-specific pricing; location and
+          channel distribution; Duplicate Drink; Publish, Pause and Archive.
+
+          No new schema migration is introduced by PR #108. This package is dependency-
+          complete and includes the already-required Menu Manager migrations from #107.
+          EOF
+          (cd deploy-patch && zip -qr ../stonefellows-menu-manager-drink-deploy.zip .)
+          unzip -t stonefellows-menu-manager-drink-deploy.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stonefellows-menu-manager-drink-deploy
+          path: stonefellows-menu-manager-drink-deploy.zip
+          if-no-files-found: error
+          retention-days: 30
