@@ -29,7 +29,7 @@ foreach ([
     home_story_assert(str_contains($index, $asset), 'Homepage must register rolling asset '.$asset.'.');
     home_story_assert(str_contains($imagesReadme, '`'.$asset.'`'), 'Public image manifest must register '.$asset.'.');
 }
-home_story_assert(str_contains($index, "is_file(__DIR__ . '/assets/images/' . $storyCandidate)"), 'Homepage must safely fall back when rolling assets are not installed.');
+home_story_assert(str_contains($index, 'is_file(__DIR__ . \'/assets/images/\' . $storyCandidate)'), 'Homepage must safely fall back when rolling assets are not installed.');
 home_story_assert(str_contains($index, 'pizza-story-toppings'), 'Homepage story must show canonical toppings/ingredients.');
 home_story_assert(str_contains($index, 'Special notes'), 'Homepage story must render special notes when present.');
 home_story_assert(str_contains($index, 'home-pizza-scroll.css?v=20260915-2'), 'Homepage must load the current pizza story stylesheet.');
