@@ -1,0 +1,35 @@
+name: Package PR89 Deploy
+on: push
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build direct deploy archive
+        run: |
+          mkdir -p deploy/api deploy/js
+          cp kds.php deploy/
+          cp kds-dashboard.php deploy/
+          cp pos.php deploy/
+          cp api/kds-history.php deploy/api/
+          cp js/kds.js deploy/js/
+          cp js/kds-dashboard.js deploy/js/
+          cp js/pos.js deploy/js/
+          cat > deploy/README-DEPLOY.txt <<'EOF'
+          Stonefellows / Gelato PR #89 deployment
+
+          Extract this ZIP into the application web root and overwrite the included files while preserving the api/ and js/ directories.
+
+          Includes KDS CSRF/timer/history fixes plus the POS hamburger active-ticket drawer, menu scrolling fix, and separate Floor Plan workspace.
+
+          No SQL migration and no upgrade.php run are required.
+          EOF
+          cd deploy
+          zip -r ../stonefellows-kds-pos-operations-deploy.zip .
+          cd ..
+          unzip -t stonefellows-kds-pos-operations-deploy.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stonefellows-kds-pos-operations-deploy
+          path: stonefellows-kds-pos-operations-deploy.zip
+          if-no-files-found: error
