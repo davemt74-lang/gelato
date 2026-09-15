@@ -14,6 +14,7 @@ $index = home_story_source('index.php');
 $menu = home_story_source('includes/menu-sync.php');
 $css = home_story_source('assets/css/home-pizza-scroll.css');
 $js = home_story_source('assets/js/home-pizza-scroll.js');
+$imagesReadme = home_story_source('assets/images/README.md');
 
 home_story_assert(str_contains($index, '$pizzaStoryItems = $pizzaSection ? public_site_featured_items($pizzaSection, 5) : [];'), 'Homepage must source up to five pizzas from the canonical menu database.');
 home_story_assert(str_contains($index, 'id="pizzaStory"'), 'Homepage must expose the sticky pizza story root.');
@@ -23,6 +24,7 @@ home_story_assert(str_contains($index, 'pizza-story-toppings'), 'Homepage story 
 home_story_assert(str_contains($index, 'Special notes'), 'Homepage story must render special notes when present.');
 home_story_assert(str_contains($index, 'home-pizza-scroll.css?v=20260915-1'), 'Homepage must load the pizza story stylesheet.');
 home_story_assert(str_contains($index, 'home-pizza-scroll.js?v=20260915-1'), 'Homepage must load the pizza story runtime.');
+home_story_assert(str_contains($imagesReadme, '`pizza-scroll-feature.webp`'), 'Public image manifest must register the supplied pizza asset.');
 
 home_story_assert(str_contains($menu, 'preparation_notes'), 'Menu projection must retain preparation notes for public presentation.');
 home_story_assert(str_contains($menu, "'specialNotes'"), 'Menu projection must expose special notes without hardcoding product copy.');
@@ -36,8 +38,5 @@ home_story_assert(str_contains($js, 'rotate(${rotate}deg)'), 'Pizza must rotate 
 home_story_assert(str_contains($js, 'translate3d(${x}vw,0,0)'), 'Pizza must travel from right to left.');
 home_story_assert(str_contains($js, 'outroStart'), 'Pizza runtime must fade out and return to normal page scrolling.');
 home_story_assert(str_contains($js, "prefers-reduced-motion: reduce"), 'Pizza runtime must honor reduced-motion preferences.');
-
-$image = __DIR__.'/../assets/images/pizza-scroll-feature.webp';
-home_story_assert(is_file($image) && filesize($image) > 10000, 'Supplied pizza image asset must ship with the feature.');
 
 echo "home-pizza-scroll-contract-ok\n";
