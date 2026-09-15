@@ -1,0 +1,143 @@
+name: Production Runtime Deploy Package
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/production-runtime-deploy.yml'
+      - 'scheduling.php'
+      - 'workspace.php'
+      - 'api/**'
+      - 'includes/**'
+      - 'js/**'
+      - 'css/**'
+      - 'assets/**'
+      - 'data/**'
+      - 'database/**'
+      - 'upgrade.php'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-runtime-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out exact revision
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+
+      - name: Validate source runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            scheduling.php
+            workspace.php
+            js/universal-admin-page-shell.js
+            css/admin-tech-theme.css
+            js/scheduling.js
+            api/scheduling.php
+            api/scheduling-agent.php
+            includes/bootstrap.php
+            includes/scheduling-core.php
+            database/20260913_zzzz_staff_scheduling.sql
+            upgrade.php
+          )
+          for path in "${required[@]}"; do
+            test -f "$path" || { echo "Missing required runtime file: $path"; exit 1; }
+          done
+          php -l scheduling.php
+          php -l workspace.php
+          php -l api/scheduling.php
+          php -l api/scheduling-agent.php
+          php -l includes/bootstrap.php
+          php -l includes/scheduling-core.php
+          node --check js/universal-admin-page-shell.js
+          node --check js/scheduling.js
+
+      - name: Build flat production runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          deploy_root="${RUNNER_TEMP}/stonefellows-runtime"
+          rm -rf "$deploy_root"
+          mkdir -p "$deploy_root"
+
+          rsync -a ./ "$deploy_root/" \
+            --exclude '.git/' \
+            --exclude '.github/' \
+            --exclude 'tests/' \
+            --exclude 'docs/' \
+            --exclude 'uploads/' \
+            --exclude 'storage/' \
+            --exclude 'config.php' \
+            --exclude '.env' \
+            --exclude '*-preview.png' \
+            --exclude 'start-local-server.bat' \
+            --exclude 'start-local-server.sh'
+
+          printf '%s\n' "${GITHUB_SHA}" > "$deploy_root/DEPLOY_SHA.txt"
+          cat > "$deploy_root/DEPLOY_INSTRUCTIONS.txt" <<'EOF'
+          Stonefellows production runtime deploy
+
+          1. Extract the contents of this ZIP directly into the application web root and overwrite included files.
+          2. Preserve the live config.php file. It is intentionally not included in this package.
+          3. Preserve all existing uploads/ and storage/ content. Those directories are intentionally not included.
+          4. Sign in as an owner/admin, open upgrade.php, and run Upgrade once.
+          5. Hard-refresh the browser, then verify workspace.php and scheduling.php before testing the remaining admin pages.
+          EOF
+
+          test ! -e "$deploy_root/.github"
+          test ! -e "$deploy_root/tests"
+          test ! -e "$deploy_root/docs"
+          test ! -e "$deploy_root/config.php"
+          test ! -e "$deploy_root/uploads"
+          test ! -e "$deploy_root/storage"
+
+          required=(
+            scheduling.php
+            workspace.php
+            js/universal-admin-page-shell.js
+            css/admin-tech-theme.css
+            js/scheduling.js
+            api/scheduling.php
+            api/scheduling-agent.php
+            includes/bootstrap.php
+            includes/scheduling-core.php
+            database/20260913_zzzz_staff_scheduling.sql
+            upgrade.php
+            DEPLOY_SHA.txt
+            DEPLOY_INSTRUCTIONS.txt
+          )
+          for path in "${required[@]}"; do
+            test -f "$deploy_root/$path" || { echo "Deploy closure missing: $path"; exit 1; }
+          done
+
+          while IFS= read -r -d '' file; do
+            php -l "$file" >/dev/null
+          done < <(find "$deploy_root" -type f -name '*.php' -print0)
+
+          (cd "$deploy_root" && zip -q -r "$GITHUB_WORKSPACE/stonefellows-runtime-deploy.zip" .)
+          unzip -t "$GITHUB_WORKSPACE/stonefellows-runtime-deploy.zip"
+
+          if zipinfo -1 "$GITHUB_WORKSPACE/stonefellows-runtime-deploy.zip" | grep -Eq '^(\.github/|tests/|docs/|config\.php$|uploads/|storage/)'; then
+            echo 'Forbidden path found in deploy ZIP.'
+            exit 1
+          fi
+
+      - name: Upload exact-revision deploy ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: stonefellows-runtime-deploy
+          path: stonefellows-runtime-deploy.zip
+          if-no-files-found: error
+          retention-days: 14
