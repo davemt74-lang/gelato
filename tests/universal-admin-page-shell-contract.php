@@ -20,7 +20,7 @@ uas_test(is_string($api)&&$api!=='','Admin shell API is missing',5);
 
 uas_test(str_contains($shell,"fetch(`api/admin-shell.php?page="),'Universal shell is not driven by the server shell model',6);
 uas_test(!str_contains($shell,'const pageTitles ='),'Page titles are still duplicated in the browser shell',7);
-uas_test(!str_contains($shell,'const groups ='),'Navigation is still duplicated in the browser shell',8);
+uas_test(str_contains($shell,'const groups = Array.isArray(shell.navigation)'),'Browser shell is not consuming server-provided navigation',8);
 uas_test(!str_contains($shell,'function currentAccount'),'Account identity is still being inferred from localStorage',9);
 uas_test(str_contains($shell,"shell.type !== 'standard'"),'Universal shell does not respect page shell classification',10);
 uas_test(str_contains($shell,'function movePageActions'),'Page-local actions are not preserved inside the canonical header',11);
