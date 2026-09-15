@@ -22,7 +22,7 @@ function admin_shell_has_any(array $user,array $permissions): bool
 function admin_shell_item_allowed(array $user,array $item): bool
 {
     $route=admin_route_access_page((string)($item['href']??''));
-    if($route!=='' && admin_route_access_rule($route)!==null && !admin_route_access_allowed($user,$route)) return false;
+    if($route!=='' && admin_route_access_rule($route)!==null) return admin_route_access_allowed($user,$route);
     if(!empty($item['ownerOnly'])) return admin_shell_is_owner($user);
     if(!empty($item['always'])) return true;
     $permissions=$item['permissions']??[];
