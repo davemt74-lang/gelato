@@ -9,6 +9,8 @@
     'asset_id','lead_id','status','stage','filter','search','q'
   ]);
   const fieldNames = new Set(['week','date','status','stage','filter','location_id','employee_id','user_id']);
+  const knownFilterIds = {weekPicker:'week',datePicker:'date',statusFilter:'status',stageFilter:'stage',locationFilter:'location_id'};
+  const entityDataKeys = {customer:'customer',staff:'employee',employee:'employee',shift:'shift',order:'order',check:'order',ticket:'ticket',table:'table',event:'event',catering:'catering',vendor:'vendor',po:'purchase_order',item:'item',recipe:'recipe',account:'account',asset:'asset',equipment:'equipment',lead:'lead',location:'location'};
   const routeModules = {
     'workspace.php':'workspace','scheduling.php':'scheduling','timeclock.php':'timeclock',
     'employee-home.php':'employee','employee-development.php':'employee','admin.php':'employee',
@@ -65,6 +67,11 @@
 
   function formFilters() {
     const out = {};
+    Object.entries(knownFilterIds).forEach(([id,key]) => {
+      const field = document.getElementById(id);
+      const safe = clean(field?.value, 120);
+      if (safe) out[key] = safe;
+    });
     document.querySelectorAll('select[name],input[name]').forEach((field) => {
       if (Object.keys(out).length >= 8) return;
       const key = clean(field.name, 40).toLowerCase();
@@ -178,6 +185,19 @@
     });
   }
 
+  function entityFromClick(target) {
+    if (!(target instanceof Element)) return;
+    for (const [dataKey,type] of Object.entries(entityDataKeys)) {
+      const node = target.closest(`[data-${dataKey}]`);
+      if (!node) continue;
+      const id = clean(node.dataset[dataKey], 100);
+      if (!id) return;
+      const label = clean(node.querySelector('strong,h1,h2,h3')?.textContent || node.textContent, 120);
+      set({entityType:type,entityId:id,entityLabel:label,filters:state.explicit.filters || {}});
+      return;
+    }
+  }
+
   function set(next = {}) {
     const safe = next && typeof next === 'object' ? next : {};
     state.explicit = {
@@ -203,6 +223,7 @@
 
   window.GelatoAgentPageContext = {snapshot, description, set, clear};
   window.addEventListener('gelato-set-agent-context', (event) => set(event.detail || {}));
+  document.addEventListener('click', (event) => entityFromClick(event.target), true);
   window.addEventListener('gelato-agent-context-change', (event) => updateDrawerContext(event.detail || snapshot()));
   window.addEventListener('gelato-agent-response', (event) => {
     installDrawerEnhancement();
