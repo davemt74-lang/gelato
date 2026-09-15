@@ -30,6 +30,7 @@
   function installOperationsNav() {
     // Floor Planner 2.0 wraps the canonical floor-planner-ops.php runtime.
     addAdminNav('floorplans.view', 'floor-planner-nav', '▦', 'Floor Planner', 'floor-planner-v2.php');
+    addAdminNav('locations.manage', 'locations-nav', '⌖', 'Locations', 'locations-admin.php');
     addAdminNav('equipment.view', 'equipment-nav', '⚙', 'Equipment Catalog', 'equipment.php');
     addAdminNav('wholesale.view', 'wholesale-nav', '◇', 'Wholesale Pipeline', 'wholesale-pipeline.php');
     addAdminNav('wholesale.view', 'wholesale-accounts-nav', '◎', 'Wholesale Customers', 'wholesale-accounts.php');
@@ -60,7 +61,7 @@
   function install() {
     installOperationsNav();
     loadScript('js/global-agent.js?v=20260913-1', 'gelato-global-agent');
-    loadScript('js/admin-shell-consolidation.js?v=20260913-1', 'gelato-admin-shell-consolidation');
+    loadScript('js/admin-shell-consolidation.js?v=20260914-2', 'gelato-admin-shell-consolidation');
     loadScript('js/equipment-module.js', 'equipment-module');
     loadScript('js/catering-module.js', 'catering-module');
     loadScript('js/restaurant-agent-bridge.js', 'restaurant-agent-bridge');
