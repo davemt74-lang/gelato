@@ -1,0 +1,108 @@
+name: Equipment + Maintenance Agent
+
+on:
+  pull_request:
+    paths:
+      - 'api/equipment-agent.php'
+      - 'api/agent-workspace.php'
+      - 'api/brain-orchestrator.php'
+      - 'api/daily-manager-agent.php'
+      - 'includes/equipment-agent-core.php'
+      - 'includes/equipment-agent-brain.php'
+      - 'includes/equipment-brain.php'
+      - 'includes/agent-node-registry.php'
+      - 'includes/agent-workspace-core.php'
+      - 'includes/agent-confirmation-core.php'
+      - 'js/equipment-agent-context.js'
+      - 'equipment.php'
+      - 'equipment-detail.php'
+      - 'tests/equipment-agent-db-lifecycle.php'
+      - '.github/workflows/equipment-maintenance-agent.yml'
+  push:
+    branches: [ main ]
+    paths:
+      - 'api/equipment-agent.php'
+      - 'api/agent-workspace.php'
+      - 'api/brain-orchestrator.php'
+      - 'api/daily-manager-agent.php'
+      - 'includes/equipment-agent-core.php'
+      - 'includes/equipment-agent-brain.php'
+      - 'includes/equipment-brain.php'
+      - 'includes/agent-node-registry.php'
+      - 'includes/agent-workspace-core.php'
+      - 'includes/agent-confirmation-core.php'
+      - 'js/equipment-agent-context.js'
+      - 'equipment.php'
+      - 'equipment-detail.php'
+      - 'tests/equipment-agent-db-lifecycle.php'
+      - '.github/workflows/equipment-maintenance-agent.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  equipment-agent:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_DATABASE: gelato_ci
+          MARIADB_USER: gelato
+          MARIADB_PASSWORD: gelato
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -h 127.0.0.1 -u root -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_NAME: gelato_ci
+      DB_USER: gelato
+      DB_PASS: gelato
+      APP_ENV: test
+      APP_BASE_URL: http://127.0.0.1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, json
+          coverage: none
+      - name: PHP syntax
+        run: |
+          php -l api/equipment-agent.php
+          php -l api/brain-orchestrator.php
+          php -l api/daily-manager-agent.php
+          php -l includes/equipment-agent-core.php
+          php -l includes/equipment-agent-brain.php
+          php -l includes/agent-node-registry.php
+          php -l includes/agent-workspace-core.php
+          php -l tests/equipment-agent-db-lifecycle.php
+      - name: JavaScript syntax
+        run: node --check js/equipment-agent-context.js
+      - name: Equipment routing and safety contract
+        run: |
+          grep -F "'equipment'=>[" includes/agent-node-registry.php
+          grep -F "'route'=>'api/equipment-agent.php'" includes/agent-node-registry.php
+          grep -F "gac_pending_store('equipment'" includes/equipment-agent-core.php
+          grep -F "SELECT * FROM equipment_assets WHERE organization_id=? AND public_id=?" includes/equipment-agent-core.php
+          grep -F "equipment_agent_assert_fresh" includes/equipment-agent-core.php
+          grep -F "equipment_agent_merge_brain_snapshot" api/brain-orchestrator.php
+          grep -F "node'=>'purchasing'" includes/equipment-agent-core.php
+          if grep -Eq "INSERT INTO purchase_orders|UPDATE purchase_orders|DELETE FROM purchase_orders" includes/equipment-agent-core.php; then
+            echo 'Equipment Agent must not mutate purchasing records directly.' >&2
+            exit 1
+          fi
+      - name: Install and upgrade schema
+        run: |
+          mariadb -h 127.0.0.1 -u gelato -pgelato gelato_ci < database/install.sql
+          php -r 'require "includes/bootstrap.php"; require "includes/upgrade-service.php"; $svc=new UpgradeService(app_pdo(), __DIR__."/database"); $svc->applyPending();'
+      - name: DB-backed Propose Confirm Execute lifecycle
+        run: php tests/equipment-agent-db-lifecycle.php
+      - name: Upgrader idempotence
+        run: php -r 'require "includes/bootstrap.php"; require "includes/upgrade-service.php"; $svc=new UpgradeService(app_pdo(), __DIR__."/database"); $applied=$svc->applyPending(); if ($applied !== []) { fwrite(STDERR,"Unexpected pending migrations: ".json_encode($applied).PHP_EOL); exit(1); } echo "Upgrade idempotence passed.\n";'
