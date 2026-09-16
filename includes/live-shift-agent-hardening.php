@@ -34,7 +34,7 @@ function live_shift_hardened_handle(PDO $pdo,array $user,array $pageContext,stri
     if(preg_match('/\b(?:assign|transfer|change)\s+(?:the\s+)?server(?:\s+(?:for|on)\s+(?:this\s+)?(?:check|table|order))?\s+(?:to\s+)?(.+)$/iu',$text,$m)){
         if(!app_has_permission('table_service.use',$user)||!operational_location_allowed($pdo,$user,'table_service.use',$locationId))throw new DomainException('Table Service operating permission is required for server assignment.');
         $check=live_shift_check($snapshot,$pageContext,$text);$staff=live_shift_staff($snapshot,$m[1]);
-        $updated=table_service_assign_server($pdo,$org,(string)$check['publicId'],(int)$staff['id'],$uid);
+        $updated=service_ops_assign_server($pdo,$org,(string)$check['publicId'],(int)$staff['id'],$uid);
         app_audit($pdo,$org,$uid,'agent.live_shift.server_assigned','pos_check',(string)$check['publicId'],null,['sourceNode'=>'live_shift','locationId'=>$locationId,'serverUserId'=>$staff['id']]);
         return ['answer'=>'Assigned '.$staff['name'].' to '.$check['checkNumber'].'.','sources'=>['Table Service staff assignment'],'check'=>$updated,'locationId'=>$locationId,'node'=>'live_shift'];
     }
