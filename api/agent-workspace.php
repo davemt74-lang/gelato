@@ -9,7 +9,7 @@ require_once __DIR__.'/../includes/menu-training-knowledge.php';
 // Compatibility route markers for older CI/contracts. Canonical routing now lives in includes/agent-node-registry.php.
 // api/admin-dashboard-agent.php api/daily-manager-agent.php api/sales-cost-agent.php api/sales-agent.php
 // api/employee-development-agent.php api/employee-agent.php api/purchasing-agent.php api/scheduling-agent.php api/pos-agent.php
-// api/customer-crm-agent.php api/prep-intelligence-agent.php api/operations-agent.php api/kds-agent.php
+// api/customer-crm-agent.php api/prep-intelligence-agent.php api/operations-agent.php api/kds-agent.php api/live-shift-agent.php
 
 $user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];$uid=(int)$user['id'];
 if(!gaw_ready($pdo))app_json_response(['ok'=>false,'message'=>'Agent Workspace migration is not installed. Run upgrade.php.'],503);
@@ -25,7 +25,7 @@ if($_SERVER['REQUEST_METHOD']==='GET'){
     if($action==='threads')app_json_response(['ok'=>true,'threads'=>gaw_threads($pdo,$org,$uid,80)]);
     app_json_response(['ok'=>false,'message'=>'Unsupported Agent Workspace action.'],422);
 }
-if($_SERVER['REQUEST_METHOD']!=='POST'){header('Allow: GET, POST');app_json_response(['ok'=>false,'message'=>'Method not allowed.'],405);} 
+if($_SERVER['REQUEST_METHOD']!=='POST'){header('Allow: GET, POST');app_json_response(['ok'=>false,'message'=>'Method not allowed.'],405);}
 $in=app_json_input();app_verify_request_csrf($in);$action=(string)($in['action']??'');
 try{
     if($action==='new_thread'){$thread=gaw_create_thread($pdo,$org,$uid,(string)($in['channel']??'text'));app_audit($pdo,$org,$uid,'agent.thread_created','agent_conversation',(string)$thread['public_id']);app_json_response(['ok'=>true,'thread'=>$thread]);}
@@ -36,12 +36,14 @@ try{
         $pageContext=is_array($in['pageContext']??null)?$in['pageContext']:[];
         $module=(string)($pageContext['module']??'');
         $isPosContext=$module==='pos'&&app_has_permission('pos.use',$user);
+        $isTableServiceContext=$module==='table_service'&&app_has_permission('table_service.view',$user);
         $isSchedulingContext=$module==='scheduling'&&app_has_permission('schedule.agent',$user);
         $isPurchasingContext=$module==='purchasing'&&app_has_permission('purchasing.agent',$user)&&app_has_permission('purchasing.view',$user);
         $isCrmContext=$module==='crm'&&app_has_permission('crm.view',$user);
         $isPrepContext=$module==='prep'&&app_has_permission('prep.intelligence.view',$user)&&app_has_permission('prep.intelligence.agent',$user);
         $isOperationsContext=$module==='operations'&&((app_has_permission('tasks.agent',$user)&&app_has_permission('tasks.view',$user))||(app_has_permission('inventory.agent',$user)&&app_has_permission('inventory.view',$user)));
         $isKdsContext=$module==='kds'&&app_has_permission('kds.view',$user);
+        $canLiveShift=app_has_permission('table_service.view',$user)||app_has_permission('pos.use',$user)||app_has_permission('kds.view',$user);
         $confirmationIntent=preg_match('/^(?:confirm|yes|yes please|do it|go ahead|execute|apply|cancel|cancel it|discard|never mind|nevermind|stop)(?:\s+(?:it|that|change|action))?[.!]?$/u',$text)===1;
         if($confirmationIntent){
             $pendingNode=gaw_pending_action_node($org,$uid);
@@ -51,6 +53,9 @@ try{
             if($pendingNode==='purchasing'&&app_has_permission('purchasing.agent',$user)&&app_has_permission('purchasing.view',$user))app_json_response(['ok'=>true]+gaw_node_route('purchasing','purchasing_confirmation'));
             if($pendingNode==='scheduling'&&app_has_permission('schedule.agent',$user))app_json_response(['ok'=>true]+gaw_node_route('scheduling','scheduling_confirmation'));
         }
+
+        $liveShiftIntent=preg_match('/\b(live shift|run the shift|shift status|service status|service priorities|floor status|ready food|food up|run food|what needs attention right now|what should (?:i|we) do right now|what is holding up (?:table|bar seat|check|ticket)|move .*\b(?:table|bar seat)\b|transfer .*\b(?:table|bar seat)\b|assign .*\bserver\b|change .*\bserver\b|seat .*\b(?:table|bar seat)\b|send .*\bkitchen\b|send .*\bheld\b|fire (?:drinks|starters|mains|dessert|other)|hold (?:drinks|starters|mains|dessert|other)|attach customer|remove .*\b(?:check|ticket|order)\b|add .*\b(?:check|ticket|order)\b|(?:void|discount|comp|refund) (?:this|the))\b/u',$text)===1;
+        if($liveShiftIntent&&$canLiveShift)app_json_response(['ok'=>true]+gaw_node_route('live_shift'));
 
         $kdsIntent=preg_match('/\b(kds|kitchen display|kitchen tickets?|kitchen orders?|expo|all day (?:count|counts|items?|kitchen)|(?:kitchen|item|items) all day|ready to bump|unrouted kitchen|station load|late kitchen|late tickets?|held tickets?|order history.*kitchen|kitchen.*order history)\b/u',$text)===1;
         if($kdsIntent&&app_has_permission('kds.view',$user))app_json_response(['ok'=>true]+gaw_node_route('kds'));
@@ -83,6 +88,11 @@ try{
         if($handoffIntent&&(app_has_permission('employee.handoffs.view',$user)||app_has_permission('employee.handoffs.create',$user)||app_has_permission('employee.handoffs.manage',$user)||app_has_permission('employee.self',$user)||app_has_permission('agent.employee_view',$user)))app_json_response(['ok'=>true]+gaw_node_route('employee_handoff'));
 
         $fallback=gaw_route($user,$message);
+        if($isTableServiceContext){
+            $fallbackDomain=(string)($fallback['domain']??'general');
+            $localIntent=preg_match('/\b(this table|selected table|this bar seat|selected bar seat|this check|selected check|this order|server|seat|party|transfer|move|fire|hold|send|unsent|ready|late|food|kitchen|turn|reset|reservation|attach customer|add item|remove item|item note|what needs attention|what should we do|what(?:\x27s| is) going on)\b/u',$text)===1;
+            if(in_array($fallbackDomain,['general','restaurant_brain','operations'],true)&&$localIntent)app_json_response(['ok'=>true]+gaw_node_route('live_shift','live_shift_context'));
+        }
         if($isKdsContext){
             $fallbackDomain=(string)($fallback['domain']??'general');
             $localIntent=preg_match('/\b(this order|selected order|this ticket|selected ticket|this item|order number|ticket number|table|special instructions?|mods?|late|ready|held|unrouted|station|all day|kitchen|orders?|tickets?|what(?:\x27s| is) next|what just came in|newest|latest|history|status|summary|what(?:\x27s| is) going on)\b/u',$text)===1;
@@ -114,6 +124,8 @@ try{
             if(in_array($fallbackDomain,['general','restaurant_brain'],true)&&($localIntent||$confirmationIntent))app_json_response(['ok'=>true]+gaw_node_route('scheduling','scheduling_context'));
         }
         if($isPosContext){
+            $posActionIntent=preg_match('/\b(move|transfer|assign server|change server|seat|send|fire|hold|attach customer|remove|delete|add item|item note|void|discount|comp|refund)\b/u',$text)===1;
+            if($posActionIntent&&$canLiveShift)app_json_response(['ok'=>true]+gaw_node_route('live_shift','live_shift_pos_context'));
             $posIntent=preg_match('/\b(current check|this check|current order|this order|cart|guest|customer|regular|repeat customer|favorite|favourite|usual|promotion|promotions|promo|reward|rewards|offer|offers|coupon|coupons|deal|deals|previous orders?|recent orders?|order history|menu|menu item|pizza|gelato|ingredient|ingredients|allergen|allergens|allergy|allergies|gluten|dairy|milk|egg|nuts?|peanut|wheat|soy|sesame|shellfish|fish|prep|prepare|preparation|cook|cooking|service note|menu note|price|prices|how much|size|sizes|option|options|recommend|recommendation|suggest)\b/u',$text)===1;
             $fallbackDomain=(string)($fallback['domain']??'general');
             $otherSpecialized=!in_array($fallbackDomain,['general','restaurant_brain'],true);
