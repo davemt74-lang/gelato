@@ -5,6 +5,7 @@ on:
     paths:
       - 'pos.php'
       - 'api/pos.php'
+      - 'api/pos-item-remove.php'
       - 'api/pos-agent.php'
       - 'api/agent-workspace.php'
       - 'api/menu-knowledge.php'
@@ -23,6 +24,7 @@ on:
       - 'database/20261001_system_user_types_pos_order_types.sql'
       - 'tests/native-pos-contract.php'
       - 'tests/pos-contextual-agent-contract.php'
+      - 'tests/pos-ticket-agent-hardening-contract.php'
       - 'tests/system-user-pos-types-contract.php'
       - '.github/workflows/native-pos.yml'
   push:
@@ -51,6 +53,7 @@ jobs:
         run: |
           php -l pos.php
           php -l api/pos.php
+          php -l api/pos-item-remove.php
           php -l api/pos-agent.php
           php -l api/agent-workspace.php
           php -l api/menu-knowledge.php
@@ -58,6 +61,7 @@ jobs:
           php -l includes/menu-training-knowledge.php
           php -l tests/native-pos-contract.php
           php -l tests/pos-contextual-agent-contract.php
+          php -l tests/pos-ticket-agent-hardening-contract.php
           php -l tests/system-user-pos-types-contract.php
           node --check js/pos.js
           node --check js/pos-runtime.js
@@ -128,6 +132,8 @@ jobs:
         run: php tests/native-pos-contract.php
       - name: POS contextual Agent contract
         run: php tests/pos-contextual-agent-contract.php
+      - name: POS ticket context and removal contract
+        run: php tests/pos-ticket-agent-hardening-contract.php
       - name: Existing Sales + Demand regression
         run: php tests/sales-demand-intelligence-contract.php
       - name: Existing Sales Cost + Margin regression
