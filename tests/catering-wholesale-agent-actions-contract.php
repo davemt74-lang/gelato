@@ -19,7 +19,7 @@ $loader=cw_file('js/global-add-canvas.js');
 cw_assert(str_contains($registry,"'catering'=>[")&&str_contains($registry,"'route'=>'api/catering-agent.php'")&&str_contains($registry,"'mode'=>'read_confirmed_write'"),'Catering node is not registered as confirmed-write.');
 cw_assert(str_contains($registry,"'wholesale'=>[")&&str_contains($registry,"'route'=>'api/wholesale-agent.php'"),'Wholesale node is not registered.');
 cw_assert(str_contains($workspace,'$isCateringContext=')&&str_contains($workspace,'$isWholesaleContext='),'Main Agent lacks Catering/Wholesale page context routing.');
-cw_assert(str_contains($workspace,"$pendingNode==='catering'")&&str_contains($workspace,"$pendingNode==='wholesale'"),'Main Agent confirmation routing is missing Catering/Wholesale.');
+cw_assert(str_contains($workspace,"\$pendingNode==='catering'")&&str_contains($workspace,"\$pendingNode==='wholesale'"),'Main Agent confirmation routing is missing Catering/Wholesale.');
 cw_assert(str_contains($workspace,"gaw_node_route('catering','catering_context')")&&str_contains($workspace,"gaw_node_route('wholesale','wholesale_context')"),'Main Agent contextual node routes are missing.');
 
 cw_assert(str_contains($catering,"gac_pending_store('catering'")&&str_contains($catering,"gac_pending_get('catering'"),'Catering actions do not use shared confirmation storage.');
