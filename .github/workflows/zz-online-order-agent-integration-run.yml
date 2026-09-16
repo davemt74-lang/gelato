@@ -25,6 +25,11 @@ jobs:
           start=source.index('# Normalize the temporary registry tripwire')
           end=source.index('# Shared fallback routing.')
           safe=source[:start]+source[end:]
+          before, marker, after = safe.partition('# Production runtime closure.')
+          if not marker:
+              raise SystemExit('production runtime marker missing')
+          before = before.replace(', 2),', ', 1),')
+          safe = before + marker + after
           exec(compile(safe,str(path),'exec'),{'__name__':'__main__'})
           PY
       - name: Validate patched source
