@@ -6,6 +6,7 @@ require_once __DIR__.'/../includes/pos-core.php';
 require_once __DIR__.'/../includes/customer-crm-agent-extensions.php';
 require_once __DIR__.'/../includes/customer-crm-brain.php';
 require_once __DIR__.'/../includes/agent-node-registry.php';
+require_once __DIR__.'/../includes/agent-workspace-core.php';
 require_once __DIR__.'/../includes/operations-core.php';
 
 $pdo=app_pdo();
