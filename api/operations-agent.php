@@ -4,8 +4,9 @@ require __DIR__ . '/../includes/bootstrap.php';
 require __DIR__ . '/../includes/operations-core.php';
 require_once __DIR__ . '/../includes/operations-wholesale.php';
 require_once __DIR__ . '/../includes/operations-wholesale-agent.php';
+require_once __DIR__ . '/../includes/agent-confirmation-core.php';
 $user=app_require_auth();$pdo=app_pdo();$organizationId=(int)$user['organization_id'];$userId=(int)$user['id'];
-$canTasks=app_has_permission('tasks.agent',$user)&&app_has_permission('tasks.view',$user);$canInventory=app_has_permission('inventory.agent',$user)&&app_has_permission('inventory.view',$user);if(!$canTasks&&!$canInventory)app_json_response(['ok'=>false,'message'=>'Operations Agent permission required.'],403);if(!operations_core_ready($pdo))app_json_response(['ok'=>false,'message'=>'Operations Core migration is not installed. Run upgrade.php.'],503);operations_sync_wholesale_tasks($pdo,$organizationId,$userId);
+$canTasks=app_has_permission('tasks.agent',$user)&&app_has_permission('tasks.view',$user);$canInventory=app_has_permission('inventory.agent',$user)&&app_has_permission('inventory.view',$user);if(!$canTasks&&!$canInventory)app_json_response(['ok'=>false,'message'=>'Operations Agent permission required.'],403);if(!operations_core_ready($pdo))app_json_response(['ok'=>false,'message'=>'Operations Core migration is not installed. Run upgrade.php.'],503);
 
 function ops_agent_split_items(string $text):array
 {
@@ -51,6 +52,35 @@ function ops_agent_task_create(PDO $pdo,int $organizationId,int $userId,string $
 {
     $parsed=ops_agent_parse_task_item($item);return operations_create_task($pdo,$organizationId,['title'=>$parsed['title'],'category'=>$category,'quantity'=>$parsed['quantity'],'unit'=>$parsed['unit'],'transcript'=>$transcript,'aiConfidence'=>1.0,'assigneeIds'=>$assigneeIds],$userId);
 }
+function ops_agent_execute_pending(PDO $pdo,int $organizationId,int $userId,array $user,array $proposal):array
+{
+    if((int)($proposal['organizationId']??0)!==$organizationId||(int)($proposal['userId']??0)!==$userId)throw new RuntimeException('This Operations Agent proposal does not belong to your session.');
+    $type=(string)$proposal['type'];$payload=(array)$proposal['payload'];
+    if($type==='category_create'){
+        if(!app_has_permission('tasks.manage',$user))throw new RuntimeException('Task management permission is required to add a category.');
+        $category=operations_create_category($pdo,$organizationId,(string)$payload['name'],$userId);
+        return ['ok'=>true,'skill'=>'operations.action_confirmed','answer'=>'Confirmed. Created the task category “'.$category['name'].'”.','data'=>['action'=>'category_create','category'=>$category],'sources'=>[(string)$category['public_id']]];
+    }
+    if($type==='prep_tasks'||$type==='task_create'){
+        if(!app_has_permission('tasks.manage',$user))throw new RuntimeException('Task management permission is required to create tasks.');
+        $created=[];$category=$type==='prep_tasks'?'prep':'general';
+        foreach((array)($payload['items']??[]) as $item)$created[]=ops_agent_task_create($pdo,$organizationId,$userId,(string)$item,$category,(string)($payload['transcript']??''),(array)($payload['assigneeIds']??[]));
+        if(!$created)throw new InvalidArgumentException('The pending task proposal no longer contains valid items.');
+        $names=array_column($created,'title');
+        return ['ok'=>true,'skill'=>'operations.action_confirmed','answer'=>'Confirmed. Added '.count($created).' '.($type==='prep_tasks'?'prep item(s)':'task(s)').': '.implode(', ',$names).'.','data'=>['action'=>$type,'tasks'=>$created],'sources'=>array_column($created,'public_id')];
+    }
+    if($type==='inventory_sync'){
+        if(!app_has_permission('inventory.manage',$user))throw new RuntimeException('Inventory management permission is required to synchronize inventory sources.');
+        $result=operations_sync_inventory_sources($pdo,$organizationId,$userId);
+        return ['ok'=>true,'skill'=>'operations.action_confirmed','answer'=>'Confirmed. Inventory synchronized from the menu ingredient catalog and active recipes. '.$result['items'].' ingredient records were touched, covering '.$result['menuReferences'].' menu references and '.$result['recipeReferences'].' recipe references.','data'=>['action'=>'inventory_sync','result'=>$result],'sources'=>[]];
+    }
+    if($type==='wholesale_task_sync'){
+        if(!app_has_permission('tasks.manage',$user))throw new RuntimeException('Task management permission is required to synchronize wholesale fulfillment tasks.');
+        $result=operations_sync_wholesale_tasks($pdo,$organizationId,$userId);
+        return ['ok'=>true,'skill'=>'operations.action_confirmed','answer'=>'Confirmed. Synchronized wholesale fulfillment tasks from current wholesale orders.','data'=>['action'=>'wholesale_task_sync','result'=>$result],'sources'=>['Wholesale Orders','Restaurant Tasks']];
+    }
+    throw new InvalidArgumentException('That pending Operations Agent action is no longer supported.');
+}
 
 if($_SERVER['REQUEST_METHOD']==='GET'){
     $summary=operations_core_summary($pdo,$organizationId);$alerts=[];if((int)$summary['overdue']>0)$alerts[]=$summary['overdue'].' task(s) are overdue.';if((int)$summary['lowStock']>0)$alerts[]=$summary['lowStock'].' inventory item(s) are at or below reorder point.';app_json_response(['ok'=>true,'skill'=>'operations.proactive_summary','summary'=>$summary,'alerts'=>$alerts]);
@@ -59,18 +89,36 @@ if($_SERVER['REQUEST_METHOD']!=='POST'){header('Allow: GET, POST');app_json_resp
 $input=app_json_input();app_verify_request_csrf($input);$message=trim((string)($input['message']??''));if($message===''||mb_strlen($message,'UTF-8')>4000)app_json_response(['ok'=>false,'message'=>'Enter an operations request no longer than 4,000 characters.'],422);$normalized=mb_strtolower(preg_replace('/^hey\s+gelato[,\s]*/i','',$message)??$message,'UTF-8');
 
 try{
+    $pending=gac_pending_get('operations',$organizationId,$userId);
+    if(gac_is_confirm($message)){
+        if(!$pending)throw new InvalidArgumentException('There is no pending Operations Agent action to confirm.');
+        try{$result=ops_agent_execute_pending($pdo,$organizationId,$userId,$user,$pending);}catch(Throwable $e){gac_pending_clear('operations',$organizationId,$userId);throw $e;}
+        gac_pending_clear('operations',$organizationId,$userId);app_audit($pdo,$organizationId,$userId,'operations.agent_action_confirmed','operations_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);app_json_response($result);
+    }
+    if(gac_is_cancel($message)&&$pending){
+        gac_pending_clear('operations',$organizationId,$userId);app_audit($pdo,$organizationId,$userId,'operations.agent_action_discarded','operations_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);app_json_response(['ok'=>true,'skill'=>'operations.action_cancelled','answer'=>'Cancelled. I did not change restaurant tasks or inventory.','data'=>['cancelledProposal'=>$pending['id']],'sources'=>['Restaurant Operations']]);
+    }
+
     if($canTasks&&preg_match('/\badd\s+(?:a\s+)?task\s+category(?:\s+(?:called|named))?\s+(.+)$/iu',$normalized,$m)){
-        if(!app_has_permission('tasks.manage',$user))app_json_response(['ok'=>false,'message'=>'Task management permission is required to add a category.'],403);$name=trim($m[1]," .\t\n\r");$category=operations_create_category($pdo,$organizationId,ucwords($name),$userId);app_audit($pdo,$organizationId,$userId,'agent.task_category_created','task_category',(string)$category['public_id'],null,['message'=>$message]);app_json_response(['ok'=>true,'skill'=>'tasks.category_create','answer'=>'Created the task category “'.$category['name'].'”.','data'=>$category,'sources'=>[(string)$category['public_id']]]);
+        if(!app_has_permission('tasks.manage',$user))app_json_response(['ok'=>false,'message'=>'Task management permission is required to add a category.'],403);$name=trim($m[1]," .\t\n\r");
+        $proposal=gac_pending_store('operations',$organizationId,$userId,'category_create',['name'=>ucwords($name)],'Proposed action: create the restaurant task category “'.ucwords($name).'”.');app_audit($pdo,$organizationId,$userId,'operations.agent_action_proposed','operations_agent_proposal',(string)$proposal['id'],null,['type'=>'category_create']);app_json_response(gac_proposal_result($proposal,'operations.action_proposal',['Restaurant Tasks → Categories']));
     }
     if($canTasks&&(preg_match('/\badd(?:\s+these|\s+the following)?(?:\s+items?)?\s+to\s+(?:the\s+)?prep\s+list\s*[:,-]?\s*(.+)$/iu',$normalized,$m)||preg_match('/\b(?:add|put)\s+(.+?)\s+(?:to|on)\s+(?:the\s+)?prep\s+list\b(.*)$/iu',$normalized,$m))){
         if(!app_has_permission('tasks.manage',$user))app_json_response(['ok'=>false,'message'=>'Task management permission is required to add prep tasks.'],403);
-        $taskText=trim(($m[1]??'').' '.($m[2]??''));$assignmentRequested=false;$assigneeIds=ops_agent_extract_assignees($pdo,$organizationId,$taskText,$assignmentRequested);if($assignmentRequested&&!$assigneeIds)app_json_response(['ok'=>false,'message'=>'I could not match that employee name to an active restaurant staff account. Say the employee name as it appears in the staff account.'],422);$items=ops_agent_split_items($taskText);if(!$items)app_json_response(['ok'=>false,'message'=>'Tell me which prep items to add.'],422);$created=[];foreach(array_slice($items,0,30) as $item)$created[]=ops_agent_task_create($pdo,$organizationId,$userId,$item,'prep',$message,$assigneeIds);$names=array_column($created,'title');$assigneeNote=$assigneeIds?' and tagged '.count($assigneeIds).' employee(s)':'';app_audit($pdo,$organizationId,$userId,'agent.prep_tasks_created','restaurant_task','prep',null,['count'=>count($created),'assigneeIds'=>$assigneeIds,'message'=>$message]);app_json_response(['ok'=>true,'skill'=>'tasks.prep_add','answer'=>'Added '.count($created).' item(s) to the prep list'.$assigneeNote.': '.implode(', ',$names).'.','data'=>$created,'sources'=>array_column($created,'public_id')]);
+        $taskText=trim(($m[1]??'').' '.($m[2]??''));$assignmentRequested=false;$assigneeIds=ops_agent_extract_assignees($pdo,$organizationId,$taskText,$assignmentRequested);if($assignmentRequested&&!$assigneeIds)app_json_response(['ok'=>false,'message'=>'I could not match that employee name to an active restaurant staff account. Say the employee name as it appears in the staff account.'],422);$items=ops_agent_split_items($taskText);if(!$items)app_json_response(['ok'=>false,'message'=>'Tell me which prep items to add.'],422);
+        $proposal=gac_pending_store('operations',$organizationId,$userId,'prep_tasks',['items'=>array_slice($items,0,30),'assigneeIds'=>$assigneeIds,'transcript'=>$message],'Proposed action: add '.count(array_slice($items,0,30)).' item(s) to the restaurant prep task list'.($assigneeIds?' and tag '.count($assigneeIds).' employee(s)':'').': '.implode(', ',array_slice($items,0,8)).(count($items)>8?'…':'').'.');app_audit($pdo,$organizationId,$userId,'operations.agent_action_proposed','operations_agent_proposal',(string)$proposal['id'],null,['type'=>'prep_tasks','count'=>count($items)]);app_json_response(gac_proposal_result($proposal,'operations.action_proposal',['Restaurant Tasks → Prep']));
     }
     if($canTasks&&preg_match('/\badd\s+(?:a\s+)?task\s*[:,-]?\s*(.+)$/iu',$normalized,$m)){
-        if(!app_has_permission('tasks.manage',$user))app_json_response(['ok'=>false,'message'=>'Task management permission is required to add tasks.'],403);$taskText=trim($m[1]);$assignmentRequested=false;$assigneeIds=ops_agent_extract_assignees($pdo,$organizationId,$taskText,$assignmentRequested);if($assignmentRequested&&!$assigneeIds)app_json_response(['ok'=>false,'message'=>'I could not match that employee name to an active restaurant staff account.'],422);$task=ops_agent_task_create($pdo,$organizationId,$userId,$taskText,'general',$message,$assigneeIds);app_audit($pdo,$organizationId,$userId,'agent.task_created','restaurant_task',(string)$task['public_id'],null,['assigneeIds'=>$assigneeIds,'message'=>$message]);app_json_response(['ok'=>true,'skill'=>'tasks.create','answer'=>'Added the task “'.$task['title'].'”'.($assigneeIds?' and tagged the requested employee(s)':'').'.','data'=>$task,'sources'=>[(string)$task['public_id']]]);
+        if(!app_has_permission('tasks.manage',$user))app_json_response(['ok'=>false,'message'=>'Task management permission is required to add tasks.'],403);$taskText=trim($m[1]);$assignmentRequested=false;$assigneeIds=ops_agent_extract_assignees($pdo,$organizationId,$taskText,$assignmentRequested);if($assignmentRequested&&!$assigneeIds)app_json_response(['ok'=>false,'message'=>'I could not match that employee name to an active restaurant staff account.'],422);
+        $proposal=gac_pending_store('operations',$organizationId,$userId,'task_create',['items'=>[$taskText],'assigneeIds'=>$assigneeIds,'transcript'=>$message],'Proposed action: create the restaurant task “'.$taskText.'”'.($assigneeIds?' and tag the requested employee(s)':'').'.');app_audit($pdo,$organizationId,$userId,'operations.agent_action_proposed','operations_agent_proposal',(string)$proposal['id'],null,['type'=>'task_create']);app_json_response(gac_proposal_result($proposal,'operations.action_proposal',['Restaurant Tasks']));
     }
     if($canInventory&&preg_match('/\b(?:build|create|sync|refresh|update)\b.*\binventory\b.*\b(?:menu|recipe|recipes|sources)\b/iu',$normalized)){
-        if(!app_has_permission('inventory.manage',$user))app_json_response(['ok'=>false,'message'=>'Inventory management permission is required to synchronize inventory sources.'],403);$result=operations_sync_inventory_sources($pdo,$organizationId,$userId);app_audit($pdo,$organizationId,$userId,'agent.inventory_synced','inventory','all',null,$result);app_json_response(['ok'=>true,'skill'=>'inventory.sync','answer'=>'Inventory synchronized from the menu ingredient catalog and active recipes. '.$result['items'].' ingredient records were touched, covering '.$result['menuReferences'].' menu references and '.$result['recipeReferences'].' recipe references.','data'=>$result,'sources'=>[]]);
+        if(!app_has_permission('inventory.manage',$user))app_json_response(['ok'=>false,'message'=>'Inventory management permission is required to synchronize inventory sources.'],403);
+        $proposal=gac_pending_store('operations',$organizationId,$userId,'inventory_sync',[],'Proposed action: synchronize canonical inventory items and menu/recipe source references.');app_audit($pdo,$organizationId,$userId,'operations.agent_action_proposed','operations_agent_proposal',(string)$proposal['id'],null,['type'=>'inventory_sync']);app_json_response(gac_proposal_result($proposal,'operations.action_proposal',['Inventory','Menu Ingredient Catalog','Recipes']));
+    }
+    if($canTasks&&preg_match('/\b(?:sync|refresh|update)\b.*\bwholesale\b.*\b(?:tasks?|fulfillment|orders?)\b/iu',$normalized)){
+        if(!app_has_permission('tasks.manage',$user))app_json_response(['ok'=>false,'message'=>'Task management permission is required to synchronize wholesale fulfillment tasks.'],403);
+        $proposal=gac_pending_store('operations',$organizationId,$userId,'wholesale_task_sync',[],'Proposed action: synchronize restaurant wholesale fulfillment tasks from the current wholesale order pipeline.');app_audit($pdo,$organizationId,$userId,'operations.agent_action_proposed','operations_agent_proposal',(string)$proposal['id'],null,['type'=>'wholesale_task_sync']);app_json_response(gac_proposal_result($proposal,'operations.action_proposal',['Wholesale Orders','Restaurant Tasks']));
     }
     if($canTasks&&(preg_match('/\bwholesale\b.*\b(order|orders|production|fulfillment)\b/iu',$normalized)||preg_match('/\b(order|orders)\b.*\bwholesale\b/iu',$normalized))){$result=operations_agent_wholesale_answer($pdo,$organizationId,$message);app_audit($pdo,$organizationId,$userId,'agent.operations_skill_used','agent_skill',$result['skill'],null,['message'=>mb_substr($message,0,500,'UTF-8')]);app_json_response(['ok'=>true]+$result);}
     if($canInventory&&preg_match('/\b(inventory|stock|par|reorder|shortage|running out|ingredient)\b/iu',$normalized)){$result=operations_agent_inventory_answer($pdo,$organizationId,$message);app_audit($pdo,$organizationId,$userId,'agent.operations_skill_used','agent_skill',$result['skill'],null,['message'=>mb_substr($message,0,500,'UTF-8')]);app_json_response(['ok'=>true]+$result);}
