@@ -76,7 +76,7 @@ function customer_crm_agent_enhanced_handle(PDO $pdo,array $user,array $input): 
     $resolved=cae_context_customer($pdo,$user,$input);$customer=$resolved['customer'];$context=is_array($input['pageContext']??null)?$input['pageContext']:[];$module=(string)($context['module']??'');
     $crossContext=in_array($module,['pos','table_service','kds'],true);
 
-    if($crossContext&&cae_relationship_intent($message)&&!$customer){
+    if($crossContext&&(cae_relationship_intent($message)||cae_followup_intent($message))&&!$customer){
         $check=$resolved['check'];$label=$check?((string)$check['checkNumber']):'this check';
         return ['ok'=>true,'skill'=>'crm.context_unlinked','answer'=>'No CRM customer is attached to '.$label.' yet. Attach a customer first if you want relationship history, favorites, prior visits, birthday context, or consent-aware follow-up.','data'=>['check'=>$check,'customer'=>null],'sources'=>['POS Customer Link']];
     }
