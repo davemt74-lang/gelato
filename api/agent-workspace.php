@@ -9,7 +9,7 @@ require_once __DIR__.'/../includes/menu-training-knowledge.php';
 // Compatibility route markers for older CI/contracts. Canonical routing now lives in includes/agent-node-registry.php.
 // api/admin-dashboard-agent.php api/daily-manager-agent.php api/sales-cost-agent.php api/sales-agent.php
 // api/employee-development-agent.php api/employee-agent.php api/purchasing-agent.php api/scheduling-agent.php api/pos-agent.php
-// api/customer-crm-agent.php api/catering-agent.php api/wholesale-agent.php api/prep-intelligence-agent.php api/operations-agent.php api/kds-agent.php api/live-shift-agent.php
+// api/customer-crm-agent.php api/catering-agent.php api/wholesale-agent.php api/prep-intelligence-agent.php api/operations-agent.php api/kds-agent.php api/live-shift-agent.php api/front-of-house-agent.php
 
 $user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];$uid=(int)$user['id'];
 if(!gaw_ready($pdo))app_json_response(['ok'=>false,'message'=>'Agent Workspace migration is not installed. Run upgrade.php.'],503);
@@ -37,6 +37,7 @@ try{
         $module=(string)($pageContext['module']??'');
         $isPosContext=$module==='pos'&&app_has_permission('pos.use',$user);
         $isTableServiceContext=$module==='table_service'&&app_has_permission('table_service.view',$user);
+        $isHostStandContext=$module==='host_stand'&&app_has_permission('host.view',$user)&&(app_has_permission('table_service.view',$user)||app_has_permission('host.use',$user)||app_has_permission('host.manage',$user));
         $isSchedulingContext=$module==='scheduling'&&app_has_permission('schedule.agent',$user);
         $isPurchasingContext=$module==='purchasing'&&app_has_permission('purchasing.agent',$user)&&app_has_permission('purchasing.view',$user);
         $isCrmContext=$module==='crm'&&app_has_permission('crm.view',$user);
@@ -49,6 +50,7 @@ try{
         $confirmationIntent=preg_match('/^(?:confirm|yes|yes please|do it|go ahead|execute|apply|cancel|cancel it|discard|never mind|nevermind|stop)(?:\s+(?:it|that|change|action))?[.!]?$/u',$text)===1;
         if($confirmationIntent){
             $pendingNode=gaw_pending_action_node($org,$uid);
+            if($pendingNode==='front_of_house'&&app_has_permission('host.view',$user)&&(app_has_permission('table_service.view',$user)||app_has_permission('host.use',$user)||app_has_permission('host.manage',$user)))app_json_response(['ok'=>true]+gaw_node_route('front_of_house','front_of_house_confirmation'));
             if($pendingNode==='crm'&&app_has_permission('crm.view',$user))app_json_response(['ok'=>true]+gaw_node_route('crm','crm_confirmation'));
             if($pendingNode==='catering'&&app_has_permission('catering.view',$user)&&app_has_permission('catering.agent',$user))app_json_response(['ok'=>true]+gaw_node_route('catering','catering_confirmation'));
             if($pendingNode==='wholesale'&&app_has_permission('wholesale.view',$user)&&app_has_permission('wholesale.agent',$user))app_json_response(['ok'=>true]+gaw_node_route('wholesale','wholesale_confirmation'));
@@ -56,6 +58,11 @@ try{
             if($pendingNode==='operations'&&((app_has_permission('tasks.agent',$user)&&app_has_permission('tasks.view',$user))||(app_has_permission('inventory.agent',$user)&&app_has_permission('inventory.view',$user))))app_json_response(['ok'=>true]+gaw_node_route('operations','operations_confirmation'));
             if($pendingNode==='purchasing'&&app_has_permission('purchasing.agent',$user)&&app_has_permission('purchasing.view',$user))app_json_response(['ok'=>true]+gaw_node_route('purchasing','purchasing_confirmation'));
             if($pendingNode==='scheduling'&&app_has_permission('schedule.agent',$user))app_json_response(['ok'=>true]+gaw_node_route('scheduling','scheduling_confirmation'));
+        }
+
+        if($isHostStandContext){
+            $localIntent=preg_match('/\b(this reservation|selected reservation|this waitlist|selected party|this party|this table|selected table|reservation|waitlist|walk[ -]?in|arrival|arrived|no[ -]?show|cancel|confirm|assign|seat|available|availability|ready|clean|dirty|protected|what needs attention|what should we do|what(?:\x27s| is) going on)\b/u',$text)===1;
+            if($localIntent||$confirmationIntent)app_json_response(['ok'=>true]+gaw_node_route('front_of_house','front_of_house_context'));
         }
 
         $liveShiftIntent=preg_match('/\b(live shift|run the shift|shift status|service status|service priorities|floor status|ready food|food up|run food|what needs attention right now|what should (?:i|we) do right now|what is holding up (?:table|bar seat|check|ticket)|move .*\b(?:table|bar seat)\b|transfer .*\b(?:table|bar seat)\b|assign .*\bserver\b|change .*\bserver\b|seat .*\b(?:table|bar seat)\b|send .*\bkitchen\b|send .*\bheld\b|fire (?:drinks|starters|mains|dessert|other)|hold (?:drinks|starters|mains|dessert|other)|attach customer|remove .*\b(?:check|ticket|order)\b|add .*\b(?:check|ticket|order)\b|(?:void|discount|comp|refund) (?:this|the))\b/u',$text)===1;
