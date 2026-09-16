@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require __DIR__ . '/../includes/bootstrap.php';
 require __DIR__ . '/../includes/prep-intelligence-core.php';
+require_once __DIR__ . '/../includes/agent-confirmation-core.php';
 
 $user=app_require_auth();
 $pdo=app_pdo();
@@ -64,6 +65,25 @@ function pia_plan(PDO $pdo,int $org,string $message,bool $create,?int $userId): 
     return $plan;
 }
 
+function pia_plan_snapshot(?array $plan): array
+{
+    return $plan?['exists'=>true,'publicId'=>(string)$plan['public_id'],'updatedAt'=>(string)$plan['updated_at'],'status'=>(string)$plan['status']]:['exists'=>false,'publicId'=>'','updatedAt'=>'','status'=>''];
+}
+
+function pia_resolve_proposal_plan(PDO $pdo,int $org,array $payload,bool $create,int $userId): array
+{
+    $date=(string)($payload['date']??'');$service=prep_service_period((string)($payload['service']??'all'));$expected=(array)($payload['expected']??[]);
+    $current=prep_plan_for_period($pdo,$org,$date,$service);
+    if(!$current&&$service!=='all')$current=prep_plan_for_period($pdo,$org,$date,'all');
+    if(!empty($expected['exists'])){
+        if(!$current||(string)$current['public_id']!==(string)($expected['publicId']??'')||(string)$current['updated_at']!==(string)($expected['updatedAt']??'')||(string)$current['status']!==(string)($expected['status']??''))throw new InvalidArgumentException('That prep plan changed after I proposed the action. Review it and ask again.');
+        return $current;
+    }
+    if($current)throw new InvalidArgumentException('A prep plan was created after I proposed this action. Review the current plan and ask again.');
+    if(!$create)throw new InvalidArgumentException('The proposed prep plan no longer exists.');
+    return prep_get_or_create_plan($pdo,$org,$date,$service,$userId);
+}
+
 function pia_compact_quantity(mixed $value): string
 {
     return rtrim(rtrim(number_format((float)$value,3,'.',''),'0'),'.');
@@ -76,43 +96,71 @@ function pia_visible_detail(array $detail,bool $canForecast): array
 }
 
 try{
+    $pending=gac_pending_get('prep',$organizationId,$userId);
+    if(gac_is_confirm($message)){
+        if(!$pending)throw new InvalidArgumentException('There is no pending Prep Agent action to confirm.');
+        if(!$canManage)app_json_response(['ok'=>false,'message'=>'Prep Intelligence management permission is required to confirm this action.'],403);
+        $payload=(array)$pending['payload'];$type=(string)$pending['type'];
+        try{
+            if($type==='add_items'){
+                $plan=pia_resolve_proposal_plan($pdo,$organizationId,$payload,true,$userId);$created=[];
+                foreach((array)($payload['items']??[]) as $parsed){
+                    if(trim((string)($parsed['title']??''))==='')continue;
+                    $created[]=prep_attach_manual_task($pdo,$organizationId,$plan,['title'=>$parsed['title'],'quantity'=>$parsed['quantity']??null,'unit'=>$parsed['unit']??'','transcript'=>$payload['transcript']??'','aiConfidence'=>1.0],$userId,(string)($payload['source']??'agent'));
+                }
+                if(!$created)throw new InvalidArgumentException('The pending prep action no longer contains valid items.');
+                $result=['ok'=>true,'skill'=>'prep.action_confirmed','answer'=>'Confirmed. Added '.count($created).' item(s) to '.ucfirst((string)$plan['service_period']).' prep: '.implode(', ',array_map(static fn($task)=>(string)$task['title'],$created)).'.','data'=>['action'=>'add_items','plan'=>$plan,'tasks'=>$created],'sources'=>array_column($created,'public_id')];
+            }elseif($type==='publish_plan'){
+                $plan=pia_resolve_proposal_plan($pdo,$organizationId,$payload,false,$userId);$detail=pia_visible_detail(prep_publish_plan($pdo,$organizationId,$plan,$userId),$canForecast);
+                $result=['ok'=>true,'skill'=>'prep.action_confirmed','answer'=>'Confirmed. Published the '.$plan['plan_date'].' '.ucfirst((string)$plan['service_period']).' prep plan with '.count($detail['tasks']).' linked task(s).','data'=>['action'=>'publish_plan']+$detail,'sources'=>array_column($detail['tasks'],'public_id')];
+            }elseif($type==='generate_recommendations'){
+                $plan=pia_resolve_proposal_plan($pdo,$organizationId,$payload,true,$userId);$detail=pia_visible_detail(prep_generate_recommendations($pdo,$organizationId,$plan,$userId),$canForecast);$active=array_values(array_filter($detail['recommendations'],static fn(array $r):bool=>$r['status']!=='dismissed'));
+                $result=['ok'=>true,'skill'=>'prep.action_confirmed','answer'=>'Confirmed. Generated '.count($active).' prep recommendation(s) for '.$plan['plan_date'].'.','data'=>['action'=>'generate_recommendations','plan'=>$detail['plan'],'recommendations'=>$active,'forecasts'=>$detail['forecasts']],'sources'=>array_column($active,'public_id')];
+            }else throw new InvalidArgumentException('That pending Prep Agent action is no longer supported.');
+        }catch(Throwable $e){gac_pending_clear('prep',$organizationId,$userId);throw $e;}
+        gac_pending_clear('prep',$organizationId,$userId);app_audit($pdo,$organizationId,$userId,'prep.agent_action_confirmed','prep_agent_proposal',(string)$pending['id'],null,['type'=>$type]);app_json_response($result);
+    }
+    if(gac_is_cancel($message)&&$pending){
+        gac_pending_clear('prep',$organizationId,$userId);app_audit($pdo,$organizationId,$userId,'prep.agent_action_discarded','prep_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);app_json_response(['ok'=>true,'skill'=>'prep.action_cancelled','answer'=>'Cancelled. I did not change the prep plan.','data'=>['cancelledProposal'=>$pending['id']],'sources'=>['Prep + Inventory Intelligence']]);
+    }
+
     if(preg_match('/\b(?:add|put)\b.*\bprep\s+list\b/iu',$normalized)||preg_match('/\badd(?:\s+these|\s+the following)?(?:\s+items?)?\s+to\s+(?:the\s+)?prep\s+list\b/iu',$normalized)){
         if(!$canManage)app_json_response(['ok'=>false,'message'=>'Prep Intelligence management permission is required to add prep items.'],403);
-        $payload=$text;
-        if(preg_match('/\badd(?:\s+these|\s+the following)?(?:\s+items?)?\s+to\s+(?:the\s+)?prep\s+list\s*[:,-]?\s*(.+)$/iu',$text,$m))$payload=trim($m[1]);
-        elseif(preg_match('/\b(?:add|put)\s+(.+?)\s+(?:to|on)\s+(?:the\s+)?prep\s+list\b/iu',$text,$m))$payload=trim($m[1]);
-        $plan=pia_plan($pdo,$organizationId,$text,true,$userId);
-        if(!$plan)throw new RuntimeException('Prep plan could not be created.');
-        $created=[];
-        foreach(array_slice(pia_items($payload),0,30) as $raw){
-            $parsed=pia_parse_item($raw);if($parsed['title']==='')continue;
-            $created[]=prep_attach_manual_task($pdo,$organizationId,$plan,['title'=>$parsed['title'],'quantity'=>$parsed['quantity'],'unit'=>$parsed['unit'],'transcript'=>$message,'aiConfidence'=>1.0],$userId,!empty($input['voice'])?'voice':'agent');
-        }
-        if(!$created)app_json_response(['ok'=>false,'message'=>'Tell me which prep items to add.'],422);
-        $names=array_map(static fn(array $t):string=>(string)$t['title'],$created);
-        app_audit($pdo,$organizationId,$userId,'agent.prep_items_added','prep_plan',(string)$plan['public_id'],null,['count'=>count($created),'voice'=>!empty($input['voice']),'message'=>mb_substr($message,0,1000,'UTF-8')]);
-        app_json_response(['ok'=>true,'skill'=>'prep.list_add','answer'=>'Added '.count($created).' item(s) to '.ucfirst((string)$plan['service_period']).' prep: '.implode(', ',$names).'.','data'=>['plan'=>$plan,'tasks'=>$created],'sources'=>array_column($created,'public_id')]);
+        $payloadText=$text;
+        if(preg_match('/\badd(?:\s+these|\s+the following)?(?:\s+items?)?\s+to\s+(?:the\s+)?prep\s+list\s*[:,-]?\s*(.+)$/iu',$text,$m))$payloadText=trim($m[1]);
+        elseif(preg_match('/\b(?:add|put)\s+(.+?)\s+(?:to|on)\s+(?:the\s+)?prep\s+list\b/iu',$text,$m))$payloadText=trim($m[1]);
+        $items=[];foreach(array_slice(pia_items($payloadText),0,30) as $raw){$parsed=pia_parse_item($raw);if($parsed['title']!=='')$items[]=$parsed;}
+        if(!$items)app_json_response(['ok'=>false,'message'=>'Tell me which prep items to add.'],422);
+        $date=prep_parse_date_phrase($text);$service=pia_service($text);$existing=prep_plan_for_period($pdo,$organizationId,$date,$service);if(!$existing&&$service!=='all')$existing=prep_plan_for_period($pdo,$organizationId,$date,'all');
+        $summary='Proposed action: add '.count($items).' item(s) to '.ucfirst($service).' prep for '.$date. '.implode(', ',array_map(static fn($row)=>(($row['quantity']??null)!==null?pia_compact_quantity($row['quantity']).' '.($row['unit']?:'ea').' ':'').$row['title'],$items)).'.';
+        $proposal=gac_pending_store('prep',$organizationId,$userId,'add_items',['date'=>$date,'service'=>$service,'expected'=>pia_plan_snapshot($existing),'items'=>$items,'transcript'=>$message,'source'=>!empty($input['voice'])?'voice':'agent'],$summary);
+        app_audit($pdo,$organizationId,$userId,'prep.agent_action_proposed','prep_agent_proposal',(string)$proposal['id'],null,['type'=>'add_items','count'=>count($items)]);app_json_response(gac_proposal_result($proposal,'prep.action_proposal',['Prep Plan','Restaurant Tasks']));
     }
 
     if(preg_match('/\b(?:publish|release)\b.*\bprep\b/iu',$normalized)){
         if(!$canManage)app_json_response(['ok'=>false,'message'=>'Prep Intelligence management permission is required to publish a prep plan.'],403);
-        $plan=pia_plan($pdo,$organizationId,$text,true,$userId);if(!$plan)throw new RuntimeException('Prep plan not found.');
-        $detail=pia_visible_detail(prep_publish_plan($pdo,$organizationId,$plan,$userId),$canForecast);
-        app_audit($pdo,$organizationId,$userId,'agent.prep_plan_published','prep_plan',(string)$plan['public_id']);
-        app_json_response(['ok'=>true,'skill'=>'prep.publish','answer'=>'Published the '.$plan['plan_date'].' '.ucfirst((string)$plan['service_period']).' prep plan with '.count($detail['tasks']).' linked task(s).','data'=>$detail,'sources'=>array_column($detail['tasks'],'public_id')]);
+        $date=prep_parse_date_phrase($text);$service=pia_service($text);$plan=prep_plan_for_period($pdo,$organizationId,$date,$service);if(!$plan&&$service!=='all')$plan=prep_plan_for_period($pdo,$organizationId,$date,'all');
+        if(!$plan)throw new InvalidArgumentException('There is no prep plan for that period to publish.');
+        $proposal=gac_pending_store('prep',$organizationId,$userId,'publish_plan',['date'=>(string)$plan['plan_date'],'service'=>(string)$plan['service_period'],'expected'=>pia_plan_snapshot($plan)],'Proposed action: publish the '.$plan['plan_date'].' '.ucfirst((string)$plan['service_period']).' prep plan into the employee task system.');
+        app_audit($pdo,$organizationId,$userId,'prep.agent_action_proposed','prep_agent_proposal',(string)$proposal['id'],null,['type'=>'publish_plan']);app_json_response(gac_proposal_result($proposal,'prep.action_proposal',['Prep Plan','Restaurant Tasks']));
     }
 
-    if(preg_match('/\b(?:what should (?:we|i) prep|build (?:today.?s |tomorrow.?s )?prep|generate .*prep|prep recommendations?|prep plan)\b/iu',$normalized)){
-        $plan=pia_plan($pdo,$organizationId,$text,$canManage,$userId);
-        if(!$plan)app_json_response(['ok'=>true,'skill'=>'prep.recommend','answer'=>'There is no prep plan for that period yet, and your role cannot create one.','data'=>null,'sources'=>[]]);
-        $detail=$canManage?prep_generate_recommendations($pdo,$organizationId,$plan,$userId):prep_plan_detail($pdo,$organizationId,(string)$plan['public_id']);
+    if(preg_match('/\b(?:generate|build|regenerate|recalculate)\b.*\b(?:prep|recommendations?)\b/iu',$normalized)){
+        if(!$canManage)app_json_response(['ok'=>false,'message'=>'Prep Intelligence management permission is required to generate recommendations.'],403);
+        $date=prep_parse_date_phrase($text);$service=pia_service($text);$plan=prep_plan_for_period($pdo,$organizationId,$date,$service);if(!$plan&&$service!=='all')$plan=prep_plan_for_period($pdo,$organizationId,$date,'all');
+        $proposal=gac_pending_store('prep',$organizationId,$userId,'generate_recommendations',['date'=>$date,'service'=>$service,'expected'=>pia_plan_snapshot($plan)],'Proposed action: generate/regenerate Prep Intelligence recommendations and inventory forecasts for '.$date.' '.ucfirst($service).'.');
+        app_audit($pdo,$organizationId,$userId,'prep.agent_action_proposed','prep_agent_proposal',(string)$proposal['id'],null,['type'=>'generate_recommendations']);app_json_response(gac_proposal_result($proposal,'prep.action_proposal',['Prep History','Demand Signals','Inventory Forecast']));
+    }
+
+    if(preg_match('/\b(?:what should (?:we|i) prep|prep recommendations?|prep plan)\b/iu',$normalized)){
+        $plan=pia_plan($pdo,$organizationId,$text,false,$userId);
+        if(!$plan)app_json_response(['ok'=>true,'skill'=>'prep.recommend','answer'=>'There is no prep plan for that period yet. Ask me to generate the prep recommendations if you want me to create one; I will show a confirmation before writing anything.','data'=>null,'sources'=>[]]);
+        $detail=pia_visible_detail(prep_plan_detail($pdo,$organizationId,(string)$plan['public_id']),$canForecast);
         $active=array_values(array_filter($detail['recommendations'],static fn(array $r):bool=>$r['status']!=='dismissed'));
         $shortages=$canForecast?array_values(array_filter($detail['forecasts'],static fn(array $f):bool=>(float)$f['shortage_quantity']>0||(float)$f['restock_quantity']>0)):[];
         $top=array_slice(array_map(static fn(array $r):string=>$r['title'].' '.pia_compact_quantity($r['recommended_quantity']).' '.$r['unit'],$active),0,6);
-        $answer=count($active).' recommendation(s) for '.$plan['plan_date'].'.';
-        if($top)$answer.=' Top prep: '.implode('; ',$top).'.';
-        if($canForecast)$answer.=count($shortages)?' Inventory forecast flags '.count($shortages).' ingredient(s) for shortage/restock.':' Inventory coverage has no flagged shortages from the current forecast.';
-        app_audit($pdo,$organizationId,$userId,'agent.prep_recommendations','prep_plan',(string)$plan['public_id'],null,['recommendations'=>count($active),'shortages'=>$canForecast?count($shortages):null]);
+        $answer=count($active).' existing recommendation(s) for '.$plan['plan_date'].'.';if($top)$answer.=' Top prep: '.implode('; ',$top).'.';if(!$active)$answer.=' No generated recommendations are stored yet; ask me to generate them if you want a new recommendation set.';
+        if($canForecast)$answer.=count($shortages)?' Inventory forecast flags '.count($shortages).' ingredient(s) for shortage/restock.':' Inventory coverage has no stored flagged shortages from the current forecast.';
         app_json_response(['ok'=>true,'skill'=>'prep.recommend','answer'=>$answer,'data'=>['plan'=>$detail['plan'],'recommendations'=>$active,'forecasts'=>$shortages,'commitments'=>$detail['commitments']],'sources'=>array_column($active,'public_id')]);
     }
 
@@ -131,16 +179,16 @@ try{
 
     if(preg_match('/\b(?:inventory forecast|forecast.*(?:inventory|shortage)|shortage forecast|what (?:are|is) (?:we|i) short|what do (?:we|i) need to order)\b/iu',$normalized)){
         if(!$canForecast)app_json_response(['ok'=>false,'message'=>'Inventory forecast permission is required for shortage and restock intelligence.'],403);
-        $plan=pia_plan($pdo,$organizationId,$text,$canManage,$userId);
+        $plan=pia_plan($pdo,$organizationId,$text,false,$userId);
         if(!$plan)app_json_response(['ok'=>true,'skill'=>'prep.inventory_forecast','answer'=>'There is no prep plan for that period yet.','data'=>[],'sources'=>[]]);
-        $detail=prep_plan_detail($pdo,$organizationId,(string)$plan['public_id']);if(!$detail['forecasts']&&$canManage)$detail=prep_generate_recommendations($pdo,$organizationId,$plan,$userId);
-        $flagged=array_values(array_filter($detail['forecasts'],static fn(array $f):bool=>(float)$f['shortage_quantity']>0||(float)$f['restock_quantity']>0));
+        $detail=prep_plan_detail($pdo,$organizationId,(string)$plan['public_id']);$flagged=array_values(array_filter($detail['forecasts'],static fn(array $f):bool=>(float)$f['shortage_quantity']>0||(float)$f['restock_quantity']>0));
         $top=array_slice(array_map(static fn(array $f):string=>$f['inventory_name'].' (short '.pia_compact_quantity($f['shortage_quantity']).', restock '.pia_compact_quantity($f['restock_quantity']).' '.$f['unit'].')',$flagged),0,8);
-        app_json_response(['ok'=>true,'skill'=>'prep.inventory_forecast','answer'=>$flagged?('Forecast flags '.count($flagged).' item(s): '.implode('; ',$top).'.'):'No forecast shortages or restock-to-par gaps are currently flagged.','data'=>$flagged,'sources'=>array_column($flagged,'public_id')]);
+        $answer=$flagged?('Forecast flags '.count($flagged).' item(s): '.implode('; ',$top).'.'):'No stored forecast shortages or restock-to-par gaps are currently flagged. Ask me to generate prep recommendations if you need the forecast recalculated.';
+        app_json_response(['ok'=>true,'skill'=>'prep.inventory_forecast','answer'=>$answer,'data'=>$flagged,'sources'=>array_column($flagged,'public_id')]);
     }
 
     $plan=pia_plan($pdo,$organizationId,$text,false,$userId);
-    if(!$plan)app_json_response(['ok'=>true,'skill'=>'prep.status','answer'=>'No prep plan exists for that period yet. Ask me to build the prep plan when you are ready.','data'=>null,'sources'=>[]]);
+    if(!$plan)app_json_response(['ok'=>true,'skill'=>'prep.status','answer'=>'No prep plan exists for that period yet. Ask me to generate the prep recommendations when you are ready; I will require confirmation before creating it.','data'=>null,'sources'=>[]]);
     $detail=pia_visible_detail(prep_plan_detail($pdo,$organizationId,(string)$plan['public_id']),$canForecast);
     $open=count(array_filter($detail['tasks'],static fn(array $t):bool=>!in_array($t['status'],['completed','verified','cancelled'],true)));
     $done=count(array_filter($detail['tasks'],static fn(array $t):bool=>in_array($t['status'],['completed','verified'],true)));
