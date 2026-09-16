@@ -82,8 +82,14 @@ function gaw_agent_nodes(): array
             'domain'=>'operations',
             'mode'=>'read_confirmed_write',
         ],
+        'online_orders'=>[
+            'label'=>'Online Ordering + Pickup Fulfillment',
+            'route'=>'api/online-order-agent.php',
+            'domain'=>'online_order_fulfillment',
+            'mode'=>'read_confirmed_write',
+        ],
         'recipes'=>[
-            'label'=>'Recipe + Production Standards',
+            'label' => 'Recipe + Production Standards',
             'route'=>'api/recipe-agent.php',
             'domain'=>'recipe_production_standards',
             'mode'=>'read_confirmed_write',
