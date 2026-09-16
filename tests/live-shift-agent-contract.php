@@ -32,8 +32,8 @@ $static=[
     'live shift node is registered'=>str_contains($nodes,"'live_shift'=>[")&&str_contains($nodes,"'route'=>'api/live-shift-agent.php'")&&str_contains($nodes,"'mode'=>'read_write'"),
     'router exposes live shift action node'=>str_contains($router,"gaw_node_route('live_shift')")&&str_contains($router,'$liveShiftIntent'),
     'POS knowledge remains a distinct node'=>str_contains($router,"gaw_node_route('pos')")&&str_contains($router,'|cook|cooking|'),
-    'Table Service local context routes into live shift'=>str_contains($router,"$isTableServiceContext")&&str_contains($router,"gaw_node_route('live_shift','live_shift_context')"),
-    'POS action context routes into live shift'=>str_contains($router,"$posActionIntent")&&str_contains($router,"gaw_node_route('live_shift','live_shift_pos_context')"),
+    'Table Service local context routes into live shift'=>str_contains($router,'$isTableServiceContext')&&str_contains($router,"gaw_node_route('live_shift','live_shift_context')"),
+    'POS action context routes into live shift'=>str_contains($router,'$posActionIntent')&&str_contains($router,"gaw_node_route('live_shift','live_shift_pos_context')"),
     'protected financial actions do not execute in live shift'=>str_contains($core,"void|discount|comp|refund")&&str_contains($core,'protected POS action'),
     'shared unsent removal core is reused'=>str_contains($removeApi,'pos_item_remove_unsent')&&str_contains($core,'pos_item_remove_unsent')&&str_contains($removeCore,'kds_assert_pos_line_mutable'),
     'captured tender guard is shared'=>str_contains($removeCore,'pos_item_action_assert_unpaid')&&str_contains($hardening,'live_shift_check_unpaid'),
@@ -77,7 +77,7 @@ $customer=crm_customer_save($pdo,$org,['displayName'=>'Taylor Guest','email'=>'t
 
 $baseContext=['module'=>'table_service','locationId'=>$location];
 $initial=live_shift_snapshot($pdo,$user,$location);lsa(count($initial['tables'])===2,'Live Shift must see canonical tables and bar seats.');
-$seat=live_shift_hardened_handle($pdo,$user,$baseContext,'Seat 2 at Table 1');lsa(isset($seat['check']['publicId']),'Agent must seat a party and open a canonical POS check.');$checkPublic=(string)$seat['check']['publicId'];
+$seat=live_shift_hardened_handle($pdo,$user,$baseContext,'Seat 1 at Table 1');lsa(isset($seat['check']['publicId']),'Agent must seat a party and open a canonical POS check.');$checkPublic=(string)$seat['check']['publicId'];
 $page=$baseContext+['tablePublicId'=>$t1['publicId'],'checkPublicId'=>$checkPublic];
 
 $assign=live_shift_hardened_handle($pdo,$user,$page,'Assign server to Alex Server');lsa(str_contains($assign['answer'],'Alex Server'),'Agent must assign the canonical Table Service server.');
@@ -94,7 +94,7 @@ $sentRemovalBlocked=false;try{live_shift_hardened_handle($pdo,$user,$page,'Remov
 $krow=$pdo->prepare('SELECT public_id FROM kds_order_items WHERE organization_id=? AND pos_check_item_id=? LIMIT 1');$krow->execute([$org,$lineId]);$kdsPublic=(string)$krow->fetchColumn();kds_transition($pdo,$org,$kdsPublic,'in_progress',$manager);kds_transition($pdo,$org,$kdsPublic,'ready',$manager);
 $ready=live_shift_snapshot($pdo,$user,$location);lsa((int)$ready['summary']['readyItems']===1&&count(array_filter($ready['nextMoves'],static fn(array $m):bool=>str_starts_with((string)$m['key'],'ready:')))===1,'READY KDS work must become a Live Shift Next Move.');
 
-$moved=live_shift_hardened_handle($pdo,$user,$page,'Move this check to Bar Seat 1');lsa(str_contains($moved['answer'],'Bar Seat 1'),'Agent must transfer an active dining visit to a bar seat.');
+$moved=live_shift_hardened_handle($pdo,$user,$page,'Move this check to Bar Seat 1');lsa(str_contains($moved['answer'],'Bar Seat 1'),'Agent must transfer a one-guest dining visit to an individual bar seat.');
 lsa((string)lsa_one($pdo,'SELECT table_name FROM pos_checks WHERE organization_id=? AND public_id=?',[$org,$checkPublic])==='Bar Seat 1','Transferred POS check must carry the bar-seat name.');
 $protected=live_shift_hardened_handle($pdo,$user,$page,'Discount this check 20 percent');lsa(($protected['protected']??false)===true,'Discount must stay in the protected POS flow.');
 
