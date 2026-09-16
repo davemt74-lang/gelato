@@ -26,6 +26,7 @@ $brain=lsa_text($root.'/api/brain-orchestrator.php');
 $events=lsa_text($root.'/api/brain-events.php');
 $removeApi=lsa_text($root.'/api/pos-item-remove.php');
 $removeCore=lsa_text($root.'/includes/pos-item-actions.php');
+$atomic=lsa_text($root.'/includes/service-ops-atomic.php');
 
 $static=[
     'live shift node is registered'=>str_contains($nodes,"'live_shift'=>[")&&str_contains($nodes,"'route'=>'api/live-shift-agent.php'")&&str_contains($nodes,"'mode'=>'read_write'"),
@@ -36,7 +37,7 @@ $static=[
     'protected financial actions do not execute in live shift'=>str_contains($core,"void|discount|comp|refund")&&str_contains($core,'protected POS action'),
     'shared unsent removal core is reused'=>str_contains($removeApi,'pos_item_remove_unsent')&&str_contains($core,'pos_item_remove_unsent')&&str_contains($removeCore,'kds_assert_pos_line_mutable'),
     'captured tender guard is shared'=>str_contains($removeCore,'pos_item_action_assert_unpaid')&&str_contains($hardening,'live_shift_check_unpaid'),
-    'server assignment uses canonical table helper'=>str_contains($hardening,'table_service_assign_server')&&!str_contains($hardening,'service_ops_assign_server'),
+    'server assignment preserves location-staff validation'=>str_contains($hardening,'service_ops_assign_server')&&str_contains($atomic,'service_ops_staff_at_location')&&str_contains($atomic,'table_service_assign_server'),
     'broad manager questions delegate to main Brain'=>str_contains($hardening,'agent_brain_orchestration_snapshot')&&str_contains($hardening,"'node'=>'brain'"),
     'Brain snapshot merges live shift signals'=>str_contains($brain,'live_shift_merge_brain_snapshot'),
     'proactive Brain includes live shift events'=>str_contains($events,'live_shift_proactive_events'),
