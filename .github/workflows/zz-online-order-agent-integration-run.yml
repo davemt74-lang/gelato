@@ -1,0 +1,55 @@
+name: Online Order Agent Integration Run
+
+on:
+  push:
+    branches: [online-order-pickup-agent-20260916]
+    paths:
+      - '.github/workflows/zz-online-order-agent-integration-run.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: online-order-pickup-agent-20260916
+      - name: Apply reviewed integration patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path=Path('scripts/online-order-agent-integration-patch.py')
+          source=path.read_text()
+          start=source.index('# Normalize the temporary registry tripwire')
+          end=source.index('# Shared fallback routing.')
+          safe=source[:start]+source[end:]
+          exec(compile(safe,str(path),'exec'),{'__name__':'__main__'})
+          PY
+      - name: Validate patched source
+        run: |
+          php -l includes/agent-node-registry.php
+          php -l includes/agent-workspace-core.php
+          php -l api/agent-workspace.php
+          php -l api/brain-orchestrator.php
+          php -l online-orders-admin.php
+          php -l pickup-fulfillment.php
+          php -l order-recovery.php
+          php -l includes/online-order-agent-core.php
+          php -l includes/online-order-agent-brain.php
+          php -l api/online-order-agent.php
+          php -l tests/online-order-agent-db-lifecycle.php
+          node --check js/online-order-agent-context.js
+          grep -F "'online_orders'=>[" includes/agent-node-registry.php
+          grep -F '$isOnlineOrdersContext=' api/agent-workspace.php
+          grep -F 'online_order_agent_merge_brain_snapshot' api/brain-orchestrator.php
+      - name: Remove temporary patch files and commit
+        run: |
+          rm scripts/online-order-agent-integration-patch.py
+          rm .github/workflows/zz-online-order-agent-integration-run.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Integrate Online Ordering + Pickup Fulfillment Agent"
+          git push origin HEAD:online-order-pickup-agent-20260916
