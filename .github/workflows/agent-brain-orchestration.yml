@@ -7,10 +7,19 @@ on:
       - 'api/brain-events.php'
       - 'api/admin-dashboard-agent.php'
       - 'api/agent-workspace.php'
+      - 'api/equipment-agent.php'
+      - 'api/daily-manager-agent.php'
       - 'includes/agent-brain-orchestrator.php'
       - 'includes/agent-node-registry.php'
+      - 'includes/agent-workspace-core.php'
+      - 'includes/equipment-agent-core.php'
+      - 'includes/equipment-agent-brain.php'
+      - 'includes/equipment-brain.php'
       - 'js/agent-next-moves.js'
       - 'js/global-add-canvas.js'
+      - 'js/equipment-agent-context.js'
+      - 'equipment.php'
+      - 'equipment-detail.php'
       - 'tests/agent-brain-orchestration-contract.php'
       - 'tests/admin-command-dashboard-contract.php'
       - 'tests/workspace-dynamic-agent-canvas-contract.php'
@@ -32,13 +41,19 @@ jobs:
           php -l api/brain-orchestrator.php
           php -l api/brain-events.php
           php -l api/admin-dashboard-agent.php
+          php -l api/equipment-agent.php
+          php -l api/daily-manager-agent.php
           php -l includes/agent-brain-orchestrator.php
           php -l includes/agent-node-registry.php
+          php -l includes/agent-workspace-core.php
+          php -l includes/equipment-agent-core.php
+          php -l includes/equipment-agent-brain.php
           php -l tests/agent-brain-orchestration-contract.php
           php -l tests/admin-command-dashboard-contract.php
           php -l tests/workspace-dynamic-agent-canvas-contract.php
           node --check js/agent-next-moves.js
           node --check js/global-add-canvas.js
+          node --check js/equipment-agent-context.js
       - name: Agent Brain orchestration contract
         run: php tests/agent-brain-orchestration-contract.php
       - name: Command Center regression
