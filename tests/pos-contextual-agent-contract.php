@@ -49,6 +49,8 @@ $agent=pca_text($root.'/api/pos-agent.php');
 pca_assert(str_contains($agent,'pos_check_base($pdo,$org,$checkPublicId,false)'),'POS Agent must re-resolve the check server-side instead of trusting browser transaction content.');
 pca_assert(str_contains($agent,'pos_agent_location_allowed'),'POS Agent must enforce location-scoped POS permission.');
 pca_assert(str_contains($agent,'menu_training_items_by_ids'),'POS Agent must use the shared Training menu/ingredient knowledge for cart items.');
+pca_assert(str_contains($agent,"return app_has_permission('crm.view',$user);"),'Repeat-order history, favorites, average check, and lifetime spend must require CRM view permission.');
+pca_assert(str_contains($agent,"app_has_permission('crm.pos_link',$user)")&&str_contains($agent,'pos_agent_can_customer_offers'),'POS customer-link access may surface active customer offers without unlocking CRM history.');
 pca_assert(str_contains($agent,'customer_inbox_messages'),'POS Agent must support active customer promotion/reward context when authorized.');
 pca_assert(!str_contains($agent,'restaurant-mistakes')&&!str_contains($agent,'restaurant-quiz-history')&&!str_contains($agent,'restaurant-certifications'),'POS Agent must not consume employee Training performance history as customer transaction context.');
 
