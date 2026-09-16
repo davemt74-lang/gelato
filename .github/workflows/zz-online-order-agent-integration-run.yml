@@ -31,6 +31,21 @@ jobs:
           before = before.replace(', 2),', ', 1),')
           safe = before + marker + after
           exec(compile(safe,str(path),'exec'),{'__name__':'__main__'})
+
+          core=Path('includes/online-order-agent-core.php')
+          text=core.read_text()
+          old="""        $row=pickup_fulfillment_order($pdo,$organizationId,(string)$explicit['value'],false);
+        if($row)return $row;
+    }
+    $selected=trim((string)($context['selectedOrderPublicId']??''));
+"""
+          new="""        return pickup_fulfillment_order($pdo,$organizationId,(string)$explicit['value'],false);
+    }
+    $selected=trim((string)($context['selectedOrderPublicId']??''));
+"""
+          if text.count(old)!=1:
+              raise SystemExit('explicit order identifier hardening marker mismatch')
+          core.write_text(text.replace(old,new,1))
           PY
       - name: Validate patched source
         run: |
@@ -49,10 +64,10 @@ jobs:
           grep -F "'online_orders'=>[" includes/agent-node-registry.php
           grep -F '$isOnlineOrdersContext=' api/agent-workspace.php
           grep -F 'online_order_agent_merge_brain_snapshot' api/brain-orchestrator.php
-      - name: Remove temporary patch files and commit
+          grep -F "return pickup_fulfillment_order(\$pdo,\$organizationId,(string)\$explicit['value'],false);" includes/online-order-agent-core.php
+      - name: Commit integrated source
         run: |
           rm scripts/online-order-agent-integration-patch.py
-          rm .github/workflows/zz-online-order-agent-integration-run.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
