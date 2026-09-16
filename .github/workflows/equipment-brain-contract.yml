@@ -91,7 +91,7 @@ jobs:
           grep -q "js/equipment-agent-context.js" equipment.php
           grep -q "js/global-agent.js" equipment.php
           grep -q "Equipment + Maintenance Agent" equipment.php
-          grep -q "api/equipment-agent.php" api/equipment-agent.php
+          grep -q "equipment_agent_handle" api/equipment-agent.php
           if grep -q 'id="brainInput"' equipment.php; then
             echo 'Legacy standalone Equipment Brain input must not return.' >&2
             exit 1
