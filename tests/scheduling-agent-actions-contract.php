@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
-require __DIR__.'/../includes/bootstrap.php';
-require __DIR__.'/../includes/scheduling-core.php';
+require_once __DIR__.'/../includes/bootstrap.php';
+require_once __DIR__.'/../includes/scheduling-core.php';
 require_once __DIR__.'/../includes/employee-shift-communications.php';
 require_once __DIR__.'/../includes/scheduling-agent-core.php';
 
