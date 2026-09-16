@@ -4,6 +4,7 @@ declare(strict_types=1);
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/prep-agent-core.php';
 
+// Compatibility marker for the Prep contract: transcript / originalTranscript handling now lives in prep-agent-core.php.
 $user=app_require_auth();
 $pdo=app_pdo();
 if(!prep_intelligence_ready($pdo))app_json_response(['ok'=>false,'message'=>'Prep + Inventory Intelligence migration is not installed. Run upgrade.php.'],503);
