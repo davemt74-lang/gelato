@@ -56,6 +56,10 @@ $read=online_order_agent_handle($pdo,$staff,['message'=>'What is going on with t
 ooaci_assert(($read['skill']??'')==='online_order_detail','Selected pickup order must re-resolve canonically on the server.');
 ooaci_assert(!empty($read['data']['order']['physicalReady'])&&!empty($read['data']['order']['paymentComplete']),'Ready paid pickup must be reported accurately.');
 
+// An invalid explicit identifier is authoritative and must never fall back to selected page context.
+$explicitMiss=online_order_agent_handle($pdo,$staff,['message'=>'Show online order id missing-order-99999','pageContext'=>$selected]);
+ooaci_assert(($explicitMiss['skill']??'')==='online_order_fulfillment_summary','Invalid explicit order ID must not fall back to the selected page-context order.');
+
 $proposal=online_order_agent_handle($pdo,$staff,['message'=>'Mark this pickup as handed to the customer.','pageContext'=>$selected]);
 ooaci_assert(!empty($proposal['data']['requiresConfirmation']),'Pickup handoff must be proposed, not executed immediately.');
 ooaci_assert((string)ooaci_one($pdo,'SELECT COALESCE(fulfilled_at,\'\') FROM online_orders WHERE organization_id=? AND public_id=?',[$org,$order2Public])==='','Proposal must not mutate fulfillment state.');
