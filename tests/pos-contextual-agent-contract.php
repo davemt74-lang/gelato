@@ -38,7 +38,7 @@ pca_assert(!str_contains($menuKnowledge,'ORDER BY mi.sort_order,mi.id'),'Shared 
 pca_assert(str_contains($menuKnowledge,'ORDER BY mi.sort_order,mi.ingredient_id'),'Shared menu knowledge must use the canonical ingredient link identity as its deterministic secondary sort.');
 
 $posPage=pca_text($root.'/pos.php');
-pca_assert(str_contains($posPage,'js/pos.js?v=20260915-pos-agent1'),'POS page must use the contextual-Agent cache key so deployments do not reuse the pre-Agent POS entrypoint.');
+pca_assert(str_contains($posPage,'js/pos.js?v=20260916-pos-context2'),'POS page must use the current contextual-Agent cache key so deployments do not reuse a pre-context POS entrypoint.');
 $loader=pca_text($root.'/js/pos.js');
 pca_assert(str_contains($loader,'js/agent-page-context.js')&&str_contains($loader,'js/pos-agent-context.js'),'POS entrypoint must load shared Agent context before the POS provider.');
 pca_assert(str_contains($loader,'js/pos-runtime.js'),'POS entrypoint must preserve the existing specialized POS runtime.');

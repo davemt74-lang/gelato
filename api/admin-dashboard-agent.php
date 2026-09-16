@@ -4,6 +4,7 @@ declare(strict_types=1);
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/admin-dashboard-core.php';
 require_once __DIR__.'/../includes/purchasing-receiving.php';
+require_once __DIR__.'/../includes/agent-brain-orchestrator.php';
 
 $user=app_require_auth();
 if(!admin_dashboard_allowed($user))app_json_response(['ok'=>false,'message'=>'Restaurant command-center access is not available for this account.'],403);
@@ -106,7 +107,14 @@ function admin_dashboard_agent_answer(array $dashboard,string $message,?array $p
 
 try{
     $message=trim((string)($input['message']??''));if($message==='')throw new InvalidArgumentException('Enter a restaurant dashboard question.');
-    $pdo=app_pdo();$locationId=admin_dashboard_agent_location_id($pdo,$user,$message);$dashboard=admin_dashboard_snapshot($pdo,$user,$locationId);$purchasing=admin_dashboard_agent_purchasing($pdo,$user);$result=admin_dashboard_agent_answer($dashboard,$message,$purchasing);
+    $pdo=app_pdo();
+    $brainIntent=preg_match('/\b(what needs (?:my |our )?attention|what should (?:we|i) do|what do we do|next moves?|action plan|restaurant priorities|operating priorities|biggest risks?|top risks?|what is happening right now|what\x27s happening right now)\b/iu',$message)===1;
+    if($brainIntent){
+        $snapshot=agent_brain_orchestration_snapshot($pdo,$user,null);$result=agent_brain_orchestration_answer($snapshot,$message);
+        app_audit($pdo,(int)$user['organization_id'],(int)$user['id'],'agent.brain_orchestration_used','agent_brain','manager',null,['signalCount'=>count($snapshot['signals']),'nextMoveCount'=>count($snapshot['nextMoves'])]);
+        app_json_response(['ok'=>true,'skill'=>'agent.brain.orchestration','answer'=>$result['answer'],'data'=>$result['data'],'sources'=>$result['sources'],'node'=>'brain']);
+    }
+    $locationId=admin_dashboard_agent_location_id($pdo,$user,$message);$dashboard=admin_dashboard_snapshot($pdo,$user,$locationId);$purchasing=admin_dashboard_agent_purchasing($pdo,$user);$result=admin_dashboard_agent_answer($dashboard,$message,$purchasing);
     app_json_response(['ok'=>true,'skill'=>'admin.dashboard','answer'=>$result['answer'],'data'=>$result['data'],'sources'=>$result['sources'],'node'=>'command_center']);
 }catch(InvalidArgumentException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);
 }catch(Throwable $e){error_log('Admin dashboard Agent failed: '.$e->getMessage());app_json_response(['ok'=>false,'message'=>'Gelato could not load the restaurant command-center context.'],500);}

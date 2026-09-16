@@ -71,6 +71,48 @@ function pos_floor_plan_structure_items(array $row): array
     return $out;
 }
 
+function pos_floor_plan_is_bar_chair(array $item): bool
+{
+    return ($item['type']??null)==='chair'&&mb_strtolower(trim((string)($item['seatZone']??'')),'UTF-8')==='bar'&&(int)($item['seats']??0)>0;
+}
+
+function pos_floor_plan_service_points(array $structures): array
+{
+    $points=[];$hasExplicitBarSeats=false;
+    foreach($structures as $item){
+        if(($item['type']??null)==='table'){$item['servicePointKind']='table';$points[]=$item;continue;}
+        if(pos_floor_plan_is_bar_chair($item)){$item['servicePointKind']='bar_seat';$item['synthetic']=false;$points[]=$item;$hasExplicitBarSeats=true;}
+    }
+    if($hasExplicitBarSeats)return $points;
+
+    $globalSeat=0;
+    foreach($structures as $bar){
+        if(($bar['type']??null)!=='bar'||mb_strtolower(trim((string)($bar['seatZone']??'')),'UTF-8')!=='bar')continue;
+        $seatCount=max(0,min(99,(int)($bar['seats']??0)));if($seatCount===0)continue;
+        $horizontal=(float)$bar['widthPercent']>=(float)$bar['heightPercent'];
+        $seatW=$horizontal?max(1.6,min(4.0,(float)$bar['heightPercent']*.45)):max(1.6,min(4.0,(float)$bar['widthPercent']*.85));
+        $seatH=$horizontal?max(2.4,min(5.5,(float)$bar['heightPercent']*.70)):max(2.4,min(5.5,(float)$bar['widthPercent']*.55));
+        $barLabel=trim((string)($bar['label']??''));$generic=$barLabel===''||mb_strtoupper($barLabel,'UTF-8')==='BAR';
+        for($index=0;$index<$seatCount;$index++){
+            $globalSeat++;$fraction=($index+.5)/$seatCount;
+            if($horizontal){
+                $x=(float)$bar['xPercent']+$fraction*(float)$bar['widthPercent']-$seatW/2;
+                $y=(float)$bar['yPercent']+(float)$bar['heightPercent']+.55;
+            }else{
+                $x=(float)$bar['xPercent']+(float)$bar['widthPercent']+.55;
+                $y=(float)$bar['yPercent']+$fraction*(float)$bar['heightPercent']-$seatH/2;
+            }
+            $componentBase=mb_substr((string)$bar['id'],0,104,'UTF-8');
+            $points[]=[
+                'id'=>$componentBase.':seat:'.($index+1),'type'=>'chair','label'=>$generic?'Bar Seat '.$globalSeat:mb_substr($barLabel.' Seat '.($index+1),0,120,'UTF-8'),
+                'seats'=>1,'seatZone'=>'bar','rotation'=>(float)($bar['rotation']??0),'xPercent'=>round(max(0,min(100-$seatW,$x)),3),'yPercent'=>round(max(0,min(100-$seatH,$y)),3),
+                'widthPercent'=>round($seatW,3),'heightPercent'=>round($seatH,3),'servicePointKind'=>'bar_seat','synthetic'=>true,'parentComponentId'=>(string)$bar['id'],
+            ];
+        }
+    }
+    return $points;
+}
+
 function pos_floor_plan_tables(PDO $pdo,int $org,int $locationId): array
 {
     if(!pos_floor_plan_ready($pdo))return [];
@@ -83,12 +125,14 @@ function pos_floor_plan_tables(PDO $pdo,int $org,int $locationId): array
 
 function pos_floor_plan_bootstrap(PDO $pdo,int $org,int $locationId): array
 {
-    if(!pos_floor_plan_ready($pdo))return ['ready'=>false,'configured'=>false,'mode'=>'unavailable','plans'=>[],'selectedPlan'=>null,'structures'=>[],'tables'=>[],'componentTableCount'=>0,'mappedCount'=>0,'unmappedCount'=>0,'selectedBy'=>'unavailable'];
-    table_service_location($pdo,$org,$locationId);$plans=pos_floor_plan_plans($pdo,$org);$assignment=pos_floor_plan_assignment($pdo,$org,$locationId);$selectedId=pos_floor_plan_selected_id($pdo,$org,$locationId);$selected=null;$structures=[];
-    if($selectedId!==null){$row=pos_floor_plan_row($pdo,$org,$selectedId);$selected=['publicId'=>(string)$row['public_id'],'name'=>(string)$row['name'],'widthFt'=>(float)$row['width_ft'],'depthFt'=>(float)$row['depth_ft'],'scale'=>(float)$row['scale_px_per_ft'],'version'=>(int)$row['version'],'isDefault'=>(bool)$row['is_default']];$structures=pos_floor_plan_structure_items($row);}
-    $tables=pos_floor_plan_tables($pdo,$org,$locationId);$componentTableCount=count(array_filter($structures,static fn(array $i):bool=>$i['type']==='table'));$mapped=0;foreach($tables as $t)if($selectedId!==null&&$t['floorPlanPublicId']===$selectedId&&$t['floorPlanComponentId']!==null)$mapped++;
+    if(!pos_floor_plan_ready($pdo))return ['ready'=>false,'configured'=>false,'mode'=>'unavailable','plans'=>[],'selectedPlan'=>null,'structures'=>[],'tables'=>[],'componentTableCount'=>0,'componentServicePointCount'=>0,'mappedCount'=>0,'unmappedCount'=>0,'selectedBy'=>'unavailable'];
+    table_service_location($pdo,$org,$locationId);$plans=pos_floor_plan_plans($pdo,$org);$assignment=pos_floor_plan_assignment($pdo,$org,$locationId);$selectedId=pos_floor_plan_selected_id($pdo,$org,$locationId);$selected=null;$structures=[];$servicePoints=[];
+    if($selectedId!==null){$row=pos_floor_plan_row($pdo,$org,$selectedId);$selected=['publicId'=>(string)$row['public_id'],'name'=>(string)$row['name'],'widthFt'=>(float)$row['width_ft'],'depthFt'=>(float)$row['depth_ft'],'scale'=>(float)$row['scale_px_per_ft'],'version'=>(int)$row['version'],'isDefault'=>(bool)$row['is_default']];$structures=pos_floor_plan_structure_items($row);$servicePoints=pos_floor_plan_service_points($structures);}
+    $tables=pos_floor_plan_tables($pdo,$org,$locationId);$componentTableCount=count(array_filter($structures,static fn(array $i):bool=>$i['type']==='table'));$servicePointIds=[];foreach($servicePoints as $point)$servicePointIds[(string)$point['id']]=true;$mapped=0;$mappedComponentIds=[];
+    foreach($tables as $t){if($selectedId===null||$t['floorPlanPublicId']!==$selectedId||$t['floorPlanComponentId']===null)continue;$component=(string)$t['floorPlanComponentId'];$mappedComponentIds[$component]=true;if(isset($servicePointIds[$component]))$mapped++;}
+    if($mappedComponentIds)$structures=array_values(array_filter($structures,static fn(array $i):bool=>!(pos_floor_plan_is_bar_chair($i)&&isset($mappedComponentIds[(string)$i['id']]))));
     $configured=$selected!==null&&$mapped>0;$mode=$selected!==null?'floor_plan':($tables?'service_map':'unconfigured');$selectedBy=$assignment['configured']?($assignment['publicId']===null?'none':'location_setting'):'default';
-    return ['ready'=>true,'configured'=>$configured,'mode'=>$mode,'plans'=>$plans,'selectedPlan'=>$selected,'structures'=>$structures,'tables'=>$tables,'componentTableCount'=>$componentTableCount,'mappedCount'=>$mapped,'unmappedCount'=>max(0,count($tables)-$mapped),'selectedBy'=>$selectedBy];
+    return ['ready'=>true,'configured'=>$configured,'mode'=>$mode,'plans'=>$plans,'selectedPlan'=>$selected,'structures'=>$structures,'tables'=>$tables,'componentTableCount'=>$componentTableCount,'componentServicePointCount'=>count($servicePoints),'mappedCount'=>$mapped,'unmappedCount'=>max(0,count($servicePoints)-$mapped),'selectedBy'=>$selectedBy];
 }
 
 function pos_floor_plan_select(PDO $pdo,int $org,int $locationId,?string $publicId,int $userId): void
@@ -108,11 +152,14 @@ function pos_floor_plan_sync_tables(PDO $pdo,int $org,int $locationId,int $userI
 {
     if(!pos_floor_plan_ready($pdo))throw new RuntimeException('POS floor-plan integration migration is not installed. Run upgrade.php.');
     $selectedId=pos_floor_plan_selected_id($pdo,$org,$locationId);if($selectedId===null)throw new InvalidArgumentException('Choose or create a floor plan before syncing tables.');
-    $row=pos_floor_plan_row($pdo,$org,$selectedId);$structures=array_values(array_filter(pos_floor_plan_structure_items($row),static fn(array $i):bool=>$i['type']==='table'));
-    $created=0;$updated=0;$componentIds=[];$owns=!$pdo->inTransaction();if($owns)$pdo->beginTransaction();
+    $row=pos_floor_plan_row($pdo,$org,$selectedId);$structures=pos_floor_plan_service_points(pos_floor_plan_structure_items($row));
+    $created=0;$updated=0;$componentIds=[];$tableNumber=0;$barSeatNumber=0;$owns=!$pdo->inTransaction();if($owns)$pdo->beginTransaction();
     try{
-        foreach($structures as $index=>$item){
-            $component=(string)$item['id'];$componentIds[$component]=true;$q=$pdo->prepare('SELECT id,public_id,active_check_id FROM service_tables WHERE organization_id=? AND location_id=? AND floor_plan_public_id=? AND floor_plan_component_id=? LIMIT 1 FOR UPDATE');$q->execute([$org,$locationId,$selectedId,$component]);$existing=$q->fetch();$id=$existing?(int)$existing['id']:null;$label=trim((string)$item['label']);if($label===''||strtoupper($label)==='4-TOP')$label='Table '.($index+1);$name=pos_floor_plan_unique_table_name($pdo,$org,$locationId,$label,$id);$capacity=max(1,(int)($item['seats']?:4));$ratio=(float)$item['widthPercent']/max(.001,(float)$item['heightPercent']);$shape=$ratio>1.25||$ratio<.8?'rectangle':'square';$w=max(2,min(40,(float)$item['widthPercent']));$h=max(2,min(40,(float)$item['heightPercent']));$x=max(0,min(100-$w,(float)$item['xPercent']));$y=max(0,min(100-$h,(float)$item['yPercent']));
+        foreach($structures as $item){
+            $component=(string)$item['id'];$componentIds[$component]=true;$q=$pdo->prepare('SELECT id,public_id,active_check_id FROM service_tables WHERE organization_id=? AND location_id=? AND floor_plan_public_id=? AND floor_plan_component_id=? LIMIT 1 FOR UPDATE');$q->execute([$org,$locationId,$selectedId,$component]);$existing=$q->fetch();$id=$existing?(int)$existing['id']:null;$label=trim((string)$item['label']);$isBarSeat=($item['servicePointKind']??'')==='bar_seat';
+            if($isBarSeat){$barSeatNumber++;if($label===''||mb_strtoupper($label,'UTF-8')==='CHAIR')$label='Bar Seat '.$barSeatNumber;$capacity=max(1,(int)($item['seats']?:1));$shape='round';}
+            else{$tableNumber++;if($label===''||mb_strtoupper($label,'UTF-8')==='4-TOP')$label='Table '.$tableNumber;$capacity=max(1,(int)($item['seats']?:4));$ratio=(float)$item['widthPercent']/max(.001,(float)$item['heightPercent']);$shape=$ratio>1.25||$ratio<.8?'rectangle':'square';}
+            $name=pos_floor_plan_unique_table_name($pdo,$org,$locationId,$label,$id);$w=max($isBarSeat?1.5:2,min($isBarSeat?8:40,(float)$item['widthPercent']));$h=max($isBarSeat?2:2,min($isBarSeat?8:40,(float)$item['heightPercent']));$x=max(0,min(100-$w,(float)$item['xPercent']));$y=max(0,min(100-$h,(float)$item['yPercent']));
             if($existing){
                 $pdo->prepare("UPDATE service_tables SET name=?,capacity=?,shape=?,x_percent=?,y_percent=?,width_percent=?,height_percent=?,status='active',floor_plan_synced_at=NOW(6),updated_by=?,updated_at=NOW(6) WHERE organization_id=? AND id=?")->execute([$name,$capacity,$shape,$x,$y,$w,$h,$userId,$org,$id]);
                 if($existing['active_check_id']!==null)$pdo->prepare("UPDATE pos_checks SET table_name=?,revision=revision+1,updated_at=NOW(6) WHERE organization_id=? AND id=? AND status='open'")->execute([$name,$org,(int)$existing['active_check_id']]);
@@ -124,5 +171,5 @@ function pos_floor_plan_sync_tables(PDO $pdo,int $org,int $locationId,int $userI
         $q=$pdo->prepare("SELECT floor_plan_component_id FROM service_tables WHERE organization_id=? AND location_id=? AND floor_plan_public_id=? AND status='active'");$q->execute([$org,$locationId,$selectedId]);$orphaned=0;foreach($q->fetchAll(PDO::FETCH_COLUMN) as $component)if($component!==null&&!isset($componentIds[(string)$component]))$orphaned++;
         if($owns)$pdo->commit();
     }catch(Throwable $e){if($owns&&$pdo->inTransaction())$pdo->rollBack();throw $e;}
-    return ['floorPlanPublicId'=>$selectedId,'componentTables'=>count($structures),'created'=>$created,'updated'=>$updated,'orphaned'=>$orphaned,'bootstrap'=>pos_floor_plan_bootstrap($pdo,$org,$locationId)];
+    return ['floorPlanPublicId'=>$selectedId,'componentTables'=>count($structures),'componentServicePoints'=>count($structures),'created'=>$created,'updated'=>$updated,'orphaned'=>$orphaned,'bootstrap'=>pos_floor_plan_bootstrap($pdo,$org,$locationId)];
 }
