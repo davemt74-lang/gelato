@@ -3,6 +3,7 @@ declare(strict_types=1);
 require __DIR__.'/../includes/bootstrap.php';
 require __DIR__.'/../includes/agent-workspace-core.php';
 require_once __DIR__.'/../includes/admin-control-core.php';
+require_once __DIR__.'/../includes/menu-training-knowledge.php';
 $user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];$uid=(int)$user['id'];
 if(!gaw_ready($pdo))app_json_response(['ok'=>false,'message'=>'Agent Workspace migration is not installed. Run upgrade.php.'],503);
 
@@ -36,13 +37,21 @@ try{
         if($costIntent&&(app_has_permission('sales.costs.view',$user)||app_has_permission('sales.view',$user))&&app_has_permission('sales.agent',$user))app_json_response(['ok'=>true,'route'=>'api/sales-cost-agent.php','domain'=>'sales_cost_intelligence']);
         $salesIntent=preg_match('/\b(sales|revenue|average check|avg check|tickets|covers|item mix|best.?selling|top items|labor percent|labor percentage|sales per labor hour|sales forecast|demand forecast|projected sales|projected covers|staffing capacity|how busy)\b/u',$text)===1;
         if($salesIntent&&app_has_permission('sales.view',$user)&&app_has_permission('sales.agent',$user))app_json_response(['ok'=>true,'route'=>'api/sales-agent.php','domain'=>'sales_intelligence']);
-        $posIntent=preg_match('/\b(current check|this check|current order|this order|cart|guest|customer|regular|repeat customer|favorite|favourite|usual|promotion|promotions|promo|reward|rewards|offer|offers|coupon|coupons|deal|deals|previous orders?|recent orders?|order history|menu|menu item|pizza|gelato|ingredient|ingredients|allergen|allergens|allergy|allergies|gluten|dairy|milk|egg|nuts?|peanut|wheat|soy|sesame|shellfish|fish|prep|prepare|preparation|cook|cooking|service note|menu note|price|prices|how much|size|sizes|option|options|recommend|recommendation|suggest)\b/u',$text)===1;
-        if($isPosContext&&$posIntent)app_json_response(['ok'=>true,'route'=>'api/pos-agent.php','domain'=>'pos_context']);
         $developmentIntent=preg_match('/\b(employee development|development brief|performance brief|coaching|coaching notes?|recognition|training progress|task completion|attendance reliability|development goals?)\b/u',$text)===1;
         if($developmentIntent&&(app_has_permission('employee.performance.view',$user)||app_has_permission('employee.manage',$user)||app_has_permission('staff.manage',$user)))app_json_response(['ok'=>true,'route'=>'api/employee-development-agent.php','domain'=>'employee_development']);
         $handoffIntent=preg_match('/\b(handoff|handoffs|shift note|station note|arrival brief|what happened before i got here|what happened before my shift|anything i should know|tell (?:the )?next shift|leave .*next shift|note .*next shift)\b/u',$text)===1;
         if($handoffIntent&&(app_has_permission('employee.handoffs.view',$user)||app_has_permission('employee.handoffs.create',$user)||app_has_permission('employee.handoffs.manage',$user)||app_has_permission('employee.self',$user)||app_has_permission('agent.employee_view',$user)))app_json_response(['ok'=>true,'route'=>'api/employee-agent.php','domain'=>'employee_handoff']);
-        app_json_response(['ok'=>true]+gaw_route($user,$message));
+
+        $fallback=gaw_route($user,$message);
+        if($isPosContext){
+            $posIntent=preg_match('/\b(current check|this check|current order|this order|cart|guest|customer|regular|repeat customer|favorite|favourite|usual|promotion|promotions|promo|reward|rewards|offer|offers|coupon|coupons|deal|deals|previous orders?|recent orders?|order history|menu|menu item|pizza|gelato|ingredient|ingredients|allergen|allergens|allergy|allergies|gluten|dairy|milk|egg|nuts?|peanut|wheat|soy|sesame|shellfish|fish|prep|prepare|preparation|cook|cooking|service note|menu note|price|prices|how much|size|sizes|option|options|recommend|recommendation|suggest)\b/u',$text)===1;
+            $fallbackDomain=(string)($fallback['domain']??'general');
+            $otherSpecialized=!in_array($fallbackDomain,['general','restaurant_brain'],true);
+            $naturalMenuMatch=false;
+            if(!$otherSpecialized&&!$posIntent){$naturalMenuMatch=(bool)menu_training_search_items($pdo,$org,$message,1);}
+            if(!$otherSpecialized&&($posIntent||$naturalMenuMatch))app_json_response(['ok'=>true,'route'=>'api/pos-agent.php','domain'=>'pos_context']);
+        }
+        app_json_response(['ok'=>true]+$fallback);
     }
     if($action==='record_action'){$thread=trim((string)($in['threadId']??''));$public=gaw_record_action($pdo,$org,$uid,$thread,['messageDatabaseId'=>isset($in['messageDatabaseId'])?(int)$in['messageDatabaseId']:null,'skill'=>$in['skill']??'unknown','route'=>$in['route']??'unknown','status'=>$in['status']??'completed','request'=>$in['request']??null,'result'=>$in['result']??null]);app_json_response(['ok'=>true,'actionId'=>$public]);}
     if($action==='archive'){$id=trim((string)($in['threadId']??''));$thread=gaw_thread($pdo,$org,$uid,$id);if(!$thread)throw new InvalidArgumentException('Agent conversation not found.');$pdo->prepare("UPDATE agent_conversations SET status='archived',archived_at=NOW(6),updated_at=NOW(6) WHERE id=?")->execute([(int)$thread['id']]);app_audit($pdo,$org,$uid,'agent.thread_archived','agent_conversation',$id);app_json_response(['ok'=>true]);}
