@@ -27,7 +27,9 @@ try{
         $message=trim((string)($in['message']??''));if($message==='')throw new InvalidArgumentException('Enter an Agent request.');
         $text=mb_strtolower(preg_replace('/^hey\s+gelato[,\s]*/iu','',$message)??$message,'UTF-8');
         $pageContext=is_array($in['pageContext']??null)?$in['pageContext']:[];
-        $isPosContext=(string)($pageContext['module']??'')==='pos'&&app_has_permission('pos.use',$user);
+        $module=(string)($pageContext['module']??'');
+        $isPosContext=$module==='pos'&&app_has_permission('pos.use',$user);
+        $isSchedulingContext=$module==='scheduling'&&app_has_permission('schedule.agent',$user);
         $dashboardIntent=preg_match('/\b(command center|command centre|dashboard|restaurant overview|operating snapshot|operations snapshot|location performance|compare locations?|active tables?|open (?:pos )?(?:tickets?|checks?)|ready tickets?|kds ready|online orders?|what needs attention|what is happening right now|what\x27s happening right now|how is wholesale doing|wholesale (?:status|overview|pipeline|orders?|receivables?|accounts?|sales)|catering (?:status|overview|readiness|events?))\b/u',$text)===1;
         $dashboardAccess=admin_control_allowed($user);
         if($dashboardIntent&&$dashboardAccess)app_json_response(['ok'=>true,'route'=>'api/admin-dashboard-agent.php','domain'=>'admin_dashboard']);
@@ -43,6 +45,12 @@ try{
         if($handoffIntent&&(app_has_permission('employee.handoffs.view',$user)||app_has_permission('employee.handoffs.create',$user)||app_has_permission('employee.handoffs.manage',$user)||app_has_permission('employee.self',$user)||app_has_permission('agent.employee_view',$user)))app_json_response(['ok'=>true,'route'=>'api/employee-agent.php','domain'=>'employee_handoff']);
 
         $fallback=gaw_route($user,$message);
+        if($isSchedulingContext){
+            $fallbackDomain=(string)($fallback['domain']??'general');
+            $hasSelection=trim((string)($pageContext['selectedShiftPublicId']??''))!==''||(int)($pageContext['selectedStaffUserId']??0)>0;
+            $localIntent=preg_match('/\b(this shift|selected shift|this employee|selected employee|them|their|they|him|her|cover this|coverage candidate|move this|change this|update this|cancel this|assign this|message them|tell them|notify them|publish this week|publish the week|visible week|this week|what about them|when do they work)\b/u',$text)===1;
+            if(in_array($fallbackDomain,['general','restaurant_brain'],true)&&($localIntent||$hasSelection&&preg_match('/^(?:confirm|yes|yes please|do it|go ahead|execute|apply|cancel|cancel it|discard|never mind|nevermind|stop)[.!]?$/u',$text)))app_json_response(['ok'=>true,'route'=>'api/scheduling-agent.php','domain'=>'scheduling_context']);
+        }
         if($isPosContext){
             $posIntent=preg_match('/\b(current check|this check|current order|this order|cart|guest|customer|regular|repeat customer|favorite|favourite|usual|promotion|promotions|promo|reward|rewards|offer|offers|coupon|coupons|deal|deals|previous orders?|recent orders?|order history|menu|menu item|pizza|gelato|ingredient|ingredients|allergen|allergens|allergy|allergies|gluten|dairy|milk|egg|nuts?|peanut|wheat|soy|sesame|shellfish|fish|prep|prepare|preparation|cook|cooking|service note|menu note|price|prices|how much|size|sizes|option|options|recommend|recommendation|suggest)\b/u',$text)===1;
             $fallbackDomain=(string)($fallback['domain']??'general');
