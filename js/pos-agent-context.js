@@ -47,6 +47,20 @@
     };
   }
 
+  function transportSnapshot() {
+    const context = snapshot();
+    return {
+      module: context.module,
+      route: context.route,
+      locationId: context.locationId,
+      view: context.view,
+      checkPublicId: context.checkPublicId,
+      menuItemIds: context.menuItemIds,
+      lineItemIds: context.lineItemIds,
+      focusedLineId: context.focusedLineId,
+    };
+  }
+
   function description(context = snapshot()) {
     const parts = ['POS'];
     if (context.checkNumber) parts.push(context.checkNumber);
@@ -130,20 +144,30 @@
     try {
       const body = JSON.parse(next.body);
       if (!body || typeof body !== 'object' || Array.isArray(body)) return next;
-      body.pageContext = snapshot();
+      body.pageContext = transportSnapshot();
       next.body = JSON.stringify(body);
     } catch {}
     return next;
   }
 
+  async function dispatchAgentError(response) {
+    try {
+      const data = await response.clone().json();
+      window.dispatchEvent(new CustomEvent('gelato-agent-error', {detail: {message: clean(data?.message || 'Gelato could not complete that request.', 500)}}));
+    } catch {
+      window.dispatchEvent(new CustomEvent('gelato-agent-error', {detail: {message: 'Gelato could not complete that request.'}}));
+    }
+  }
+
   window.fetch = async function gelatoPosContextFetch(input, init) {
     const nextInit = withAgentContext(input, init);
     const response = await nativeFetch(input, nextInit);
-    if (localPath(input) === 'pos.php') {
-      try {
-        const data = await response.clone().json();
-        applyPosPayload(data);
-      } catch {}
+    const file = localPath(input);
+    if (file === 'pos.php') {
+      try { applyPosPayload(await response.clone().json()); } catch {}
+    }
+    if (!response.ok && ['agent-workspace.php', 'pos-agent.php'].includes(file) && String(nextInit?.method || 'GET').toUpperCase() === 'POST') {
+      dispatchAgentError(response);
     }
     return response;
   };
@@ -178,12 +202,13 @@
 
   window.GelatoAgentPageContext = {
     snapshot,
+    transportSnapshot,
     description,
     set(next = {}) {
       if (next && typeof next === 'object' && next.view) setView(String(next.view));
       return publish();
     },
   };
-  window.GelatoPosAgentContext = {snapshot, description, publish};
+  window.GelatoPosAgentContext = {snapshot, transportSnapshot, description, publish};
   publish();
 })();
