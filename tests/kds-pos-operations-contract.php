@@ -8,7 +8,8 @@ $kds=ops_read('js/kds.js');
 $dash=ops_read('js/kds-dashboard.js');
 $history=ops_read('api/kds-history.php');
 $pos=ops_read('pos.php');
-$posJs=ops_read('js/pos.js');
+$posEntry=ops_read('js/pos.js');
+$posJs=str_contains($posEntry,'js/pos-runtime.js')?ops_read('js/pos-runtime.js'):$posEntry;
 $posReady=ops_read('api/pos-ready.php');
 $posCore=ops_read('includes/pos-core.php');
 
@@ -29,6 +30,7 @@ ops_assert(!str_contains($pos,'id="floorMeta"')&&!str_contains($pos,'id="floorNo
 ops_assert(str_contains($pos,'.floor-view{overflow:hidden;padding:0}')&&str_contains($pos,'.floor-shell{height:100%;min-height:0;background:#f8f8f5;border:0;border-radius:0;padding:0'),'POS floor canvas must use the entire available workspace without an inset card/header.');
 ops_assert(str_contains($pos,'id="readyTickets"')&&str_contains($pos,'id="readyBadge"'),'POS must render a dedicated READY ticket surface and header badge.');
 ops_assert(str_contains($pos,'.menu-scroll{min-height:0;overflow-y:auto'),'POS menu must retain an independent vertical scroll region.');
+ops_assert(str_contains($posEntry,'js/pos-runtime.js'),'POS entrypoint must preserve the specialized runtime behind its Agent-aware loader.');
 ops_assert(str_contains($posCore,'t.id table_id')&&str_contains($posJs,'Table ID #${tableId}')&&str_contains($posJs,'Opened by'),'Active ticket drawer must expose the canonical service-table ID and staff user.');
 ops_assert(str_contains($posJs,"function switchView(view)")&&str_contains($posJs,"switchView('menu')")&&str_contains($posJs,"view==='ready'"),'POS Menu, Floor Plan, and READY must be first-class switchable workspace sections.');
 ops_assert(str_contains($posJs,"if(t.checkPublicId){selectCheck(t.checkPublicId);return}"),'Occupied mapped service points must reopen their existing active check.');
