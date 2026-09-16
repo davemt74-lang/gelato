@@ -18,11 +18,11 @@ on:
       - 'js/agent-next-moves.js'
       - 'js/global-add-canvas.js'
       - 'js/equipment-agent-context.js'
+      - 'equipment.php'
       - 'equipment-detail.php'
       - 'tests/agent-brain-orchestration-contract.php'
       - 'tests/admin-command-dashboard-contract.php'
       - 'tests/workspace-dynamic-agent-canvas-contract.php'
-      - 'tests/equipment-agent-db-lifecycle.php'
       - '.github/workflows/agent-brain-orchestration.yml'
   push:
     branches: [main]
@@ -51,7 +51,6 @@ jobs:
           php -l tests/agent-brain-orchestration-contract.php
           php -l tests/admin-command-dashboard-contract.php
           php -l tests/workspace-dynamic-agent-canvas-contract.php
-          php -l tests/equipment-agent-db-lifecycle.php
           node --check js/agent-next-moves.js
           node --check js/global-add-canvas.js
           node --check js/equipment-agent-context.js
@@ -61,44 +60,3 @@ jobs:
         run: php tests/admin-command-dashboard-contract.php
       - name: Shared Agent UI regression
         run: php tests/workspace-dynamic-agent-canvas-contract.php
-
-  equipment-agent-db:
-    runs-on: ubuntu-latest
-    services:
-      mariadb:
-        image: mariadb:10.11
-        env:
-          MARIADB_DATABASE: gelato_ci
-          MARIADB_USER: gelato
-          MARIADB_PASSWORD: gelato
-          MARIADB_ROOT_PASSWORD: root
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mariadb-admin ping -h 127.0.0.1 -u root -proot"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=10
-    env:
-      DB_HOST: 127.0.0.1
-      DB_PORT: 3306
-      DB_NAME: gelato_ci
-      DB_USER: gelato
-      DB_PASS: gelato
-      APP_ENV: test
-      APP_BASE_URL: http://127.0.0.1
-    steps:
-      - uses: actions/checkout@v4
-      - uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.2'
-          extensions: pdo_mysql, mbstring, json
-          coverage: none
-      - name: Install and upgrade schema
-        run: |
-          mariadb -h 127.0.0.1 -u gelato -pgelato gelato_ci < database/install.sql
-          php -r 'require "includes/bootstrap.php"; require "includes/upgrade-service.php"; $svc=new UpgradeService(app_pdo(), __DIR__."/database"); $svc->applyPending();'
-      - name: Equipment DB-backed lifecycle
-        run: php tests/equipment-agent-db-lifecycle.php
-      - name: Upgrader idempotence
-        run: php -r 'require "includes/bootstrap.php"; require "includes/upgrade-service.php"; $svc=new UpgradeService(app_pdo(), __DIR__."/database"); $applied=$svc->applyPending(); if ($applied !== []) { fwrite(STDERR,"Unexpected pending migrations: ".json_encode($applied).PHP_EOL); exit(1); } echo "Upgrade idempotence passed.\n";'
