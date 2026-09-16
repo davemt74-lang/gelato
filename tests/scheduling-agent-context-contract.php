@@ -27,7 +27,7 @@ sac_assert(!str_contains($schedulingContext,'display_name')&&!str_contains($sche
 
 $contextPos=strpos($loader,'agent-page-context.js');$schedulePos=strpos($loader,'scheduling-agent-context.js');$globalPos=strpos($loader,'global-agent.js');
 sac_assert($contextPos!==false&&$schedulePos!==false&&$globalPos!==false&&$contextPos<$schedulePos&&$schedulePos<$globalPos,'Global loader must install shared context and page adapter before the Agent transport starts.');
-sac_assert(str_contains($route,"\$isSchedulingContext")&&str_contains($route,"'domain'=>'scheduling_context'")&&str_contains($route,'selectedShiftPublicId'),'Agent Workspace must route ambiguous Scheduling page context to the Scheduling Agent.');
+sac_assert(str_contains($route,"\$isSchedulingContext")&&str_contains($route,"'domain'=>'scheduling_context'")&&str_contains($route,'$localIntent'),'Agent Workspace must route ambiguous Scheduling page language through the shared page-context route.');
 sac_assert(str_contains($route,'$confirmationIntent')&&str_contains($route,'$localIntent||$confirmationIntent'),'Scheduling confirmations must route back to the Scheduling Agent even when no row is selected.');
 
 sac_assert(str_contains($endpoint,"require_once __DIR__.'/../includes/scheduling-agent-core.php'")&&str_contains($endpoint,'scheduling_agent_handle($pdo,$user,$input)'),'Scheduling Agent HTTP endpoint must delegate to the reusable secure action core.');
