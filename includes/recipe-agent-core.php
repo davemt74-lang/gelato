@@ -267,7 +267,10 @@ function recipe_agent_handle(PDO $pdo,array $user,array $input): array
 
     if(preg_match('/\byield\s+(?:to\s+)?(\d+(?:\.\d+)?)\s+([a-z][a-z0-9 _-]{0,79})\b/u',$lower,$m)&&preg_match('/\b(set|change|update)\b/u',$lower)){
         recipe_agent_require_edit($user);if(!$recipe)throw new InvalidArgumentException('Select or name the recipe before changing its yield.');
-        $qty=(float)$m[1];$unit=trim($m[2]);return recipe_agent_propose($pdo,$user,$recipe,'set_yield',['yieldQuantity'=>$qty,'yieldUnit'=>$unit],'Proposed change: set '.$recipe['name'].' yield to '.recipe_agent_format_number($qty).' '.$unit.'.');
+        $qty=(float)$m[1];$unit=trim($m[2]);
+        $unit=preg_replace('/\s+(?:for|on|to)\s+(?:the\s+)?'.preg_quote(mb_strtolower((string)$recipe['name'],'UTF-8'),'/').'(?:\s+recipe)?[.!]?$/iu','',$unit)??$unit;$unit=trim($unit);
+        if($unit==='')throw new InvalidArgumentException('Tell me the yield unit, such as portions, quarts, pans, or batches.');
+        return recipe_agent_propose($pdo,$user,$recipe,'set_yield',['yieldQuantity'=>$qty,'yieldUnit'=>$unit],'Proposed change: set '.$recipe['name'].' yield to '.recipe_agent_format_number($qty).' '.$unit.'.');
     }
     if(preg_match('/\b(?:mark|set|make)\b.*\b(active|inactive)\b/u',$lower,$m)){
         recipe_agent_require_edit($user);if(!$recipe)throw new InvalidArgumentException('Select or name the recipe before changing its status.');
