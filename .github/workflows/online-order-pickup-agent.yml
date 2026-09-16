@@ -1,0 +1,153 @@
+name: Online Ordering + Pickup Fulfillment Agent
+
+on:
+  pull_request:
+    paths:
+      - 'online-orders-admin.php'
+      - 'pickup-fulfillment.php'
+      - 'order-recovery.php'
+      - 'api/online-order-agent.php'
+      - 'api/agent-workspace.php'
+      - 'api/brain-orchestrator.php'
+      - 'includes/online-order-agent-core.php'
+      - 'includes/online-order-agent-brain.php'
+      - 'includes/agent-node-registry.php'
+      - 'includes/agent-workspace-core.php'
+      - 'includes/agent-confirmation-core.php'
+      - 'includes/pickup-fulfillment-core.php'
+      - 'includes/order-recovery-core.php'
+      - 'js/online-order-agent-context.js'
+      - 'tests/online-order-agent-db-lifecycle.php'
+      - '.github/workflows/online-order-pickup-agent.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'online-orders-admin.php'
+      - 'pickup-fulfillment.php'
+      - 'order-recovery.php'
+      - 'api/online-order-agent.php'
+      - 'api/agent-workspace.php'
+      - 'api/brain-orchestrator.php'
+      - 'includes/online-order-agent-core.php'
+      - 'includes/online-order-agent-brain.php'
+      - 'includes/agent-node-registry.php'
+      - 'includes/agent-workspace-core.php'
+      - 'includes/agent-confirmation-core.php'
+      - 'includes/pickup-fulfillment-core.php'
+      - 'includes/order-recovery-core.php'
+      - 'js/online-order-agent-context.js'
+      - 'tests/online-order-agent-db-lifecycle.php'
+      - '.github/workflows/online-order-pickup-agent.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  online-order-agent:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -h 127.0.0.1 -u root -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - name: PHP syntax
+        run: |
+          php -l online-orders-admin.php
+          php -l pickup-fulfillment.php
+          php -l order-recovery.php
+          php -l api/online-order-agent.php
+          php -l api/agent-workspace.php
+          php -l api/brain-orchestrator.php
+          php -l includes/online-order-agent-core.php
+          php -l includes/online-order-agent-brain.php
+          php -l includes/agent-node-registry.php
+          php -l includes/agent-workspace-core.php
+          php -l tests/online-order-agent-db-lifecycle.php
+      - name: JavaScript syntax
+        run: node --check js/online-order-agent-context.js
+      - name: Routing and safety contract
+        run: |
+          grep -F "'online_orders'=>[" includes/agent-node-registry.php
+          grep -F "'route'=>'api/online-order-agent.php'" includes/agent-node-registry.php
+          grep -F "gac_pending_store('online_orders'" includes/online-order-agent-core.php
+          grep -F 'expectedUpdatedAt' includes/online-order-agent-core.php
+          grep -F 'pickup_fulfillment_mark_handed' includes/online-order-agent-core.php
+          grep -F 'order_recovery_delay' includes/online-order-agent-core.php
+          grep -F '$isOnlineOrdersContext=' api/agent-workspace.php
+          grep -F "gaw_node_route('online_orders','online_order_context')" api/agent-workspace.php
+          grep -F 'online_order_agent_merge_brain_snapshot' api/brain-orchestrator.php
+          grep -F 'js/online-order-agent-context.js' pickup-fulfillment.php
+          grep -F 'js/online-order-agent-context.js' order-recovery.php
+          grep -F 'js/online-order-agent-context.js' online-orders-admin.php
+          if grep -Eq 'INSERT[[:space:]]+INTO[[:space:]]+pos_refunds|UPDATE[[:space:]]+pos_refunds|pos_record_tender|order_recovery_refund|order_recovery_remake' includes/online-order-agent-core.php; then
+            echo 'Online Order Agent must not mutate refunds, tenders, or remakes.' >&2
+            exit 1
+          fi
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_online_order_agent_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $service=new UpgradeService(app_pdo(),__DIR__);
+          $service->ensureTrackingTables();
+          $service->bootstrapLegacyHistory(null);
+          $service->applyPending(null);
+          if($service->pendingMigrations()) exit(1);
+          PHP
+      - name: Verify canonical online-order schema and permissions
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('online_orders','order_exceptions','pos_refunds','kds_order_items');")" = "4"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('online_orders.fulfill','order_recovery.view','order_recovery.manage','order_recovery.refund');")" = "4"
+      - name: DB-backed Propose Confirm Execute lifecycle
+        run: php tests/online-order-agent-db-lifecycle.php
+      - name: Existing pickup fulfillment regression
+        run: php tests/pickup-fulfillment-contract.php
+      - name: Existing order recovery regression
+        run: php tests/order-recovery-contract.php
+      - name: Restaurant lifecycle regression
+        run: php tests/restaurant-order-lifecycle-contract.php
+      - name: Online ordering regression
+        run: php tests/online-ordering-inbox-contract.php
+      - name: KDS regression
+        run: php tests/kds-contract.php
+      - name: Native POS regression
+        run: php tests/native-pos-contract.php
+      - name: Verify upgrader idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $service=new UpgradeService(app_pdo(),__DIR__);
+          $service->assertAppliedChecksumsUnchanged();
+          if($service->pendingMigrations()) exit(2);
+          if($service->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP
