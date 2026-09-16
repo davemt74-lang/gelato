@@ -32,6 +32,12 @@ try{
         $isPosContext=$module==='pos'&&app_has_permission('pos.use',$user);
         $isSchedulingContext=$module==='scheduling'&&app_has_permission('schedule.agent',$user);
         $isPurchasingContext=$module==='purchasing'&&app_has_permission('purchasing.agent',$user)&&app_has_permission('purchasing.view',$user);
+        $confirmationIntent=preg_match('/^(?:confirm|yes|yes please|do it|go ahead|execute|apply|cancel|cancel it|discard|never mind|nevermind|stop)(?:\s+(?:it|that|change|action))?[.!]?$/u',$text)===1;
+        if($confirmationIntent){
+            $pendingNode=gaw_pending_action_node($org,$uid);
+            if($pendingNode==='purchasing'&&app_has_permission('purchasing.agent',$user)&&app_has_permission('purchasing.view',$user))app_json_response(['ok'=>true]+gaw_node_route('purchasing','purchasing_confirmation'));
+            if($pendingNode==='scheduling'&&app_has_permission('schedule.agent',$user))app_json_response(['ok'=>true]+gaw_node_route('scheduling','scheduling_confirmation'));
+        }
 
         $dashboardIntent=preg_match('/\b(command center|command centre|dashboard|restaurant overview|operating snapshot|operations snapshot|location performance|compare locations?|active tables?|open (?:pos )?(?:tickets?|checks?)|ready tickets?|kds ready|online orders?|what needs attention|what is happening right now|what\x27s happening right now|how is wholesale doing|wholesale (?:status|overview|pipeline|orders?|receivables?|accounts?|sales)|catering (?:status|overview|readiness|events?))\b/u',$text)===1;
         if($dashboardIntent&&admin_control_allowed($user))app_json_response(['ok'=>true]+gaw_node_route('command_center'));
@@ -55,13 +61,11 @@ try{
         if($isPurchasingContext){
             $fallbackDomain=(string)($fallback['domain']??'general');
             $localIntent=preg_match('/\b(this po|selected po|this purchase order|selected purchase order|this vendor|this shipment|this delivery|outstanding|remaining|submit this|cancel this|receive this|received in full|everything arrived|all remaining|current suggestions?)\b/u',$text)===1;
-            $confirmationIntent=preg_match('/^(?:confirm|yes|yes please|do it|go ahead|execute|apply|cancel|cancel it|discard|never mind|nevermind|stop)(?:\s+(?:it|that|change|action))?[.!]?$/u',$text)===1;
             if(in_array($fallbackDomain,['general','restaurant_brain','purchasing'],true)&&($localIntent||$confirmationIntent))app_json_response(['ok'=>true]+gaw_node_route('purchasing','purchasing_context'));
         }
         if($isSchedulingContext){
             $fallbackDomain=(string)($fallback['domain']??'general');
             $localIntent=preg_match('/\b(this shift|selected shift|this employee|selected employee|them|their|they|him|her|cover this|coverage candidate|move this|change this|update this|cancel this|assign this|message them|tell them|notify them|publish this week|publish the week|visible week|this week|what about them|when do they work)\b/u',$text)===1;
-            $confirmationIntent=preg_match('/^(?:confirm|yes|yes please|do it|go ahead|execute|apply|cancel|cancel it|discard|never mind|nevermind|stop)(?:\s+(?:it|that|change|action))?[.!]?$/u',$text)===1;
             if(in_array($fallbackDomain,['general','restaurant_brain'],true)&&($localIntent||$confirmationIntent))app_json_response(['ok'=>true]+gaw_node_route('scheduling','scheduling_context'));
         }
         if($isPosContext){
