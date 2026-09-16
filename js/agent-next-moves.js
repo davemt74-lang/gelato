@@ -2,7 +2,7 @@
   'use strict';
   if (window.GelatoAgentNextMoves || document.body?.dataset.agentVoiceOnly === '1') return;
 
-  const state = {moves: [], dismissed: new Set(), timer: null, mounted: false};
+  const state = {moves: [], dismissed: new Set(), timer: null, mounted: false, csrf: ''};
   const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
   function loadDismissed() {
@@ -69,8 +69,18 @@
     if(visibleMoves().some((move)=>['critical','high'].includes(String(move.severity)))) document.querySelector('.ganm-toggle')?.classList.add('show');
   }
 
+  async function csrfToken() {
+    if(state.csrf)return state.csrf;
+    const response=await fetch('api/agent-workspace.php?action=bootstrap',{cache:'no-store',headers:{Accept:'application/json'}});
+    if(!response.ok)return '';
+    const data=await response.json().catch(()=>null);state.csrf=String(data?.csrf||'');return state.csrf;
+  }
+
   async function synthesizeProactiveEvents() {
-    try { await fetch('api/brain-events.php',{cache:'no-store',headers:{Accept:'application/json'}}); } catch {}
+    try {
+      const csrf=await csrfToken();if(!csrf)return;
+      await fetch('api/brain-events.php',{method:'POST',cache:'no-store',headers:{Accept:'application/json','Content-Type':'application/json','X-CSRF-Token':csrf},body:JSON.stringify({action:'synthesize',csrf_token:csrf})});
+    } catch {}
   }
 
   async function refresh() {
