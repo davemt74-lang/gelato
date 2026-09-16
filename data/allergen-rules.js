@@ -1,6 +1,6 @@
-/* Conservative allergen lookup rules for the current Gelato Spot menu.
-   These are training indicators only, never a safety guarantee. */
-window.ALLERGEN_KNOWLEDGE = {
+/* Compatibility fallback. The authenticated training runtime now receives the canonical
+   allergen knowledge from api/menu-knowledge.php / includes/menu-training-knowledge.php. */
+window.ALLERGEN_KNOWLEDGE = window.ALLERGEN_KNOWLEDGE || {
   majorAllergens: [
     {id:'milk',name:'Milk',note:'Cheese, dairy, cream, butter, milk, and gelato names are direct or likely indicators; verify recipes and cross-contact.'},
     {id:'egg',name:'Egg',note:'Egg and mayonnaise are direct indicators; dressings, breads, pasta, gelato, and baked goods require verification.'},

@@ -47,5 +47,8 @@ contract(str_contains($dynamic,'openDrawer({pending:true})'),'non-Workplace foot
 contract(str_contains($dynamic,'aria-live'),'response drawer is not announced accessibly',30);
 contract(str_contains($dynamic,'window.addEventListener(\'resize\',syncDrawerPosition)'),'response drawer does not stay anchored to the chat bar',31);
 contract(str_contains($globalAdd,'20260915-drawer1'),'shared loader does not bust the dynamic Agent drawer cache',32);
+contract(str_contains($dynamic,'drawerRefreshQueued'),'response drawer does not queue a refresh that arrives during an in-flight load',33);
+contract(str_contains($dynamic,"window.addEventListener('gelato-agent-error'"),'response drawer does not surface Agent request failures',34);
+contract(str_contains($dynamic,"'\"':'&quot;'"),'Agent response escaping must encode double quotes correctly',35);
 
 echo "workspace dynamic Agent canvas + response drawer contract passed\n";

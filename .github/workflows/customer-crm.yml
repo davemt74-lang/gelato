@@ -10,6 +10,7 @@ on:
       - 'pos.php'
       - 'js/customer-crm.js'
       - 'js/pos.js'
+      - 'js/pos-runtime.js'
       - 'database/20260917_customer_crm.sql'
       - 'tests/customer-crm-contract.php'
       - '.github/workflows/customer-crm.yml'
@@ -45,6 +46,7 @@ jobs:
           php -l tests/customer-crm-contract.php
           node --check js/customer-crm.js
           node --check js/pos.js
+          node --check js/pos-runtime.js
       - name: Architecture and privacy contract
         run: |
           test "$(grep -c 'CREATE TABLE IF NOT EXISTS crm_' database/20260917_customer_crm.sql)" = "5"
@@ -59,7 +61,8 @@ jobs:
           ! grep -q 'lifetime_spend' database/20260917_customer_crm.sql
           ! grep -Eiq 'birthday_year|birth_date|date_of_birth|\bdob\b' database/20260917_customer_crm.sql
           grep -q "FROM pos_checks WHERE organization_id=? AND customer_id=? AND status='paid'" includes/customer-crm-core.php
-          grep -q "scope:'pos'" js/pos.js
+          grep -q 'js/pos-runtime.js' js/pos.js
+          grep -q "scope:'pos'" js/pos-runtime.js
           grep -q "array_keys(\$minimal\[0\])===\['publicId','displayName','email','phone'\]" tests/customer-crm-contract.php
       - name: Install and upgrade schema
         run: |

@@ -5,12 +5,24 @@ on:
     paths:
       - 'pos.php'
       - 'api/pos.php'
+      - 'api/pos-agent.php'
+      - 'api/agent-workspace.php'
+      - 'api/menu-knowledge.php'
       - 'includes/pos-core.php'
+      - 'includes/menu-training-knowledge.php'
+      - 'includes/customer-crm-core.php'
+      - 'includes/customer-inbox-core.php'
       - 'js/pos.js'
+      - 'js/pos-runtime.js'
+      - 'js/pos-agent-context.js'
+      - 'js/global-agent.js'
+      - 'js/dynamic-agent-canvas.js'
       - 'js/auth.js'
+      - 'data/allergen-rules.js'
       - 'database/20260916_native_pos.sql'
       - 'database/20261001_system_user_types_pos_order_types.sql'
       - 'tests/native-pos-contract.php'
+      - 'tests/pos-contextual-agent-contract.php'
       - 'tests/system-user-pos-types-contract.php'
       - '.github/workflows/native-pos.yml'
   push:
@@ -39,10 +51,19 @@ jobs:
         run: |
           php -l pos.php
           php -l api/pos.php
+          php -l api/pos-agent.php
+          php -l api/agent-workspace.php
+          php -l api/menu-knowledge.php
           php -l includes/pos-core.php
+          php -l includes/menu-training-knowledge.php
           php -l tests/native-pos-contract.php
+          php -l tests/pos-contextual-agent-contract.php
           php -l tests/system-user-pos-types-contract.php
           node --check js/pos.js
+          node --check js/pos-runtime.js
+          node --check js/pos-agent-context.js
+          node --check js/global-agent.js
+          node --check js/dynamic-agent-canvas.js
           node --check js/auth.js
       - name: Architecture and payment-data contract
         run: |
@@ -105,6 +126,8 @@ jobs:
           test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_schema='gelato_restaurant_ai_ci' AND trigger_name='organizations_seed_operational_user_types';")" = "1"
       - name: Native POS behavioral contract
         run: php tests/native-pos-contract.php
+      - name: POS contextual Agent contract
+        run: php tests/pos-contextual-agent-contract.php
       - name: Existing Sales + Demand regression
         run: php tests/sales-demand-intelligence-contract.php
       - name: Existing Sales Cost + Margin regression

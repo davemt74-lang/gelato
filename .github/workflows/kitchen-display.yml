@@ -14,6 +14,7 @@ on:
       - 'js/kds.js'
       - 'js/kds-dashboard.js'
       - 'js/pos.js'
+      - 'js/pos-runtime.js'
       - 'database/20260919_kitchen_display_order_routing.sql'
       - 'tests/kds-contract.php'
       - 'tests/kds-production-expo-contract.php'
@@ -56,6 +57,7 @@ jobs:
           node --check js/kds.js
           node --check js/kds-dashboard.js
           node --check js/pos.js
+          node --check js/pos-runtime.js
       - name: Architecture and production contract
         run: |
           test "$(grep -c 'CREATE TABLE IF NOT EXISTS kds_stations' database/20260919_kitchen_display_order_routing.sql)" = "1"
@@ -96,9 +98,10 @@ jobs:
           grep -q 'kds_cancel_pos_line' api/pos.php
           grep -q 'kds_cancel_check' api/pos.php
           grep -q "action==='kitchen.send'" api/pos.php
-          grep -q 'id="kitchenSend"' js/pos.js
-          grep -q 'id="kitchenHold"' js/pos.js
-          grep -q 'kitchenItemByLine' js/pos.js
+          grep -q 'js/pos-runtime.js' js/pos.js
+          grep -q 'id="kitchenSend"' js/pos-runtime.js
+          grep -q 'id="kitchenHold"' js/pos-runtime.js
+          grep -q 'kitchenItemByLine' js/pos-runtime.js
           grep -q 'href="kds.php"' pos.php
       - name: Install and upgrade schema
         run: |

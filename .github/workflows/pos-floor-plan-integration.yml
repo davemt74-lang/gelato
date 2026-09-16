@@ -8,6 +8,7 @@ on:
       - 'api/pos.php'
       - 'pos.php'
       - 'js/pos.js'
+      - 'js/pos-runtime.js'
       - 'tests/pos-floor-plan-integration-contract.php'
       - '.github/workflows/pos-floor-plan-integration.yml'
   push:
@@ -39,6 +40,7 @@ jobs:
           php -l pos.php
           php -l tests/pos-floor-plan-integration-contract.php
           node --check js/pos.js
+          node --check js/pos-runtime.js
       - name: Architecture and safety contract
         run: |
           grep -q 'CREATE TABLE IF NOT EXISTS pos_floor_plan_settings' database/20260930_pos_floor_plan_integration.sql
@@ -48,8 +50,9 @@ jobs:
           grep -q "action==='floor.sync'" api/pos.php
           grep -q 'table_service_release_closed_check' api/pos.php
           grep -q 'floorPlanSelect' pos.php
-          grep -q 'data-table-public' js/pos.js
-          grep -q "mutate('table.seat'" js/pos.js
+          grep -q 'js/pos-runtime.js' js/pos.js
+          grep -q 'data-table-public' js/pos-runtime.js
+          grep -q "mutate('table.seat'" js/pos-runtime.js
           ! grep -q 'DELETE FROM service_tables' includes/pos-floor-plan.php
       - name: Install and upgrade schema
         run: |
