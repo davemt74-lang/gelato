@@ -9,7 +9,7 @@ require_once __DIR__.'/../includes/menu-training-knowledge.php';
 // Compatibility route markers for older CI/contracts. Canonical routing now lives in includes/agent-node-registry.php.
 // api/admin-dashboard-agent.php api/daily-manager-agent.php api/sales-cost-agent.php api/sales-agent.php
 // api/employee-development-agent.php api/employee-agent.php api/purchasing-agent.php api/scheduling-agent.php api/pos-agent.php
-// api/customer-crm-agent.php api/catering-agent.php api/wholesale-agent.php api/prep-intelligence-agent.php api/operations-agent.php api/kds-agent.php api/live-shift-agent.php api/front-of-house-agent.php api/equipment-agent.php
+// api/customer-crm-agent.php api/catering-agent.php api/wholesale-agent.php api/prep-intelligence-agent.php api/operations-agent.php api/kds-agent.php api/live-shift-agent.php api/front-of-house-agent.php api/equipment-agent.php api/recipe-agent.php
 
 $user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];$uid=(int)$user['id'];
 if(!gaw_ready($pdo))app_json_response(['ok'=>false,'message'=>'Agent Workspace migration is not installed. Run upgrade.php.'],503);
@@ -47,6 +47,7 @@ try{
         $isOperationsContext=$module==='operations'&&((app_has_permission('tasks.agent',$user)&&app_has_permission('tasks.view',$user))||(app_has_permission('inventory.agent',$user)&&app_has_permission('inventory.view',$user)));
         $isKdsContext=$module==='kds'&&app_has_permission('kds.view',$user);
         $isEquipmentContext=$module==='equipment'&&app_has_permission('equipment.view',$user)&&app_has_permission('agent.equipment_skills',$user);
+        $isRecipesContext=$module==='recipes'&&app_has_permission('recipes.view',$user)&&app_has_permission('recipes.agent',$user);
         $canLiveShift=app_has_permission('table_service.view',$user)||app_has_permission('pos.use',$user)||app_has_permission('kds.view',$user);
         $confirmationIntent=preg_match('/^(?:confirm|yes|yes please|do it|go ahead|execute|apply|cancel|cancel it|discard|never mind|nevermind|stop)(?:\s+(?:it|that|change|action))?[.!]?$/u',$text)===1;
         if($confirmationIntent){
@@ -60,6 +61,7 @@ try{
             if($pendingNode==='purchasing'&&app_has_permission('purchasing.agent',$user)&&app_has_permission('purchasing.view',$user))app_json_response(['ok'=>true]+gaw_node_route('purchasing','purchasing_confirmation'));
             if($pendingNode==='scheduling'&&app_has_permission('schedule.agent',$user))app_json_response(['ok'=>true]+gaw_node_route('scheduling','scheduling_confirmation'));
             if($pendingNode==='equipment'&&app_has_permission('equipment.view',$user)&&app_has_permission('agent.equipment_skills',$user))app_json_response(['ok'=>true]+gaw_node_route('equipment','equipment_confirmation'));
+            if($pendingNode==='recipes'&&app_has_permission('recipes.view',$user)&&app_has_permission('recipes.agent',$user))app_json_response(['ok'=>true]+gaw_node_route('recipes','recipe_confirmation'));
         }
 
         if($isHostStandContext){
@@ -69,6 +71,10 @@ try{
         if($isEquipmentContext){
             $localIntent=preg_match('/\b(this equipment|selected equipment|this asset|selected asset|service history|repair history|maintenance history|maintenance|service|repair|warranty|service contact|repair company|status|condition|criticality|out of service|offline|active|next service|last service|replacement|replace|record|log|schedule|what needs attention|what should we do|what(?:\x27s| is) going on)\b/u',$text)===1;
             if($localIntent||$confirmationIntent)app_json_response(['ok'=>true]+gaw_node_route('equipment','equipment_context'));
+        }
+        if($isRecipesContext){
+            $localIntent=preg_match('/\b(this recipe|selected recipe|ingredients?|instructions?|method|yield|scale|batch|allergen|allergens|production standards?|prep note|production note|add ingredient|add step|add instruction|active|inactive|what needs attention|what should we do|how do we make|how is this made)\b/u',$text)===1;
+            if($localIntent||$confirmationIntent)app_json_response(['ok'=>true]+gaw_node_route('recipes','recipe_context'));
         }
 
         $liveShiftIntent=preg_match('/\b(live shift|run the shift|shift status|service status|service priorities|floor status|ready food|food up|run food|what needs attention right now|what should (?:i|we) do right now|what is holding up (?:table|bar seat|check|ticket)|move .*\b(?:table|bar seat)\b|transfer .*\b(?:table|bar seat)\b|assign .*\bserver\b|change .*\bserver\b|seat .*\b(?:table|bar seat)\b|send .*\bkitchen\b|send .*\bheld\b|fire (?:drinks|starters|mains|dessert|other)|hold (?:drinks|starters|mains|dessert|other)|attach customer|remove .*\b(?:check|ticket|order)\b|add .*\b(?:check|ticket|order)\b|(?:void|discount|comp|refund) (?:this|the))\b/u',$text)===1;
@@ -100,6 +106,9 @@ try{
 
         $crmIntent=preg_match('/\b(customer crm|crm customer|customer profile|guest profile|customer history|customer notes?|customer tags?|find customer|look up customer|lifetime spend|customer favorites?|customer favourites?|relationship history)\b/u',$text)===1;
         if($crmIntent&&!$isPosContext&&app_has_permission('crm.view',$user))app_json_response(['ok'=>true]+gaw_node_route('crm'));
+
+        $recipeIntent=preg_match('/\b(recipe|recipes|recipe standards?|production standards?|recipe yield|recipe ingredients?|recipe instructions?|recipe method|batch formula|scale .*recipe|recipe .*scale|make .*recipe|what recipes? use|which recipes? use|recipe allergens?|allergens?.*recipe)\b/u',$text)===1;
+        if($recipeIntent&&app_has_permission('recipes.view',$user)&&app_has_permission('recipes.agent',$user))app_json_response(['ok'=>true]+gaw_node_route('recipes'));
 
         $prepIntent=preg_match('/\b(prep intelligence|prep plan|prep recommendations?|prep list|prep history|publish prep|generate prep|build prep|prep forecast|prep shortage)\b/u',$text)===1;
         if($prepIntent&&app_has_permission('prep.intelligence.view',$user)&&app_has_permission('prep.intelligence.agent',$user))app_json_response(['ok'=>true]+gaw_node_route('prep'));
