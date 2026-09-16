@@ -15,8 +15,8 @@ $files=[];foreach($paths as $name=>$path){if(!is_file($path)){fwrite(STDERR,"Mis
 $removeStart=strpos($files['runtime'],"if(act==='remove')");$voidStart=$removeStart!==false?strpos($files['runtime'],"if(act==='void')",$removeStart):false;$removeBranch=$removeStart!==false&&$voidStart!==false?substr($files['runtime'],$removeStart,$voidStart-$removeStart):'';
 
 $checks=[
-    'remove endpoint requires POS permission'=>str_contains($files['removeApi'],"app_has_permission('pos.use',$user)"),
-    'remove endpoint enforces assigned location'=>str_contains($files['removeApi'],"operational_location_allowed($pdo,$user,'pos.use',$locationId)"),
+    'remove endpoint requires POS permission'=>str_contains($files['removeApi'],"app_has_permission('pos.use',\$user)"),
+    'remove endpoint enforces assigned location'=>str_contains($files['removeApi'],"operational_location_allowed(\$pdo,\$user,'pos.use',\$locationId)"),
     'remove endpoint blocks captured tender edits'=>str_contains($files['removeApi'],"status='captured'"),
     'remove endpoint blocks kitchen-sent line'=>str_contains($files['removeApi'],'kds_assert_pos_line_mutable'),
     'remove endpoint removes only active line'=>str_contains($files['removeApi'],"DELETE FROM pos_check_items")&&str_contains($files['removeApi'],"status='active'"),
