@@ -53,13 +53,13 @@ jobs:
             js/pos-runtime.js
             js/pos-agent-context.js
             js/table-service-agent-context.js
-            js/table-cleaning-controls.js
             js/agent-next-moves.js
             api/scheduling.php
             api/scheduling-agent.php
             api/pos-agent.php
             api/pos-item-remove.php
             api/live-shift-agent.php
+            api/customer-crm-agent.php
             api/brain-orchestrator.php
             api/brain-events.php
             includes/bootstrap.php
@@ -68,6 +68,10 @@ jobs:
             includes/live-shift-agent-core.php
             includes/live-shift-agent-hardening.php
             includes/live-shift-brain.php
+            includes/customer-crm-agent-core.php
+            includes/customer-crm-agent-extensions.php
+            includes/customer-crm-intelligence.php
+            includes/customer-crm-brain.php
             includes/pos-item-actions.php
             database/20260913_zzzz_staff_scheduling.sql
             upgrade.php
@@ -84,6 +88,7 @@ jobs:
           php -l api/pos-agent.php
           php -l api/pos-item-remove.php
           php -l api/live-shift-agent.php
+          php -l api/customer-crm-agent.php
           php -l api/brain-orchestrator.php
           php -l api/brain-events.php
           php -l includes/bootstrap.php
@@ -92,6 +97,10 @@ jobs:
           php -l includes/live-shift-agent-core.php
           php -l includes/live-shift-agent-hardening.php
           php -l includes/live-shift-brain.php
+          php -l includes/customer-crm-agent-core.php
+          php -l includes/customer-crm-agent-extensions.php
+          php -l includes/customer-crm-intelligence.php
+          php -l includes/customer-crm-brain.php
           php -l includes/pos-item-actions.php
           node --check js/universal-admin-page-shell.js
           node --check js/scheduling.js
@@ -99,7 +108,6 @@ jobs:
           node --check js/pos-runtime.js
           node --check js/pos-agent-context.js
           node --check js/table-service-agent-context.js
-          node --check js/table-cleaning-controls.js
           node --check js/agent-next-moves.js
 
       - name: Build flat production runtime
@@ -131,7 +139,7 @@ jobs:
           2. Preserve the live config.php file. It is intentionally not included in this package.
           3. Preserve all existing uploads/ and storage/ content. Those directories are intentionally not included.
           4. Sign in as an owner/admin, open upgrade.php, and run Upgrade once.
-          5. Hard-refresh the browser, then verify the POS Agent/ticket flow, Table Service Agent, and workspace.php before testing the remaining admin pages.
+          5. Hard-refresh the browser, then verify the POS Agent/ticket flow, Table Service Agent, CRM Agent, and workspace.php before testing the remaining admin pages.
           EOF
 
           test ! -e "$deploy_root/.github"
@@ -153,13 +161,13 @@ jobs:
             js/pos-runtime.js
             js/pos-agent-context.js
             js/table-service-agent-context.js
-            js/table-cleaning-controls.js
             js/agent-next-moves.js
             api/scheduling.php
             api/scheduling-agent.php
             api/pos-agent.php
             api/pos-item-remove.php
             api/live-shift-agent.php
+            api/customer-crm-agent.php
             api/brain-orchestrator.php
             api/brain-events.php
             includes/bootstrap.php
@@ -168,6 +176,10 @@ jobs:
             includes/live-shift-agent-core.php
             includes/live-shift-agent-hardening.php
             includes/live-shift-brain.php
+            includes/customer-crm-agent-core.php
+            includes/customer-crm-agent-extensions.php
+            includes/customer-crm-intelligence.php
+            includes/customer-crm-brain.php
             includes/pos-item-actions.php
             database/20260913_zzzz_staff_scheduling.sql
             upgrade.php
