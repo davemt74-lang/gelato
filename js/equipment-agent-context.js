@@ -73,8 +73,9 @@
   }
 
   function removeLegacyEquipmentBrain() {
-    if (page === 'equipment.php') document.querySelector('aside.right .card.brain')?.remove();
-    if (page === 'equipment-detail.php') document.querySelector('.card.agent')?.remove();
+    if (page !== 'equipment.php') return;
+    const legacy = document.querySelector('aside.right .card.brain');
+    if (legacy?.querySelector('#brainAsk,#brainInput,#brainOutput')) legacy.remove();
   }
 
   const provider = {module: 'equipment', snapshot, transportSnapshot, description, placeholder};
@@ -83,13 +84,12 @@
   window.addEventListener('gelato-agent-ready', () => { register(); publish(); });
   document.addEventListener('DOMContentLoaded', () => { removeLegacyEquipmentBrain(); register(); publish(); }, {once: true});
   document.addEventListener('click', (event) => {
-    if (event.target.closest?.('[data-tab],[data-equipment-tab],.asset[data-id],[data-asset-id],a[href*="equipment-detail.php?id="]')) setTimeout(publish, 0);
+    if (event.target.closest?.('[data-tab],[data-equipment-tab],.asset,[data-asset-id],a[href*="equipment-detail.php?id="]')) setTimeout(publish, 0);
   });
   document.addEventListener('change', (event) => {
     if (event.target?.id === 'assetId') setTimeout(publish, 0);
   });
-  const observer = new MutationObserver(() => publish());
-  if (document.documentElement) observer.observe(document.documentElement, {subtree: true, childList: true, attributes: true, attributeFilter: ['class','value','aria-selected','data-asset-id']});
+
   removeLegacyEquipmentBrain();
   register();
   publish();
