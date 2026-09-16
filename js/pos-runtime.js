@@ -4,7 +4,7 @@ const $=id=>document.getElementById(id);
 const state={locationId:0,locations:[],settings:{},menu:[],openChecks:[],recentChecks:[],readyTickets:[],current:null,category:0,tenderType:'cash',permissions:{},floorPlan:null,view:'menu'};
 let readyLoading=false;
 const money=n=>'$'+Number(n||0).toFixed(2);
-const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#039;'}[c]));
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 const fmtQty=n=>{const v=Number(n||0);return Number.isInteger(v)?String(v):v.toFixed(2).replace(/0+$/,'').replace(/\.$/,'')};
 function readyTime(value){if(!value)return'';const normalized=String(value).replace(' ','T').replace(/(\.\d{3})\d+/,'$1');const date=new Date(normalized);return Number.isNaN(date.getTime())?'':date.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}
 function toast(message){const el=$('toast');el.textContent=message;el.classList.remove('hidden');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.add('hidden'),3300)}
