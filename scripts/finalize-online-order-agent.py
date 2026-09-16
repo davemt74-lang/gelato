@@ -4,14 +4,10 @@ source_path = Path('scripts/online-order-agent-integration-patch.py')
 source = source_path.read_text()
 start = source.index('# Normalize the temporary registry tripwire')
 end = source.index('# Shared fallback routing.')
-safe = source[:start] + source[end:]
-before, marker, after = safe.partition('# Production runtime closure.')
-if not marker:
-    raise SystemExit('production runtime marker missing')
-# Agent Brain orchestration has one path-filter block, not two.
-before = before.replace(', 2),', ', 1),')
-safe = before + marker + after
-exec(compile(safe, str(source_path), 'exec'), {'__name__': '__main__'})
+source_only = source[:start] + source[end:]
+stop = source_only.index('# Existing Brain workflow also covers the new node.')
+source_only = source_only[:stop]
+exec(compile(source_only, str(source_path), 'exec'), {'__name__': '__main__'})
 
 # Safety hardening: an explicit order identifier that is invalid must not silently
 # fall back to the order currently selected in page context.
