@@ -82,6 +82,12 @@ function gaw_agent_nodes(): array
             'domain'=>'operations',
             'mode'=>'read_confirmed_write',
         ],
+        'equipment'=>[
+            'label'=>'Equipment + Maintenance',
+            'route'=>'api/equipment-agent.php',
+            'domain'=>'equipment_maintenance',
+            'mode'=>'read_confirmed_write',
+        ],
         'kds'=>[
             'label'=>'Kitchen Display System',
             'route'=>'api/kds-agent.php',
