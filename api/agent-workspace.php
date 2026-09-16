@@ -48,7 +48,7 @@ try{
         if($dashboardIntent&&admin_control_allowed($user))app_json_response(['ok'=>true]+gaw_node_route('command_center'));
 
         $managerIntent=preg_match('/\b(gm brief|manager brief|daily brief|opening brief|morning brief|closing brief|manager recap|daily manager|restaurant status|how is (?:the )?restaurant doing|how are we doing today|what needs manager attention)\b/u',$text)===1;
-        if($managerIntent&&app_has_permission('manager.brief.view',$user)&&app_has_permission('manager.brief.agent',$user))app_json_response(['ok'=>true]+gaw_node_route('daily_manager'));
+        if($managerIntent&&app_has_permission('manager.brief.view',$user)&&app_has_permission('manager.brief.agent',$user))app_json_response(['ok'=>true]+gaw_node_route('daily_manager','daily_manager_brief'));
 
         $purchasingIntent=preg_match('/\b(purchase orders?|\bpo\b|vendor prices?|supplier prices?|receiving|goods receipts?|restock|inventory pressure|need to buy|need to order|should buy|purchasing suggestions?|draft .*\bpo\b|submit .*\bpo\b|cancel .*\bpo\b)\b/u',$text)===1;
         if($purchasingIntent&&app_has_permission('purchasing.agent',$user)&&app_has_permission('purchasing.view',$user))app_json_response(['ok'=>true]+gaw_node_route('purchasing'));
