@@ -79,6 +79,7 @@ function gaw_route(array $user,string $message): array
     $workforce='/\b(resume|resumes|applicant|applicants|candidate|candidates|hiring|hire|new hires?|employee activity|staff activity|recent activity|workforce overview|workforce summary)\b/u';
     if(($user['role_slug']??'')==='wholesale_customer')return ['route'=>'api/wholesale-portal-agent.php','domain'=>'wholesale_portal'];
     $time='/\b(clock(?:ed)?\s+(?:me\s+)?(?:in|out)|time\s*clock|break|attendance|no.?show|late|actual labor|on clock|clock status)\b/u';
+    $frontOfHouse='/\b(front.?of.?house|host stand|reservations?|reservation status|waitlist|walk.?ins?|waiting parties|table availability|available tables?|open tables?|selected reservation|this reservation|selected party|this waitlist|guest (?:has )?arrived|party (?:has )?arrived|mark .*no.?show|seat this (?:party|reservation)|assign .*reservation .*table|table cleaning|mark .*table .*ready|ready for service)\b/u';
     $schedule='/\b(schedule|scheduled|shift|shifts|availability|time off|swap|coverage|staffing|short.?staffed|who works|who is working|when do i work|next shift)\b/u';
     $employee='/\b(my day|employee home|employee profile|emergency contact|announcement|announcements|restaurant update|handbook|policy|policies|certification|certifications|my training|training due|onboarding|checklist|orientation)\b/u';
     $catering='/\b(catering|banquet|event order|guest count|tasting|deposit|catering readiness)\b/u';
@@ -91,12 +92,14 @@ function gaw_route(array $user,string $message): array
     $confirmationIntent=preg_match('/^(?:confirm|yes|yes please|do it|go ahead|execute|apply|cancel|cancel it|discard|never mind|nevermind|stop)(?:\s+(?:it|that|change|action))?[.!]?$/u',$text)===1;
     if($confirmationIntent&&function_exists('gaw_pending_action_node')&&function_exists('gaw_node_route')){
         $pendingNode=gaw_pending_action_node((int)($user['organization_id']??0),(int)($user['id']??0));
+        if($pendingNode==='front_of_house'&&app_has_permission('host.view',$user)&&(app_has_permission('table_service.view',$user)||app_has_permission('host.use',$user)||app_has_permission('host.manage',$user)))return gaw_node_route('front_of_house','front_of_house_confirmation');
         if($pendingNode==='marketing'&&(app_has_permission('packages.view',$user)||app_has_permission('public_pages.edit',$user)||app_has_permission('settings.organization_edit',$user)))return gaw_node_route('marketing','marketing_confirmation');
     }
 
     if(preg_match($workforce,$text)&&(app_has_permission('resumes.view',$user)||app_has_permission('audit.view',$user)||app_has_permission('schedule.view',$user)))return ['route'=>'api/workspace-workforce-agent.php','domain'=>'workspace_workforce'];
     if(preg_match($menu,$text)&&app_has_permission('menu.view',$user))return ['route'=>'api/agent-brain.php','domain'=>'restaurant_brain'];
     if(preg_match($time,$text)&&(app_has_permission('timeclock.agent',$user)||app_has_permission('timeclock.self',$user)||app_has_permission('attendance.view',$user)))return ['route'=>'api/timeclock-agent.php','domain'=>'timeclock'];
+    if(preg_match($frontOfHouse,$text)&&app_has_permission('host.view',$user)&&(app_has_permission('table_service.view',$user)||app_has_permission('host.use',$user)||app_has_permission('host.manage',$user)))return ['route'=>'api/front-of-house-agent.php','domain'=>'front_of_house'];
     if(preg_match($schedule,$text)&&(app_has_permission('schedule.agent',$user)||app_has_permission('schedule.view',$user)||app_has_permission('schedule.self',$user)))return ['route'=>'api/scheduling-agent.php','domain'=>'scheduling'];
     if(preg_match($employee,$text)&&(app_has_permission('employee.self',$user)||app_has_permission('tasks.self',$user)||app_has_permission('agent.employee_view',$user)||app_has_permission('training.self_view',$user)))return ['route'=>'api/employee-agent.php','domain'=>'employee_home'];
     if(preg_match($marketing,$text)&&(app_has_permission('packages.view',$user)||app_has_permission('public_pages.edit',$user)||app_has_permission('settings.organization_edit',$user)))return ['route'=>'api/marketing-agent.php','domain'=>'marketing'];
