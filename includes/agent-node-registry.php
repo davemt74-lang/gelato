@@ -28,6 +28,12 @@ function gaw_agent_nodes(): array
             'domain'=>'live_shift',
             'mode'=>'read_write',
         ],
+        'front_of_house'=>[
+            'label'=>'Front of House',
+            'route'=>'api/front-of-house-agent.php',
+            'domain'=>'front_of_house',
+            'mode'=>'read_confirmed_write',
+        ],
         'sales_cost'=>[
             'label'=>'Sales Cost Intelligence',
             'route'=>'api/sales-cost-agent.php',
