@@ -9,6 +9,7 @@ on:
       - 'workspace.php'
       - 'pos.php'
       - 'table-service.php'
+      - 'host-stand.php'
       - 'api/**'
       - 'includes/**'
       - 'js/**'
@@ -46,6 +47,7 @@ jobs:
             workspace.php
             pos.php
             table-service.php
+            host-stand.php
             js/universal-admin-page-shell.js
             css/admin-tech-theme.css
             js/scheduling.js
@@ -53,6 +55,8 @@ jobs:
             js/pos-runtime.js
             js/pos-agent-context.js
             js/table-service-agent-context.js
+            js/host-stand-agent-context.js
+            js/table-cleaning-controls.js
             js/catering-agent-context.js
             js/wholesale-agent-context.js
             js/marketing-agent-context.js
@@ -62,6 +66,7 @@ jobs:
             api/pos-agent.php
             api/pos-item-remove.php
             api/live-shift-agent.php
+            api/front-of-house-agent.php
             api/customer-crm-agent.php
             api/catering-agent.php
             api/wholesale-agent.php
@@ -71,9 +76,12 @@ jobs:
             includes/bootstrap.php
             includes/scheduling-core.php
             includes/agent-brain-orchestrator.php
+            includes/agent-node-registry.php
+            includes/agent-workspace-core.php
             includes/live-shift-agent-core.php
             includes/live-shift-agent-hardening.php
             includes/live-shift-brain.php
+            includes/front-of-house-agent-core.php
             includes/customer-crm-agent-core.php
             includes/customer-crm-agent-extensions.php
             includes/customer-crm-intelligence.php
@@ -93,11 +101,13 @@ jobs:
           php -l workspace.php
           php -l pos.php
           php -l table-service.php
+          php -l host-stand.php
           php -l api/scheduling.php
           php -l api/scheduling-agent.php
           php -l api/pos-agent.php
           php -l api/pos-item-remove.php
           php -l api/live-shift-agent.php
+          php -l api/front-of-house-agent.php
           php -l api/customer-crm-agent.php
           php -l api/catering-agent.php
           php -l api/wholesale-agent.php
@@ -107,9 +117,12 @@ jobs:
           php -l includes/bootstrap.php
           php -l includes/scheduling-core.php
           php -l includes/agent-brain-orchestrator.php
+          php -l includes/agent-node-registry.php
+          php -l includes/agent-workspace-core.php
           php -l includes/live-shift-agent-core.php
           php -l includes/live-shift-agent-hardening.php
           php -l includes/live-shift-brain.php
+          php -l includes/front-of-house-agent-core.php
           php -l includes/customer-crm-agent-core.php
           php -l includes/customer-crm-agent-extensions.php
           php -l includes/customer-crm-intelligence.php
@@ -125,6 +138,8 @@ jobs:
           node --check js/pos-runtime.js
           node --check js/pos-agent-context.js
           node --check js/table-service-agent-context.js
+          node --check js/host-stand-agent-context.js
+          node --check js/table-cleaning-controls.js
           node --check js/catering-agent-context.js
           node --check js/wholesale-agent-context.js
           node --check js/marketing-agent-context.js
@@ -159,7 +174,7 @@ jobs:
           2. Preserve the live config.php file. It is intentionally not included in this package.
           3. Preserve all existing uploads/ and storage/ content. Those directories are intentionally not included.
           4. Sign in as an owner/admin, open upgrade.php, and run Upgrade once.
-          5. Hard-refresh the browser, then verify the POS Agent/ticket flow, Table Service Agent, CRM Agent, Catering Agent, Wholesale Agent, Marketing Agent, and workspace.php before testing the remaining admin pages.
+          5. Hard-refresh the browser, then verify the POS Agent/ticket flow, Table Service Agent, Host Stand / Front of House Agent, CRM Agent, Catering Agent, Wholesale Agent, Marketing Agent, and workspace.php before testing the remaining admin pages.
           EOF
 
           test ! -e "$deploy_root/.github"
@@ -174,6 +189,7 @@ jobs:
             workspace.php
             pos.php
             table-service.php
+            host-stand.php
             js/universal-admin-page-shell.js
             css/admin-tech-theme.css
             js/scheduling.js
@@ -181,6 +197,8 @@ jobs:
             js/pos-runtime.js
             js/pos-agent-context.js
             js/table-service-agent-context.js
+            js/host-stand-agent-context.js
+            js/table-cleaning-controls.js
             js/catering-agent-context.js
             js/wholesale-agent-context.js
             js/marketing-agent-context.js
@@ -190,6 +208,7 @@ jobs:
             api/pos-agent.php
             api/pos-item-remove.php
             api/live-shift-agent.php
+            api/front-of-house-agent.php
             api/customer-crm-agent.php
             api/catering-agent.php
             api/wholesale-agent.php
@@ -199,9 +218,12 @@ jobs:
             includes/bootstrap.php
             includes/scheduling-core.php
             includes/agent-brain-orchestrator.php
+            includes/agent-node-registry.php
+            includes/agent-workspace-core.php
             includes/live-shift-agent-core.php
             includes/live-shift-agent-hardening.php
             includes/live-shift-brain.php
+            includes/front-of-house-agent-core.php
             includes/customer-crm-agent-core.php
             includes/customer-crm-agent-extensions.php
             includes/customer-crm-intelligence.php
