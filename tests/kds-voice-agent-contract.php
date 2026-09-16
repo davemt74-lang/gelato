@@ -11,6 +11,7 @@ $sidebar=kva_text($root.'/js/kds-agent-sidebar.js');
 $context=kva_text($root.'/js/kds-agent-context.js');
 $agent=kva_text($root.'/api/kds-agent.php');
 $registry=kva_text($root.'/includes/agent-node-registry.php');
+$router=kva_text($root.'/api/agent-workspace.php');
 
 kva_assert(str_contains($page,'data-agent-voice-only="1"'),'KDS must opt into voice-only Agent mode.');
 kva_assert(str_contains($page,'js/agent-page-context.js')&&str_contains($page,'js/kds-agent-context.js')&&str_contains($page,'js/global-agent.js')&&str_contains($page,'js/kds-agent-sidebar.js'),'KDS must load shared Agent context, the main Agent Brain transport, and the KDS voice sidebar.');
@@ -33,5 +34,7 @@ kva_assert(str_contains($agent,'kds_production_board')&&str_contains($agent,'kda
 kva_assert(str_contains($agent,'special_instructions')&&str_contains($agent,'station_name')&&str_contains($agent,'guestCount'),'KDS Agent must understand special instructions, station state, and guest/order context.');
 kva_assert(str_contains($agent,"'skill'=>'kds.read_orders'")&&str_contains($agent,"'skill'=>'kds.order_detail'")&&str_contains($agent,"'skill'=>'kds.order_history'"),'KDS Agent must answer live-board, individual-order, and recent-history questions.');
 kva_assert(str_contains($registry,"'kds'")&&str_contains($registry,"'route'=>'api/kds-agent.php'"),'KDS must be a first-class node in the main Agent Brain registry.');
+kva_assert(str_contains($router,'all day (?:count|counts|items?|kitchen)')&&str_contains($router,'(?:kitchen|item|items) all day'),'Global KDS routing must require kitchen/item context for All Day language.');
+kva_assert(str_contains($router,"station|all day|kitchen|orders?"),'KDS-local routing must still accept bare All Day language on the KDS page.');
 
 echo "kds-voice-agent-contract-ok\n";
