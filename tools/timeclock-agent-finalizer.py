@@ -15,11 +15,20 @@ def regex_once(path, pattern, repl, label, flags=0):
         raise SystemExit(f'{label}: expected 1 regex match, found {n}')
     p.write_text(out)
 
+# First-class registry node.
 replace_once(
     'includes/agent-node-registry.php',
     "        'online_orders'=>[\n",
     "        'timeclock'=>[\n            'label'=>'Time Clock + Attendance',\n            'route'=>'api/timeclock-agent.php',\n            'domain'=>'timeclock_attendance',\n            'mode'=>'read_confirmed_write',\n        ],\n        'online_orders'=>[\n",
     'registry timeclock node'
+)
+
+# Shared legacy route normalizes to the first-class node and confirmations return to it.
+replace_once(
+    'includes/agent-workspace-core.php',
+    "    $time='/\\b(clock(?:ed)?\\s+(?:me\\s+)?(?:in|out)|time\\s*clock|break|attendance|no.?show|late|actual labor|on clock|clock status)\\b/u';\n",
+    "    $time='/\\b(clock(?:ed)?\\s+(?:me\\s+)?(?:in|out)|time\\s*clock|(?:start|take|begin|end|finish|stop)\\s+(?:my\\s+)?break|my break|attendance|no.?show|late|actual labor|on clock|clock status)\\b/u';\n",
+    'narrow global timeclock break intent'
 )
 replace_once(
     'includes/agent-workspace-core.php',
@@ -33,6 +42,8 @@ replace_once(
     "    if(preg_match($time,$text)&&app_has_permission('timeclock.agent',$user))return function_exists('gaw_node_route')?gaw_node_route('timeclock'):['route'=>'api/timeclock-agent.php','domain'=>'timeclock_attendance'];\n",
     'core explicit timeclock route'
 )
+
+# Shared page-context router.
 replace_once(
     'api/agent-workspace.php',
     "// api/customer-crm-agent.php api/catering-agent.php api/wholesale-agent.php api/prep-intelligence-agent.php api/operations-agent.php api/kds-agent.php api/live-shift-agent.php api/front-of-house-agent.php api/equipment-agent.php api/recipe-agent.php api/online-order-agent.php\n",
@@ -57,6 +68,8 @@ replace_once(
     "\n        if($isTimeclockContext){\n            $localIntent=preg_match('/\\b(this employee|selected employee|my clock|clock status|clocked in|clocked out|break|attendance|late|no[ -]?show|labor|labor variance|scheduled labor|actual labor|who is working|who is clocked in|what needs attention|what should we do|what(?:\\x27s| is) going on)\\b/u',$text)===1;\n            if($localIntent||$confirmationIntent)app_json_response(['ok'=>true]+gaw_node_route('timeclock','timeclock_context'));\n        }\n\n        $liveShiftIntent=preg_match(",
     'workspace local timeclock context'
 )
+
+# Brain composition: Time Clock is another signal adapter over the same canonical snapshot.
 replace_once(
     'api/brain-orchestrator.php',
     "require_once __DIR__.'/../includes/online-order-agent-brain.php';\n",
@@ -81,10 +94,18 @@ replace_once(
     "'onlineOrdersIntegrated'=>true,'timeclockIntegrated'=>true]",
     'brain audit integration marker'
 )
+
+# Time Clock page: shared Agent canvas replaces the old page-specific text bar; voice remains opt-in UI.
 replace_once('timeclock.php','<title>Time Clock + Voice Agent</title>','<title>Time Clock + Attendance | Restaurant Admin</title>','page title')
 replace_once('timeclock.php','<strong>Time Clock + Voice Agent</strong><div class="muted">Attendance · Labor · Employee AI</div>','<strong>Time Clock + Attendance</strong><div class="muted">Attendance · Labor · Voice personalization</div>','page brand')
 replace_once('timeclock.php','padding-bottom:108px','padding-bottom:32px','page bottom spacing')
-regex_once('timeclock.php',r"\.agentbar\{.*?\.listen\.on\{.*?\}",'','remove legacy agentbar css',re.S)
+regex_once(
+    'timeclock.php',
+    r"\.agentbar\{.*?\.listen\.on\{.*?\}",
+    '',
+    'remove legacy agentbar css',
+    re.S
+)
 replace_once(
     'timeclock.php',
     '<div class="actions"><button class="btn" id="listeningToggle">Enable Listening Mode</button><label class="muted"><input type="checkbox" id="speakAlerts"> Speak proactive alerts</label></div>',
@@ -110,6 +131,8 @@ replace_once(
     '<script src="js/universal-admin-page-shell.js?v=20260915-3"></script><script src="js/timeclock-voice.js?v=20260916-1"></script><script src="js/agent-page-context.js?v=20260916-1"></script><script src="js/timeclock-agent-context.js?v=20260916-1"></script><script src="js/global-agent.js?v=20260916-1"></script><script src="js/dynamic-agent-canvas.js?v=20260916-1"></script></body></html>',
     'shared Agent scripts'
 )
+
+# Voice JS keeps voice controls but routes direct spoken commands through the same confirmed Agent core + page context.
 replace_once(
     'js/timeclock-voice.js',
     "async function sendAgent(text,voice=false){if(!text.trim())return;status('Gelato is checking your restaurant context…');try{const d=await post('api/timeclock-agent.php',{message:text,voice,voiceEventId:voice?voiceEventId:''});status(d.answer);",
