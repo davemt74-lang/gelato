@@ -9,7 +9,7 @@ require_once __DIR__.'/../includes/menu-training-knowledge.php';
 // Compatibility route markers for older CI/contracts. Canonical routing now lives in includes/agent-node-registry.php.
 // api/admin-dashboard-agent.php api/daily-manager-agent.php api/sales-cost-agent.php api/sales-agent.php
 // api/employee-development-agent.php api/employee-agent.php api/purchasing-agent.php api/scheduling-agent.php api/pos-agent.php
-// api/customer-crm-agent.php api/catering-agent.php api/wholesale-agent.php api/prep-intelligence-agent.php api/operations-agent.php api/kds-agent.php api/live-shift-agent.php api/front-of-house-agent.php api/equipment-agent.php api/recipe-agent.php
+// api/customer-crm-agent.php api/catering-agent.php api/wholesale-agent.php api/prep-intelligence-agent.php api/operations-agent.php api/kds-agent.php api/live-shift-agent.php api/front-of-house-agent.php api/equipment-agent.php api/recipe-agent.php api/online-order-agent.php
 
 $user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];$uid=(int)$user['id'];
 if(!gaw_ready($pdo))app_json_response(['ok'=>false,'message'=>'Agent Workspace migration is not installed. Run upgrade.php.'],503);
@@ -48,6 +48,8 @@ try{
         $isKdsContext=$module==='kds'&&app_has_permission('kds.view',$user);
         $isEquipmentContext=$module==='equipment'&&app_has_permission('equipment.view',$user)&&app_has_permission('agent.equipment_skills',$user);
         $isRecipesContext=$module==='recipes'&&app_has_permission('recipes.view',$user)&&app_has_permission('recipes.agent',$user);
+        $canOnlineOrders=app_has_permission('online_orders.fulfill',$user)||app_has_permission('order_recovery.view',$user)||app_has_permission('order_recovery.manage',$user)||app_has_permission('order_recovery.refund',$user)||app_has_permission('pos.use',$user)||app_has_permission('pos.manage',$user)||app_has_permission('kds.view',$user)||app_has_permission('crm.view',$user);
+        $isOnlineOrdersContext=in_array($module,['online_orders','pickup_fulfillment','order_recovery'],true)&&$canOnlineOrders;
         $canLiveShift=app_has_permission('table_service.view',$user)||app_has_permission('pos.use',$user)||app_has_permission('kds.view',$user);
         $confirmationIntent=preg_match('/^(?:confirm|yes|yes please|do it|go ahead|execute|apply|cancel|cancel it|discard|never mind|nevermind|stop)(?:\s+(?:it|that|change|action))?[.!]?$/u',$text)===1;
         if($confirmationIntent){
@@ -62,6 +64,7 @@ try{
             if($pendingNode==='scheduling'&&app_has_permission('schedule.agent',$user))app_json_response(['ok'=>true]+gaw_node_route('scheduling','scheduling_confirmation'));
             if($pendingNode==='equipment'&&app_has_permission('equipment.view',$user)&&app_has_permission('agent.equipment_skills',$user))app_json_response(['ok'=>true]+gaw_node_route('equipment','equipment_confirmation'));
             if($pendingNode==='recipes'&&app_has_permission('recipes.view',$user)&&app_has_permission('recipes.agent',$user))app_json_response(['ok'=>true]+gaw_node_route('recipes','recipe_confirmation'));
+            if($pendingNode==='online_orders'&&$canOnlineOrders)app_json_response(['ok'=>true]+gaw_node_route('online_orders','online_order_confirmation'));
         }
 
         if($isHostStandContext){
@@ -75,6 +78,10 @@ try{
         if($isRecipesContext){
             $localIntent=preg_match('/\b(this recipe|selected recipe|ingredients?|instructions?|method|yield|scale|batch|allergen|allergens|production standards?|prep note|production note|add ingredient|add step|add instruction|active|inactive|what needs attention|what should we do|how do we make|how is this made)\b/u',$text)===1;
             if($localIntent||$confirmationIntent)app_json_response(['ok'=>true]+gaw_node_route('recipes','recipe_context'));
+        }
+        if($isOnlineOrdersContext){
+            $localIntent=preg_match('/\b(this order|selected order|this pickup|selected pickup|pickup|ready|readiness|payment due|paid|promise|promised|late|past promise|handed|hand off|handoff|picked up|fulfill|fulfillment|delay|recovery|exception|what needs attention|what should we do|what(?:\x27s| is) going on)\b/u',$text)===1;
+            if($localIntent||$confirmationIntent)app_json_response(['ok'=>true]+gaw_node_route('online_orders','online_order_context'));
         }
 
         $liveShiftIntent=preg_match('/\b(live shift|run the shift|shift status|service status|service priorities|floor status|ready food|food up|run food|what needs attention right now|what should (?:i|we) do right now|what is holding up (?:table|bar seat|check|ticket)|move .*\b(?:table|bar seat)\b|transfer .*\b(?:table|bar seat)\b|assign .*\bserver\b|change .*\bserver\b|seat .*\b(?:table|bar seat)\b|send .*\bkitchen\b|send .*\bheld\b|fire (?:drinks|starters|mains|dessert|other)|hold (?:drinks|starters|mains|dessert|other)|attach customer|remove .*\b(?:check|ticket|order)\b|add .*\b(?:check|ticket|order)\b|(?:void|discount|comp|refund) (?:this|the))\b/u',$text)===1;
@@ -97,6 +104,9 @@ try{
 
         $wholesaleIntent=preg_match('/\b(wholesale fulfillment|fulfillment batch|wholesale allocation|wholesale shortages?|create .*fulfillment batch|dispatch .*batch|deliver .*batch|mark .*batch .*ready|cancel .*batch)\b/u',$text)===1;
         if($wholesaleIntent&&app_has_permission('wholesale.view',$user)&&app_has_permission('wholesale.agent',$user))app_json_response(['ok'=>true]+gaw_node_route('wholesale'));
+
+        $onlineOrderIntent=preg_match('/\b(online orders?|pickup orders?|web orders?|pickup queue|pickup fulfillment|pickup handoff|ready for pickup|past promise|late pickup|pickup promise|order recovery|pickup recovery)\b/u',$text)===1;
+        if($onlineOrderIntent&&$canOnlineOrders)app_json_response(['ok'=>true]+gaw_node_route('online_orders'));
 
         $dashboardIntent=preg_match('/\b(command center|command centre|dashboard|restaurant overview|operating snapshot|operations snapshot|location performance|compare locations?|active tables?|open (?:pos )?(?:tickets?|checks?)|online orders?|what needs attention|what is happening right now|what\x27s happening right now|how is wholesale doing|wholesale (?:status|overview|pipeline|orders?|receivables?|accounts?|sales)|catering (?:status|overview|readiness|events?))\b/u',$text)===1;
         if($dashboardIntent&&admin_control_allowed($user))app_json_response(['ok'=>true]+gaw_node_route('command_center'));

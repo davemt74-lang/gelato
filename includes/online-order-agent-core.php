@@ -74,8 +74,7 @@ function online_order_agent_resolve_order(PDO $pdo,int $organizationId,string $m
     $explicit=online_order_agent_explicit_identifier($message);
     if($explicit){
         if($explicit['type']==='check')return online_order_agent_order_by_check_number($pdo,$organizationId,(string)$explicit['value']);
-        $row=pickup_fulfillment_order($pdo,$organizationId,(string)$explicit['value'],false);
-        if($row)return $row;
+        return pickup_fulfillment_order($pdo,$organizationId,(string)$explicit['value'],false);
     }
     $selected=trim((string)($context['selectedOrderPublicId']??''));
     if($selected!=='')return pickup_fulfillment_order($pdo,$organizationId,$selected,false);
