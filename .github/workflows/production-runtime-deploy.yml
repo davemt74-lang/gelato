@@ -13,6 +13,9 @@ on:
       - 'equipment.php'
       - 'equipment-detail.php'
       - 'recipes.php'
+      - 'online-orders-admin.php'
+      - 'pickup-fulfillment.php'
+      - 'order-recovery.php'
       - 'api/**'
       - 'includes/**'
       - 'js/**'
@@ -54,6 +57,9 @@ jobs:
             equipment.php
             equipment-detail.php
             recipes.php
+            online-orders-admin.php
+            pickup-fulfillment.php
+            order-recovery.php
             js/universal-admin-page-shell.js
             css/admin-tech-theme.css
             js/scheduling.js
@@ -68,6 +74,7 @@ jobs:
             js/marketing-agent-context.js
             js/equipment-agent-context.js
             js/recipe-agent-context.js
+            js/online-order-agent-context.js
             js/agent-next-moves.js
             api/scheduling.php
             api/scheduling-agent.php
@@ -81,6 +88,7 @@ jobs:
             api/marketing-agent.php
             api/equipment-agent.php
             api/recipe-agent.php
+            api/online-order-agent.php
             api/brain-orchestrator.php
             api/brain-events.php
             api/daily-manager-agent.php
@@ -106,6 +114,8 @@ jobs:
             includes/equipment-agent-brain.php
             includes/recipe-agent-core.php
             includes/recipe-agent-brain.php
+            includes/online-order-agent-core.php
+            includes/online-order-agent-brain.php
             includes/pos-item-actions.php
             database/20260913_zzzz_staff_scheduling.sql
             database/20260912_equipment_catalog_brain.sql
@@ -123,6 +133,9 @@ jobs:
           php -l equipment.php
           php -l equipment-detail.php
           php -l recipes.php
+          php -l online-orders-admin.php
+          php -l pickup-fulfillment.php
+          php -l order-recovery.php
           php -l api/scheduling.php
           php -l api/scheduling-agent.php
           php -l api/pos-agent.php
@@ -135,6 +148,7 @@ jobs:
           php -l api/marketing-agent.php
           php -l api/equipment-agent.php
           php -l api/recipe-agent.php
+          php -l api/online-order-agent.php
           php -l api/brain-orchestrator.php
           php -l api/brain-events.php
           php -l api/daily-manager-agent.php
@@ -160,6 +174,8 @@ jobs:
           php -l includes/equipment-agent-brain.php
           php -l includes/recipe-agent-core.php
           php -l includes/recipe-agent-brain.php
+          php -l includes/online-order-agent-core.php
+          php -l includes/online-order-agent-brain.php
           php -l includes/pos-item-actions.php
           node --check js/universal-admin-page-shell.js
           node --check js/scheduling.js
@@ -174,6 +190,7 @@ jobs:
           node --check js/marketing-agent-context.js
           node --check js/equipment-agent-context.js
           node --check js/recipe-agent-context.js
+          node --check js/online-order-agent-context.js
           node --check js/agent-next-moves.js
 
       - name: Build flat production runtime
@@ -205,7 +222,7 @@ jobs:
           2. Preserve the live config.php file. It is intentionally not included in this package.
           3. Preserve all existing uploads/ and storage/ content. Those directories are intentionally not included.
           4. Sign in as an owner/admin, open upgrade.php, and run Upgrade once.
-          5. Hard-refresh the browser, then verify the POS Agent/ticket flow, Table Service Agent, Host Stand / Front of House Agent, CRM Agent, Catering Agent, Wholesale Agent, Marketing Agent, Equipment + Maintenance Agent, Recipe + Production Standards Agent, and workspace.php before testing the remaining admin pages.
+          5. Hard-refresh the browser, then verify the POS Agent/ticket flow, Table Service Agent, Host Stand / Front of House Agent, CRM Agent, Catering Agent, Wholesale Agent, Marketing Agent, Equipment + Maintenance Agent, Recipe + Production Standards Agent, Online Ordering + Pickup Fulfillment Agent, and workspace.php before testing the remaining admin pages.
           EOF
 
           test ! -e "$deploy_root/.github"
@@ -224,6 +241,9 @@ jobs:
             equipment.php
             equipment-detail.php
             recipes.php
+            online-orders-admin.php
+            pickup-fulfillment.php
+            order-recovery.php
             js/universal-admin-page-shell.js
             css/admin-tech-theme.css
             js/scheduling.js
@@ -238,6 +258,7 @@ jobs:
             js/marketing-agent-context.js
             js/equipment-agent-context.js
             js/recipe-agent-context.js
+            js/online-order-agent-context.js
             js/agent-next-moves.js
             api/scheduling.php
             api/scheduling-agent.php
@@ -251,6 +272,7 @@ jobs:
             api/marketing-agent.php
             api/equipment-agent.php
             api/recipe-agent.php
+            api/online-order-agent.php
             api/brain-orchestrator.php
             api/brain-events.php
             api/daily-manager-agent.php
@@ -276,6 +298,8 @@ jobs:
             includes/equipment-agent-brain.php
             includes/recipe-agent-core.php
             includes/recipe-agent-brain.php
+            includes/online-order-agent-core.php
+            includes/online-order-agent-brain.php
             includes/pos-item-actions.php
             database/20260913_zzzz_staff_scheduling.sql
             database/20260912_equipment_catalog_brain.sql
