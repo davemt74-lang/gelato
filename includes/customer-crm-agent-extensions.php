@@ -8,7 +8,7 @@ require_once __DIR__.'/agent-confirmation-core.php';
 function cae_relationship_intent(string $message): bool
 {
     $text=mb_strtolower($message,'UTF-8');
-    return preg_match('/\b(this customer|this guest|regular|repeat customer|returning customer|relationship|vip|high value|valuable|top spend|lapsed|re.?engage|inactive|last visit|when were they last|birthday|consent|opt.?in|can i (?:email|text|message)|favorite|favourite|usual|recent (?:orders?|checks?|visits?)|customer history|guest history|lifetime spend|average check|what should (?:we|i) do for (?:this )?(?:customer|guest))\b/u',$text)===1;
+    return preg_match('/\b(this customer|this guest|regular|repeat customer|returning customer|relationship|vip|high value|valuable|top spend|lapsed|re.?engage|inactive|last visit|when were they last|birthday|consent|opt.?in|can i (?:email|text|message)|favorite|favourite|usual(?:ly)?|recent (?:orders?|checks?|visits?)|customer history|guest history|lifetime spend|average check|what should (?:we|i) do for (?:this )?(?:customer|guest))\b/u',$text)===1;
 }
 
 function cae_global_intent(string $message): bool
@@ -85,7 +85,10 @@ function customer_crm_agent_enhanced_handle(PDO $pdo,array $user,array $input): 
         if(cae_followup_intent($message))return cae_followup_proposal($pdo,$user,$customer,$message);
         if(cae_relationship_intent($message)){
             $lower=mb_strtolower($message,'UTF-8');
-            if(preg_match('/\b(?:favorite|favourite|usual|recent (?:orders?|checks?|visits?)|customer history|guest history|notes?|tags?)\b/u',$lower))return customer_crm_agent_handle($pdo,$user,cae_rewrite_to_crm($input,$customer));
+            if(preg_match('/\b(?:favorite|favourite|usual(?:ly)?)\b/u',$lower)){
+                return ['ok'=>true,'skill'=>'crm.relationship','answer'=>cac_favorites_answer($customer),'data'=>['customer'=>['publicId'=>$customer['publicId'],'displayName'=>$customer['displayName'],'metrics'=>$customer['metrics'],'tags'=>$customer['tags']]],'sources'=>['Customer CRM','POS Paid Visit History']];
+            }
+            if(preg_match('/\b(?:recent (?:orders?|checks?|visits?)|customer history|guest history|notes?|tags?)\b/u',$lower))return customer_crm_agent_handle($pdo,$user,cae_rewrite_to_crm($input,$customer));
             $answer=cri_relationship_answer($pdo,(int)$user['organization_id'],$customer,$message);
             return ['ok'=>true,'skill'=>'crm.relationship_intelligence','answer'=>$answer['answer'],'data'=>['customer'=>['publicId'=>$customer['publicId'],'displayName'=>$customer['displayName']],'relationship'=>$answer['relationship']],'sources'=>$answer['sources']];
         }
