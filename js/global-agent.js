@@ -60,7 +60,7 @@
   }
 
   function mount() {
-    if (document.body?.dataset.agentCanvas === '1' || document.getElementById('gelato-agent-bar')) return;
+    if (document.body?.dataset.agentCanvas === '1' || document.body?.dataset.agentVoiceOnly === '1' || document.getElementById('gelato-agent-bar')) return;
     installCss();
     document.body.insertAdjacentHTML('beforeend', `
       <div id="gelato-agent-status" role="status"></div>
@@ -85,13 +85,15 @@
   }
 
   function status(text, milliseconds = 0) {
+    const value = String(text || '');
+    window.dispatchEvent(new CustomEvent('gelato-agent-status', {detail: {message: value}}));
     const element = document.getElementById('gelato-agent-status') || document.getElementById('canvasStatus');
     if (!element) return;
-    element.textContent = text || '';
-    element.style.display = text ? 'block' : 'none';
-    if (milliseconds && text) {
+    element.textContent = value;
+    element.style.display = value ? 'block' : 'none';
+    if (milliseconds && value) {
       setTimeout(() => {
-        if (element.textContent === text) element.style.display = 'none';
+        if (element.textContent === value) element.style.display = 'none';
       }, milliseconds);
     }
   }
@@ -283,6 +285,7 @@
       await verifyVoice();
       status('Listening…');
       const text = await speechOnce();
+      window.dispatchEvent(new CustomEvent('gelato-agent-voice-transcript', {detail: {text}}));
       return await send(text, true);
     } catch (error) {
       status(error.message, 4500);
@@ -313,6 +316,7 @@
       });
       S.listening = on;
       document.getElementById('gaListen')?.classList.toggle('on', on);
+      window.dispatchEvent(new CustomEvent('gelato-agent-listening-change', {detail: {listening: on}}));
       if (on) {
         startContinuous();
         startPoll();
@@ -349,6 +353,7 @@
             status('Voice check expired. Re-enable Listening Mode.', 4500);
             return;
           }
+          window.dispatchEvent(new CustomEvent('gelato-agent-voice-transcript', {detail: {text}}));
           send(text, true);
         }
       }
@@ -438,6 +443,7 @@
     get threadId() { return S.thread; },
     get user() { return S.user; },
     get permissions() { return [...S.permissions]; },
+    get listening() { return S.listening; },
   };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, {once: true});

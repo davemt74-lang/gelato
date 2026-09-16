@@ -17,9 +17,13 @@
   }
 
   function ensureAgentExperience() {
-    ensureScript('js/agent-page-context.js?v=20260915-context2', 'data-agent-page-context-loader');
+    ensureScript('js/agent-page-context.js?v=20260915-context3', 'data-agent-page-context-loader');
     if (page === 'scheduling.php') ensureScript('js/scheduling-agent-context.js?v=20260915-context2', 'data-scheduling-agent-context-loader');
     if (page === 'purchasing.php') ensureScript('js/purchasing-agent-context.js?v=20260915-context2', 'data-purchasing-agent-context-loader');
+    if (page === 'customer-crm.php') ensureScript('js/customer-crm-agent-context.js?v=20260915-context1', 'data-crm-agent-context-loader');
+    if (page === 'prep-intelligence.php') ensureScript('js/prep-agent-context.js?v=20260915-context1', 'data-prep-agent-context-loader');
+    if (page === 'operations.php') ensureScript('js/operations-agent-context.js?v=20260915-context1', 'data-operations-agent-context-loader');
+    if (page === 'kds.php' || page === 'kds-dashboard.php') ensureScript('js/kds-agent-context.js?v=20260915-context1', 'data-kds-agent-context-loader');
     if (!window.GelatoGlobalAgent) ensureScript('js/global-agent.js?v=20260915-agent2', 'data-gelato-global-agent-loader');
     ensureScript('js/dynamic-agent-canvas.js?v=20260915-drawer1', 'data-dynamic-agent-canvas-loader');
   }

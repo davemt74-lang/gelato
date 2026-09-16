@@ -9,6 +9,7 @@ require_once __DIR__.'/../includes/menu-training-knowledge.php';
 // Compatibility route markers for older CI/contracts. Canonical routing now lives in includes/agent-node-registry.php.
 // api/admin-dashboard-agent.php api/daily-manager-agent.php api/sales-cost-agent.php api/sales-agent.php
 // api/employee-development-agent.php api/employee-agent.php api/purchasing-agent.php api/scheduling-agent.php api/pos-agent.php
+// api/customer-crm-agent.php api/prep-intelligence-agent.php api/operations-agent.php api/kds-agent.php
 
 $user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];$uid=(int)$user['id'];
 if(!gaw_ready($pdo))app_json_response(['ok'=>false,'message'=>'Agent Workspace migration is not installed. Run upgrade.php.'],503);
@@ -37,18 +38,37 @@ try{
         $isPosContext=$module==='pos'&&app_has_permission('pos.use',$user);
         $isSchedulingContext=$module==='scheduling'&&app_has_permission('schedule.agent',$user);
         $isPurchasingContext=$module==='purchasing'&&app_has_permission('purchasing.agent',$user)&&app_has_permission('purchasing.view',$user);
+        $isCrmContext=$module==='crm'&&app_has_permission('crm.view',$user);
+        $isPrepContext=$module==='prep'&&app_has_permission('prep.intelligence.view',$user)&&app_has_permission('prep.intelligence.agent',$user);
+        $isOperationsContext=$module==='operations'&&((app_has_permission('tasks.agent',$user)&&app_has_permission('tasks.view',$user))||(app_has_permission('inventory.agent',$user)&&app_has_permission('inventory.view',$user)));
+        $isKdsContext=$module==='kds'&&app_has_permission('kds.view',$user);
         $confirmationIntent=preg_match('/^(?:confirm|yes|yes please|do it|go ahead|execute|apply|cancel|cancel it|discard|never mind|nevermind|stop)(?:\s+(?:it|that|change|action))?[.!]?$/u',$text)===1;
         if($confirmationIntent){
             $pendingNode=gaw_pending_action_node($org,$uid);
+            if($pendingNode==='crm'&&app_has_permission('crm.view',$user))app_json_response(['ok'=>true]+gaw_node_route('crm','crm_confirmation'));
+            if($pendingNode==='prep'&&app_has_permission('prep.intelligence.view',$user)&&app_has_permission('prep.intelligence.agent',$user))app_json_response(['ok'=>true]+gaw_node_route('prep','prep_confirmation'));
+            if($pendingNode==='operations'&&((app_has_permission('tasks.agent',$user)&&app_has_permission('tasks.view',$user))||(app_has_permission('inventory.agent',$user)&&app_has_permission('inventory.view',$user))))app_json_response(['ok'=>true]+gaw_node_route('operations','operations_confirmation'));
             if($pendingNode==='purchasing'&&app_has_permission('purchasing.agent',$user)&&app_has_permission('purchasing.view',$user))app_json_response(['ok'=>true]+gaw_node_route('purchasing','purchasing_confirmation'));
             if($pendingNode==='scheduling'&&app_has_permission('schedule.agent',$user))app_json_response(['ok'=>true]+gaw_node_route('scheduling','scheduling_confirmation'));
         }
 
-        $dashboardIntent=preg_match('/\b(command center|command centre|dashboard|restaurant overview|operating snapshot|operations snapshot|location performance|compare locations?|active tables?|open (?:pos )?(?:tickets?|checks?)|ready tickets?|kds ready|online orders?|what needs attention|what is happening right now|what\x27s happening right now|how is wholesale doing|wholesale (?:status|overview|pipeline|orders?|receivables?|accounts?|sales)|catering (?:status|overview|readiness|events?))\b/u',$text)===1;
+        $kdsIntent=preg_match('/\b(kds|kitchen display|kitchen tickets?|kitchen orders?|expo|all day (?:count|counts|items?|kitchen)|(?:kitchen|item|items) all day|ready to bump|unrouted kitchen|station load|late kitchen|late tickets?|held tickets?|order history.*kitchen|kitchen.*order history)\b/u',$text)===1;
+        if($kdsIntent&&app_has_permission('kds.view',$user))app_json_response(['ok'=>true]+gaw_node_route('kds'));
+
+        $dashboardIntent=preg_match('/\b(command center|command centre|dashboard|restaurant overview|operating snapshot|operations snapshot|location performance|compare locations?|active tables?|open (?:pos )?(?:tickets?|checks?)|online orders?|what needs attention|what is happening right now|what\x27s happening right now|how is wholesale doing|wholesale (?:status|overview|pipeline|orders?|receivables?|accounts?|sales)|catering (?:status|overview|readiness|events?))\b/u',$text)===1;
         if($dashboardIntent&&admin_control_allowed($user))app_json_response(['ok'=>true]+gaw_node_route('command_center'));
 
         $managerIntent=preg_match('/\b(gm brief|manager brief|daily brief|opening brief|morning brief|closing brief|manager recap|daily manager|restaurant status|how is (?:the )?restaurant doing|how are we doing today|what needs manager attention)\b/u',$text)===1;
         if($managerIntent&&app_has_permission('manager.brief.view',$user)&&app_has_permission('manager.brief.agent',$user))app_json_response(['ok'=>true]+gaw_node_route('daily_manager','daily_manager_brief'));
+
+        $crmIntent=preg_match('/\b(customer crm|crm customer|customer profile|guest profile|customer history|customer notes?|customer tags?|find customer|look up customer|lifetime spend|customer favorites?|customer favourites?|relationship history)\b/u',$text)===1;
+        if($crmIntent&&!$isPosContext&&app_has_permission('crm.view',$user))app_json_response(['ok'=>true]+gaw_node_route('crm'));
+
+        $prepIntent=preg_match('/\b(prep intelligence|prep plan|prep recommendations?|prep list|prep history|publish prep|generate prep|build prep|prep forecast|prep shortage)\b/u',$text)===1;
+        if($prepIntent&&app_has_permission('prep.intelligence.view',$user)&&app_has_permission('prep.intelligence.agent',$user))app_json_response(['ok'=>true]+gaw_node_route('prep'));
+
+        $operationsIntent=preg_match('/\b(restaurant tasks?|operations tasks?|task list|overdue tasks?|low stock|inventory par|inventory count|inventory sources?|sync inventory|task categor(?:y|ies)|restaurant operations)\b/u',$text)===1;
+        if($operationsIntent&&((app_has_permission('tasks.agent',$user)&&app_has_permission('tasks.view',$user))||(app_has_permission('inventory.agent',$user)&&app_has_permission('inventory.view',$user))))app_json_response(['ok'=>true]+gaw_node_route('operations'));
 
         $purchasingIntent=preg_match('/\b(purchase orders?|\bpo\b|vendor prices?|supplier prices?|receiving|goods receipts?|restock|inventory pressure|need to buy|need to order|should buy|purchasing suggestions?|draft .*\bpo\b|submit .*\bpo\b|cancel .*\bpo\b)\b/u',$text)===1;
         if($purchasingIntent&&app_has_permission('purchasing.agent',$user)&&app_has_permission('purchasing.view',$user))app_json_response(['ok'=>true]+gaw_node_route('purchasing'));
@@ -63,6 +83,26 @@ try{
         if($handoffIntent&&(app_has_permission('employee.handoffs.view',$user)||app_has_permission('employee.handoffs.create',$user)||app_has_permission('employee.handoffs.manage',$user)||app_has_permission('employee.self',$user)||app_has_permission('agent.employee_view',$user)))app_json_response(['ok'=>true]+gaw_node_route('employee_handoff'));
 
         $fallback=gaw_route($user,$message);
+        if($isKdsContext){
+            $fallbackDomain=(string)($fallback['domain']??'general');
+            $localIntent=preg_match('/\b(this order|selected order|this ticket|selected ticket|this item|order number|ticket number|table|special instructions?|mods?|late|ready|held|unrouted|station|all day|kitchen|orders?|tickets?|what(?:\x27s| is) next|what just came in|newest|latest|history|status|summary|what(?:\x27s| is) going on)\b/u',$text)===1;
+            if(in_array($fallbackDomain,['general','restaurant_brain','operations'],true)&&$localIntent)app_json_response(['ok'=>true]+gaw_node_route('kds','kds_context'));
+        }
+        if($isCrmContext){
+            $fallbackDomain=(string)($fallback['domain']??'general');
+            $localIntent=preg_match('/\b(this customer|selected customer|customer|guest|visits?|favorites?|favourites?|recent checks?|recent orders?|notes?|tags?|archive|consent|lifetime spend|average check|relationship)\b/u',$text)===1;
+            if(in_array($fallbackDomain,['general','restaurant_brain'],true)&&($localIntent||$confirmationIntent))app_json_response(['ok'=>true]+gaw_node_route('crm','crm_context'));
+        }
+        if($isPrepContext){
+            $fallbackDomain=(string)($fallback['domain']??'general');
+            $localIntent=preg_match('/\b(this prep|this plan|selected plan|recommendations?|prep list|forecast|shortage|history|publish|generate|add .*prep|what should we prep|what should i prep)\b/u',$text)===1;
+            if(in_array($fallbackDomain,['general','restaurant_brain','operations'],true)&&($localIntent||$confirmationIntent))app_json_response(['ok'=>true]+gaw_node_route('prep','prep_context'));
+        }
+        if($isOperationsContext){
+            $fallbackDomain=(string)($fallback['domain']??'general');
+            $localIntent=preg_match('/\b(this task|selected task|this inventory|selected inventory|tasks?|prep|inventory|stock|par|reorder|shortage|opening|closing|cleaning|overdue|task category|sync .*inventory|sync .*wholesale)\b/u',$text)===1;
+            if(in_array($fallbackDomain,['general','restaurant_brain','operations'],true)&&($localIntent||$confirmationIntent))app_json_response(['ok'=>true]+gaw_node_route('operations','operations_context'));
+        }
         if($isPurchasingContext){
             $fallbackDomain=(string)($fallback['domain']??'general');
             $localIntent=preg_match('/\b(this po|selected po|this purchase order|selected purchase order|this vendor|this shipment|this delivery|outstanding|remaining|submit this|cancel this|receive this|received in full|everything arrived|all remaining|current suggestions?)\b/u',$text)===1;

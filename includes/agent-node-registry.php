@@ -28,6 +28,30 @@ function gaw_agent_nodes(): array
             'domain'=>'sales_intelligence',
             'mode'=>'read',
         ],
+        'crm'=>[
+            'label'=>'Customer CRM',
+            'route'=>'api/customer-crm-agent.php',
+            'domain'=>'customer_crm',
+            'mode'=>'read_confirmed_write',
+        ],
+        'prep'=>[
+            'label'=>'Prep + Inventory Intelligence',
+            'route'=>'api/prep-intelligence-agent.php',
+            'domain'=>'prep_intelligence',
+            'mode'=>'read_confirmed_write',
+        ],
+        'operations'=>[
+            'label'=>'Restaurant Operations',
+            'route'=>'api/operations-agent.php',
+            'domain'=>'operations',
+            'mode'=>'read_confirmed_write',
+        ],
+        'kds'=>[
+            'label'=>'Kitchen Display System',
+            'route'=>'api/kds-agent.php',
+            'domain'=>'kds',
+            'mode'=>'read',
+        ],
         'employee_development'=>[
             'label'=>'Employee Development',
             'route'=>'api/employee-development-agent.php',
@@ -94,12 +118,24 @@ function gaw_normalize_node_route(array $route): array
 function gaw_pending_action_node(int $organizationId,int $userId): ?string
 {
     $key=$organizationId.':'.$userId;
-    $maps=[
+    $candidates=[];
+
+    foreach((array)($_SESSION['agent_node_pending']??[]) as $node=>$rows){
+        $proposal=is_array($rows)?($rows[$key]??null):null;
+        if(!is_array($proposal))continue;
+        $expires=(int)($proposal['expires']??0);
+        if($expires<time()){
+            unset($_SESSION['agent_node_pending'][$node][$key]);
+            continue;
+        }
+        $candidates[]=['node'=>(string)$node,'created'=>(int)($proposal['created']??($expires-600)),'expires'=>$expires];
+    }
+
+    $legacy=[
         'purchasing'=>'purchasing_agent_pending',
         'scheduling'=>'schedule_agent_pending',
     ];
-    $candidates=[];
-    foreach($maps as $node=>$sessionKey){
+    foreach($legacy as $node=>$sessionKey){
         $proposal=$_SESSION[$sessionKey][$key]??null;
         if(!is_array($proposal))continue;
         $expires=(int)($proposal['expires']??0);
@@ -107,9 +143,10 @@ function gaw_pending_action_node(int $organizationId,int $userId): ?string
             unset($_SESSION[$sessionKey][$key]);
             continue;
         }
-        $candidates[]=['node'=>$node,'expires'=>$expires];
+        $candidates[]=['node'=>$node,'created'=>(int)($proposal['created']??($expires-600)),'expires'=>$expires];
     }
+
     if(!$candidates)return null;
-    usort($candidates,static fn($a,$b)=>$b['expires']<=>$a['expires']);
+    usort($candidates,static fn($a,$b)=>($b['created']<=>$a['created'])?:($b['expires']<=>$a['expires']));
     return (string)$candidates[0]['node'];
 }
