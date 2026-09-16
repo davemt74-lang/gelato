@@ -28,6 +28,7 @@
     if (page === 'customer-crm.php') ensureScript('js/customer-crm-agent-context.js?v=20260915-context1', 'data-crm-agent-context-loader');
     if (page === 'catering-operations.php' || page === 'catering-pipeline.php') ensureScript('js/catering-agent-context.js?v=20260916-context1', 'data-catering-agent-context-loader');
     if (wholesaleAgentPages.has(page)) ensureScript('js/wholesale-agent-context.js?v=20260916-context1', 'data-wholesale-agent-context-loader');
+    if (page === 'packages-admin.php' || page === 'public-site-settings.php') ensureScript('js/marketing-agent-context.js?v=20260916-context1', 'data-marketing-agent-context-loader');
     if (page === 'prep-intelligence.php') ensureScript('js/prep-agent-context.js?v=20260915-context1', 'data-prep-agent-context-loader');
     if (page === 'operations.php') ensureScript('js/operations-agent-context.js?v=20260915-context1', 'data-operations-agent-context-loader');
     if (page === 'kds.php' || page === 'kds-dashboard.php') ensureScript('js/kds-agent-context.js?v=20260915-context1', 'data-kds-agent-context-loader');
