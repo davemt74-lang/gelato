@@ -152,17 +152,43 @@ function menu_training_items_by_ids(PDO $pdo,int $organizationId,array $ids,int 
     return $result;
 }
 
+function menu_training_query_terms(string $query): array
+{
+    $normalized=menu_training_normalize_text($query);
+    $normalized=str_replace(["’","'"],' ',$normalized);
+    $tokens=preg_split('/[^\pL\pN-]+/u',$normalized)?:[];
+    $stop=array_flip([
+        'a','an','and','are','at','be','can','could','do','does','for','from','give','has','have','how','i','in','is','it','list','me','of','on','or','please','show','tell','that','the','this','to','what','which','with','would',
+        'allergen','allergens','allergy','allergies','contain','contains','ingredient','ingredients','made','price','prices','cost','much','size','sizes','option','options','prep','prepare','preparation','cook','cooking','notes','menu','item','items'
+    ]);
+    $terms=[];
+    foreach($tokens as $token){
+        $token=trim($token,'-');
+        if($token===''||mb_strlen($token,'UTF-8')<2||isset($stop[$token]))continue;
+        $terms[$token]=true;
+        if(count($terms)>=8)break;
+    }
+    return array_keys($terms);
+}
+
 function menu_training_search_items(PDO $pdo,int $organizationId,string $query,int $limit=12): array
 {
-    $query=trim($query);if($query==='')return [];$limit=max(1,min(30,$limit));$like='%'.$query.'%';
+    $query=trim($query);if($query==='')return [];$limit=max(1,min(30,$limit));
+    $terms=menu_training_query_terms($query);
+    if(!$terms)$terms=[menu_training_normalize_text($query)];
+    $clauses=[];$args=[$organizationId];
+    foreach($terms as $term){
+        $like='%'.$term.'%';
+        $clauses[]='(LOWER(i.name) LIKE ? OR LOWER(COALESCE(i.description,\'\')) LIKE ? OR LOWER(COALESCE(i.preparation_notes,\'\')) LIKE ? OR LOWER(s.name) LIKE ? OR LOWER(COALESCE(mi.display_name,ing.canonical_name,\'\')) LIKE ?)';
+        array_push($args,$like,$like,$like,$like,$like);
+    }
     $q=$pdo->prepare("SELECT DISTINCT i.id
         FROM menu_items i
         JOIN menu_sections s ON s.id=i.section_id AND s.organization_id=i.organization_id
         LEFT JOIN menu_item_ingredients mi ON mi.menu_item_id=i.id
         LEFT JOIN ingredients ing ON ing.id=mi.ingredient_id
-        WHERE i.organization_id=? AND i.is_active=1 AND s.status='active'
-          AND (i.name LIKE ? OR i.description LIKE ? OR i.preparation_notes LIKE ? OR s.name LIKE ? OR COALESCE(mi.display_name,ing.canonical_name) LIKE ?)
+        WHERE i.organization_id=? AND i.is_active=1 AND s.status='active' AND ".implode(' AND ',$clauses)."
         ORDER BY i.name LIMIT {$limit}");
-    $q->execute([$organizationId,$like,$like,$like,$like,$like]);
+    $q->execute($args);
     return menu_training_items_by_ids($pdo,$organizationId,array_map('intval',$q->fetchAll(PDO::FETCH_COLUMN)),$limit);
 }
