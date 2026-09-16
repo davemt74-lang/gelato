@@ -7,7 +7,7 @@ on:
       - '.github/workflows/zz-finalize-online-order-agent.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   finalize:
@@ -35,18 +35,10 @@ jobs:
           grep -F "'online_orders'=>[" includes/agent-node-registry.php
           grep -F '$isOnlineOrdersContext=' api/agent-workspace.php
           grep -F 'online_order_agent_merge_brain_snapshot' api/brain-orchestrator.php
-      - name: Package validated patched files
+      - name: Commit validated source only
         run: |
-          mkdir -p patched/includes patched/api patched/js patched/.github/workflows
-          cp includes/agent-workspace-core.php includes/online-order-agent-core.php patched/includes/
-          cp api/agent-workspace.php api/brain-orchestrator.php patched/api/
-          cp online-orders-admin.php pickup-fulfillment.php order-recovery.php patched/
-          cp .github/workflows/agent-brain-orchestration.yml .github/workflows/production-runtime-deploy.yml patched/.github/workflows/
-          cp js/online-order-agent-context.js patched/js/
-          zip -qr online-order-agent-patched-files.zip patched
-      - uses: actions/upload-artifact@v4
-        with:
-          name: online-order-agent-patched-files
-          path: online-order-agent-patched-files.zip
-          if-no-files-found: error
-          retention-days: 3
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add includes/agent-workspace-core.php includes/online-order-agent-core.php api/agent-workspace.php api/brain-orchestrator.php online-orders-admin.php pickup-fulfillment.php order-recovery.php
+          git commit -m "Integrate Online Ordering + Pickup Fulfillment Agent"
+          git push origin HEAD:online-order-pickup-agent-20260916
