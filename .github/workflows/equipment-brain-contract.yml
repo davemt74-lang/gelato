@@ -6,9 +6,13 @@ on:
       - 'equipment.php'
       - 'api/equipment.php'
       - 'api/agent-brain.php'
+      - 'api/equipment-agent.php'
       - 'includes/equipment-brain.php'
+      - 'includes/equipment-agent-core.php'
       - 'js/equipment-module.js'
       - 'js/floor-planner-module.js'
+      - 'js/equipment-agent-context.js'
+      - 'js/global-agent.js'
       - 'database/20260912_floor_planner.sql'
       - 'database/20260912_equipment_catalog_brain.sql'
       - '.github/workflows/equipment-brain-contract.yml'
@@ -18,9 +22,13 @@ on:
       - 'equipment.php'
       - 'api/equipment.php'
       - 'api/agent-brain.php'
+      - 'api/equipment-agent.php'
       - 'includes/equipment-brain.php'
+      - 'includes/equipment-agent-core.php'
       - 'js/equipment-module.js'
       - 'js/floor-planner-module.js'
+      - 'js/equipment-agent-context.js'
+      - 'js/global-agent.js'
       - 'database/20260912_floor_planner.sql'
       - 'database/20260912_equipment_catalog_brain.sql'
       - '.github/workflows/equipment-brain-contract.yml'
@@ -51,11 +59,15 @@ jobs:
           php -l equipment.php
           php -l api/equipment.php
           php -l api/agent-brain.php
+          php -l api/equipment-agent.php
           php -l includes/equipment-brain.php
+          php -l includes/equipment-agent-core.php
       - name: JavaScript syntax
         run: |
           node --check js/equipment-module.js
           node --check js/floor-planner-module.js
+          node --check js/equipment-agent-context.js
+          node --check js/global-agent.js
       - name: Equipment schema and permission contract
         run: |
           grep -q "CREATE TABLE IF NOT EXISTS equipment_assets" database/20260912_equipment_catalog_brain.sql
@@ -76,7 +88,14 @@ jobs:
           grep -q "knowledge.search" api/agent-brain.php
           grep -q "askOwnerEquipmentBrain" js/equipment-module.js
           grep -q "equipment.php" js/equipment-module.js
-          grep -q "api/agent-brain.php" equipment.php
+          grep -q "js/equipment-agent-context.js" equipment.php
+          grep -q "js/global-agent.js" equipment.php
+          grep -q "Equipment + Maintenance Agent" equipment.php
+          grep -q "api/equipment-agent.php" api/equipment-agent.php
+          if grep -q 'id="brainInput"' equipment.php; then
+            echo 'Legacy standalone Equipment Brain input must not return.' >&2
+            exit 1
+          fi
       - name: Security contract
         run: |
           grep -q "app_verify_request_csrf" api/equipment.php
@@ -85,6 +104,9 @@ jobs:
           grep -q "organization_id" api/agent-brain.php
           grep -q "app_has_permission('equipment.view'" api/agent-brain.php
           grep -q "app_has_permission('agent.equipment_skills'" api/agent-brain.php
+          grep -q "equipment_agent_require_read" includes/equipment-agent-core.php
+          grep -q "equipment_agent_require_edit" includes/equipment-agent-core.php
+          grep -q "equipment_agent_require_service" includes/equipment-agent-core.php
       - name: Install migrations in MariaDB
         run: |
           sudo apt-get update -qq
