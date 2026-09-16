@@ -1,0 +1,100 @@
+name: Front of House Agent
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'api/front-of-house-agent.php'
+      - 'api/agent-workspace.php'
+      - 'includes/front-of-house-agent-core.php'
+      - 'includes/agent-node-registry.php'
+      - 'includes/agent-workspace-core.php'
+      - 'js/host-stand-agent-context.js'
+      - 'js/table-cleaning-controls.js'
+      - 'tests/front-of-house-agent-contract.php'
+      - '.github/workflows/front-of-house-agent.yml'
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  front-of-house-agent:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 1
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+          coverage: none
+
+      - name: Syntax and architecture gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -l api/front-of-house-agent.php
+          php -l api/agent-workspace.php
+          php -l includes/front-of-house-agent-core.php
+          php -l includes/agent-node-registry.php
+          php -l includes/agent-workspace-core.php
+          php -l tests/front-of-house-agent-contract.php
+          node --check js/host-stand-agent-context.js
+          node --check js/table-cleaning-controls.js
+          grep -q "'front_of_house'=>" includes/agent-node-registry.php
+          grep -q "api/front-of-house-agent.php" includes/agent-workspace-core.php
+          grep -q "module==='host_stand'" api/agent-workspace.php
+          grep -q "gac_pending_store('front_of_house'" includes/front-of-house-agent-core.php
+          grep -q "bootHostStandAgent" js/table-cleaning-controls.js
+
+      - name: Install database and run upgrader
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_foh_agent_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->ensureTrackingTables();
+          $s->bootstrapLegacyHistory(null);
+          $s->applyPending(null);
+          if($s->pendingMigrations()) exit(1);
+          PHP
+
+      - name: Front of House Agent behavior contract
+        run: php tests/front-of-house-agent-contract.php
+
+      - name: Existing Host Stand regression
+        run: php tests/host-stand-contract.php
+
+      - name: Existing Table Service regression
+        run: php tests/table-service-contract.php
+
+      - name: Reservation protection regression
+        run: php tests/upcoming-reservation-protection-contract.php
+
+      - name: Table cleaning lifecycle regression
+        run: php tests/table-cleaning-lifecycle-contract.php
