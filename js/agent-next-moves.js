@@ -56,9 +56,10 @@
     const action=event.target.closest('[data-next-action]');if(!action)return;
     const card=action.closest('[data-key]');const key=card?.dataset.key;const move=findMove(key);if(!move)return;
     if(action.dataset.nextAction==='dismiss'){state.dismissed.add(String(key));saveDismissed();render();return;}
-    const prefix=action.dataset.nextAction==='propose'?`Propose the safest fix through the ${move.nodeLabel || move.node} node. Do not execute a consequential change until I explicitly confirm. `:'';
+    const nodeHint=`${move.nodeLabel || move.node || 'Agent node'}: `;
+    const safety=action.dataset.nextAction==='propose'?'Propose the safest fix. Do not execute a consequential change until I explicitly confirm. ':'';
     document.getElementById('gelato-agent-next-moves')?.classList.remove('open');
-    await window.GelatoGlobalAgent?.send?.(prefix+String(move.prompt||move.title||''),false);
+    await window.GelatoGlobalAgent?.send?.(nodeHint+safety+String(move.prompt||move.title||''),false);
   }
 
   function accept(moves) {
@@ -68,12 +69,17 @@
     if(visibleMoves().some((move)=>['critical','high'].includes(String(move.severity)))) document.querySelector('.ganm-toggle')?.classList.add('show');
   }
 
+  async function synthesizeProactiveEvents() {
+    try { await fetch('api/brain-events.php',{cache:'no-store',headers:{Accept:'application/json'}}); } catch {}
+  }
+
   async function refresh() {
     try {
       const response=await fetch('api/brain-orchestrator.php?action=snapshot',{cache:'no-store',headers:{Accept:'application/json'}});
       if(response.status===401||response.status===403)return;
       const data=await response.json().catch(()=>null);if(!response.ok||!data?.ok)return;
       accept(data.data?.nextMoves||[]);
+      synthesizeProactiveEvents();
     } catch {}
   }
 
