@@ -25,13 +25,13 @@ sac_assert(!str_contains($schedulingContext,'display_name')&&!str_contains($sche
 
 $contextPos=strpos($loader,'agent-page-context.js');$schedulePos=strpos($loader,'scheduling-agent-context.js');$globalPos=strpos($loader,'global-agent.js');
 sac_assert($contextPos!==false&&$schedulePos!==false&&$globalPos!==false&&$contextPos<$schedulePos&&$schedulePos<$globalPos,'Global loader must install shared context and page adapter before the Agent transport starts.');
-sac_assert(str_contains($route,"$isSchedulingContext")&&str_contains($route,"'domain'=>'scheduling_context'")&&str_contains($route,'selectedShiftPublicId'),'Agent Workspace must route ambiguous selected Scheduling context to the Scheduling Agent.');
+sac_assert(str_contains($route,"\$isSchedulingContext")&&str_contains($route,"'domain'=>'scheduling_context'")&&str_contains($route,'selectedShiftPublicId'),'Agent Workspace must route ambiguous selected Scheduling context to the Scheduling Agent.');
 
 sac_assert(str_contains($agent,'sa_pending_store')&&str_contains($agent,'sa_pending_get')&&str_contains($agent,'sa_pending_clear'),'Scheduling Agent writes must use server-side pending proposals.');
 sac_assert(str_contains($agent,"'expires'=>time()+600"),'Scheduling Agent proposals must expire quickly.');
 sac_assert(str_contains($agent,'Reply Confirm to execute this change, or Cancel to discard it.'),'Scheduling Agent must require explicit human confirmation.');
 sac_assert(str_contains($agent,"schedule.agent_action_proposed")&&str_contains($agent,"schedule.agent_action_confirmed")&&str_contains($agent,"schedule.agent_action_discarded"),'Scheduling Agent proposal lifecycle must be audited.');
-sac_assert(str_contains($agent,"app_has_permission('schedule.manage',$user)"),'Schedule mutations must remain permission-gated.');
+sac_assert(str_contains($agent,"app_has_permission('schedule.manage',\$user)"),'Schedule mutations must remain permission-gated.');
 sac_assert(str_contains($agent,"employee.handoffs.manage")&&str_contains($agent,'employee_shift_message_save'),'Employee messages must use the existing permission-gated shift communications system.');
 sac_assert(str_contains($agent,'scheduling_availability_check')&&str_contains($agent,'scheduling_shift_conflicts'),'Coverage candidates and confirmed shift writes must respect availability and overlap validation.');
 sac_assert(str_contains($agent,"'shift_create'")&&str_contains($agent,"'shift_update'")&&str_contains($agent,"'shift_cancel'")&&str_contains($agent,"'week_publish'")&&str_contains($agent,"'employee_message'"),'Scheduling Agent must support the approved first action set.');
