@@ -117,7 +117,7 @@ function menu_training_item(PDO $pdo,int $organizationId,int $menuItemId): ?arra
     $ingredients=$pdo->prepare("SELECT COALESCE(mi.display_name,ing.canonical_name) display_name,ing.canonical_name,
         ing.category,ing.verification_status,mi.is_optional,mi.can_remove,mi.sort_order
         FROM menu_item_ingredients mi JOIN ingredients ing ON ing.id=mi.ingredient_id
-        WHERE mi.menu_item_id=? ORDER BY mi.sort_order,mi.id");
+        WHERE mi.menu_item_id=? ORDER BY mi.sort_order,mi.ingredient_id");
     $ingredients->execute([$menuItemId]);
 
     $metadata=menu_training_decode_metadata($row['behavior_tags_json']!==null?(string)$row['behavior_tags_json']:null);
