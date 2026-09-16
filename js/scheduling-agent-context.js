@@ -103,6 +103,14 @@
     queueMicrotask(publish);
   }, true);
 
+  window.addEventListener('gelato-agent-response', (event) => {
+    const result = event.detail?.result;
+    if (result?.skill !== 'schedule.action_confirmed') return;
+    if (result?.data?.action === 'shift_cancel') state.selectedShiftPublicId = '';
+    document.getElementById('refresh')?.click();
+    setTimeout(publish, 0);
+  });
+
   const provider = {module: 'scheduling', snapshot, transportSnapshot, description, placeholder};
   function boot() {
     removeLegacyBar();
