@@ -13,7 +13,7 @@ on:
       - 'js/global-add-canvas.js'
       - 'tests/agent-brain-orchestration-contract.php'
       - 'tests/admin-command-dashboard-contract.php'
-      - 'tests/agent-workspace-contract.php'
+      - 'tests/workspace-dynamic-agent-canvas-contract.php'
       - '.github/workflows/agent-brain-orchestration.yml'
   push:
     branches: [main]
@@ -35,11 +35,13 @@ jobs:
           php -l includes/agent-brain-orchestrator.php
           php -l includes/agent-node-registry.php
           php -l tests/agent-brain-orchestration-contract.php
+          php -l tests/admin-command-dashboard-contract.php
+          php -l tests/workspace-dynamic-agent-canvas-contract.php
           node --check js/agent-next-moves.js
           node --check js/global-add-canvas.js
       - name: Agent Brain orchestration contract
         run: php tests/agent-brain-orchestration-contract.php
       - name: Command Center regression
         run: php tests/admin-command-dashboard-contract.php
-      - name: Agent Workspace regression
-        run: php tests/agent-workspace-contract.php
+      - name: Shared Agent UI regression
+        run: php tests/workspace-dynamic-agent-canvas-contract.php
