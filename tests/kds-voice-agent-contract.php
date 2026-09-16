@@ -27,7 +27,7 @@ kva_assert(str_contains($sidebar,'state.voiceQueue.push(message)')&&str_contains
 kva_assert(str_contains($sidebar,'Special instruction:')&&str_contains($sidebar,'ticket.tableName')&&str_contains($sidebar,'ticket.checkNumber'),'New-order speech must include order/table context and special instructions.');
 kva_assert(str_contains($sidebar,'Read active orders now')&&str_contains($sidebar,"Read the active KDS orders aloud"),'KDS must provide an explicit read-current-board voice action.');
 
-kva_assert(str_contains($context,"module: 'kds'")&&str_contains($context,'locationId')&&str_contains($context,'checkPublicId'),'KDS page context must send stable identifiers to the shared Agent.');
+kva_assert((str_contains($context,"module:'kds'")||str_contains($context,"module: 'kds'"))&&str_contains($context,'locationId')&&str_contains($context,'checkPublicId')&&str_contains($context,'kitchenItemPublicId')&&str_contains($context,'stationPublicId'),'KDS page context must send stable identifiers to the shared Agent.');
 kva_assert(str_contains($agent,"app_has_permission('kds.view',\$user)")&&str_contains($agent,'operational_location_allowed'),'KDS Agent knowledge must be permission- and location-scoped server-side.');
 kva_assert(str_contains($agent,'kds_production_board')&&str_contains($agent,'kda_recent_history'),'KDS Agent must use authoritative live production data plus recent completed-order history.');
 kva_assert(str_contains($agent,'special_instructions')&&str_contains($agent,'station_name')&&str_contains($agent,'guestCount'),'KDS Agent must understand special instructions, station state, and guest/order context.');
