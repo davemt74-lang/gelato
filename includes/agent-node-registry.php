@@ -4,6 +4,12 @@ declare(strict_types=1);
 function gaw_agent_nodes(): array
 {
     return [
+        'brain'=>[
+            'label'=>'Main Agent Brain',
+            'route'=>'api/brain-orchestrator.php',
+            'domain'=>'agent_brain_orchestration',
+            'mode'=>'read_orchestrator',
+        ],
         'command_center'=>[
             'label'=>'Manager Command Center',
             'route'=>'api/admin-dashboard-agent.php',
