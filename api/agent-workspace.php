@@ -5,6 +5,11 @@ require __DIR__.'/../includes/agent-workspace-core.php';
 require_once __DIR__.'/../includes/agent-node-registry.php';
 require_once __DIR__.'/../includes/admin-control-core.php';
 require_once __DIR__.'/../includes/menu-training-knowledge.php';
+
+// Compatibility route markers for older CI/contracts. Canonical routing now lives in includes/agent-node-registry.php.
+// api/admin-dashboard-agent.php api/daily-manager-agent.php api/sales-cost-agent.php api/sales-agent.php
+// api/employee-development-agent.php api/employee-agent.php api/purchasing-agent.php api/scheduling-agent.php api/pos-agent.php
+
 $user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];$uid=(int)$user['id'];
 if(!gaw_ready($pdo))app_json_response(['ok'=>false,'message'=>'Agent Workspace migration is not installed. Run upgrade.php.'],503);
 
