@@ -46,6 +46,12 @@ function gaw_agent_nodes(): array
             'domain'=>'customer_crm',
             'mode'=>'read_confirmed_write',
         ],
+        'marketing'=>[
+            'label'=>'Marketing + Public Site',
+            'route'=>'api/marketing-agent.php',
+            'domain'=>'marketing',
+            'mode'=>'read_confirmed_write',
+        ],
         'catering'=>[
             'label'=>'Catering Operations',
             'route'=>'api/catering-agent.php',
