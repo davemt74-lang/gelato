@@ -7,6 +7,10 @@ on:
       - 'pos.php'
       - 'includes/pos-core.php'
       - 'js/pos.js'
+      - 'js/pos-runtime.js'
+      - 'js/pos-agent-context.js'
+      - 'js/global-agent.js'
+      - 'js/dynamic-agent-canvas.js'
       - 'js/universal-admin-page-shell.js'
       - 'sales-import-center.php'
       - 'timeclock.php'
@@ -23,6 +27,10 @@ on:
       - 'pos.php'
       - 'includes/pos-core.php'
       - 'js/pos.js'
+      - 'js/pos-runtime.js'
+      - 'js/pos-agent-context.js'
+      - 'js/global-agent.js'
+      - 'js/dynamic-agent-canvas.js'
       - 'js/universal-admin-page-shell.js'
       - 'sales-import-center.php'
       - 'timeclock.php'
@@ -64,6 +72,10 @@ jobs:
       - name: JavaScript syntax
         run: |
           node --check js/pos.js
+          node --check js/pos-runtime.js
+          node --check js/pos-agent-context.js
+          node --check js/global-agent.js
+          node --check js/dynamic-agent-canvas.js
           node --check js/universal-admin-page-shell.js
       - name: POS and shell contract
         run: php tests/pos-admin-shell-followup-contract.php
