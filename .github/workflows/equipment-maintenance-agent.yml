@@ -14,6 +14,9 @@ on:
       - 'includes/agent-workspace-core.php'
       - 'includes/agent-confirmation-core.php'
       - 'js/equipment-agent-context.js'
+      - 'js/agent-page-context.js'
+      - 'js/global-agent.js'
+      - 'js/universal-admin-page-shell.js'
       - 'equipment.php'
       - 'equipment-detail.php'
       - 'tests/equipment-agent-db-lifecycle.php'
@@ -32,6 +35,9 @@ on:
       - 'includes/agent-workspace-core.php'
       - 'includes/agent-confirmation-core.php'
       - 'js/equipment-agent-context.js'
+      - 'js/agent-page-context.js'
+      - 'js/global-agent.js'
+      - 'js/universal-admin-page-shell.js'
       - 'equipment.php'
       - 'equipment-detail.php'
       - 'tests/equipment-agent-db-lifecycle.php'
@@ -47,9 +53,7 @@ jobs:
       mariadb:
         image: mariadb:10.11
         env:
-          MARIADB_DATABASE: gelato_ci
-          MARIADB_USER: gelato
-          MARIADB_PASSWORD: gelato
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
           MARIADB_ROOT_PASSWORD: root
         ports:
           - 3306:3306
@@ -58,24 +62,17 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=10
-    env:
-      DB_HOST: 127.0.0.1
-      DB_PORT: 3306
-      DB_NAME: gelato_ci
-      DB_USER: gelato
-      DB_PASS: gelato
-      APP_ENV: test
-      APP_BASE_URL: http://127.0.0.1
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
-          extensions: pdo_mysql, mbstring, json
           coverage: none
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
       - name: PHP syntax
         run: |
           php -l api/equipment-agent.php
+          php -l api/agent-workspace.php
           php -l api/brain-orchestrator.php
           php -l api/daily-manager-agent.php
           php -l includes/equipment-agent-core.php
@@ -84,7 +81,11 @@ jobs:
           php -l includes/agent-workspace-core.php
           php -l tests/equipment-agent-db-lifecycle.php
       - name: JavaScript syntax
-        run: node --check js/equipment-agent-context.js
+        run: |
+          node --check js/equipment-agent-context.js
+          node --check js/agent-page-context.js
+          node --check js/global-agent.js
+          node --check js/universal-admin-page-shell.js
       - name: Equipment routing and safety contract
         run: |
           grep -F "'equipment'=>[" includes/agent-node-registry.php
@@ -93,16 +94,47 @@ jobs:
           grep -F "SELECT * FROM equipment_assets WHERE organization_id=? AND public_id=?" includes/equipment-agent-core.php
           grep -F "equipment_agent_assert_fresh" includes/equipment-agent-core.php
           grep -F "equipment_agent_merge_brain_snapshot" api/brain-orchestrator.php
-          grep -F "node'=>'purchasing'" includes/equipment-agent-core.php
+          grep -F "'node'=>'purchasing'" includes/equipment-agent-core.php
+          grep -F "'equipment.php': 'js/equipment-agent-context.js" js/universal-admin-page-shell.js
+          grep -F "await ensureSharedAgent();" js/universal-admin-page-shell.js
           if grep -Eq "INSERT INTO purchase_orders|UPDATE purchase_orders|DELETE FROM purchase_orders" includes/equipment-agent-core.php; then
             echo 'Equipment Agent must not mutate purchasing records directly.' >&2
             exit 1
           fi
       - name: Install and upgrade schema
         run: |
-          mariadb -h 127.0.0.1 -u gelato -pgelato gelato_ci < database/install.sql
-          php -r 'require "includes/bootstrap.php"; require "includes/upgrade-service.php"; $svc=new UpgradeService(app_pdo(), __DIR__."/database"); $svc->applyPending();'
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_equipment_agent_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $service=new UpgradeService(app_pdo(),__DIR__);
+          $service->ensureTrackingTables();
+          $service->bootstrapLegacyHistory(null);
+          $service->applyPending(null);
+          if($service->pendingMigrations()) exit(1);
+          PHP
       - name: DB-backed Propose Confirm Execute lifecycle
         run: php tests/equipment-agent-db-lifecycle.php
-      - name: Upgrader idempotence
-        run: php -r 'require "includes/bootstrap.php"; require "includes/upgrade-service.php"; $svc=new UpgradeService(app_pdo(), __DIR__."/database"); $applied=$svc->applyPending(); if ($applied !== []) { fwrite(STDERR,"Unexpected pending migrations: ".json_encode($applied).PHP_EOL); exit(1); } echo "Upgrade idempotence passed.\n";'
+      - name: Verify upgrader idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $service=new UpgradeService(app_pdo(),__DIR__);
+          $service->assertAppliedChecksumsUnchanged();
+          if($service->pendingMigrations()) exit(2);
+          if($service->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP
