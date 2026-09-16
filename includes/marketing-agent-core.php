@@ -12,9 +12,7 @@ function mac_can_read(array $user): bool
 {
     return app_has_permission('packages.view',$user)
         || app_has_permission('public_pages.edit',$user)
-        || app_has_permission('settings.organization_edit',$user)
-        || app_has_permission('sales.view',$user)
-        || app_has_permission('crm.view',$user);
+        || app_has_permission('settings.organization_edit',$user);
 }
 
 function mac_require_read(array $user): void
@@ -158,8 +156,8 @@ function mac_feature_action(string $message): ?bool
 {
     $lower=mb_strtolower($message,'UTF-8');
     if(!preg_match('/\b(package|deal|specials?|homepage|home page|public site)\b/u',$lower))return null;
-    if(preg_match('/\b(unfeature|remove\s+(?:it\s+)?from\s+(?:the\s+)?(?:homepage|home page|public site)|stop\s+featuring)\b/u',$lower))return false;
-    if(preg_match('/\b(feature|featured|feature\s+(?:it\s+)?on\s+(?:the\s+)?(?:homepage|home page|public site))\b/u',$lower))return true;
+    if(preg_match('/\b(?:unfeature|stop\s+featuring)\b/u',$lower)||preg_match('/\bremove\s+(?:it|this|the\s+package|the\s+deal)?\s*from\s+(?:the\s+)?(?:homepage|home page|public site|specials page)\b/u',$lower))return false;
+    if(preg_match('/\b(?:feature|start\s+featuring)\b/u',$lower)||preg_match('/\bmake\b.+\bfeatured\b/u',$lower)||preg_match('/\bput\b.+\bon\s+(?:the\s+)?(?:homepage|home page|public site|specials page)\b/u',$lower))return true;
     return null;
 }
 
