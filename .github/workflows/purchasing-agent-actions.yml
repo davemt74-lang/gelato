@@ -1,0 +1,96 @@
+name: Purchasing Agent Actions + Manager Node
+
+on:
+  pull_request:
+    paths:
+      - 'api/agent-workspace.php'
+      - 'api/admin-dashboard-agent.php'
+      - 'api/purchasing-agent.php'
+      - 'includes/agent-node-registry.php'
+      - 'includes/purchasing-agent-core.php'
+      - 'js/global-add-canvas.js'
+      - 'js/purchasing-agent-context.js'
+      - 'tests/purchasing-manager-agent-node-contract.php'
+      - 'tests/purchasing-agent-actions-contract.php'
+      - '.github/workflows/purchasing-agent-actions.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'api/agent-workspace.php'
+      - 'api/admin-dashboard-agent.php'
+      - 'api/purchasing-agent.php'
+      - 'includes/agent-node-registry.php'
+      - 'includes/purchasing-agent-core.php'
+      - 'js/global-add-canvas.js'
+      - 'js/purchasing-agent-context.js'
+      - 'tests/purchasing-manager-agent-node-contract.php'
+      - 'tests/purchasing-agent-actions-contract.php'
+      - '.github/workflows/purchasing-agent-actions.yml'
+
+jobs:
+  purchasing-agent-actions:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ALLOW_EMPTY_ROOT_PASSWORD: 'yes'
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - name: Syntax and static node contract
+        run: |
+          php -l includes/agent-node-registry.php
+          php -l includes/purchasing-agent-core.php
+          php -l api/agent-workspace.php
+          php -l api/admin-dashboard-agent.php
+          php -l api/purchasing-agent.php
+          php -l tests/purchasing-manager-agent-node-contract.php
+          php -l tests/purchasing-agent-actions-contract.php
+          node --check js/global-add-canvas.js
+          node --check js/purchasing-agent-context.js
+          php tests/purchasing-manager-agent-node-contract.php
+      - name: Install current schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_restaurant_ai_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $service=new UpgradeService(app_pdo(),__DIR__);
+          $service->ensureTrackingTables();
+          $service->bootstrapLegacyHistory(null);
+          $service->applyPending(null);
+          if($service->pendingMigrations())exit(1);
+          PHP
+      - name: Confirmed Purchasing action lifecycle
+        run: php tests/purchasing-agent-actions-contract.php
+      - name: Verify upgrader remains idempotent
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $service=new UpgradeService(app_pdo(),__DIR__);
+          if($service->applyPending(null)!==[]||$service->pendingMigrations())exit(1);
+          echo "idempotent\n";
+          PHP

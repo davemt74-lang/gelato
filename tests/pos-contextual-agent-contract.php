@@ -53,7 +53,9 @@ pca_assert(str_contains($sharedContext,"file === 'agent-workspace.php' || /-agen
 pca_assert(!str_contains($context,'localStorage'),'POS Agent context must not copy browser-local Training performance telemetry into the transaction context.');
 
 $route=pca_text($root.'/api/agent-workspace.php');
-pca_assert(str_contains($route,"route'=>'api/pos-agent.php'")&&str_contains($route,"domain'=>'pos_context'"),'Agent Workspace must route POS-context menu/customer/check questions to the POS Agent skill.');
+$nodes=pca_text($root.'/includes/agent-node-registry.php');
+pca_assert(str_contains($nodes,"'pos'=>[")&&str_contains($nodes,"'route'=>'api/pos-agent.php'")&&str_contains($nodes,"'domain'=>'pos_context'"),'POS must remain a first-class Agent node with the canonical POS endpoint/domain.');
+pca_assert(str_contains($route,"gaw_node_route('pos')")&&str_contains($route,'$isPosContext')&&str_contains($route,'$posIntent'),'Agent Workspace must route POS-context menu/customer/check questions through the named POS node.');
 $agent=pca_text($root.'/api/pos-agent.php');
 pca_assert(str_contains($agent,'pos_check_base($pdo,$org,$checkPublicId,false)'),'POS Agent must re-resolve the check server-side instead of trusting browser transaction content.');
 pca_assert(str_contains($agent,'pos_agent_location_allowed'),'POS Agent must enforce location-scoped POS permission.');

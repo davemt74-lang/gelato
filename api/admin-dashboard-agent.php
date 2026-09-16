@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/admin-dashboard-core.php';
+require_once __DIR__.'/../includes/purchasing-receiving.php';
 
 $user=app_require_auth();
 if(!admin_dashboard_allowed($user))app_json_response(['ok'=>false,'message'=>'Restaurant command-center access is not available for this account.'],403);
@@ -27,7 +28,15 @@ function admin_dashboard_agent_location_id(PDO $pdo,array $user,string $message)
     return count($matches)===1?(int)$matches[0]['id']:null;
 }
 
-function admin_dashboard_agent_answer(array $dashboard,string $message): array
+function admin_dashboard_agent_purchasing(PDO $pdo,array $user): ?array
+{
+    if(!app_has_permission('purchasing.view',$user)||!purchasing_ready($pdo))return null;
+    $summary=purchasing_summary($pdo,(int)$user['organization_id']);
+    $suggestions=array_slice(purchasing_suggestions($pdo,(int)$user['organization_id']),0,5);
+    return ['summary'=>$summary,'suggestions'=>$suggestions];
+}
+
+function admin_dashboard_agent_answer(array $dashboard,string $message,?array $purchasing=null): array
 {
     $text=mb_strtolower($message,'UTF-8');
     $t=$dashboard['totals'];
@@ -53,13 +62,17 @@ function admin_dashboard_agent_answer(array $dashboard,string $message): array
             $answer='Catering has '.number_format((int)$c['activeEvents']).' active event'.((int)$c['activeEvents']===1?'':'s').', '.number_format((int)$c['next7Days']).' in the next 7 days, and '.number_format((int)$c['atRisk']).' upcoming event'.((int)$c['atRisk']===1?'':'s').' below 80% readiness. Average active-event readiness is '.number_format((int)$c['averageReadiness']).'%.';
             $data=$c;
         }
+    }elseif(preg_match('/\b(purchasing|inventory pressure|purchase orders?|vendors?|receiving)\b/u',$text)){
+        if(!$purchasing)$answer='Your account does not have Purchasing dashboard access, or Purchasing + Receiving is not installed.';
+        else{
+            $p=$purchasing['summary'];$sources[]='Purchasing + Inventory';
+            $answer='Purchasing has '.number_format((int)$p['suggestions']).' current suggestion'.((int)$p['suggestions']===1?'':'s').', '.number_format((int)$p['unmapped']).' without a vendor map, '.number_format((int)$p['drafts']).' draft PO'.((int)$p['drafts']===1?'':'s').', and '.number_format((int)$p['openOrders']).' submitted/open order'.((int)$p['openOrders']===1?'':'s').' with '.admin_dashboard_agent_money((float)$p['committed']).' committed.';
+            if($purchasing['suggestions']){$top=$purchasing['suggestions'][0];$answer.=' Highest current purchasing pressure: '.$top['name'].' needs about '.round((float)$top['needQuantity'],2).' '.$top['unit'].'.';}
+            $answer.=' Purchasing changes are delegated to the Purchasing + Inventory node and remain confirmation-gated.';$data=$purchasing;
+        }
     }elseif(preg_match('/\bonline\s+orders?|pickup\s+orders?\b/u',$text)){
         if(empty($cap['sales']))$answer='Your account does not have POS sales and online-order dashboard access.';
-        else{
-            $o=$dashboard['onlineOrders'];$sources[]='Online Ordering';
-            $answer=$scope.' has '.number_format((int)$o['open']).' open online order'.((int)$o['open']===1?'':'s').' and '.number_format((int)$o['today']).' submitted today.';
-            $data=$o;
-        }
+        else{$o=$dashboard['onlineOrders'];$sources[]='Online Ordering';$answer=$scope.' has '.number_format((int)$o['open']).' open online order'.((int)$o['open']===1?'':'s').' and '.number_format((int)$o['today']).' submitted today.';$data=$o;}
     }elseif(preg_match('/\b(active tables?|active tickets?|open checks?|ready tickets?|kds|expo|floor)\b/u',$text)){
         $parts=[];
         if(!empty($cap['tables'])){$parts[]=number_format((int)$t['activeTables']).' active table'.((int)$t['activeTables']===1?'':'s');$data['activeTables']=$t['activeTables'];$sources[]='Table Service';}
@@ -69,27 +82,12 @@ function admin_dashboard_agent_answer(array $dashboard,string $message): array
     }elseif(preg_match('/\b(compare locations?|location performance|by location|which location|locations? doing)\b/u',$text)){
         if(!$dashboard['locations'])$answer='No active restaurant locations are available in the dashboard.';
         else{
-            $parts=[];
-            foreach($dashboard['locations'] as $location){
-                $metrics=[];
-                if(!empty($cap['sales'])){$metrics[]=admin_dashboard_agent_money((float)$location['salesToday']).' today';$metrics[]=number_format((int)$location['ticketsToday']).' paid ticket'.((int)$location['ticketsToday']===1?'':'s');$metrics[]=number_format((int)$location['activeTickets']).' open';}
-                if(!empty($cap['tables']))$metrics[]=number_format((int)$location['activeTables']).' active table'.((int)$location['activeTables']===1?'':'s');
-                if(!empty($cap['kds']))$metrics[]=number_format((int)$location['readyTickets']).' READY';
-                $parts[]=$location['name'].': '.($metrics?implode(', ',$metrics):'no permitted operating metrics');
-            }
-            if(!empty($cap['sales']))$sources[]='Native POS';
-            if(!empty($cap['tables']))$sources[]='Table Service';
-            if(!empty($cap['kds']))$sources[]='KDS';
-            $answer='Location performance — '.implode('. ',$parts).'.';
-            $data=$dashboard['locations'];
+            $parts=[];foreach($dashboard['locations'] as $location){$metrics=[];if(!empty($cap['sales'])){$metrics[]=admin_dashboard_agent_money((float)$location['salesToday']).' today';$metrics[]=number_format((int)$location['ticketsToday']).' paid ticket'.((int)$location['ticketsToday']===1?'':'s');$metrics[]=number_format((int)$location['activeTickets']).' open';}if(!empty($cap['tables']))$metrics[]=number_format((int)$location['activeTables']).' active table'.((int)$location['activeTables']===1?'':'s');if(!empty($cap['kds']))$metrics[]=number_format((int)$location['readyTickets']).' READY';$parts[]=$location['name'].': '.($metrics?implode(', ',$metrics):'no permitted operating metrics');}
+            if(!empty($cap['sales']))$sources[]='Native POS';if(!empty($cap['tables']))$sources[]='Table Service';if(!empty($cap['kds']))$sources[]='KDS';$answer='Location performance — '.implode('. ',$parts).'.';$data=$dashboard['locations'];
         }
     }elseif(preg_match('/\b(sales|revenue|average check|avg check|daily|weekly|monthly|today|this week|this month)\b/u',$text)){
         if(empty($cap['sales']))$answer='Your account does not have Sales dashboard access.';
-        else{
-            $sources[]='Native POS';
-            $answer=$scope.' sales are '.admin_dashboard_agent_money((float)$t['salesToday']).' today, '.admin_dashboard_agent_money((float)$t['salesWeek']).' this week, and '.admin_dashboard_agent_money((float)$t['salesMonth']).' this month. Today has '.number_format((int)$t['ticketsToday']).' paid ticket'.((int)$t['ticketsToday']===1?'':'s').' and '.number_format((int)$t['coversToday']).' cover'.((int)$t['coversToday']===1?'':'s').', with an average check of '.admin_dashboard_agent_money((float)$t['avgCheckToday']).'.';
-            $data=['salesToday'=>$t['salesToday'],'salesWeek'=>$t['salesWeek'],'salesMonth'=>$t['salesMonth'],'ticketsToday'=>$t['ticketsToday'],'coversToday'=>$t['coversToday'],'avgCheckToday'=>$t['avgCheckToday']];
-        }
+        else{$sources[]='Native POS';$answer=$scope.' sales are '.admin_dashboard_agent_money((float)$t['salesToday']).' today, '.admin_dashboard_agent_money((float)$t['salesWeek']).' this week, and '.admin_dashboard_agent_money((float)$t['salesMonth']).' this month. Today has '.number_format((int)$t['ticketsToday']).' paid ticket'.((int)$t['ticketsToday']===1?'':'s').' and '.number_format((int)$t['coversToday']).' cover'.((int)$t['coversToday']===1?'':'s').', with an average check of '.admin_dashboard_agent_money((float)$t['avgCheckToday']).'.';$data=['salesToday'=>$t['salesToday'],'salesWeek'=>$t['salesWeek'],'salesMonth'=>$t['salesMonth'],'ticketsToday'=>$t['ticketsToday'],'coversToday'=>$t['coversToday'],'avgCheckToday'=>$t['avgCheckToday']];}
     }else{
         $parts=[];
         if(!empty($cap['sales'])){$parts[]=admin_dashboard_agent_money((float)$t['salesToday']).' sales today across '.number_format((int)$t['ticketsToday']).' paid ticket'.((int)$t['ticketsToday']===1?'':'s');$parts[]=number_format((int)$t['activeTickets']).' open POS ticket'.((int)$t['activeTickets']===1?'':'s');$parts[]=number_format((int)$dashboard['onlineOrders']['open']).' open online order'.((int)$dashboard['onlineOrders']['open']===1?'':'s');$sources[]='Native POS';$sources[]='Online Ordering';}
@@ -98,23 +96,17 @@ function admin_dashboard_agent_answer(array $dashboard,string $message): array
         if(!empty($cap['wholesale'])){$w=$dashboard['wholesale'];$parts[]='Wholesale has '.number_format((int)$w['openOrders']).' open order'.((int)$w['openOrders']===1?'':'s').' worth '.admin_dashboard_agent_money((float)$w['openOrderValue']);$sources[]='Wholesale';}
         if(!empty($cap['catering'])){$c=$dashboard['catering'];$parts[]='Catering has '.number_format((int)$c['next7Days']).' event'.((int)$c['next7Days']===1?'':'s').' in the next 7 days, with '.number_format((int)$c['atRisk']).' at risk';$sources[]='Catering Operations';}
         if(!empty($cap['crm'])){$customers=$dashboard['customers'];$parts[]=number_format((int)$customers['activeCustomers']).' active CRM customer'.((int)$customers['activeCustomers']===1?'':'s');$sources[]='Customer CRM';}
+        if($purchasing){$p=$purchasing['summary'];$parts[]=number_format((int)$p['suggestions']).' purchasing suggestion'.((int)$p['suggestions']===1?'':'s').' and '.number_format((int)$p['openOrders']).' open PO'.((int)$p['openOrders']===1?'':'s');$sources[]='Purchasing + Inventory';}
         $answer=$scope.' command-center snapshot: '.($parts?implode('; ',$parts).'.':'no operating metrics are available to this account.');
         if($dashboard['priorities'])$answer.=' Highest dashboard priority: '.$dashboard['priorities'][0]['title'].'.';
-        $data=['totals'=>$t,'onlineOrders'=>$dashboard['onlineOrders'],'wholesale'=>$dashboard['wholesale'],'catering'=>$dashboard['catering'],'customers'=>$dashboard['customers'],'priorities'=>$dashboard['priorities']];
+        $data=['totals'=>$t,'onlineOrders'=>$dashboard['onlineOrders'],'wholesale'=>$dashboard['wholesale'],'catering'=>$dashboard['catering'],'customers'=>$dashboard['customers'],'purchasing'=>$purchasing,'priorities'=>$dashboard['priorities']];
     }
     return ['answer'=>$answer,'data'=>$data,'sources'=>array_values(array_unique($sources))];
 }
 
 try{
-    $message=trim((string)($input['message']??''));
-    if($message==='')throw new InvalidArgumentException('Enter a restaurant dashboard question.');
-    $pdo=app_pdo();$locationId=admin_dashboard_agent_location_id($pdo,$user,$message);
-    $dashboard=admin_dashboard_snapshot($pdo,$user,$locationId);
-    $result=admin_dashboard_agent_answer($dashboard,$message);
-    app_json_response(['ok'=>true,'skill'=>'admin.dashboard','answer'=>$result['answer'],'data'=>$result['data'],'sources'=>$result['sources']]);
-}catch(InvalidArgumentException $e){
-    app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);
-}catch(Throwable $e){
-    error_log('Admin dashboard Agent failed: '.$e->getMessage());
-    app_json_response(['ok'=>false,'message'=>'Gelato could not load the restaurant command-center context.'],500);
-}
+    $message=trim((string)($input['message']??''));if($message==='')throw new InvalidArgumentException('Enter a restaurant dashboard question.');
+    $pdo=app_pdo();$locationId=admin_dashboard_agent_location_id($pdo,$user,$message);$dashboard=admin_dashboard_snapshot($pdo,$user,$locationId);$purchasing=admin_dashboard_agent_purchasing($pdo,$user);$result=admin_dashboard_agent_answer($dashboard,$message,$purchasing);
+    app_json_response(['ok'=>true,'skill'=>'admin.dashboard','answer'=>$result['answer'],'data'=>$result['data'],'sources'=>$result['sources'],'node'=>'command_center']);
+}catch(InvalidArgumentException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);
+}catch(Throwable $e){error_log('Admin dashboard Agent failed: '.$e->getMessage());app_json_response(['ok'=>false,'message'=>'Gelato could not load the restaurant command-center context.'],500);}

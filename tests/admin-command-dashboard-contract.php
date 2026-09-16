@@ -8,6 +8,7 @@ $files=[
     'api'=>$root.'/api/admin-dashboard.php',
     'agent'=>$root.'/api/admin-dashboard-agent.php',
     'router'=>$root.'/api/agent-workspace.php',
+    'nodes'=>$root.'/includes/agent-node-registry.php',
     'js'=>$root.'/js/admin-command-dashboard.js',
     'css'=>$root.'/css/admin-command-dashboard.css',
 ];
@@ -48,19 +49,14 @@ $checks=[
     'agent answers wholesale context'=>str_contains($files['agent'],"preg_match('/\\bwholesale\\b/u'"),
     'agent answers location comparison'=>str_contains($files['agent'],'compare locations?'),
     'agent refuses sales answers without sales capability'=>str_contains($files['agent'],'Your account does not have Sales dashboard access.'),
-    'shared Agent router sends dashboard requests to dashboard skill'=>str_contains($files['router'],"'route'=>'api/admin-dashboard-agent.php'"),
-    'shared Agent router uses canonical admin control gate'=>str_contains($files['router'],'$dashboardAccess=admin_control_allowed($user);'),
+    'command center is registered as a main Agent node'=>str_contains($files['nodes'],"'command_center'=>[")&&str_contains($files['nodes'],"'route'=>'api/admin-dashboard-agent.php'")&&str_contains($files['nodes'],"'mode'=>'read_orchestrator'"),
+    'shared Agent router sends dashboard requests through command-center node'=>str_contains($files['router'],"gaw_node_route('command_center')"),
+    'shared Agent router uses canonical admin control gate'=>str_contains($files['router'],'admin_control_allowed($user)'),
     'shared Agent router preserves detailed thread history'=>str_contains($files['router'],'gaw_messages($pdo,$org,$uid,$id,220)'),
     'dashboard layout is responsive'=>str_contains($files['css'],'@media(max-width:720px)'),
 ];
 
 $failed=[];
-foreach($checks as $label=>$passed){
-    if(!$passed)$failed[]=$label;
-}
-if($failed){
-    fwrite(STDERR,"Admin command dashboard contract failed:\n - ".implode("\n - ",$failed)."\n");
-    exit(1);
-}
-
+foreach($checks as $label=>$passed){if(!$passed)$failed[]=$label;}
+if($failed){fwrite(STDERR,"Admin command dashboard contract failed:\n - ".implode("\n - ",$failed)."\n");exit(1);}
 echo 'Admin command dashboard contract passed ('.count($checks)." checks).\n";
