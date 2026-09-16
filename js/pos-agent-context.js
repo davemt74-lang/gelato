@@ -55,8 +55,6 @@
       locationId: context.locationId,
       view: context.view,
       checkPublicId: context.checkPublicId,
-      menuItemIds: context.menuItemIds,
-      lineItemIds: context.lineItemIds,
       focusedLineId: context.focusedLineId,
     };
   }
@@ -150,25 +148,37 @@
     return next;
   }
 
+  function emitAgentError(message) {
+    window.dispatchEvent(new CustomEvent('gelato-agent-error', {
+      detail: {message: clean(message || 'Gelato could not complete that request.', 500)},
+    }));
+  }
+
   async function dispatchAgentError(response) {
     try {
       const data = await response.clone().json();
-      window.dispatchEvent(new CustomEvent('gelato-agent-error', {detail: {message: clean(data?.message || 'Gelato could not complete that request.', 500)}}));
+      emitAgentError(data?.message || 'Gelato could not complete that request.');
     } catch {
-      window.dispatchEvent(new CustomEvent('gelato-agent-error', {detail: {message: 'Gelato could not complete that request.'}}));
+      emitAgentError('Gelato could not complete that request.');
     }
   }
 
   window.fetch = async function gelatoPosContextFetch(input, init) {
     const nextInit = withAgentContext(input, init);
-    const response = await nativeFetch(input, nextInit);
     const file = localPath(input);
+    const agentPost = ['agent-workspace.php', 'pos-agent.php'].includes(file)
+      && String(nextInit?.method || 'GET').toUpperCase() === 'POST';
+    let response;
+    try {
+      response = await nativeFetch(input, nextInit);
+    } catch (error) {
+      if (agentPost) emitAgentError(error?.message || 'Network error while contacting Gelato.');
+      throw error;
+    }
     if (file === 'pos.php') {
       try { applyPosPayload(await response.clone().json()); } catch {}
     }
-    if (!response.ok && ['agent-workspace.php', 'pos-agent.php'].includes(file) && String(nextInit?.method || 'GET').toUpperCase() === 'POST') {
-      dispatchAgentError(response);
-    }
+    if (!response.ok && agentPost) dispatchAgentError(response);
     return response;
   };
 
