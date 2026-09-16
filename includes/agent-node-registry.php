@@ -12,9 +12,15 @@ function gaw_agent_nodes(): array
         ],
         'command_center'=>[
             'label'=>'Manager Command Center',
+            'route'=>'api/brain-orchestrator.php',
+            'domain'=>'agent_brain_orchestration',
+            'mode'=>'read_orchestrator',
+        ],
+        'dashboard_detail'=>[
+            'label'=>'Command Dashboard Detail',
             'route'=>'api/admin-dashboard-agent.php',
             'domain'=>'admin_dashboard',
-            'mode'=>'read_orchestrator',
+            'mode'=>'read',
         ],
         'daily_manager'=>[
             'label'=>'Daily Manager Brief',
