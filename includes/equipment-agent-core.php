@@ -227,7 +227,7 @@ function equipment_agent_handle(PDO $pdo,array $user,array $input): array
 
     if(preg_match('/\b(record|log|add)\s+(?:a\s+)?(maintenance|repair|inspection|cleaning|warranty|installation|service)\b/u',$lower,$m)){
         equipment_agent_require_service($user);if(!$asset)throw new InvalidArgumentException('Select or name the equipment asset before recording service.');
-        $eventType=$m[1]==='service'?'maintenance':$m[1];$description='';
+        $eventType=$m[2]==='service'?'maintenance':$m[2];$description='';
         if(preg_match('/:\s*(.+)$/us',$message,$dm))$description=trim($dm[1]);
         elseif(preg_match('/\b(?:maintenance|repair|inspection|cleaning|warranty|installation|service)\b\s+(?:for|on)?\s*(.+)$/iu',$message,$dm))$description=trim($dm[1]);
         $description=preg_replace('/\s+next\s+due\s+20\d{2}-\d{2}-\d{2}.*$/iu','',$description)??$description;
