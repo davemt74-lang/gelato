@@ -91,7 +91,7 @@ function gaw_route(array $user,string $message): array
     $confirmationIntent=preg_match('/^(?:confirm|yes|yes please|do it|go ahead|execute|apply|cancel|cancel it|discard|never mind|nevermind|stop)(?:\s+(?:it|that|change|action))?[.!]?$/u',$text)===1;
     if($confirmationIntent&&function_exists('gaw_pending_action_node')&&function_exists('gaw_node_route')){
         $pendingNode=gaw_pending_action_node((int)($user['organization_id']??0),(int)($user['id']??0));
-        if($pendingNode==='marketing'&&(app_has_permission('packages.view',$user)||app_has_permission('public_pages.edit',$user)||app_has_permission('settings.organization_edit',$user)||app_has_permission('sales.view',$user)||app_has_permission('crm.view',$user)))return gaw_node_route('marketing','marketing_confirmation');
+        if($pendingNode==='marketing'&&(app_has_permission('packages.view',$user)||app_has_permission('public_pages.edit',$user)||app_has_permission('settings.organization_edit',$user)))return gaw_node_route('marketing','marketing_confirmation');
     }
 
     if(preg_match($workforce,$text)&&(app_has_permission('resumes.view',$user)||app_has_permission('audit.view',$user)||app_has_permission('schedule.view',$user)))return ['route'=>'api/workspace-workforce-agent.php','domain'=>'workspace_workforce'];
@@ -99,7 +99,7 @@ function gaw_route(array $user,string $message): array
     if(preg_match($time,$text)&&(app_has_permission('timeclock.agent',$user)||app_has_permission('timeclock.self',$user)||app_has_permission('attendance.view',$user)))return ['route'=>'api/timeclock-agent.php','domain'=>'timeclock'];
     if(preg_match($schedule,$text)&&(app_has_permission('schedule.agent',$user)||app_has_permission('schedule.view',$user)||app_has_permission('schedule.self',$user)))return ['route'=>'api/scheduling-agent.php','domain'=>'scheduling'];
     if(preg_match($employee,$text)&&(app_has_permission('employee.self',$user)||app_has_permission('tasks.self',$user)||app_has_permission('agent.employee_view',$user)||app_has_permission('training.self_view',$user)))return ['route'=>'api/employee-agent.php','domain'=>'employee_home'];
-    if(preg_match($marketing,$text)&&(app_has_permission('packages.view',$user)||app_has_permission('public_pages.edit',$user)||app_has_permission('settings.organization_edit',$user)||app_has_permission('sales.view',$user)||app_has_permission('crm.view',$user)))return ['route'=>'api/marketing-agent.php','domain'=>'marketing'];
+    if(preg_match($marketing,$text)&&(app_has_permission('packages.view',$user)||app_has_permission('public_pages.edit',$user)||app_has_permission('settings.organization_edit',$user)))return ['route'=>'api/marketing-agent.php','domain'=>'marketing'];
     if(preg_match($catering,$text)&&app_has_permission('catering.agent',$user))return ['route'=>'api/catering-agent.php','domain'=>'catering'];
     if(preg_match($purchasing,$text)&&app_has_permission('purchasing.agent',$user)&&app_has_permission('purchasing.view',$user))return ['route'=>'api/purchasing-agent.php','domain'=>'purchasing'];
     if(preg_match($prepIntel,$text)&&app_has_permission('prep.intelligence.agent',$user)&&app_has_permission('prep.intelligence.view',$user))return ['route'=>'api/prep-intelligence-agent.php','domain'=>'prep_intelligence'];
