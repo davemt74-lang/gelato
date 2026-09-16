@@ -32,6 +32,7 @@ sac_assert(str_contains($route,'$confirmationIntent')&&str_contains($route,'$loc
 
 sac_assert(str_contains($endpoint,"require_once __DIR__.'/../includes/scheduling-agent-core.php'")&&str_contains($endpoint,'scheduling_agent_handle($pdo,$user,$input)'),'Scheduling Agent HTTP endpoint must delegate to the reusable secure action core.');
 sac_assert(str_contains($endpoint,'catch(SchedulingAgentPermissionException $e)')&&str_contains($endpoint,'],403)'),'Scheduling Agent endpoint must distinguish permission failures from validation failures.');
+sac_assert(str_contains($endpoint,'$hasScheduleVisibility')&&str_contains($endpoint,'$confirmingStaffMessage')&&str_contains($endpoint,'Schedule visibility permission is required for scheduling intelligence.'),'Staff identity access must not silently grant scheduling intelligence; staff-message confirmations are the scoped exception.');
 
 sac_assert(str_contains($core,'sac_pending_store')&&str_contains($core,'sac_pending_get')&&str_contains($core,'sac_pending_clear'),'Scheduling Agent writes must use server-side pending proposals.');
 sac_assert(str_contains($core,"'expires'=>time()+600"),'Scheduling Agent proposals must expire quickly.');
