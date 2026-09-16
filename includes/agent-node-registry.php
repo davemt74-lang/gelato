@@ -22,6 +22,12 @@ function gaw_agent_nodes(): array
             'domain'=>'daily_manager_brief',
             'mode'=>'read_orchestrator',
         ],
+        'live_shift'=>[
+            'label'=>'Live Shift Orchestration',
+            'route'=>'api/live-shift-agent.php',
+            'domain'=>'live_shift',
+            'mode'=>'read_write',
+        ],
         'sales_cost'=>[
             'label'=>'Sales Cost Intelligence',
             'route'=>'api/sales-cost-agent.php',
