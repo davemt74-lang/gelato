@@ -1,0 +1,48 @@
+name: KDS Voice Agent
+
+on:
+  pull_request:
+    paths:
+      - 'kds.php'
+      - 'api/kds-agent.php'
+      - 'includes/agent-node-registry.php'
+      - 'js/agent-page-context.js'
+      - 'js/global-agent.js'
+      - 'js/kds-agent-context.js'
+      - 'js/kds-agent-sidebar.js'
+      - 'tests/kds-voice-agent-contract.php'
+      - '.github/workflows/kds-voice-agent.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'kds.php'
+      - 'api/kds-agent.php'
+      - 'includes/agent-node-registry.php'
+      - 'js/agent-page-context.js'
+      - 'js/global-agent.js'
+      - 'js/kds-agent-context.js'
+      - 'js/kds-agent-sidebar.js'
+      - 'tests/kds-voice-agent-contract.php'
+      - '.github/workflows/kds-voice-agent.yml'
+
+jobs:
+  kds-voice-agent:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring
+      - name: Syntax checks
+        run: |
+          php -l kds.php
+          php -l api/kds-agent.php
+          php -l includes/agent-node-registry.php
+          php -l tests/kds-voice-agent-contract.php
+          node --check js/agent-page-context.js
+          node --check js/global-agent.js
+          node --check js/kds-agent-context.js
+          node --check js/kds-agent-sidebar.js
+      - name: KDS voice-only Agent contract
+        run: php tests/kds-voice-agent-contract.php
