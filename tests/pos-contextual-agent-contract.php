@@ -40,13 +40,16 @@ pca_assert(str_contains($menuKnowledge,'ORDER BY mi.sort_order,mi.ingredient_id'
 $posPage=pca_text($root.'/pos.php');
 pca_assert(str_contains($posPage,'js/pos.js?v=20260915-pos-agent1'),'POS page must use the contextual-Agent cache key so deployments do not reuse the pre-Agent POS entrypoint.');
 $loader=pca_text($root.'/js/pos.js');
-pca_assert(str_contains($loader,'js/pos-agent-context.js'),'POS entrypoint must load page-context transport before the workstation runtime.');
+pca_assert(str_contains($loader,'js/agent-page-context.js')&&str_contains($loader,'js/pos-agent-context.js'),'POS entrypoint must load shared Agent context before the POS provider.');
 pca_assert(str_contains($loader,'js/pos-runtime.js'),'POS entrypoint must preserve the existing specialized POS runtime.');
 pca_assert(str_contains($loader,'js/global-agent.js')&&str_contains($loader,'js/dynamic-agent-canvas.js'),'POS entrypoint must load the shared Agent bar and response drawer.');
 $context=pca_text($root.'/js/pos-agent-context.js');
+$sharedContext=pca_text($root.'/js/agent-page-context.js');
 pca_assert(str_contains($context,"module: 'pos'")&&str_contains($context,'checkPublicId'),'POS page context must identify the module and active check.');
-pca_assert(str_contains($context,"['agent-workspace.php', 'pos-agent.php']"),'POS context transport must attach only to Agent routing and POS Agent requests.');
-pca_assert(str_contains($context,'function transportSnapshot()')&&str_contains($context,'body.pageContext = transportSnapshot()'),'POS network transport must use the minimized identifier-only page context.');
+pca_assert(str_contains($context,'function transportSnapshot()')&&str_contains($context,'checkPublicId: context.checkPublicId')&&str_contains($context,'focusedLineId: context.focusedLineId'),'POS provider must expose minimized identifier-only transport context.');
+pca_assert(str_contains($context,'GelatoAgentPageContext?.register?.(provider)'),'POS must register its provider with the shared Agent page-context layer.');
+pca_assert(!str_contains($context,'body.pageContext')&&!str_contains($context,'withAgentContext'),'POS must not maintain a second Agent request injector after the shared transport refactor.');
+pca_assert(str_contains($sharedContext,"file === 'agent-workspace.php' || /-agent\\.php$/i.test(file)")&&str_contains($sharedContext,'body.pageContext = context'),'Shared Agent context must attach page context to Agent routing and routed skills.');
 pca_assert(!str_contains($context,'localStorage'),'POS Agent context must not copy browser-local Training performance telemetry into the transaction context.');
 
 $route=pca_text($root.'/api/agent-workspace.php');
