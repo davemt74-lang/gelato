@@ -3,6 +3,7 @@ declare(strict_types=1);
 require __DIR__ . '/../includes/bootstrap.php';
 require __DIR__ . '/../includes/catering-brain.php';
 require __DIR__ . '/../includes/catering-operations.php';
+require_once __DIR__ . '/../includes/catering-agent-actions.php';
 
 $user=app_require_auth();
 if(!app_has_permission('catering.view',$user)||!app_has_permission('catering.agent',$user))app_json_response(['ok'=>false,'message'=>'Catering Agent permission required.'],403);
@@ -30,9 +31,12 @@ if($_SERVER['REQUEST_METHOD']==='GET'){
 if($_SERVER['REQUEST_METHOD']!=='POST'){header('Allow: GET, POST');app_json_response(['ok'=>false,'message'=>'Method not allowed.'],405);}
 $input=app_json_input();app_verify_request_csrf($input);$action=(string)($input['action']??'ask');
 if($action==='ask'){
-  $message=trim((string)($input['message']??''));if($message===''||mb_strlen($message,'UTF-8')>1600)app_json_response(['ok'=>false,'message'=>'Enter a catering question no longer than 1,600 characters.'],422);
-  $result=(catering_operations_ready($pdo)&&catering_agent_operations_intent($message))?catering_operations_agent_answer($pdo,$organizationId,$message):catering_brain_answer($pdo,$organizationId,$message);
-  app_audit($pdo,$organizationId,(int)$user['id'],'agent.catering_skill_used','agent_skill',$result['skill'],null,['message'=>mb_substr($message,0,300,'UTF-8'),'sources'=>$result['sources']]);app_json_response(['ok'=>true]+$result);
+  try{
+    $result=catering_agent_actions_handle($pdo,$user,$input);
+    app_audit($pdo,$organizationId,(int)$user['id'],'agent.catering_skill_used','agent_skill',(string)($result['skill']??'catering'),null,['message'=>mb_substr((string)($input['message']??''),0,300,'UTF-8'),'sources'=>$result['sources']??[]]);
+    app_json_response($result);
+  }catch(CateringAgentActionPermissionException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],403);}
+  catch(Throwable $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);}
 }
 if($action==='run_skill'){
   $skill=(string)($input['skill']??'');$args=(array)($input['arguments']??[]);
