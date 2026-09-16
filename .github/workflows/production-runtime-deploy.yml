@@ -12,6 +12,7 @@ on:
       - 'host-stand.php'
       - 'equipment.php'
       - 'equipment-detail.php'
+      - 'recipes.php'
       - 'api/**'
       - 'includes/**'
       - 'js/**'
@@ -52,6 +53,7 @@ jobs:
             host-stand.php
             equipment.php
             equipment-detail.php
+            recipes.php
             js/universal-admin-page-shell.js
             css/admin-tech-theme.css
             js/scheduling.js
@@ -65,6 +67,7 @@ jobs:
             js/wholesale-agent-context.js
             js/marketing-agent-context.js
             js/equipment-agent-context.js
+            js/recipe-agent-context.js
             js/agent-next-moves.js
             api/scheduling.php
             api/scheduling-agent.php
@@ -77,6 +80,7 @@ jobs:
             api/wholesale-agent.php
             api/marketing-agent.php
             api/equipment-agent.php
+            api/recipe-agent.php
             api/brain-orchestrator.php
             api/brain-events.php
             api/daily-manager-agent.php
@@ -100,9 +104,12 @@ jobs:
             includes/equipment-brain.php
             includes/equipment-agent-core.php
             includes/equipment-agent-brain.php
+            includes/recipe-agent-core.php
+            includes/recipe-agent-brain.php
             includes/pos-item-actions.php
             database/20260913_zzzz_staff_scheduling.sql
             database/20260912_equipment_catalog_brain.sql
+            database/20260912_wholesale_recipe_intelligence.sql
             upgrade.php
           )
           for path in "${required[@]}"; do
@@ -115,6 +122,7 @@ jobs:
           php -l host-stand.php
           php -l equipment.php
           php -l equipment-detail.php
+          php -l recipes.php
           php -l api/scheduling.php
           php -l api/scheduling-agent.php
           php -l api/pos-agent.php
@@ -126,6 +134,7 @@ jobs:
           php -l api/wholesale-agent.php
           php -l api/marketing-agent.php
           php -l api/equipment-agent.php
+          php -l api/recipe-agent.php
           php -l api/brain-orchestrator.php
           php -l api/brain-events.php
           php -l api/daily-manager-agent.php
@@ -149,6 +158,8 @@ jobs:
           php -l includes/equipment-brain.php
           php -l includes/equipment-agent-core.php
           php -l includes/equipment-agent-brain.php
+          php -l includes/recipe-agent-core.php
+          php -l includes/recipe-agent-brain.php
           php -l includes/pos-item-actions.php
           node --check js/universal-admin-page-shell.js
           node --check js/scheduling.js
@@ -162,6 +173,7 @@ jobs:
           node --check js/wholesale-agent-context.js
           node --check js/marketing-agent-context.js
           node --check js/equipment-agent-context.js
+          node --check js/recipe-agent-context.js
           node --check js/agent-next-moves.js
 
       - name: Build flat production runtime
@@ -193,7 +205,7 @@ jobs:
           2. Preserve the live config.php file. It is intentionally not included in this package.
           3. Preserve all existing uploads/ and storage/ content. Those directories are intentionally not included.
           4. Sign in as an owner/admin, open upgrade.php, and run Upgrade once.
-          5. Hard-refresh the browser, then verify the POS Agent/ticket flow, Table Service Agent, Host Stand / Front of House Agent, CRM Agent, Catering Agent, Wholesale Agent, Marketing Agent, Equipment + Maintenance Agent, and workspace.php before testing the remaining admin pages.
+          5. Hard-refresh the browser, then verify the POS Agent/ticket flow, Table Service Agent, Host Stand / Front of House Agent, CRM Agent, Catering Agent, Wholesale Agent, Marketing Agent, Equipment + Maintenance Agent, Recipe + Production Standards Agent, and workspace.php before testing the remaining admin pages.
           EOF
 
           test ! -e "$deploy_root/.github"
@@ -211,6 +223,7 @@ jobs:
             host-stand.php
             equipment.php
             equipment-detail.php
+            recipes.php
             js/universal-admin-page-shell.js
             css/admin-tech-theme.css
             js/scheduling.js
@@ -224,6 +237,7 @@ jobs:
             js/wholesale-agent-context.js
             js/marketing-agent-context.js
             js/equipment-agent-context.js
+            js/recipe-agent-context.js
             js/agent-next-moves.js
             api/scheduling.php
             api/scheduling-agent.php
@@ -236,6 +250,7 @@ jobs:
             api/wholesale-agent.php
             api/marketing-agent.php
             api/equipment-agent.php
+            api/recipe-agent.php
             api/brain-orchestrator.php
             api/brain-events.php
             api/daily-manager-agent.php
@@ -259,9 +274,12 @@ jobs:
             includes/equipment-brain.php
             includes/equipment-agent-core.php
             includes/equipment-agent-brain.php
+            includes/recipe-agent-core.php
+            includes/recipe-agent-brain.php
             includes/pos-item-actions.php
             database/20260913_zzzz_staff_scheduling.sql
             database/20260912_equipment_catalog_brain.sql
+            database/20260912_wholesale_recipe_intelligence.sql
             upgrade.php
             DEPLOY_SHA.txt
             DEPLOY_INSTRUCTIONS.txt

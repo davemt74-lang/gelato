@@ -8,6 +8,7 @@ on:
       - 'api/admin-dashboard-agent.php'
       - 'api/agent-workspace.php'
       - 'api/equipment-agent.php'
+      - 'api/recipe-agent.php'
       - 'api/daily-manager-agent.php'
       - 'includes/agent-brain-orchestrator.php'
       - 'includes/agent-node-registry.php'
@@ -15,11 +16,15 @@ on:
       - 'includes/equipment-agent-core.php'
       - 'includes/equipment-agent-brain.php'
       - 'includes/equipment-brain.php'
+      - 'includes/recipe-agent-core.php'
+      - 'includes/recipe-agent-brain.php'
       - 'js/agent-next-moves.js'
       - 'js/global-add-canvas.js'
       - 'js/equipment-agent-context.js'
+      - 'js/recipe-agent-context.js'
       - 'equipment.php'
       - 'equipment-detail.php'
+      - 'recipes.php'
       - 'tests/agent-brain-orchestration-contract.php'
       - 'tests/admin-command-dashboard-contract.php'
       - 'tests/workspace-dynamic-agent-canvas-contract.php'
@@ -42,20 +47,29 @@ jobs:
           php -l api/brain-events.php
           php -l api/admin-dashboard-agent.php
           php -l api/equipment-agent.php
+          php -l api/recipe-agent.php
           php -l api/daily-manager-agent.php
           php -l includes/agent-brain-orchestrator.php
           php -l includes/agent-node-registry.php
           php -l includes/agent-workspace-core.php
           php -l includes/equipment-agent-core.php
           php -l includes/equipment-agent-brain.php
+          php -l includes/recipe-agent-core.php
+          php -l includes/recipe-agent-brain.php
           php -l tests/agent-brain-orchestration-contract.php
           php -l tests/admin-command-dashboard-contract.php
           php -l tests/workspace-dynamic-agent-canvas-contract.php
           node --check js/agent-next-moves.js
           node --check js/global-add-canvas.js
           node --check js/equipment-agent-context.js
+          node --check js/recipe-agent-context.js
       - name: Agent Brain orchestration contract
         run: php tests/agent-brain-orchestration-contract.php
+      - name: Recipe Brain integration contract
+        run: |
+          grep -F "require_once __DIR__.'/../includes/recipe-agent-brain.php';" api/brain-orchestrator.php
+          grep -F 'recipe_agent_merge_brain_snapshot' api/brain-orchestrator.php
+          grep -F "'node'=>'recipes'" includes/recipe-agent-brain.php
       - name: Command Center regression
         run: php tests/admin-command-dashboard-contract.php
       - name: Shared Agent UI regression
