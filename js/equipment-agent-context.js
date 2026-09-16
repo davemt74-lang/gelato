@@ -79,7 +79,7 @@
   }
 
   const provider = {module: 'equipment', snapshot, transportSnapshot, description, placeholder};
-  window.GelatoEquipmentAgentContext = {state, provider, snapshot, transportSnapshot, description, placeholder, publish, register};
+  window.GelatoEquipmentAgentContext = {state, provider, snapshot, transportSnapshot, description, placeholder, publish, sync: publish, register};
 
   window.addEventListener('gelato-agent-ready', () => { register(); publish(); });
   document.addEventListener('DOMContentLoaded', () => { removeLegacyEquipmentBrain(); register(); publish(); }, {once: true});
