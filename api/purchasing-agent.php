@@ -11,10 +11,13 @@ if($_SERVER['REQUEST_METHOD']==='GET')app_json_response(['ok'=>true,'skill'=>'pu
 if($_SERVER['REQUEST_METHOD']!=='POST'){header('Allow: GET, POST');app_json_response(['ok'=>false,'message'=>'Method not allowed.'],405);}
 
 $input=app_json_input();app_verify_request_csrf($input);
+$message=trim((string)($input['message']??''));
+$receivingIntent=preg_match('/\b(receiv|receipt|invoice|delivery histor|everything arrived|full shipment)\b/iu',$message)===1;
+if($receivingIntent&&!app_has_permission('receiving.view',$user)&&!app_has_permission('receiving.manage',$user))app_json_response(['ok'=>false,'message'=>'Receiving view permission is required for receiving intelligence.'],403);
 try{
     $result=purchasing_agent_handle($pdo,$user,$input);
     $pageContext=is_array($input['pageContext']??null)?$input['pageContext']:[];
-    app_audit($pdo,$org,$uid,'purchasing.agent_skill_used','agent_node',(string)($result['skill']??'purchasing.unknown'),null,['message'=>mb_substr(trim((string)($input['message']??'')),0,1800,'UTF-8'),'contextModule'=>(string)($pageContext['module']??'')]);
+    app_audit($pdo,$org,$uid,'purchasing.agent_skill_used','agent_node',(string)($result['skill']??'purchasing.unknown'),null,['message'=>mb_substr($message,0,1800,'UTF-8'),'contextModule'=>(string)($pageContext['module']??'')]);
     app_json_response($result);
 }catch(PurchasingAgentPermissionException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],403);
 }catch(InvalidArgumentException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);
