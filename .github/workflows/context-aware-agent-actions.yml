@@ -1,0 +1,56 @@
+name: Context-Aware Agent Actions
+
+on:
+  pull_request:
+    paths:
+      - 'api/agent-workspace.php'
+      - 'api/scheduling-agent.php'
+      - 'includes/scheduling-agent-core.php'
+      - 'js/agent-page-context.js'
+      - 'js/scheduling-agent-context.js'
+      - 'js/global-add-canvas.js'
+      - 'js/pos.js'
+      - 'js/pos-agent-context.js'
+      - 'tests/scheduling-agent-context-contract.php'
+      - 'tests/scheduling-agent-actions-contract.php'
+      - '.github/workflows/context-aware-agent-actions.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'api/agent-workspace.php'
+      - 'api/scheduling-agent.php'
+      - 'includes/scheduling-agent-core.php'
+      - 'js/agent-page-context.js'
+      - 'js/scheduling-agent-context.js'
+      - 'js/global-add-canvas.js'
+      - 'js/pos.js'
+      - 'js/pos-agent-context.js'
+      - 'tests/scheduling-agent-context-contract.php'
+      - 'tests/scheduling-agent-actions-contract.php'
+      - '.github/workflows/context-aware-agent-actions.yml'
+
+jobs:
+  context-aware-agent-actions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring
+      - name: PHP syntax
+        run: |
+          php -l api/agent-workspace.php
+          php -l api/scheduling-agent.php
+          php -l includes/scheduling-agent-core.php
+          php -l tests/scheduling-agent-context-contract.php
+          php -l tests/scheduling-agent-actions-contract.php
+      - name: JavaScript syntax
+        run: |
+          node --check js/agent-page-context.js
+          node --check js/scheduling-agent-context.js
+          node --check js/global-add-canvas.js
+          node --check js/pos.js
+          node --check js/pos-agent-context.js
+      - name: Shared context and action contract
+        run: php tests/scheduling-agent-context-contract.php

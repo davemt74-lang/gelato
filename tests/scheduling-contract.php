@@ -28,3 +28,5 @@ $swapShift=scheduling_shift_save($pdo,$org,['title'=>'Friday PM','startsAt'=>'20
 $pdo->prepare("UPDATE staff_availability_exceptions SET status='rejected' WHERE organization_id=? AND public_id=?")->execute([$org,$exception['public_id']]);scheduling_request_review($pdo,$org,$swap['public_id'],'approved',$users['alice']);$swapped=scheduling_shift_by_public_id($pdo,$org,$swapShift['public_id']);ok_sched((int)$swapped['user_id']===$users['bob'],'approved swap did not reassign shift',18);
 $events=(int)$pdo->query("SELECT COUNT(*) FROM schedule_events WHERE organization_id={$org}")->fetchColumn();ok_sched($events>=5,'schedule event history missing',19);
 echo "staff=".count($staff)." scheduledHours={$summary['scheduledHours']} taskHours={$summary['taskHours']} coverageGaps={$summary['coverageGaps']} events={$events}\n";
+
+require __DIR__.'/scheduling-agent-actions-contract.php';
