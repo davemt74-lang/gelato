@@ -9,6 +9,7 @@ require_once __DIR__.'/../includes/marketing-brain.php';
 require_once __DIR__.'/../includes/equipment-agent-brain.php';
 require_once __DIR__.'/../includes/recipe-agent-brain.php';
 require_once __DIR__.'/../includes/online-order-agent-brain.php';
+require_once __DIR__.'/../includes/timeclock-agent-brain.php';
 
 $user=app_require_auth();
 if(!admin_dashboard_allowed($user))app_json_response(['ok'=>false,'message'=>'Manager Agent Brain access is not available for this account.'],403);
@@ -16,7 +17,10 @@ if(!admin_dashboard_allowed($user))app_json_response(['ok'=>false,'message'=>'Ma
 try{
     $pdo=app_pdo();
     $buildSnapshot=static function() use ($pdo,$user): array {
-        return online_order_agent_merge_brain_snapshot(
+        return timeclock_agent_merge_brain_snapshot(
+            $pdo,
+            $user,
+            online_order_agent_merge_brain_snapshot(
             $pdo,
             $user,
             recipe_agent_merge_brain_snapshot(
@@ -36,7 +40,7 @@ try{
                     )
                 )
             )
-        );
+        ));
     };
     if($_SERVER['REQUEST_METHOD']==='GET'){
         $action=(string)($_GET['action']??'snapshot');
@@ -49,7 +53,7 @@ try{
     if((string)($input['action']??'ask')!=='ask')app_json_response(['ok'=>false,'message'=>'Unsupported Agent Brain orchestration action.'],422);
     $message=trim((string)($input['message']??''));if($message==='')throw new InvalidArgumentException('Enter a restaurant operating question.');
     $snapshot=$buildSnapshot();$result=agent_brain_orchestration_answer($snapshot,$message);
-    app_audit($pdo,(int)$user['organization_id'],(int)$user['id'],'agent.brain_orchestration_used','agent_brain','manager',null,['signalCount'=>count($snapshot['signals']),'nextMoveCount'=>count($snapshot['nextMoves']),'liveShiftIntegrated'=>true,'crmIntegrated'=>true,'marketingIntegrated'=>true,'equipmentIntegrated'=>true,'recipesIntegrated'=>true,'onlineOrdersIntegrated'=>true]);
+    app_audit($pdo,(int)$user['organization_id'],(int)$user['id'],'agent.brain_orchestration_used','agent_brain','manager',null,['signalCount'=>count($snapshot['signals']),'nextMoveCount'=>count($snapshot['nextMoves']),'liveShiftIntegrated'=>true,'crmIntegrated'=>true,'marketingIntegrated'=>true,'equipmentIntegrated'=>true,'recipesIntegrated'=>true,'onlineOrdersIntegrated'=>true,'timeclockIntegrated'=>true]);
     app_json_response(['ok'=>true,'skill'=>'agent.brain.orchestration','answer'=>$result['answer'],'data'=>$result['data'],'sources'=>$result['sources'],'node'=>'brain']);
 }catch(InvalidArgumentException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);
 }catch(Throwable $e){error_log('Agent Brain orchestration failed: '.$e->getMessage());app_json_response(['ok'=>false,'message'=>'Gelato could not assemble the cross-node restaurant operating picture.'],500);}
