@@ -33,6 +33,9 @@ pca_assert(str_contains((string)$natural[0]['sectionNote'],'wood-fired'),'Shared
 $direct=array_column($natural[0]['allergens']['direct'],'id');
 pca_assert(in_array('milk',$direct,true)&&in_array('wheat',$direct,true),'Shared allergen rules must identify direct milk and wheat indicators from recorded ingredients.');
 pca_assert(str_contains((string)$natural[0]['allergens']['warning'],'not')||str_contains(mb_strtolower((string)$natural[0]['allergens']['warning'],'UTF-8'),'verify'),'Allergen knowledge must retain a verification safety boundary.');
+$menuKnowledge=pca_text($root.'/includes/menu-training-knowledge.php');
+pca_assert(!str_contains($menuKnowledge,'ORDER BY mi.sort_order,mi.id'),'Shared menu knowledge must not order by a nonexistent menu_item_ingredients id column.');
+pca_assert(str_contains($menuKnowledge,'ORDER BY mi.sort_order,mi.ingredient_id'),'Shared menu knowledge must use the canonical ingredient link identity as its deterministic secondary sort.');
 
 $posPage=pca_text($root.'/pos.php');
 pca_assert(str_contains($posPage,'js/pos.js?v=20260915-pos-agent1'),'POS page must use the contextual-Agent cache key so deployments do not reuse the pre-Agent POS entrypoint.');
