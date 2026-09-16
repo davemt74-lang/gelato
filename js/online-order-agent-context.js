@@ -10,12 +10,12 @@
   function detectOrder() {
     const query = cleanId(new URLSearchParams(location.search).get('order'));
     if (query) return query;
-    const selected = document.querySelector('[data-order].is-agent-selected,[data-order][aria-selected="true"],.pickup-card.is-agent-selected[data-order]');
+    const selected = document.querySelector('[data-order].is-agent-selected,[data-order].is-selected,[data-order][aria-selected="true"]');
     return cleanId(selected?.dataset?.order || selected?.getAttribute('data-order') || state.selectedOrderPublicId);
   }
 
   function locationId() {
-    const field = document.getElementById('locationFilter');
+    const field = document.getElementById('locationFilter') || document.getElementById('recoveryLocation') || document.querySelector('select[name="location"]');
     const value = Number(field?.value || 0);
     return Number.isInteger(value) && value > 0 ? value : null;
   }
@@ -59,7 +59,10 @@
     state.selectedOrderPublicId = cleanId(card.dataset.order || '');
     setTimeout(publish, 0);
   });
-  document.addEventListener('change', event => { if (event.target?.id === 'locationFilter') publish(); });
+  document.addEventListener('change', event => {
+    if (['locationFilter', 'recoveryLocation'].includes(event.target?.id) || event.target?.matches?.('select[name="location"]')) publish();
+  });
+  window.addEventListener('popstate', publish);
   window.addEventListener('gelato-agent-ready', () => { register(); publish(); });
   document.addEventListener('DOMContentLoaded', () => { register(); publish(); }, {once:true});
   register();
