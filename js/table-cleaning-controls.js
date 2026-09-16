@@ -1,7 +1,7 @@
 (()=>{'use strict';
 const isTableService=!!window.GELATO_TABLE_SERVICE,isHost=!!window.HOST_CONFIG;if(!isTableService&&!isHost)return;
 let hostTables=[],hostSelectedId='',hostFetchBusy=false,hostDecorateTimer=null,hostObserver=null,tableObserver=null,tableServiceFetchBusy=false,tableServiceMetaCache={id:'',row:null};
-const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#039;'}[c]));
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 const secondsLabel=n=>{n=Number(n);if(!Number.isFinite(n)||n<0)return'';const m=Math.floor(n/60);return m<60?`${m}m`:`${Math.floor(m/60)}h ${m%60}m`};
 function toast(message){const el=document.getElementById('toast');if(!el)return;el.textContent=message;el.classList.remove('hidden');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.add('hidden'),3000)}
 async function post(endpoint,action,tablePublicId){const cfg=isTableService?window.GELATO_TABLE_SERVICE:window.HOST_CONFIG;const location=document.getElementById(isTableService?'locationSelect':'location');const date=document.getElementById('date');const body={action,tablePublicId,locationId:Number(location?.value||0),csrf:cfg.csrf||''};if(date?.value)body.date=date.value;const r=await fetch(endpoint,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':cfg.csrf||'',Accept:'application/json'},body:JSON.stringify(body)});const d=await r.json().catch(()=>({ok:false,message:'Invalid server response.'}));if(!r.ok||!d.ok)throw new Error(d.message||'Table cleaning action failed.');return d}
