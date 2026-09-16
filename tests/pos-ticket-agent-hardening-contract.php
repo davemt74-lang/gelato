@@ -12,6 +12,7 @@ $paths=[
     'agent'=>$root.'/api/pos-agent.php',
 ];
 $files=[];foreach($paths as $name=>$path){if(!is_file($path)){fwrite(STDERR,"Missing {$name}: {$path}\n");exit(1);}$files[$name]=(string)file_get_contents($path);}
+$removeStart=strpos($files['runtime'],"if(act==='remove')");$voidStart=$removeStart!==false?strpos($files['runtime'],"if(act==='void')",$removeStart):false;$removeBranch=$removeStart!==false&&$voidStart!==false?substr($files['runtime'],$removeStart,$voidStart-$removeStart):'';
 
 $checks=[
     'remove endpoint requires POS permission'=>str_contains($files['removeApi'],"app_has_permission('pos.use',$user)"),
@@ -24,7 +25,7 @@ $checks=[
     'cart removal does not require void permission'=>!str_contains($files['removeApi'],"pos.void"),
     'runtime exposes remove action'=>str_contains($files['runtime'],'data-act="remove"')&&str_contains($files['runtime'],"action==='item.remove'"),
     'quantity one minus removes directly'=>str_contains($files['runtime'],"Number(item.quantity)<=1")&&str_contains($files['runtime'],"mutate('item.remove'"),
-    'remove path has no confirmation prompt'=>!preg_match("/act==='remove'.{0,240}prompt\\(/s",$files['runtime']),
+    'remove path has no confirmation prompt'=>$removeBranch!==''&&!str_contains($removeBranch,'prompt(')&&!str_contains($removeBranch,'confirm('),
     'sent item uses void instead of remove'=>str_contains($files['runtime'],'Void sent item'),
     'context observes remove API payload'=>str_contains($files['context'],"'pos-item-remove.php'"),
     'context focuses newly added line'=>str_contains($files['context'],'const newlyAdded = state.lineItemIds.filter')&&str_contains($files['context'],'state.focusedLineId = newlyAdded[newlyAdded.length - 1]'),
