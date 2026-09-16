@@ -6,12 +6,20 @@ on:
       - 'scheduling.php'
       - 'api/scheduling.php'
       - 'api/scheduling-agent.php'
+      - 'api/agent-workspace.php'
       - 'includes/scheduling-core.php'
+      - 'includes/employee-shift-communications.php'
       - 'js/scheduling.js'
+      - 'js/agent-page-context.js'
+      - 'js/scheduling-agent-context.js'
+      - 'js/global-add-canvas.js'
+      - 'js/pos.js'
+      - 'js/pos-agent-context.js'
       - 'js/floor-planner-module.js'
       - 'js/restaurant-agent-bridge.js'
       - 'database/20260913_zzzz_staff_scheduling.sql'
       - 'tests/scheduling-contract.php'
+      - 'tests/scheduling-agent-context-contract.php'
       - '.github/workflows/staff-scheduling.yml'
   push:
     branches: [main]
@@ -19,12 +27,20 @@ on:
       - 'scheduling.php'
       - 'api/scheduling.php'
       - 'api/scheduling-agent.php'
+      - 'api/agent-workspace.php'
       - 'includes/scheduling-core.php'
+      - 'includes/employee-shift-communications.php'
       - 'js/scheduling.js'
+      - 'js/agent-page-context.js'
+      - 'js/scheduling-agent-context.js'
+      - 'js/global-add-canvas.js'
+      - 'js/pos.js'
+      - 'js/pos-agent-context.js'
       - 'js/floor-planner-module.js'
       - 'js/restaurant-agent-bridge.js'
       - 'database/20260913_zzzz_staff_scheduling.sql'
       - 'tests/scheduling-contract.php'
+      - 'tests/scheduling-agent-context-contract.php'
       - '.github/workflows/staff-scheduling.yml'
 
 jobs:
@@ -55,9 +71,16 @@ jobs:
           php -l scheduling.php
           php -l api/scheduling.php
           php -l api/scheduling-agent.php
+          php -l api/agent-workspace.php
           php -l includes/scheduling-core.php
           php -l tests/scheduling-contract.php
+          php -l tests/scheduling-agent-context-contract.php
           node --check js/scheduling.js
+          node --check js/agent-page-context.js
+          node --check js/scheduling-agent-context.js
+          node --check js/global-add-canvas.js
+          node --check js/pos.js
+          node --check js/pos-agent-context.js
           node --check js/floor-planner-module.js
           node --check js/restaurant-agent-bridge.js
 
@@ -84,12 +107,17 @@ jobs:
           grep -q "Coverage location" api/scheduling.php
           grep -q "hourly_labor_cost.*scheduling_notes" api/scheduling.php
           grep -q "Shift requests are available after the schedule is published" api/scheduling.php
-          grep -q "schedule.shift_create" api/scheduling-agent.php
+          grep -q "schedule.action_proposal" api/scheduling-agent.php
+          grep -q "schedule.action_confirmed" api/scheduling-agent.php
           grep -q "schedule.coverage" api/scheduling-agent.php
           grep -q "schedule.workload" api/scheduling-agent.php
+          grep -q "scheduling_context" api/agent-workspace.php
+          grep -q "agent-page-context.js" js/global-add-canvas.js
+          grep -q "scheduling-agent-context.js" js/global-add-canvas.js
           grep -q "api/scheduling-agent.php" js/restaurant-agent-bridge.js
           grep -q "Staff Scheduling" js/floor-planner-module.js
           grep -q "Coverage + Workload" scheduling.php
+          php tests/scheduling-agent-context-contract.php
 
       - name: Install and upgrade schema
         run: |
