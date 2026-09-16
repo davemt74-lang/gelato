@@ -2,7 +2,7 @@
   'use strict';
   if (window.GelatoPosAgentContext) return;
 
-  const nativeFetch = window.fetch.bind(window);
+  const contextFetch = window.fetch.bind(window);
   const state = {
     locationId: 0,
     locationName: '',
@@ -68,17 +68,14 @@
     return parts.join(' · ');
   }
 
-  function publish() {
-    const context = snapshot();
-    window.GELATO_AGENT_PAGE_CONTEXT = context;
-    window.dispatchEvent(new CustomEvent('gelato-agent-context-change', {detail: context}));
-    const drawer = document.querySelector('#gelato-agent-response-drawer .gar-context');
-    if (drawer) drawer.textContent = description(context);
-    const input = document.getElementById('gaInput');
-    if (input) input.placeholder = context.checkPublicId
+  function placeholder(context = snapshot()) {
+    return context.checkPublicId
       ? 'Ask Gelato about this check, menu items, allergens, customer, or promotions…'
       : 'Ask Gelato about the menu, ingredients, allergens, or POS…';
-    return context;
+  }
+
+  function publish() {
+    return window.GelatoAgentPageContext?.publish?.() || snapshot();
   }
 
   function applyPosPayload(data) {
@@ -121,64 +118,20 @@
     publish();
   }
 
-  function targetUrl(input) {
-    if (typeof input === 'string') return input;
-    if (input instanceof URL) return input.toString();
-    if (typeof Request !== 'undefined' && input instanceof Request) return input.url;
-    return '';
+  function targetFile(input) {
+    let value = '';
+    if (typeof input === 'string') value = input;
+    else if (input instanceof URL) value = input.toString();
+    else if (typeof Request !== 'undefined' && input instanceof Request) value = input.url;
+    try { return new URL(value, window.location.href).pathname.split('/').pop() || ''; }
+    catch { return value.split('?')[0].split('/').pop() || ''; }
   }
 
-  function localPath(input) {
-    const url = targetUrl(input);
-    try { return new URL(url, window.location.href).pathname.replace(/^.*\//, ''); }
-    catch { return url.split('?')[0].split('/').pop() || ''; }
-  }
-
-  function withAgentContext(input, init) {
-    const file = localPath(input);
-    if (!['agent-workspace.php', 'pos-agent.php'].includes(file)) return init;
-    const next = {...(init || {})};
-    if (String(next.method || 'GET').toUpperCase() !== 'POST' || typeof next.body !== 'string') return next;
-    try {
-      const body = JSON.parse(next.body);
-      if (!body || typeof body !== 'object' || Array.isArray(body)) return next;
-      body.pageContext = transportSnapshot();
-      next.body = JSON.stringify(body);
-    } catch {}
-    return next;
-  }
-
-  function emitAgentError(message) {
-    window.dispatchEvent(new CustomEvent('gelato-agent-error', {
-      detail: {message: clean(message || 'Gelato could not complete that request.', 500)},
-    }));
-  }
-
-  async function dispatchAgentError(response) {
-    try {
-      const data = await response.clone().json();
-      emitAgentError(data?.message || 'Gelato could not complete that request.');
-    } catch {
-      emitAgentError('Gelato could not complete that request.');
-    }
-  }
-
-  window.fetch = async function gelatoPosContextFetch(input, init) {
-    const nextInit = withAgentContext(input, init);
-    const file = localPath(input);
-    const agentPost = ['agent-workspace.php', 'pos-agent.php'].includes(file)
-      && String(nextInit?.method || 'GET').toUpperCase() === 'POST';
-    let response;
-    try {
-      response = await nativeFetch(input, nextInit);
-    } catch (error) {
-      if (agentPost) emitAgentError(error?.message || 'Network error while contacting Gelato.');
-      throw error;
-    }
-    if (file === 'pos.php') {
+  window.fetch = async function gelatoPosStateFetch(input, init) {
+    const response = await contextFetch(input, init);
+    if (targetFile(input) === 'pos.php') {
       try { applyPosPayload(await response.clone().json()); } catch {}
     }
-    if (!response.ok && agentPost) dispatchAgentError(response);
     return response;
   };
 
@@ -201,24 +154,8 @@
     if (check) state.focusedLineId = 0;
   }, true);
 
-  window.addEventListener('gelato-agent-ready', publish);
-  window.addEventListener('gelato-agent-response', publish);
-  window.addEventListener('gelato-agent-context-change', (event) => {
-    if (event.detail?.module === 'pos') {
-      const drawer = document.querySelector('#gelato-agent-response-drawer .gar-context');
-      if (drawer) drawer.textContent = description(event.detail);
-    }
-  });
-
-  window.GelatoAgentPageContext = {
-    snapshot,
-    transportSnapshot,
-    description,
-    set(next = {}) {
-      if (next && typeof next === 'object' && next.view) setView(String(next.view));
-      return publish();
-    },
-  };
-  window.GelatoPosAgentContext = {snapshot, transportSnapshot, description, publish};
+  const provider = {module: 'pos', snapshot, transportSnapshot, description, placeholder};
+  window.GelatoAgentPageContext?.register?.(provider);
+  window.GelatoPosAgentContext = {snapshot, transportSnapshot, description, placeholder, publish};
   publish();
 })();
