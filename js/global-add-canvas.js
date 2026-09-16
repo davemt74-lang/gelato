@@ -17,8 +17,9 @@
   }
 
   function ensureAgentExperience() {
-    ensureScript('js/agent-page-context.js?v=20260915-context1', 'data-agent-page-context-loader');
-    if (page === 'scheduling.php') ensureScript('js/scheduling-agent-context.js?v=20260915-context1', 'data-scheduling-agent-context-loader');
+    ensureScript('js/agent-page-context.js?v=20260915-context2', 'data-agent-page-context-loader');
+    if (page === 'scheduling.php') ensureScript('js/scheduling-agent-context.js?v=20260915-context2', 'data-scheduling-agent-context-loader');
+    if (page === 'purchasing.php') ensureScript('js/purchasing-agent-context.js?v=20260915-context2', 'data-purchasing-agent-context-loader');
     if (!window.GelatoGlobalAgent) ensureScript('js/global-agent.js?v=20260915-agent2', 'data-gelato-global-agent-loader');
     ensureScript('js/dynamic-agent-canvas.js?v=20260915-drawer1', 'data-dynamic-agent-canvas-loader');
   }
