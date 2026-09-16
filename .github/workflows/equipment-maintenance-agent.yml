@@ -96,6 +96,8 @@ jobs:
           grep -F 'js/global-agent.js' equipment.php
           grep -F 'data-agent-prompt=' equipment.php
           grep -F 'sync: publish' js/equipment-agent-context.js
+          grep -F '$isEquipmentContext=' api/agent-workspace.php
+          grep -F "gaw_node_route('equipment','equipment_context')" api/agent-workspace.php
           if grep -Eq "INSERT INTO purchase_orders|UPDATE purchase_orders|DELETE FROM purchase_orders" includes/equipment-agent-core.php; then
             echo 'Equipment Agent must not mutate purchasing records directly.' >&2
             exit 1
