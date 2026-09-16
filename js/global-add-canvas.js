@@ -5,20 +5,22 @@
   const state = {shell: null, overlay: null, launcher: null, lastFocus: null};
   const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[ch]));
   const groups = ['People','Menu & Products','Operations','Sales & Customers','Purchasing & Assets'];
+  const page = (location.pathname.split('/').pop() || '').toLowerCase();
+
+  function ensureScript(src, marker) {
+    if (document.querySelector(`script[${marker}]`)) return;
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = false;
+    script.setAttribute(marker, '1');
+    document.head.appendChild(script);
+  }
 
   function ensureAgentExperience() {
-    if (!window.GelatoGlobalAgent && !document.querySelector('script[data-gelato-global-agent-loader]')) {
-      const globalAgent = document.createElement('script');
-      globalAgent.src = 'js/global-agent.js?v=20260915-agent2';
-      globalAgent.dataset.gelatoGlobalAgentLoader = '1';
-      document.head.appendChild(globalAgent);
-    }
-    if (!document.querySelector('script[data-dynamic-agent-canvas-loader]')) {
-      const canvas = document.createElement('script');
-      canvas.src = 'js/dynamic-agent-canvas.js?v=20260915-drawer1';
-      canvas.dataset.dynamicAgentCanvasLoader = '1';
-      document.head.appendChild(canvas);
-    }
+    ensureScript('js/agent-page-context.js?v=20260915-context1', 'data-agent-page-context-loader');
+    if (page === 'scheduling.php') ensureScript('js/scheduling-agent-context.js?v=20260915-context1', 'data-scheduling-agent-context-loader');
+    if (!window.GelatoGlobalAgent) ensureScript('js/global-agent.js?v=20260915-agent2', 'data-gelato-global-agent-loader');
+    ensureScript('js/dynamic-agent-canvas.js?v=20260915-drawer1', 'data-dynamic-agent-canvas-loader');
   }
 
   function ensureStyles() {
