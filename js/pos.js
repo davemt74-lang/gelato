@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const version = '20260915-context-actions1';
+  const version = '20260916-pos-context2';
   const load = (src) => new Promise((resolve, reject) => {
     const script = document.createElement('script');
     script.src = src;
@@ -14,7 +14,7 @@
   async function boot() {
     await load(`js/agent-page-context.js?v=${version}`);
     await load(`js/pos-agent-context.js?v=${version}`);
-    await load('js/pos-runtime.js?v=20260914-ready-floor-1');
+    await load(`js/pos-runtime.js?v=${version}`);
     await load(`js/global-agent.js?v=${version}`);
     await load(`js/dynamic-agent-canvas.js?v=${version}`);
   }
