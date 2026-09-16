@@ -105,7 +105,9 @@ $replacement=equipment_agent_handle($pdo,$user,['message'=>'Should we replace th
 eadb_assert(($replacement['data']['handoff']['node']??'')==='purchasing','Equipment replacement intelligence did not identify the Purchasing handoff.');
 eadb_assert((int)eadb_scalar($pdo,"SELECT COUNT(*) FROM purchase_orders WHERE organization_id=?",[$org])===$poBefore,'Equipment replacement read created a purchase order.');
 
-// Main Brain signals include the critical outage/maintenance condition without mutating equipment.
+// Main Brain signals include a real critical outage/overdue condition without mutating equipment.
+$pdo->prepare("UPDATE equipment_assets SET operational_status='out_of_service',maintenance_required=1,next_service_on=?,updated_at=NOW(6) WHERE organization_id=? AND public_id=?")
+    ->execute([date('Y-m-d',strtotime('-1 day')),$org,'equip-agent-ci']);
 $snapshot=['generatedAt'=>date(DATE_ATOM),'scope'=>[],'signals'=>[],'nextMoves'=>[]];
 $merged=equipment_agent_merge_brain_snapshot($pdo,$user,$snapshot);
 eadb_assert(count($merged['signals'])>=1,'Equipment risk was not added to Main Brain signals.');
