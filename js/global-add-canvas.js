@@ -6,6 +6,11 @@
   const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[ch]));
   const groups = ['People','Menu & Products','Operations','Sales & Customers','Purchasing & Assets'];
   const page = (location.pathname.split('/').pop() || '').toLowerCase();
+  const wholesaleAgentPages = new Set([
+    'wholesale-accounts.php','wholesale-acquisition.php','wholesale-commerce.php','wholesale-customer-360.php',
+    'wholesale-demand.php','wholesale-fulfillment.php','wholesale-order-entry.php','wholesale-pipeline.php',
+    'wholesale-purchasing.php','wholesale-receivables.php','wholesale.php',
+  ]);
 
   function ensureScript(src, marker) {
     if (document.querySelector(`script[${marker}]`)) return;
@@ -21,6 +26,8 @@
     if (page === 'scheduling.php') ensureScript('js/scheduling-agent-context.js?v=20260915-context2', 'data-scheduling-agent-context-loader');
     if (page === 'purchasing.php') ensureScript('js/purchasing-agent-context.js?v=20260915-context2', 'data-purchasing-agent-context-loader');
     if (page === 'customer-crm.php') ensureScript('js/customer-crm-agent-context.js?v=20260915-context1', 'data-crm-agent-context-loader');
+    if (page === 'catering-operations.php' || page === 'catering-pipeline.php') ensureScript('js/catering-agent-context.js?v=20260916-context1', 'data-catering-agent-context-loader');
+    if (wholesaleAgentPages.has(page)) ensureScript('js/wholesale-agent-context.js?v=20260916-context1', 'data-wholesale-agent-context-loader');
     if (page === 'prep-intelligence.php') ensureScript('js/prep-agent-context.js?v=20260915-context1', 'data-prep-agent-context-loader');
     if (page === 'operations.php') ensureScript('js/operations-agent-context.js?v=20260915-context1', 'data-operations-agent-context-loader');
     if (page === 'kds.php' || page === 'kds-dashboard.php') ensureScript('js/kds-agent-context.js?v=20260915-context1', 'data-kds-agent-context-loader');
