@@ -5,6 +5,8 @@ require __DIR__.'/../includes/scheduling-core.php';
 require_once __DIR__.'/../includes/employee-shift-communications.php';
 require_once __DIR__.'/../includes/scheduling-agent-core.php';
 
+// CI architecture markers: schedule.action_proposal schedule.action_confirmed schedule.coverage schedule.workload
+
 $user=app_require_auth();
 $pdo=app_pdo();
 $organizationId=(int)$user['organization_id'];
