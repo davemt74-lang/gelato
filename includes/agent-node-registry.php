@@ -90,3 +90,22 @@ function gaw_normalize_node_route(array $route): array
     }
     return ['ok'=>true]+$route;
 }
+
+function gaw_pending_action_node(int $organizationId,int $userId): ?string
+{
+    $key=$organizationId.':'.$userId;
+    $maps=[
+        'purchasing'=>'purchasing_agent_pending',
+        'scheduling'=>'schedule_agent_pending',
+    ];
+    foreach($maps as $node=>$sessionKey){
+        $proposal=$_SESSION[$sessionKey][$key]??null;
+        if(!is_array($proposal))continue;
+        if((int)($proposal['expires']??0)<time()){
+            unset($_SESSION[$sessionKey][$key]);
+            continue;
+        }
+        return $node;
+    }
+    return null;
+}
