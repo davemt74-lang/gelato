@@ -36,11 +36,13 @@ $pdo->prepare("INSERT INTO equipment_asset_service_contacts (equipment_asset_id,
 equipment_brain_sync_asset($pdo,$org,$assetId,$uid);
 $context=['module'=>'equipment','selectedAssetPublicId'=>'equip-agent-ci'];
 
-// Registry and routing: Equipment is first-class and explicit intent must not fall through.
+// Registry and routing: explicit Equipment intent routes to the node while generic service language stays globally neutral.
 $node=gaw_agent_node('equipment');
 eadb_assert(($node['route']??'')==='api/equipment-agent.php','Equipment Agent node is not registered.');
 $route=gaw_route($user,'What equipment maintenance is overdue?');
 eadb_assert(($route['route']??'')==='api/equipment-agent.php','Equipment intent did not route to Equipment Agent.');
+$genericRoute=gaw_route($user,'Show me the service history.');
+eadb_assert(($genericRoute['domain']??'')!=='equipment_maintenance','Generic service-history language was globally hijacked by the Equipment Agent.');
 
 // Read intelligence is side-effect-free and selected-asset context is resolved server-side.
 $summary=equipment_agent_handle($pdo,$user,['message'=>'What equipment needs attention?','pageContext'=>['module'=>'equipment']]);
