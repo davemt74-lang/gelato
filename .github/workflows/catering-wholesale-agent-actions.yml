@@ -1,0 +1,59 @@
+name: Catering + Wholesale Agent Actions
+
+on:
+  pull_request:
+    paths:
+      - 'api/agent-workspace.php'
+      - 'api/catering-agent.php'
+      - 'api/wholesale-agent.php'
+      - 'includes/agent-node-registry.php'
+      - 'includes/catering-agent-actions.php'
+      - 'includes/wholesale-agent-core.php'
+      - 'js/catering-agent-context.js'
+      - 'js/wholesale-agent-context.js'
+      - 'js/global-add-canvas.js'
+      - 'tests/catering-wholesale-agent-actions-contract.php'
+      - '.github/workflows/catering-wholesale-agent-actions.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'api/agent-workspace.php'
+      - 'api/catering-agent.php'
+      - 'api/wholesale-agent.php'
+      - 'includes/agent-node-registry.php'
+      - 'includes/catering-agent-actions.php'
+      - 'includes/wholesale-agent-core.php'
+      - 'js/catering-agent-context.js'
+      - 'js/wholesale-agent-context.js'
+      - 'js/global-add-canvas.js'
+      - 'tests/catering-wholesale-agent-actions-contract.php'
+      - '.github/workflows/catering-wholesale-agent-actions.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+      - name: PHP syntax
+        run: |
+          php -l api/agent-workspace.php
+          php -l api/catering-agent.php
+          php -l api/wholesale-agent.php
+          php -l includes/agent-node-registry.php
+          php -l includes/catering-agent-actions.php
+          php -l includes/wholesale-agent-core.php
+          php -l tests/catering-wholesale-agent-actions-contract.php
+      - name: JavaScript syntax
+        run: |
+          node --check js/catering-agent-context.js
+          node --check js/wholesale-agent-context.js
+          node --check js/global-add-canvas.js
+      - name: Agent behavior contract
+        run: php tests/catering-wholesale-agent-actions-contract.php

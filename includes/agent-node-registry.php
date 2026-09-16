@@ -46,6 +46,18 @@ function gaw_agent_nodes(): array
             'domain'=>'customer_crm',
             'mode'=>'read_confirmed_write',
         ],
+        'catering'=>[
+            'label'=>'Catering Operations',
+            'route'=>'api/catering-agent.php',
+            'domain'=>'catering',
+            'mode'=>'read_confirmed_write',
+        ],
+        'wholesale'=>[
+            'label'=>'Wholesale Fulfillment',
+            'route'=>'api/wholesale-agent.php',
+            'domain'=>'wholesale',
+            'mode'=>'read_confirmed_write',
+        ],
         'prep'=>[
             'label'=>'Prep + Inventory Intelligence',
             'route'=>'api/prep-intelligence-agent.php',
