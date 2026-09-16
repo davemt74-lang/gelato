@@ -37,7 +37,7 @@ sac_assert(str_contains($core,'sac_pending_store')&&str_contains($core,'sac_pend
 sac_assert(str_contains($core,"'expires'=>time()+600"),'Scheduling Agent proposals must expire quickly.');
 sac_assert(str_contains($core,'Reply Confirm to execute this change, or Cancel to discard it.'),'Scheduling Agent must require explicit human confirmation.');
 sac_assert(str_contains($core,"schedule.agent_action_proposed")&&str_contains($core,"schedule.agent_action_confirmed")&&str_contains($core,"schedule.agent_action_discarded"),'Scheduling Agent proposal lifecycle must be audited.');
-sac_assert(str_contains($core,"sac_require(\$user,'schedule.manage'")||str_contains($core,"sac_require($user,'schedule.manage'"),'Schedule mutations must remain permission-gated.');
+sac_assert(str_contains($core,"sac_require(\$user,'schedule.manage'"),'Schedule mutations must remain permission-gated.');
 sac_assert(str_contains($core,"employee.handoffs.manage")&&str_contains($core,'employee_shift_message_save'),'Employee messages must use the existing permission-gated shift communications system.');
 sac_assert(str_contains($core,'scheduling_availability_check')&&str_contains($core,'scheduling_shift_conflicts'),'Coverage candidates and shift writes must respect availability and overlap validation.');
 sac_assert(str_contains($core,"'shift_create'")&&str_contains($core,"'shift_update'")&&str_contains($core,"'shift_cancel'")&&str_contains($core,"'week_publish'")&&str_contains($core,"'employee_message'"),'Scheduling Agent must support the approved first action set.');
@@ -45,7 +45,7 @@ sac_assert(str_contains($core,'expectedUpdatedAt')&&str_contains($core,'sac_guar
 sac_assert(str_contains($core,'sac_week_snapshot')&&str_contains($core,"That schedule week changed after I proposed publishing it."),'Week publication must reject stale proposals.');
 sac_assert(str_contains($core,'sac_view_all')&&str_contains($core,'sac_view_self')&&str_contains($core,'Scheduling or staff visibility permission is required.'),'Scheduling Agent permission must not bypass underlying schedule/staff visibility permissions.');
 sac_assert(str_contains($core,"Schedule view permission is required for the restaurant roster.")&&str_contains($core,"Schedule view permission is required to compare staff availability."),'Cross-staff roster and availability intelligence must require schedule-wide visibility.');
-sac_assert(str_contains($core,"organizationId")&&str_contains($core,"userId")&&str_contains($core,'does not belong to your session'),'Pending actions must be bound to the authenticated organization and user.');
+sac_assert(str_contains($core,"'organizationId'=>\$org")&&str_contains($core,"'userId'=>\$userId")&&str_contains($core,'does not belong to your session'),'Pending actions must be bound to the authenticated organization and user.');
 
 sac_assert(str_contains($posLoader,'js/agent-page-context.js'),'POS must load the shared context layer before its adapter.');
 sac_assert(str_contains($posContext,"module: 'pos'")&&str_contains($posContext,'GelatoAgentPageContext?.register?.(provider)'),'POS must register with the same shared context layer.');
