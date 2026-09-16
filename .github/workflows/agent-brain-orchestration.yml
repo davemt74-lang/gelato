@@ -1,0 +1,45 @@
+name: Agent Brain Orchestration
+
+on:
+  pull_request:
+    paths:
+      - 'api/brain-orchestrator.php'
+      - 'api/brain-events.php'
+      - 'api/admin-dashboard-agent.php'
+      - 'api/agent-workspace.php'
+      - 'includes/agent-brain-orchestrator.php'
+      - 'includes/agent-node-registry.php'
+      - 'js/agent-next-moves.js'
+      - 'js/global-add-canvas.js'
+      - 'tests/agent-brain-orchestration-contract.php'
+      - 'tests/admin-command-dashboard-contract.php'
+      - 'tests/agent-workspace-contract.php'
+      - '.github/workflows/agent-brain-orchestration.yml'
+  push:
+    branches: [main]
+
+jobs:
+  brain-orchestration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring
+      - name: Syntax checks
+        run: |
+          php -l api/brain-orchestrator.php
+          php -l api/brain-events.php
+          php -l api/admin-dashboard-agent.php
+          php -l includes/agent-brain-orchestrator.php
+          php -l includes/agent-node-registry.php
+          php -l tests/agent-brain-orchestration-contract.php
+          node --check js/agent-next-moves.js
+          node --check js/global-add-canvas.js
+      - name: Agent Brain orchestration contract
+        run: php tests/agent-brain-orchestration-contract.php
+      - name: Command Center regression
+        run: php tests/admin-command-dashboard-contract.php
+      - name: Agent Workspace regression
+        run: php tests/agent-workspace-contract.php
