@@ -20,7 +20,9 @@ reject_text($pos,'<div class="logo">G</div>','Legacy Gelato POS logo block must 
 
 require_text($root.'/includes/pos-core.php',"table_name='service_tables'",'POS open-check feed must safely detect service_tables',$failures);
 require_text($root.'/includes/pos-core.php','t.id table_id','POS open-check feed must expose the service table ID',$failures);
-require_text($root.'/js/pos.js','Table ID #${tableId}','Active Tickets must display the canonical Table ID number',$failures);
+require_text($root.'/js/pos-runtime.js','Table ID #${tableId}','Active Tickets must display the canonical Table ID number in the preserved POS runtime',$failures);
+require_text($root.'/js/pos.js','js/pos-runtime.js','POS entrypoint must load the preserved specialized POS runtime',$failures);
+require_text($root.'/js/pos.js','js/pos-agent-context.js','POS entrypoint must initialize contextual Agent transport before the runtime',$failures);
 
 $bootstrap=$root.'/includes/bootstrap.php';
 $core=$root.'/includes/admin-shell-core.php';
