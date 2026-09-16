@@ -1,0 +1,141 @@
+name: Recipe + Production Standards Agent
+
+on:
+  pull_request:
+    paths:
+      - 'recipes.php'
+      - 'api/recipe-agent.php'
+      - 'api/agent-workspace.php'
+      - 'api/brain-orchestrator.php'
+      - 'includes/recipe-agent-core.php'
+      - 'includes/recipe-agent-brain.php'
+      - 'includes/restaurant-brain.php'
+      - 'includes/agent-node-registry.php'
+      - 'includes/agent-workspace-core.php'
+      - 'includes/agent-confirmation-core.php'
+      - 'js/recipe-agent-context.js'
+      - 'js/agent-page-context.js'
+      - 'js/global-agent.js'
+      - 'tests/recipe-agent-db-lifecycle.php'
+      - '.github/workflows/recipe-production-standards-agent.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'recipes.php'
+      - 'api/recipe-agent.php'
+      - 'api/agent-workspace.php'
+      - 'api/brain-orchestrator.php'
+      - 'includes/recipe-agent-core.php'
+      - 'includes/recipe-agent-brain.php'
+      - 'includes/restaurant-brain.php'
+      - 'includes/agent-node-registry.php'
+      - 'includes/agent-workspace-core.php'
+      - 'includes/agent-confirmation-core.php'
+      - 'js/recipe-agent-context.js'
+      - 'js/agent-page-context.js'
+      - 'js/global-agent.js'
+      - 'tests/recipe-agent-db-lifecycle.php'
+      - '.github/workflows/recipe-production-standards-agent.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  recipe-agent:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mariadb-admin ping -h 127.0.0.1 -u root -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - name: PHP syntax
+        run: |
+          php -l recipes.php
+          php -l api/recipe-agent.php
+          php -l api/agent-workspace.php
+          php -l api/brain-orchestrator.php
+          php -l includes/recipe-agent-core.php
+          php -l includes/recipe-agent-brain.php
+          php -l includes/agent-node-registry.php
+          php -l includes/agent-workspace-core.php
+          php -l tests/recipe-agent-db-lifecycle.php
+      - name: JavaScript syntax
+        run: |
+          node --check js/recipe-agent-context.js
+          node --check js/agent-page-context.js
+          node --check js/global-agent.js
+      - name: Recipe routing and safety contract
+        run: |
+          grep -F "'recipes'=>[" includes/agent-node-registry.php
+          grep -F "'route'=>'api/recipe-agent.php'" includes/agent-node-registry.php
+          grep -F "gac_pending_store('recipes'" includes/recipe-agent-core.php
+          grep -F "SELECT * FROM recipes WHERE organization_id=? AND public_id=?" includes/recipe-agent-core.php
+          grep -F "recipe_agent_assert_fresh" includes/recipe-agent-core.php
+          grep -F "restaurant_brain_sync_recipe" includes/recipe-agent-core.php
+          grep -F "recipe_agent_merge_brain_snapshot" api/brain-orchestrator.php
+          grep -F 'js/recipe-agent-context.js' recipes.php
+          grep -F 'js/global-agent.js' recipes.php
+          grep -F 'data-recipe-agent-prompt=' recipes.php
+          grep -F 'sync: publish' js/recipe-agent-context.js
+          grep -F '$isRecipesContext=' api/agent-workspace.php
+          grep -F "gaw_node_route('recipes','recipe_context')" api/agent-workspace.php
+          if grep -Eq "INSERT INTO purchase_orders|UPDATE purchase_orders|DELETE FROM purchase_orders|INSERT INTO prep_|UPDATE prep_|DELETE FROM prep_" includes/recipe-agent-core.php; then
+            echo 'Recipe Agent must not mutate Purchasing or Prep records directly.' >&2
+            exit 1
+          fi
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_recipe_agent_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $service=new UpgradeService(app_pdo(),__DIR__);
+          $service->ensureTrackingTables();
+          $service->bootstrapLegacyHistory(null);
+          $service->applyPending(null);
+          if($service->pendingMigrations()) exit(1);
+          PHP
+      - name: Verify canonical recipe schema and permissions
+        run: |
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('recipes','recipe_images');")" = "2"
+          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('recipes.view','recipes.edit','recipes.ai_map','recipes.agent');")" = "4"
+      - name: DB-backed Propose Confirm Execute lifecycle
+        run: php tests/recipe-agent-db-lifecycle.php
+      - name: Verify upgrader idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $service=new UpgradeService(app_pdo(),__DIR__);
+          $service->assertAppliedChecksumsUnchanged();
+          if($service->pendingMigrations()) exit(2);
+          if($service->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP
