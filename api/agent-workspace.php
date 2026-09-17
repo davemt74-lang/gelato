@@ -87,7 +87,7 @@ try{
         }
 
         if($isTimeclockContext){
-            $localIntent=preg_match('/\b(this employee|selected employee|my clock|clock status|clocked in|clocked out|break|attendance|late|no[ -]?show|labor|labor variance|scheduled labor|actual labor|who is working|who is clocked in|what needs attention|what should we do|what(?:\x27s| is) going on)\b/u',$text)===1;
+            $localIntent=preg_match('/\b(this employee|selected employee|my clock|clock status|clocked in|clocked out|break|employee attendance|staff attendance|attendance exceptions?|attendance issues?|late arrivals?|attendance no[ -]?show|no[ -]?show attendance|missing shift|labor variance|labor hours|scheduled labor|actual labor|who is working|who is clocked in|what needs attention|what should we do|what(?:\x27s| is) going on)\b/u',$text)===1;
             if($localIntent||$confirmationIntent)app_json_response(['ok'=>true]+gaw_node_route('timeclock','timeclock_context'));
         }
 
