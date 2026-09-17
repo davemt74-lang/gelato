@@ -129,12 +129,30 @@ tca_ok(($labor['skill']??'')==='attendance.labor','labor variance read failed',3
 $employee=timeclock_agent_handle($pdo,$manager,['message'=>'this employee attendance','pageContext'=>['module'=>'timeclock','selectedUserId'=>$other,'selectedDate'=>date('Y-m-d')]]);
 tca_ok(($employee['skill']??'')==='attendance.employee_context'&&($employee['data']['employee']['id']??0)===$other,'selected employee context was not re-resolved canonically',33);
 
+$badDate=timeclock_agent_context(['pageContext'=>['selectedDate'=>'2026-99-99']]);
+tca_ok(($badDate['selectedDate']??'')===date('Y-m-d'),'invalid selected date was not normalized safely',40);
+
 $withoutAgent=$user;$withoutAgent['permissions']=['timeclock.self'];$denied=false;
 try{timeclock_agent_handle($pdo,$withoutAgent,['message'=>'my clock status']);}catch(TimeclockAgentPermissionException){$denied=true;}
 tca_ok($denied,'missing timeclock.agent permission was not rejected',34);
 $readOnly=$manager;$selfDenied=false;
 try{timeclock_agent_handle($pdo,$readOnly,['message'=>'clock me in']);}catch(TimeclockAgentPermissionException){$selfDenied=true;}
 tca_ok($selfDenied,'manager without timeclock.self could mutate personal time clock',35);
+$agentOnly=$manager;$agentOnly['permissions']=['timeclock.agent'];
+$scheduleDenied=false;try{timeclock_agent_handle($pdo,$agentOnly,['message'=>'when do i work']);}catch(TimeclockAgentPermissionException){$scheduleDenied=true;}
+tca_ok($scheduleDenied,'schedule context was exposed without schedule permission',41);
+$tasksDenied=false;try{timeclock_agent_handle($pdo,$agentOnly,['message'=>'my tasks']);}catch(TimeclockAgentPermissionException){$tasksDenied=true;}
+tca_ok($tasksDenied,'task context was exposed without task permission',42);
+
+// An unscheduled clock-in should remain visible in the employee's primary location scope.
+$unscheduled=$makeUser('unscheduled-agent@example.test','Unscheduled','Worker');
+tv_clock_in($pdo,$org,$unscheduled,$uid,'manual');
+$locationRows=timeclock_agent_active_staff($pdo,$org,$loc);
+$locationIds=array_map(static fn(array $row):int=>(int)$row['user_id'],$locationRows);
+tca_ok(in_array($unscheduled,$locationIds,true),'unscheduled clock-in disappeared from primary-location active staff',43);
+$locationSummary=timeclock_agent_daily_summary($pdo,$org,date('Y-m-d'),$loc);
+tca_ok(($locationSummary['clockedInEmployees']??0)>=1&&($locationSummary['employeesWorked']??0)>=1,'unscheduled clock-in was omitted from location labor summary',44);
+tv_clock_out($pdo,$org,$unscheduled,$uid,'manual');
 
 $signals=timeclock_agent_brain_signal_rows($pdo,$manager);
 $keys=array_column($signals,'key');
