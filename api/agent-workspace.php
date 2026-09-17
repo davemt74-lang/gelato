@@ -9,7 +9,7 @@ require_once __DIR__.'/../includes/menu-training-knowledge.php';
 // Compatibility route markers for older CI/contracts. Canonical routing now lives in includes/agent-node-registry.php.
 // api/admin-dashboard-agent.php api/daily-manager-agent.php api/sales-cost-agent.php api/sales-agent.php
 // api/employee-development-agent.php api/employee-agent.php api/purchasing-agent.php api/scheduling-agent.php api/pos-agent.php
-// api/customer-crm-agent.php api/catering-agent.php api/wholesale-agent.php api/prep-intelligence-agent.php api/operations-agent.php api/kds-agent.php api/live-shift-agent.php api/front-of-house-agent.php api/equipment-agent.php api/recipe-agent.php api/online-order-agent.php
+// api/customer-crm-agent.php api/catering-agent.php api/wholesale-agent.php api/prep-intelligence-agent.php api/operations-agent.php api/kds-agent.php api/live-shift-agent.php api/front-of-house-agent.php api/equipment-agent.php api/recipe-agent.php api/online-order-agent.php api/timeclock-agent.php
 
 $user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];$uid=(int)$user['id'];
 if(!gaw_ready($pdo))app_json_response(['ok'=>false,'message'=>'Agent Workspace migration is not installed. Run upgrade.php.'],503);
@@ -50,6 +50,7 @@ try{
         $isRecipesContext=$module==='recipes'&&app_has_permission('recipes.view',$user)&&app_has_permission('recipes.agent',$user);
         $canOnlineOrders=app_has_permission('online_orders.fulfill',$user)||app_has_permission('order_recovery.view',$user)||app_has_permission('order_recovery.manage',$user)||app_has_permission('order_recovery.refund',$user)||app_has_permission('pos.use',$user)||app_has_permission('pos.manage',$user)||app_has_permission('kds.view',$user)||app_has_permission('crm.view',$user);
         $isOnlineOrdersContext=in_array($module,['online_orders','pickup_fulfillment','order_recovery'],true)&&$canOnlineOrders;
+        $isTimeclockContext=$module==='timeclock'&&app_has_permission('timeclock.agent',$user);
         $canLiveShift=app_has_permission('table_service.view',$user)||app_has_permission('pos.use',$user)||app_has_permission('kds.view',$user);
         $confirmationIntent=preg_match('/^(?:confirm|yes|yes please|do it|go ahead|execute|apply|cancel|cancel it|discard|never mind|nevermind|stop)(?:\s+(?:it|that|change|action))?[.!]?$/u',$text)===1;
         if($confirmationIntent){
@@ -65,6 +66,7 @@ try{
             if($pendingNode==='equipment'&&app_has_permission('equipment.view',$user)&&app_has_permission('agent.equipment_skills',$user))app_json_response(['ok'=>true]+gaw_node_route('equipment','equipment_confirmation'));
             if($pendingNode==='recipes'&&app_has_permission('recipes.view',$user)&&app_has_permission('recipes.agent',$user))app_json_response(['ok'=>true]+gaw_node_route('recipes','recipe_confirmation'));
             if($pendingNode==='online_orders'&&$canOnlineOrders)app_json_response(['ok'=>true]+gaw_node_route('online_orders','online_order_confirmation'));
+            if($pendingNode==='timeclock'&&app_has_permission('timeclock.agent',$user))app_json_response(['ok'=>true]+gaw_node_route('timeclock','timeclock_confirmation'));
         }
 
         if($isHostStandContext){
@@ -82,6 +84,11 @@ try{
         if($isOnlineOrdersContext){
             $localIntent=preg_match('/\b(this order|selected order|this pickup|selected pickup|pickup|ready|readiness|payment due|paid|promise|promised|late|past promise|handed|hand off|handoff|picked up|fulfill|fulfillment|delay|recovery|exception|what needs attention|what should we do|what(?:\x27s| is) going on)\b/u',$text)===1;
             if($localIntent||$confirmationIntent)app_json_response(['ok'=>true]+gaw_node_route('online_orders','online_order_context'));
+        }
+
+        if($isTimeclockContext){
+            $localIntent=preg_match('/\b(this employee|selected employee|my clock|clock status|clocked in|clocked out|break|employee attendance|staff attendance|attendance exceptions?|attendance issues?|late arrivals?|attendance no[ -]?show|no[ -]?show attendance|missing shift|labor variance|labor hours|scheduled labor|actual labor|who is working|who is clocked in|what needs attention|what should we do|what(?:\x27s| is) going on)\b/u',$text)===1;
+            if($localIntent||$confirmationIntent)app_json_response(['ok'=>true]+gaw_node_route('timeclock','timeclock_context'));
         }
 
         $liveShiftIntent=preg_match('/\b(live shift|run the shift|shift status|service status|service priorities|floor status|ready food|food up|run food|what needs attention right now|what should (?:i|we) do right now|what is holding up (?:table|bar seat|check|ticket)|move .*\b(?:table|bar seat)\b|transfer .*\b(?:table|bar seat)\b|assign .*\bserver\b|change .*\bserver\b|seat .*\b(?:table|bar seat)\b|send .*\bkitchen\b|send .*\bheld\b|fire (?:drinks|starters|mains|dessert|other)|hold (?:drinks|starters|mains|dessert|other)|attach customer|remove .*\b(?:check|ticket|order)\b|add .*\b(?:check|ticket|order)\b|(?:void|discount|comp|refund) (?:this|the))\b/u',$text)===1;

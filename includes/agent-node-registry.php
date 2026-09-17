@@ -82,6 +82,12 @@ function gaw_agent_nodes(): array
             'domain'=>'operations',
             'mode'=>'read_confirmed_write',
         ],
+        'timeclock'=>[
+            'label'=>'Time Clock + Attendance',
+            'route'=>'api/timeclock-agent.php',
+            'domain'=>'timeclock_attendance',
+            'mode'=>'read_confirmed_write',
+        ],
         'online_orders'=>[
             'label'=>'Online Ordering + Pickup Fulfillment',
             'route'=>'api/online-order-agent.php',
