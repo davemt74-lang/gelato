@@ -64,6 +64,10 @@ $route=gaw_route($user,'Who is clocked in now?');
 tca_ok(($route['node']??'')==='timeclock'||($route['route']??'')==='api/timeclock-agent.php','explicit time-clock request did not route to timeclock node',9);
 $generic=gaw_route($user,'show order status');
 tca_ok(($generic['node']??'')!=='timeclock'&&($generic['route']??'')!=='api/timeclock-agent.php','generic order request was hijacked by timeclock',10);
+$latePickup=gaw_route($user,'show late pickup orders');
+tca_ok(($latePickup['node']??'')!=='timeclock'&&($latePickup['route']??'')!=='api/timeclock-agent.php','late pickup request was hijacked by timeclock',38);
+$reservationNoShow=gaw_route($user,'mark this reservation no-show');
+tca_ok(($reservationNoShow['node']??'')!=='timeclock'&&($reservationNoShow['route']??'')!=='api/timeclock-agent.php','reservation no-show request was hijacked by timeclock',39);
 
 $proposal=timeclock_agent_handle($pdo,$user,['message'=>'clock me in']);
 tca_ok(!empty($proposal['data']['requiresConfirmation']),'clock-in did not require confirmation',11);
