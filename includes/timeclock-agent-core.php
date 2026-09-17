@@ -22,7 +22,11 @@ function timeclock_agent_context(array $input): array
 {
     $context=is_array($input['pageContext']??null)?$input['pageContext']:[];
     $date=trim((string)($context['selectedDate']??''));
-    if(!preg_match('/^\d{4}-\d{2}-\d{2}$/',$date))$date=date('Y-m-d');
+    $validDate=false;
+    if(preg_match('/^\d{4}-\d{2}-\d{2}$/',$date)){
+        try{$day=new DateTimeImmutable($date);$validDate=$day->format('Y-m-d')===$date;}catch(Throwable){$validDate=false;}
+    }
+    if(!$validDate)$date=date('Y-m-d');
     $userId=(int)($context['selectedUserId']??0);
     $locationId=(int)($context['locationId']??0);
     return ['selectedDate'=>$date,'selectedUserId'=>$userId>0?$userId:null,'locationId'=>$locationId>0?$locationId:null];
@@ -37,9 +41,9 @@ function timeclock_agent_staff(PDO $pdo,int $org,int $userId): ?array
 
 function timeclock_agent_active_staff(PDO $pdo,int $org,?int $locationId=null): array
 {
-    $sql="SELECT u.id user_id,u.display_name,t.public_id clock_public_id,t.clocked_in_at,t.updated_at,s.title shift_title,s.location_id FROM time_clock_entries t INNER JOIN users u ON u.id=t.user_id LEFT JOIN schedule_shifts s ON s.id=t.schedule_shift_id WHERE t.organization_id=? AND t.status='open' AND t.clocked_out_at IS NULL";
+    $sql="SELECT u.id user_id,u.display_name,t.public_id clock_public_id,t.clocked_in_at,t.updated_at,s.title shift_title,COALESCE(s.location_id,om.primary_location_id) location_id FROM time_clock_entries t INNER JOIN users u ON u.id=t.user_id INNER JOIN organization_memberships om ON om.organization_id=t.organization_id AND om.user_id=t.user_id AND om.status='active' LEFT JOIN schedule_shifts s ON s.id=t.schedule_shift_id AND s.organization_id=t.organization_id WHERE t.organization_id=? AND t.status='open' AND t.clocked_out_at IS NULL";
     $args=[$org];
-    if($locationId!==null){$sql.=' AND s.location_id=?';$args[]=$locationId;}
+    if($locationId!==null){$sql.=' AND COALESCE(s.location_id,om.primary_location_id)=?';$args[]=$locationId;}
     $sql.=' ORDER BY t.clocked_in_at';
     $q=$pdo->prepare($sql);$q->execute($args);return $q->fetchAll();
 }
@@ -73,9 +77,9 @@ function timeclock_agent_daily_summary(PDO $pdo,int $org,string $date,?int $loca
     $from=$date.' 00:00:00';$to=(new DateTimeImmutable($date))->modify('+1 day')->format('Y-m-d 00:00:00');
     $scheduled=$pdo->prepare("SELECT COUNT(*) shifts,COALESCE(SUM(TIMESTAMPDIFF(MINUTE,starts_at,ends_at)-break_minutes),0) minutes FROM schedule_shifts WHERE organization_id=? AND location_id=? AND user_id IS NOT NULL AND archived_at IS NULL AND status<>'cancelled' AND starts_at>=? AND starts_at<?");
     $scheduled->execute([$org,$locationId,$from,$to]);$s=$scheduled->fetch()?:[];
-    $actual=$pdo->prepare("SELECT COUNT(DISTINCT t.user_id) employees,COALESCE(SUM(TIMESTAMPDIFF(MINUTE,t.clocked_in_at,COALESCE(t.clocked_out_at,NOW(6)))),0) minutes FROM time_clock_entries t INNER JOIN schedule_shifts s ON s.id=t.schedule_shift_id AND s.organization_id=t.organization_id WHERE t.organization_id=? AND s.location_id=? AND t.clocked_in_at>=? AND t.clocked_in_at<?");
+    $actual=$pdo->prepare("SELECT COUNT(DISTINCT t.user_id) employees,COALESCE(SUM(TIMESTAMPDIFF(MINUTE,t.clocked_in_at,COALESCE(t.clocked_out_at,NOW(6)))),0) minutes FROM time_clock_entries t INNER JOIN organization_memberships om ON om.organization_id=t.organization_id AND om.user_id=t.user_id AND om.status='active' LEFT JOIN schedule_shifts s ON s.id=t.schedule_shift_id AND s.organization_id=t.organization_id WHERE t.organization_id=? AND COALESCE(s.location_id,om.primary_location_id)=? AND t.clocked_in_at>=? AND t.clocked_in_at<?");
     $actual->execute([$org,$locationId,$from,$to]);$a=$actual->fetch()?:[];
-    $open=$pdo->prepare("SELECT COUNT(*) FROM time_clock_entries t INNER JOIN schedule_shifts s ON s.id=t.schedule_shift_id AND s.organization_id=t.organization_id WHERE t.organization_id=? AND s.location_id=? AND t.status='open' AND t.clocked_out_at IS NULL");
+    $open=$pdo->prepare("SELECT COUNT(*) FROM time_clock_entries t INNER JOIN organization_memberships om ON om.organization_id=t.organization_id AND om.user_id=t.user_id AND om.status='active' LEFT JOIN schedule_shifts s ON s.id=t.schedule_shift_id AND s.organization_id=t.organization_id WHERE t.organization_id=? AND COALESCE(s.location_id,om.primary_location_id)=? AND t.status='open' AND t.clocked_out_at IS NULL");
     $open->execute([$org,$locationId]);
     return ['date'=>$date,'scheduledMinutes'=>(int)($s['minutes']??0),'actualMinutes'=>(int)($a['minutes']??0),'scheduledShifts'=>(int)($s['shifts']??0),'clockedInEmployees'=>(int)$open->fetchColumn(),'employeesWorked'=>(int)($a['employees']??0),'locationId'=>$locationId];
 }
@@ -207,11 +211,13 @@ function timeclock_agent_handle(PDO $pdo,array $user,array $input): array
         return ['ok'=>true,'skill'=>'timeclock.self_status','answer'=>$answer,'data'=>['clock'=>$clock?['publicId'=>$clock['public_id'],'clockedInAt'=>$clock['clocked_in_at'],'shiftTitle'=>$clock['shift_title']??null]:null],'sources'=>['Time Clock']];
     }
     if(preg_match('/\b(?:when do i work|my schedule|next shift|when am i scheduled)\b/u',$lower)){
+        if(!app_has_permission('schedule.self',$user)&&!app_has_permission('schedule.view',$user))throw new TimeclockAgentPermissionException('Schedule permission required.');
         $snapshot=tv_self_snapshot($pdo,$org,$uid);$up=array_values(array_filter($snapshot['shifts'],static fn($s)=>strtotime((string)$s['ends_at'])>=time()));usort($up,static fn($a,$b)=>strcmp((string)$a['starts_at'],(string)$b['starts_at']));
         $answer=$up?'Your next shift is '.date('l M j, g:i A',strtotime((string)$up[0]['starts_at'])).'–'.date('g:i A',strtotime((string)$up[0]['ends_at'])).' for '.$up[0]['title'].'.':'You have no remaining published shifts this week.';
         return ['ok'=>true,'skill'=>'schedule.self_context','answer'=>$answer,'data'=>['nextShift'=>$up[0]??null],'sources'=>['Staff Scheduling']];
     }
     if(preg_match('/\b(?:my tasks|what.*prep|what do i need to do|assigned to me)\b/u',$lower)){
+        if(!app_has_permission('tasks.self',$user)&&!app_has_permission('tasks.view',$user)&&!app_has_permission('agent.employee_view',$user))throw new TimeclockAgentPermissionException('Task permission required.');
         $snapshot=tv_self_snapshot($pdo,$org,$uid);$tasks=$snapshot['tasks'];$answer=$tasks?'You have '.count($tasks).' open assigned task'.(count($tasks)===1?'':'s').': '.implode('; ',array_map(static fn($t)=>$t['title'].($t['due_at']?' due '.date('D g:i A',strtotime((string)$t['due_at'])):''),array_slice($tasks,0,6))).'.':'You have no open assigned tasks.';
         return ['ok'=>true,'skill'=>'tasks.self_context','answer'=>$answer,'data'=>['tasks'=>array_slice($tasks,0,20)],'sources'=>['Restaurant Tasks']];
     }
@@ -220,7 +226,7 @@ function timeclock_agent_handle(PDO $pdo,array $user,array $input): array
         $rows=timeclock_agent_active_staff($pdo,$org,$context['locationId']);$answer=$rows?count($rows).' employee'.(count($rows)===1?' is':'s are').' clocked in: '.implode('; ',array_map(static fn($r)=>$r['display_name'].' since '.date('g:i A',strtotime((string)$r['clocked_in_at'])).($r['shift_title']?' — '.$r['shift_title']:''),$rows)).'.':'No employees are currently clocked in for this scope.';
         return ['ok'=>true,'skill'=>'timeclock.active_staff','answer'=>$answer,'data'=>['rows'=>$rows,'scope'=>$context],'sources'=>['Time Clock']];
     }
-    if(preg_match('/\b(?:late|no.?show|missing.*shift|attendance exceptions?|attendance issues?)\b/u',$lower)){
+    if(preg_match('/\b(?:late\s+(?:employee|staff|worker|arrival)|(?:employee|staff)\s+no.?show|no.?show\s+attendance|missing\s+shift|attendance\s+exceptions?|attendance\s+issues?)\b/u',$lower)){
         if(!app_has_permission('attendance.view',$user))throw new TimeclockAgentPermissionException('Attendance permission required.');
         $noShows=timeclock_agent_no_shows($pdo,$org,$context['locationId']);$events=timeclock_agent_late_events($pdo,$org,$context['selectedDate'],$context['locationId']);
         $parts=[];if($noShows)$parts[]='Potential no-shows: '.implode('; ',array_map(static fn($r)=>$r['display_name'].' — '.$r['title'].' started '.date('g:i A',strtotime((string)$r['starts_at'])),$noShows)).'.';if($events)$parts[]=count($events).' recorded late/no-show attendance event'.(count($events)===1?'':'s').' on '.$context['selectedDate'].'.';
