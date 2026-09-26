@@ -1,4 +1,4 @@
-name: Production Runtime Deploy Package
+name: Full Production Deploy Package
 
 on:
   pull_request:
@@ -210,7 +210,6 @@ jobs:
             --exclude 'storage/' \
             --exclude 'config.php' \
             --exclude '.env' \
-            --exclude '*-preview.png' \
             --exclude 'start-local-server.bat' \
             --exclude 'start-local-server.sh'
 
@@ -327,7 +326,7 @@ jobs:
       - name: Upload exact-revision deploy ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: stonefellows-runtime-deploy
+          name: stonefellows-full-deploy
           path: stonefellows-runtime-deploy.zip
           if-no-files-found: error
           retention-days: 14
