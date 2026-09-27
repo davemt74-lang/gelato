@@ -18,6 +18,34 @@ function glasses_definition_normalize_name(string $value): string
     return trim(preg_replace('/\s+/u',' ',$value)??$value);
 }
 
+function glasses_definition_component_key(string $name,int $ingredientId): string
+{
+    if($ingredientId>0)return 'ingredient:'.$ingredientId;
+    $slug=glasses_definition_normalize_name($name);
+    $slug=str_replace(' ','-',$slug);
+    return $slug!==''?'name:'.$slug:'name:unknown';
+}
+
+function glasses_definition_menu(PDO $pdo,int $org,int $menuItemId): array
+{
+    $menu=glasses_definition_menu($pdo,$org,$menuItemId);
+    $q=$pdo->prepare("SELECT ing.id,ing.canonical_name,mii.display_name,mii.is_optional,mii.can_remove,mii.sort_order
+        FROM menu_item_ingredients mii
+        JOIN ingredients ing ON ing.id=mii.ingredient_id AND ing.organization_id=?
+        WHERE mii.menu_item_id=?
+        ORDER BY mii.sort_order,ing.id");
+    $q->execute([$org,$menuItemId]);
+    $menu['ingredientDetails']=array_map(static fn(array $r):array=>[
+        'id'=>(int)$r['id'],
+        'name'=>(string)($r['display_name']?:$r['canonical_name']),
+        'canonicalName'=>(string)$r['canonical_name'],
+        'optional'=>(bool)$r['is_optional'],
+        'canRemove'=>(bool)$r['can_remove'],
+        'sortOrder'=>(int)$r['sort_order'],
+    ],$q->fetchAll());
+    return $menu;
+}
+
 function glasses_definition_quantity(mixed $value): ?float
 {
     if(is_int($value)||is_float($value))return (float)$value;
@@ -101,7 +129,7 @@ function glasses_definition_compile_data(array $menu,array $recipe,string $resol
         $ingredientId=(int)($ingredient['id']??0);
         if($ingredientId<1)continue;
         $name=(string)($ingredient['name']??$ingredient['canonicalName']??'Ingredient');
-        $key=glasses_build_component_key($name,$ingredientId);
+        $key=glasses_definition_component_key($name,$ingredientId);
         $match=glasses_definition_match_recipe_ingredient($ingredient,$recipeIngredients);
         $quantity=1.0;$unit='portion';$matched=false;$notes='';
         if($match){
