@@ -154,7 +154,7 @@ function glasses_current_work(PDO $pdo,array $device): array
     $focus=$focusIndex!==null?$items[$focusIndex]:null;
     $revisionMaterial=[];
     foreach($items as $item)$revisionMaterial[]=[
-        $item['kdsItemPublicId'],$item['status'],$item['timing']['ageSeconds'],
+        $item['kdsItemPublicId'],$item['status'],
         $item['posLine']['id'],$item['posLine']['specialInstructions'],$item['posLine']['modifiers']
     ];
     $pdo->prepare("UPDATE glasses_devices SET last_seen_at=NOW(6),updated_at=NOW(6) WHERE organization_id=? AND id=? AND status='active'")
