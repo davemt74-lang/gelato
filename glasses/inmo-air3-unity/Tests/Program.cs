@@ -13,6 +13,7 @@ internal static class Program
         await ErrorStateFlow();
         HudContract();
         SimulatorSupportContract();
+        await VisionPipelineContract();
         Console.WriteLine("air3-unity-shell-ok");
     }
 
@@ -266,6 +267,187 @@ internal static class Program
 
         Assert(SimulatorHotkeys.ComponentRange == "1-9", "simulator component hotkey range must remain documented");
         Assert(SimulatorHotkeys.ConfirmVerify == "C" && SimulatorHotkeys.ResolveUnexpected == "X", "simulator exception hotkeys must remain stable");
+    }
+
+
+    private static async Task VisionPipelineContract()
+    {
+        var frame = new CameraFrame
+        {
+            Data = new byte[640 * 480],
+            Width = 640,
+            Height = 480,
+            TimestampNanoseconds = 1,
+            PixelFormat = "grayscale8"
+        };
+        var bread = new BuildComponent
+        {
+            ComponentKey = "ingredient:bread",
+            DisplayName = "Bread",
+            ExpectedQuantity = 3f,
+            Unit = "slices",
+            Status = "waiting"
+        };
+        var context = new VisionFrameContext
+        {
+            BuildSessionPublicId = "build-vision-1",
+            ExpectedComponents = new[] { bread },
+            Calibration = new CameraCalibration { Fx = 640f, Fy = 640f, Cx = 320f, Cy = 240f },
+            Pose = new PoseState()
+        };
+
+        var detector = new ScriptedVisionDetector(
+            D("ingredient:bread", "Bread", "bread-a", 0.92f, 1f, 0.20f, 0.40f, 0.12f, 0.12f),
+            D("ingredient:bread", "Bread", "bread-a", 0.94f, 1f, 0.205f, 0.405f, 0.12f, 0.12f),
+            D("ingredient:bread", "Bread", "bread-a", 0.95f, 1f, 0.21f, 0.41f, 0.12f, 0.12f),
+            Array.Empty<VisionDetection>(),
+            Array.Empty<VisionDetection>(),
+            Array.Empty<VisionDetection>(),
+            D("ingredient:bread", "Bread", "bread-a", 0.93f, 1f, 0.22f, 0.42f, 0.12f, 0.12f),
+            D("ingredient:bread", "Bread", "bread-a", 0.96f, 1f, 0.225f, 0.425f, 0.12f, 0.12f)
+        );
+        var pipeline = new VisionPipeline(detector, new VisionPipelineOptions
+        {
+            MinimumConfidence = 0.50f,
+            StableFramesRequired = 2,
+            MaxMissingFrames = 3,
+            AssociationIouThreshold = 0.25f
+        });
+
+        var r1 = await pipeline.ProcessAsync(frame, context);
+        Assert(r1.Count == 0, "single-frame vision evidence must not emit before stability threshold");
+
+        var r2 = await pipeline.ProcessAsync(frame, context);
+        Assert(r2.Count == 1, "stable two-frame ingredient detection must emit once");
+        Assert(r2[0].ComponentKey == "ingredient:bread" && r2[0].Action == "added", "vision observation must preserve component/action");
+        Assert(r2[0].BoundingBox.Length == 4, "vision observation must preserve normalized bounding box");
+
+        var r3 = await pipeline.ProcessAsync(frame, context);
+        Assert(r3.Count == 0, "persistent visible ingredient must not be double-counted");
+
+        await pipeline.ProcessAsync(frame, context);
+        await pipeline.ProcessAsync(frame, context);
+        await pipeline.ProcessAsync(frame, context);
+        Assert(pipeline.ActiveTrackCount == 0, "track must retire after configured missing frames");
+
+        var r7 = await pipeline.ProcessAsync(frame, context);
+        Assert(r7.Count == 0, "reappearing ingredient must restabilize after track retirement");
+        var r8 = await pipeline.ProcessAsync(frame, context);
+        Assert(r8.Count == 1, "reappearing ingredient may emit as a new addition after restabilization");
+        Assert(r8[0].ObservationKey != r2[0].ObservationKey, "retired/reappearing track must receive a distinct idempotency key");
+
+        var constrainedDetector = new ScriptedVisionDetector(
+            D("ingredient:cheese", "Cheese", "cheese-a", 0.40f, 1f, 0.1f, 0.2f, 0.1f, 0.1f),
+            D("ingredient:cheese", "Cheese", "cheese-a", 0.97f, 1f, 0.1f, 0.2f, 0.1f, 0.1f),
+            D("ingredient:cheese", "Cheese", "cheese-a", 0.97f, 1f, 0.1f, 0.2f, 0.1f, 0.1f),
+            DU("vision:swiss", "Swiss Cheese", "swiss-a", 0.94f, 0.32f, 0.44f, 0.11f, 0.11f),
+            DU("vision:swiss", "Swiss Cheese", "swiss-a", 0.95f, 0.32f, 0.44f, 0.11f, 0.11f)
+        );
+        var constrained = new VisionPipeline(constrainedDetector);
+        Assert((await constrained.ProcessAsync(frame, context)).Count == 0, "below-threshold detection must be rejected");
+        Assert((await constrained.ProcessAsync(frame, context)).Count == 0, "non-recipe detection must be rejected even at high confidence");
+        Assert((await constrained.ProcessAsync(frame, context)).Count == 0, "non-recipe detection must never stabilize into a normal observation");
+        Assert((await constrained.ProcessAsync(frame, context)).Count == 0, "unexpected evidence must still satisfy temporal stability");
+        var unexpected = await constrained.ProcessAsync(frame, context);
+        Assert(unexpected.Count == 1 && unexpected[0].ComponentKey == "vision:swiss", "explicit unexpected detector evidence must pass through after stabilization");
+
+        var multiDetector = new ScriptedVisionDetector(
+            new[]
+            {
+                D1("ingredient:bread", "Bread", "slice-a", 0.96f, 1f, 0.18f, 0.45f, 0.09f, 0.09f),
+                D1("ingredient:bread", "Bread", "slice-b", 0.95f, 1f, 0.33f, 0.45f, 0.09f, 0.09f)
+            },
+            new[]
+            {
+                D1("ingredient:bread", "Bread", "slice-a", 0.97f, 1f, 0.18f, 0.45f, 0.09f, 0.09f),
+                D1("ingredient:bread", "Bread", "slice-b", 0.96f, 1f, 0.33f, 0.45f, 0.09f, 0.09f)
+            }
+        );
+        var multi = new VisionPipeline(multiDetector);
+        await multi.ProcessAsync(frame, new VisionFrameContext
+        {
+            BuildSessionPublicId = "build-vision-multi",
+            ExpectedComponents = new[] { bread }
+        });
+        var multiOutput = await multi.ProcessAsync(frame, new VisionFrameContext
+        {
+            BuildSessionPublicId = "build-vision-multi",
+            ExpectedComponents = new[] { bread }
+        });
+        Assert(multiOutput.Count == 2, "distinct detector instance keys must allow multiple same-ingredient objects to emit separately");
+        Assert(multiOutput[0].ObservationKey != multiOutput[1].ObservationKey, "same-ingredient instances must receive unique observation keys");
+
+        var a = new VisionBoundingBox(0.1f, 0.1f, 0.2f, 0.2f);
+        var b = new VisionBoundingBox(0.15f, 0.15f, 0.2f, 0.2f);
+        Assert(VisionBoundingBox.IntersectionOverUnion(a, b) > 0f, "vision tracker IoU must detect overlapping boxes");
+
+        var clamped = new VisionBoundingBox(-1f, 0.9f, 4f, 4f);
+        Assert(clamped.X == 0f && clamped.Y == 0.9f && clamped.Right <= 1f && clamped.Bottom <= 1f, "vision bounding boxes must be clamped to normalized image coordinates");
+    }
+
+    private static IReadOnlyList<VisionDetection> D(
+        string componentKey, string displayName, string instanceKey, float confidence, float quantity,
+        float x, float y, float width, float height)
+    {
+        return new[] { D1(componentKey, displayName, instanceKey, confidence, quantity, x, y, width, height) };
+    }
+
+    private static VisionDetection D1(
+        string componentKey, string displayName, string instanceKey, float confidence, float quantity,
+        float x, float y, float width, float height)
+    {
+        return new VisionDetection
+        {
+            ComponentKey = componentKey,
+            DisplayName = displayName,
+            InstanceKey = instanceKey,
+            Action = "added",
+            Quantity = quantity,
+            Confidence = confidence,
+            BoundingBox = new[] { x, y, width, height }
+        };
+    }
+
+    private static IReadOnlyList<VisionDetection> DU(
+        string componentKey, string displayName, string instanceKey, float confidence,
+        float x, float y, float width, float height)
+    {
+        return new[]
+        {
+            new VisionDetection
+            {
+                ComponentKey = componentKey,
+                DisplayName = displayName,
+                InstanceKey = instanceKey,
+                Action = "added",
+                Quantity = 1f,
+                Confidence = confidence,
+                BoundingBox = new[] { x, y, width, height },
+                IsUnexpected = true
+            }
+        };
+    }
+
+    private sealed class ScriptedVisionDetector : IVisionDetector
+    {
+        private readonly Queue<IReadOnlyList<VisionDetection>> _frames;
+
+        public ScriptedVisionDetector(params IReadOnlyList<VisionDetection>[] frames)
+        {
+            _frames = new Queue<IReadOnlyList<VisionDetection>>(frames);
+        }
+
+        public string DetectorName => "scripted-test-detector";
+
+        public Task<IReadOnlyList<VisionDetection>> DetectAsync(
+            CameraFrame frame,
+            VisionFrameContext context,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var result = _frames.Count > 0 ? _frames.Dequeue() : Array.Empty<VisionDetection>();
+            return Task.FromResult(result);
+        }
     }
 
     private static void Assert(bool condition, string message)
