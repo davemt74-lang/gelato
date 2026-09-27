@@ -157,6 +157,7 @@ function glasses_build_item_context(PDO $pdo,int $org,array $kds): array
     $q->execute([$org,(int)$kds['pos_check_item_id']]);$line=$q->fetch();
     if(!$line)throw new InvalidArgumentException('POS line for this kitchen item was not found.');
     return [
+        'menuItemId'=>(int)$line['menu_item_id'],
         'checkPublicId'=>(string)$line['check_public_id'],
         'checkNumber'=>(string)$line['check_number'],
         'itemName'=>(string)$line['item_name_snapshot'],
@@ -184,12 +185,13 @@ function glasses_build_start(PDO $pdo,array $device,string $kdsPublicId,?string 
             return glasses_build_payload($pdo,$org,(string)$existing['public_id']);
         }
 
-        $expected=glasses_build_expected_components($pdo,$org,(int)$kds['menu_item_id']);
+        $context=glasses_build_item_context($pdo,$org,$kds);
+        $menuItemId=(int)$context['menuItemId'];
+        $expected=glasses_build_expected_components($pdo,$org,$menuItemId);
         if(!$expected)throw new InvalidArgumentException('This menu item has no canonical ingredients configured for AR build tracking.');
         $public=glasses_public_id('build');
-        $context=glasses_build_item_context($pdo,$org,$kds);
         $pdo->prepare("INSERT INTO glasses_build_sessions (organization_id,public_id,device_id,kds_order_item_id,pos_check_item_id,menu_item_id,status,source_revision,context_json) VALUES (?,?,?,?,?,?,'active',?,?)")
-            ->execute([$org,$public,(int)$device['id'],(int)$kds['id'],(int)$kds['pos_check_item_id'],(int)$kds['menu_item_id'],$sourceRevision,glasses_json_object($context)]);
+            ->execute([$org,$public,(int)$device['id'],(int)$kds['id'],(int)$kds['pos_check_item_id'],$menuItemId,$sourceRevision,glasses_json_object($context)]);
         $sessionId=(int)$pdo->lastInsertId();
         $insert=$pdo->prepare("INSERT INTO glasses_build_components (organization_id,build_session_id,component_key,ingredient_id,display_name,expected_quantity,unit,is_optional,status,sort_order,metadata_json) VALUES (?,?,?,?,?,?,?,?,'waiting',?,?)");
         foreach($expected as $component)$insert->execute([
@@ -237,7 +239,7 @@ function glasses_build_observe(PDO $pdo,array $device,string $sessionPublicId,ar
         if(!$component){
             $unexpected=true;
             $name=mb_substr(trim((string)($input['displayName']??$componentKey)),0,180,'UTF-8')?:'Unexpected component';
-            $sort=(int)$pdo->query('SELECT 10000')->fetchColumn();
+            $sort=10000;
             $pdo->prepare("INSERT INTO glasses_build_components (organization_id,build_session_id,component_key,display_name,expected_quantity,detected_quantity,unit,is_optional,status,confidence,sort_order,first_detected_at,metadata_json) VALUES (?,?,?,?,0,?,'',0,'unexpected',?,?,NOW(6),?)")
                 ->execute([$org,(int)$session['id'],$componentKey,$name,$quantity,$confidence,$sort,glasses_json_object(['unexpected'=>true])]);
             $q=$pdo->prepare('SELECT * FROM glasses_build_components WHERE organization_id=? AND build_session_id=? AND component_key=? LIMIT 1 FOR UPDATE');
