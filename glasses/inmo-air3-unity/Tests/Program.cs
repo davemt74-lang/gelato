@@ -53,6 +53,7 @@ internal static class Program
         var build = await coordinator.StartFocusBuildAsync();
         Assert(coordinator.State == WorkflowState.Building, "start build must enter Building");
         Assert(build.PublicId == "build-1", "build session identity must be preserved");
+        Assert(platform.StartTrackingCalls == 1 && platform.Tracking, "build start must start platform tracking");
 
         var firstValidation = await coordinator.SubmitObservationAsync(new IngredientObservation
         {
@@ -82,6 +83,7 @@ internal static class Program
         Assert(coordinator.State == WorkflowState.HandedOff, "successful handoff must terminalize client workflow");
         Assert(handoff.KdsStatus == "ready", "handoff must preserve server KDS Ready state");
         Assert(gateway.HandoffCalls == 1, "handoff must use the Gelato handoff endpoint once");
+        Assert(platform.StopTrackingCalls == 1 && !platform.Tracking, "successful handoff must stop platform tracking");
 
         coordinator.ResetForNextWork();
         Assert(coordinator.State == WorkflowState.Idle, "paired reset must return to Idle");
@@ -126,6 +128,9 @@ internal static class Program
     private sealed class FakePlatform : IGlassesPlatform
     {
         public bool IsInitialized { get; private set; }
+        public bool Tracking { get; private set; }
+        public int StartTrackingCalls { get; private set; }
+        public int StopTrackingCalls { get; private set; }
         public PlatformCapabilities Capabilities { get; } = new PlatformCapabilities
         {
             Platform = "fake",
@@ -143,8 +148,8 @@ internal static class Program
             return Task.CompletedTask;
         }
 
-        public void StartTracking() { }
-        public void StopTracking() { }
+        public void StartTracking() { StartTrackingCalls++; Tracking = true; }
+        public void StopTracking() { StopTrackingCalls++; Tracking = false; }
         public CameraFrame? TryGetLatestFrame() => null;
         public CameraCalibration? TryGetCameraCalibration() => null;
         public PoseState GetPose() => new PoseState();
