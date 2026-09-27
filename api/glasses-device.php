@@ -5,6 +5,7 @@ require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/glasses-core.php';
 require_once __DIR__.'/../includes/glasses-work.php';
 require_once __DIR__.'/../includes/glasses-build.php';
+require_once __DIR__.'/../includes/glasses-validation.php';
 
 $pdo=app_pdo();
 if(!glasses_ready($pdo))app_json_response(['ok'=>false,'message'=>'Glasses plugin migration is not installed.'],503);
@@ -92,6 +93,20 @@ try{
         if($componentKey==='')throw new InvalidArgumentException('Unexpected component is required.');
         $session=glasses_build_resolve_unexpected($pdo,$device,$sessionPublicId,$componentKey);
         app_json_response(['ok'=>true,'buildSession'=>$session]);
+    }
+
+    if($action==='validation.evaluate'){
+        $sessionPublicId=trim((string)($in['buildSessionPublicId']??''));
+        if($sessionPublicId==='')throw new InvalidArgumentException('Build session is required.');
+        $validation=glasses_validation_evaluate($pdo,$device,$sessionPublicId);
+        app_json_response(['ok'=>true,'validation'=>$validation]);
+    }
+
+    if($action==='validation.get'){
+        $sessionPublicId=trim((string)($in['buildSessionPublicId']??''));
+        if($sessionPublicId==='')throw new InvalidArgumentException('Build session is required.');
+        $validation=glasses_validation_get($pdo,$device,$sessionPublicId);
+        app_json_response(['ok'=>true,'validation'=>$validation]);
     }
 
     if($action==='self'){
