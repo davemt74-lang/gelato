@@ -91,6 +91,8 @@ namespace Gelato.Ar.Core
         public const string HandoffExpo = "E";
         public const string Reset = "R";
         public const string Unexpected = "U";
+        public const string ConfirmVerify = "C";
+        public const string ResolveUnexpected = "X";
         public const string LowConfidenceModifier = "Left Shift";
         public const string ComponentRange = "1-9";
     }
