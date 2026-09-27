@@ -253,8 +253,8 @@ namespace Gelato.Ar.Unity
             };
         }
 
-        [Serializable] private sealed class ActionRequest { public string action; }
-        [Serializable] private sealed class BuildSessionRequest : ActionRequest { public string buildSessionPublicId; }
+        [Serializable] private class ActionRequest { public string action; }
+        [Serializable] private class BuildSessionRequest : ActionRequest { public string buildSessionPublicId; }
         [Serializable] private sealed class BuildStartRequest : ActionRequest { public string kdsItemPublicId; public string sourceRevision; }
         [Serializable] private sealed class PairRequest : ActionRequest
         {
