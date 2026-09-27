@@ -6,6 +6,7 @@ require_once __DIR__.'/../includes/glasses-core.php';
 require_once __DIR__.'/../includes/glasses-work.php';
 require_once __DIR__.'/../includes/glasses-build.php';
 require_once __DIR__.'/../includes/glasses-validation.php';
+require_once __DIR__.'/../includes/glasses-handoff.php';
 
 $pdo=app_pdo();
 if(!glasses_ready($pdo))app_json_response(['ok'=>false,'message'=>'Glasses plugin migration is not installed.'],503);
@@ -107,6 +108,13 @@ try{
         if($sessionPublicId==='')throw new InvalidArgumentException('Build session is required.');
         $validation=glasses_validation_get($pdo,$device,$sessionPublicId);
         app_json_response(['ok'=>true,'validation'=>$validation]);
+    }
+
+    if($action==='handoff.expo'){
+        $sessionPublicId=trim((string)($in['buildSessionPublicId']??''));
+        if($sessionPublicId==='')throw new InvalidArgumentException('Build session is required.');
+        $handoff=glasses_handoff_to_expo($pdo,$device,$sessionPublicId);
+        app_json_response(['ok'=>true,'handoff'=>$handoff]);
     }
 
     if($action==='self'){
