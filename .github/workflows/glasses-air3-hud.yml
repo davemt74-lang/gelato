@@ -1,0 +1,40 @@
+name: AR Glasses AIR3 HUD
+
+on:
+  pull_request:
+    paths:
+      - 'glasses/inmo-air3-unity/**'
+      - 'docs/GLASSES-AIR3-HUD.md'
+      - '.github/workflows/glasses-air3-hud.yml'
+  push:
+    branches: [main, 'feature/glasses-air3-hud']
+
+jobs:
+  air3-hud:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: HUD architecture contract
+        run: |
+          grep -q 'class HudLayoutPolicy' glasses/inmo-air3-unity/Runtime/Core/HudViewModel.cs
+          grep -q 'ReferenceWidth = 1920f' glasses/inmo-air3-unity/Runtime/Core/HudViewModel.cs
+          grep -q 'ReferenceHeight = 1080f' glasses/inmo-air3-unity/Runtime/Core/HudViewModel.cs
+          grep -q 'RightRailWidth = 520f' glasses/inmo-air3-unity/Runtime/Core/HudViewModel.cs
+          grep -q 'RailGapFromCenter = 72f' glasses/inmo-air3-unity/Runtime/Core/HudViewModel.cs
+          grep -q 'PersistentUiClearsCenter' glasses/inmo-air3-unity/Runtime/Core/HudViewModel.cs
+          grep -q '"ITEM"' glasses/inmo-air3-unity/Runtime/Unity/ArHudController.cs
+          grep -q '"BUILD STEPS"' glasses/inmo-air3-unity/Runtime/Unity/ArHudController.cs
+          grep -q '"PRODUCT VALIDATION"' glasses/inmo-air3-unity/Runtime/Unity/ArHudController.cs
+          grep -q '"NEXT"' glasses/inmo-air3-unity/Runtime/Unity/ArHudController.cs
+          test "$(grep -c 'CreateSection(rail.transform' glasses/inmo-air3-unity/Runtime/Unity/ArHudController.cs)" = "4"
+          grep -q '_nextPanel.SetActive(false)' glasses/inmo-air3-unity/Runtime/Unity/ArHudController.cs
+          grep -q 'TransientOutlineSeconds' glasses/inmo-air3-unity/Runtime/Unity/IngredientOutlineOverlay.cs
+          grep -q 'WaitForSeconds' glasses/inmo-air3-unity/Runtime/Unity/IngredientOutlineOverlay.cs
+          grep -q 'buildDefinition.steps' glasses/inmo-air3-unity/Runtime/Unity/UnityGelatoGateway.cs
+      - name: Compile AR core
+        run: dotnet build glasses/inmo-air3-unity/Runtime/Core/Gelato.Ar.Core.csproj -c Release --nologo
+      - name: Run AIR3 HUD + workflow contracts
+        run: dotnet run --project glasses/inmo-air3-unity/Tests/Gelato.Ar.Core.Tests.csproj -c Release

@@ -102,6 +102,14 @@ namespace Gelato.Ar.Core
         public float? Confidence { get; set; }
     }
 
+    public sealed class BuildStep
+    {
+        public string StepKey { get; set; } = string.Empty;
+        public int Order { get; set; }
+        public string Text { get; set; } = string.Empty;
+        public IReadOnlyList<string> ComponentKeys { get; set; } = Array.Empty<string>();
+    }
+
     public sealed class BuildSession
     {
         public string PublicId { get; set; } = string.Empty;
@@ -109,6 +117,7 @@ namespace Gelato.Ar.Core
         public string KdsItemPublicId { get; set; } = string.Empty;
         public string SourceRevision { get; set; } = string.Empty;
         public IReadOnlyList<BuildComponent> Components { get; set; } = Array.Empty<BuildComponent>();
+        public IReadOnlyList<BuildStep> BuildSteps { get; set; } = Array.Empty<BuildStep>();
     }
 
     public sealed class IngredientObservation
