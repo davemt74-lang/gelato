@@ -39,11 +39,13 @@ namespace Gelato.Ar.Unity
                 else if (Input.GetKeyDown(KeyCode.E)) await HandoffAsync();
                 else if (Input.GetKeyDown(KeyCode.R)) ResetWorkflow();
                 else if (Input.GetKeyDown(KeyCode.U)) await SimulateUnexpectedAsync();
+                else if (Input.GetKeyDown(KeyCode.C)) await ConfirmFirstVerifyAsync();
+                else if (Input.GetKeyDown(KeyCode.X)) await ResolveFirstUnexpectedAsync();
                 else
                 {
                     for (var i = 0; i < 9; i++)
                     {
-                        var key = KeyCode.Alpha1 + i;
+                        var key = (KeyCode)((int)KeyCode.Alpha1 + i);
                         if (!Input.GetKeyDown(key)) continue;
                         await SimulateComponentAsync(i, Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift));
                         break;
@@ -134,6 +136,52 @@ namespace Gelato.Ar.Unity
             {
                 var validation = await bootstrap.Coordinator.SubmitObservationAsync(observation);
                 LogLine("Unexpected: " + observation.DisplayName + " → " + validation.Status);
+            });
+        }
+
+        public async Task ConfirmFirstVerifyAsync()
+        {
+            var build = bootstrap.Coordinator.BuildSession;
+            if (build == null) throw new InvalidOperationException("There is no active build session.");
+
+            BuildComponent target = null;
+            foreach (var component in build.Components)
+            {
+                if (string.Equals(component.Status, "verify", StringComparison.Ordinal))
+                {
+                    target = component;
+                    break;
+                }
+            }
+            if (target == null) throw new InvalidOperationException("No Verify component is waiting for manual confirmation.");
+
+            await RunBusyAsync(async () =>
+            {
+                var validation = await bootstrap.Coordinator.ConfirmComponentAsync(target.ComponentKey);
+                LogLine("Confirmed " + target.DisplayName + " → " + validation.Status);
+            });
+        }
+
+        public async Task ResolveFirstUnexpectedAsync()
+        {
+            var build = bootstrap.Coordinator.BuildSession;
+            if (build == null) throw new InvalidOperationException("There is no active build session.");
+
+            BuildComponent target = null;
+            foreach (var component in build.Components)
+            {
+                if (string.Equals(component.Status, "unexpected", StringComparison.Ordinal))
+                {
+                    target = component;
+                    break;
+                }
+            }
+            if (target == null) throw new InvalidOperationException("No unexpected component is waiting for resolution.");
+
+            await RunBusyAsync(async () =>
+            {
+                var validation = await bootstrap.Coordinator.ResolveUnexpectedAsync(target.ComponentKey);
+                LogLine("Resolved unexpected " + target.DisplayName + " → " + validation.Status);
             });
         }
 
