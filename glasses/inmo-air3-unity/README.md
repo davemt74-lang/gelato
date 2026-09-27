@@ -46,3 +46,8 @@ The KDS, recipe, validation, build-session, and Expo workflow must remain vendor
 8. Pair the device with a one-time pairing code generated in Gelato.
 
 The right-rail HUD is now implemented programmatically: ITEM, BUILD STEPS, PRODUCT VALIDATION, and conditional NEXT stay on the right side while the center remains clear except for short-lived ingredient outlines. The ingredient detector itself remains a separate release unit.
+
+
+## Desktop simulator
+
+While the INMO vendor package is pending, use `DesktopSimulatorPlatform` with `DesktopSimulatorController` to exercise the same Gelato pairing, station work, build, validation, transient outline, Verify/unexpected exception handling, and Expo handoff workflow on a desktop computer. See `docs/GLASSES-DESKTOP-SIMULATOR.md`.

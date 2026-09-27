@@ -1,0 +1,45 @@
+name: AR Glasses Desktop Simulator
+
+on:
+  pull_request:
+    paths:
+      - 'glasses/inmo-air3-unity/**'
+      - 'docs/GLASSES-DESKTOP-SIMULATOR.md'
+      - '.github/workflows/glasses-desktop-simulator.yml'
+  push:
+    branches: [main, 'feature/glasses-desktop-simulator']
+
+jobs:
+  desktop-simulator:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Simulator architecture contract
+        run: |
+          grep -q 'class DesktopSimulatorPlatform' glasses/inmo-air3-unity/Runtime/Unity/DesktopSimulatorPlatform.cs
+          grep -q 'WebCamTexture' glasses/inmo-air3-unity/Runtime/Unity/DesktopSimulatorPlatform.cs
+          grep -q 'PixelFormat = "grayscale8"' glasses/inmo-air3-unity/Runtime/Unity/DesktopSimulatorPlatform.cs
+          grep -q 'class DesktopSimulatorController' glasses/inmo-air3-unity/Runtime/Unity/DesktopSimulatorController.cs
+          grep -q 'SimulatorObservationFactory.Create' glasses/inmo-air3-unity/Runtime/Unity/DesktopSimulatorController.cs
+          grep -q 'SimulatorObservationFactory.CreateUnexpected' glasses/inmo-air3-unity/Runtime/Unity/DesktopSimulatorController.cs
+          grep -q 'ConfirmFirstVerifyAsync' glasses/inmo-air3-unity/Runtime/Unity/DesktopSimulatorController.cs
+          grep -q 'ResolveFirstUnexpectedAsync' glasses/inmo-air3-unity/Runtime/Unity/DesktopSimulatorController.cs
+          grep -q 'ShowIngredientObservation' glasses/inmo-air3-unity/Runtime/Unity/DesktopSimulatorController.cs
+          grep -q 'class DesktopSimulatorDebugOverlay' glasses/inmo-air3-unity/Runtime/Unity/DesktopSimulatorDebugOverlay.cs
+          grep -q 'ConfirmComponentAsync' glasses/inmo-air3-unity/Runtime/Core/Contracts.cs
+          grep -q 'ResolveUnexpectedAsync' glasses/inmo-air3-unity/Runtime/Core/Contracts.cs
+          grep -q 'DeviceApiActions.BuildConfirm' glasses/inmo-air3-unity/Runtime/Unity/UnityGelatoGateway.cs
+          grep -q 'DeviceApiActions.ResolveUnexpected' glasses/inmo-air3-unity/Runtime/Unity/UnityGelatoGateway.cs
+          ! grep -R 'ArPoseManager' glasses/inmo-air3-unity/Runtime/Unity/DesktopSimulatorPlatform.cs glasses/inmo-air3-unity/Runtime/Unity/DesktopSimulatorController.cs
+          grep -q '0.68f' glasses/inmo-air3-unity/Runtime/Core/SimulatorSupport.cs
+          grep -q '0.96f' glasses/inmo-air3-unity/Runtime/Core/SimulatorSupport.cs
+
+      - name: Compile hardware-neutral AR core
+        run: dotnet build glasses/inmo-air3-unity/Runtime/Core/Gelato.Ar.Core.csproj -c Release --nologo
+
+      - name: Run simulator + workflow + HUD contracts
+        run: dotnet run --project glasses/inmo-air3-unity/Tests/Gelato.Ar.Core.Tests.csproj -c Release

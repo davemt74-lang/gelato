@@ -12,6 +12,7 @@ internal static class Program
         await ExistingCredentialFlow();
         await ErrorStateFlow();
         HudContract();
+        SimulatorSupportContract();
         Console.WriteLine("air3-unity-shell-ok");
     }
 
@@ -67,6 +68,14 @@ internal static class Program
         });
         Assert(firstValidation.Status == "pending", "partial build must remain pending");
         Assert(coordinator.State == WorkflowState.Building, "pending validation must remain Building");
+
+        var confirmedValidation = await coordinator.ConfirmComponentAsync("ingredient:1");
+        Assert(confirmedValidation.Status == "pending", "manual Verify confirmation must re-evaluate validation");
+        Assert(gateway.ConfirmCalls == 1, "manual confirmation must use the build.confirm gateway action");
+
+        var resolvedValidation = await coordinator.ResolveUnexpectedAsync("sim:unexpected:cheese");
+        Assert(resolvedValidation.Status == "pending", "unexpected resolution must re-evaluate validation");
+        Assert(gateway.ResolveCalls == 1, "unexpected resolution must use the build.resolve_unexpected gateway action");
 
         var secondValidation = await coordinator.SubmitObservationAsync(new IngredientObservation
         {
@@ -220,6 +229,45 @@ internal static class Program
         Assert(handoffHud.ShowNext && handoffHud.NextTitle == "SENT TO EXPO / FINISHING", "terminal handoff must replace the NEXT action with sent state");
     }
 
+
+    private static void SimulatorSupportContract()
+    {
+        var component = new BuildComponent
+        {
+            ComponentKey = "ingredient:42",
+            DisplayName = "Turkey",
+            ExpectedQuantity = 3f,
+            DetectedQuantity = 1f,
+            Unit = "slices",
+            Status = "detected"
+        };
+
+        var normal = SimulatorObservationFactory.Create(component, 1);
+        Assert(normal.ObservationKey.Contains("ingredient-42", StringComparison.Ordinal), "simulator observation key must be deterministic and component-scoped");
+        Assert(Math.Abs(normal.Quantity - 2f) < 0.0001f, "simulator must default to the remaining expected quantity");
+        Assert(Math.Abs(normal.Confidence - 0.96f) < 0.0001f, "normal simulator observation must use high confidence");
+        Assert(normal.BoundingBox.Length == 4, "simulator observation must provide a normalized bounding box");
+
+        var low = SimulatorObservationFactory.Create(component, 2, true, 1f);
+        Assert(Math.Abs(low.Quantity - 1f) < 0.0001f, "simulator quantity override must be preserved");
+        Assert(Math.Abs(low.Confidence - 0.68f) < 0.0001f, "low-confidence simulator mode must exercise Verify behavior");
+
+        var unexpected = SimulatorObservationFactory.CreateUnexpected("Swiss Cheese", 3);
+        Assert(unexpected.ComponentKey.Contains("swiss-cheese", StringComparison.Ordinal), "unexpected simulator observation must expose an isolated component key");
+        Assert(Math.Abs(unexpected.Confidence - 0.95f) < 0.0001f, "unexpected simulator event must still be high-confidence evidence");
+
+        for (var i = 1; i <= 12; i++)
+        {
+            var box = SimulatorObservationFactory.DeterministicBox(i);
+            Assert(box[0] >= 0f && box[1] >= 0f && box[2] > 0f && box[3] > 0f, "simulator box must be positive");
+            Assert(box[0] + box[2] <= 0.75f, "simulator ingredient box must remain out of the persistent right rail");
+            Assert(box[1] + box[3] <= 1f, "simulator ingredient box must stay within the display");
+        }
+
+        Assert(SimulatorHotkeys.ComponentRange == "1-9", "simulator component hotkey range must remain documented");
+        Assert(SimulatorHotkeys.ConfirmVerify == "C" && SimulatorHotkeys.ResolveUnexpected == "X", "simulator exception hotkeys must remain stable");
+    }
+
     private static void Assert(bool condition, string message)
     {
         if (!condition) throw new InvalidOperationException(message);
@@ -271,6 +319,8 @@ internal static class Program
         public string DeviceToken { get; private set; } = string.Empty;
         public bool FailCurrentWork { get; set; }
         public int HandoffCalls { get; private set; }
+        public int ConfirmCalls { get; private set; }
+        public int ResolveCalls { get; private set; }
 
         public void SetDeviceToken(string token) { DeviceToken = token; }
 
@@ -319,6 +369,41 @@ internal static class Program
                 PublicId = buildSessionPublicId,
                 Status = "active",
                 KdsItemPublicId = "kds-item-1"
+            });
+        }
+
+        public Task<BuildSession> ConfirmComponentAsync(string buildSessionPublicId, string componentKey, CancellationToken cancellationToken)
+        {
+            ConfirmCalls++;
+            return Task.FromResult(new BuildSession
+            {
+                PublicId = buildSessionPublicId,
+                Status = "active",
+                KdsItemPublicId = "kds-item-1",
+                Components = new[]
+                {
+                    new BuildComponent
+                    {
+                        ComponentKey = componentKey,
+                        DisplayName = "Verified component",
+                        ExpectedQuantity = 1f,
+                        DetectedQuantity = 1f,
+                        Status = "confirmed",
+                        Confidence = 1f
+                    }
+                }
+            });
+        }
+
+        public Task<BuildSession> ResolveUnexpectedAsync(string buildSessionPublicId, string componentKey, CancellationToken cancellationToken)
+        {
+            ResolveCalls++;
+            return Task.FromResult(new BuildSession
+            {
+                PublicId = buildSessionPublicId,
+                Status = "active",
+                KdsItemPublicId = "kds-item-1",
+                Components = Array.Empty<BuildComponent>()
             });
         }
 

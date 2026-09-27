@@ -119,6 +119,34 @@ namespace Gelato.Ar.Core
             }).ConfigureAwait(false);
         }
 
+        public async Task<ProductValidation> ConfirmComponentAsync(string componentKey, CancellationToken cancellationToken = default)
+        {
+            EnsureActiveBuild();
+            if (string.IsNullOrWhiteSpace(componentKey)) throw new ArgumentException("Component key is required.", nameof(componentKey));
+
+            return await GuardAsync(async () =>
+            {
+                BuildSession = await _gateway.ConfirmComponentAsync(BuildSession!.PublicId, componentKey, cancellationToken).ConfigureAwait(false);
+                Validation = await _gateway.EvaluateAsync(BuildSession.PublicId, cancellationToken).ConfigureAwait(false);
+                State = IsReadyForFinishing(Validation) ? WorkflowState.ReadyForFinishing : WorkflowState.Building;
+                return Validation;
+            }).ConfigureAwait(false);
+        }
+
+        public async Task<ProductValidation> ResolveUnexpectedAsync(string componentKey, CancellationToken cancellationToken = default)
+        {
+            EnsureActiveBuild();
+            if (string.IsNullOrWhiteSpace(componentKey)) throw new ArgumentException("Component key is required.", nameof(componentKey));
+
+            return await GuardAsync(async () =>
+            {
+                BuildSession = await _gateway.ResolveUnexpectedAsync(BuildSession!.PublicId, componentKey, cancellationToken).ConfigureAwait(false);
+                Validation = await _gateway.EvaluateAsync(BuildSession.PublicId, cancellationToken).ConfigureAwait(false);
+                State = IsReadyForFinishing(Validation) ? WorkflowState.ReadyForFinishing : WorkflowState.Building;
+                return Validation;
+            }).ConfigureAwait(false);
+        }
+
         public async Task<ProductValidation> EvaluateAsync(CancellationToken cancellationToken = default)
         {
             EnsureActiveBuild();
