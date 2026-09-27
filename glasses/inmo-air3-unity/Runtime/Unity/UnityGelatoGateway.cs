@@ -243,13 +243,32 @@ namespace Gelato.Ar.Unity
                 }
             }
 
+            var steps = new List<BuildStep>();
+            var stepDtos = dto.context != null && dto.context.buildDefinition != null
+                ? dto.context.buildDefinition.steps
+                : null;
+            if (stepDtos != null)
+            {
+                foreach (var step in stepDtos)
+                {
+                    steps.Add(new BuildStep
+                    {
+                        StepKey = step.stepKey ?? string.Empty,
+                        Order = step.order,
+                        Text = step.text ?? string.Empty,
+                        ComponentKeys = step.componentKeys ?? Array.Empty<string>()
+                    });
+                }
+            }
+
             return new BuildSession
             {
                 PublicId = dto.publicId ?? string.Empty,
                 Status = dto.status ?? string.Empty,
                 KdsItemPublicId = dto.kdsItemPublicId ?? string.Empty,
                 SourceRevision = dto.sourceRevision ?? string.Empty,
-                Components = components
+                Components = components,
+                BuildSteps = steps
             };
         }
 
@@ -305,6 +324,22 @@ namespace Gelato.Ar.Unity
             public string kdsItemPublicId;
             public string sourceRevision;
             public BuildComponentDto[] components;
+            public BuildContextDto context;
+        }
+        [Serializable] private sealed class BuildContextDto
+        {
+            public BuildDefinitionContextDto buildDefinition;
+        }
+        [Serializable] private sealed class BuildDefinitionContextDto
+        {
+            public BuildStepDto[] steps;
+        }
+        [Serializable] private sealed class BuildStepDto
+        {
+            public string stepKey;
+            public int order;
+            public string text;
+            public string[] componentKeys;
         }
         [Serializable] private sealed class BuildComponentDto
         {
