@@ -69,6 +69,14 @@ internal static class Program
         Assert(firstValidation.Status == "pending", "partial build must remain pending");
         Assert(coordinator.State == WorkflowState.Building, "pending validation must remain Building");
 
+        var confirmedValidation = await coordinator.ConfirmComponentAsync("ingredient:1");
+        Assert(confirmedValidation.Status == "pending", "manual Verify confirmation must re-evaluate validation");
+        Assert(gateway.ConfirmCalls == 1, "manual confirmation must use the build.confirm gateway action");
+
+        var resolvedValidation = await coordinator.ResolveUnexpectedAsync("sim:unexpected:cheese");
+        Assert(resolvedValidation.Status == "pending", "unexpected resolution must re-evaluate validation");
+        Assert(gateway.ResolveCalls == 1, "unexpected resolution must use the build.resolve_unexpected gateway action");
+
         var secondValidation = await coordinator.SubmitObservationAsync(new IngredientObservation
         {
             ObservationKey = "obs-2",
@@ -311,6 +319,8 @@ internal static class Program
         public string DeviceToken { get; private set; } = string.Empty;
         public bool FailCurrentWork { get; set; }
         public int HandoffCalls { get; private set; }
+        public int ConfirmCalls { get; private set; }
+        public int ResolveCalls { get; private set; }
 
         public void SetDeviceToken(string token) { DeviceToken = token; }
 
@@ -364,6 +374,7 @@ internal static class Program
 
         public Task<BuildSession> ConfirmComponentAsync(string buildSessionPublicId, string componentKey, CancellationToken cancellationToken)
         {
+            ConfirmCalls++;
             return Task.FromResult(new BuildSession
             {
                 PublicId = buildSessionPublicId,
@@ -386,6 +397,7 @@ internal static class Program
 
         public Task<BuildSession> ResolveUnexpectedAsync(string buildSessionPublicId, string componentKey, CancellationToken cancellationToken)
         {
+            ResolveCalls++;
             return Task.FromResult(new BuildSession
             {
                 PublicId = buildSessionPublicId,
