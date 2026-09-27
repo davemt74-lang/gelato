@@ -35,6 +35,7 @@ namespace Gelato.Ar.Unity
             GUILayout.Space(8f);
             GUILayout.Label("P Pair   F1 Work   F2 Start   V Validate   E Expo   R Reset", _textStyle);
             GUILayout.Label("1-9 ingredient   Shift+1-9 low confidence   U unexpected", _textStyle);
+            GUILayout.Label("C confirm Verify   X resolve unexpected", _textStyle);
             GUILayout.Space(8f);
 
             var builder = new StringBuilder();
