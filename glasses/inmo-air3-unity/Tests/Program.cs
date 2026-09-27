@@ -11,6 +11,7 @@ internal static class Program
         await PairingAndBuildFlow();
         await ExistingCredentialFlow();
         await ErrorStateFlow();
+        HudContract();
         Console.WriteLine("air3-unity-shell-ok");
     }
 
@@ -118,6 +119,105 @@ internal static class Program
         Assert(failed, "gateway failure must propagate");
         Assert(coordinator.State == WorkflowState.Error, "gateway failure must put coordinator in Error");
         Assert(coordinator.LastError == "simulated work failure", "coordinator must preserve a safe error message");
+    }
+
+
+    private static void HudContract()
+    {
+        Assert(HudLayoutPolicy.ReferenceWidth == 1920f && HudLayoutPolicy.ReferenceHeight == 1080f, "HUD reference resolution must match AIR3 layout target");
+        Assert(HudLayoutPolicy.PersistentUiClearsCenter(), "persistent right rail must not overlap the center safe zone");
+        Assert(HudLayoutPolicy.CenterSafeZone.Right + HudLayoutPolicy.RailGapFromCenter <= HudLayoutPolicy.RightRail.X, "center safe zone must retain a physical gap before the right rail");
+        Assert(HudLayoutPolicy.TransientOutlineSeconds <= 1.5f, "ingredient outlines must remain short-lived");
+
+        var work = new CurrentWork
+        {
+            FocusItem = new WorkItem
+            {
+                KdsItemPublicId = "kds-club",
+                Status = "in_progress",
+                Name = "Club Sandwich + Fries",
+                SpecialInstructions = "NO TOMATO"
+            }
+        };
+        var build = new BuildSession
+        {
+            PublicId = "build-club",
+            Status = "active",
+            Components = new[]
+            {
+                new BuildComponent
+                {
+                    ComponentKey = "ingredient:bread",
+                    DisplayName = "Bread",
+                    ExpectedQuantity = 3,
+                    DetectedQuantity = 3,
+                    Unit = "slices",
+                    Status = "confirmed",
+                    Confidence = 0.97f
+                },
+                new BuildComponent
+                {
+                    ComponentKey = "ingredient:turkey",
+                    DisplayName = "Turkey",
+                    ExpectedQuantity = 3,
+                    DetectedQuantity = 2,
+                    Unit = "slices",
+                    Status = "detected",
+                    Confidence = 0.96f
+                }
+            },
+            BuildSteps = new[]
+            {
+                new BuildStep { StepKey = "step:1", Order = 1, Text = "Add Bread", ComponentKeys = new[] { "ingredient:bread" } },
+                new BuildStep { StepKey = "step:2", Order = 2, Text = "Add Turkey", ComponentKeys = new[] { "ingredient:turkey" } },
+                new BuildStep { StepKey = "step:3", Order = 3, Text = "Top and slice", ComponentKeys = Array.Empty<string>() }
+            }
+        };
+
+        var pending = new ProductValidation
+        {
+            Status = "pending",
+            NextStage = string.Empty,
+            AllIngredientsAccountedFor = false,
+            Next = new ValidationNext { Label = "Expo / Finishing", Available = false }
+        };
+        var pendingHud = HudViewModelFactory.Create(work, build, pending, null);
+        Assert(pendingHud.ItemTitle == "Club Sandwich + Fries", "ITEM panel must show the focused product");
+        Assert(pendingHud.ItemBody.Contains("NO TOMATO", StringComparison.Ordinal), "ITEM panel must surface POS instructions");
+        Assert(pendingHud.BuildBody.Contains("[x] Add Bread", StringComparison.Ordinal), "completed build steps must be marked complete");
+        Assert(pendingHud.BuildBody.Contains("> Add Turkey", StringComparison.Ordinal), "first incomplete ingredient step must become active");
+        Assert(pendingHud.BuildBody.Contains("• Top and slice", StringComparison.Ordinal), "action-only recipe instruction must remain visible");
+        Assert(pendingHud.ValidationBody.Contains("Turkey", StringComparison.Ordinal), "PRODUCT VALIDATION must expose component accounting");
+        Assert(!pendingHud.ShowNext, "NEXT must stay hidden before validation is ready");
+
+        var ready = new ProductValidation
+        {
+            PublicId = "validation-club",
+            Status = "ready_for_finishing",
+            NextStage = "expo_finishing",
+            AllIngredientsAccountedFor = true,
+            Next = new ValidationNext
+            {
+                Stage = "expo_finishing",
+                Label = "Expo / Finishing",
+                Available = true,
+                Message = "All ingredients accounted for."
+            }
+        };
+        var readyHud = HudViewModelFactory.Create(work, build, ready, null);
+        Assert(readyHud.ShowNext, "NEXT must appear when product validation is ready");
+        Assert(readyHud.NextTitle == "EXPO / FINISHING", "NEXT must identify Expo / Finishing");
+        Assert(readyHud.NextBody == "All ingredients accounted for.", "NEXT must explain readiness");
+        Assert(readyHud.ValidationBody.StartsWith("ALL INGREDIENTS ACCOUNTED FOR", StringComparison.Ordinal), "validation panel must visibly confirm full accounting");
+
+        var handoffHud = HudViewModelFactory.Create(work, build, ready, new ExpoHandoff
+        {
+            PublicId = "handoff-club",
+            Status = "completed",
+            KdsStatus = "ready",
+            Label = "Sent to Expo / Finishing"
+        });
+        Assert(handoffHud.ShowNext && handoffHud.NextTitle == "SENT TO EXPO / FINISHING", "terminal handoff must replace the NEXT action with sent state");
     }
 
     private static void Assert(bool condition, string message)
