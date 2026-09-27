@@ -11,7 +11,7 @@ on:
       - 'docs/GLASSES-PLUGIN-FOUNDATION.md'
       - '.github/workflows/glasses-plugin-foundation.yml'
   push:
-    branches: [main]
+    branches: [main, 'feature/glasses-plugin-foundation']
 
 jobs:
   glasses-foundation:
