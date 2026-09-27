@@ -27,6 +27,8 @@ jobs:
           grep -q 'interface IGelatoGateway' glasses/inmo-air3-unity/Runtime/Core/Contracts.cs
           grep -q 'class ArWorkflowCoordinator' glasses/inmo-air3-unity/Runtime/Core/ArWorkflowCoordinator.cs
           grep -q 'ReadyForFinishing' glasses/inmo-air3-unity/Runtime/Core/ArWorkflowCoordinator.cs
+          grep -q '_platform.StartTracking()' glasses/inmo-air3-unity/Runtime/Core/ArWorkflowCoordinator.cs
+          grep -q '_platform.StopTracking()' glasses/inmo-air3-unity/Runtime/Core/ArWorkflowCoordinator.cs
           grep -q 'DeviceApiActions.HandoffExpo' glasses/inmo-air3-unity/Runtime/Unity/UnityGelatoGateway.cs
           grep -q 'https://' glasses/inmo-air3-unity/Runtime/Unity/UnityGelatoGateway.cs
           grep -q 'GetAir3ImageData' glasses/inmo-air3-unity/Runtime/Unity/InmoAir3Platform.cs
@@ -35,6 +37,9 @@ jobs:
           ! grep -R 'UnityEngine' glasses/inmo-air3-unity/Runtime/Core
           ! grep -R 'ArPoseManager' glasses/inmo-air3-unity/Runtime/Core
           test "$(grep -R -l 'ArPoseManager' glasses/inmo-air3-unity/Runtime/Unity | wc -l)" = "1"
+          grep -q 'DevelopmentPlayerPrefsTokenStore' glasses/inmo-air3-unity/Runtime/Unity/PlayerPrefsTokenStore.cs
+          grep -q 'deviceTokenStore as IDeviceTokenStore' glasses/inmo-air3-unity/Runtime/Unity/GelatoArBootstrap.cs
+          ! grep -q 'new PlayerPrefsTokenStore' glasses/inmo-air3-unity/Runtime/Unity/GelatoArBootstrap.cs
       - name: Compile hardware-neutral AIR3 core
         run: dotnet build glasses/inmo-air3-unity/Runtime/Core/Gelato.Ar.Core.csproj -c Release --nologo
       - name: Run workflow coordinator contract
