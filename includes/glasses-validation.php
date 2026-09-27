@@ -61,8 +61,9 @@ function glasses_validation_snapshot(PDO $pdo,int $org,array $session): array
         $check=glasses_validation_component_check($component);
         $checks[]=$check;
         if($check['optional'])continue;
-        if($check['componentStatus']==='unexpected'){
-            $blockers[]=['type'=>'unexpected','componentKey'=>$check['componentKey'],'message'=>'Unexpected component detected: '.$check['displayName']];
+        if($check['expectedQuantity']<=0){
+            if($check['componentStatus']==='unexpected')
+                $blockers[]=['type'=>'unexpected','componentKey'=>$check['componentKey'],'message'=>'Unexpected component detected: '.$check['displayName']];
             continue;
         }
         $required++;
