@@ -26,9 +26,17 @@ function glasses_definition_component_key(string $name,int $ingredientId): strin
     return $slug!==''?'name:'.$slug:'name:unknown';
 }
 
+function glasses_definition_table_exists(PDO $pdo,string $table): bool
+{
+    $q=$pdo->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?");
+    $q->execute([$table]);
+    return (int)$q->fetchColumn()===1;
+}
+
 function glasses_definition_menu(PDO $pdo,int $org,int $menuItemId): array
 {
-    $menu=glasses_definition_menu($pdo,$org,$menuItemId);
+    $menu=menu_training_item($pdo,$org,$menuItemId);
+    if(!$menu)throw new InvalidArgumentException('Active menu item was not found.');
     $q=$pdo->prepare("SELECT ing.id,ing.canonical_name,mii.display_name,mii.is_optional,mii.can_remove,mii.sort_order
         FROM menu_item_ingredients mii
         JOIN ingredients ing ON ing.id=mii.ingredient_id AND ing.organization_id=?
@@ -62,9 +70,8 @@ function glasses_definition_quantity(mixed $value): ?float
 
 function glasses_definition_recipe(PDO $pdo,int $org,int $menuItemId,?string $recipePublicId=null): array
 {
-    $menu=menu_training_item($pdo,$org,$menuItemId);
-    if(!$menu)throw new InvalidArgumentException('Active menu item was not found.');
-    if(!glasses_work_table_exists($pdo,'recipes'))throw new RuntimeException('Recipe Library is not installed.');
+    $menu=glasses_definition_menu($pdo,$org,$menuItemId);
+    if(!glasses_definition_table_exists($pdo,'recipes'))throw new RuntimeException('Recipe Library is not installed.');
 
     if($recipePublicId!==null&&trim($recipePublicId)!==''){
         $q=$pdo->prepare("SELECT * FROM recipes WHERE organization_id=? AND public_id=? AND archived_at IS NULL AND status='active' LIMIT 1");
