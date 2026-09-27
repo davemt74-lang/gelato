@@ -7,7 +7,7 @@ The vendor `InmoAir3SDK_0.7.3.unitypackage` is intentionally **not** committed b
 ## Current runtime layers
 
 - `Runtime/Core` — pure .NET Standard 2.1 workflow/domain code with no Unity or INMO dependency.
-- `Runtime/Unity` — Unity adapters for token storage, Gelato HTTPS device API, bootstrap, mock glasses runtime, and the isolated future INMO adapter.
+- `Runtime/Unity` — Unity adapters for token storage, Gelato HTTPS device API, bootstrap, mock glasses runtime, and the isolated future INMO adapter. Production bootstrap requires an explicit `IDeviceTokenStore`; the bundled PlayerPrefs implementation is development-only.
 - `Tests` — executable .NET contract tests for pairing → current work → build → validation → Expo handoff orchestration.
 
 ## Gelato device API used by the client
@@ -41,7 +41,8 @@ The KDS, recipe, validation, build-session, and Expo workflow must remain vendor
 3. Import the INMO AIR3 vendor package.
 4. Implement `InmoAir3Platform`.
 5. Add `UnityGelatoGateway`, `InmoAir3Platform`, and `GelatoArBootstrap` components to the app bootstrap scene.
-6. Configure the Gelato HTTPS base URL.
-7. Pair the device with a one-time pairing code generated in Gelato.
+6. Assign an `IDeviceTokenStore` implementation. `DevelopmentPlayerPrefsTokenStore` is for editor/development use only; use secure Android/AIR3-backed storage for production.
+7. Configure the Gelato HTTPS base URL.
+8. Pair the device with a one-time pairing code generated in Gelato.
 
 No HUD prefab or ingredient detector is part of this section; those are separate release units.
