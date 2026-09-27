@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__.'/glasses-core.php';
 require_once __DIR__.'/glasses-work.php';
+require_once __DIR__.'/glasses-definition.php';
 
 function glasses_build_ready(PDO $pdo): bool
 {
@@ -25,6 +26,31 @@ function glasses_build_component_key(string $name,?int $ingredientId=null): stri
 
 function glasses_build_expected_components(PDO $pdo,int $org,int $menuItemId): array
 {
+    $definition=glasses_definition_for_menu_item($pdo,$org,$menuItemId);
+    if($definition!==null&&!empty($definition['definition']['ready'])&&empty($definition['stale'])){
+        $out=[];
+        foreach((array)($definition['definition']['components']??[]) as $component){
+            $out[]=[
+                'componentKey'=>(string)$component['componentKey'],
+                'ingredientId'=>isset($component['ingredientId'])?(int)$component['ingredientId']:null,
+                'displayName'=>(string)$component['displayName'],
+                'expectedQuantity'=>(float)($component['expectedQuantity']??1),
+                'unit'=>(string)($component['unit']??'portion'),
+                'optional'=>!empty($component['optional']),
+                'sortOrder'=>(int)($component['sortOrder']??0),
+                'metadata'=>[
+                    'source'=>'glasses_build_definition',
+                    'definitionPublicId'=>$definition['publicId'],
+                    'definitionVersion'=>$definition['version'],
+                    'recipePublicId'=>$definition['recipePublicId'],
+                    'recipeMatched'=>!empty($component['recipeMatched']),
+                    'notes'=>(string)($component['notes']??''),
+                ],
+            ];
+        }
+        return $out;
+    }
+
     $q=$pdo->prepare("SELECT ing.id ingredient_id,ing.canonical_name,mii.display_name,mii.is_optional,mii.sort_order
         FROM menu_item_ingredients mii
         JOIN ingredients ing ON ing.id=mii.ingredient_id AND ing.organization_id=?
@@ -57,9 +83,11 @@ function glasses_build_event(PDO $pdo,int $org,int $sessionId,string $type,?stri
 
 function glasses_build_session_row(PDO $pdo,int $org,string $publicId,bool $forUpdate=false): array
 {
-    $sql="SELECT s.*,d.public_id device_public_id,k.public_id kds_public_id,k.location_id,k.station_id,k.status kds_status,ks.public_id station_public_id,ks.name station_name
+    $sql="SELECT s.*,d.public_id device_public_id,k.public_id kds_public_id,k.location_id,k.station_id,k.status kds_status,ks.public_id station_public_id,ks.name station_name,
+        bd.public_id build_definition_public_id,bd.version build_definition_version,bd.status build_definition_status
         FROM glasses_build_sessions s
         JOIN glasses_devices d ON d.id=s.device_id AND d.organization_id=s.organization_id
+        LEFT JOIN glasses_build_definitions bd ON bd.id=s.build_definition_id AND bd.organization_id=s.organization_id
         JOIN kds_order_items k ON k.id=s.kds_order_item_id AND k.organization_id=s.organization_id
         LEFT JOIN kds_stations ks ON ks.id=k.station_id AND ks.organization_id=k.organization_id
         WHERE s.organization_id=? AND s.public_id=? LIMIT 1".($forUpdate?' FOR UPDATE':'');
@@ -139,6 +167,12 @@ function glasses_build_payload(PDO $pdo,int $org,string $publicId): array
         'posCheckItemId'=>(int)$session['pos_check_item_id'],
         'menuItemId'=>(int)$session['menu_item_id'],
         'sourceRevision'=>$session['source_revision'],
+        'buildDefinition'=>$session['build_definition_id']!==null?[
+            'id'=>(int)$session['build_definition_id'],
+            'publicId'=>$session['build_definition_public_id'],
+            'version'=>$session['build_definition_version']!==null?(int)$session['build_definition_version']:null,
+            'status'=>$session['build_definition_status'],
+        ]:null,
         'context'=>json_decode((string)($session['context_json']??'null'),true),
         'summary'=>glasses_build_summary_from_rows($rows),
         'components'=>$components,
@@ -187,11 +221,23 @@ function glasses_build_start(PDO $pdo,array $device,string $kdsPublicId,?string 
 
         $context=glasses_build_item_context($pdo,$org,$kds);
         $menuItemId=(int)$context['menuItemId'];
+        $definition=glasses_definition_for_menu_item($pdo,$org,$menuItemId);
+        $buildDefinitionId=null;
+        if($definition!==null&&!empty($definition['definition']['ready'])&&empty($definition['stale'])){
+            $buildDefinitionId=(int)$definition['id'];
+            $sourceRevision=$sourceRevision??(string)$definition['sourceHash'];
+            $context['buildDefinition']=[
+                'publicId'=>$definition['publicId'],
+                'version'=>$definition['version'],
+                'recipePublicId'=>$definition['recipePublicId'],
+                'steps'=>$definition['definition']['steps']??[],
+            ];
+        }
         $expected=glasses_build_expected_components($pdo,$org,$menuItemId);
         if(!$expected)throw new InvalidArgumentException('This menu item has no canonical ingredients configured for AR build tracking.');
         $public=glasses_public_id('build');
-        $pdo->prepare("INSERT INTO glasses_build_sessions (organization_id,public_id,device_id,kds_order_item_id,pos_check_item_id,menu_item_id,status,source_revision,context_json) VALUES (?,?,?,?,?,?,'active',?,?)")
-            ->execute([$org,$public,(int)$device['id'],(int)$kds['id'],(int)$kds['pos_check_item_id'],$menuItemId,$sourceRevision,glasses_json_object($context)]);
+        $pdo->prepare("INSERT INTO glasses_build_sessions (organization_id,public_id,device_id,kds_order_item_id,pos_check_item_id,menu_item_id,build_definition_id,status,source_revision,context_json) VALUES (?,?,?,?,?,?,?,'active',?,?)")
+            ->execute([$org,$public,(int)$device['id'],(int)$kds['id'],(int)$kds['pos_check_item_id'],$menuItemId,$buildDefinitionId,$sourceRevision,glasses_json_object($context)]);
         $sessionId=(int)$pdo->lastInsertId();
         $insert=$pdo->prepare("INSERT INTO glasses_build_components (organization_id,build_session_id,component_key,ingredient_id,display_name,expected_quantity,unit,is_optional,status,sort_order,metadata_json) VALUES (?,?,?,?,?,?,?,?,'waiting',?,?)");
         foreach($expected as $component)$insert->execute([
