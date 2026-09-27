@@ -8,6 +8,7 @@ namespace Gelato.Ar.Unity
     {
         [SerializeField] private MonoBehaviour glassesPlatform;
         [SerializeField] private MonoBehaviour gelatoGateway;
+        [SerializeField] private MonoBehaviour deviceTokenStore;
 
         public ArWorkflowCoordinator Coordinator { get; private set; }
 
@@ -17,11 +18,13 @@ namespace Gelato.Ar.Unity
             {
                 var platform = glassesPlatform as IGlassesPlatform;
                 var gateway = gelatoGateway as IGelatoGateway;
+                var tokenStore = deviceTokenStore as IDeviceTokenStore;
 
                 if (platform == null) throw new InvalidOperationException("Assigned glassesPlatform must implement IGlassesPlatform.");
                 if (gateway == null) throw new InvalidOperationException("Assigned gelatoGateway must implement IGelatoGateway.");
+                if (tokenStore == null) throw new InvalidOperationException("Assigned deviceTokenStore must implement IDeviceTokenStore.");
 
-                Coordinator = new ArWorkflowCoordinator(platform, gateway, new PlayerPrefsTokenStore());
+                Coordinator = new ArWorkflowCoordinator(platform, gateway, tokenStore);
                 await Coordinator.InitializeAsync();
             }
             catch (Exception ex)
