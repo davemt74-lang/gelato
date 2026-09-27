@@ -1,0 +1,95 @@
+name: AR Glasses Build Session Engine
+
+on:
+  pull_request:
+    paths:
+      - 'api/glasses-device.php'
+      - 'includes/glasses-build.php'
+      - 'database/20261012_glasses_build_session_engine.sql'
+      - 'tests/glasses-build-session-contract.php'
+      - 'docs/GLASSES-BUILD-SESSIONS.md'
+      - '.github/workflows/glasses-build-session.yml'
+  push:
+    branches: [main, 'feature/glasses-build-session-engine']
+
+jobs:
+  glasses-build-session:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - name: Syntax checks
+        run: |
+          php -l api/glasses-device.php
+          php -l includes/glasses-build.php
+          php -l tests/glasses-build-session-contract.php
+      - name: Architecture contract
+        run: |
+          grep -q 'CREATE TABLE glasses_build_sessions' database/20261012_glasses_build_session_engine.sql
+          grep -q 'CREATE TABLE glasses_build_components' database/20261012_glasses_build_session_engine.sql
+          grep -q 'CREATE TABLE glasses_build_observations' database/20261012_glasses_build_session_engine.sql
+          grep -q 'CREATE TABLE glasses_build_events' database/20261012_glasses_build_session_engine.sql
+          grep -q 'function glasses_build_start' includes/glasses-build.php
+          grep -q 'function glasses_build_observe' includes/glasses-build.php
+          grep -q 'function glasses_build_confirm' includes/glasses-build.php
+          grep -q 'function glasses_build_resolve_unexpected' includes/glasses-build.php
+          grep -q "action==='build.start'" api/glasses-device.php
+          grep -q "action==='build.observe'" api/glasses-device.php
+          grep -q "action==='build.confirm'" api/glasses-device.php
+          ! grep -q 'kds_transition' includes/glasses-build.php
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_restaurant_ai_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->ensureTrackingTables();
+          $s->bootstrapLegacyHistory(null);
+          $s->applyPending(null);
+          if($s->pendingMigrations()) exit(1);
+          PHP
+      - name: Build session behavioral contract
+        run: php tests/glasses-build-session-contract.php
+      - name: Glasses + KDS regressions
+        run: |
+          php tests/glasses-foundation-contract.php
+          php tests/glasses-work-api-contract.php
+          php tests/kds-contract.php
+          php tests/kds-production-expo-contract.php
+      - name: Upgrader idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->assertAppliedChecksumsUnchanged();
+          if($s->pendingMigrations()) exit(2);
+          if($s->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP
