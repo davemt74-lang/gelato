@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace Gelato.Ar.Unity
 {
-    public sealed class PlayerPrefsTokenStore : IDeviceTokenStore
+    public sealed class DevelopmentPlayerPrefsTokenStore : MonoBehaviour, IDeviceTokenStore
     {
         private const string Key = "gelato.ar.device_token";
 
