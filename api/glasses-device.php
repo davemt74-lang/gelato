@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/glasses-core.php';
+require_once __DIR__.'/../includes/glasses-work.php';
 
 $pdo=app_pdo();
 if(!glasses_ready($pdo))app_json_response(['ok'=>false,'message'=>'Glasses plugin migration is not installed.'],503);
@@ -47,6 +48,11 @@ try{
     if($action==='heartbeat'){
         $public=glasses_heartbeat($pdo,$device,$in);
         app_json_response(['ok'=>true,'device'=>$public,'serverTime'=>(new DateTimeImmutable())->format(DATE_ATOM)]);
+    }
+
+    if($action==='current_work'){
+        $work=glasses_current_work($pdo,$device);
+        app_json_response(['ok'=>true,'work'=>$work,'serverTime'=>(new DateTimeImmutable())->format(DATE_ATOM)]);
     }
 
     if($action==='self'){
