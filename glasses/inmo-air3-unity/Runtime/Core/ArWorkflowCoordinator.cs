@@ -11,6 +11,7 @@ namespace Gelato.Ar.Core
         private readonly IDeviceTokenStore _tokenStore;
         private string? _deviceToken;
 
+        public IGlassesPlatform Platform => _platform;
         public WorkflowState State { get; private set; } = WorkflowState.Uninitialized;
         public CurrentWork? CurrentWork { get; private set; }
         public BuildSession? BuildSession { get; private set; }
@@ -96,6 +97,7 @@ namespace Gelato.Ar.Core
 
                 Validation = null;
                 Handoff = null;
+                _platform.StartTracking();
                 State = WorkflowState.Building;
                 return BuildSession;
             }).ConfigureAwait(false);
@@ -138,6 +140,7 @@ namespace Gelato.Ar.Core
             return await GuardAsync(async () =>
             {
                 Handoff = await _gateway.HandoffExpoAsync(BuildSession!.PublicId, cancellationToken).ConfigureAwait(false);
+                _platform.StopTracking();
                 State = WorkflowState.HandedOff;
                 return Handoff;
             }).ConfigureAwait(false);
