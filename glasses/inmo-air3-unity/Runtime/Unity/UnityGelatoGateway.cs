@@ -96,6 +96,30 @@ namespace Gelato.Ar.Unity
             return MapBuild(response.buildSession);
         }
 
+        public async Task<BuildSession> ConfirmComponentAsync(string buildSessionPublicId, string componentKey, CancellationToken cancellationToken)
+        {
+            var response = await PostAsync<BuildResponse>(new ComponentActionRequest
+            {
+                action = DeviceApiActions.BuildConfirm,
+                buildSessionPublicId = buildSessionPublicId,
+                componentKey = componentKey
+            }, true, cancellationToken);
+
+            return MapBuild(response.buildSession);
+        }
+
+        public async Task<BuildSession> ResolveUnexpectedAsync(string buildSessionPublicId, string componentKey, CancellationToken cancellationToken)
+        {
+            var response = await PostAsync<BuildResponse>(new ComponentActionRequest
+            {
+                action = DeviceApiActions.ResolveUnexpected,
+                buildSessionPublicId = buildSessionPublicId,
+                componentKey = componentKey
+            }, true, cancellationToken);
+
+            return MapBuild(response.buildSession);
+        }
+
         public async Task<ProductValidation> EvaluateAsync(string buildSessionPublicId, CancellationToken cancellationToken)
         {
             var response = await PostAsync<ValidationResponse>(new BuildSessionRequest
@@ -275,6 +299,7 @@ namespace Gelato.Ar.Unity
         [Serializable] private class ActionRequest { public string action; }
         [Serializable] private class BuildSessionRequest : ActionRequest { public string buildSessionPublicId; }
         [Serializable] private sealed class BuildStartRequest : ActionRequest { public string kdsItemPublicId; public string sourceRevision; }
+        [Serializable] private sealed class ComponentActionRequest : BuildSessionRequest { public string componentKey; }
         [Serializable] private sealed class PairRequest : ActionRequest
         {
             public string pairingCode;
