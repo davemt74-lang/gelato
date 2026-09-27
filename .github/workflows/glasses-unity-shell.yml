@@ -1,0 +1,46 @@
+name: AR Glasses Unity Shell
+
+on:
+  pull_request:
+    paths:
+      - 'glasses/inmo-air3-unity/**'
+      - 'docs/GLASSES-UNITY-SHELL.md'
+      - '.github/workflows/glasses-unity-shell.yml'
+  push:
+    branches: [main, 'feature/glasses-unity-shell']
+
+jobs:
+  unity-shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Validate Unity assembly manifests
+        run: |
+          python -m json.tool glasses/inmo-air3-unity/Runtime/Core/Gelato.Ar.Core.asmdef >/dev/null
+          python -m json.tool glasses/inmo-air3-unity/Runtime/Unity/Gelato.Ar.Unity.asmdef >/dev/null
+      - name: Architecture contract
+        run: |
+          grep -q 'interface IGlassesPlatform' glasses/inmo-air3-unity/Runtime/Core/Contracts.cs
+          grep -q 'interface IGelatoGateway' glasses/inmo-air3-unity/Runtime/Core/Contracts.cs
+          grep -q 'class ArWorkflowCoordinator' glasses/inmo-air3-unity/Runtime/Core/ArWorkflowCoordinator.cs
+          grep -q 'ReadyForFinishing' glasses/inmo-air3-unity/Runtime/Core/ArWorkflowCoordinator.cs
+          grep -q '_platform.StartTracking()' glasses/inmo-air3-unity/Runtime/Core/ArWorkflowCoordinator.cs
+          grep -q '_platform.StopTracking()' glasses/inmo-air3-unity/Runtime/Core/ArWorkflowCoordinator.cs
+          grep -q 'DeviceApiActions.HandoffExpo' glasses/inmo-air3-unity/Runtime/Unity/UnityGelatoGateway.cs
+          grep -q 'https://' glasses/inmo-air3-unity/Runtime/Unity/UnityGelatoGateway.cs
+          grep -q 'GetAir3ImageData' glasses/inmo-air3-unity/Runtime/Unity/InmoAir3Platform.cs
+          grep -q 'GetAir3CameraParams' glasses/inmo-air3-unity/Runtime/Unity/InmoAir3Platform.cs
+          grep -q 'Start6Dof' glasses/inmo-air3-unity/Runtime/Unity/InmoAir3Platform.cs
+          ! grep -R 'UnityEngine' glasses/inmo-air3-unity/Runtime/Core
+          ! grep -R 'ArPoseManager' glasses/inmo-air3-unity/Runtime/Core
+          test "$(grep -R -l 'ArPoseManager' glasses/inmo-air3-unity/Runtime/Unity | wc -l)" = "1"
+          grep -q 'DevelopmentPlayerPrefsTokenStore' glasses/inmo-air3-unity/Runtime/Unity/PlayerPrefsTokenStore.cs
+          grep -q 'deviceTokenStore as IDeviceTokenStore' glasses/inmo-air3-unity/Runtime/Unity/GelatoArBootstrap.cs
+          ! grep -q 'new PlayerPrefsTokenStore' glasses/inmo-air3-unity/Runtime/Unity/GelatoArBootstrap.cs
+      - name: Compile hardware-neutral AIR3 core
+        run: dotnet build glasses/inmo-air3-unity/Runtime/Core/Gelato.Ar.Core.csproj -c Release --nologo
+      - name: Run workflow coordinator contract
+        run: dotnet run --project glasses/inmo-air3-unity/Tests/Gelato.Ar.Core.Tests.csproj -c Release
