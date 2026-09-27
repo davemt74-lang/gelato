@@ -45,4 +45,4 @@ The KDS, recipe, validation, build-session, and Expo workflow must remain vendor
 7. Configure the Gelato HTTPS base URL.
 8. Pair the device with a one-time pairing code generated in Gelato.
 
-No HUD prefab or ingredient detector is part of this section; those are separate release units.
+The right-rail HUD is now implemented programmatically: ITEM, BUILD STEPS, PRODUCT VALIDATION, and conditional NEXT stay on the right side while the center remains clear except for short-lived ingredient outlines. The ingredient detector itself remains a separate release unit.
