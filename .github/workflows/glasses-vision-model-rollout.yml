@@ -19,7 +19,7 @@ on:
       - 'docs/GLASSES-VISION-MODEL-ACTIVATION.md'
       - '.github/workflows/glasses-vision-model-rollout.yml'
   push:
-    branches: [main, 'feature/glasses-vision-model-rollout']
+    branches: [main, 'feature/glasses-vision-model-rollout', 'feature/onnx-model-onboarding-preflight']
 
 jobs:
   vision-model-rollout:
@@ -67,6 +67,12 @@ jobs:
           grep -q 'CREATE TABLE glasses_vision_model_assignments' database/20261021_glasses_vision_model_assignment_ledger.sql
           grep -q 'ADD COLUMN assignment_id' database/20261021_glasses_vision_model_assignment_ledger.sql
           grep -q 'function glasses_vision_model_package_create' includes/glasses-vision-models.php
+          grep -q 'function glasses_vision_browser_inference_metadata' includes/glasses-vision-models.php
+          grep -q 'gelato.browser_onnx_detector.v1' includes/glasses-vision-models.php
+          grep -q 'Verify browser artifact' glasses-vision-models.php
+          grep -q 'crypto.subtle.digest' assets/js/glasses-vision-models.js
+          grep -q 'ort.InferenceSession.create' assets/js/glasses-vision-models.js
+          grep -q 'browserPreflight' assets/js/glasses-vision-models.js
           grep -Fq '/^\d+(?:\.\d+){0,3}(?:[-+][0-9A-Za-z.-]+)?$/' includes/glasses-vision-models.php
           grep -q 'function glasses_vision_model_rollout_advance' includes/glasses-vision-models.php
           grep -q 'function glasses_vision_model_rollout_rollback' includes/glasses-vision-models.php

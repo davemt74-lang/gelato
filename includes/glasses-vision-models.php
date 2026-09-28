@@ -80,6 +80,48 @@ function glasses_vision_model_version_at_least(?string $actual,?string $minimum)
     return version_compare($actualParsed,$minimumParsed,'>=');
 }
 
+function glasses_vision_browser_inference_metadata(mixed $metadata,string $runtime): ?array
+{
+    if($runtime!=='onnx')return null;
+    if(!is_array($metadata))return null;
+    $browser=is_array($metadata['browserInference']??null)?$metadata['browserInference']:null;
+    if($browser===null)return null;
+    if((string)($browser['schema']??'')!=='gelato.browser_onnx_detector.v1')
+        throw new InvalidArgumentException('Browser inference schema is unsupported.');
+    if((string)($browser['decoder']??'')!=='yolo_v8')
+        throw new InvalidArgumentException('Browser inference decoder is unsupported.');
+    $input=is_array($browser['input']??null)?$browser['input']:[];
+    $output=is_array($browser['output']??null)?$browser['output']:[];
+    $width=(int)($input['width']??0);$height=(int)($input['height']??0);
+    if($width<32||$width>4096||$height<32||$height>4096)
+        throw new InvalidArgumentException('Browser inference input dimensions must be between 32 and 4096 pixels.');
+    $inputName=mb_substr(trim((string)($input['name']??'')),0,160,'UTF-8');
+    $outputName=mb_substr(trim((string)($output['name']??'')),0,160,'UTF-8');
+    if($inputName===''||$outputName==='')throw new InvalidArgumentException('Browser inference input and output names are required.');
+    $layout=(string)($input['layout']??'nchw');
+    if(!in_array($layout,['nchw','nhwc'],true))throw new InvalidArgumentException('Browser inference input layout is invalid.');
+    $outputLayout=(string)($output['layout']??'channels_first');
+    if(!in_array($outputLayout,['channels_first','rows'],true))throw new InvalidArgumentException('Browser inference output layout is invalid.');
+    $boxScale=(string)($output['boxScale']??'pixels');
+    if(!in_array($boxScale,['pixels','normalized'],true))throw new InvalidArgumentException('Browser inference box scale is invalid.');
+    $labels=array_values(array_filter(array_map(static fn($v)=>mb_substr(trim((string)$v),0,160,'UTF-8'),(array)($browser['labels']??[])),static fn($v)=>$v!==''));
+    if(!$labels||count($labels)>1000)throw new InvalidArgumentException('Browser inference labels are required.');
+    if(count($labels)!==count(array_unique($labels)))throw new InvalidArgumentException('Browser inference labels must be unique.');
+    $nms=(float)($browser['nmsIou']??0.45);
+    if(!is_finite($nms)||$nms<0.05||$nms>0.95)throw new InvalidArgumentException('Browser inference NMS IoU is invalid.');
+    $max=(int)($browser['maxDetections']??25);
+    if($max<1||$max>100)throw new InvalidArgumentException('Browser inference max detections must be between 1 and 100.');
+    return [
+        'schema'=>'gelato.browser_onnx_detector.v1',
+        'decoder'=>'yolo_v8',
+        'input'=>['name'=>$inputName,'width'=>$width,'height'=>$height,'layout'=>$layout],
+        'output'=>['name'=>$outputName,'layout'=>$outputLayout,'boxScale'=>$boxScale],
+        'labels'=>$labels,
+        'nmsIou'=>round($nms,4),
+        'maxDetections'=>$max,
+    ];
+}
+
 function glasses_vision_model_package_public(array $row): array
 {
     return [
@@ -148,7 +190,10 @@ function glasses_vision_model_package_create(PDO $pdo,int $org,array $input,int 
     $minimumSdk=glasses_vision_model_version($input['minimumSdkVersion']??null);
     $minimumApp=glasses_vision_model_version($input['minimumAppVersion']??null);
     $notes=mb_substr(trim((string)($input['notes']??'')),0,1000,'UTF-8')?:null;
-    $metadata=glasses_json_object(is_array($input['metadata']??null)?$input['metadata']:null,12000);
+    $metadataInput=is_array($input['metadata']??null)?$input['metadata']:[];
+    $browserInference=glasses_vision_browser_inference_metadata($metadataInput,$runtime);
+    if($browserInference!==null)$metadataInput['browserInference']=$browserInference;
+    $metadata=glasses_json_object($metadataInput?:null,12000);
     $public=glasses_public_id('vision-model');
 
     try{
