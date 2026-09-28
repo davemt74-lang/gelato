@@ -23,7 +23,8 @@ namespace Gelato.Ar.Unity
                 coordinator.CurrentWork,
                 coordinator.BuildSession,
                 coordinator.Validation,
-                coordinator.Handoff
+                coordinator.Handoff,
+                coordinator.ReviewFeedback
             );
             hud.Render(model);
         }
