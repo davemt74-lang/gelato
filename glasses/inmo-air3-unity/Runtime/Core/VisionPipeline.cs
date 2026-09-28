@@ -14,6 +14,7 @@ namespace Gelato.Ar.Core
         private readonly List<TrackState> _tracks = new List<TrackState>();
         private string _sessionPublicId = string.Empty;
         private int _nextTrackId = 1;
+        private long _lastFrameTimestampNanoseconds = long.MinValue;
 
         public VisionPipeline(IVisionDetector detector, VisionPipelineOptions? options = null)
         {
@@ -24,12 +25,15 @@ namespace Gelato.Ar.Core
 
         public string DetectorName => _detector.DetectorName;
         public int ActiveTrackCount => _tracks.Count;
+        public VisionPipelineDiagnostics Diagnostics { get; } = new VisionPipelineDiagnostics();
 
         public void Reset(string? buildSessionPublicId = null)
         {
             _tracks.Clear();
             _nextTrackId = 1;
+            _lastFrameTimestampNanoseconds = long.MinValue;
             _sessionPublicId = buildSessionPublicId?.Trim() ?? string.Empty;
+            Diagnostics.Reset();
         }
 
         public async Task<IReadOnlyList<IngredientObservation>> ProcessAsync(
@@ -41,37 +45,89 @@ namespace Gelato.Ar.Core
             if (context == null) throw new ArgumentNullException(nameof(context));
             if (string.IsNullOrWhiteSpace(context.BuildSessionPublicId))
                 throw new InvalidOperationException("Vision processing requires an active build-session identity.");
+            if (frame.Data == null || frame.Data.Length == 0 || frame.Width <= 0 || frame.Height <= 0)
+                throw new InvalidOperationException("Vision processing requires a non-empty camera frame with valid dimensions.");
 
             if (!string.Equals(_sessionPublicId, context.BuildSessionPublicId, StringComparison.Ordinal))
                 Reset(context.BuildSessionPublicId);
 
+            if (_options.RequireMonotonicTimestamps && frame.TimestampNanoseconds > 0)
+            {
+                if (_lastFrameTimestampNanoseconds != long.MinValue
+                    && frame.TimestampNanoseconds <= _lastFrameTimestampNanoseconds)
+                {
+                    Diagnostics.DuplicateOrStaleFramesSkipped++;
+                    return Array.Empty<IngredientObservation>();
+                }
+                _lastFrameTimestampNanoseconds = frame.TimestampNanoseconds;
+            }
+
             cancellationToken.ThrowIfCancellationRequested();
+            Diagnostics.FramesProcessed++;
+
             var detections = await _detector.DetectAsync(frame, context, cancellationToken).ConfigureAwait(false)
                 ?? Array.Empty<VisionDetection>();
 
-            var expected = new HashSet<string>(
-                context.ExpectedComponents
-                    .Where(c => !string.IsNullOrWhiteSpace(c.ComponentKey))
-                    .Select(c => c.ComponentKey),
-                StringComparer.Ordinal
-            );
+            Diagnostics.DetectionsReceived += detections.Count;
+
+            var expectedByKey = new Dictionary<string, BuildComponent>(StringComparer.Ordinal);
+            var expectedByName = new Dictionary<string, List<BuildComponent>>(StringComparer.Ordinal);
+
+            foreach (var component in context.ExpectedComponents)
+            {
+                if (component == null || string.IsNullOrWhiteSpace(component.ComponentKey)) continue;
+                expectedByKey[component.ComponentKey] = component;
+
+                var normalized = NormalizeLabel(component.DisplayName);
+                if (normalized.Length == 0) continue;
+                if (!expectedByName.TryGetValue(normalized, out var list))
+                {
+                    list = new List<BuildComponent>();
+                    expectedByName[normalized] = list;
+                }
+                list.Add(component);
+            }
 
             var accepted = new List<VisionDetection>();
-            foreach (var detection in detections)
+            var detectionLimit = Math.Min(detections.Count, _options.MaxDetectionsPerFrame);
+            for (var i = 0; i < detectionLimit; i++)
             {
-                if (detection == null) continue;
-                if (detection.Confidence < _options.MinimumConfidence) continue;
-                if (string.IsNullOrWhiteSpace(detection.ComponentKey)) continue;
-                if (!detection.IsUnexpected && !expected.Contains(detection.ComponentKey)) continue;
-                if (detection.Quantity <= 0f) continue;
+                var detection = detections[i];
+                if (detection == null)
+                {
+                    Diagnostics.DetectionsRejected++;
+                    continue;
+                }
+
+                if (detection.Confidence < _options.MinimumConfidence
+                    || detection.Quantity <= 0f)
+                {
+                    Diagnostics.DetectionsRejected++;
+                    continue;
+                }
 
                 var box = VisionBoundingBox.FromArray(detection.BoundingBox);
-                if (box.Area <= 0f) continue;
+                if (box.Area <= 0f)
+                {
+                    Diagnostics.DetectionsRejected++;
+                    continue;
+                }
+
+                if (!TryResolveDetection(detection, expectedByKey, expectedByName))
+                {
+                    Diagnostics.DetectionsRejected++;
+                    continue;
+                }
 
                 detection.BoundingBox = box.ToArray();
                 detection.Confidence = Math.Max(0f, Math.Min(1f, detection.Confidence));
+                detection.Quantity = Math.Max(0.001f, detection.Quantity);
                 accepted.Add(detection);
+                Diagnostics.DetectionsAccepted++;
             }
+
+            if (detections.Count > detectionLimit)
+                Diagnostics.DetectionsRejected += detections.Count - detectionLimit;
 
             var matched = new HashSet<int>();
             var observations = new List<IngredientObservation>();
@@ -81,6 +137,12 @@ namespace Gelato.Ar.Core
                 var track = FindTrack(detection, matched);
                 if (track == null)
                 {
+                    if (_tracks.Count >= _options.MaxActiveTracks)
+                    {
+                        Diagnostics.DetectionsRejected++;
+                        continue;
+                    }
+
                     track = new TrackState
                     {
                         TrackId = _nextTrackId++,
@@ -117,7 +179,7 @@ namespace Gelato.Ar.Core
                 if (track.Emitted || track.StableFrames < _options.StableFramesRequired) continue;
 
                 track.Emitted = true;
-                observations.Add(new IngredientObservation
+                var observation = new IngredientObservation
                 {
                     ObservationKey = BuildObservationKey(_sessionPublicId, track.TrackId),
                     ComponentKey = track.ComponentKey,
@@ -127,7 +189,9 @@ namespace Gelato.Ar.Core
                     Confidence = track.Confidence,
                     TrackingId = "vision-track-" + track.TrackId,
                     BoundingBox = track.Box.ToArray()
-                });
+                };
+                observations.Add(observation);
+                Diagnostics.ObservationsEmitted++;
             }
 
             for (var i = _tracks.Count - 1; i >= 0; i--)
@@ -140,6 +204,50 @@ namespace Gelato.Ar.Core
             }
 
             return observations;
+        }
+
+        private static bool TryResolveDetection(
+            VisionDetection detection,
+            IReadOnlyDictionary<string, BuildComponent> expectedByKey,
+            IReadOnlyDictionary<string, List<BuildComponent>> expectedByName)
+        {
+            var componentKey = detection.ComponentKey?.Trim() ?? string.Empty;
+            var label = !string.IsNullOrWhiteSpace(detection.Label)
+                ? detection.Label.Trim()
+                : detection.DisplayName?.Trim() ?? string.Empty;
+
+            if (detection.IsUnexpected)
+            {
+                var display = !string.IsNullOrWhiteSpace(detection.DisplayName)
+                    ? detection.DisplayName.Trim()
+                    : (!string.IsNullOrWhiteSpace(label) ? label : "Unexpected Ingredient");
+
+                detection.DisplayName = display;
+                detection.Label = label;
+                detection.ComponentKey = componentKey.Length > 0
+                    ? componentKey
+                    : "vision:unexpected:" + Slug(display);
+                return !string.IsNullOrWhiteSpace(detection.ComponentKey);
+            }
+
+            if (componentKey.Length > 0)
+            {
+                if (!expectedByKey.TryGetValue(componentKey, out var direct)) return false;
+                detection.ComponentKey = direct.ComponentKey;
+                if (string.IsNullOrWhiteSpace(detection.DisplayName)) detection.DisplayName = direct.DisplayName;
+                return true;
+            }
+
+            var normalized = NormalizeLabel(label);
+            if (normalized.Length == 0) return false;
+            if (!expectedByName.TryGetValue(normalized, out var matches) || matches.Count != 1) return false;
+
+            var resolved = matches[0];
+            detection.ComponentKey = resolved.ComponentKey;
+            detection.DisplayName = string.IsNullOrWhiteSpace(detection.DisplayName)
+                ? resolved.DisplayName
+                : detection.DisplayName.Trim();
+            return true;
         }
 
         private TrackState? FindTrack(VisionDetection detection, HashSet<int> alreadyMatched)
@@ -178,6 +286,33 @@ namespace Gelato.Ar.Core
             if (string.Equals(action, "removed", StringComparison.Ordinal)) return "removed";
             if (string.Equals(action, "seen", StringComparison.Ordinal)) return "seen";
             return "added";
+        }
+
+        private static string NormalizeLabel(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+            var builder = new StringBuilder(value.Length);
+            var pendingSpace = false;
+            foreach (var ch in value.Trim().ToLowerInvariant())
+            {
+                if (char.IsLetterOrDigit(ch))
+                {
+                    if (pendingSpace && builder.Length > 0) builder.Append(' ');
+                    builder.Append(ch);
+                    pendingSpace = false;
+                }
+                else
+                {
+                    pendingSpace = true;
+                }
+            }
+            return builder.ToString();
+        }
+
+        private static string Slug(string value)
+        {
+            var normalized = NormalizeLabel(value);
+            return normalized.Length == 0 ? "unknown" : normalized.Replace(' ', '-');
         }
 
         private static string BuildObservationKey(string session, int trackId)
