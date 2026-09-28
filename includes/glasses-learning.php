@@ -207,7 +207,7 @@ function glasses_learning_analytics(
     $total=count($rows);
     $corrected=0;$rejected=0;$reclassified=0;$quantityCorrected=0;$reviewed=0;
     $confidenceSum=0.0;$confidenceCount=0;
-    $bands=[];$components=[];$evidenceKinds=[];
+    $bands=[];$components=[];$evidenceKinds=[];$modelLabels=[];
 
     foreach(['0.00–0.49','0.50–0.74','0.75–0.84','0.85–0.94','0.95–1.00'] as $band)
         $bands[$band]=['band'=>$band,'observations'=>0,'corrected'=>0,'rejected'=>0,'reclassified'=>0,'correctionRate'=>0.0];
@@ -249,6 +249,24 @@ function glasses_learning_analytics(
         ];
         $evidenceKinds[$kind]['observations']++;
         if($isCorrected)$evidenceKinds[$kind]['corrected']++;
+
+        $detectorLabel=is_array($metadata)?trim((string)($metadata['detectorLabel']??'')):'';
+        if($detectorLabel!==''){
+            $profileMatched=!empty($metadata['profileMatched']);
+            $labelKey=mb_strtolower($detectorLabel,'UTF-8').'|'.($profileMatched?'profile':'fallback');
+            if(!isset($modelLabels[$labelKey]))$modelLabels[$labelKey]=[
+                'detectorLabel'=>$detectorLabel,
+                'profileMatched'=>$profileMatched,
+                'minimumConfidence'=>!empty($metadata['hasProfileMinimumConfidence'])
+                    ?(float)($metadata['profileMinimumConfidence']??0)
+                    :null,
+                'observations'=>0,'corrected'=>0,'rejected'=>0,'reclassified'=>0,'correctionRate'=>0.0
+            ];
+            $modelLabels[$labelKey]['observations']++;
+            if($isCorrected)$modelLabels[$labelKey]['corrected']++;
+            if($outcome==='rejected')$modelLabels[$labelKey]['rejected']++;
+            if($outcome==='reclassified')$modelLabels[$labelKey]['reclassified']++;
+        }
     }
 
     foreach($bands as &$band){
@@ -260,6 +278,9 @@ function glasses_learning_analytics(
     foreach($evidenceKinds as &$kind){
         $kind['correctionRate']=$kind['observations']>0?round($kind['corrected']/$kind['observations'],4):0.0;
     }unset($kind);
+    foreach($modelLabels as &$label){
+        $label['correctionRate']=$label['observations']>0?round($label['corrected']/$label['observations'],4):0.0;
+    }unset($label);
 
     $components=array_values($components);
     usort($components,static function(array $a,array $b):int{
@@ -268,6 +289,11 @@ function glasses_learning_analytics(
     });
     $evidenceKinds=array_values($evidenceKinds);
     usort($evidenceKinds,static fn(array $a,array $b):int=>$b['observations']<=>$a['observations']);
+    $modelLabels=array_values($modelLabels);
+    usort($modelLabels,static function(array $a,array $b):int{
+        $rate=$b['correctionRate']<=>$a['correctionRate'];
+        return $rate!==0?$rate:($b['observations']<=>$a['observations']);
+    });
 
     return [
         'window'=>['days'=>$days],
@@ -286,6 +312,7 @@ function glasses_learning_analytics(
         'confidenceBands'=>array_values($bands),
         'components'=>$components,
         'evidenceKinds'=>$evidenceKinds,
+        'modelLabels'=>$modelLabels,
         'interpretation'=>[
             'uncorrectedDoesNotMeanVerifiedCorrect'=>true,
             'correctionRateIsHumanInterventionRate'=>true,
