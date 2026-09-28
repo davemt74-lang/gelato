@@ -82,13 +82,13 @@ $cheese=glasses_vision_profile_save($pdo,$org,[
 $genericMystery=glasses_vision_profile_save($pdo,$org,[
     'ingredientId'=>$ingredients['Turkey'],
     'detectorName'=>'*',
-    'modelLabel'=>'mystery_slice',
+    'modelLabel'=>'Turkey',
     'minimumConfidence'=>0.72,
 ],$user);
 $specificMystery=glasses_vision_profile_save($pdo,$org,[
     'ingredientId'=>$ingredients['Swiss Cheese'],
     'detectorName'=>'Food Model V3',
-    'modelLabel'=>'mystery slice',
+    'modelLabel'=>'Turkey',
     'minimumConfidence'=>0.93,
 ],$user);
 
@@ -120,8 +120,8 @@ $profile=glasses_vision_profile_for_build($pdo,$device,$sessionPublic,'Food Mode
 gvlp_assert((string)$profile['schema']==='gelato.vision_label_profile.v1','Runtime vision profile schema must be versioned.');
 gvlp_assert((string)$profile['detectorName']==='food-model-v3','Runtime detector identity must be normalized.');
 gvlp_assert(count($profile['mappings'])===2,'Runtime profile must include only recipe ingredients, excluding unrelated Cheese and detector-specific non-recipe overrides.');
-gvlp_assert(count(array_filter($profile['mappings'],static fn(array $row):bool=>$row['normalizedLabel']==='mystery slice'))===0,'Detector-specific non-recipe override must suppress the generic recipe mapping and fail closed.');
-gvlp_assert(in_array('mystery slice',$profile['blockedLabels'],true),'Suppressed detector-specific non-recipe labels must be explicitly blocked so the client cannot recipe-name fallback them.');
+gvlp_assert(count(array_filter($profile['mappings'],static fn(array $row):bool=>$row['normalizedLabel']==='turkey'))===0,'Detector-specific non-recipe override must suppress the generic recipe mapping and fail closed.');
+gvlp_assert(in_array('turkey',$profile['blockedLabels'],true),'Suppressed detector-specific non-recipe labels must be explicitly blocked so the client cannot recipe-name fallback them.');
 gvlp_assert(strlen((string)$profile['profileHash'])===64,'Runtime profile must carry a deterministic SHA-256 hash.');
 
 $turkey=gvlp_mapping($profile,'turkey slice');
