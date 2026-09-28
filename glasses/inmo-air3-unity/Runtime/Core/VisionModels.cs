@@ -91,6 +91,10 @@ namespace Gelato.Ar.Core
         public bool RequireMonotonicTimestamps { get; set; } = true;
         public float SpatialSupportBoost { get; set; } = 0.06f;
         public float SpatialConflictPenalty { get; set; } = 0.20f;
+        public float TransferSupportBoost { get; set; } = 0.08f;
+        public int TransferMinimumFrames { get; set; } = 3;
+        public float TransferMinimumDistance { get; set; } = 0.08f;
+        public bool RequireStableInstanceForTransfer { get; set; } = true;
 
         public void Validate()
         {
@@ -110,6 +114,12 @@ namespace Gelato.Ar.Core
                 throw new InvalidOperationException("Vision spatial support boost is invalid.");
             if (SpatialConflictPenalty < 0f || SpatialConflictPenalty > 0.50f)
                 throw new InvalidOperationException("Vision spatial conflict penalty is invalid.");
+            if (TransferSupportBoost < 0f || TransferSupportBoost > 0.25f)
+                throw new InvalidOperationException("Vision transfer support boost is invalid.");
+            if (TransferMinimumFrames < 2 || TransferMinimumFrames > 60)
+                throw new InvalidOperationException("Vision transfer minimum-frame requirement is invalid.");
+            if (TransferMinimumDistance < 0f || TransferMinimumDistance > 1f)
+                throw new InvalidOperationException("Vision transfer minimum distance is invalid.");
         }
     }
 
@@ -123,6 +133,8 @@ namespace Gelato.Ar.Core
         public long ObservationsEmitted { get; internal set; }
         public long SpatialSupports { get; internal set; }
         public long SpatialConflicts { get; internal set; }
+        public long TransferStarts { get; internal set; }
+        public long TransferCompletions { get; internal set; }
 
         internal void Reset()
         {
@@ -134,6 +146,8 @@ namespace Gelato.Ar.Core
             ObservationsEmitted = 0;
             SpatialSupports = 0;
             SpatialConflicts = 0;
+            TransferStarts = 0;
+            TransferCompletions = 0;
         }
     }
 }
