@@ -28,6 +28,9 @@ gws_assert(str_contains($js,"mode==='mock'"),'Simulator must have isolated mock 
 gws_assert(str_contains($js,"mode==='live'"),'Simulator must have real Gelato live mode.');
 gws_assert(str_contains($js,"metadata:{source:'web_glasses_simulator'"),'Live simulated observations must be source-labelled.');
 gws_assert(str_contains($js,"validation.status!=='ready_for_finishing'"),'Expo control must remain gated by product validation.');
+gws_assert(str_contains($js,'function selectedItem()'),'Live simulator must allow explicit KDS work selection.');
+gws_assert(str_contains($js,'resetSimulator'),'Simulator must support releasing local build UI state for the next ticket.');
+gws_assert(str_contains($page,'workItemSelect'),'Page must expose KDS item selector.');
 gws_assert(str_contains($css,'.hud-right'),'HUD must keep persistent projection on the right side.');
 gws_assert(str_contains($css,'.detection-box'),'HUD must support ingredient bounding boxes.');
 
