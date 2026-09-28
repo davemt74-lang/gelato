@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 from pathlib import Path
-import importlib.util
+import importlib.util, sys
 
 root=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location("gelato_pipeline",root/"tools/vision_training/pipeline.py")
-mod=importlib.util.module_from_spec(spec);spec.loader.exec_module(mod)
+mod=importlib.util.module_from_spec(spec);sys.modules[spec.name]=mod;spec.loader.exec_module(mod)
 
 images=[Path(f"frame-{i:06d}.jpg") for i in range(1,7)]
 manifest={"samples":[
