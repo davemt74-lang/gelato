@@ -21,6 +21,8 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
     <label>Mode <select id="modeSelect"><option value="mock">Mock</option><option value="live">Live Gelato</option></select></label>
     <label>Device <select id="deviceSelect"><option value="">Loading…</option></select></label>
     <button id="refreshWork" type="button">Refresh work</button>
+    <label class="asset-load">Scene <input id="sceneFile" type="file" accept="image/*"></label>
+    <label class="asset-load">Glasses <input id="glassesFile" type="file" accept="image/*"></label>
     <a href="kds.php">KDS</a>
     <a href="pos.php">POS</a>
   </div>
@@ -39,7 +41,8 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
         <img id="sceneImage" alt="" hidden>
         <div class="scene-copy" id="scenePlaceholder">Drop your final kitchen/glasses artwork in later — the HUD is already live.</div>
       </div>
-      <div class="glasses-frame" aria-hidden="true">
+      <img id="glassesImage" class="glasses-image" alt="" hidden>
+      <div class="glasses-frame" id="cssGlassesFrame" aria-hidden="true">
         <div class="bridge"></div>
         <div class="lens left-lens"></div>
         <div class="lens right-lens"></div>
