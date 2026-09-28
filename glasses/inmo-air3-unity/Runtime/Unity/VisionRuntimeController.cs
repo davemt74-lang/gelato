@@ -24,6 +24,8 @@ namespace Gelato.Ar.Unity
 
         private VisionPipeline _pipeline;
         private VisionDetectorRuntimeHarness _detectorRuntime;
+        private DeviceRuntimeSupervisor _deviceRuntimeSupervisor;
+        private DeviceRuntimeHealthSnapshot _deviceRuntimeHealth;
         private bool _detectorWarmupReady;
         private float _nextDetectorRecoveryRetryAt;
         private CancellationTokenSource _lifetime;
@@ -42,6 +44,7 @@ namespace Gelato.Ar.Unity
         public string DetectorName => _pipeline == null ? string.Empty : _pipeline.DetectorName;
         public int ActiveTrackCount => _pipeline == null ? 0 : _pipeline.ActiveTrackCount;
         public VisionDetectorRuntimeHealth DetectorHealth => _detectorRuntime?.Health;
+        public DeviceRuntimeHealthSnapshot DeviceHealth => _deviceRuntimeHealth;
 
         private void Awake()
         {
@@ -51,6 +54,8 @@ namespace Gelato.Ar.Unity
                 Debug.LogWarning("Gelato AR vision detector is not assigned. Vision processing is disabled.");
                 return;
             }
+
+            _deviceRuntimeSupervisor = new DeviceRuntimeSupervisor();
 
             _detectorRuntime = new VisionDetectorRuntimeHarness(detector, new VisionDetectorRuntimeOptions
             {
@@ -146,6 +151,28 @@ namespace Gelato.Ar.Unity
             }
 
             var frame = coordinator.Platform.TryGetLatestFrame();
+            var deviceSignals = new DeviceRuntimeSignals
+            {
+                PlatformInitialized = coordinator.Platform.IsInitialized,
+                CameraAvailable = frame != null && frame.Data != null && frame.Data.Length > 0,
+                FrameTimestampNanoseconds = frame?.TimestampNanoseconds ?? 0,
+                DetectorState = _detectorRuntime?.Health.State ?? VisionDetectorRuntimeState.Failed,
+                ModelRuntimeReady = _modelRecoveryService == null || _modelRecoveryReady,
+                HeartbeatHealthy = true,
+                ThermalState = "unknown",
+                ResourceConstrained = false
+            };
+            _deviceRuntimeHealth = _deviceRuntimeSupervisor.Evaluate(
+                deviceSignals,
+                TimeSpan.FromSeconds(Math.Max(0f, Time.unscaledTime)));
+
+            if (!_deviceRuntimeHealth.CanProcessAutomatedVision)
+            {
+                Debug.LogWarning("Gelato AR device runtime health is holding automated vision fail-closed: "
+                    + _deviceRuntimeHealth.PrimaryCode + " " + _deviceRuntimeHealth.Message);
+                return;
+            }
+
             if (frame == null || frame.Data == null || frame.Data.Length == 0) return;
 
             _nextInferenceAt = Time.unscaledTime + (1f / Mathf.Max(1f, maximumInferenceFps));
