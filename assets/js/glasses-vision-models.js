@@ -205,7 +205,7 @@ function renderPackages(){
    if(p.minimumSdkVersion)floor.push('SDK ≥ '+esc(p.minimumSdkVersion));
    if(p.minimumAppVersion)floor.push('App ≥ '+esc(p.minimumAppVersion));
    return '<tr>'+
-    '<td><strong>'+esc(p.modelName)+' '+esc(p.modelVersion)+'</strong><small>'+esc(p.detectorName)+' · '+esc(p.platform)+'</small></td>'+
+    '<td><strong>'+esc(p.modelName)+' '+esc(p.modelVersion)+'</strong><small>'+esc(p.detectorName)+' · '+esc(p.platform)+'</small>'+(p.metadata&&p.metadata.browserInference&&p.metadata.browserInference.schema==='gelato.browser_onnx_detector.v1'?'<span class="gvm-browser-pill">Browser ONNX</span>':'')+'</td>'+
     '<td>'+esc(p.runtimeType)+'</td>'+
     '<td>'+(floor.length?floor.join('<br>'):'None')+'</td>'+
     '<td><code title="'+esc(p.artifactSha256)+'">'+esc(shortSha(p.artifactSha256))+'</code></td>'+
