@@ -101,6 +101,7 @@ namespace Gelato.Ar.Core
                 return Array.Empty<VisionDetection>();
             }
 
+            var releaseGate = true;
             try
             {
                 Health.InferenceCalls++;
@@ -112,7 +113,14 @@ namespace Gelato.Ar.Core
 
                 if (completed != detectTask)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     timeout.Cancel();
+                    releaseGate = false;
+                    _ = detectTask.ContinueWith(
+                        _ => _inferenceGate.Release(),
+                        CancellationToken.None,
+                        TaskContinuationOptions.ExecuteSynchronously,
+                        TaskScheduler.Default);
                     Health.TimedOutInferences++;
                     RegisterFailure("inference_timeout", "Detector inference exceeded its deadline.");
                     await TryRecoverAsync(cancellationToken).ConfigureAwait(false);
@@ -151,7 +159,7 @@ namespace Gelato.Ar.Core
             }
             finally
             {
-                _inferenceGate.Release();
+                if (releaseGate) _inferenceGate.Release();
             }
         }
 
