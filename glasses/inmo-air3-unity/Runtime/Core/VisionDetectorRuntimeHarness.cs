@@ -116,14 +116,10 @@ namespace Gelato.Ar.Core
                     cancellationToken.ThrowIfCancellationRequested();
                     timeout.Cancel();
                     releaseGate = false;
-                    _ = detectTask.ContinueWith(
-                        _ => _inferenceGate.Release(),
-                        CancellationToken.None,
-                        TaskContinuationOptions.ExecuteSynchronously,
-                        TaskScheduler.Default);
                     Health.TimedOutInferences++;
                     RegisterFailure("inference_timeout", "Detector inference exceeded its deadline.");
-                    await TryRecoverAsync(cancellationToken).ConfigureAwait(false);
+                    Health.State = VisionDetectorRuntimeState.Degraded;
+                    _ = DrainTimedOutInferenceAndRecoverAsync(detectTask);
                     return Array.Empty<VisionDetection>();
                 }
 
@@ -160,6 +156,32 @@ namespace Gelato.Ar.Core
             finally
             {
                 if (releaseGate) _inferenceGate.Release();
+            }
+        }
+
+        private async Task DrainTimedOutInferenceAndRecoverAsync(Task<IReadOnlyList<VisionDetection>> detectTask)
+        {
+            try
+            {
+                await detectTask.ConfigureAwait(false);
+            }
+            catch
+            {
+                // The timed-out result is intentionally discarded. Its only purpose here is to
+                // ensure the underlying detector call has physically exited before restart.
+            }
+            finally
+            {
+                _inferenceGate.Release();
+            }
+
+            try
+            {
+                await TryRecoverAsync(CancellationToken.None).ConfigureAwait(false);
+            }
+            catch
+            {
+                // TryRecoverAsync records explicit runtime health on restart failures.
             }
         }
 
