@@ -182,7 +182,7 @@ namespace Gelato.Ar.Core
                     }
                     case HandsFreeCommandKind.ConfirmVerify:
                     {
-                        var target = SelectComponent("verify", command.Target);
+                        var target = SelectComponent(command.Kind, "verify", command.Target);
                         if (target == null) return _lastSelectionFailure!;
                         var validation = await _coordinator.ConfirmComponentAsync(target.ComponentKey, cancellationToken).ConfigureAwait(false);
                         return Feedback(command.Kind, true, false, "CONFIRMED", target.DisplayName + " confirmed. " + ValidationSuffix(validation));
@@ -196,7 +196,7 @@ namespace Gelato.Ar.Core
                     }
                     case HandsFreeCommandKind.ResolveUnexpected:
                     {
-                        var target = SelectComponent("unexpected", command.Target);
+                        var target = SelectComponent(command.Kind, "unexpected", command.Target);
                         if (target == null) return _lastSelectionFailure!;
                         var validation = await _coordinator.ResolveUnexpectedAsync(target.ComponentKey, cancellationToken).ConfigureAwait(false);
                         return Feedback(command.Kind, true, false, "UNEXPECTED ITEM RESOLVED", target.DisplayName + " cleared. " + ValidationSuffix(validation));
@@ -221,13 +221,13 @@ namespace Gelato.Ar.Core
 
         private HandsFreeCommandResult? _lastSelectionFailure;
 
-        private BuildComponent? SelectComponent(string requiredStatus, string target)
+        private BuildComponent? SelectComponent(HandsFreeCommandKind kind, string requiredStatus, string target)
         {
             _lastSelectionFailure = null;
             var build = _coordinator.BuildSession;
             if (build == null)
             {
-                _lastSelectionFailure = Feedback(HandsFreeCommandKind.Unknown, false, true, "NO ACTIVE BUILD", "Start a build before reviewing ingredients.");
+                _lastSelectionFailure = Feedback(kind, false, true, "NO ACTIVE BUILD", "Start a build before reviewing ingredients.");
                 return null;
             }
 
@@ -237,7 +237,7 @@ namespace Gelato.Ar.Core
 
             if (candidates.Count == 0)
             {
-                _lastSelectionFailure = Feedback(HandsFreeCommandKind.Unknown, false, false, "NOTHING TO REVIEW",
+                _lastSelectionFailure = Feedback(kind, false, false, "NOTHING TO REVIEW",
                     requiredStatus == "verify" ? "No ingredient is waiting for confirmation." : "No unexpected ingredient is waiting for resolution.");
                 return null;
             }
@@ -246,7 +246,7 @@ namespace Gelato.Ar.Core
             if (normalizedTarget.Length == 0)
             {
                 if (candidates.Count == 1) return candidates[0];
-                _lastSelectionFailure = Feedback(HandsFreeCommandKind.Unknown, false, true, "SAY THE INGREDIENT",
+                _lastSelectionFailure = Feedback(kind, false, true, "SAY THE INGREDIENT",
                     candidates.Count + " items need review. Name the ingredient.");
                 return null;
             }
@@ -261,7 +261,7 @@ namespace Gelato.Ar.Core
 
             if (matches.Count == 1) return matches[0];
 
-            _lastSelectionFailure = Feedback(HandsFreeCommandKind.Unknown, false, true,
+            _lastSelectionFailure = Feedback(kind, false, true,
                 matches.Count == 0 ? "INGREDIENT NOT FOUND" : "INGREDIENT AMBIGUOUS",
                 matches.Count == 0 ? "No matching review item was found." : "More than one review item matches that name.");
             return null;
