@@ -65,6 +65,61 @@ namespace Gelato.Ar.Unity
             };
         }
 
+        public async Task<StationCalibration> GetStationCalibrationAsync(CameraFrame frame, CancellationToken cancellationToken)
+        {
+            if (frame == null) throw new ArgumentNullException(nameof(frame));
+
+            var response = await PostAsync<CalibrationResponse>(new CalibrationRequest
+            {
+                action = DeviceApiActions.CalibrationGet,
+                frameWidth = frame.Width,
+                frameHeight = frame.Height,
+                pixelFormat = frame.PixelFormat ?? string.Empty
+            }, true, cancellationToken);
+
+            if (response.calibration == null) return null;
+            var dto = response.calibration;
+            var zones = new List<IngredientZone>();
+            if (dto.zones != null)
+            {
+                foreach (var zone in dto.zones)
+                {
+                    zones.Add(new IngredientZone
+                    {
+                        ZoneKey = zone.zoneKey ?? string.Empty,
+                        IngredientId = zone.ingredientId,
+                        CanonicalName = zone.canonicalName ?? string.Empty,
+                        DisplayName = zone.displayName ?? string.Empty,
+                        X = zone.x,
+                        Y = zone.y,
+                        Width = zone.width,
+                        Height = zone.height,
+                        Priority = zone.priority
+                    });
+                }
+            }
+
+            var compatibility = dto.compatibility ?? new CalibrationCompatibilityDto();
+            return new StationCalibration
+            {
+                PublicId = dto.publicId ?? string.Empty,
+                StationPublicId = dto.stationPublicId ?? string.Empty,
+                StationName = dto.stationName ?? string.Empty,
+                Version = dto.version,
+                Platform = dto.platform ?? string.Empty,
+                FrameWidth = dto.frame != null ? dto.frame.width : 0,
+                FrameHeight = dto.frame != null ? dto.frame.height : 0,
+                PixelFormat = dto.frame != null ? dto.frame.pixelFormat ?? string.Empty : string.Empty,
+                SourceHash = dto.sourceHash ?? string.Empty,
+                Zones = zones,
+                Compatibility = new CalibrationCompatibility
+                {
+                    Compatible = compatibility.compatible,
+                    Reasons = compatibility.reasons ?? Array.Empty<string>()
+                }
+            };
+        }
+
         public async Task<BuildSession> StartBuildAsync(string kdsItemPublicId, string sourceRevision, CancellationToken cancellationToken)
         {
             var response = await PostAsync<BuildResponse>(new BuildStartRequest
@@ -299,6 +354,12 @@ namespace Gelato.Ar.Unity
         [Serializable] private class ActionRequest { public string action; }
         [Serializable] private class BuildSessionRequest : ActionRequest { public string buildSessionPublicId; }
         [Serializable] private sealed class BuildStartRequest : ActionRequest { public string kdsItemPublicId; public string sourceRevision; }
+        [Serializable] private sealed class CalibrationRequest : ActionRequest
+        {
+            public int frameWidth;
+            public int frameHeight;
+            public string pixelFormat;
+        }
         [Serializable] private sealed class ComponentActionRequest : BuildSessionRequest { public string componentKey; }
         [Serializable] private sealed class PairRequest : ActionRequest
         {
@@ -340,6 +401,48 @@ namespace Gelato.Ar.Unity
             public PosLineDto posLine;
         }
         [Serializable] private sealed class PosLineDto { public string name; public string specialInstructions; }
+
+        [Serializable] private sealed class CalibrationResponse
+        {
+            public bool ok;
+            public bool assignmentRequired;
+            public StationCalibrationDto calibration;
+        }
+        [Serializable] private sealed class StationCalibrationDto
+        {
+            public string publicId;
+            public string stationPublicId;
+            public string stationName;
+            public int version;
+            public string platform;
+            public CalibrationFrameDto frame;
+            public string sourceHash;
+            public IngredientZoneDto[] zones;
+            public CalibrationCompatibilityDto compatibility;
+        }
+        [Serializable] private sealed class CalibrationFrameDto
+        {
+            public int width;
+            public int height;
+            public string pixelFormat;
+        }
+        [Serializable] private sealed class IngredientZoneDto
+        {
+            public string zoneKey;
+            public int ingredientId;
+            public string canonicalName;
+            public string displayName;
+            public float x;
+            public float y;
+            public float width;
+            public float height;
+            public int priority;
+        }
+        [Serializable] private sealed class CalibrationCompatibilityDto
+        {
+            public bool compatible;
+            public string[] reasons;
+        }
 
         [Serializable] private sealed class BuildResponse { public bool ok; public BuildSessionDto buildSession; }
         [Serializable] private sealed class BuildSessionDto
