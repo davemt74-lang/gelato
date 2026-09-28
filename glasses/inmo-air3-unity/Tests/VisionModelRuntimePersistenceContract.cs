@@ -11,6 +11,8 @@ internal static class VisionModelRuntimePersistenceContract
     {
         await SuccessfulActivationPersistsAndClearsPending();
         await InterruptedRestartRecoversKnownGood();
+        await InterruptedWithoutKnownGoodFailsClosed();
+        await PersistenceCommitFailureRestoresPrevious();
         await CorruptKnownGoodFailsClosed();
         await MissingRecoveryAdapterFailsClosed();
     }
@@ -71,6 +73,56 @@ internal static class VisionModelRuntimePersistenceContract
         Assert(result.InterruptedActivationFound, "restart must identify the interrupted transaction");
         Assert(runtime.ActivePackagePublicId == "vision-model-v1", "runtime must restore the durable known-good package");
         Assert(persistence.State.Pending == null, "successful restart recovery must clear interrupted pending state");
+    }
+
+    private static async Task InterruptedWithoutKnownGoodFailsClosed()
+    {
+        var persistence = new MemoryPersistence();
+        persistence.State.DetectorName = "scripted-test-detector";
+        persistence.State.RuntimeType = "onnx";
+        persistence.State.Pending = new VisionModelPendingActivation
+        {
+            AssignmentKey = "first-activation-interrupted",
+            PackagePublicId = "vision-model-v1",
+            ArtifactSha256 = new string('a', 64),
+            RuntimeType = "onnx",
+            Stage = "verified"
+        };
+
+        var runtime = new RecoverableRuntime("scripted-test-detector", "onnx")
+        {
+            ActivePackagePublicId = string.Empty,
+            ActiveArtifactSha256 = string.Empty
+        };
+
+        var result = await new VisionModelRecoveryService(runtime, persistence).ReconcileAsync();
+
+        Assert(!result.Ready && result.ErrorCode == "interrupted_without_known_good", "first activation interrupted without known-good must hold fail-closed");
+        Assert(runtime.RecoverCalls == 0, "recovery must not invent a model when no known-good state exists");
+    }
+
+    private static async Task PersistenceCommitFailureRestoresPrevious()
+    {
+        var bytes = Encoding.UTF8.GetBytes("section-21-commit-failure");
+        var assignment = Assignment(bytes);
+        var persistence = new MemoryPersistence { FailCommitActive = true };
+        var runtime = new RecoverableRuntime("scripted-test-detector", "onnx");
+        var previousPackage = runtime.ActivePackagePublicId;
+        var previousSha = runtime.ActiveArtifactSha256;
+
+        var service = new VisionModelActivationService(
+            new Fetcher(bytes),
+            runtime,
+            (report, token) => Task.FromResult(true),
+            VisionModelActivationService.DefaultMaximumArtifactBytes,
+            persistence);
+
+        var result = await service.ApplyAsync(assignment);
+
+        Assert(!result.Activated && result.ErrorCode == "runtime_persistence_commit_failed", "persistence commit failure after swap must fail the activation");
+        Assert(result.RestoredPrevious, "persistence commit failure must restore previous runtime");
+        Assert(runtime.ActivePackagePublicId == previousPackage && runtime.ActiveArtifactSha256 == previousSha, "runtime and durable state must return to previous known-good after commit failure");
+        Assert(persistence.State.Pending == null, "restored persistence state must clear pending activation");
     }
 
     private static async Task CorruptKnownGoodFailsClosed()
@@ -160,6 +212,7 @@ internal static class VisionModelRuntimePersistenceContract
     {
         public VisionModelDurableState State { get; } = new VisionModelDurableState();
         public Dictionary<string, byte[]> Artifacts { get; } = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        public bool FailCommitActive { get; set; }
 
         public Task<VisionModelDurableState> LoadAsync(CancellationToken cancellationToken) => Task.FromResult(State);
 
@@ -197,6 +250,7 @@ internal static class VisionModelRuntimePersistenceContract
 
         public Task CommitActiveAsync(VisionModelAssignment assignment, VisionModelRuntimeSnapshot previous, CancellationToken cancellationToken)
         {
+            if (FailCommitActive) throw new InvalidOperationException("simulated durable commit failure");
             State.KnownGoodPackagePublicId = previous.PackagePublicId;
             State.KnownGoodArtifactSha256 = previous.ArtifactSha256;
             State.ActivePackagePublicId = assignment.Package!.PublicId;
