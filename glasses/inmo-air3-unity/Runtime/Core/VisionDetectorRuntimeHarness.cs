@@ -72,9 +72,19 @@ namespace Gelato.Ar.Core
 
         public async Task WarmupAsync(CancellationToken cancellationToken = default)
         {
+            var wasFailed = Health.State == VisionDetectorRuntimeState.Failed;
             Health.State = VisionDetectorRuntimeState.Starting;
             if (_inner is IVisionDetectorRuntimeControl control)
+            {
+                if (wasFailed)
+                {
+                    Health.State = VisionDetectorRuntimeState.Recovering;
+                    Health.RestartAttempts++;
+                    await control.RestartAsync(cancellationToken).ConfigureAwait(false);
+                    Health.RestartSuccesses++;
+                }
                 await control.WarmupAsync(cancellationToken).ConfigureAwait(false);
+            }
             Health.State = VisionDetectorRuntimeState.Ready;
             Health.LastErrorCode = string.Empty;
             Health.LastErrorMessage = string.Empty;
