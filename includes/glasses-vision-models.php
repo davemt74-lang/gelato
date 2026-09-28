@@ -66,7 +66,7 @@ function glasses_vision_model_semver_value(?string $value): ?string
     $value=trim((string)$value);
     if($value==='')return null;
     $value=preg_replace('/^[vV]/','',$value)??$value;
-    if(!preg_match('/^d+(?:.d+){0,3}(?:[-+][0-9A-Za-z.-]+)?$/',$value))return null;
+    if(!preg_match('/^\d+(?:\.\d+){0,3}(?:[-+][0-9A-Za-z.-]+)?$/',$value))return null;
     return $value;
 }
 
