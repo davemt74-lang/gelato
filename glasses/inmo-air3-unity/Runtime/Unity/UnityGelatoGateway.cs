@@ -140,7 +140,7 @@ namespace Gelato.Ar.Unity
             };
         }
 
-        public async Task<VisionLabelProfile> GetVisionLabelProfileAsync(
+        public async Task<VisionLabelProfile?> GetVisionLabelProfileAsync(
             string buildSessionPublicId,
             string detectorName,
             CancellationToken cancellationToken)
