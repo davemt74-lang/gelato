@@ -14,8 +14,8 @@ function glasses_vision_normalize_label(string $value): string
 {
     $value=mb_strtolower(trim($value),'UTF-8');
     if($value==='')return '';
-    $value=preg_replace('/[^p{L}p{N}]+/u',' ',$value)??'';
-    $value=preg_replace('/s+/u',' ',trim($value))??'';
+    $value=preg_replace('/[^\p{L}\p{N}]+/u',' ',$value)??'';
+    $value=preg_replace('/\s+/u',' ',trim($value))??'';
     return mb_substr($value,0,160,'UTF-8');
 }
 
