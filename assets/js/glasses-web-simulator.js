@@ -64,9 +64,29 @@ $('modeSelect').addEventListener('change',async e=>{state.mode=e.target.value;st
 $('deviceSelect').addEventListener('change',async e=>{state.device=state.devices.find(x=>x.publicId===e.target.value)||null;state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;if(state.mode==='live')await refreshWork();else render();});
 $('workItemSelect').addEventListener('change',e=>{state.selectedKdsItemPublicId=e.target.value;state.validation=null;render();});
 $('refreshWork').addEventListener('click',refreshWork);$('startBuild').addEventListener('click',startBuild);$('resetSimulator').addEventListener('click',resetSimulator);$('injectUnexpected').addEventListener('click',injectUnexpected);$('evaluateBuild').addEventListener('click',validate);$('handoffExpo').addEventListener('click',handoff);$('clearLog').addEventListener('click',()=>{state.logs=[];renderLog();});
+const FRAME_MODE_KEY='gelato.webGlassesSimulator.frameMode.v1';
+const OPTICAL_MASK_KEY='gelato.webGlassesSimulator.opticalMask.v1';
+let frameMode=['svg','image','none'].includes(localStorage.getItem(FRAME_MODE_KEY))?localStorage.getItem(FRAME_MODE_KEY):'svg';
+let opticalMaskEnabled=localStorage.getItem(OPTICAL_MASK_KEY)!=='0';
+function applyFrameMode(){
+  const stage=$('glassesStage');
+  stage.classList.remove('frame-svg','frame-image','frame-none','mask-disabled');
+  stage.classList.add('frame-'+frameMode);
+  if(!opticalMaskEnabled||frameMode==='none')stage.classList.add('mask-disabled');
+  $('frameModeSelect').value=frameMode;
+  $('opticalMaskToggle').checked=opticalMaskEnabled;
+  $('opticalMaskToggle').disabled=frameMode==='none';
+}
+function setFrameMode(mode){
+  if(!['svg','image','none'].includes(mode))mode='svg';
+  if(mode==='image'&&!$('glassesImage').src){log('ERROR','Load a glasses image before selecting Uploaded frame mode.');mode='svg';}
+  frameMode=mode;localStorage.setItem(FRAME_MODE_KEY,frameMode);applyFrameMode();log('OPTICS','Frame mode: '+frameMode+'.');
+}
+$('frameModeSelect').addEventListener('change',e=>setFrameMode(e.target.value));
+$('opticalMaskToggle').addEventListener('change',e=>{opticalMaskEnabled=!!e.target.checked;localStorage.setItem(OPTICAL_MASK_KEY,opticalMaskEnabled?'1':'0');applyFrameMode();log('OPTICS','Lens mask '+(opticalMaskEnabled?'enabled.':'disabled.'));});
 function bindLocalImage(inputId,imageId,onLoaded){let currentUrl='';$(inputId).addEventListener('change',e=>{const file=e.target.files?.[0];if(!file)return;if(currentUrl)URL.revokeObjectURL(currentUrl);currentUrl=URL.createObjectURL(file);const image=$(imageId);image.src=currentUrl;image.hidden=false;if(onLoaded)onLoaded();log('ASSET','Previewing local '+file.name+'.');});}
 bindLocalImage('sceneFile','sceneImage',()=>{$('scenePlaceholder').hidden=true;});
-bindLocalImage('glassesFile','glassesImage',()=>{});
+bindLocalImage('glassesFile','glassesImage',()=>{frameMode='image';localStorage.setItem(FRAME_MODE_KEY,frameMode);applyFrameMode();});
 $('componentControls').addEventListener('click',e=>{const b=e.target.closest('[data-detect]');if(b)detect(b.dataset.detect);});
 
 const CAL_KEY='gelato.webGlassesSimulator.calibration.v1';
@@ -161,7 +181,7 @@ function bindRegionEditor(regionName){
   resize.addEventListener('pointerdown',e=>begin(e,'resize'));resize.addEventListener('touchstart',e=>begin(e,'resize'),{passive:false});
 }
 bindRegionEditor('hudRight');bindRegionEditor('hudStatus');
-refreshPresets();applyCalibration();
+refreshPresets();applyCalibration();applyFrameMode();
 $('exceptions').addEventListener('click',e=>{const b=e.target.closest('[data-resolve]');if(b)resolveUnexpected(b.dataset.resolve);});
 (async()=>{await loadDevices();state.work=structuredClone(mock.work);state.selectedKdsItemPublicId=state.work.focusItem?.kdsItemPublicId||'';render();log('SYSTEM','Simulator ready. Mock mode is isolated from POS/KDS writes.');})();
 })();
