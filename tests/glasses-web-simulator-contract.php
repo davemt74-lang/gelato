@@ -75,5 +75,16 @@ gws_assert(str_contains($js,'syncEpoch'),'Live sync must discard stale in-flight
 gws_assert(str_contains($js,'devicePublicId=state.device.publicId'),'Live sync requests must bind to the device selected when each poll begins.');
 gws_assert(!str_contains($api,'app_verify_request_csrf($_GET'),'Read-only station synchronization must not pretend GET is a mutation.');
 gws_assert(str_contains($css,'.sim-sync-badge.live')&&str_contains($css,'.sim-sync-badge.error'),'Simulator must visibly distinguish healthy and retrying synchronization.');
+gws_assert(str_contains($page,'cameraVideo')&&str_contains($page,'sceneSourceSelect'),'Simulator must expose browser camera as a scene source.');
+gws_assert(str_contains($page,'cameraDeviceSelect')&&str_contains($page,'cameraResolution'),'Simulator must expose camera device and resolution controls.');
+gws_assert(str_contains($page,'cameraManualTarget')&&str_contains($page,'submitCameraTarget'),'Simulator must expose manual camera vision targeting.');
+gws_assert(str_contains($js,'navigator.mediaDevices.getUserMedia'),'Browser camera runtime must use standards-based getUserMedia.');
+gws_assert(str_contains($js,'function enumerateCameras'),'Camera runtime must enumerate available video inputs.');
+gws_assert(str_contains($js,'function captureCameraFrame'),'Camera runtime must support local frame capture.');
+gws_assert(str_contains($js,'function submitCameraTargetObservation'),'Camera runtime must submit targeted observations through canonical simulator flow.');
+gws_assert(str_contains($js,"metadata:{source:'web_glasses_simulator_camera'"),'Camera observations must be source-labelled.');
+gws_assert(str_contains($js,'cameraStream.getTracks().forEach'),'Camera stop must release hardware tracks.');
+gws_assert(str_contains($js,'NotAllowedError')&&str_contains($js,'NotFoundError'),'Camera runtime must handle permission denial and missing hardware.');
+gws_assert(str_contains($css,'.camera-target-marker')&&str_contains($css,'.camera-video'),'Camera preview and target overlay must be styled independently of HUD.');
 
 echo "glasses-web-simulator-ok\n";
