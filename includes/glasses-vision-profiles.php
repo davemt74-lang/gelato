@@ -220,10 +220,14 @@ function glasses_vision_profile_for_build(
             $resolvedByLabel[(string)$row['normalized_label']]=$row;
         }
 
+        $blockedLabels=[];
         $byLabel=[];
         foreach($resolvedByLabel as $normalized=>$row){
             $ingredientId=(int)$row['ingredient_id'];
-            if(!isset($components[$ingredientId]))continue;
+            if(!isset($components[$ingredientId])){
+                $blockedLabels[$normalized]=$normalized;
+                continue;
+            }
             $component=$components[$ingredientId];
             $byLabel[$normalized]=[
                 'modelLabel'=>(string)$row['model_label'],
@@ -237,13 +241,18 @@ function glasses_vision_profile_for_build(
             ];
         }
         ksort($byLabel,SORT_STRING);
+        ksort($blockedLabels,SORT_STRING);
         $mappings=array_values($byLabel);
+        $blockedLabels=array_values($blockedLabels);
+    }else{
+        $blockedLabels=[];
     }
 
     $material=[
         'detectorName'=>$detector,
         'buildSessionPublicId'=>$sessionPublicId,
         'mappings'=>$mappings,
+        'blockedLabels'=>$blockedLabels,
     ];
     $json=json_encode($material,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
 
@@ -253,6 +262,7 @@ function glasses_vision_profile_for_build(
         'buildSessionPublicId'=>$sessionPublicId,
         'profileHash'=>hash('sha256',$json),
         'mappings'=>$mappings,
+        'blockedLabels'=>$blockedLabels,
     ];
 }
 
