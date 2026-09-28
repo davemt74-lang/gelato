@@ -42,5 +42,12 @@ gws_assert(str_contains($js,"CAL_KEY='gelato.webGlassesSimulator.calibration.v1'
 gws_assert(str_contains($js,'bindRegionEditor'),'Calibration must support drag/resize region editing.');
 gws_assert(str_contains($js,'leftEyeX')&&str_contains($js,'rightEyeY'),'Calibration must support per-eye alignment.');
 gws_assert(str_contains($css,'.glasses-stage.calibrating .eye-guide'),'Calibration guides must be visible only while editing.');
+gws_assert(str_contains($page,'svgGlassesLayer')&&str_contains($page,'outsideLensMask'),'Simulator must render a native SVG glasses frame with optical occlusion mask.');
+gws_assert(str_contains($page,'frameModeSelect'),'Simulator must expose SVG, uploaded-image, and frameless modes.');
+gws_assert(str_contains($page,'opticalMaskToggle'),'Simulator must expose independent lens-mask control.');
+gws_assert(str_contains($js,"FRAME_MODE_KEY='gelato.webGlassesSimulator.frameMode.v1'"),'Frame mode must persist locally.');
+gws_assert(str_contains($js,'function applyFrameMode()'),'Simulator must apply optical frame mode without touching kitchen state.');
+gws_assert(str_contains($js,"frameMode='image'"),'Loading custom glasses artwork must switch to image mode.');
+gws_assert(str_contains($css,'.svg-glasses-layer'),'SVG optical layer must be independently styled above the HUD.');
 
 echo "glasses-web-simulator-ok\n";
