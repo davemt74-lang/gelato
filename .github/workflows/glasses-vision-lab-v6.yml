@@ -1,0 +1,135 @@
+name: AR Glasses Vision Lab V6 Curation & Group Splits
+
+on:
+  pull_request:
+    paths:
+      - 'database/20261030_vision_lab_v6_curation_group_splits.sql'
+      - 'includes/glasses-vision-curation.php'
+      - 'includes/glasses-vision-lab.php'
+      - 'api/glasses-vision-lab.php'
+      - 'glasses-vision-lab.php'
+      - 'assets/js/glasses-vision-lab.js'
+      - 'assets/css/glasses-vision-lab.css'
+      - 'assets/js/glasses-web-simulator.js'
+      - 'tools/vision_training/pipeline.py'
+      - 'tests/glasses-vision-lab-v6-curation-splits-contract.php'
+      - 'tests/vision-training-group-split-contract.py'
+      - 'docs/GLASSES-VISION-LAB-CURATION-SPLITS.md'
+      - '.github/workflows/glasses-vision-lab-v6.yml'
+  push:
+    branches: [main, 'feature/vision-lab-v6-curation-group-splits']
+
+jobs:
+  vision-lab-v6:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Syntax
+        run: |
+          php -l includes/glasses-vision-curation.php
+          php -l includes/glasses-vision-lab.php
+          php -l api/glasses-vision-lab.php
+          php -l glasses-vision-lab.php
+          php -l tests/glasses-vision-lab-v6-curation-splits-contract.php
+          python -m py_compile tools/vision_training/pipeline.py tests/vision-training-group-split-contract.py
+          node --check assets/js/glasses-vision-lab.js
+          node --check assets/js/glasses-web-simulator.js
+
+      - name: Curation and split architecture
+        run: |
+          grep -q 'CREATE TABLE glasses_vision_dataset_curation_events' database/20261030_vision_lab_v6_curation_group_splits.sql
+          grep -q 'CREATE TABLE glasses_vision_dataset_split_plans' database/20261030_vision_lab_v6_curation_group_splits.sql
+          grep -q 'CREATE TABLE glasses_vision_dataset_split_assignments' database/20261030_vision_lab_v6_curation_group_splits.sql
+          grep -q 'function glasses_vision_curation_decide' includes/glasses-vision-curation.php
+          grep -q 'function glasses_vision_curation_union_find' includes/glasses-vision-curation.php
+          grep -q 'function glasses_vision_curation_create_split_plan' includes/glasses-vision-curation.php
+          grep -q 'function glasses_vision_curation_apply_split_plan' includes/glasses-vision-curation.php
+          grep -q 'function glasses_vision_curation_freeze_guard' includes/glasses-vision-curation.php
+          grep -q 'gelato.vision_training_split.v2' tools/vision_training/pipeline.py
+          grep -q 'group_aware' tools/vision_training/pipeline.py
+          grep -q 'sample_fallback' tools/vision_training/pipeline.py
+          grep -q 'captureGroup' assets/js/glasses-web-simulator.js
+          ! grep -q 'glasses_build_observe' api/glasses-vision-lab.php
+          ! grep -q 'kds_transition' api/glasses-vision-lab.php
+
+      - name: Python group split contract
+        run: python tests/vision-training-group-split-contract.py
+
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_restaurant_ai_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->ensureTrackingTables();
+          $s->bootstrapLegacyHistory(null);
+          $s->applyPending(null);
+          if($s->pendingMigrations()) exit(1);
+          PHP
+
+      - name: Vision Lab V6 curation/split contract
+        run: php tests/glasses-vision-lab-v6-curation-splits-contract.php
+
+      - name: Prior Vision Lab regressions
+        run: |
+          php tests/glasses-vision-lab-v5-training-media-contract.php
+          php tests/glasses-vision-lab-v4-dataset-intelligence-contract.php
+          php tests/glasses-vision-lab-v3-active-learning-contract.php
+          php tests/glasses-vision-lab-v2-contract.php
+
+      - name: Existing simulator and vision regressions
+        run: |
+          php tests/glasses-web-simulator-contract.php
+          php tests/glasses-learning-analytics-contract.php
+          php tests/glasses-vision-operations-contract.php
+          php tests/glasses-vision-model-rollout-contract.php
+          php tests/glasses-observation-corrections-contract.php
+          php tests/glasses-build-session-contract.php
+          php tests/glasses-product-validation-contract.php
+          php tests/kds-contract.php
+
+      - name: Upgrade idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->assertAppliedChecksumsUnchanged();
+          if($s->pendingMigrations()) exit(2);
+          if($s->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP
