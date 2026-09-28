@@ -67,7 +67,7 @@ jobs:
           grep -q 'uq_glasses_vision_label_detector' database/20261019_glasses_vision_label_profiles.sql
           grep -q 'function glasses_vision_profile_for_build' includes/glasses-vision-profiles.php
           grep -q 'Resolve generic vs detector-specific precedence' includes/glasses-vision-profiles.php
-          grep -q "p.detector_name IN ('*',?)" includes/glasses-vision-profiles.php
+          grep -Fq "p.detector_name IN ('*',?)" includes/glasses-vision-profiles.php
           grep -q 'minimumConfidence' includes/glasses-vision-profiles.php
           grep -q "action==='vision.profile'" api/glasses-device.php
           grep -q 'glasses.manage' api/glasses-vision-profiles.php
@@ -82,7 +82,8 @@ jobs:
           grep -q 'detectorLabel' glasses/inmo-air3-unity/Runtime/Unity/UnityGelatoGateway.cs
           grep -q "'modelLabels'" includes/glasses-learning.php
           ! grep -R 'ArPoseManager' glasses/inmo-air3-unity/Runtime/Core
-          ! grep -q 'minimumConfidence<0.50' includes/glasses-vision-profiles.php
+          grep -Fq '$minimumConfidence<0.50' includes/glasses-vision-profiles.php
+          grep -Fq '$minimumConfidence>1.0' includes/glasses-vision-profiles.php
 
       - name: Install and upgrade schema
         run: |
