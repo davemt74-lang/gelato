@@ -68,6 +68,100 @@ function bindLocalImage(inputId,imageId,onLoaded){let currentUrl='';$(inputId).a
 bindLocalImage('sceneFile','sceneImage',()=>{$('scenePlaceholder').hidden=true;});
 bindLocalImage('glassesFile','glassesImage',()=>{});
 $('componentControls').addEventListener('click',e=>{const b=e.target.closest('[data-detect]');if(b)detect(b.dataset.detect);});
+
+const CAL_KEY='gelato.webGlassesSimulator.calibration.v1';
+const PRESET_KEY='gelato.webGlassesSimulator.presets.v1';
+const calibrationDefaults={
+  opacity:100,brightness:100,scale:100,safeWidth:80,safeHeight:66,
+  leftEyeX:0,leftEyeY:0,rightEyeX:0,rightEyeY:0,
+  regions:{hudRight:{x:68,y:0,w:32,h:100},hudStatus:{x:0,y:0,w:26,h:12}}
+};
+function deepClone(v){return JSON.parse(JSON.stringify(v));}
+function clamp(n,min,max){return Math.max(min,Math.min(max,Number(n)));}
+function normalizeCalibration(input){
+  const next=deepClone(calibrationDefaults),src=input&&typeof input==='object'?input:{};
+  for(const key of ['opacity','brightness','scale','safeWidth','safeHeight','leftEyeX','leftEyeY','rightEyeX','rightEyeY']){
+    if(Number.isFinite(Number(src[key])))next[key]=Number(src[key]);
+  }
+  for(const name of Object.keys(next.regions)){
+    const region=src.regions&&src.regions[name]?src.regions[name]:{};
+    for(const key of ['x','y','w','h'])if(Number.isFinite(Number(region[key])))next.regions[name][key]=Number(region[key]);
+  }
+  next.opacity=clamp(next.opacity,20,100);next.brightness=clamp(next.brightness,50,180);next.scale=clamp(next.scale,60,140);
+  next.safeWidth=clamp(next.safeWidth,45,95);next.safeHeight=clamp(next.safeHeight,35,90);
+  for(const key of ['leftEyeX','leftEyeY','rightEyeX','rightEyeY'])next[key]=clamp(next[key],-20,20);
+  for(const r of Object.values(next.regions)){r.x=clamp(r.x,0,92);r.y=clamp(r.y,0,92);r.w=clamp(r.w,8,100-r.x);r.h=clamp(r.h,8,100-r.y);}
+  return next;
+}
+function loadStored(key,fallback){try{const raw=localStorage.getItem(key);return raw?JSON.parse(raw):deepClone(fallback);}catch{return deepClone(fallback);}}
+let calibration=normalizeCalibration(loadStored(CAL_KEY,calibrationDefaults));
+let calibrationEnabled=false;
+let presets=loadStored(PRESET_KEY,{});
+function saveCalibration(){calibration=normalizeCalibration(calibration);localStorage.setItem(CAL_KEY,JSON.stringify(calibration));applyCalibration();}
+function applyCalibration(){
+  calibration=normalizeCalibration(calibration);
+  const stage=$('glassesStage'),projection=$('lensProjection');
+  projection.style.setProperty('--hud-opacity',String(calibration.opacity/100));
+  projection.style.setProperty('--hud-brightness',String(calibration.brightness/100));
+  projection.style.setProperty('--hud-scale',String(calibration.scale/100));
+  stage.style.setProperty('--safe-width',calibration.safeWidth+'%');stage.style.setProperty('--safe-height',calibration.safeHeight+'%');
+  stage.style.setProperty('--left-eye-x',calibration.leftEyeX+'%');stage.style.setProperty('--left-eye-y',calibration.leftEyeY+'%');
+  stage.style.setProperty('--right-eye-x',calibration.rightEyeX+'%');stage.style.setProperty('--right-eye-y',calibration.rightEyeY+'%');
+  for(const [name,r] of Object.entries(calibration.regions)){const el=$(name);if(!el)continue;el.style.setProperty('--region-x',r.x+'%');el.style.setProperty('--region-y',r.y+'%');el.style.setProperty('--region-w',r.w+'%');el.style.setProperty('--region-h',r.h+'%');}
+  const controls={hudOpacity:['opacity','%'],hudBrightness:['brightness','%'],hudScale:['scale','%'],safeWidth:['safeWidth','%'],safeHeight:['safeHeight','%'],leftEyeX:['leftEyeX','%'],leftEyeY:['leftEyeY','%'],rightEyeX:['rightEyeX','%'],rightEyeY:['rightEyeY','%']};
+  for(const [id,[key,suffix]] of Object.entries(controls)){if($(id)){$(id).value=String(calibration[key]);$(id+'Value').textContent=String(calibration[key])+suffix;}}
+}
+function setCalibrationEnabled(enabled){
+  calibrationEnabled=!!enabled;$('glassesStage').classList.toggle('calibrating',calibrationEnabled);
+  $('calibrationToggle').setAttribute('aria-pressed',calibrationEnabled?'true':'false');
+  $('calibrationToggle').textContent=calibrationEnabled?'Lock layout':'Calibrate';
+  $('calibrationState').textContent=calibrationEnabled?'EDITING':'LOCKED';
+  log('CALIBRATION',calibrationEnabled?'Layout editing enabled.':'Layout locked.');
+}
+function refreshPresets(){
+  const names=Object.keys(presets).sort((a,b)=>a.localeCompare(b));
+  $('presetSelect').innerHTML='<option value="">Choose preset…</option>'+names.map(n=>'<option value="'+escapeHtml(n)+'">'+escapeHtml(n)+'</option>').join('');
+}
+function savePreset(){
+  const name=$('presetName').value.trim().slice(0,48);if(!name){log('ERROR','Enter a preset name.');return;}
+  presets[name]=deepClone(normalizeCalibration(calibration));localStorage.setItem(PRESET_KEY,JSON.stringify(presets));refreshPresets();$('presetSelect').value=name;log('CALIBRATION','Saved preset '+name+'.');
+}
+function loadPreset(name){if(!name||!presets[name])return;calibration=normalizeCalibration(presets[name]);saveCalibration();log('CALIBRATION','Loaded preset '+name+'.');}
+function deletePreset(){
+  const name=$('presetSelect').value;if(!name||!presets[name])return;delete presets[name];localStorage.setItem(PRESET_KEY,JSON.stringify(presets));refreshPresets();$('presetName').value='';log('CALIBRATION','Deleted preset '+name+'.');
+}
+function factoryCalibration(){calibration=deepClone(calibrationDefaults);saveCalibration();log('CALIBRATION','Restored factory projection geometry.');}
+for(const [id,key] of Object.entries({hudOpacity:'opacity',hudBrightness:'brightness',hudScale:'scale',safeWidth:'safeWidth',safeHeight:'safeHeight',leftEyeX:'leftEyeX',leftEyeY:'leftEyeY',rightEyeX:'rightEyeX',rightEyeY:'rightEyeY'})){
+  $(id).addEventListener('input',e=>{calibration[key]=Number(e.target.value);saveCalibration();});
+}
+$('calibrationToggle').addEventListener('click',()=>setCalibrationEnabled(!calibrationEnabled));
+$('savePreset').addEventListener('click',savePreset);
+$('deletePreset').addEventListener('click',deletePreset);
+$('resetCalibration').addEventListener('click',factoryCalibration);
+$('presetSelect').addEventListener('change',e=>loadPreset(e.target.value));
+
+function bindRegionEditor(regionName){
+  const el=$(regionName),stage=$('glassesStage'),move=el.querySelector('.region-move'),resize=el.querySelector('.region-resize');
+  const begin=(event,kind)=>{
+    if(!calibrationEnabled)return;
+    event.preventDefault();event.stopPropagation();
+    const pointer=event.touches?event.touches[0]:event;
+    const stageRect=stage.getBoundingClientRect(),startX=pointer.clientX,startY=pointer.clientY,start=deepClone(calibration.regions[regionName]);
+    const onMove=e=>{
+      const p=e.touches?e.touches[0]:e,dx=(p.clientX-startX)/stageRect.width*100,dy=(p.clientY-startY)/stageRect.height*100,r=calibration.regions[regionName];
+      if(kind==='move'){r.x=clamp(start.x+dx,0,100-start.w);r.y=clamp(start.y+dy,0,100-start.h);}
+      else{r.w=clamp(start.w+dx,8,100-r.x);r.h=clamp(start.h+dy,8,100-r.y);}
+      applyCalibration();
+    };
+    const end=()=>{window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',end);window.removeEventListener('touchmove',onMove);window.removeEventListener('touchend',end);saveCalibration();log('CALIBRATION','Updated '+regionName+' region.');};
+    window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',end,{once:true});
+    window.addEventListener('touchmove',onMove,{passive:false});window.addEventListener('touchend',end,{once:true});
+  };
+  move.addEventListener('pointerdown',e=>begin(e,'move'));move.addEventListener('touchstart',e=>begin(e,'move'),{passive:false});
+  resize.addEventListener('pointerdown',e=>begin(e,'resize'));resize.addEventListener('touchstart',e=>begin(e,'resize'),{passive:false});
+}
+bindRegionEditor('hudRight');bindRegionEditor('hudStatus');
+refreshPresets();applyCalibration();
 $('exceptions').addEventListener('click',e=>{const b=e.target.closest('[data-resolve]');if(b)resolveUnexpected(b.dataset.resolve);});
 (async()=>{await loadDevices();state.work=structuredClone(mock.work);state.selectedKdsItemPublicId=state.work.focusItem?.kdsItemPublicId||'';render();log('SYSTEM','Simulator ready. Mock mode is isolated from POS/KDS writes.');})();
 })();

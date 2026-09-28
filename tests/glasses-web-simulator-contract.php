@@ -35,5 +35,12 @@ gws_assert(str_contains($page,'sceneFile')&&str_contains($page,'glassesFile'),'S
 gws_assert(str_contains($js,"bindLocalImage('sceneFile'"),'Simulator must bind local scene artwork preview.');
 gws_assert(str_contains($css,'.hud-right'),'HUD must keep persistent projection on the right side.');
 gws_assert(str_contains($css,'.detection-box'),'HUD must support ingredient bounding boxes.');
+gws_assert(str_contains($page,'calibrationToggle'),'Simulator must expose calibration mode.');
+gws_assert(str_contains($page,'safeAreaGuide')&&str_contains($page,'leftEyeGuide')&&str_contains($page,'rightEyeGuide'),'Simulator must expose safe-area and per-eye guides.');
+gws_assert(str_contains($page,'presetSelect')&&str_contains($page,'savePreset'),'Simulator must expose layout presets.');
+gws_assert(str_contains($js,"CAL_KEY='gelato.webGlassesSimulator.calibration.v1'"),'Calibration must persist in browser storage.');
+gws_assert(str_contains($js,'bindRegionEditor'),'Calibration must support drag/resize region editing.');
+gws_assert(str_contains($js,'leftEyeX')&&str_contains($js,'rightEyeY'),'Calibration must support per-eye alignment.');
+gws_assert(str_contains($css,'.glasses-stage.calibrating .eye-guide'),'Calibration guides must be visible only while editing.');
 
 echo "glasses-web-simulator-ok\n";
