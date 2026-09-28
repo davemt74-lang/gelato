@@ -221,18 +221,19 @@ function scopeLabel(r){
  return 'Organization-wide';
 }
 function reportsLabel(r){
- var m=metrics[r.publicId]&&metrics[r.publicId].byType?metrics[r.publicId].byType:{};
+ var all=metrics[r.publicId]||{},m=all.byType||{},h=all.canaryHealth||null;
  var activated=m.activated?m.activated.devices:0;
  var failed=m.failed?m.failed.devices:0;
  var seen=m.assignment_seen?m.assignment_seen.devices:0;
- return '<span>'+Number(seen)+' seen</span><span>'+Number(activated)+' activated</span><span'+(failed?' class="danger"':'')+'>'+Number(failed)+' failed</span>';
+ var health=h?'<span class="gvm-health '+esc(h.state)+'">'+esc(h.state.replaceAll('_',' '))+' · '+Number(h.target.samples||0)+'T/'+Number(h.baseline.samples||0)+'B</span>':'';
+ return '<span>'+Number(seen)+' seen</span><span>'+Number(activated)+' activated</span><span'+(failed?' class="danger"':'')+'>'+Number(failed)+' failed</span>'+health;
 }
 function rolloutControls(r){
  if(!catalog.canManage)return '';
  var html='<div class="gvm-actions">';
  if(r.status==='draft')html+='<button type="button" class="admin-button quiet" data-rollout-action="activate" data-id="'+esc(r.publicId)+'">Activate</button>';
  if(r.status==='active'){
-   if(Number(r.canaryPercent)<100)html+='<button type="button" class="admin-button quiet" data-rollout-action="advance" data-id="'+esc(r.publicId)+'">Advance</button>';
+   if(Number(r.canaryPercent)<100){html+='<button type="button" class="admin-button quiet" data-rollout-action="advance" data-id="'+esc(r.publicId)+'">Advance</button>';var h=metrics[r.publicId]&&metrics[r.publicId].canaryHealth;if(h&&!h.promotionEligible&&h.state!=='rollback_required')html+='<button type="button" class="admin-button quiet" data-rollout-action="advance_override" data-id="'+esc(r.publicId)+'">Override</button>';}
    html+='<button type="button" class="admin-button quiet" data-rollout-action="pause" data-id="'+esc(r.publicId)+'">Pause</button>';
    html+='<button type="button" class="admin-button danger" data-rollout-action="rollback" data-id="'+esc(r.publicId)+'">Rollback</button>';
  }
@@ -302,11 +303,12 @@ async function retire(id){
 }
 async function rolloutAction(action,id){
  var payload={action:'rollout.'+action,csrf_token:String(boot.csrfToken||''),publicId:id};
- if(action==='advance'){
-   var current=rollouts.find(function(r){return r.publicId===id;});
-   var next=window.prompt('Advance canary percentage. Current: '+pct(current?current.canaryPercent:0),current?String(Math.min(100,Number(current.canaryPercent)+10)):'20');
-   if(next===null)return;
-   payload.canaryPercent=Number(next);
+ if(action==='advance'||action==='advance_override'){
+   var current=rollouts.find(function(r){return r.publicId===id;}),h=metrics[id]&&metrics[id].canaryHealth;
+   var next=h&&h.nextStage!=null?Number(h.nextStage):Math.min(100,Number(current?current.canaryPercent:0)+10);
+   if(!window.confirm('Advance canary from '+pct(current?current.canaryPercent:0)+' to '+pct(next)+'?'))return;
+   payload.canaryPercent=next;
+   if(action==='advance_override'){var overrideReason=window.prompt('Override rationale (recorded in the rollout audit):','');if(overrideReason===null)return;payload.reason=overrideReason;}
  }
  if(action==='rollback'){
    var reason=window.prompt('Rollback reason (recorded in the audit event):','');
