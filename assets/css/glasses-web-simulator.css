@@ -120,3 +120,15 @@
 .vision-model-status[data-state="loading"],.vision-model-status[data-state="verifying"]{border-color:#31596b}
 .vision-model-status[data-state="error"]{border-color:#6b3b31}.vision-model-status[data-state="error"] strong{color:var(--warn)}
 .vision-runtime-panel input[type="text"],.vision-runtime-panel input:not([type]){width:100%;border:1px solid #2c3930;background:#111914;color:var(--ink);border-radius:8px;padding:7px;font-size:9px}
+
+
+/* Local vision training dataset capture */
+.dataset-capture-panel{border-top:1px solid #1d333c;padding-top:10px;display:grid;gap:8px}
+.dataset-annotation-layer{position:absolute;inset:0;z-index:6;pointer-events:none}
+.dataset-box,.dataset-draft-box{position:absolute;border:2px solid var(--blue);border-radius:7px;background:rgba(97,199,255,.06);box-shadow:0 0 12px rgba(97,199,255,.25)}
+.dataset-draft-box{border-style:dashed}
+.dataset-box span,.dataset-draft-box span{position:absolute;left:0;bottom:100%;margin-bottom:3px;background:rgba(4,18,24,.92);border:1px solid var(--blue);padding:2px 5px;border-radius:4px;font-size:7px;color:var(--blue);white-space:nowrap}
+.dataset-labeling{cursor:crosshair}
+.dataset-annotation-list{display:grid;gap:4px;max-height:130px;overflow:auto}
+.dataset-annotation-row{display:grid;grid-template-columns:auto 1fr auto;gap:7px;align-items:center;border:1px solid #22343d;border-radius:7px;padding:5px 7px;font-size:8px}
+.dataset-annotation-row b{color:var(--blue)}.dataset-annotation-row span{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dataset-annotation-row button{padding:2px 6px;min-width:auto}

@@ -148,6 +148,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 
         <div id="detectionLayer" class="detection-layer"></div>
         <div id="visionDetectionLayer" class="vision-detection-layer"></div>
+        <div id="datasetAnnotationLayer" class="dataset-annotation-layer"></div>
       </section>
     </div>
   </section>
@@ -216,6 +217,24 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
           <div id="temporalValidationDetail" class="vision-metrics">0 missing · 0 verify · 0 unexpected · 0 sequence · 0 pending</div>
           <div id="temporalEventList" class="temporal-event-list"><span class="sim-muted">No temporal events yet.</span></div>
         </div>
+        <div class="dataset-capture-panel">
+          <div class="console-heading"><div><small>TRAINING DATASET</small><strong>Camera capture &amp; box labeling</strong></div><span id="datasetState">0 SAMPLES</span></div>
+          <div class="camera-toggle-row"><label><input id="datasetLabelMode" type="checkbox"> Label mode</label><span class="sim-muted">Drag boxes on the camera image.</span></div>
+          <label class="work-picker"><span>CLASS</span><select id="datasetClassSelect"><option value="">Start a build to load ingredient classes</option></select></label>
+          <div class="inline-actions">
+            <button id="datasetFreezeFrame" type="button" disabled>Freeze Frame</button>
+            <button id="datasetResumeFrame" type="button" disabled>Resume</button>
+            <button id="datasetCaptureSample" type="button" disabled>Capture Labeled Sample</button>
+          </div>
+          <div class="inline-actions">
+            <button id="datasetUndoBox" type="button" disabled>Undo Box</button>
+            <button id="datasetClearBoxes" type="button" disabled>Clear Boxes</button>
+            <button id="datasetExport" type="button" disabled>Export YOLO ZIP</button>
+          </div>
+          <div id="datasetStats" class="vision-metrics">0 boxes on frame · 0 samples · 0 classes</div>
+          <div id="datasetAnnotationList" class="dataset-annotation-list"><span class="sim-muted">No annotations on the current frame.</span></div>
+          <p class="calibration-note">Dataset capture stays local to this browser. Export contains JPEG frames, YOLO labels, data.yaml and a Gelato manifest; it does not modify POS, KDS, builds or validation.</p>
+        </div>
       </div>
     </section>
 
@@ -265,6 +284,6 @@ window.GELATO_GLASSES_SIMULATOR={
   api:'api/glasses-simulator.php'
 };
 </script>
-<script src="assets/js/glasses-web-simulator.js?v=20260928-browsermodel1"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20260928-dataset1"></script>
 </body>
 </html>

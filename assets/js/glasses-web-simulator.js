@@ -1,7 +1,7 @@
 (()=>{'use strict';
 const cfg=window.GELATO_GLASSES_SIMULATOR||{};
 const $=id=>document.getElementById(id);
-const state={mode:'mock',devices:[],device:null,work:null,selectedKdsItemPublicId:'',build:null,validation:null,seq:1,logs:[],autoPlayTimer:null,syncTimer:null,syncBusy:false,syncErrors:0,syncFingerprint:'',syncAbort:null,syncEpoch:0,lastSyncAt:null,cameraStream:null,cameraTrack:null,cameraTarget:null,cameraDevices:[],cameraSource:'image',visionMode:'manual',visionTimer:null,visionBusy:false,visionFrameSeq:0,visionLastAt:0,visionLatencyMs:0,visionFps:0,visionDetections:[],visionTracks:new Map(),visionSubmitted:new Set(),visionAdapter:null,temporalTracks:new Map(),temporalEvents:[],temporalSequence:[],temporalViolations:[],temporalValidationBusy:false,temporalValidationFingerprint:'',temporalReadySince:0,temporalGate:null,browserModel:{status:'idle',session:null,assignment:null,profile:null,config:null,package:null,verifiedSha256:null,loadEpoch:0}};
+const state={mode:'mock',devices:[],device:null,work:null,selectedKdsItemPublicId:'',build:null,validation:null,seq:1,logs:[],autoPlayTimer:null,syncTimer:null,syncBusy:false,syncErrors:0,syncFingerprint:'',syncAbort:null,syncEpoch:0,lastSyncAt:null,cameraStream:null,cameraTrack:null,cameraTarget:null,cameraDevices:[],cameraSource:'image',visionMode:'manual',visionTimer:null,visionBusy:false,visionFrameSeq:0,visionLastAt:0,visionLatencyMs:0,visionFps:0,visionDetections:[],visionTracks:new Map(),visionSubmitted:new Set(),visionAdapter:null,temporalTracks:new Map(),temporalEvents:[],temporalSequence:[],temporalViolations:[],temporalValidationBusy:false,temporalValidationFingerprint:'',temporalReadySince:0,temporalGate:null,browserModel:{status:'idle',session:null,assignment:null,profile:null,config:null,package:null,verifiedSha256:null,loadEpoch:0},dataset:{annotations:[],samples:[],drag:null,frozen:false}};
 const mock={
   work:{assignmentRequired:false,station:{publicId:'station-mock',name:'Sandwich / Pizza Line'},revision:'mock-revision',focusItem:{kdsItemPublicId:'kds-mock-1',status:'queued',ticket:{checkNumber:'1042',serviceMode:'dine_in',tableName:'Table 12',guestCount:2},posLine:{id:1,menuItemId:1,name:'Club Sandwich + Fries',optionName:'Regular',quantity:1,specialInstructions:'NO TOMATO · EXTRA BACON',modifiers:[{name:'Extra Bacon'}]},menu:{preparationNotes:'Build, slice and plate with fries.'},recipeSource:{status:'exact_name',recipe:{instructions:['Toast bread','Add mayo','Add turkey','Add bacon','Add lettuce','Add tomato','Top and slice','Plate with fries']}}},items:[],metrics:{queued:1,inProgress:0,ready:0,held:0}},
   components:['Toasted Bread','Mayo','Turkey','Bacon','Lettuce','Tomato','Fries'].map((name,i)=>({componentKey:'mock:'+i,displayName:name,expectedQuantity:i===0?3:1,detectedQuantity:0,unit:i===0?'slices':'portion',optional:false,status:'waiting',sortOrder:i+1})),
@@ -131,6 +131,7 @@ async function enumerateCameras(){
 function stopCamera(reason='stopped'){
   stopVisionRuntime(reason);
   if(state.cameraStream)state.cameraStream.getTracks().forEach(t=>t.stop());
+  state.dataset.frozen=false;state.dataset.drag=null;state.dataset.annotations=[];renderDatasetAnnotations();
   state.cameraStream=null;state.cameraTrack=null;
   const video=$('cameraVideo');video.srcObject=null;video.hidden=true;
   $('startCamera').disabled=false;$('stopCamera').disabled=true;$('captureFrame').disabled=true;
@@ -189,6 +190,7 @@ function cameraPointerGeometry(event){
   return {stage,stageX:clamp(px/rect.width,0,1),stageY:clamp(py/rect.height,0,1),videoX:clamp(x,0,1),videoY:clamp(y,0,1)};
 }
 function setCameraTargetFromPointer(event){
+  if($('datasetLabelMode')?.checked)return;
   if(!$('cameraManualTarget').checked||state.cameraSource!=='camera'||!state.cameraStream)return;
   const g=cameraPointerGeometry(event);if(!g)return;
   const boxW=.12,boxH=.12;
@@ -216,6 +218,101 @@ async function submitCameraTargetObservation(){
 function renderCameraTargetComponents(){
   const comps=state.build?.components||[];
   $('cameraTargetComponent').innerHTML='<option value="">Current required component</option>'+comps.filter(c=>c.status!=='unexpected'&&c.status!=='ignored').map(c=>'<option value="'+escapeHtml(c.componentKey)+'">'+escapeHtml(c.displayName)+'</option>').join('');
+}
+
+function datasetSlug(value){return String(value||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,80)||'class';}
+function datasetClasses(){
+  const labels=new Set();
+  for(const sample of state.dataset.samples)for(const a of sample.annotations)labels.add(a.label);
+  for(const a of state.dataset.annotations)labels.add(a.label);
+  return [...labels].sort((a,b)=>a.localeCompare(b));
+}
+function renderDatasetClassOptions(){
+  const select=$('datasetClassSelect');if(!select)return;
+  const previous=select.value;
+  const comps=(state.build?.components||[]).filter(c=>c.status!=='unexpected'&&c.status!=='ignored');
+  select.innerHTML=comps.length?comps.map(c=>'<option value="'+escapeHtml(c.displayName)+'">'+escapeHtml(c.displayName)+'</option>').join(''):'<option value="">Start a build to load ingredient classes</option>';
+  if(comps.some(c=>c.displayName===previous))select.value=previous;
+}
+function renderDatasetAnnotations(){
+  const layer=$('datasetAnnotationLayer');if(layer){layer.innerHTML='';for(const [i,a] of state.dataset.annotations.entries()){const g=normalizedBoxToStage(a.bbox);if(!g)continue;const el=document.createElement('div');el.className='dataset-box';el.style.left=(g.left*100)+'%';el.style.top=(g.top*100)+'%';el.style.width=(g.width*100)+'%';el.style.height=(g.height*100)+'%';el.innerHTML='<span>'+escapeHtml(a.label)+' #'+(i+1)+'</span>';layer.appendChild(el);}}
+  const list=$('datasetAnnotationList');if(list)list.innerHTML=state.dataset.annotations.length?state.dataset.annotations.map((a,i)=>'<div class="dataset-annotation-row"><b>'+escapeHtml(a.label)+'</b><span>x '+a.bbox.x.toFixed(3)+' · y '+a.bbox.y.toFixed(3)+' · '+a.bbox.width.toFixed(3)+'×'+a.bbox.height.toFixed(3)+'</span><button type="button" data-dataset-remove="'+i+'">×</button></div>').join(''):'<span class="sim-muted">No annotations on the current frame.</span>';
+  const classes=datasetClasses(),stats=$('datasetStats');if(stats)stats.textContent=state.dataset.annotations.length+' boxes on frame · '+state.dataset.samples.length+' samples · '+classes.length+' classes';
+  if($('datasetState'))$('datasetState').textContent=state.dataset.samples.length+' SAMPLE'+(state.dataset.samples.length===1?'':'S');
+  if($('datasetUndoBox'))$('datasetUndoBox').disabled=state.dataset.annotations.length===0;
+  if($('datasetClearBoxes'))$('datasetClearBoxes').disabled=state.dataset.annotations.length===0;
+  if($('datasetExport'))$('datasetExport').disabled=state.dataset.samples.length===0;
+  const cameraReady=!!state.cameraStream;
+  if($('datasetFreezeFrame'))$('datasetFreezeFrame').disabled=!cameraReady||state.dataset.frozen;
+  if($('datasetResumeFrame'))$('datasetResumeFrame').disabled=!cameraReady||!state.dataset.frozen;
+  if($('datasetCaptureSample'))$('datasetCaptureSample').disabled=!cameraReady;
+}
+function datasetPoint(event){
+  const g=cameraPointerGeometry(event);return g?{x:g.videoX,y:g.videoY}:null;
+}
+function startDatasetBox(event){
+  if(!$('datasetLabelMode')?.checked||!state.cameraStream)return;
+  const label=$('datasetClassSelect')?.value||'';if(!label){log('DATASET','Choose a dataset class first.');return;}
+  const point=datasetPoint(event);if(!point)return;
+  event.preventDefault();state.dataset.drag={start:point,current:point,label,pointerId:event.pointerId};
+  $('glassesStage').setPointerCapture?.(event.pointerId);renderDatasetDrag();
+}
+function renderDatasetDrag(){
+  document.querySelector('.dataset-draft-box')?.remove();const d=state.dataset.drag;if(!d)return;
+  const box={x:Math.min(d.start.x,d.current.x),y:Math.min(d.start.y,d.current.y),width:Math.abs(d.current.x-d.start.x),height:Math.abs(d.current.y-d.start.y)};
+  if(box.width<.001||box.height<.001)return;const g=normalizedBoxToStage(box);if(!g)return;
+  const el=document.createElement('div');el.className='dataset-draft-box';el.style.left=(g.left*100)+'%';el.style.top=(g.top*100)+'%';el.style.width=(g.width*100)+'%';el.style.height=(g.height*100)+'%';el.innerHTML='<span>'+escapeHtml(d.label)+'</span>';$('datasetAnnotationLayer').appendChild(el);
+}
+function moveDatasetBox(event){
+  const d=state.dataset.drag;if(!d||event.pointerId!==d.pointerId)return;const point=datasetPoint(event);if(!point)return;d.current=point;event.preventDefault();renderDatasetAnnotations();renderDatasetDrag();
+}
+function finishDatasetBox(event){
+  const d=state.dataset.drag;if(!d||event.pointerId!==d.pointerId)return;const point=datasetPoint(event)||d.current;d.current=point;
+  const box={x:Math.min(d.start.x,d.current.x),y:Math.min(d.start.y,d.current.y),width:Math.abs(d.current.x-d.start.x),height:Math.abs(d.current.y-d.start.y)};
+  state.dataset.drag=null;document.querySelector('.dataset-draft-box')?.remove();
+  if(box.width>=.01&&box.height>=.01){state.dataset.annotations.push({label:d.label,bbox:{x:clamp(box.x,0,1),y:clamp(box.y,0,1),width:clamp(box.width,0,1-box.x),height:clamp(box.height,0,1-box.y)}});log('DATASET','Added '+d.label+' training box.');}
+  renderDatasetAnnotations();
+}
+function freezeDatasetFrame(){
+  const video=$('cameraVideo');if(!state.cameraStream||!video.videoWidth)return;video.pause();state.dataset.frozen=true;renderDatasetAnnotations();log('DATASET','Camera frame frozen for labeling.');
+}
+async function resumeDatasetFrame(){
+  const video=$('cameraVideo');if(!state.cameraStream)return;await video.play();state.dataset.frozen=false;state.dataset.annotations=[];renderDatasetAnnotations();log('DATASET','Camera resumed; current annotations cleared.');
+}
+function canvasToBlob(canvas,type='image/jpeg',quality=.92){return new Promise(resolve=>canvas.toBlob(resolve,type,quality));}
+async function captureDatasetSample(){
+  const video=$('cameraVideo');if(!state.cameraStream||!video.videoWidth||!video.videoHeight)throw new Error('Start the browser camera first.');
+  const canvas=document.createElement('canvas');canvas.width=video.videoWidth;canvas.height=video.videoHeight;const ctx=canvas.getContext('2d');ctx.drawImage(video,0,0,canvas.width,canvas.height);
+  const blob=await canvasToBlob(canvas,'image/jpeg',.92);if(!blob)throw new Error('Camera frame could not be encoded.');
+  const bytes=new Uint8Array(await blob.arrayBuffer()),index=state.dataset.samples.length+1;
+  const annotations=state.dataset.annotations.map(a=>({label:a.label,bbox:{...a.bbox}}));
+  state.dataset.samples.push({index,width:canvas.width,height:canvas.height,bytes,annotations,capturedAt:new Date().toISOString(),buildPublicId:state.build?.publicId||null,station:state.work?.station?.name||null});
+  state.dataset.annotations=[];renderDatasetAnnotations();log('DATASET','Captured labeled sample #'+index+' with '+annotations.length+' box(es).');
+}
+function crc32(bytes){
+  let crc=0xffffffff;for(const b of bytes){crc^=b;for(let k=0;k<8;k++)crc=(crc>>>1)^((crc&1)?0xedb88320:0);}return (crc^0xffffffff)>>>0;
+}
+function le16(n){return new Uint8Array([n&255,(n>>>8)&255]);}
+function le32(n){return new Uint8Array([n&255,(n>>>8)&255,(n>>>16)&255,(n>>>24)&255]);}
+function concatBytes(parts){const total=parts.reduce((n,p)=>n+p.length,0),out=new Uint8Array(total);let o=0;for(const p of parts){out.set(p,o);o+=p.length;}return out;}
+function zipStore(entries){
+  const enc=new TextEncoder(),locals=[],centrals=[];let offset=0;
+  for(const entry of entries){const name=enc.encode(entry.name),data=entry.data instanceof Uint8Array?entry.data:enc.encode(String(entry.data)),crc=crc32(data);
+    const local=concatBytes([le32(0x04034b50),le16(20),le16(0),le16(0),le16(0),le16(0),le32(crc),le32(data.length),le32(data.length),le16(name.length),le16(0),name,data]);locals.push(local);
+    const central=concatBytes([le32(0x02014b50),le16(20),le16(20),le16(0),le16(0),le16(0),le16(0),le32(crc),le32(data.length),le32(data.length),le16(name.length),le16(0),le16(0),le16(0),le16(0),le32(0),le32(offset),name]);centrals.push(central);offset+=local.length;
+  }
+  const centralBlob=concatBytes(centrals),localBlob=concatBytes(locals),end=concatBytes([le32(0x06054b50),le16(0),le16(0),le16(entries.length),le16(entries.length),le32(centralBlob.length),le32(localBlob.length),le16(0)]);
+  return new Blob([localBlob,centralBlob,end],{type:'application/zip'});
+}
+function yoloLine(classIndex,bbox){const cx=bbox.x+bbox.width/2,cy=bbox.y+bbox.height/2;return [classIndex,cx,cy,bbox.width,bbox.height].map((v,i)=>i===0?String(v):Number(v).toFixed(6)).join(' ');}
+function exportDatasetZip(){
+  if(!state.dataset.samples.length){log('DATASET','Capture at least one dataset sample first.');return;}
+  const classes=[...new Set(state.dataset.samples.flatMap(s=>s.annotations.map(a=>a.label)))].sort((a,b)=>a.localeCompare(b)),classMap=new Map(classes.map((c,i)=>[c,i])),entries=[];
+  for(const sample of state.dataset.samples){const id=String(sample.index).padStart(6,'0');entries.push({name:'images/train/frame-'+id+'.jpg',data:sample.bytes});entries.push({name:'labels/train/frame-'+id+'.txt',data:sample.annotations.map(a=>yoloLine(classMap.get(a.label),a.bbox)).join('\n')+(sample.annotations.length?'\n':'')});}
+  const yaml=['path: .','train: images/train','val: images/train','names:',...classes.map((c,i)=>'  '+i+': '+JSON.stringify(c)),''].join('\n');
+  const manifest={schema:'gelato.vision_training_dataset.v1',createdAt:new Date().toISOString(),format:'yolo_detection',sampleCount:state.dataset.samples.length,classCount:classes.length,classes:classes.map((name,index)=>({index,name,slug:datasetSlug(name)})),samples:state.dataset.samples.map(s=>({index:s.index,width:s.width,height:s.height,annotations:s.annotations.length,capturedAt:s.capturedAt,buildPublicId:s.buildPublicId,station:s.station}))};
+  entries.push({name:'data.yaml',data:yaml},{name:'gelato-manifest.json',data:JSON.stringify(manifest,null,2)+'\n'},{name:'README.txt',data:'Gelato local vision training dataset\nFormat: YOLO object detection\nImages and labels were captured in the Web Glasses Simulator.\nNo POS/KDS/build state is modified by dataset capture.\n'});
+  const blob=zipStore(entries),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='gelato-vision-dataset-'+new Date().toISOString().replace(/[:.]/g,'-')+'.zip';a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);log('DATASET','Exported '+state.dataset.samples.length+' YOLO training sample(s).');
 }
 
 const VISION_TRACK_TTL_MS=1800;
@@ -611,7 +708,7 @@ function render(){
   ].map(([a,b])=>'<div><small>'+escapeHtml(a)+'</small><strong>'+escapeHtml(b)+'</strong></div>').join('');
   const steps=deriveSteps(),comp=currentComponent(),comps=build?.components||[];
   renderTopStatus();renderOrdersQueue(item);renderNextInstruction(comp,validation);renderBuildRail(item,steps,comps);renderValidationPanel(comps,validation);
-  $('componentCount').textContent=String(comps.length);renderCameraTargetComponents();
+  $('componentCount').textContent=String(comps.length);renderCameraTargetComponents();renderDatasetClassOptions();renderDatasetAnnotations();
   $('componentControls').innerHTML=comps.filter(c=>c.status!=='unexpected'&&c.status!=='ignored').map(c=>'<div class="component-row '+escapeHtml(c.status)+'"><div class="copy"><strong>'+escapeHtml(c.displayName)+'</strong><small>'+escapeHtml(c.status)+' · '+Number(c.detectedQuantity||0)+' / '+Number(c.expectedQuantity||0)+' '+escapeHtml(c.unit||'')+'</small></div><button type="button" data-detect="'+escapeHtml(c.componentKey)+'" '+(c.status==='confirmed'?'disabled':'')+'>Detect</button></div>').join('')||'<span class="sim-muted">Start a build to simulate detections.</span>';
   const unexpected=comps.filter(c=>c.status==='unexpected');
   $('exceptions').innerHTML=unexpected.map(c=>'<div class="exception-row"><span>'+escapeHtml(c.displayName)+'</span><button data-resolve="'+escapeHtml(c.componentKey)+'" type="button">Resolve</button></div>').join('')||'<span class="sim-muted">No build exceptions.</span>';
@@ -689,6 +786,18 @@ $('unloadVisionModel').addEventListener('click',()=>unloadGovernedVisionModel())
 $('visionFpsLimit').addEventListener('change',startVisionRuntime);
 $('visionConfidenceThreshold').addEventListener('input',e=>{$('visionConfidenceValue').textContent=e.target.value+'%';});
 $('glassesStage').addEventListener('click',setCameraTargetFromPointer);
+$('glassesStage').addEventListener('pointerdown',startDatasetBox);
+$('glassesStage').addEventListener('pointermove',moveDatasetBox);
+$('glassesStage').addEventListener('pointerup',finishDatasetBox);
+$('glassesStage').addEventListener('pointercancel',finishDatasetBox);
+$('datasetLabelMode').addEventListener('change',e=>{$('glassesStage').classList.toggle('dataset-labeling',e.target.checked);if(e.target.checked)$('cameraManualTarget').checked=false;renderDatasetAnnotations();});
+$('datasetFreezeFrame').addEventListener('click',freezeDatasetFrame);
+$('datasetResumeFrame').addEventListener('click',()=>resumeDatasetFrame().catch(e=>log('ERROR',e.message)));
+$('datasetCaptureSample').addEventListener('click',()=>captureDatasetSample().catch(e=>log('ERROR',e.message)));
+$('datasetUndoBox').addEventListener('click',()=>{state.dataset.annotations.pop();renderDatasetAnnotations();});
+$('datasetClearBoxes').addEventListener('click',()=>{state.dataset.annotations=[];renderDatasetAnnotations();});
+$('datasetExport').addEventListener('click',exportDatasetZip);
+$('datasetAnnotationList').addEventListener('click',e=>{const b=e.target.closest('[data-dataset-remove]');if(!b)return;state.dataset.annotations.splice(Number(b.dataset.datasetRemove),1);renderDatasetAnnotations();});
 $('cameraTargetConfidence').addEventListener('input',e=>{$('cameraTargetConfidenceValue').textContent=e.target.value+'%';});
 document.addEventListener('visibilitychange',()=>{if(state.cameraTrack){state.cameraTrack.enabled=!document.hidden;setCameraHealth(document.hidden?'paused':'ready',document.hidden?'PAUSED':'READY');}if(document.hidden){stopVisionRuntime('paused');stopLiveStationSync('hidden');}else{if(state.cameraStream)startVisionRuntime();if(state.mode==='live'&&state.device)startLiveStationSync({immediate:true});}});
 window.addEventListener('offline',()=>{stopLiveStationSync('idle');setSyncBadge('error','OFFLINE');});
