@@ -196,22 +196,59 @@ namespace Gelato.Ar.Core
 
                 matched.Add(track.TrackId);
 
-                if (track.Emitted || track.StableFrames < _options.StableFramesRequired) continue;
+                var transfer = TransferEvidenceFusion.Advance(
+                    track.Transfer,
+                    detection,
+                    context.StationCalibration,
+                    frame,
+                    _options.TransferMinimumFrames,
+                    _options.TransferMinimumDistance,
+                    _options.TransferSupportBoost,
+                    _options.RequireStableInstanceForTransfer
+                );
+                if (transfer.Started) Diagnostics.TransferStarts++;
 
-                track.Emitted = true;
-                var observation = new IngredientObservation
+                if (!track.Emitted && track.StableFrames >= _options.StableFramesRequired)
                 {
-                    ObservationKey = BuildObservationKey(_sessionPublicId, track.TrackId),
-                    ComponentKey = track.ComponentKey,
-                    DisplayName = string.IsNullOrWhiteSpace(track.DisplayName) ? track.ComponentKey : track.DisplayName,
-                    Action = track.Action,
-                    Quantity = track.Quantity,
-                    Confidence = track.Confidence,
-                    TrackingId = "vision-track-" + track.TrackId,
-                    BoundingBox = track.Box.ToArray()
-                };
-                observations.Add(observation);
-                Diagnostics.ObservationsEmitted++;
+                    track.Emitted = true;
+                    var observation = new IngredientObservation
+                    {
+                        ObservationKey = BuildObservationKey(_sessionPublicId, track.TrackId),
+                        ComponentKey = track.ComponentKey,
+                        DisplayName = string.IsNullOrWhiteSpace(track.DisplayName) ? track.ComponentKey : track.DisplayName,
+                        Action = track.Action,
+                        Quantity = track.Quantity,
+                        Confidence = track.Confidence,
+                        TrackingId = "vision-track-" + track.TrackId,
+                        BoundingBox = track.Box.ToArray(),
+                        EvidenceType = "visual",
+                        RawConfidence = track.Confidence
+                    };
+                    observations.Add(observation);
+                    Diagnostics.ObservationsEmitted++;
+                }
+
+                if (transfer.Completed && track.Emitted && !track.TransferEmitted)
+                {
+                    track.TransferEmitted = true;
+                    observations.Add(new IngredientObservation
+                    {
+                        ObservationKey = BuildTransferObservationKey(_sessionPublicId, track.TrackId),
+                        ComponentKey = track.ComponentKey,
+                        DisplayName = string.IsNullOrWhiteSpace(track.DisplayName) ? track.ComponentKey : track.DisplayName,
+                        Action = "seen",
+                        Quantity = track.Quantity,
+                        Confidence = transfer.EffectiveConfidence,
+                        TrackingId = "vision-track-" + track.TrackId + "-transfer",
+                        BoundingBox = track.Box.ToArray(),
+                        EvidenceType = "visual_transfer",
+                        SourceZoneKey = transfer.SourceZoneKey,
+                        WorkAreaKey = transfer.WorkAreaKey,
+                        RawConfidence = transfer.BaseConfidence
+                    });
+                    Diagnostics.TransferCompletions++;
+                    Diagnostics.ObservationsEmitted++;
+                }
             }
 
             for (var i = _tracks.Count - 1; i >= 0; i--)
@@ -220,6 +257,8 @@ namespace Gelato.Ar.Core
                 if (matched.Contains(track.TrackId)) continue;
                 track.MissedFrames++;
                 track.StableFrames = 0;
+                // Transfer evidence requires one continuous tracked trajectory.
+                track.Transfer.Reset();
                 if (track.MissedFrames >= _options.MaxMissingFrames) _tracks.RemoveAt(i);
             }
 
@@ -344,6 +383,11 @@ namespace Gelato.Ar.Core
             return "vision-" + builder.ToString().Trim('-') + "-track-" + trackId;
         }
 
+        private static string BuildTransferObservationKey(string session, int trackId)
+        {
+            return BuildObservationKey(session, trackId) + "-transfer";
+        }
+
         private sealed class TrackState
         {
             public int TrackId;
@@ -358,6 +402,8 @@ namespace Gelato.Ar.Core
             public float Quantity;
             public bool IsUnexpected;
             public bool Emitted;
+            public TransferEvidenceState Transfer = new TransferEvidenceState();
+            public bool TransferEmitted;
         }
     }
 }
