@@ -320,6 +320,9 @@ function glasses_vision_dataset_intelligence_freeze_guard(PDO $pdo,int $org,stri
 {
     $datasetId=glasses_vision_dataset_intelligence_dataset_id($pdo,$org,$datasetPublic);
     if($datasetId===null)return;
+    $sq=$pdo->prepare("SELECT status FROM glasses_vision_dataset_versions WHERE organization_id=? AND id=? LIMIT 1");
+    $sq->execute([$org,$datasetId]);
+    if((string)$sq->fetchColumn()==='frozen')return;
     $leakage=glasses_vision_dataset_intelligence_split_leakage($pdo,$org,$datasetId);
     if($leakage)throw new InvalidArgumentException('Dataset freeze blocked: build-session split leakage must be resolved.');
     $disagreements=glasses_vision_dataset_intelligence_disagreements($pdo,$org,$datasetId);
