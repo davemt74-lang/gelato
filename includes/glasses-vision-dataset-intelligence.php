@@ -439,6 +439,10 @@ function glasses_vision_dataset_intelligence_collection_plan(PDO $pdo,int $org,s
                 'exact_provenance_duplicate'=>'Remove or intentionally retain duplicate provenance with rationale.',
                 'lighting_metadata'=>'Capture reviewed samples with explicit lighting metadata.',
                 'camera_metadata'=>'Instrument/capture camera-angle or calibration-pose metadata.',
+                'visual_exact_duplicate'=>'Exclude redundant exact duplicate media before release.',
+                'visual_near_duplicate'=>'Review near-duplicate media and keep only useful visual diversity.',
+                'capture_group_leakage'=>'Keep all frames from one capture group in the same dataset split.',
+                'poor_visual_quality'=>'Recapture poor-quality frames under usable lighting/focus.',
                 'location_diversity'=>'Collect approved samples at another location.',
                 'operator_diversity'=>'Collect approved samples from another operator/wearer.',
                 default=>'Collect and approve additional representative examples.',
@@ -469,7 +473,7 @@ function glasses_vision_dataset_intelligence_accept_plan(PDO $pdo,int $org,strin
         $payload=json_decode((string)$plan['plan_json'],true)?:[];
         $missions=0;
         foreach ((array)($payload['tasks']??[]) as $task) {
-            if (!in_array((string)($task['type']??''),['menu_ingredient','class_coverage','location_diversity','operator_diversity','lighting_metadata','camera_metadata'],true)) continue;
+            if (!in_array((string)($task['type']??''),['menu_ingredient','class_coverage','location_diversity','operator_diversity','lighting_metadata','camera_metadata','poor_visual_quality'],true)) continue;
             $label=(string)($task['label']??$task['key']??'coverage');
             $target=max(20,(int)($task['targetApprovedSamples']??20));
             glasses_vision_lab_create_mission($pdo,$org,[
