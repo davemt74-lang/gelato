@@ -259,6 +259,7 @@ namespace Gelato.Ar.Core
         public string BuildSessionPublicId { get; set; } = string.Empty;
         public string ProfileHash { get; set; } = string.Empty;
         public IReadOnlyList<VisionLabelMapping> Mappings { get; set; } = Array.Empty<VisionLabelMapping>();
+        public IReadOnlyList<string> BlockedLabels { get; set; } = Array.Empty<string>();
     }
 
     public sealed class VisionModelPackage
@@ -306,6 +307,7 @@ namespace Gelato.Ar.Core
 
     public sealed class VisionModelReport
     {
+        public string AssignmentKey { get; set; } = string.Empty;
         public string ReportKey { get; set; } = string.Empty;
         public string ReportType { get; set; } = string.Empty;
         public string RolloutPublicId { get; set; } = string.Empty;

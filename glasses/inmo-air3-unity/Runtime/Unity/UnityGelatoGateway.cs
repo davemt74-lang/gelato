@@ -184,7 +184,8 @@ namespace Gelato.Ar.Unity
                 DetectorName = dto.detectorName ?? string.Empty,
                 BuildSessionPublicId = dto.buildSessionPublicId ?? string.Empty,
                 ProfileHash = dto.profileHash ?? string.Empty,
-                Mappings = mappings
+                Mappings = mappings,
+                BlockedLabels = dto.blockedLabels ?? Array.Empty<string>()
             };
         }
 
@@ -246,6 +247,7 @@ namespace Gelato.Ar.Unity
             await PostAsync<VisionModelReportResponse>(new VisionModelReportRequest
             {
                 action = DeviceApiActions.VisionModelReport,
+                assignmentKey = report.AssignmentKey ?? string.Empty,
                 reportKey = report.ReportKey ?? string.Empty,
                 reportType = report.ReportType ?? string.Empty,
                 rolloutPublicId = report.RolloutPublicId ?? string.Empty,
@@ -572,6 +574,7 @@ namespace Gelato.Ar.Unity
         }
         [Serializable] private sealed class VisionModelReportRequest : ActionRequest
         {
+            public string assignmentKey;
             public string reportKey;
             public string reportType;
             public string rolloutPublicId;
@@ -734,6 +737,7 @@ namespace Gelato.Ar.Unity
             public string buildSessionPublicId;
             public string profileHash;
             public VisionLabelMappingDto[] mappings;
+            public string[] blockedLabels;
         }
         [Serializable] private sealed class VisionLabelMappingDto
         {

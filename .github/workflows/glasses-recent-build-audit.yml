@@ -1,4 +1,4 @@
-name: AR Glasses Vision Model Rollout
+name: AR Glasses Sections 18-20 Audit
 
 on:
   pull_request:
@@ -17,9 +17,9 @@ on:
       - 'docs/GLASSES-VISION-MODEL-ROLLOUT.md'
       - 'glasses/inmo-air3-unity/Runtime/Core/VisionModelActivation.cs'
       - 'docs/GLASSES-VISION-MODEL-ACTIVATION.md'
-      - '.github/workflows/glasses-vision-model-rollout.yml'
+      - '.github/workflows/glasses-recent-build-audit.yml'
   push:
-    branches: [main, 'feature/glasses-vision-model-rollout']
+    branches: ['audit/glasses-sections-18-20-hardening']
 
 jobs:
   vision-model-rollout:
@@ -56,10 +56,16 @@ jobs:
           php -l glasses-vision-models.php
           php -l includes/admin-control-core.php
           php -l tests/glasses-vision-model-rollout-contract.php
+          php -l includes/glasses-vision-profiles.php
+          php -l tests/glasses-vision-label-profiles-contract.php
           node --check assets/js/glasses-vision-models.js
 
       - name: Architecture and governance contract
         run: |
+          grep -q 'blockedLabels' includes/glasses-vision-profiles.php
+          grep -q 'automated vision evidence is held fail-closed' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
+          grep -q 'BlockedLabels' glasses/inmo-air3-unity/Runtime/Core/Models.cs
+          grep -q 'visionProfile?.BlockedLabels' glasses/inmo-air3-unity/Runtime/Core/VisionPipeline.cs
           grep -q 'CREATE TABLE glasses_vision_model_packages' database/20261020_glasses_vision_model_rollout.sql
           grep -q 'CREATE TABLE glasses_vision_model_rollouts' database/20261020_glasses_vision_model_rollout.sql
           grep -q 'CREATE TABLE glasses_vision_model_rollout_events' database/20261020_glasses_vision_model_rollout.sql
@@ -117,6 +123,9 @@ jobs:
           $s->applyPending(null);
           if($s->pendingMigrations()) exit(1);
           PHP
+
+      - name: Vision label profile backend contract
+        run: php tests/glasses-vision-label-profiles-contract.php
 
       - name: Vision model rollout backend contract
         run: php tests/glasses-vision-model-rollout-contract.php

@@ -92,6 +92,24 @@ namespace Gelato.Ar.Core
                 return await FailAsync(assignment, "artifact_url_not_https", "Artifact URL must be HTTPS.", cancellationToken).ConfigureAwait(false);
 
             var previous = _runtime.CaptureActive();
+            var expectedSha = (package.ArtifactSha256 ?? string.Empty).Trim().ToLowerInvariant();
+            if (string.Equals(previous.PackagePublicId, package.PublicId, StringComparison.Ordinal)
+                && string.Equals((previous.ArtifactSha256 ?? string.Empty).Trim().ToLowerInvariant(), expectedSha, StringComparison.Ordinal))
+            {
+                var alreadyType = string.Equals(assignment.Selection, "rollback", StringComparison.Ordinal)
+                    ? "rollback_activated"
+                    : "activated";
+                await ReportBestEffortAsync(CreateReport(assignment, alreadyType, "already_active", expectedSha), cancellationToken).ConfigureAwait(false);
+                return new VisionModelActivationResult
+                {
+                    Activated = true,
+                    RestoredPrevious = false,
+                    State = "already_active",
+                    Package = package,
+                    Message = "Assigned verified model is already active."
+                };
+            }
+
             byte[] artifact;
 
             try
@@ -120,7 +138,6 @@ namespace Gelato.Ar.Core
             await ReportBestEffortAsync(CreateReport(assignment, "downloaded", "downloaded"), cancellationToken).ConfigureAwait(false);
 
             var actualSha = ComputeSha256(artifact);
-            var expectedSha = (package.ArtifactSha256 ?? string.Empty).Trim().ToLowerInvariant();
             if (!string.Equals(actualSha, expectedSha, StringComparison.Ordinal))
                 return await FailAsync(assignment, "artifact_sha256_mismatch", "Downloaded artifact checksum does not match the immutable package manifest.", cancellationToken).ConfigureAwait(false);
 
@@ -238,6 +255,7 @@ namespace Gelato.Ar.Core
             var rollout = assignment.Rollout;
             return new VisionModelReport
             {
+                AssignmentKey = assignment.AssignmentKey,
                 ReportKey = assignment.AssignmentKey + ":" + reportType,
                 ReportType = reportType,
                 RolloutPublicId = rollout?.PublicId ?? string.Empty,

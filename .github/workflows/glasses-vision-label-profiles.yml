@@ -78,7 +78,11 @@ jobs:
           grep -q 'ProfileThresholdRejects' glasses/inmo-air3-unity/Runtime/Core/VisionModels.cs
           grep -q 'ProfileApplies' glasses/inmo-air3-unity/Runtime/Core/VisionPipeline.cs
           grep -q 'ProfileMinimumConfidence' glasses/inmo-air3-unity/Runtime/Core/VisionPipeline.cs
+          grep -q 'blockedLabels' includes/glasses-vision-profiles.php
+          grep -q 'BlockedLabels' glasses/inmo-air3-unity/Runtime/Core/Models.cs
+          grep -q 'visionProfile?.BlockedLabels' glasses/inmo-air3-unity/Runtime/Core/VisionPipeline.cs
           grep -q 'RefreshVisionLabelProfileAsync' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
+          grep -q 'automated vision evidence is held fail-closed' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
           grep -q 'detectorLabel' glasses/inmo-air3-unity/Runtime/Unity/UnityGelatoGateway.cs
           grep -q "'modelLabels'" includes/glasses-learning.php
           ! grep -R 'ArPoseManager' glasses/inmo-air3-unity/Runtime/Core

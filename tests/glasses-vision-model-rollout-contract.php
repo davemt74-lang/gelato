@@ -184,12 +184,14 @@ gvm_assert(in_array('sdk_version_too_old_or_unknown',$incompatibleAssignment['co
 glasses_vision_model_rollout_rollback($pdo,$org,(string)$incompatibleDraft['publicId'],$user,'Compatibility gate test complete.');
 
 $report=glasses_vision_model_report($pdo,$device,[
+    'assignmentKey'=>(string)$targetAssignment['assignmentKey'],
     'reportKey'=>(string)$targetAssignment['assignmentKey'].':seen','reportType'=>'assignment_seen',
     'rolloutPublicId'=>(string)$draft['publicId'],'packagePublicId'=>(string)$target['publicId'],
     'runtimeState'=>'assignment_received',
 ]);
 gvm_assert($report['idempotent']===false,'First model report must append to rollout ledger.');
 $reportAgain=glasses_vision_model_report($pdo,$device,[
+    'assignmentKey'=>(string)$targetAssignment['assignmentKey'],
     'reportKey'=>(string)$targetAssignment['assignmentKey'].':seen','reportType'=>'assignment_seen',
 ]);
 gvm_assert($reportAgain['idempotent']===true,'Report keys must be idempotent per device.');
@@ -197,17 +199,36 @@ gvm_assert($reportAgain['idempotent']===true,'Report keys must be idempotent per
 $wrongVerified=false;
 try{
     glasses_vision_model_report($pdo,$device,[
-        'reportKey'=>'verify-wrong','reportType'=>'verified','rolloutPublicId'=>(string)$draft['publicId'],
+        'assignmentKey'=>(string)$targetAssignment['assignmentKey'],
+        'reportKey'=>(string)$targetAssignment['assignmentKey'].':verified','reportType'=>'verified','rolloutPublicId'=>(string)$draft['publicId'],
         'packagePublicId'=>(string)$target['publicId'],'artifactSha256'=>str_repeat('f',64),'runtimeState'=>'verified',
     ]);
 }catch(InvalidArgumentException){$wrongVerified=true;}
 gvm_assert($wrongVerified,'Verified/activated reports must reject checksum mismatch.');
 
 $verified=glasses_vision_model_report($pdo,$device,[
-    'reportKey'=>'verify-correct','reportType'=>'verified','rolloutPublicId'=>(string)$draft['publicId'],
+    'assignmentKey'=>(string)$targetAssignment['assignmentKey'],
+    'reportKey'=>(string)$targetAssignment['assignmentKey'].':verified','reportType'=>'verified','rolloutPublicId'=>(string)$draft['publicId'],
     'packagePublicId'=>(string)$target['publicId'],'artifactSha256'=>(string)$target['artifactSha256'],'runtimeState'=>'verified',
 ]);
 gvm_assert($verified['idempotent']===false,'Correct checksum verification must be recordable.');
+
+$forgedTarget=false;
+try{
+    glasses_vision_model_report($pdo,$device,[
+        'assignmentKey'=>(string)$baselineAssignment['assignmentKey'],
+        'reportKey'=>(string)$baselineAssignment['assignmentKey'].':activated',
+        'reportType'=>'activated',
+        'rolloutPublicId'=>(string)$draft['publicId'],
+        'packagePublicId'=>(string)$target['publicId'],
+        'artifactSha256'=>(string)$target['artifactSha256'],
+        'runtimeState'=>'active',
+    ]);
+}catch(InvalidArgumentException){$forgedTarget=true;}
+gvm_assert($forgedTarget,'A baseline-issued assignment must never be able to claim target-package activation.');
+
+$assignmentLedger=(int)gvm_one($pdo,"SELECT COUNT(*) FROM glasses_vision_model_assignments WHERE organization_id=? AND device_id=? AND build_session_id=(SELECT id FROM glasses_build_sessions WHERE organization_id=? AND public_id=?)",[$org,(int)$device['id'],$org,$sessionPublic]);
+gvm_assert($assignmentLedger>=5,'Every materially different device/build model assignment must be recorded in the immutable assignment ledger.');
 
 $metrics=glasses_vision_model_rollout_metrics($pdo,$org,(string)$draft['publicId']);
 gvm_assert((int)($metrics['byType']['assignment_seen']['devices']??0)===1,'Rollout metrics must count assignment-seen devices.');

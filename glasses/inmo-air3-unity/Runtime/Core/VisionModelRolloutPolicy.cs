@@ -71,6 +71,7 @@ namespace Gelato.Ar.Core
             if (assignment == null) throw new ArgumentNullException(nameof(assignment));
             return new VisionModelReport
             {
+                AssignmentKey = assignment.AssignmentKey,
                 ReportKey = assignment.AssignmentKey + ":seen",
                 ReportType = "assignment_seen",
                 RolloutPublicId = assignment.Rollout?.PublicId ?? string.Empty,

@@ -11,6 +11,7 @@ function glasses_vision_models_ready(PDO $pdo): bool
         'glasses_vision_model_packages',
         'glasses_vision_model_rollouts',
         'glasses_vision_model_rollout_events',
+        'glasses_vision_model_assignments',
         'glasses_vision_model_device_reports',
     ] as $table){
         $q=$pdo->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?");
@@ -456,11 +457,37 @@ function glasses_vision_model_matching_rollout(PDO $pdo,array $device,string $de
     return $public?glasses_vision_model_rollout_row($pdo,$org,(string)$public,false):null;
 }
 
+function glasses_vision_model_assignment_record(
+    PDO $pdo,array $device,array $session,array $result,?array $rollout,?array $package
+): void {
+    $compatibility=is_array($result['compatibility']??null)?$result['compatibility']:[];
+    $compatJson=json_encode($compatibility,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
+    $pdo->prepare("INSERT INTO glasses_vision_model_assignments
+        (organization_id,device_id,build_session_id,assignment_key,detector_name,rollout_id,package_id,action,selection,rollout_status,canary_percent,canary_bucket,compatibility_json)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ON DUPLICATE KEY UPDATE assignment_key=VALUES(assignment_key)")
+        ->execute([
+            (int)$device['organization_id'],
+            (int)$device['id'],
+            (int)$session['id'],
+            (string)$result['assignmentKey'],
+            (string)$result['detectorName'],
+            $rollout!==null?(int)$rollout['id']:null,
+            $package!==null?(int)$package['id']:null,
+            (string)$result['action'],
+            (string)($result['selection']??'hold'),
+            $rollout!==null?(string)$rollout['status']:null,
+            $rollout!==null?(float)$rollout['canary_percent']:null,
+            array_key_exists('canaryBucket',$result)?(float)$result['canaryBucket']:null,
+            $compatJson,
+        ]);
+}
+
 function glasses_vision_model_assignment(
     PDO $pdo,array $device,string $sessionPublicId,string $detectorName
 ): array {
     if(!glasses_vision_models_ready($pdo))
-        throw new RuntimeException('Vision model rollout migration is not installed.');
+        throw new RuntimeException('Vision model rollout migrations are not installed.');
 
     $org=(int)$device['organization_id'];
     $session=glasses_build_session_row($pdo,$org,$sessionPublicId,false);
@@ -471,17 +498,22 @@ function glasses_vision_model_assignment(
 
     $rollout=glasses_vision_model_matching_rollout($pdo,$device,$detector);
     if(!$rollout){
-        return [
+        $result=[
             'schema'=>'gelato.vision_model_assignment.v1',
             'detectorName'=>$detector,
             'buildSessionPublicId'=>$sessionPublicId,
             'action'=>'hold',
             'reason'=>'no_rollout',
-            'assignmentKey'=>hash('sha256',$detector.'|'.$sessionPublicId.'|hold|no_rollout'),
+            'assignmentKey'=>hash('sha256',implode('|',[
+                $detector,$sessionPublicId,(string)$device['public_id'],'hold','no_rollout'
+            ])),
+            'selection'=>'hold',
             'rollout'=>null,
             'package'=>null,
             'compatibility'=>['compatible'=>true,'reasons'=>[]],
         ];
+        glasses_vision_model_assignment_record($pdo,$device,$session,$result,null,null);
+        return $result;
     }
 
     $status=(string)$rollout['status'];
@@ -509,11 +541,11 @@ function glasses_vision_model_assignment(
     $action=$package===null?'hold':($compatibility['compatible']?'apply':'hold');
     $packagePublic=$package!==null?(string)$package['public_id']:'';
     $assignmentKey=hash('sha256',implode('|',[
-        (string)$rollout['public_id'],(string)$device['public_id'],$status,(string)$rollout['canary_percent'],
+        $sessionPublicId,(string)$rollout['public_id'],(string)$device['public_id'],$status,(string)$rollout['canary_percent'],
         $selection,$packagePublic,$action
     ]));
 
-    return [
+    $result=[
         'schema'=>'gelato.vision_model_assignment.v1',
         'detectorName'=>$detector,
         'buildSessionPublicId'=>$sessionPublicId,
@@ -530,14 +562,20 @@ function glasses_vision_model_assignment(
         'package'=>$package!==null?glasses_vision_model_package_public($package):null,
         'compatibility'=>$compatibility,
     ];
+    glasses_vision_model_assignment_record($pdo,$device,$session,$result,$rollout,$package);
+    return $result;
 }
 
 function glasses_vision_model_report(PDO $pdo,array $device,array $input): array
 {
     if(!glasses_vision_models_ready($pdo))
-        throw new RuntimeException('Vision model rollout migration is not installed.');
+        throw new RuntimeException('Vision model rollout migrations are not installed.');
 
     $org=(int)$device['organization_id'];
+    $assignmentKey=strtolower(trim((string)($input['assignmentKey']??'')));
+    if(!preg_match('/^[a-f0-9]{64}$/',$assignmentKey))
+        throw new InvalidArgumentException('Vision model report requires a valid assignment key.');
+
     $reportKey=mb_substr(trim((string)($input['reportKey']??'')),0,190,'UTF-8');
     $reportType=trim((string)($input['reportType']??''));
     $runtimeState=mb_substr(trim((string)($input['runtimeState']??'')),0,40,'UTF-8')?:null;
@@ -547,9 +585,12 @@ function glasses_vision_model_report(PDO $pdo,array $device,array $input): array
 
     $allowed=['assignment_seen','download_started','downloaded','verified','activated','failed','rollback_activated'];
     if(!in_array($reportType,$allowed,true))throw new InvalidArgumentException('Vision model report type is invalid.');
+    $expectedReportKey=$assignmentKey.($reportType==='assignment_seen'?':seen':':'.$reportType);
+    if(!hash_equals($expectedReportKey,$reportKey))
+        throw new InvalidArgumentException('Model report key does not match the issued assignment and report type.');
 
     return glasses_transaction($pdo,function()use(
-        $pdo,$device,$org,$input,$reportKey,$reportType,$runtimeState,$errorCode,$message
+        $pdo,$device,$org,$input,$assignmentKey,$reportKey,$reportType,$runtimeState,$errorCode,$message
     ):array{
         $q=$pdo->prepare("SELECT * FROM glasses_vision_model_device_reports WHERE device_id=? AND report_key=? LIMIT 1");
         $q->execute([(int)$device['id'],$reportKey]);
@@ -560,38 +601,52 @@ function glasses_vision_model_report(PDO $pdo,array $device,array $input): array
             'idempotent'=>true,
         ];
 
-        $rolloutId=null;
+        $q=$pdo->prepare("SELECT * FROM glasses_vision_model_assignments
+            WHERE organization_id=? AND device_id=? AND assignment_key=? LIMIT 1");
+        $q->execute([$org,(int)$device['id'],$assignmentKey]);
+        $assignment=$q->fetch();
+        if(!$assignment)throw new InvalidArgumentException('Vision model report references an assignment that was not issued to this device.');
+
+        $rolloutId=$assignment['rollout_id']!==null?(int)$assignment['rollout_id']:null;
+        $packageId=$assignment['package_id']!==null?(int)$assignment['package_id']:null;
+
         $rollout=null;
         $rolloutPublic=trim((string)($input['rolloutPublicId']??''));
-        if($rolloutPublic!==''){
-            $rollout=glasses_vision_model_rollout_row($pdo,$org,$rolloutPublic,false);
-            $rolloutId=(int)$rollout['id'];
+        if($rolloutId!==null){
+            $q=$pdo->prepare("SELECT * FROM glasses_vision_model_rollouts WHERE organization_id=? AND id=? LIMIT 1");
+            $q->execute([$org,$rolloutId]);
+            $rollout=$q->fetch();
+            if(!$rollout)throw new InvalidArgumentException('Issued rollout assignment no longer exists.');
+            if($rolloutPublic===''||!hash_equals((string)$rollout['public_id'],$rolloutPublic))
+                throw new InvalidArgumentException('Reported rollout does not match the issued assignment.');
+        }elseif($rolloutPublic!==''){
+            throw new InvalidArgumentException('Issued assignment did not include a rollout.');
         }
 
-        $packageId=null;
         $package=null;
         $packagePublic=trim((string)($input['packagePublicId']??''));
-        if($packagePublic!==''){
-            $package=glasses_vision_model_package_row($pdo,$org,$packagePublic,false);
-            $packageId=(int)$package['id'];
+        if($packageId!==null){
+            $q=$pdo->prepare("SELECT * FROM glasses_vision_model_packages WHERE organization_id=? AND id=? LIMIT 1");
+            $q->execute([$org,$packageId]);
+            $package=$q->fetch();
+            if(!$package)throw new InvalidArgumentException('Issued model package no longer exists.');
+            if($packagePublic===''||!hash_equals((string)$package['public_id'],$packagePublic))
+                throw new InvalidArgumentException('Reported model package does not match the issued assignment.');
+        }elseif($packagePublic!==''){
+            throw new InvalidArgumentException('Issued assignment did not include a package.');
         }
 
         $reportedSha=null;
         if(trim((string)($input['artifactSha256']??''))!=='')
             $reportedSha=glasses_vision_model_sha256((string)$input['artifactSha256']);
 
-        if($rollout!==null&&$package!==null){
-            $allowedPackageIds=array_filter([
-                (int)$rollout['target_package_id'],
-                $rollout['baseline_package_id']!==null?(int)$rollout['baseline_package_id']:null,
-            ],static fn($id):bool=>$id!==null);
-            if(!in_array((int)$package['id'],$allowedPackageIds,true))
-                throw new InvalidArgumentException('Reported model package does not belong to the referenced rollout.');
+        if(in_array($reportType,['download_started','downloaded','verified','activated','rollback_activated'],true)){
+            if((string)$assignment['action']!=='apply'||!$package)
+                throw new InvalidArgumentException('This issued assignment did not authorize model application.');
         }
 
         if(in_array($reportType,['verified','activated','rollback_activated'],true)){
-            if(!$rollout)throw new InvalidArgumentException('Verified or activated model reports require a rollout.');
-            if(!$package)throw new InvalidArgumentException('Verified or activated model reports require a package.');
+            if(!$rollout)throw new InvalidArgumentException('Verified or activated model reports require an issued rollout.');
             if($reportedSha===null)throw new InvalidArgumentException('Verified or activated model reports require the artifact SHA-256.');
             if(!hash_equals((string)$package['artifact_sha256'],$reportedSha))
                 throw new InvalidArgumentException('Reported model checksum does not match the registered package.');
@@ -600,16 +655,20 @@ function glasses_vision_model_report(PDO $pdo,array $device,array $input): array
             if(!$compatibility['compatible'])
                 throw new InvalidArgumentException('Device cannot verify or activate an incompatible model package.');
 
+            if($reportType==='rollback_activated'&&(string)$assignment['selection']!=='rollback')
+                throw new InvalidArgumentException('Rollback activation requires an issued rollback assignment.');
             if($reportType==='rollback_activated'&&(int)$package['id']!==(int)$rollout['baseline_package_id'])
                 throw new InvalidArgumentException('Rollback activation must report the declared baseline package.');
+            if($reportType==='activated'&&(string)$assignment['selection']==='rollback')
+                throw new InvalidArgumentException('Rollback assignments must use rollback_activated telemetry.');
         }
 
         $metadata=glasses_json_object(is_array($input['metadata']??null)?$input['metadata']:null,12000);
         $pdo->prepare("INSERT INTO glasses_vision_model_device_reports
-            (organization_id,device_id,rollout_id,package_id,report_key,report_type,runtime_state,artifact_sha256,error_code,message,metadata_json)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)")
+            (organization_id,device_id,assignment_id,rollout_id,package_id,report_key,report_type,runtime_state,artifact_sha256,error_code,message,metadata_json)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
             ->execute([
-                $org,(int)$device['id'],$rolloutId,$packageId,$reportKey,$reportType,$runtimeState,$reportedSha,
+                $org,(int)$device['id'],(int)$assignment['id'],$rolloutId,$packageId,$reportKey,$reportType,$runtimeState,$reportedSha,
                 $errorCode,$message,$metadata
             ]);
 
@@ -617,6 +676,7 @@ function glasses_vision_model_report(PDO $pdo,array $device,array $input): array
             $pdo,$org,(int)$device['id'],'vision_model_'.$reportType,
             (int)$device['location_id'],$device['station_id']!==null?(int)$device['station_id']:null,
             [
+                'assignmentKey'=>$assignmentKey,
                 'rolloutPublicId'=>$rolloutPublic?:null,
                 'packagePublicId'=>$packagePublic?:null,
                 'runtimeState'=>$runtimeState,

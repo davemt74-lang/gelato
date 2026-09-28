@@ -22,7 +22,9 @@ Unverified bytes never reach the runtime host.
 
 Before preparing a candidate, Gelato captures the currently active runtime snapshot.
 
-Preparation and self-test happen before the active model is changed.
+If the active package ID and verified SHA-256 already match the governed assignment, Gelato returns `already_active`, emits assignment-specific activation telemetry, and skips download, preparation, self-test, and swap.
+
+Otherwise, preparation and self-test happen before the active model is changed.
 
 If the runtime throws during activation, Gelato calls `RestoreAsync` with the captured known-good snapshot using a non-cancelled restoration token. A failed activation therefore attempts restoration even when the original operation was cancelled or faulted during the swap.
 
@@ -40,7 +42,7 @@ The default client-side artifact ceiling is 512 MiB. A host may configure a smal
 
 ## Reports
 
-The activation transaction emits idempotent assignment-derived reports:
+The activation transaction emits idempotent assignment-derived reports. Each report carries the exact Section 19 assignment key, and the server accepts it only when that assignment was actually issued to the reporting device/build:
 
 - `download_started`
 - `downloaded`
@@ -97,6 +99,7 @@ The activated runtime only changes the detector implementation feeding the exist
 The hardware-neutral contract proves:
 
 - verified bytes activate exactly once;
+- an already-active package/checksum performs no download or runtime swap;
 - equal-length tampered bytes fail on SHA-256 before runtime preparation;
 - preparation failure preserves the known-good runtime;
 - activation failure restores the captured known-good runtime;

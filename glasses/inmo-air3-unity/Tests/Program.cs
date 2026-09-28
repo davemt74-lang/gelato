@@ -558,6 +558,7 @@ internal static class Program
             DetectorName = "scripted-test-detector",
             BuildSessionPublicId = "build-1",
             ProfileHash = new string('b', 64),
+            BlockedLabels = new[] { "turkey" },
             Mappings = new[]
             {
                 new VisionLabelMapping
@@ -603,6 +604,43 @@ internal static class Program
         Assert(unavailable == null, "vision profile transport failure must degrade to recipe-name fallback");
         Assert(coordinator.State == WorkflowState.Building, "optional vision-profile failure must not put the kitchen workflow into Error");
         Assert(coordinator.LastVisionProfileError == "simulated vision profile failure", "vision-profile fallback reason must remain diagnosable");
+
+        var detector = new ScriptedVisionDetector(
+            new[]
+            {
+                new VisionDetection
+                {
+                    Label = "Turkey",
+                    DisplayName = "Turkey",
+                    Confidence = 0.95f,
+                    Quantity = 1f,
+                    BoundingBox = new[] { 0.1f, 0.1f, 0.2f, 0.2f }
+                }
+            }
+        );
+        var pipeline = new VisionPipeline(detector, new VisionPipelineOptions
+        {
+            MinimumConfidence = 0.50f,
+            StableFramesRequired = 1,
+            MaxMissingFrames = 1
+        });
+        var observations = await pipeline.ProcessAsync(
+            new CameraFrame
+            {
+                Data = new byte[16],
+                Width = 4,
+                Height = 4,
+                TimestampNanoseconds = 1,
+                PixelFormat = "grayscale8"
+            },
+            new VisionFrameContext
+            {
+                BuildSessionPublicId = "build-1",
+                ExpectedComponents = gateway.StartComponents,
+                VisionProfile = profile
+            }
+        );
+        Assert(observations.Count == 0, "blocked detector-specific labels must not re-enter through recipe display-name fallback");
 
         coordinator.ResetForNextWork();
         Assert(coordinator.VisionLabelProfile == null && coordinator.LastVisionProfileError == null, "reset must clear per-build vision profile state");
