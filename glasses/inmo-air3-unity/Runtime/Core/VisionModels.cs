@@ -49,6 +49,9 @@ namespace Gelato.Ar.Core
 
     public sealed class VisionDetection
     {
+        // Detector-facing class/label. The model does not need to know Gelato database/component IDs.
+        public string Label { get; set; } = string.Empty;
+        // Optional direct component key for deterministic/test detectors. Production models may leave this empty.
         public string ComponentKey { get; set; } = string.Empty;
         public string DisplayName { get; set; } = string.Empty;
         public string InstanceKey { get; set; } = string.Empty;
@@ -82,6 +85,9 @@ namespace Gelato.Ar.Core
         public int StableFramesRequired { get; set; } = 2;
         public int MaxMissingFrames { get; set; } = 3;
         public float AssociationIouThreshold { get; set; } = 0.25f;
+        public int MaxDetectionsPerFrame { get; set; } = 64;
+        public int MaxActiveTracks { get; set; } = 128;
+        public bool RequireMonotonicTimestamps { get; set; } = true;
 
         public void Validate()
         {
@@ -93,6 +99,30 @@ namespace Gelato.Ar.Core
                 throw new InvalidOperationException("Vision missing-frame limit is invalid.");
             if (AssociationIouThreshold < 0f || AssociationIouThreshold > 1f)
                 throw new InvalidOperationException("Vision IoU threshold must be between 0 and 1.");
+            if (MaxDetectionsPerFrame < 1 || MaxDetectionsPerFrame > 512)
+                throw new InvalidOperationException("Vision per-frame detection limit is invalid.");
+            if (MaxActiveTracks < 1 || MaxActiveTracks > 2048)
+                throw new InvalidOperationException("Vision active-track limit is invalid.");
+        }
+    }
+
+    public sealed class VisionPipelineDiagnostics
+    {
+        public long FramesProcessed { get; internal set; }
+        public long DuplicateOrStaleFramesSkipped { get; internal set; }
+        public long DetectionsReceived { get; internal set; }
+        public long DetectionsAccepted { get; internal set; }
+        public long DetectionsRejected { get; internal set; }
+        public long ObservationsEmitted { get; internal set; }
+
+        internal void Reset()
+        {
+            FramesProcessed = 0;
+            DuplicateOrStaleFramesSkipped = 0;
+            DetectionsReceived = 0;
+            DetectionsAccepted = 0;
+            DetectionsRejected = 0;
+            ObservationsEmitted = 0;
         }
     }
 }
