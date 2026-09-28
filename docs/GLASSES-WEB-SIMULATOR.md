@@ -50,3 +50,16 @@ The simulator now includes a browser-local projection calibration layer designed
 - Factory reset for deterministic baseline geometry.
 
 Calibration settings never alter POS, KDS, build sessions, observations, validation, or Expo state. They are presentation-only simulator data.
+
+
+## SVG frame and optical mask
+
+The default simulator frame is now native SVG rather than a raster dependency. The vector layer contains separate frame artwork and a lens occlusion mask, allowing the HUD to remain an independent live DOM projection while the area outside the optical lens openings is visually suppressed.
+
+Frame modes:
+
+- **SVG** — default scalable vector frame + optional optical mask.
+- **Uploaded** — local custom glasses artwork with the same optional optical mask.
+- **None** — scene/HUD-only development view with no frame or mask.
+
+Frame and mask preferences persist only in browser localStorage. They do not alter POS, KDS, AR build, validation, or Expo data.
