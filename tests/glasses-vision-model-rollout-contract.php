@@ -388,6 +388,7 @@ $override=glasses_vision_model_rollout_advance_override($pdo,$org,(string)$canar
 gvm_assert((float)$override['canaryPercent']===10.0,'Documented override must advance only to the next governed stage.');
 
 $canaryRow=glasses_vision_model_rollout_row($pdo,$org,(string)$canaryDraft['publicId'],false);
+$sessionRow=glasses_build_session_row($pdo,$org,$sessionPublic,false);
 $baseRow=glasses_vision_model_package_row($pdo,$org,(string)$baseline['publicId'],false);
 $targetRow=glasses_vision_model_package_row($pdo,$org,(string)$shadowTarget['publicId'],false);
 $deviceIds=[(int)$device['id']];
@@ -407,7 +408,7 @@ foreach(['baseline','baseline','target','target'] as $idx=>$cohort){
     $pdo->prepare("INSERT INTO glasses_vision_model_assignments
         (organization_id,device_id,build_session_id,assignment_key,detector_name,rollout_id,package_id,action,selection,rollout_status,canary_percent,canary_bucket,compatibility_json)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")->execute([
-            $org,$deviceIds[$idx],(int)$session['id'],$key,'food-model-v3',(int)$canaryRow['id'],$packageId,'apply',$cohort,'active',10,$bucket,'{"compatible":true,"reasons":[]}'
+            $org,$deviceIds[$idx],(int)$sessionRow['id'],$key,'food-model-v3',(int)$canaryRow['id'],$packageId,'apply',$cohort,'active',10,$bucket,'{"compatible":true,"reasons":[]}'
         ]);
     $assignmentIds[$cohort][]=(int)$pdo->lastInsertId();
 }
@@ -418,7 +419,7 @@ foreach(['baseline','target'] as $cohort){
         $pdo->prepare("INSERT INTO glasses_vision_canary_samples
             (organization_id,rollout_id,assignment_id,device_id,build_session_id,sample_key,cohort,observation_count,correction_count,low_confidence_count,unexpected_count,validation_failed,build_duration_ms,inference_count,inference_latency_ms,timeout_count,runtime_error_count)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")->execute([
-                $org,(int)$canaryRow['id'],$assignmentId,$deviceId,(int)$session['id'],$cohort.'-healthy-'.$i,$cohort,
+                $org,(int)$canaryRow['id'],$assignmentId,$deviceId,(int)$sessionRow['id'],$cohort.'-healthy-'.$i,$cohort,
                 10,0,$cohort==='target'?1:1,0,0,$cohort==='target'?102000:100000,100,$cohort==='target'?5200:5000,0,0
             ]);
     }
@@ -432,7 +433,7 @@ for($i=1;$i<=10;$i++){
     $pdo->prepare("INSERT INTO glasses_vision_canary_samples
         (organization_id,rollout_id,assignment_id,device_id,build_session_id,sample_key,cohort,observation_count,correction_count,low_confidence_count,unexpected_count,validation_failed,build_duration_ms,inference_count,inference_latency_ms,timeout_count,runtime_error_count)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")->execute([
-            $org,(int)$canaryRow['id'],$assignmentIds['target'][$i%2],$deviceIds[2+($i%2)],(int)$session['id'],'target-severe-'.$i,'target',
+            $org,(int)$canaryRow['id'],$assignmentIds['target'][$i%2],$deviceIds[2+($i%2)],(int)$sessionRow['id'],'target-severe-'.$i,'target',
             10,10,8,4,1,180000,100,12000,12,8
         ]);
 }
