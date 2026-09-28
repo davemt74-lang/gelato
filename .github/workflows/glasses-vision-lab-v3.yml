@@ -1,0 +1,109 @@
+name: AR Glasses Vision Lab V3 Active Learning
+
+on:
+  pull_request:
+    paths:
+      - 'database/20261027_vision_lab_v3_active_learning.sql'
+      - 'includes/glasses-vision-active-learning.php'
+      - 'includes/glasses-vision-lab.php'
+      - 'api/glasses-vision-lab.php'
+      - 'glasses-vision-lab.php'
+      - 'assets/js/glasses-vision-lab.js'
+      - 'assets/css/glasses-vision-lab.css'
+      - 'includes/admin-control-core.php'
+      - 'tests/glasses-vision-lab-v2-contract.php'
+      - 'tests/glasses-vision-lab-v3-active-learning-contract.php'
+      - 'docs/GLASSES-VISION-LAB-ACTIVE-LEARNING.md'
+      - '.github/workflows/glasses-vision-lab-v3.yml'
+  push:
+    branches: [main, 'feature/vision-lab-v3-active-learning-automation']
+
+jobs:
+  vision-lab-v3:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax
+        run: |
+          php -l includes/glasses-vision-active-learning.php
+          php -l api/glasses-vision-lab.php
+          php -l glasses-vision-lab.php
+          php -l tests/glasses-vision-lab-v3-active-learning-contract.php
+          node --check assets/js/glasses-vision-lab.js
+      - name: Active learning architecture
+        run: |
+          grep -q 'CREATE TABLE glasses_vision_active_learning_candidates' database/20261027_vision_lab_v3_active_learning.sql
+          grep -q 'CREATE TABLE glasses_vision_active_learning_scans' database/20261027_vision_lab_v3_active_learning.sql
+          grep -q 'function glasses_vision_active_learning_scan' includes/glasses-vision-active-learning.php
+          grep -q 'function glasses_vision_active_learning_create_mission' includes/glasses-vision-active-learning.php
+          grep -q 'shadow_disagreement' includes/glasses-vision-active-learning.php
+          grep -q 'drift_incident' includes/glasses-vision-active-learning.php
+          grep -q 'canary_failure' includes/glasses-vision-active-learning.php
+          grep -q 'rare_class' includes/glasses-vision-active-learning.php
+          grep -q 'low_confidence' includes/glasses-vision-active-learning.php
+          grep -q 'app_verify_request_csrf' api/glasses-vision-lab.php
+          ! grep -q 'glasses_build_observe' api/glasses-vision-lab.php
+          ! grep -q 'kds_transition' api/glasses-vision-lab.php
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_restaurant_ai_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->ensureTrackingTables();$s->bootstrapLegacyHistory(null);$s->applyPending(null);
+          if($s->pendingMigrations()) exit(1);
+          PHP
+      - name: Vision Lab V3 active learning contract
+        run: php tests/glasses-vision-lab-v3-active-learning-contract.php
+      - name: Vision Lab V2 regression
+        run: php tests/glasses-vision-lab-v2-contract.php
+      - name: Existing vision regressions
+        run: |
+          php tests/glasses-learning-analytics-contract.php
+          php tests/glasses-vision-operations-contract.php
+          php tests/glasses-vision-model-rollout-contract.php
+          php tests/glasses-observation-corrections-contract.php
+          php tests/glasses-build-session-contract.php
+          php tests/glasses-product-validation-contract.php
+          php tests/kds-contract.php
+      - name: Upgrade idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->assertAppliedChecksumsUnchanged();
+          if($s->pendingMigrations()) exit(2);
+          if($s->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP
