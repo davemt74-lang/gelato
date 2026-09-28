@@ -66,7 +66,7 @@ function glasses_simulator_dispatch(PDO $pdo,array $user,array $in): array
     $action=trim((string)($in['action']??''));
     $write=in_array($action,[
         'build.start','build.observe','build.confirm','build.resolve_unexpected',
-        'validation.evaluate','handoff.expo'
+        'validation.evaluate','handoff.expo','vision.shadow_report','vision.shadow_complete'
     ],true);
     $device=glasses_simulator_device($pdo,$user,(string)($in['devicePublicId']??''),$write);
 
@@ -98,6 +98,19 @@ function glasses_simulator_dispatch(PDO $pdo,array $user,array $in): array
         $detector=trim((string)($in['detectorName']??''));
         if($detector==='')throw new InvalidArgumentException('Detector name is required.');
         return ['profile'=>glasses_vision_profile_for_build($pdo,$device,$session,$detector)];
+    }
+    if($action==='vision.shadow_assignment'){
+        $detector=trim((string)($in['detectorName']??''));
+        if($detector==='')throw new InvalidArgumentException('Detector name is required.');
+        return ['shadow'=>glasses_vision_shadow_assignment($pdo,$device,$session,$detector)];
+    }
+    if($action==='vision.shadow_report'){
+        return ['shadow'=>glasses_vision_shadow_report($pdo,$device,$session,$in)];
+    }
+    if($action==='vision.shadow_complete'){
+        $run=trim((string)($in['shadowRunPublicId']??''));
+        if($run==='')throw new InvalidArgumentException('Shadow run is required.');
+        return ['shadow'=>glasses_vision_shadow_complete($pdo,$device,$session,$run)];
     }
     if($action==='build.observe'){
         return ['buildSession'=>glasses_build_observe($pdo,$device,$session,$in)];
