@@ -2,6 +2,7 @@
 SET NAMES utf8mb4;
 
 ALTER TABLE glasses_vision_drift_incidents
+  ADD COLUMN public_id VARCHAR(64) NULL AFTER id,
   ADD COLUMN recovery_status VARCHAR(32) NOT NULL DEFAULT 'open' AFTER category,
   ADD COLUMN remediation_type VARCHAR(48) NULL AFTER recovery_status,
   ADD COLUMN remediation_notes VARCHAR(2000) NULL AFTER remediation_type,
@@ -15,6 +16,11 @@ ALTER TABLE glasses_vision_drift_incidents
   ADD COLUMN last_action_at DATETIME(6) NULL AFTER last_action_by,
   ADD CONSTRAINT fk_glasses_vision_drift_replacement_package FOREIGN KEY (replacement_package_id) REFERENCES glasses_vision_model_packages(id) ON DELETE SET NULL,
   ADD CONSTRAINT fk_glasses_vision_drift_last_action_user FOREIGN KEY (last_action_by) REFERENCES users(id) ON DELETE SET NULL;
+
+UPDATE glasses_vision_drift_incidents SET public_id=CONCAT('vision-drift-',id) WHERE public_id IS NULL;
+ALTER TABLE glasses_vision_drift_incidents
+  MODIFY public_id VARCHAR(64) NOT NULL,
+  ADD UNIQUE KEY uq_glasses_vision_drift_public (organization_id,public_id);
 
 ALTER TABLE glasses_vision_drift_baselines
   DROP INDEX uq_glasses_vision_drift_baseline,
