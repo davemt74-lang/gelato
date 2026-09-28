@@ -13,6 +13,7 @@ internal static class Program
         await ErrorStateFlow();
         HudContract();
         SimulatorSupportContract();
+        await StationCalibrationContract();
         await VisionPipelineContract();
         Console.WriteLine("air3-unity-shell-ok");
     }
@@ -269,6 +270,95 @@ internal static class Program
         Assert(SimulatorHotkeys.ConfirmVerify == "C" && SimulatorHotkeys.ResolveUnexpected == "X", "simulator exception hotkeys must remain stable");
     }
 
+
+    private static async Task StationCalibrationContract()
+    {
+        var frame = new CameraFrame
+        {
+            Data = new byte[640 * 480],
+            Width = 640,
+            Height = 480,
+            TimestampNanoseconds = 101,
+            PixelFormat = "grayscale8"
+        };
+
+        var calibration = new StationCalibration
+        {
+            PublicId = "station-cal-1",
+            StationPublicId = "station-sandwich",
+            StationName = "Sandwich",
+            Version = 2,
+            Platform = "inmo_air3",
+            FrameWidth = 640,
+            FrameHeight = 480,
+            PixelFormat = "grayscale8",
+            SourceHash = new string('a', 64),
+            Compatibility = new CalibrationCompatibility { Compatible = true },
+            Zones = new[]
+            {
+                new IngredientZone
+                {
+                    ZoneKey = "turkey-primary",
+                    IngredientId = 42,
+                    CanonicalName = "Turkey",
+                    DisplayName = "Turkey Pan",
+                    X = 0.10f,
+                    Y = 0.20f,
+                    Width = 0.20f,
+                    Height = 0.20f,
+                    Priority = 10
+                },
+                new IngredientZone
+                {
+                    ZoneKey = "turkey-backup",
+                    IngredientId = 42,
+                    CanonicalName = "Turkey",
+                    DisplayName = "Turkey Backup",
+                    X = 0.15f,
+                    Y = 0.25f,
+                    Width = 0.20f,
+                    Height = 0.20f,
+                    Priority = 5
+                }
+            }
+        };
+
+        Assert(StationCalibrationPolicy.CanUse(calibration, frame), "matching camera geometry and compatible profile must be usable");
+
+        var mismatched = new CameraFrame
+        {
+            Data = frame.Data,
+            Width = 480,
+            Height = 640,
+            TimestampNanoseconds = 102,
+            PixelFormat = "grayscale8"
+        };
+        Assert(!StationCalibrationPolicy.CanUse(calibration, mismatched), "camera geometry mismatch must disable station zones");
+
+        var zones = StationCalibrationPolicy.ZonesForComponent(calibration, new BuildComponent
+        {
+            ComponentKey = "ingredient:42",
+            DisplayName = "Turkey"
+        });
+        Assert(zones.Count == 2 && zones[0].ZoneKey == "turkey-primary", "ingredient zone lookup must return matching zones by priority");
+
+        var best = StationCalibrationPolicy.HighestPriorityZoneAt(calibration, 0.18f, 0.28f);
+        Assert(best != null && best.ZoneKey == "turkey-primary", "overlapping station zones must resolve by priority");
+
+        var platform = new FakePlatform();
+        var gateway = new FakeGateway { Calibration = calibration };
+        var coordinator = new ArWorkflowCoordinator(platform, gateway, new FakeTokenStore("existing-token"));
+        await coordinator.InitializeAsync();
+        var loaded = await coordinator.RefreshStationCalibrationAsync(frame);
+        Assert(loaded != null && loaded.PublicId == "station-cal-1", "coordinator must load station calibration from Gelato");
+        Assert(coordinator.State == WorkflowState.Idle, "loading optional calibration must not disturb workflow state");
+
+        gateway.FailCalibration = true;
+        var unavailable = await coordinator.RefreshStationCalibrationAsync(frame);
+        Assert(unavailable == null, "calibration transport failure must degrade to no spatial profile");
+        Assert(coordinator.State == WorkflowState.Idle, "optional calibration failure must not put the kitchen workflow into Error");
+        Assert(coordinator.LastCalibrationError == "simulated calibration failure", "optional calibration failure must remain diagnosable");
+    }
 
     private static async Task VisionPipelineContract()
     {
@@ -602,6 +692,8 @@ internal static class Program
 
         public string DeviceToken { get; private set; } = string.Empty;
         public bool FailCurrentWork { get; set; }
+        public bool FailCalibration { get; set; }
+        public StationCalibration? Calibration { get; set; }
         public int HandoffCalls { get; private set; }
         public int ConfirmCalls { get; private set; }
         public int ResolveCalls { get; private set; }
@@ -629,6 +721,13 @@ internal static class Program
                 },
                 Items = new List<WorkItem>()
             });
+        }
+
+        public Task<StationCalibration?> GetStationCalibrationAsync(CameraFrame frame, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (FailCalibration) throw new InvalidOperationException("simulated calibration failure");
+            return Task.FromResult(Calibration);
         }
 
         public Task<BuildSession> StartBuildAsync(string kdsItemPublicId, string? sourceRevision, CancellationToken cancellationToken)
