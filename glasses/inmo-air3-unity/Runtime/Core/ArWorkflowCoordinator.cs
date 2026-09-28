@@ -74,6 +74,7 @@ namespace Gelato.Ar.Core
                 CurrentWork = await _gateway.GetCurrentWorkAsync(cancellationToken).ConfigureAwait(false);
                 StationCalibration = null;
                 BuildSession = null;
+                LastSubmittedObservationKey = null;
                 Validation = null;
                 Handoff = null;
 
@@ -126,6 +127,7 @@ namespace Gelato.Ar.Core
 
                 Validation = null;
                 Handoff = null;
+                LastSubmittedObservationKey = null;
                 _platform.StartTracking();
                 State = WorkflowState.Building;
                 return BuildSession;
