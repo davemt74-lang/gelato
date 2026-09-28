@@ -272,6 +272,16 @@ function glasses_vision_dataset_intelligence_menu_readiness(PDO $pdo,int $org,in
     return array_values($items);
 }
 
+function glasses_vision_dataset_intelligence_freeze_guard(PDO $pdo,int $org,string $datasetPublic): void
+{
+    $datasetId=glasses_vision_dataset_intelligence_dataset_id($pdo,$org,$datasetPublic);
+    if($datasetId===null)return;
+    $leakage=glasses_vision_dataset_intelligence_split_leakage($pdo,$org,$datasetId);
+    if($leakage)throw new InvalidArgumentException('Dataset freeze blocked: build-session split leakage must be resolved.');
+    $disagreements=glasses_vision_dataset_intelligence_disagreements($pdo,$org,$datasetId);
+    if($disagreements)throw new InvalidArgumentException('Dataset freeze blocked: reviewer disagreement must be adjudicated.');
+}
+
 function glasses_vision_dataset_intelligence_analyze(PDO $pdo,int $org,?string $datasetPublic,int $actor,int $minimumPerClass=20): array
 {
     if (!glasses_vision_dataset_intelligence_ready($pdo)) throw new RuntimeException('Vision Lab V4 migration is not installed.');
@@ -304,11 +314,22 @@ function glasses_vision_dataset_intelligence_analyze(PDO $pdo,int $org,?string $
 
     usort($gaps,static fn($a,$b)=>($b['priority']<=>$a['priority'])?:strcmp((string)$a['key'],(string)$b['key']));
 
+    $readyMenuItems=count(array_filter($menu,static fn($x)=>$x['ready']));
     $readiness=[
         'menuItems'=>$menu,
-        'readyMenuItems'=>count(array_filter($menu,static fn($x)=>$x['ready'])),
+        'readyMenuItems'=>$readyMenuItems,
         'totalMenuItems'=>count($menu),
+        'hasValidationSplit'=>$datasetId===null?null:((glasses_vision_lab_dataset_coverage($pdo,$org,(string)$datasetPublic)['hasValidation']??false)===true),
+        'hasTestSplit'=>$datasetId===null?null:((glasses_vision_lab_dataset_coverage($pdo,$org,(string)$datasetPublic)['hasTest']??false)===true),
+        'splitLeakageClear'=>count($leakage)===0,
+        'reviewDisagreementsClear'=>count($disagreements)===0,
     ];
+    $readiness['datasetReleaseReady']=$datasetId===null?null:(
+        $readiness['hasValidationSplit'] &&
+        $readiness['hasTestSplit'] &&
+        $readiness['splitLeakageClear'] &&
+        $readiness['reviewDisagreementsClear']
+    );
     $snapshot=glasses_public_id('vision-intel');
     $pdo->prepare("INSERT INTO glasses_vision_dataset_intelligence_snapshots
       (organization_id,public_id,dataset_id,snapshot_type,metrics_json,gaps_json,readiness_json,created_by)
