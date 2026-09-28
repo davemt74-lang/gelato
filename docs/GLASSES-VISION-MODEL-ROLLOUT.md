@@ -312,3 +312,74 @@ The preflight happens entirely in the administrator's browser and does not uploa
 A successful preflight reports **Browser-ready** and the registry marks packages carrying the supported metadata contract with a Browser ONNX capability badge.
 
 Preflight does not replace rollout governance or runtime verification. Registration remains immutable; canary assignment, compatibility, download verification, activation and rollback continue to use the existing model-governance system.
+
+
+## Live shadow model evaluation
+
+Comparison-aware challengers now have a non-authoritative production-evidence stage between offline champion/challenger evaluation and canary rollout.
+
+### Shadow assignment
+
+For a live device/build, Gelato can select the most specific eligible **draft** rollout whose target already passed the offline champion/challenger gate.
+
+The rollout baseline is the shadow champion and the target is the shadow challenger.
+
+Both packages must independently pass normal device/runtime compatibility checks.
+
+The Web Glasses Simulator additionally verifies that the shadow champion package exactly matches the currently loaded authoritative browser model before it loads the challenger.
+
+### Same-frame execution
+
+The browser runs champion and challenger inference over the same camera frame.
+
+Only champion detections continue into:
+
+- temporal tracking;
+- canonical build observations;
+- validation;
+- KDS/Expo authority.
+
+The challenger result is compared only for evaluation.
+
+Shadow telemetry explicitly declares `authoritative=false`.
+
+No shadow endpoint calls `glasses_build_observe`, product validation, KDS transitions, or rollout assignment mutation.
+
+### Durable shadow ledger
+
+Migration `20261022_glasses_vision_shadow_evaluation.sql` adds:
+
+- `glasses_vision_shadow_runs`;
+- `glasses_vision_shadow_events`.
+
+The ledger stores metadata only, not kitchen images.
+
+Per-frame evidence includes:
+
+- champion/challenger detection counts;
+- matched detections;
+- champion-only / challenger-only counts;
+- mean matched IoU;
+- mean confidence;
+- optional human-correction alignment;
+- critical-mismatch flag.
+
+Frame keys are idempotent for a shadow run.
+
+### Default canary gate
+
+A completed shadow run is eligible for canary when:
+
+- at least 30 evaluated frames were persisted;
+- critical mismatch rate is at most 10%;
+- challenger correction wins are greater than or equal to champion correction wins.
+
+The offline model-comparison gate still applies first.
+
+A comparison-aware target cannot be activated from draft to canary until at least one completed shadow run for that rollout passes this live gate.
+
+Legacy packages without comparison metadata retain their existing rollout behavior.
+
+The intended progression is:
+
+Offline golden-set comparison → draft rollout → live shadow evaluation → explicit completion → shadow gate → explicit canary activation.

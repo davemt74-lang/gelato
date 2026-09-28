@@ -1,0 +1,58 @@
+-- Gelato AR Glasses Shadow Model Evaluation
+SET NAMES utf8mb4;
+
+CREATE TABLE glasses_vision_shadow_runs (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  organization_id BIGINT UNSIGNED NOT NULL,
+  public_id VARCHAR(64) NOT NULL,
+  rollout_id BIGINT UNSIGNED NOT NULL,
+  device_id BIGINT UNSIGNED NOT NULL,
+  build_session_id BIGINT UNSIGNED NOT NULL,
+  detector_name VARCHAR(120) NOT NULL,
+  champion_package_id BIGINT UNSIGNED NOT NULL,
+  challenger_package_id BIGINT UNSIGNED NOT NULL,
+  status VARCHAR(24) NOT NULL DEFAULT 'running',
+  frame_count INT UNSIGNED NOT NULL DEFAULT 0,
+  disagreement_count INT UNSIGNED NOT NULL DEFAULT 0,
+  correction_champion_wins INT UNSIGNED NOT NULL DEFAULT 0,
+  correction_challenger_wins INT UNSIGNED NOT NULL DEFAULT 0,
+  correction_ties INT UNSIGNED NOT NULL DEFAULT 0,
+  critical_mismatch_count INT UNSIGNED NOT NULL DEFAULT 0,
+  started_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  completed_at DATETIME(6) NULL,
+  updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_glasses_vision_shadow_public (organization_id,public_id),
+  UNIQUE KEY uq_glasses_vision_shadow_scope (rollout_id,device_id,build_session_id),
+  KEY idx_glasses_vision_shadow_rollout (organization_id,rollout_id,status,updated_at),
+  CONSTRAINT fk_glasses_vision_shadow_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  CONSTRAINT fk_glasses_vision_shadow_rollout FOREIGN KEY (rollout_id) REFERENCES glasses_vision_model_rollouts(id) ON DELETE CASCADE,
+  CONSTRAINT fk_glasses_vision_shadow_device FOREIGN KEY (device_id) REFERENCES glasses_devices(id) ON DELETE CASCADE,
+  CONSTRAINT fk_glasses_vision_shadow_build FOREIGN KEY (build_session_id) REFERENCES glasses_build_sessions(id) ON DELETE CASCADE,
+  CONSTRAINT fk_glasses_vision_shadow_champion FOREIGN KEY (champion_package_id) REFERENCES glasses_vision_model_packages(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_vision_shadow_challenger FOREIGN KEY (challenger_package_id) REFERENCES glasses_vision_model_packages(id) ON DELETE RESTRICT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE glasses_vision_shadow_events (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  organization_id BIGINT UNSIGNED NOT NULL,
+  shadow_run_id BIGINT UNSIGNED NOT NULL,
+  frame_key VARCHAR(160) NOT NULL,
+  champion_detection_count INT UNSIGNED NOT NULL DEFAULT 0,
+  challenger_detection_count INT UNSIGNED NOT NULL DEFAULT 0,
+  matched_count INT UNSIGNED NOT NULL DEFAULT 0,
+  champion_only_count INT UNSIGNED NOT NULL DEFAULT 0,
+  challenger_only_count INT UNSIGNED NOT NULL DEFAULT 0,
+  mean_iou DECIMAL(7,6) NULL,
+  champion_mean_confidence DECIMAL(7,6) NULL,
+  challenger_mean_confidence DECIMAL(7,6) NULL,
+  correction_alignment VARCHAR(24) NOT NULL DEFAULT 'unknown',
+  critical_mismatch TINYINT(1) NOT NULL DEFAULT 0,
+  metadata_json JSON NULL,
+  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_glasses_vision_shadow_frame (shadow_run_id,frame_key),
+  KEY idx_glasses_vision_shadow_events_run (organization_id,shadow_run_id,created_at),
+  CONSTRAINT fk_glasses_vision_shadow_event_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  CONSTRAINT fk_glasses_vision_shadow_event_run FOREIGN KEY (shadow_run_id) REFERENCES glasses_vision_shadow_runs(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -175,6 +175,17 @@ gws_assert(str_contains($js,"schema:'gelato.vision_active_learning.v1'"),'YOLO e
 gws_assert(str_contains($js,'reviewOutcomes:reviewCounts'),'YOLO export must summarize active-learning human review outcomes.');
 gws_assert(!str_contains($core,'vision_active_learning'),'Active-learning image capture must remain browser-local with no new server image mutation path.');
 gws_assert(str_contains($css,'.active-learning-panel')&&str_contains($css,'.active-learning-row'),'Active-learning candidates must have visible review UI states.');
+gws_assert(str_contains($page,'startShadowModel')&&str_contains($page,'completeShadowModel'),'Simulator must expose explicit live shadow start/complete controls.');
+gws_assert(str_contains($page,'shadowModelStatus')&&str_contains($page,'shadowSummary'),'Simulator must expose challenger state and shadow evidence summary.');
+gws_assert(str_contains($core,"\$action==='vision.shadow_assignment'")&&str_contains($core,'glasses_vision_shadow_assignment'),'Simulator must obtain shadow challengers through governed server assignment.');
+gws_assert(str_contains($core,"\$action==='vision.shadow_report'")&&str_contains($core,'glasses_vision_shadow_report'),'Simulator must report shadow telemetry through a dedicated non-build action.');
+gws_assert(str_contains($js,'function startShadowModel')&&str_contains($js,'function runShadowFrame'),'Browser runtime must load and execute a challenger beside the champion.');
+gws_assert(str_contains($js,"shadow.champion?.publicId!==state.browserModel.package.publicId"),'Shadow runtime must verify its champion matches the currently authoritative browser model.');
+gws_assert(str_contains($js,'compareShadowDetections'),'Shadow runtime must compare champion/challenger detections on the same frame.');
+gws_assert(str_contains($js,"metadata:{source:'web_glasses_simulator_shadow',authoritative:false}"),'Shadow telemetry must explicitly declare itself non-authoritative.');
+gws_assert(!str_contains($js,"shadowModel.session.run({[state.browserModel"),'Shadow model must not reuse or mutate champion session authority.');
+gws_assert(str_contains($css,'.shadow-model-panel'),'Shadow evaluation must have a visible but distinct simulator UI.');
+
 
 
 

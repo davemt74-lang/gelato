@@ -318,12 +318,57 @@ gvm_assert($crossDevice,'Model assignment must preserve build-session device iso
 $compat=glasses_vision_model_package_compatibility(glasses_vision_model_package_row($pdo,$org,(string)$baseline['publicId']),$device2);
 gvm_assert($compat['compatible']===false&&in_array('vision_runtime_capability_unreported',$compat['reasons'],true),'Unreported model-runtime capability must fail closed.');
 
+
+$shadowTarget=glasses_vision_model_package_create($pdo,$org,[
+    'detectorName'=>'food-model-v3','modelName'=>'sandwich-detector','modelVersion'=>'4.0.0','runtimeType'=>'onnx','platform'=>'inmo_air3',
+    'artifactUrl'=>'https://models.example.test/sandwich-detector-shadow.onnx','artifactSha256'=>str_repeat('4',64),
+    'metadata'=>['modelComparison'=>[
+        'schema'=>'gelato.vision_model_comparison.v1','eligible'=>true,'override'=>false,
+        'goldenTestHash'=>str_repeat('d',64),'regressions'=>[],
+        'summary'=>['map50Delta'=>0.03,'recallDelta'=>0.02,'demonstratedGain'=>true],
+    ]],
+],$user);
+$shadowDraft=glasses_vision_model_rollout_create($pdo,$org,[
+    'targetPackagePublicId'=>$shadowTarget['publicId'],'baselinePackagePublicId'=>$baseline['publicId'],
+    'locationId'=>$location,'stationPublicId'=>(string)$station['public_id'],'canaryPercent'=>10,
+    'notes'=>'Shadow challenger before canary.',
+],$user);
+$shadowBlocked=false;
+try{glasses_vision_model_rollout_activate($pdo,$org,(string)$shadowDraft['publicId'],$user);}catch(InvalidArgumentException){$shadowBlocked=true;}
+gvm_assert($shadowBlocked,'Comparison-aware challenger must not activate before a passing live shadow run.');
+
+$shadow=glasses_vision_shadow_assignment($pdo,$device,$sessionPublic,'food-model-v3');
+gvm_assert(($shadow['action']??'')==='shadow','Eligible draft challenger must be available in non-authoritative shadow mode.');
+gvm_assert((string)$shadow['champion']['publicId']===(string)$baseline['publicId'],'Shadow assignment champion must be the rollout baseline.');
+gvm_assert((string)$shadow['challenger']['publicId']===(string)$shadowTarget['publicId'],'Shadow assignment challenger must be the rollout target.');
+for($i=1;$i<=30;$i++){
+    $reported=glasses_vision_shadow_report($pdo,$device,$sessionPublic,[
+        'shadowRunPublicId'=>$shadow['runPublicId'],'frameKey'=>'frame-'.$i,
+        'championDetectionCount'=>1,'challengerDetectionCount'=>1,'matchedCount'=>1,
+        'championOnlyCount'=>0,'challengerOnlyCount'=>0,'meanIou'=>0.82,
+        'championMeanConfidence'=>0.91,'challengerMeanConfidence'=>0.93,
+        'correctionAlignment'=>$i===30?'challenger':'unknown','criticalMismatch'=>false,
+        'metadata'=>['source'=>'ci_shadow','authoritative'=>false],
+    ]);
+}
+$duplicateShadow=glasses_vision_shadow_report($pdo,$device,$sessionPublic,[
+    'shadowRunPublicId'=>$shadow['runPublicId'],'frameKey'=>'frame-30',
+    'championDetectionCount'=>1,'challengerDetectionCount'=>1,'matchedCount'=>1,
+]);
+gvm_assert($duplicateShadow['idempotent']===true,'Shadow frame keys must be idempotent per run.');
+$shadowComplete=glasses_vision_shadow_complete($pdo,$device,$sessionPublic,(string)$shadow['runPublicId']);
+gvm_assert($shadowComplete['frameCount']===30&&$shadowComplete['eligibleForCanary']===true,'Thirty clean same-frame evaluations must satisfy the default shadow canary gate.');
+gvm_assert($shadowComplete['correctionChallengerWins']===1&&$shadowComplete['correctionChampionWins']===0,'Shadow summary must preserve correction alignment evidence.');
+$shadowActive=glasses_vision_model_rollout_activate($pdo,$org,(string)$shadowDraft['publicId'],$user);
+gvm_assert((string)$shadowActive['status']==='active','Passing shadow evidence must unlock explicit canary activation.');
+glasses_vision_model_rollout_rollback($pdo,$org,(string)$shadowDraft['publicId'],$user,'Shadow gate contract complete.');
+
 $catalog=glasses_vision_model_catalog($pdo,[
     'organization_id'=>$org,'permissions'=>['*'],'is_owner_role'=>1,
 ]);
 gvm_assert($catalog['ready']===true&&$catalog['canManage']===true,'Owner model catalog must be ready/manageable.');
-gvm_assert(count($catalog['packages'])===4,'Catalog must expose registered model packages.');
-gvm_assert(count($catalog['rollouts'])===4,'Catalog must expose all rollout plans.');
+gvm_assert(count($catalog['packages'])===5,'Catalog must expose registered model packages.');
+gvm_assert(count($catalog['rollouts'])===5,'Catalog must expose all rollout plans.');
 gvm_assert(isset($catalog['metricsByRollout'][(string)$draft['publicId']]),'Catalog must expose rollout telemetry.');
 
 $modules=admin_modules(['permissions'=>['glasses.view'],'is_owner_role'=>0]);
