@@ -102,7 +102,7 @@ namespace Gelato.Ar.Core
         {
             var state = await _persistence.LoadAsync(cancellationToken).ConfigureAwait(false)
                 ?? new VisionModelDurableState();
-            var interrupted = interrupted;
+            var interrupted = state.Pending != null;
 
             if (!string.IsNullOrWhiteSpace(state.DetectorName)
                 && !string.Equals(state.DetectorName, _runtime.DetectorName, StringComparison.Ordinal))
