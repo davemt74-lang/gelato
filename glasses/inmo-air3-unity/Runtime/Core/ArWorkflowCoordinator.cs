@@ -14,10 +14,12 @@ namespace Gelato.Ar.Core
         public IGlassesPlatform Platform => _platform;
         public WorkflowState State { get; private set; } = WorkflowState.Uninitialized;
         public CurrentWork? CurrentWork { get; private set; }
+        public StationCalibration? StationCalibration { get; private set; }
         public BuildSession? BuildSession { get; private set; }
         public ProductValidation? Validation { get; private set; }
         public ExpoHandoff? Handoff { get; private set; }
         public string? LastError { get; private set; }
+        public string? LastCalibrationError { get; private set; }
 
         public ArWorkflowCoordinator(IGlassesPlatform platform, IGelatoGateway gateway, IDeviceTokenStore tokenStore)
         {
@@ -69,6 +71,7 @@ namespace Gelato.Ar.Core
             return await GuardAsync(async () =>
             {
                 CurrentWork = await _gateway.GetCurrentWorkAsync(cancellationToken).ConfigureAwait(false);
+                StationCalibration = null;
                 BuildSession = null;
                 Validation = null;
                 Handoff = null;
@@ -79,6 +82,31 @@ namespace Gelato.Ar.Core
 
                 return CurrentWork;
             }).ConfigureAwait(false);
+        }
+
+        public async Task<StationCalibration?> RefreshStationCalibrationAsync(CameraFrame frame, CancellationToken cancellationToken = default)
+        {
+            EnsurePaired();
+            if (frame == null) throw new ArgumentNullException(nameof(frame));
+            if (frame.Width <= 0 || frame.Height <= 0 || string.IsNullOrWhiteSpace(frame.PixelFormat))
+                throw new InvalidOperationException("A valid camera frame is required to load station calibration.");
+
+            try
+            {
+                LastCalibrationError = null;
+                StationCalibration = await _gateway.GetStationCalibrationAsync(frame, cancellationToken).ConfigureAwait(false);
+                return StationCalibration;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                StationCalibration = null;
+                LastCalibrationError = ex.Message;
+                return null;
+            }
         }
 
         public async Task<BuildSession> StartFocusBuildAsync(CancellationToken cancellationToken = default)
@@ -177,10 +205,12 @@ namespace Gelato.Ar.Core
         public void ResetForNextWork()
         {
             CurrentWork = null;
+            StationCalibration = null;
             BuildSession = null;
             Validation = null;
             Handoff = null;
             LastError = null;
+            LastCalibrationError = null;
             State = string.IsNullOrWhiteSpace(_deviceToken) ? WorkflowState.Unpaired : WorkflowState.Idle;
         }
 
