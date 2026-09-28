@@ -1,7 +1,7 @@
 (()=>{'use strict';
 const cfg=window.GELATO_GLASSES_SIMULATOR||{};
 const $=id=>document.getElementById(id);
-const state={mode:'mock',devices:[],device:null,work:null,selectedKdsItemPublicId:'',build:null,validation:null,seq:1,logs:[],autoPlayTimer:null,syncTimer:null,syncBusy:false,syncErrors:0,syncFingerprint:'',syncAbort:null,syncEpoch:0,lastSyncAt:null,cameraStream:null,cameraTrack:null,cameraTarget:null,cameraDevices:[],cameraSource:'image',visionMode:'manual',visionTimer:null,visionBusy:false,visionFrameSeq:0,visionLastAt:0,visionLatencyMs:0,visionFps:0,visionDetections:[],visionTracks:new Map(),visionSubmitted:new Set(),visionAdapter:null};
+const state={mode:'mock',devices:[],device:null,work:null,selectedKdsItemPublicId:'',build:null,validation:null,seq:1,logs:[],autoPlayTimer:null,syncTimer:null,syncBusy:false,syncErrors:0,syncFingerprint:'',syncAbort:null,syncEpoch:0,lastSyncAt:null,cameraStream:null,cameraTrack:null,cameraTarget:null,cameraDevices:[],cameraSource:'image',visionMode:'manual',visionTimer:null,visionBusy:false,visionFrameSeq:0,visionLastAt:0,visionLatencyMs:0,visionFps:0,visionDetections:[],visionTracks:new Map(),visionSubmitted:new Set(),visionAdapter:null,temporalTracks:new Map(),temporalEvents:[],temporalSequence:[],temporalViolations:[],temporalValidationBusy:false,temporalValidationFingerprint:'',temporalReadySince:0,temporalGate:null};
 const mock={
   work:{assignmentRequired:false,station:{publicId:'station-mock',name:'Sandwich / Pizza Line'},revision:'mock-revision',focusItem:{kdsItemPublicId:'kds-mock-1',status:'queued',ticket:{checkNumber:'1042',serviceMode:'dine_in',tableName:'Table 12',guestCount:2},posLine:{id:1,menuItemId:1,name:'Club Sandwich + Fries',optionName:'Regular',quantity:1,specialInstructions:'NO TOMATO · EXTRA BACON',modifiers:[{name:'Extra Bacon'}]},menu:{preparationNotes:'Build, slice and plate with fries.'},recipeSource:{status:'exact_name',recipe:{instructions:['Toast bread','Add mayo','Add turkey','Add bacon','Add lettuce','Add tomato','Top and slice','Plate with fries']}}},items:[],metrics:{queued:1,inProgress:0,ready:0,held:0}},
   components:['Toasted Bread','Mayo','Turkey','Bacon','Lettuce','Tomato','Fries'].map((name,i)=>({componentKey:'mock:'+i,displayName:name,expectedQuantity:i===0?3:1,detectedQuantity:0,unit:i===0?'slices':'portion',optional:false,status:'waiting',sortOrder:i+1})),
@@ -219,18 +219,28 @@ function renderCameraTargetComponents(){
 }
 
 const VISION_TRACK_TTL_MS=1800;
-const VISION_SUBMIT_COOLDOWN_MS=1200;
+const VISION_STABLE_FRAMES=3;
+const VISION_REMOVAL_GRACE_MS=2200;
+const VISION_READY_STABLE_MS=900;
+const VISION_REPLACEMENT_IOU=.35;
 const VISION_ADAPTERS={
   fixture:{
     id:'fixture',
     async detect(frame){
-      const component=currentComponent();
-      if(!component)return [];
-      const phase=(frame.seq%24)/24;
-      return [{label:component.displayName,componentKey:component.componentKey,confidence:Math.max(.4,Number($('visionConfidenceThreshold')?.value||75)/100+.08),bbox:{x:.28+phase*.18,y:.46,width:.16,height:.14}}];
+      const comps=(state.build?.components||[]).filter(c=>c.status!=='unexpected'&&c.status!=='ignored');
+      if(!comps.length)return [];
+      const active=comps.filter(c=>c.status==='confirmed'||c.status==='detected'||c.componentKey===currentComponent()?.componentKey).slice(0,8);
+      return active.map((component,index)=>{
+        const col=index%4,row=Math.floor(index/4),phase=((frame.seq+index*3)%18)/18;
+        return {label:component.displayName,componentKey:component.componentKey,confidence:Math.max(.4,Number($('visionConfidenceThreshold')?.value||75)/100+.1),bbox:{x:.12+col*.19+phase*.015,y:.38+row*.2,width:.14,height:.13}};
+      });
     }
   }
 };
+function clearTemporalRuntime(){
+  state.temporalTracks.clear();state.temporalEvents=[];state.temporalSequence=[];state.temporalViolations=[];
+  state.temporalValidationBusy=false;state.temporalValidationFingerprint='';state.temporalReadySince=0;state.temporalGate=null;renderTemporalPanel();
+}
 function stopVisionRuntime(reason='idle'){
   if(state.visionTimer){clearTimeout(state.visionTimer);state.visionTimer=null;}
   state.visionBusy=false;state.visionDetections=[];renderVisionOverlay();renderVisionHealth(reason);
@@ -241,7 +251,7 @@ function renderVisionHealth(status='ready'){
   const el=$('visionHealth');if(!el)return;
   const active=visionMode()!=='manual'&&state.cameraStream&&!document.hidden;
   el.textContent=active?(status==='error'?'VISION ERROR':'VISION '+visionMode().toUpperCase()):'VISION IDLE';
-  const metrics=$('visionMetrics');if(metrics)metrics.textContent='FPS '+state.visionFps.toFixed(1)+' · '+Math.round(state.visionLatencyMs)+'ms · '+state.visionDetections.length+' det';
+  const metrics=$('visionMetrics');if(metrics)metrics.textContent='FPS '+state.visionFps.toFixed(1)+' · '+Math.round(state.visionLatencyMs)+'ms · '+state.visionDetections.length+' det · '+state.temporalTracks.size+' tracks';
 }
 function normalizedBoxToStage(box){
   const video=$('cameraVideo'),stage=$('glassesStage'),rect=stage.getBoundingClientRect();
@@ -257,46 +267,129 @@ function renderVisionOverlay(){
   const layer=$('visionDetectionLayer');if(!layer)return;layer.innerHTML='';
   for(const d of state.visionDetections){
     const g=normalizedBoxToStage(d.bbox);if(!g)continue;
-    const el=document.createElement('div');el.className='vision-auto-box '+(d.confidence<.75?'verify':'confirmed');
+    const t=state.temporalTracks.get(d.componentKey||d.label),stable=t?.stable===true;
+    const el=document.createElement('div');el.className='vision-auto-box '+(d.confidence<.75?'verify':stable?'confirmed':'pending');
     el.style.left=(g.left*100)+'%';el.style.top=(g.top*100)+'%';el.style.width=(g.width*100)+'%';el.style.height=(g.height*100)+'%';
-    el.innerHTML='<span>'+escapeHtml(d.label)+' · '+Math.round(d.confidence*100)+'%</span>';layer.appendChild(el);
+    el.innerHTML='<span>'+escapeHtml(d.label)+' · '+Math.round(d.confidence*100)+'% · '+(stable?'STABLE':'TRACKING')+'</span>';layer.appendChild(el);
   }
+}
+function bboxIou(a,b){
+  if(!a||!b)return 0;const ax2=a.x+a.width,ay2=a.y+a.height,bx2=b.x+b.width,by2=b.y+b.height;
+  const ix=Math.max(0,Math.min(ax2,bx2)-Math.max(a.x,b.x)),iy=Math.max(0,Math.min(ay2,by2)-Math.max(a.y,b.y));
+  const inter=ix*iy,union=a.width*a.height+b.width*b.height-inter;return union>0?inter/union:0;
 }
 function trackDetections(detections,now){
-  const next=new Map();
+  const seen=new Set();
   for(const d of detections){
-    const key=d.componentKey||d.label;
-    const prev=state.visionTracks.get(key);
-    const trackId=prev&&now-prev.lastSeen<VISION_TRACK_TTL_MS?prev.trackId:'webvision-'+(++state.visionFrameSeq)+'-'+Date.now();
-    const track={...d,trackId,lastSeen:now};next.set(key,track);
+    const key=d.componentKey||d.label;seen.add(key);
+    const prev=state.temporalTracks.get(key);
+    const track=prev||{key,trackId:'webvision-'+(++state.visionFrameSeq)+'-'+Date.now(),firstSeen:now,lastSeen:now,frames:0,stable:false,present:false,submitted:false,submittedQuantity:0,removed:false,bbox:d.bbox,label:d.label,componentKey:d.componentKey};
+    track.lastSeen=now;track.frames+=1;track.present=true;track.missingSince=0;track.bbox=d.bbox;track.confidence=d.confidence;track.label=d.label;track.componentKey=d.componentKey;
+    if(track.frames>=VISION_STABLE_FRAMES)track.stable=true;
+    state.temporalTracks.set(key,track);
   }
-  state.visionTracks=next;return [...next.values()];
+  for(const [key,track] of state.temporalTracks){
+    if(seen.has(key))continue;
+    track.present=false;if(!track.missingSince)track.missingSince=now;
+    if(!track.stable&&now-track.lastSeen>VISION_TRACK_TTL_MS)state.temporalTracks.delete(key);
+  }
+  state.visionTracks=new Map([...state.temporalTracks].filter(([,t])=>t.present).map(([k,t])=>[k,t]));
+  return detections.map(d=>({...d,trackId:state.temporalTracks.get(d.componentKey||d.label)?.trackId}));
 }
-async function submitAutomaticDetection(d){
-  if(!state.build||!d.componentKey)return;
-  const c=state.build.components?.find(x=>x.componentKey===d.componentKey);if(!c||['confirmed','ignored'].includes(c.status))return;
-  const dedupe=state.build.publicId+'|'+d.componentKey;if(state.visionSubmitted.has(dedupe))return;
-  state.visionSubmitted.add(dedupe);
-  const qty=Math.max(.001,Number(c.expectedQuantity||1)-Number(c.detectedQuantity||0));
+function sequenceViolationFor(componentKey){
+  const comps=(state.build?.components||[]).filter(c=>!c.optional&&c.status!=='unexpected'&&c.status!=='ignored').sort((a,b)=>Number(a.sortOrder||0)-Number(b.sortOrder||0));
+  const idx=comps.findIndex(c=>c.componentKey===componentKey);if(idx<=0)return null;
+  const unmet=comps.slice(0,idx).filter(c=>!['confirmed','ignored'].includes(c.status));
+  return unmet.length?{componentKey,blockedBy:unmet.map(c=>c.componentKey),message:'Detected '+(comps[idx]?.displayName||componentKey)+' before '+unmet.map(c=>c.displayName).join(', ')}:null;
+}
+function pushTemporalEvent(type,track,extra={}){
+  const event={id:'te-'+Date.now()+'-'+state.temporalEvents.length,type,componentKey:track.componentKey,label:track.label,trackId:track.trackId,at:Date.now(),...extra};
+  state.temporalEvents.unshift(event);state.temporalEvents=state.temporalEvents.slice(0,40);return event;
+}
+async function submitTemporalObservation(track,action,quantity,metadata={}){
+  if(!state.build||!track.componentKey)return false;
+  const component=state.build.components?.find(c=>c.componentKey===track.componentKey);
+  const displayName=component?.displayName||track.label||track.componentKey;
   try{
-    if(state.mode==='mock'){c.detectedQuantity=Number(c.detectedQuantity||0)+qty;c.confidence=d.confidence;c.status=d.confidence<.75?'verify':'confirmed';state.validation=null;render();return;}
-    const result=await api('build.observe',{buildSessionPublicId:state.build.publicId,observationKey:'browser-vision-'+Date.now()+'-'+state.seq,componentKey:c.componentKey,displayName:c.displayName,observationAction:'added',quantity:qty,confidence:d.confidence,trackingId:d.trackId,bbox:d.bbox,metadata:{source:'web_glasses_simulator_auto_vision',automatic:true,adapter:state.visionAdapter?.id||'fixture'}});
-    state.build=result.buildSession;state.validation=null;render();log('VISION','Automatic observation accepted for '+c.displayName+'.');
-  }catch(e){state.visionSubmitted.delete(dedupe);log('ERROR',e.message);}
+    if(state.mode==='mock'){
+      if(!component)return false;
+      const current=Number(component.detectedQuantity||0);
+      component.detectedQuantity=action==='removed'?Math.max(0,current-quantity):action==='seen'?Math.max(current,quantity):current+quantity;
+      component.confidence=track.confidence;
+      component.status=component.detectedQuantity<=0?'waiting':track.confidence<.75?'verify':component.detectedQuantity+.0001>=Number(component.expectedQuantity||1)?'confirmed':'detected';
+      state.validation=null;render();return true;
+    }
+    const result=await api('build.observe',{buildSessionPublicId:state.build.publicId,observationKey:'browser-temporal-'+action+'-'+Date.now()+'-'+state.seq,componentKey:track.componentKey,displayName,observationAction:action,quantity,confidence:track.confidence||.9,trackingId:track.trackId,bbox:track.bbox,metadata:{source:'web_glasses_simulator_temporal_vision',automatic:true,temporal:true,adapter:state.visionAdapter?.id||'fixture',...metadata}});
+    state.build=result.buildSession;state.validation=null;render();return true;
+  }catch(e){log('ERROR',e.message);return false;}
+}
+async function processTemporalEvents(now){
+  if(visionMode()!=='automatic'||!state.build)return;
+  for(const track of state.temporalTracks.values()){
+    if(track.present&&track.stable&&!track.submitted){
+      const component=state.build.components?.find(c=>c.componentKey===track.componentKey);
+      const violation=sequenceViolationFor(track.componentKey);
+      if(violation&&!state.temporalViolations.some(v=>v.componentKey===track.componentKey)){state.temporalViolations.push({...violation,at:now});pushTemporalEvent('sequence_violation',track,{message:violation.message});log('VISION',violation.message+'.');}
+      const qty=component?Math.max(.001,Number(component.expectedQuantity||1)-Number(component.detectedQuantity||0)):1;
+      if(await submitTemporalObservation(track,'added',qty,{sequenceViolation:!!violation})){
+        track.submitted=true;track.submittedQuantity=qty;track.removed=false;state.temporalSequence.push({componentKey:track.componentKey,at:now,action:'added'});pushTemporalEvent('added',track,{quantity:qty});
+      }
+    }
+  }
+  const stableMissing=[...state.temporalTracks.values()].filter(t=>t.stable&&t.submitted&&!t.present&&!t.removed&&t.missingSince&&now-t.missingSince>=VISION_REMOVAL_GRACE_MS);
+  for(const lost of stableMissing){
+    const replacement=[...state.temporalTracks.values()].find(t=>t!==lost&&t.present&&t.stable&&!t.submitted&&bboxIou(lost.bbox,t.bbox)>=VISION_REPLACEMENT_IOU);
+    if(await submitTemporalObservation(lost,'removed',Math.max(.001,lost.submittedQuantity||1),{reason:replacement?'replacement':'track_absent'})){
+      lost.removed=true;lost.submitted=false;state.temporalSequence.push({componentKey:lost.componentKey,at:now,action:'removed'});pushTemporalEvent(replacement?'replaced':'removed',lost,{replacementComponentKey:replacement?.componentKey||null});
+      if(replacement)log('VISION',(lost.label||lost.componentKey)+' replaced by '+(replacement.label||replacement.componentKey)+'.');else log('VISION',(lost.label||lost.componentKey)+' removed after stable absence.');
+    }
+  }
+}
+function temporalAssessment(now=Date.now()){
+  const comps=state.build?.components||[];
+  if(!state.build)return {ready:false,state:'IDLE',missing:0,verify:0,unexpected:0,sequence:0,pending:0};
+  const missing=comps.filter(c=>!c.optional&&!['confirmed','ignored','unexpected'].includes(c.status)).length;
+  const verify=comps.filter(c=>c.status==='verify').length;
+  const unexpected=comps.filter(c=>c.status==='unexpected').length;
+  const pending=[...state.temporalTracks.values()].filter(t=>(t.present&&!t.stable)||(t.stable&&t.submitted&&!t.present&&!t.removed&&now-t.missingSince<VISION_REMOVAL_GRACE_MS)).length;
+  const sequence=state.temporalViolations.length;
+  const ready=missing===0&&verify===0&&unexpected===0&&pending===0&&sequence===0;
+  return {ready,state:ready?'READY':sequence||verify||unexpected?'BLOCKED':'BUILDING',missing,verify,unexpected,sequence,pending};
+}
+function renderTemporalPanel(){
+  const gate=temporalAssessment();state.temporalGate=gate;
+  const status=$('temporalValidationState');if(status)status.textContent=gate.state;
+  const detail=$('temporalValidationDetail');if(detail)detail.textContent=gate.ready?'Stable complete build ready for canonical validation.':gate.missing+' missing · '+gate.verify+' verify · '+gate.unexpected+' unexpected · '+gate.sequence+' sequence · '+gate.pending+' pending';
+  const list=$('temporalEventList');if(list)list.innerHTML=state.temporalEvents.slice(0,6).map(e=>'<div class="temporal-event '+escapeHtml(e.type)+'"><b>'+escapeHtml(e.type.replaceAll('_',' ').toUpperCase())+'</b><span>'+escapeHtml(e.label||e.componentKey||'component')+'</span></div>').join('')||'<span class="sim-muted">No temporal events yet.</span>';
+}
+async function autoEvaluateTemporalReadiness(now=Date.now()){
+  const gate=temporalAssessment(now);state.temporalGate=gate;renderTemporalPanel();
+  if(visionMode()!=='automatic'||!gate.ready){state.temporalReadySince=0;return;}
+  if(!state.temporalReadySince){state.temporalReadySince=now;return;}
+  if(now-state.temporalReadySince<VISION_READY_STABLE_MS||state.temporalValidationBusy)return;
+  const fingerprint=(state.build?.publicId||'')+'|'+(state.build?.components||[]).map(c=>c.componentKey+':'+c.status+':'+c.detectedQuantity).join(',');
+  if(fingerprint===state.temporalValidationFingerprint)return;
+  state.temporalValidationBusy=true;
+  try{
+    if(state.mode==='mock'){mockValidate();state.temporalValidationFingerprint=fingerprint;log('VALIDATION','Temporal build automatically validated: '+state.validation.status);render();return;}
+    const d=await api('validation.evaluate',{buildSessionPublicId:state.build.publicId});state.validation=d.validation;state.temporalValidationFingerprint=fingerprint;log('VALIDATION','Temporal build automatically validated: '+state.validation.status);render();
+  }catch(e){log('ERROR',e.message);}
+  finally{state.temporalValidationBusy=false;}
 }
 async function runVisionFrame(){
   if(visionMode()==='manual'||!state.cameraStream||document.hidden){stopVisionRuntime(document.hidden?'paused':'idle');return;}
   if(state.visionBusy){state.visionTimer=setTimeout(runVisionFrame,visionIntervalMs());return;}
   state.visionBusy=true;
-  const started=performance.now(),seq=state.visionFrameSeq+1;
+  const started=performance.now(),seq=state.visionFrameSeq+1,nowWall=Date.now();
   try{
     state.visionAdapter=state.visionAdapter||VISION_ADAPTERS.fixture;
-    const raw=await state.visionAdapter.detect({seq,video:$('cameraVideo'),build:state.build});
+    const raw=await state.visionAdapter.detect({seq,video:$('cameraVideo'),build:state.build,temporalTracks:state.temporalTracks});
     const threshold=Number($('visionConfidenceThreshold')?.value||75)/100;
     const filtered=(raw||[]).filter(d=>d&&d.bbox&&d.confidence>=threshold);
-    state.visionDetections=trackDetections(filtered,Date.now());
+    state.visionDetections=trackDetections(filtered,nowWall);
     renderVisionOverlay();
-    if(visionMode()==='automatic')for(const d of state.visionDetections)await submitAutomaticDetection(d);
+    await processTemporalEvents(nowWall);
+    await autoEvaluateTemporalReadiness(nowWall);
     const elapsed=performance.now()-started;state.visionLatencyMs=elapsed;
     const now=performance.now();if(state.visionLastAt){const instant=1000/Math.max(1,now-state.visionLastAt);state.visionFps=state.visionFps?state.visionFps*.7+instant*.3:instant;}state.visionLastAt=now;
     renderVisionHealth('ready');
@@ -382,7 +475,8 @@ function render(){
   $('componentControls').innerHTML=comps.filter(c=>c.status!=='unexpected'&&c.status!=='ignored').map(c=>'<div class="component-row '+escapeHtml(c.status)+'"><div class="copy"><strong>'+escapeHtml(c.displayName)+'</strong><small>'+escapeHtml(c.status)+' · '+Number(c.detectedQuantity||0)+' / '+Number(c.expectedQuantity||0)+' '+escapeHtml(c.unit||'')+'</small></div><button type="button" data-detect="'+escapeHtml(c.componentKey)+'" '+(c.status==='confirmed'?'disabled':'')+'>Detect</button></div>').join('')||'<span class="sim-muted">Start a build to simulate detections.</span>';
   const unexpected=comps.filter(c=>c.status==='unexpected');
   $('exceptions').innerHTML=unexpected.map(c=>'<div class="exception-row"><span>'+escapeHtml(c.displayName)+'</span><button data-resolve="'+escapeHtml(c.componentKey)+'" type="button">Resolve</button></div>').join('')||'<span class="sim-muted">No build exceptions.</span>';
-  $('handoffExpo').disabled=validation?.status!=='ready_for_finishing';
+  renderTemporalPanel();
+  $('handoffExpo').disabled=validation?.status!=='ready_for_finishing'||(visionMode()==='automatic'&&!state.temporalGate?.ready);
   $('startBuild').disabled=!!build||!item||(live&&(!state.device||!state.device.simulatorWritable));
   $('autoPlayBuild').disabled=live;
   $('nextDetection').disabled=live;
@@ -410,7 +504,7 @@ async function refreshWork(){
     log('LIVE','Refreshed current KDS station work.');
   }catch(e){log('ERROR',e.message);}
 }
-async function startBuild(){try{if(state.mode==='mock'){state.build=mockBuild();state.validation=null;log('MOCK','Started mock build session.');render();return;}const item=selectedItem();if(!item)throw new Error('No selected KDS item.');const d=await api('build.start',{kdsItemPublicId:item.kdsItemPublicId,sourceRevision:state.work.revision});state.build=d.buildSession;state.validation=null;log('LIVE','Started build '+state.build.publicId+' against real KDS item.');render();}catch(e){log('ERROR',e.message);}}
+async function startBuild(){try{clearTemporalRuntime();if(state.mode==='mock'){state.build=mockBuild();state.validation=null;log('MOCK','Started mock build session.');render();return;}const item=selectedItem();if(!item)throw new Error('No selected KDS item.');const d=await api('build.start',{kdsItemPublicId:item.kdsItemPublicId,sourceRevision:state.work.revision});state.build=d.buildSession;state.validation=null;log('LIVE','Started build '+state.build.publicId+' against real KDS item.');render();}catch(e){log('ERROR',e.message);}}
 async function detect(key){try{if(!state.build)throw new Error('Start a build first.');const c=state.build.components.find(x=>x.componentKey===key);if(!c)return;const qty=Math.max(.001,Number(c.expectedQuantity||1)-Number(c.detectedQuantity||0));flashDetection(c,{confidence:.96,state:'confirmed'});if(state.mode==='mock'){c.detectedQuantity=Number(c.detectedQuantity||0)+qty;c.confidence=.96;c.status=c.detectedQuantity+.0001>=Number(c.expectedQuantity||1)?'confirmed':'detected';state.build.summary.currentComponentKey=currentComponent()?.componentKey||null;state.validation=null;log('VISION','Detected '+c.displayName+' in mock mode.');render();return;}const obs='websim-'+state.build.publicId+'-'+Date.now()+'-'+state.seq;const d=await api('build.observe',{buildSessionPublicId:state.build.publicId,observationKey:obs,componentKey:c.componentKey,displayName:c.displayName,observationAction:'added',quantity:qty,confidence:.96,trackingId:'websim-'+state.seq,bbox:{x:.18,y:.46,width:.18,height:.16},metadata:{source:'web_glasses_simulator'}});state.build=d.buildSession;state.validation=null;log('LIVE','Submitted simulated detection for '+c.displayName+'.');render();}catch(e){log('ERROR',e.message);}}
 function ensureMockBuild(){if(state.mode!=='mock')throw new Error('Demo controls are available only in Mock mode.');if(!state.build)state.build=mockBuild();}
 async function playNextMockDetection(){
@@ -437,9 +531,9 @@ async function injectUnexpected(){try{if(!state.build)throw new Error('Start a b
 async function resolveUnexpected(key){try{if(state.mode==='mock'){const c=state.build?.components.find(x=>x.componentKey===key);if(c)c.status='ignored';state.validation=null;log('MOCK','Resolved unexpected ingredient.');render();return;}const d=await api('build.resolve_unexpected',{buildSessionPublicId:state.build.publicId,componentKey:key});state.build=d.buildSession;state.validation=null;log('LIVE','Resolved unexpected ingredient.');render();}catch(e){log('ERROR',e.message);}}
 async function validate(){try{if(!state.build)throw new Error('Start a build first.');if(state.mode==='mock'){mockValidate();log('VALIDATION','Mock result: '+state.validation.status);render();return;}const d=await api('validation.evaluate',{buildSessionPublicId:state.build.publicId});state.validation=d.validation;log('LIVE','Validation result: '+state.validation.status);render();}catch(e){log('ERROR',e.message);}}
 async function handoff(){try{if(!state.validation||state.validation.status!=='ready_for_finishing')throw new Error('Validation is not ready for Expo.');if(state.mode==='mock'){log('MOCK','Simulated Expo handoff.');state.build=null;state.validation=null;render();return;}const d=await api('handoff.expo',{buildSessionPublicId:state.build.publicId});log('LIVE','Expo handoff completed; KDS status '+(d.handoff.kdsStatus||'ready')+'.');state.build=null;state.validation=null;await refreshWork();}catch(e){log('ERROR',e.message);}}
-function resetSimulator(){state.build=null;state.validation=null;state.selectedKdsItemPublicId='';clearCameraTarget();$('detectionLayer').innerHTML='';log('SYSTEM','Simulator build state reset; POS/KDS records were not changed.');refreshWork();}
-$('modeSelect').addEventListener('change',async e=>{stopAutoPlay();stopLiveStationSync('idle');state.mode=e.target.value;state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;state.syncFingerprint='';log('MODE','Switched to '+state.mode+'.');if(state.mode==='live')startLiveStationSync({immediate:true});else await refreshWork();});
-$('deviceSelect').addEventListener('change',async e=>{stopLiveStationSync('idle');state.device=state.devices.find(x=>x.publicId===e.target.value)||null;state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;state.syncFingerprint='';if(state.mode==='live')startLiveStationSync({immediate:true});else render();});
+function resetSimulator(){state.build=null;state.validation=null;state.selectedKdsItemPublicId='';clearTemporalRuntime();clearCameraTarget();$('detectionLayer').innerHTML='';log('SYSTEM','Simulator build state reset; POS/KDS records were not changed.');refreshWork();}
+$('modeSelect').addEventListener('change',async e=>{stopAutoPlay();stopLiveStationSync('idle');state.mode=e.target.value;state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;clearTemporalRuntime();state.syncFingerprint='';log('MODE','Switched to '+state.mode+'.');if(state.mode==='live')startLiveStationSync({immediate:true});else await refreshWork();});
+$('deviceSelect').addEventListener('change',async e=>{stopLiveStationSync('idle');state.device=state.devices.find(x=>x.publicId===e.target.value)||null;state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;clearTemporalRuntime();state.syncFingerprint='';if(state.mode==='live')startLiveStationSync({immediate:true});else render();});
 $('workItemSelect').addEventListener('change',e=>{state.selectedKdsItemPublicId=e.target.value;state.validation=null;render();});
 $('refreshWork').addEventListener('click',refreshWork);$('startBuild').addEventListener('click',startBuild);$('resetSimulator').addEventListener('click',resetSimulator);$('injectUnexpected').addEventListener('click',injectUnexpected);$('evaluateBuild').addEventListener('click',validate);$('autoPlayBuild').addEventListener('click',toggleAutoPlay);$('nextDetection').addEventListener('click',playNextMockDetection);$('lowConfidenceDetection').addEventListener('click',injectLowConfidenceDetection);$('completeMockBuild').addEventListener('click',completeMockScenario);$('handoffExpo').addEventListener('click',handoff);$('clearLog').addEventListener('click',()=>{state.logs=[];renderLog();});
 $('sceneSourceSelect').addEventListener('change',async e=>{state.cameraSource=e.target.value;if(state.cameraSource==='camera'){await startCamera();}else{stopCamera();$('sceneImage').hidden=!$('sceneImage').src;$('scenePlaceholder').hidden=!!$('sceneImage').src;}});
