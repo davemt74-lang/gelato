@@ -78,8 +78,9 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
   <aside class="sim-console">
     <section class="console-card">
       <div class="console-heading"><div><small>WORK</small><strong id="consoleItem">Club Sandwich + Fries</strong></div><span id="workStatus">queued</span></div>
+      <label class="work-picker"><span>KDS ITEM</span><select id="workItemSelect"><option value="">No work loaded</option></select></label>
       <div class="meta-grid" id="workMeta"></div>
-      <button id="startBuild" type="button">Start focused build</button>
+      <div class="inline-actions"><button id="startBuild" type="button">Start selected build</button><button id="resetSimulator" type="button">Reset</button></div>
     </section>
 
     <section class="console-card">
