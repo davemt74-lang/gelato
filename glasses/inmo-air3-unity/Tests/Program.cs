@@ -17,6 +17,7 @@ internal static class Program
         SimulatorSupportContract();
         await StationCalibrationContract();
         await VisionLabelProfileContract();
+        await VisionModelRolloutContract();
         await SpatialEvidenceFusionContract();
         await TransferSequenceEvidenceContract();
         await VisionPipelineContract();
@@ -604,6 +605,115 @@ internal static class Program
 
         coordinator.ResetForNextWork();
         Assert(coordinator.VisionLabelProfile == null && coordinator.LastVisionProfileError == null, "reset must clear per-build vision profile state");
+    }
+
+    private static async Task VisionModelRolloutContract()
+    {
+        var assignment = new VisionModelAssignment
+        {
+            Schema = "gelato.vision_model_assignment.v1",
+            DetectorName = "scripted-test-detector",
+            BuildSessionPublicId = "build-1",
+            Action = "apply",
+            AssignmentKey = new string('a', 64),
+            Selection = "target",
+            CanaryBucket = 7.25f,
+            Rollout = new VisionModelRolloutAssignment
+            {
+                PublicId = "vision-rollout-1",
+                Status = "active",
+                CanaryPercent = 10f
+            },
+            Package = new VisionModelPackage
+            {
+                PublicId = "vision-model-2",
+                DetectorName = "scripted-test-detector",
+                ModelName = "sandwich-detector",
+                ModelVersion = "2.0.0",
+                RuntimeType = "onnx",
+                Platform = "inmo_air3",
+                ArtifactUrl = "https://models.example.test/sandwich-detector-2.onnx",
+                ArtifactSha256 = new string('b', 64),
+                ArtifactBytes = 2048,
+                MinimumSdkVersion = "1.0.0",
+                MinimumAppVersion = "1.0.0"
+            },
+            Compatibility = new VisionModelCompatibility { Compatible = true }
+        };
+
+        Assert(VisionModelAssignmentPolicy.CanApply(assignment, "scripted-test-detector", out var reasons)
+            && reasons.Count == 0, "valid governed assignment must pass independent client policy");
+
+        var insecure = new VisionModelAssignment
+        {
+            DetectorName = assignment.DetectorName,
+            Action = "apply",
+            Rollout = assignment.Rollout,
+            Package = new VisionModelPackage
+            {
+                PublicId = "bad",
+                DetectorName = assignment.DetectorName,
+                RuntimeType = "onnx",
+                Platform = "inmo_air3",
+                ArtifactUrl = "http://models.example.test/model.onnx",
+                ArtifactSha256 = new string('b', 64)
+            },
+            Compatibility = new VisionModelCompatibility { Compatible = true }
+        };
+        Assert(!VisionModelAssignmentPolicy.CanApply(insecure, "scripted-test-detector", out var insecureReasons)
+            && Contains(insecureReasons, "artifact_url_not_https"), "client policy must reject non-HTTPS model artifacts");
+
+        var badSha = new VisionModelAssignment
+        {
+            DetectorName = assignment.DetectorName,
+            Action = "apply",
+            Rollout = assignment.Rollout,
+            Package = new VisionModelPackage
+            {
+                PublicId = "bad-sha",
+                DetectorName = assignment.DetectorName,
+                RuntimeType = "onnx",
+                Platform = "inmo_air3",
+                ArtifactUrl = "https://models.example.test/model.onnx",
+                ArtifactSha256 = "not-a-checksum"
+            },
+            Compatibility = new VisionModelCompatibility { Compatible = true }
+        };
+        Assert(!VisionModelAssignmentPolicy.CanApply(badSha, "scripted-test-detector", out var shaReasons)
+            && Contains(shaReasons, "artifact_sha256_invalid"), "client policy must reject invalid model checksums");
+
+        var gateway = new FakeGateway { VisionModelAssignment = assignment };
+        var coordinator = new ArWorkflowCoordinator(new FakePlatform(), gateway, new FakeTokenStore("existing-token"));
+        await coordinator.InitializeAsync();
+        await coordinator.RefreshWorkAsync();
+        await coordinator.StartFocusBuildAsync();
+
+        var loaded = await coordinator.RefreshVisionModelAssignmentAsync("scripted-test-detector");
+        Assert(loaded != null && loaded.AssignmentKey == assignment.AssignmentKey, "coordinator must load the governed model assignment for the active build");
+        Assert(gateway.VisionModelAssignmentCalls == 1, "model assignment must use the dedicated gateway action");
+        Assert(coordinator.State == WorkflowState.Building, "optional model assignment must not disturb build workflow state");
+
+        var seen = VisionModelAssignmentPolicy.AssignmentSeenReport(loaded!);
+        Assert(seen.ReportType == "assignment_seen" && seen.ReportKey.EndsWith(":seen", StringComparison.Ordinal), "assignment-seen report must use an idempotent assignment-derived key");
+        Assert(await coordinator.ReportVisionModelAsync(seen), "model assignment telemetry should report without mutating kitchen workflow");
+        Assert(gateway.VisionModelReports.Count == 1 && gateway.VisionModelReports[0].PackagePublicId == "vision-model-2", "model report must preserve selected package identity");
+
+        gateway.FailVisionModelAssignment = true;
+        var unavailable = await coordinator.RefreshVisionModelAssignmentAsync("scripted-test-detector");
+        Assert(unavailable == null, "model assignment transport failure must preserve the currently running detector");
+        Assert(coordinator.State == WorkflowState.Building, "optional model assignment failure must not put the kitchen workflow into Error");
+        Assert(coordinator.LastVisionModelError == "simulated vision model assignment failure", "assignment failure must remain diagnosable");
+
+        gateway.FailVisionModelReport = true;
+        var reportOk = await coordinator.ReportVisionModelAsync(new VisionModelReport
+        {
+            ReportKey = "report-failure",
+            ReportType = "failed"
+        });
+        Assert(!reportOk && coordinator.State == WorkflowState.Building, "telemetry failure must not stop the cook workflow");
+
+        coordinator.ResetForNextWork();
+        Assert(coordinator.VisionModelAssignment == null && coordinator.LastVisionModelError == null, "reset must clear model-assignment state");
     }
 
     private static async Task SpatialEvidenceFusionContract()
@@ -1337,6 +1447,12 @@ internal static class Program
         }
     }
 
+    private static bool Contains(IReadOnlyList<string> values, string expected)
+    {
+        foreach (var value in values) if (string.Equals(value, expected, StringComparison.Ordinal)) return true;
+        return false;
+    }
+
     private static void Assert(bool condition, string message)
     {
         if (!condition) throw new InvalidOperationException(message);
@@ -1389,9 +1505,14 @@ internal static class Program
         public bool FailCurrentWork { get; set; }
         public bool FailCalibration { get; set; }
         public bool FailVisionProfile { get; set; }
+        public bool FailVisionModelAssignment { get; set; }
+        public bool FailVisionModelReport { get; set; }
         public StationCalibration? Calibration { get; set; }
         public VisionLabelProfile? VisionProfile { get; set; }
+        public VisionModelAssignment? VisionModelAssignment { get; set; }
         public int VisionProfileCalls { get; private set; }
+        public int VisionModelAssignmentCalls { get; private set; }
+        public List<VisionModelReport> VisionModelReports { get; } = new List<VisionModelReport>();
         public int HandoffCalls { get; private set; }
         public int ConfirmCalls { get; private set; }
         public int ResolveCalls { get; private set; }
@@ -1442,6 +1563,25 @@ internal static class Program
             VisionProfileCalls++;
             if (FailVisionProfile) throw new InvalidOperationException("simulated vision profile failure");
             return Task.FromResult(VisionProfile);
+        }
+
+        public Task<VisionModelAssignment?> GetVisionModelAssignmentAsync(
+            string buildSessionPublicId,
+            string detectorName,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            VisionModelAssignmentCalls++;
+            if (FailVisionModelAssignment) throw new InvalidOperationException("simulated vision model assignment failure");
+            return Task.FromResult(VisionModelAssignment);
+        }
+
+        public Task ReportVisionModelAsync(VisionModelReport report, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (FailVisionModelReport) throw new InvalidOperationException("simulated vision model report failure");
+            VisionModelReports.Add(report);
+            return Task.CompletedTask;
         }
 
         public Task<BuildSession> StartBuildAsync(string kdsItemPublicId, string? sourceRevision, CancellationToken cancellationToken)

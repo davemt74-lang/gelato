@@ -1,0 +1,149 @@
+name: AR Glasses Vision Model Rollout
+
+on:
+  pull_request:
+    paths:
+      - 'database/20261020_glasses_vision_model_rollout.sql'
+      - 'includes/glasses-vision-models.php'
+      - 'api/glasses-vision-models.php'
+      - 'api/glasses-device.php'
+      - 'glasses-vision-models.php'
+      - 'assets/js/glasses-vision-models.js'
+      - 'assets/css/glasses-vision-models.css'
+      - 'includes/admin-control-core.php'
+      - 'tests/glasses-vision-model-rollout-contract.php'
+      - 'glasses/inmo-air3-unity/**'
+      - 'docs/GLASSES-VISION-MODEL-ROLLOUT.md'
+      - '.github/workflows/glasses-vision-model-rollout.yml'
+  push:
+    branches: [main, 'feature/glasses-vision-model-rollout']
+
+jobs:
+  vision-model-rollout:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Syntax checks
+        run: |
+          php -l includes/glasses-vision-models.php
+          php -l api/glasses-vision-models.php
+          php -l api/glasses-device.php
+          php -l glasses-vision-models.php
+          php -l includes/admin-control-core.php
+          php -l tests/glasses-vision-model-rollout-contract.php
+          node --check assets/js/glasses-vision-models.js
+
+      - name: Architecture and governance contract
+        run: |
+          grep -q 'CREATE TABLE glasses_vision_model_packages' database/20261020_glasses_vision_model_rollout.sql
+          grep -q 'CREATE TABLE glasses_vision_model_rollouts' database/20261020_glasses_vision_model_rollout.sql
+          grep -q 'CREATE TABLE glasses_vision_model_rollout_events' database/20261020_glasses_vision_model_rollout.sql
+          grep -q 'CREATE TABLE glasses_vision_model_device_reports' database/20261020_glasses_vision_model_rollout.sql
+          grep -q 'function glasses_vision_model_package_create' includes/glasses-vision-models.php
+          grep -Fq '/^\d+(?:\.\d+){0,3}(?:[-+][0-9A-Za-z.-]+)?$/' includes/glasses-vision-models.php
+          grep -q 'function glasses_vision_model_rollout_advance' includes/glasses-vision-models.php
+          grep -q 'function glasses_vision_model_rollout_rollback' includes/glasses-vision-models.php
+          grep -q 'function glasses_vision_model_canary_bucket' includes/glasses-vision-models.php
+          grep -q 'vision_runtime_capability_unreported' includes/glasses-vision-models.php
+          grep -q "action==='vision.model_assignment'" api/glasses-device.php
+          grep -q "action==='vision.model_report'" api/glasses-device.php
+          grep -q 'app_verify_request_csrf' api/glasses-vision-models.php
+          grep -q 'Vision Model Packages' glasses-vision-models.php
+          grep -q 'AR Vision Models' includes/admin-control-core.php
+          grep -q 'class VisionModelAssignmentPolicy' glasses/inmo-air3-unity/Runtime/Core/VisionModelRolloutPolicy.cs
+          grep -q 'artifact_url_not_https' glasses/inmo-air3-unity/Runtime/Core/VisionModelRolloutPolicy.cs
+          grep -q 'artifact_sha256_invalid' glasses/inmo-air3-unity/Runtime/Core/VisionModelRolloutPolicy.cs
+          grep -q 'VisionModelRuntimes' glasses/inmo-air3-unity/Runtime/Core/Models.cs
+          grep -q 'visionModelRuntimes' glasses/inmo-air3-unity/Runtime/Unity/UnityGelatoGateway.cs
+          grep -q 'RefreshVisionModelAssignmentAsync' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
+          grep -q 'Activation is deferred until a verified model-loader implementation is installed' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
+          ! grep -q 'ReportType = "activated"' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
+          ! grep -q 'UPDATE glasses_vision_model_packages SET artifact_url' includes/glasses-vision-models.php
+          ! grep -q 'kds_transition' includes/glasses-vision-models.php
+          ! grep -R 'ArPoseManager' glasses/inmo-air3-unity/Runtime/Core
+
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_restaurant_ai_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->ensureTrackingTables();
+          $s->bootstrapLegacyHistory(null);
+          $s->applyPending(null);
+          if($s->pendingMigrations()) exit(1);
+          PHP
+
+      - name: Vision model rollout backend contract
+        run: php tests/glasses-vision-model-rollout-contract.php
+
+      - name: Compile hardware-neutral AR core
+        run: dotnet build glasses/inmo-air3-unity/Runtime/Core/Gelato.Ar.Core.csproj -c Release --nologo
+
+      - name: Run full AIR3 behavior contracts
+        run: dotnet run --project glasses/inmo-air3-unity/Tests/Gelato.Ar.Core.Tests.csproj -c Release
+
+      - name: Existing glasses + KDS regressions
+        run: |
+          php tests/glasses-foundation-contract.php
+          php tests/glasses-work-api-contract.php
+          php tests/glasses-build-session-contract.php
+          php tests/glasses-build-definition-contract.php
+          php tests/glasses-product-validation-contract.php
+          php tests/glasses-expo-handoff-contract.php
+          php tests/glasses-station-calibration-contract.php
+          php tests/glasses-transfer-sequence-contract.php
+          php tests/glasses-calibration-studio-contract.php
+          node tests/glasses-calibration-geometry.test.js
+          php tests/glasses-observation-corrections-contract.php
+          php tests/glasses-learning-analytics-contract.php
+          php tests/glasses-vision-label-profiles-contract.php
+          php tests/kds-contract.php
+          php tests/kds-production-expo-contract.php
+
+      - name: Upgrade idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->assertAppliedChecksumsUnchanged();
+          if($s->pendingMigrations()) exit(2);
+          if($s->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP

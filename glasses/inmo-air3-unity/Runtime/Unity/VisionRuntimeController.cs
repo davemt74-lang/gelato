@@ -25,6 +25,7 @@ namespace Gelato.Ar.Unity
         private string _activeSession = string.Empty;
         private bool _stationCalibrationLoaded;
         private bool _visionProfileLoaded;
+        private bool _visionModelAssignmentLoaded;
 
         public string DetectorName => _pipeline == null ? string.Empty : _pipeline.DetectorName;
         public int ActiveTrackCount => _pipeline == null ? 0 : _pipeline.ActiveTrackCount;
@@ -62,6 +63,7 @@ namespace Gelato.Ar.Unity
                 _pipeline.Reset(_activeSession);
                 _stationCalibrationLoaded = false;
                 _visionProfileLoaded = false;
+                _visionModelAssignmentLoaded = false;
             }
 
             var frame = coordinator.Platform.TryGetLatestFrame();
@@ -78,6 +80,39 @@ namespace Gelato.Ar.Unity
                     _stationCalibrationLoaded = true;
                     if (!string.IsNullOrWhiteSpace(coordinator.LastCalibrationError))
                         Debug.LogWarning("Gelato AR station calibration unavailable: " + coordinator.LastCalibrationError);
+                }
+
+                if (!_visionModelAssignmentLoaded)
+                {
+                    var assignment = await coordinator.RefreshVisionModelAssignmentAsync(_pipeline.DetectorName, _lifetime.Token);
+                    _visionModelAssignmentLoaded = true;
+
+                    if (!string.IsNullOrWhiteSpace(coordinator.LastVisionModelError))
+                    {
+                        Debug.LogWarning("Gelato AR vision model assignment unavailable; current detector remains active: " + coordinator.LastVisionModelError);
+                    }
+                    else if (assignment != null)
+                    {
+                        await coordinator.ReportVisionModelAsync(
+                            VisionModelAssignmentPolicy.AssignmentSeenReport(assignment),
+                            _lifetime.Token
+                        );
+
+                        if (string.Equals(assignment.Action, "apply", StringComparison.Ordinal))
+                        {
+                            if (VisionModelAssignmentPolicy.CanApply(assignment, _pipeline.DetectorName, out var reasons))
+                            {
+                                Debug.Log("Gelato AR governed model package is eligible for runtime activation: "
+                                    + (assignment.Package?.ModelName ?? "unknown") + " "
+                                    + (assignment.Package?.ModelVersion ?? string.Empty)
+                                    + ". Activation is deferred until a verified model-loader implementation is installed.");
+                            }
+                            else
+                            {
+                                Debug.LogWarning("Gelato AR governed model assignment failed client policy: " + string.Join(",", reasons));
+                            }
+                        }
+                    }
                 }
 
                 if (!_visionProfileLoaded)

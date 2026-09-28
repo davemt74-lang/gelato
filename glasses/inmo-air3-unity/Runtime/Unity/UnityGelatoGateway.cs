@@ -32,7 +32,13 @@ namespace Gelato.Ar.Unity
                 platform = device.Platform,
                 sdkVersion = device.SdkVersion,
                 appVersion = device.AppVersion,
-                systemVersion = device.SystemVersion
+                systemVersion = device.SystemVersion,
+                capabilities = new PairCapabilitiesRequest
+                {
+                    visionModelRuntimes = device.VisionModelRuntimes == null
+                        ? Array.Empty<string>()
+                        : new List<string>(device.VisionModelRuntimes).ToArray()
+                }
             }, false, cancellationToken);
 
             return new PairResult
@@ -180,6 +186,75 @@ namespace Gelato.Ar.Unity
                 ProfileHash = dto.profileHash ?? string.Empty,
                 Mappings = mappings
             };
+        }
+
+        public async Task<VisionModelAssignment?> GetVisionModelAssignmentAsync(
+            string buildSessionPublicId,
+            string detectorName,
+            CancellationToken cancellationToken)
+        {
+            var response = await PostAsync<VisionModelAssignmentResponse>(new VisionModelAssignmentRequest
+            {
+                action = DeviceApiActions.VisionModelAssignment,
+                buildSessionPublicId = buildSessionPublicId,
+                detectorName = detectorName ?? string.Empty
+            }, true, cancellationToken);
+
+            if (response.modelAssignment == null) return null;
+            var dto = response.modelAssignment;
+            return new VisionModelAssignment
+            {
+                Schema = dto.schema ?? string.Empty,
+                DetectorName = dto.detectorName ?? string.Empty,
+                BuildSessionPublicId = dto.buildSessionPublicId ?? string.Empty,
+                Action = dto.action ?? "hold",
+                Reason = dto.reason ?? string.Empty,
+                AssignmentKey = dto.assignmentKey ?? string.Empty,
+                Selection = dto.selection ?? string.Empty,
+                CanaryBucket = dto.canaryBucket,
+                Rollout = dto.rollout == null ? null : new VisionModelRolloutAssignment
+                {
+                    PublicId = dto.rollout.publicId ?? string.Empty,
+                    Status = dto.rollout.status ?? string.Empty,
+                    CanaryPercent = dto.rollout.canaryPercent
+                },
+                Package = dto.package == null ? null : new VisionModelPackage
+                {
+                    PublicId = dto.package.publicId ?? string.Empty,
+                    DetectorName = dto.package.detectorName ?? string.Empty,
+                    ModelName = dto.package.modelName ?? string.Empty,
+                    ModelVersion = dto.package.modelVersion ?? string.Empty,
+                    RuntimeType = dto.package.runtimeType ?? string.Empty,
+                    Platform = dto.package.platform ?? string.Empty,
+                    ArtifactUrl = dto.package.artifactUrl ?? string.Empty,
+                    ArtifactSha256 = dto.package.artifactSha256 ?? string.Empty,
+                    ArtifactBytes = dto.package.hasArtifactBytes ? dto.package.artifactBytes : (long?)null,
+                    MinimumSdkVersion = dto.package.minimumSdkVersion ?? string.Empty,
+                    MinimumAppVersion = dto.package.minimumAppVersion ?? string.Empty
+                },
+                Compatibility = dto.compatibility == null ? new VisionModelCompatibility() : new VisionModelCompatibility
+                {
+                    Compatible = dto.compatibility.compatible,
+                    Reasons = dto.compatibility.reasons ?? Array.Empty<string>()
+                }
+            };
+        }
+
+        public async Task ReportVisionModelAsync(VisionModelReport report, CancellationToken cancellationToken)
+        {
+            if (report == null) throw new ArgumentNullException(nameof(report));
+            await PostAsync<VisionModelReportResponse>(new VisionModelReportRequest
+            {
+                action = DeviceApiActions.VisionModelReport,
+                reportKey = report.ReportKey ?? string.Empty,
+                reportType = report.ReportType ?? string.Empty,
+                rolloutPublicId = report.RolloutPublicId ?? string.Empty,
+                packagePublicId = report.PackagePublicId ?? string.Empty,
+                runtimeState = report.RuntimeState ?? string.Empty,
+                artifactSha256 = report.ArtifactSha256 ?? string.Empty,
+                errorCode = report.ErrorCode ?? string.Empty,
+                message = report.Message ?? string.Empty
+            }, true, cancellationToken);
         }
 
         public async Task<BuildSession> StartBuildAsync(string kdsItemPublicId, string sourceRevision, CancellationToken cancellationToken)
@@ -491,6 +566,21 @@ namespace Gelato.Ar.Unity
         [Serializable] private class ActionRequest { public string action; }
         [Serializable] private class BuildSessionRequest : ActionRequest { public string buildSessionPublicId; }
         [Serializable] private sealed class BuildStartRequest : ActionRequest { public string kdsItemPublicId; public string sourceRevision; }
+        [Serializable] private sealed class VisionModelAssignmentRequest : BuildSessionRequest
+        {
+            public string detectorName;
+        }
+        [Serializable] private sealed class VisionModelReportRequest : ActionRequest
+        {
+            public string reportKey;
+            public string reportType;
+            public string rolloutPublicId;
+            public string packagePublicId;
+            public string runtimeState;
+            public string artifactSha256;
+            public string errorCode;
+            public string message;
+        }
         [Serializable] private sealed class VisionProfileRequest : BuildSessionRequest
         {
             public string detectorName;
@@ -511,6 +601,11 @@ namespace Gelato.Ar.Unity
             public string sdkVersion;
             public string appVersion;
             public string systemVersion;
+            public PairCapabilitiesRequest capabilities;
+        }
+        [Serializable] private sealed class PairCapabilitiesRequest
+        {
+            public string[] visionModelRuntimes;
         }
         [Serializable] private sealed class ObservationRequest : BuildSessionRequest
         {
@@ -568,6 +663,64 @@ namespace Gelato.Ar.Unity
             public PosLineDto posLine;
         }
         [Serializable] private sealed class PosLineDto { public string name; public string specialInstructions; }
+
+        [Serializable] private sealed class VisionModelAssignmentResponse
+        {
+            public bool ok;
+            public VisionModelAssignmentDto modelAssignment;
+        }
+        [Serializable] private sealed class VisionModelAssignmentDto
+        {
+            public string schema;
+            public string detectorName;
+            public string buildSessionPublicId;
+            public string action;
+            public string reason;
+            public string assignmentKey;
+            public string selection;
+            public float canaryBucket;
+            public VisionModelRolloutDto rollout;
+            public VisionModelPackageDto package;
+            public VisionModelCompatibilityDto compatibility;
+        }
+        [Serializable] private sealed class VisionModelRolloutDto
+        {
+            public string publicId;
+            public string status;
+            public float canaryPercent;
+        }
+        [Serializable] private sealed class VisionModelPackageDto
+        {
+            public string publicId;
+            public string detectorName;
+            public string modelName;
+            public string modelVersion;
+            public string runtimeType;
+            public string platform;
+            public string artifactUrl;
+            public string artifactSha256;
+            public long artifactBytes;
+            public bool hasArtifactBytes;
+            public string minimumSdkVersion;
+            public string minimumAppVersion;
+        }
+        [Serializable] private sealed class VisionModelCompatibilityDto
+        {
+            public bool compatible;
+            public string[] reasons;
+        }
+        [Serializable] private sealed class VisionModelReportResponse
+        {
+            public bool ok;
+            public VisionModelReportAckDto modelReport;
+        }
+        [Serializable] private sealed class VisionModelReportAckDto
+        {
+            public string reportKey;
+            public string reportType;
+            public string createdAt;
+            public bool idempotent;
+        }
 
         [Serializable] private sealed class VisionProfileResponse
         {

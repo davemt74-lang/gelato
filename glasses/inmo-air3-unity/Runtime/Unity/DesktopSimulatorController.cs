@@ -72,7 +72,8 @@ namespace Gelato.Ar.Unity
                     Platform = "desktop_simulator",
                     SdkVersion = "simulator",
                     AppVersion = Application.version,
-                    SystemVersion = SystemInfo.operatingSystem
+                    SystemVersion = SystemInfo.operatingSystem,
+                    VisionModelRuntimes = new[] { "onnx", "tflite", "unity_barracuda", "vendor" }
                 });
                 LogLine("Paired with Gelato.");
             });
