@@ -8,6 +8,7 @@ on:
       - 'database/20261022_glasses_vision_shadow_evaluation.sql'
       - 'database/20261023_glasses_vision_canary_production.sql'
       - 'database/20261024_glasses_vision_production_drift.sql'
+      - 'database/20261025_glasses_vision_drift_recovery.sql'
       - 'includes/glasses-vision-models.php'
       - 'api/glasses-vision-models.php'
       - 'api/glasses-device.php'
@@ -22,7 +23,7 @@ on:
       - 'docs/GLASSES-VISION-MODEL-ACTIVATION.md'
       - '.github/workflows/glasses-vision-model-rollout.yml'
   push:
-    branches: [main, 'feature/glasses-vision-model-rollout', 'feature/onnx-model-onboarding-preflight', 'feature/vision-shadow-live-evaluation', 'feature/vision-canary-production-governance', 'feature/vision-production-drift-awareness']
+    branches: [main, 'feature/glasses-vision-model-rollout', 'feature/onnx-model-onboarding-preflight', 'feature/vision-shadow-live-evaluation', 'feature/vision-canary-production-governance', 'feature/vision-production-drift-awareness', 'feature/vision-drift-recovery-remediation']
 
 jobs:
   vision-model-rollout:
@@ -88,6 +89,13 @@ jobs:
           grep -q 'function glasses_vision_drift_compare' includes/glasses-vision-models.php
           grep -q 'drift_auto_rolled_back' includes/glasses-vision-models.php
           grep -q "action==='vision.drift_sample'" api/glasses-device.php
+          grep -q 'CREATE TABLE glasses_vision_drift_recovery_events' database/20261025_glasses_vision_drift_recovery.sql
+          grep -q 'recovery_status' database/20261025_glasses_vision_drift_recovery.sql
+          grep -q 'function glasses_vision_drift_recovery_action' includes/glasses-vision-models.php
+          grep -q 'function glasses_vision_drift_recovery_progress' includes/glasses-vision-models.php
+          grep -q 'Baseline reset is not allowed for unresolved model-quality or runtime drift' includes/glasses-vision-models.php
+          grep -q "str_starts_with(\$action,'drift.')" api/glasses-vision-models.php
+          grep -q 'gvmDriftIncidentRows' glasses-vision-models.php
           grep -q 'function glasses_vision_model_package_create' includes/glasses-vision-models.php
           grep -q 'function glasses_vision_browser_inference_metadata' includes/glasses-vision-models.php
           grep -q 'gelato.browser_onnx_detector.v1' includes/glasses-vision-models.php

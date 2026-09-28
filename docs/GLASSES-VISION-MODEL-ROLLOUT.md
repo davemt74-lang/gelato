@@ -572,3 +572,96 @@ No drift path mutates POS, KDS, build observations, validation, or Expo state.
 The production safety loop is now:
 
 Train → golden test → shadow → canary → production → continuous drift awareness → hold/rollback when the deployed environment or data distribution materially changes.
+
+
+## Drift recovery, recalibration and guided remediation
+
+Drift detection now continues into a governed recovery workflow instead of ending at an alert or rollback.
+
+### Incident lifecycle
+
+Each durable drift incident has a stable public ID and recovery state:
+
+- `open`
+- `diagnosing`
+- `remediation_required`
+- `validating`
+- `resolved`
+- `reopened`
+
+Every recovery transition is appended to `glasses_vision_drift_recovery_events` with actor, notes, remediation type and supporting evidence.
+
+A resolved incident is not permanently dismissed. If the same drift signature returns, Gelato reopens the same incident, clears its validation count and increments its reopen counter.
+
+### Guided diagnosis
+
+Admin now shows:
+
+- severity;
+- drift category;
+- concrete reasons / what changed;
+- recommended remediation;
+- current recovery state;
+- stable validation progress;
+- reopen count.
+
+Default recommendations are cause-specific:
+
+- lighting → restore lighting / recalibrate environment;
+- camera pose/config/environment → restore camera/station calibration;
+- menu/ingredient domain → review recipe/label coverage and collect examples;
+- model quality → active learning + retraining;
+- runtime → repair device/runtime path;
+- mixed → diagnose before choosing remediation.
+
+### Controlled baseline reset
+
+A baseline reset is permitted only for environment/data-domain categories:
+
+- lighting;
+- camera pose;
+- camera configuration;
+- station calibration/environment;
+- menu/ingredient data-domain change.
+
+The previous baseline is retained as `superseded` evidence.
+
+After reset, only production samples captured **after the reset timestamp** can establish the replacement 20-sample baseline.
+
+Baseline reset is explicitly forbidden for:
+
+- model-quality drift;
+- runtime drift.
+
+This prevents degraded model/runtime performance from being normalized away.
+
+### Recovery evidence links
+
+A remediation can retain references to:
+
+- station calibration public ID;
+- replacement model package;
+- active-learning / dataset reference;
+- operator notes.
+
+These references remain attached to the incident audit.
+
+### Post-remediation validation
+
+Starting validation does not resolve the incident.
+
+Gelato requires 10 stable post-remediation samples. Once the tenth stable sample is recorded, the incident automatically becomes `resolved`.
+
+If `watch`, `drifted` or `critical` behavior returns while validating—or after resolution—the incident becomes `reopened` and the stable-sample counter resets.
+
+### Persistence
+
+Migration `20261025_glasses_vision_drift_recovery.sql`:
+
+- extends `glasses_vision_drift_incidents` with recovery state and evidence links;
+- preserves historical baselines by allowing superseded versions;
+- adds `glasses_vision_drift_recovery_events` for immutable recovery history.
+
+The full operational loop is now:
+
+Detect → classify → rollback if necessary → diagnose → remediate/recalibrate/retrain → re-baseline when appropriate → validate 10 stable samples → resolve → reopen automatically if drift returns.

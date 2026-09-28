@@ -788,6 +788,8 @@ function glasses_vision_drift_establish_baseline(PDO $pdo,int $org,array $assign
     $packageId=(int)$assignment['package_id'];$locationId=(int)$session['location_id'];$stationId=$session['station_id']!==null?(int)$session['station_id']:null;
     if($existing=glasses_vision_drift_baseline_row($pdo,$org,$packageId,$locationId,$stationId))return $existing;
     $whereStation=$stationId===null?'station_id IS NULL':'station_id=?';
+    $cutoffQ=$pdo->prepare("SELECT MAX(updated_at) FROM glasses_vision_drift_baselines WHERE organization_id=? AND package_id=? AND location_id=? AND ".($stationId===null?'station_id IS NULL':'station_id=?')." AND status='superseded'");
+    $cutoffArgs=[$org,$packageId,$locationId];if($stationId!==null)$cutoffArgs[]=$stationId;$cutoffQ->execute($cutoffArgs);$cutoff=$cutoffQ->fetchColumn()?:null;
     $sql="SELECT COUNT(*) samples,
         AVG(brightness_mean) brightness_mean,AVG(contrast_mean) contrast_mean,
         AVG(camera_pitch) camera_pitch_mean,AVG(camera_yaw) camera_yaw_mean,AVG(camera_roll) camera_roll_mean,
@@ -800,9 +802,10 @@ function glasses_vision_drift_establish_baseline(PDO $pdo,int $org,array $assign
             AND drift_state='calibrating'
             AND ((calibration_source_hash IS NULL AND ? IS NULL) OR calibration_source_hash=?)
             AND menu_signature=? AND ingredient_signature=?
+            AND (? IS NULL OR created_at>?)
           ORDER BY id DESC LIMIT 20) x";
     $args=[$org,$packageId,$locationId];if($stationId!==null)$args[]=$stationId;
-    $args[]=$ctx['calibrationSourceHash'];$args[]=$ctx['calibrationSourceHash'];$args[]=$ctx['menuSignature'];$args[]=$ctx['ingredientSignature'];
+    $args[]=$ctx['calibrationSourceHash'];$args[]=$ctx['calibrationSourceHash'];$args[]=$ctx['menuSignature'];$args[]=$ctx['ingredientSignature'];$args[]=$cutoff;$args[]=$cutoff;
     $q=$pdo->prepare($sql);$q->execute($args);$agg=$q->fetch();
     if(!$agg||(int)$agg['samples']<20)return null;
     $observations=(int)$agg['observations'];
@@ -854,11 +857,16 @@ function glasses_vision_drift_incident(PDO $pdo,int $org,array $assignment,array
     if(in_array($evaluation['state'],['stable','calibrating'],true))return;
     $category=$evaluation['categories'][0]??'mixed';$severity=$evaluation['state']==='critical'?'critical':($evaluation['state']==='drifted'?'high':'warning');
     $key=hash('sha256',implode('|',[(string)$assignment['package_id'],(string)$session['location_id'],(string)($session['station_id']??0),$category,implode(',',$evaluation['reasons'])]));
+    $public=glasses_public_id('vision-drift');
     $pdo->prepare("INSERT INTO glasses_vision_drift_incidents
-      (organization_id,package_id,rollout_id,location_id,station_id,incident_key,severity,drift_state,category,reasons_json,metadata_json)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?)
-      ON DUPLICATE KEY UPDATE severity=VALUES(severity),drift_state=VALUES(drift_state),last_seen_at=NOW(6),resolved_at=NULL,reasons_json=VALUES(reasons_json),metadata_json=VALUES(metadata_json)")
-      ->execute([$org,(int)$assignment['package_id'],$assignment['rollout_id']!==null?(int)$assignment['rollout_id']:null,(int)$session['location_id'],$session['station_id']!==null?(int)$session['station_id']:null,$key,$severity,$evaluation['state'],$category,glasses_json_object($evaluation['reasons'],4000),glasses_json_object(['score'=>$evaluation['score'],'categories'=>$evaluation['categories']],4000)]);
+      (organization_id,public_id,package_id,rollout_id,location_id,station_id,incident_key,severity,drift_state,category,reasons_json,metadata_json)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+      ON DUPLICATE KEY UPDATE severity=VALUES(severity),drift_state=VALUES(drift_state),last_seen_at=NOW(6),resolved_at=NULL,
+        reopened_count=reopened_count+CASE WHEN recovery_status IN ('resolved','validating') THEN 1 ELSE 0 END,
+        validation_stable_samples=CASE WHEN recovery_status IN ('resolved','validating') THEN 0 ELSE validation_stable_samples END,
+        recovery_status=CASE WHEN recovery_status IN ('resolved','validating') THEN 'reopened' ELSE recovery_status END,
+        reasons_json=VALUES(reasons_json),metadata_json=VALUES(metadata_json)")
+      ->execute([$org,$public,(int)$assignment['package_id'],$assignment['rollout_id']!==null?(int)$assignment['rollout_id']:null,(int)$session['location_id'],$session['station_id']!==null?(int)$session['station_id']:null,$key,$severity,$evaluation['state'],$category,glasses_json_object($evaluation['reasons'],4000),glasses_json_object(['score'=>$evaluation['score'],'categories'=>$evaluation['categories']],4000)]);
 }
 
 function glasses_vision_drift_auto_rollback(PDO $pdo,int $org,int $rolloutId,array $evaluation): void
@@ -908,6 +916,7 @@ function glasses_vision_drift_sample(PDO $pdo,array $device,array $input): array
     if($ins->rowCount()===0)return ['idempotent'=>true,'evaluation'=>$evaluation,'baselineEstablished'=>$baseline!==null];
     if(!$baseline){$baseline=glasses_vision_drift_establish_baseline($pdo,$org,$assignment,$session,$ctx);if($baseline)$evaluation=['schema'=>'gelato.vision_drift_evaluation.v1','state'=>'stable','score'=>0.0,'reasons'=>['baseline_established'],'categories'=>[]];}
     if($baseline&&$evaluation['state']!=='calibrating')glasses_vision_drift_incident($pdo,$org,$assignment,$session,$evaluation);
+    glasses_vision_drift_recovery_progress($pdo,$org,$assignment,$session,$evaluation);
     if($evaluation['state']==='critical'&&$assignment['rollout_id']!==null)glasses_vision_drift_auto_rollback($pdo,$org,(int)$assignment['rollout_id'],$evaluation);
     return ['idempotent'=>false,'evaluation'=>$evaluation,'baselineEstablished'=>$baseline!==null,'baselineSampleCount'=>$baseline?(int)$baseline['sample_count']:0];
 }
@@ -916,11 +925,151 @@ function glasses_vision_drift_rollout_summary(PDO $pdo,int $org,string $rolloutP
 {
     if(!glasses_vision_drift_ready($pdo))return ['schema'=>'gelato.vision_drift_summary.v1','state'=>'unavailable','promotionBlocked'=>false,'reasons'=>[]];
     $rollout=glasses_vision_model_rollout_row($pdo,$org,$rolloutPublicId,false);
+    if(glasses_vision_drift_recovery_ready($pdo)){
+        $iq=$pdo->prepare("SELECT drift_state,reasons_json,last_seen_at,recovery_status,validation_stable_samples
+            FROM glasses_vision_drift_incidents
+            WHERE organization_id=? AND rollout_id=? AND package_id=? AND recovery_status<>'resolved'
+            ORDER BY FIELD(drift_state,'critical','drifted','watch','stable','calibrating') ASC,last_seen_at DESC,id DESC LIMIT 1");
+        $iq->execute([$org,(int)$rollout['id'],(int)$rollout['target_package_id']]);$incident=$iq->fetch();
+        if($incident){
+            return ['schema'=>'gelato.vision_drift_summary.v1','state'=>(string)$incident['drift_state'],'score'=>null,'promotionBlocked'=>true,
+                'reasons'=>json_decode((string)($incident['reasons_json']??'[]'),true)?:[],'latestAt'=>$incident['last_seen_at'],
+                'recoveryStatus'=>(string)$incident['recovery_status'],'validationStableSamples'=>(int)$incident['validation_stable_samples']];
+        }
+    }
     $q=$pdo->prepare("SELECT drift_state,drift_score,reasons_json,created_at FROM glasses_vision_drift_samples WHERE organization_id=? AND rollout_id=? AND package_id=? ORDER BY id DESC LIMIT 1");
     $q->execute([$org,(int)$rollout['id'],(int)$rollout['target_package_id']]);$row=$q->fetch();
     if(!$row)return ['schema'=>'gelato.vision_drift_summary.v1','state'=>'unknown','promotionBlocked'=>false,'reasons'=>[],'latestAt'=>null];
     $state=(string)$row['drift_state'];
     return ['schema'=>'gelato.vision_drift_summary.v1','state'=>$state,'score'=>(float)$row['drift_score'],'promotionBlocked'=>in_array($state,['drifted','critical'],true),'reasons'=>json_decode((string)($row['reasons_json']??'[]'),true)?:[],'latestAt'=>$row['created_at']];
+}
+
+
+function glasses_vision_drift_recovery_ready(PDO $pdo): bool
+{
+    $q=$pdo->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='glasses_vision_drift_recovery_events'");
+    $q->execute();return (int)$q->fetchColumn()===1;
+}
+
+function glasses_vision_drift_recommendation(string $category,array $reasons=[]): array
+{
+    return match($category){
+        'lighting'=>['type'=>'recalibrate_environment','title'=>'Recalibrate lighting/environment','steps'=>['Verify station lighting','Re-run station calibration if optical zones shifted','Collect 20 new stable samples','Validate 10 stable post-fix samples']],
+        'camera_pose','camera_config','environment'=>['type'=>'recalibrate_station','title'=>'Recalibrate station/camera','steps'=>['Restore camera position','Verify frame format','Create or activate corrected station calibration','Re-establish environment baseline','Validate 10 stable post-fix samples']],
+        'data_domain'=>['type'=>'review_menu_domain','title'=>'Review menu and ingredient domain','steps'=>['Confirm menu/build-definition change is intentional','Review label-profile coverage','Collect hard examples for new ingredients/packaging','Retrain if detector coverage changed','Re-establish baseline only after domain review']],
+        'runtime'=>['type'=>'repair_runtime','title'=>'Repair runtime/device path','steps'=>['Inspect timeout/error telemetry','Verify device/runtime versions','Repair runtime before validation','Do not reset baseline to hide runtime degradation']],
+        'model_quality'=>['type'=>'retrain_model','title'=>'Collect evidence and retrain','steps'=>['Review corrections and hard examples','Export reviewed training data','Train challenger','Pass golden-set/shadow/canary gates','Do not reset baseline to hide model degradation']],
+        default=>['type'=>'diagnose','title'=>'Diagnose mixed drift','steps'=>['Review drift reasons','Separate environment from model/runtime causes','Apply the matching remediation','Validate with stable production samples']],
+    };
+}
+
+function glasses_vision_drift_incident_public(array $row): array
+{
+    $reasons=json_decode((string)($row['reasons_json']??'[]'),true)?:[];
+    $recommendation=glasses_vision_drift_recommendation((string)$row['category'],$reasons);
+    return [
+        'publicId'=>(string)$row['public_id'],'severity'=>(string)$row['severity'],'driftState'=>(string)$row['drift_state'],
+        'category'=>(string)$row['category'],'reasons'=>$reasons,'recoveryStatus'=>(string)$row['recovery_status'],
+        'remediationType'=>$row['remediation_type'],'remediationNotes'=>(string)($row['remediation_notes']??''),
+        'validationStableSamples'=>(int)$row['validation_stable_samples'],'validationRequiredSamples'=>10,
+        'reopenedCount'=>(int)$row['reopened_count'],'calibrationPublicId'=>$row['calibration_public_id'],
+        'activeLearningReference'=>$row['active_learning_reference'],'firstSeenAt'=>$row['first_seen_at'],'lastSeenAt'=>$row['last_seen_at'],
+        'resolvedAt'=>$row['resolved_at'],'recommendation'=>$recommendation,
+    ];
+}
+
+function glasses_vision_drift_incident_row(PDO $pdo,int $org,string $publicId,bool $forUpdate=false): array
+{
+    $sql="SELECT * FROM glasses_vision_drift_incidents WHERE organization_id=? AND public_id=? LIMIT 1".($forUpdate?' FOR UPDATE':'');
+    $q=$pdo->prepare($sql);$q->execute([$org,trim($publicId)]);$row=$q->fetch();
+    if(!$row)throw new InvalidArgumentException('Vision drift incident was not found.');
+    return $row;
+}
+
+function glasses_vision_drift_incidents(PDO $pdo,int $org): array
+{
+    if(!glasses_vision_drift_recovery_ready($pdo))return [];
+    $q=$pdo->prepare("SELECT * FROM glasses_vision_drift_incidents WHERE organization_id=? ORDER BY resolved_at IS NULL DESC,last_seen_at DESC,id DESC LIMIT 100");
+    $q->execute([$org]);return array_map('glasses_vision_drift_incident_public',$q->fetchAll());
+}
+
+function glasses_vision_drift_recovery_event(PDO $pdo,int $org,int $incidentId,string $type,?string $previous,?string $next,?string $remediation,?string $notes,?int $actor,array $evidence=[]): void
+{
+    $pdo->prepare("INSERT INTO glasses_vision_drift_recovery_events
+      (organization_id,incident_id,event_type,previous_status,next_status,remediation_type,notes,evidence_json,actor_user_id)
+      VALUES (?,?,?,?,?,?,?,?,?)")->execute([$org,$incidentId,$type,$previous,$next,$remediation,$notes,glasses_json_object($evidence,12000),$actor]);
+}
+
+function glasses_vision_drift_recovery_action(PDO $pdo,int $org,string $publicId,string $action,array $input,int $userId): array
+{
+    if(!glasses_vision_drift_recovery_ready($pdo))throw new RuntimeException('Vision drift recovery migration is not installed.');
+    return glasses_transaction($pdo,function()use($pdo,$org,$publicId,$action,$input,$userId):array{
+        $row=glasses_vision_drift_incident_row($pdo,$org,$publicId,true);$previous=(string)$row['recovery_status'];
+        $notes=mb_substr(trim((string)($input['notes']??'')),0,2000,'UTF-8');
+        $remediation=mb_substr(trim((string)($input['remediationType']??'')),0,48,'UTF-8');
+        $next=$previous;$event=$action;$evidence=[];
+        if($action==='diagnose'){
+            $next='diagnosing';
+        }elseif($action==='remediate'){
+            if($remediation==='')throw new InvalidArgumentException('Remediation type is required.');
+            $next='remediation_required';
+            $calibration=mb_substr(trim((string)($input['calibrationPublicId']??'')),0,64,'UTF-8')?:null;
+            $activeLearning=mb_substr(trim((string)($input['activeLearningReference']??'')),0,190,'UTF-8')?:null;
+            $replacementPackageId=null;
+            $replacementPublic=trim((string)($input['replacementPackagePublicId']??''));
+            if($replacementPublic!=='')$replacementPackageId=(int)glasses_vision_model_package_row($pdo,$org,$replacementPublic,false)['id'];
+            $pdo->prepare("UPDATE glasses_vision_drift_incidents SET remediation_type=?,remediation_notes=?,calibration_public_id=?,replacement_package_id=?,active_learning_reference=?,recovery_status=?,last_action_by=?,last_action_at=NOW(6) WHERE organization_id=? AND id=?")
+                ->execute([$remediation,$notes?:null,$calibration,$replacementPackageId,$activeLearning,$next,$userId,$org,(int)$row['id']]);
+            glasses_vision_drift_recovery_event($pdo,$org,(int)$row['id'],$event,$previous,$next,$remediation,$notes?:null,$userId,['calibrationPublicId'=>$calibration,'replacementPackagePublicId'=>$replacementPublic?:null,'activeLearningReference'=>$activeLearning]);
+            return glasses_vision_drift_incident_public(glasses_vision_drift_incident_row($pdo,$org,$publicId,false));
+        }elseif($action==='validate'){
+            $remediation=(string)($row['remediation_type']??'');
+            if($remediation==='')throw new InvalidArgumentException('Record a remediation before validation.');
+            $reset=!empty($input['resetBaseline']);
+            $allowedReset=['lighting','camera_pose','camera_config','environment','data_domain'];
+            if($reset&&!in_array((string)$row['category'],$allowedReset,true))
+                throw new InvalidArgumentException('Baseline reset is not allowed for unresolved model-quality or runtime drift.');
+            if($reset){
+                $q=$pdo->prepare("SELECT * FROM glasses_vision_drift_baselines WHERE organization_id=? AND package_id=? AND location_id=? AND ".($row['station_id']===null?'station_id IS NULL':'station_id=?')." AND status='active' ORDER BY id DESC LIMIT 1");
+                $args=[$org,(int)$row['package_id'],(int)$row['location_id']];if($row['station_id']!==null)$args[]=(int)$row['station_id'];$q->execute($args);$baseline=$q->fetch();
+                if($baseline){
+                    $pdo->prepare("UPDATE glasses_vision_drift_baselines SET status='superseded',updated_at=NOW(6) WHERE organization_id=? AND id=?")->execute([$org,(int)$baseline['id']]);
+                    $evidence['supersededBaselineId']=(int)$baseline['id'];$evidence['supersededBaselineSampleCount']=(int)$baseline['sample_count'];
+                }
+            }
+            $next='validating';
+            $pdo->prepare("UPDATE glasses_vision_drift_incidents SET recovery_status=?,validation_started_at=NOW(6),validation_stable_samples=0,last_action_by=?,last_action_at=NOW(6) WHERE organization_id=? AND id=?")
+                ->execute([$next,$userId,$org,(int)$row['id']]);
+        }else{
+            throw new InvalidArgumentException('Unsupported drift recovery action.');
+        }
+        $pdo->prepare("UPDATE glasses_vision_drift_incidents SET recovery_status=?,remediation_notes=COALESCE(NULLIF(?,''),remediation_notes),last_action_by=?,last_action_at=NOW(6) WHERE organization_id=? AND id=?")
+            ->execute([$next,$notes,$userId,$org,(int)$row['id']]);
+        glasses_vision_drift_recovery_event($pdo,$org,(int)$row['id'],$event,$previous,$next,$remediation?:null,$notes?:null,$userId,$evidence);
+        return glasses_vision_drift_incident_public(glasses_vision_drift_incident_row($pdo,$org,$publicId,false));
+    });
+}
+
+function glasses_vision_drift_recovery_progress(PDO $pdo,int $org,array $assignment,array $session,array $evaluation): void
+{
+    if(!glasses_vision_drift_recovery_ready($pdo))return;
+    $q=$pdo->prepare("SELECT * FROM glasses_vision_drift_incidents WHERE organization_id=? AND package_id=? AND location_id=? AND ".($session['station_id']===null?'station_id IS NULL':'station_id=?')." AND recovery_status IN ('validating','resolved') ORDER BY last_seen_at DESC,id DESC");
+    $args=[$org,(int)$assignment['package_id'],(int)$session['location_id']];if($session['station_id']!==null)$args[]=(int)$session['station_id'];$q->execute($args);
+    foreach($q->fetchAll() as $incident){
+        $status=(string)$incident['recovery_status'];
+        if($evaluation['state']==='stable'){
+            if($status!=='validating')continue;
+            $count=(int)$incident['validation_stable_samples']+1;$next=$count>=10?'resolved':'validating';
+            $pdo->prepare("UPDATE glasses_vision_drift_incidents SET validation_stable_samples=?,recovery_status=?,resolved_at=".($next==='resolved'?'NOW(6)':'NULL').",last_action_at=NOW(6) WHERE organization_id=? AND id=?")
+                ->execute([$count,$next,$org,(int)$incident['id']]);
+            if($next==='resolved')glasses_vision_drift_recovery_event($pdo,$org,(int)$incident['id'],'auto_resolved','validating','resolved',(string)($incident['remediation_type']??''),null,null,['stableSamples'=>$count]);
+        }elseif(in_array($evaluation['state'],['watch','drifted','critical'],true)){
+            $next='reopened';
+            $pdo->prepare("UPDATE glasses_vision_drift_incidents SET recovery_status=?,validation_stable_samples=0,resolved_at=NULL,reopened_count=reopened_count+1,last_action_at=NOW(6) WHERE organization_id=? AND id=?")
+                ->execute([$next,$org,(int)$incident['id']]);
+            glasses_vision_drift_recovery_event($pdo,$org,(int)$incident['id'],'reopened',$status,$next,(string)($incident['remediation_type']??''),null,null,['drift'=>$evaluation]);
+        }
+    }
 }
 
 function glasses_vision_model_rollout_activate(PDO $pdo,int $org,string $publicId,int $userId): array
@@ -1391,6 +1540,7 @@ function glasses_vision_model_catalog(PDO $pdo,array $user): array
         'packages'=>glasses_vision_model_packages($pdo,$org),
         'rollouts'=>$rollouts,
         'metricsByRollout'=>$metrics,
+        'driftIncidents'=>glasses_vision_drift_incidents($pdo,$org),
         'locations'=>array_map(static fn(array $location):array=>[
             'id'=>(int)$location['id'],'name'=>(string)$location['name'],'primary'=>(bool)$location['is_primary']
         ],$locations),
