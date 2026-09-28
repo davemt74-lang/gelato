@@ -44,6 +44,7 @@ $boot=[
         <span><strong>Restaurant Admin</strong><small>AR vision learning</small></span>
     </a>
     <nav class="admin-top-actions">
+        <a class="admin-button dark" href="glasses-vision-lab.php">Vision Lab</a>
         <a class="admin-button" href="glasses-calibration-studio.php">Calibration Studio</a>
         <a class="admin-button" href="admin.php">Admin</a>
     </nav>
