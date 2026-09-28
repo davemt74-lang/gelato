@@ -299,6 +299,13 @@ function glasses_vision_dataset_intelligence_consolidate_build_split(PDO $pdo,in
     if($datasetId===null)throw new InvalidArgumentException('Vision dataset was not found.');
     $dq=$pdo->prepare("SELECT status FROM glasses_vision_dataset_versions WHERE organization_id=? AND id=?");$dq->execute([$org,$datasetId]);
     if((string)$dq->fetchColumn()!=='draft')throw new InvalidArgumentException('Frozen datasets are immutable.');
+    $cq=$pdo->prepare("SELECT COUNT(*) FROM glasses_vision_dataset_items di
+      JOIN glasses_vision_training_samples s ON s.id=di.sample_id AND s.organization_id=di.organization_id
+      JOIN glasses_build_observations o ON o.id=s.observation_id
+      JOIN glasses_build_sessions bs ON bs.id=o.build_session_id
+      WHERE di.organization_id=? AND di.dataset_id=? AND bs.public_id=?");
+    $cq->execute([$org,$datasetId,$buildPublic]);$matched=(int)$cq->fetchColumn();
+    if($matched===0)throw new InvalidArgumentException('No dataset samples matched that build session.');
     $q=$pdo->prepare("UPDATE glasses_vision_dataset_items di
       JOIN glasses_vision_training_samples s ON s.id=di.sample_id AND s.organization_id=di.organization_id
       JOIN glasses_build_observations o ON o.id=s.observation_id
@@ -306,8 +313,7 @@ function glasses_vision_dataset_intelligence_consolidate_build_split(PDO $pdo,in
       SET di.split_name=?
       WHERE di.organization_id=? AND di.dataset_id=? AND bs.public_id=?");
     $q->execute([$split,$org,$datasetId,$buildPublic]);
-    if($q->rowCount()===0)throw new InvalidArgumentException('No dataset samples matched that build session.');
-    return ['datasetPublicId'=>$datasetPublic,'buildPublicId'=>$buildPublic,'split'=>$split,'updatedItems'=>$q->rowCount()];
+    return ['datasetPublicId'=>$datasetPublic,'buildPublicId'=>$buildPublic,'split'=>$split,'matchedItems'=>$matched,'changedItems'=>$q->rowCount()];
 }
 
 function glasses_vision_dataset_intelligence_freeze_guard(PDO $pdo,int $org,string $datasetPublic): void
