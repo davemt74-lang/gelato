@@ -103,7 +103,7 @@ v4_assert($freezeBlocked,'Freeze must be blocked while split leakage or reviewer
 
 $buildA=(string)$analysis['splitLeakage'][0]['buildPublicId'];
 $fixed=glasses_vision_dataset_intelligence_consolidate_build_split($pdo,$org,(string)$dataset['publicId'],$buildA,'train');
-v4_assert($fixed['updatedItems']===2,'Leakage remediation must move all samples from the build into one split.');
+v4_assert($fixed['matchedItems']===2&&$fixed['changedItems']===1,'Leakage remediation must move all samples from the build into one split.');
 
 $consensus=glasses_vision_dataset_intelligence_record_review($pdo,$org,(string)$bySource['v4-a1']['publicId'],$peer,'approve',$component,'Peer agrees after adjudication.');
 v4_assert($consensus['hasDisagreement']===false&&$consensus['reviewCount']===2,'Matching peer reviews must clear disagreement.');
