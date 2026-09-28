@@ -26,5 +26,7 @@ try{
  if($action==='dataset_intelligence.analyze')app_json_response(['ok'=>true,'analysis'=>glasses_vision_dataset_intelligence_analyze($pdo,$org,!empty($in['datasetPublicId'])?(string)$in['datasetPublicId']:null,$actor,(int)($in['minimumPerClass']??20))]);
  if($action==='dataset_intelligence.plan')app_json_response(['ok'=>true,'plan'=>glasses_vision_dataset_intelligence_collection_plan($pdo,$org,(string)($in['snapshotPublicId']??''),(string)($in['title']??'Vision collection plan'),$actor)],201);
  if($action==='dataset_intelligence.accept_plan')app_json_response(['ok'=>true,'plan'=>glasses_vision_dataset_intelligence_accept_plan($pdo,$org,(string)($in['publicId']??''),$actor)]);
+ if($action==='dataset_intelligence.set_split')app_json_response(['ok'=>true,'coverage'=>glasses_vision_dataset_intelligence_set_split($pdo,$org,(string)($in['datasetPublicId']??''),(string)($in['samplePublicId']??''),(string)($in['split']??''))]);
+ if($action==='dataset_intelligence.consolidate_build_split')app_json_response(['ok'=>true,'result'=>glasses_vision_dataset_intelligence_consolidate_build_split($pdo,$org,(string)($in['datasetPublicId']??''),(string)($in['buildPublicId']??''),(string)($in['split']??''))]);
  app_json_response(['ok'=>false,'message'=>'Unsupported Vision Lab action.'],422);
 }catch(InvalidArgumentException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);}catch(Throwable $e){error_log('[gelato-vision-lab] '.$e->getMessage());app_json_response(['ok'=>false,'message'=>'Vision Lab request could not be completed.'],500);}
