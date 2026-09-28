@@ -479,7 +479,8 @@ for($i=1;$i<=20;$i++){
     ]);
 }
 gvm_assert(($d['baselineEstablished']??false)===true,'Twenty stable production samples must establish a package/station drift baseline.');
-$baselineRow=glasses_vision_drift_baseline_row($pdo,$org,(int)glasses_vision_model_package_row($pdo,$org,(string)$driftTargetPackage['publicId'],false)['id'],$location,(int)$station['id']);
+$driftTargetRow=glasses_vision_model_package_row($pdo,$org,(string)$driftTargetPackage['publicId'],false);
+$baselineRow=glasses_vision_drift_baseline_row($pdo,$org,(int)$driftTargetRow['id'],$location,(int)$station['id']);
 gvm_assert($baselineRow!==null&&(int)$baselineRow['sample_count']===20,'Drift baseline must persist its evidence count.');
 gvm_assert((int)$baselineRow['frame_width']===640&&(string)$baselineRow['pixel_format']==='grayscale8','Drift baseline must preserve camera geometry and pixel format.');
 
@@ -492,7 +493,7 @@ $criticalDrift=glasses_vision_drift_sample($pdo,$device,[
 gvm_assert(($criticalDrift['evaluation']['state']??'')==='critical','Large sustained lighting deviation must classify as critical drift.');
 $driftRow=glasses_vision_model_rollout_row($pdo,$org,(string)$driftRollout['publicId'],false);
 gvm_assert((string)$driftRow['status']==='rolled_back','Critical production drift must automatically restore the rollout baseline.');
-gvm_assert((int)gvm_one($pdo,"SELECT COUNT(*) FROM glasses_vision_drift_incidents WHERE organization_id=? AND package_id=? AND severity='critical' AND resolved_at IS NULL",[$org,(int)glasses_vision_model_package_row($pdo,$org,(string)$driftTargetPackage['publicId'],false)['id']])===1,'Critical drift must open a durable incident.');
+gvm_assert((int)gvm_one($pdo,"SELECT COUNT(*) FROM glasses_vision_drift_incidents WHERE organization_id=? AND package_id=? AND severity='critical' AND resolved_at IS NULL",[$org,(int)$driftTargetRow['id']])===1,'Critical drift must open a durable incident.');
 gvm_assert((int)gvm_one($pdo,"SELECT COUNT(*) FROM glasses_vision_model_rollout_events WHERE organization_id=? AND event_type='drift_auto_rolled_back'",[$org])===1,'Critical drift rollback must append immutable rollout evidence.');
 $driftSummary=glasses_vision_drift_rollout_summary($pdo,$org,(string)$driftRollout['publicId']);
 gvm_assert($driftSummary['promotionBlocked']===true&&$driftSummary['state']==='critical','Rollout drift summary must block promotion while critical drift remains.');
