@@ -559,6 +559,7 @@ function glasses_vision_model_report(PDO $pdo,array $device,array $input): array
         ];
 
         $rolloutId=null;
+        $rollout=null;
         $rolloutPublic=trim((string)($input['rolloutPublicId']??''));
         if($rolloutPublic!==''){
             $rollout=glasses_vision_model_rollout_row($pdo,$org,$rolloutPublic,false);
@@ -577,11 +578,28 @@ function glasses_vision_model_report(PDO $pdo,array $device,array $input): array
         if(trim((string)($input['artifactSha256']??''))!=='')
             $reportedSha=glasses_vision_model_sha256((string)$input['artifactSha256']);
 
+        if($rollout!==null&&$package!==null){
+            $allowedPackageIds=array_filter([
+                (int)$rollout['target_package_id'],
+                $rollout['baseline_package_id']!==null?(int)$rollout['baseline_package_id']:null,
+            ],static fn($id):bool=>$id!==null);
+            if(!in_array((int)$package['id'],$allowedPackageIds,true))
+                throw new InvalidArgumentException('Reported model package does not belong to the referenced rollout.');
+        }
+
         if(in_array($reportType,['verified','activated','rollback_activated'],true)){
+            if(!$rollout)throw new InvalidArgumentException('Verified or activated model reports require a rollout.');
             if(!$package)throw new InvalidArgumentException('Verified or activated model reports require a package.');
             if($reportedSha===null)throw new InvalidArgumentException('Verified or activated model reports require the artifact SHA-256.');
             if(!hash_equals((string)$package['artifact_sha256'],$reportedSha))
                 throw new InvalidArgumentException('Reported model checksum does not match the registered package.');
+
+            $compatibility=glasses_vision_model_package_compatibility($package,$device);
+            if(!$compatibility['compatible'])
+                throw new InvalidArgumentException('Device cannot verify or activate an incompatible model package.');
+
+            if($reportType==='rollback_activated'&&(int)$package['id']!==(int)$rollout['baseline_package_id'])
+                throw new InvalidArgumentException('Rollback activation must report the declared baseline package.');
         }
 
         $metadata=glasses_json_object(is_array($input['metadata']??null)?$input['metadata']:null,12000);
