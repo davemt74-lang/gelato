@@ -145,6 +145,11 @@ function glasses_learning_public_row(array $row): array
             'sourceZoneKey'=>(string)($metadata['sourceZoneKey']??''),
             'destinationRegionKey'=>(string)($metadata['destinationRegionKey']??''),
             'sequenceSupported'=>!empty($metadata['sequenceSupported']),
+            'detectorLabel'=>(string)($metadata['detectorLabel']??''),
+            'profileMatched'=>!empty($metadata['profileMatched']),
+            'profileMinimumConfidence'=>!empty($metadata['hasProfileMinimumConfidence'])
+                ?(float)($metadata['profileMinimumConfidence']??0)
+                :null,
         ],
         'humanReview'=>[
             'reviewed'=>$row['correction_id']!==null,
