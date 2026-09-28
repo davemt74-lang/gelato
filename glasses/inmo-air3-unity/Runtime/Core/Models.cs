@@ -133,6 +133,23 @@ namespace Gelato.Ar.Core
         public int Priority { get; set; }
     }
 
+    public sealed class StationRegion
+    {
+        public string RegionKey { get; set; } = string.Empty;
+        public string RegionType { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public float X { get; set; }
+        public float Y { get; set; }
+        public float Width { get; set; }
+        public float Height { get; set; }
+        public int Priority { get; set; }
+
+        public bool Contains(float x, float y)
+        {
+            return x >= X && y >= Y && x <= X + Width && y <= Y + Height;
+        }
+    }
+
     public sealed class CalibrationCompatibility
     {
         public bool Compatible { get; set; }
@@ -151,6 +168,7 @@ namespace Gelato.Ar.Core
         public string PixelFormat { get; set; } = string.Empty;
         public string SourceHash { get; set; } = string.Empty;
         public IReadOnlyList<IngredientZone> Zones { get; set; } = Array.Empty<IngredientZone>();
+        public IReadOnlyList<StationRegion> Regions { get; set; } = Array.Empty<StationRegion>();
         public CalibrationCompatibility Compatibility { get; set; } = new CalibrationCompatibility();
     }
 
@@ -192,6 +210,27 @@ namespace Gelato.Ar.Core
             return best;
         }
 
+        public static StationRegion? HighestPriorityRegionAt(StationCalibration? calibration, string regionType, float x, float y)
+        {
+            if (calibration == null || calibration.Regions == null || string.IsNullOrWhiteSpace(regionType)) return null;
+            StationRegion? best = null;
+            foreach (var region in calibration.Regions)
+            {
+                if (region == null || !string.Equals(region.RegionType, regionType, StringComparison.Ordinal)) continue;
+                if (!region.Contains(x, y)) continue;
+                if (best == null || region.Priority > best.Priority) best = region;
+            }
+            return best;
+        }
+
+        public static bool HasRegionType(StationCalibration? calibration, string regionType)
+        {
+            if (calibration == null || calibration.Regions == null || string.IsNullOrWhiteSpace(regionType)) return false;
+            foreach (var region in calibration.Regions)
+                if (region != null && string.Equals(region.RegionType, regionType, StringComparison.Ordinal)) return true;
+            return false;
+        }
+
         public static int IngredientIdForComponent(string componentKey)
         {
             if (string.IsNullOrWhiteSpace(componentKey)) return 0;
@@ -211,6 +250,10 @@ namespace Gelato.Ar.Core
         public float Confidence { get; set; }
         public string TrackingId { get; set; } = string.Empty;
         public float[] BoundingBox { get; set; } = Array.Empty<float>();
+        public string EvidenceKind { get; set; } = string.Empty;
+        public string EvidenceSourceZoneKey { get; set; } = string.Empty;
+        public string EvidenceDestinationRegionKey { get; set; } = string.Empty;
+        public bool EvidenceSequenceSupported { get; set; }
     }
 
     public sealed class ValidationNext

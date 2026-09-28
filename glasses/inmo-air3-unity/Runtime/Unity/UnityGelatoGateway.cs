@@ -99,6 +99,25 @@ namespace Gelato.Ar.Unity
                 }
             }
 
+            var regions = new List<StationRegion>();
+            if (dto.regions != null)
+            {
+                foreach (var region in dto.regions)
+                {
+                    regions.Add(new StationRegion
+                    {
+                        RegionKey = region.regionKey ?? string.Empty,
+                        RegionType = region.regionType ?? string.Empty,
+                        DisplayName = region.displayName ?? string.Empty,
+                        X = region.x,
+                        Y = region.y,
+                        Width = region.width,
+                        Height = region.height,
+                        Priority = region.priority
+                    });
+                }
+            }
+
             var compatibility = dto.compatibility ?? new CalibrationCompatibilityDto();
             return new StationCalibration
             {
@@ -112,6 +131,7 @@ namespace Gelato.Ar.Unity
                 PixelFormat = dto.frame != null ? dto.frame.pixelFormat ?? string.Empty : string.Empty,
                 SourceHash = dto.sourceHash ?? string.Empty,
                 Zones = zones,
+                Regions = regions,
                 Compatibility = new CalibrationCompatibility
                 {
                     Compatible = compatibility.compatible,
@@ -145,7 +165,14 @@ namespace Gelato.Ar.Unity
                 quantity = observation.Quantity,
                 confidence = observation.Confidence,
                 trackingId = observation.TrackingId,
-                bbox = observation.BoundingBox ?? Array.Empty<float>()
+                bbox = observation.BoundingBox ?? Array.Empty<float>(),
+                metadata = new ObservationMetadataRequest
+                {
+                    evidenceKind = observation.EvidenceKind ?? string.Empty,
+                    sourceZoneKey = observation.EvidenceSourceZoneKey ?? string.Empty,
+                    destinationRegionKey = observation.EvidenceDestinationRegionKey ?? string.Empty,
+                    sequenceSupported = observation.EvidenceSequenceSupported
+                }
             }, true, cancellationToken);
 
             return MapBuild(response.buildSession);
@@ -381,6 +408,14 @@ namespace Gelato.Ar.Unity
             public float confidence;
             public string trackingId;
             public float[] bbox;
+            public ObservationMetadataRequest metadata;
+        }
+        [Serializable] private sealed class ObservationMetadataRequest
+        {
+            public string evidenceKind;
+            public string sourceZoneKey;
+            public string destinationRegionKey;
+            public bool sequenceSupported;
         }
 
         [Serializable] private sealed class ErrorResponse { public bool ok; public string message; }
@@ -418,6 +453,7 @@ namespace Gelato.Ar.Unity
             public CalibrationFrameDto frame;
             public string sourceHash;
             public IngredientZoneDto[] zones;
+            public StationRegionDto[] regions;
             public CalibrationCompatibilityDto compatibility;
         }
         [Serializable] private sealed class CalibrationFrameDto
@@ -431,6 +467,17 @@ namespace Gelato.Ar.Unity
             public string zoneKey;
             public int ingredientId;
             public string canonicalName;
+            public string displayName;
+            public float x;
+            public float y;
+            public float width;
+            public float height;
+            public int priority;
+        }
+        [Serializable] private sealed class StationRegionDto
+        {
+            public string regionKey;
+            public string regionType;
             public string displayName;
             public float x;
             public float y;

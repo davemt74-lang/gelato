@@ -15,6 +15,7 @@ internal static class Program
         SimulatorSupportContract();
         await StationCalibrationContract();
         await SpatialEvidenceFusionContract();
+        await TransferSequenceEvidenceContract();
         await VisionPipelineContract();
         Console.WriteLine("air3-unity-shell-ok");
     }
@@ -321,6 +322,20 @@ internal static class Program
                     Height = 0.20f,
                     Priority = 5
                 }
+            },
+            Regions = new[]
+            {
+                new StationRegion
+                {
+                    RegionKey = "build-main",
+                    RegionType = "build_surface",
+                    DisplayName = "Build Surface",
+                    X = 0.40f,
+                    Y = 0.45f,
+                    Width = 0.35f,
+                    Height = 0.35f,
+                    Priority = 20
+                }
             }
         };
 
@@ -345,6 +360,9 @@ internal static class Program
 
         var best = StationCalibrationPolicy.HighestPriorityZoneAt(calibration, 0.18f, 0.28f);
         Assert(best != null && best.ZoneKey == "turkey-primary", "overlapping station zones must resolve by priority");
+        var buildRegion = StationCalibrationPolicy.HighestPriorityRegionAt(calibration, "build_surface", 0.50f, 0.55f);
+        Assert(buildRegion != null && buildRegion.RegionKey == "build-main", "station calibration must expose the configured build surface");
+        Assert(StationCalibrationPolicy.HasRegionType(calibration, "build_surface"), "build-surface region type must be discoverable");
 
         var platform = new FakePlatform();
         var gateway = new FakeGateway { Calibration = calibration };
@@ -487,6 +505,238 @@ internal static class Program
         Assert((await lowPipeline.ProcessAsync(NextFrame(frame), context)).Count == 0, "below-floor raw visual evidence must be rejected before spatial support");
         Assert((await lowPipeline.ProcessAsync(NextFrame(frame), context)).Count == 0, "station location alone must never create a recipe observation");
         Assert(lowPipeline.Diagnostics.SpatialSupports == 0, "rejected raw visual candidates must not be counted as spatially supported observations");
+    }
+
+    private static async Task TransferSequenceEvidenceContract()
+    {
+        var frame = new CameraFrame
+        {
+            Data = new byte[640 * 480],
+            Width = 640,
+            Height = 480,
+            TimestampNanoseconds = 500,
+            PixelFormat = "grayscale8"
+        };
+
+        var turkey = new BuildComponent
+        {
+            ComponentKey = "ingredient:42",
+            DisplayName = "Turkey",
+            ExpectedQuantity = 3f,
+            DetectedQuantity = 0f,
+            Unit = "slices",
+            Status = "waiting"
+        };
+        var bacon = new BuildComponent
+        {
+            ComponentKey = "ingredient:43",
+            DisplayName = "Bacon",
+            ExpectedQuantity = 3f,
+            DetectedQuantity = 0f,
+            Unit = "strips",
+            Status = "waiting"
+        };
+
+        var calibration = new StationCalibration
+        {
+            PublicId = "station-cal-transfer",
+            FrameWidth = 640,
+            FrameHeight = 480,
+            PixelFormat = "grayscale8",
+            Compatibility = new CalibrationCompatibility { Compatible = true },
+            Zones = new[]
+            {
+                new IngredientZone
+                {
+                    ZoneKey = "turkey-pan",
+                    IngredientId = 42,
+                    DisplayName = "Turkey Pan",
+                    X = 0.05f,
+                    Y = 0.15f,
+                    Width = 0.20f,
+                    Height = 0.22f,
+                    Priority = 20
+                },
+                new IngredientZone
+                {
+                    ZoneKey = "bacon-pan",
+                    IngredientId = 43,
+                    DisplayName = "Bacon Pan",
+                    X = 0.27f,
+                    Y = 0.15f,
+                    Width = 0.18f,
+                    Height = 0.22f,
+                    Priority = 20
+                }
+            },
+            Regions = new[]
+            {
+                new StationRegion
+                {
+                    RegionKey = "build-main",
+                    RegionType = "build_surface",
+                    DisplayName = "Build Surface",
+                    X = 0.40f,
+                    Y = 0.45f,
+                    Width = 0.38f,
+                    Height = 0.35f,
+                    Priority = 20
+                }
+            }
+        };
+
+        var context = new VisionFrameContext
+        {
+            BuildSessionPublicId = "build-transfer-1",
+            ExpectedComponents = new[] { turkey, bacon },
+            BuildSteps = new[]
+            {
+                new BuildStep
+                {
+                    StepKey = "step:1",
+                    Order = 1,
+                    Text = "Add Turkey",
+                    ComponentKeys = new[] { "ingredient:42" }
+                },
+                new BuildStep
+                {
+                    StepKey = "step:2",
+                    Order = 2,
+                    Text = "Add Bacon",
+                    ComponentKeys = new[] { "ingredient:43" }
+                }
+            },
+            StationCalibration = calibration
+        };
+
+        var transferDetector = new ScriptedVisionDetector(
+            D("ingredient:42", "Turkey", "turkey-transfer-a", 0.91f, 1f, 0.09f, 0.19f, 0.08f, 0.08f),
+            D("ingredient:42", "Turkey", "turkey-transfer-a", 0.92f, 1f, 0.10f, 0.20f, 0.08f, 0.08f),
+            D("ingredient:42", "Turkey", "turkey-transfer-a", 0.80f, 1f, 0.49f, 0.55f, 0.08f, 0.08f),
+            D("ingredient:42", "Turkey", "turkey-transfer-a", 0.82f, 1f, 0.50f, 0.56f, 0.08f, 0.08f)
+        );
+        var transferPipeline = new VisionPipeline(transferDetector);
+
+        Assert((await transferPipeline.ProcessAsync(NextFrame(frame), context)).Count == 0, "ingredient sitting in its source pan must not be emitted as an add");
+        Assert((await transferPipeline.ProcessAsync(NextFrame(frame), context)).Count == 0, "persistent source-pan presence must remain held");
+        Assert(transferPipeline.ActiveTrackCount == 0, "source-pan evidence must not create a normal observation track");
+
+        Assert((await transferPipeline.ProcessAsync(NextFrame(frame), context)).Count == 0, "first build-surface transfer frame must still satisfy temporal stability");
+        var transferred = await transferPipeline.ProcessAsync(NextFrame(frame), context);
+        Assert(transferred.Count == 1, "same tracked ingredient moving source → build surface must emit exactly one observation");
+        Assert(transferred[0].Action == "added", "proven source → build transfer must be an added observation");
+        Assert(Math.Abs(transferred[0].Confidence - 0.93f) < 0.0001f, "current-step transfer must receive bounded transfer + sequence support");
+        Assert(transferred[0].EvidenceKind == "TransferConfirmed", "durable observation must retain transfer evidence kind");
+        Assert(transferred[0].EvidenceSourceZoneKey == "turkey-pan", "durable observation must retain source ingredient zone");
+        Assert(transferred[0].EvidenceDestinationRegionKey == "build-main", "durable observation must retain destination build region");
+        Assert(transferred[0].EvidenceSequenceSupported, "durable observation must retain recipe-sequence support");
+        Assert(transferPipeline.Diagnostics.TransferSourcesPrimed == 2, "source-zone evidence must be diagnosable");
+        Assert(transferPipeline.Diagnostics.TransfersConfirmed == 2, "both stable build-surface transfer frames must retain transfer evidence");
+        Assert(transferPipeline.Diagnostics.SequenceSupports == 2, "current recipe step must receive sequence support");
+        Assert(transferPipeline.Diagnostics.ObservationsEmitted == 1, "one physical transfer must emit only one durable observation");
+
+        var duplicateTransferDetector = new ScriptedVisionDetector(
+            D("ingredient:42", "Turkey", "turkey-repeat", 0.92f, 1f, 0.09f, 0.19f, 0.08f, 0.08f),
+            D("ingredient:42", "Turkey", "turkey-repeat", 0.93f, 1f, 0.10f, 0.20f, 0.08f, 0.08f),
+            D("ingredient:42", "Turkey", "turkey-repeat", 0.82f, 1f, 0.50f, 0.56f, 0.08f, 0.08f),
+            D("ingredient:42", "Turkey", "turkey-repeat", 0.83f, 1f, 0.51f, 0.56f, 0.08f, 0.08f),
+            Array.Empty<VisionDetection>(),
+            Array.Empty<VisionDetection>(),
+            Array.Empty<VisionDetection>(),
+            D("ingredient:42", "Turkey", "turkey-repeat", 0.96f, 1f, 0.52f, 0.57f, 0.08f, 0.08f),
+            D("ingredient:42", "Turkey", "turkey-repeat", 0.97f, 1f, 0.53f, 0.57f, 0.08f, 0.08f)
+        );
+        var duplicateTransfer = new VisionPipeline(duplicateTransferDetector);
+        await duplicateTransfer.ProcessAsync(NextFrame(frame), context);
+        await duplicateTransfer.ProcessAsync(NextFrame(frame), context);
+        await duplicateTransfer.ProcessAsync(NextFrame(frame), context);
+        var firstTransfer = await duplicateTransfer.ProcessAsync(NextFrame(frame), context);
+        Assert(firstTransfer.Count == 1 && firstTransfer[0].Action == "added", "first proven physical transfer must be additive");
+        await duplicateTransfer.ProcessAsync(NextFrame(frame), context);
+        await duplicateTransfer.ProcessAsync(NextFrame(frame), context);
+        await duplicateTransfer.ProcessAsync(NextFrame(frame), context);
+        Assert((await duplicateTransfer.ProcessAsync(NextFrame(frame), context)).Count == 0, "same physical instance must restabilize after occlusion");
+        var repeatVisibility = await duplicateTransfer.ProcessAsync(NextFrame(frame), context);
+        Assert(repeatVisibility.Count == 1 && repeatVisibility[0].Action == "seen", "same consumed transfer must never double-count as another add after occlusion");
+        Assert(Math.Abs(repeatVisibility[0].Confidence - 0.74f) < 0.0001f, "repeat visibility of consumed transfer must remain review-only evidence");
+
+        var sourceOnlyDetector = new ScriptedVisionDetector(
+            D("ingredient:42", "Turkey", "turkey-bin-only", 0.97f, 1f, 0.10f, 0.20f, 0.08f, 0.08f),
+            D("ingredient:42", "Turkey", "turkey-bin-only", 0.98f, 1f, 0.11f, 0.20f, 0.08f, 0.08f)
+        );
+        var sourceOnly = new VisionPipeline(sourceOnlyDetector);
+        Assert((await sourceOnly.ProcessAsync(NextFrame(frame), context)).Count == 0, "high-confidence ingredient in its bin must not count as added");
+        Assert((await sourceOnly.ProcessAsync(NextFrame(frame), context)).Count == 0, "bin presence can never satisfy product quantity by itself");
+        Assert(sourceOnly.Diagnostics.ObservationsEmitted == 0, "source-only evidence must not create a build observation");
+
+        var unprimedDetector = new ScriptedVisionDetector(
+            D("ingredient:42", "Turkey", "turkey-unprimed", 0.96f, 3f, 0.50f, 0.56f, 0.08f, 0.08f),
+            D("ingredient:42", "Turkey", "turkey-unprimed", 0.97f, 3f, 0.51f, 0.56f, 0.08f, 0.08f)
+        );
+        var unprimed = new VisionPipeline(unprimedDetector);
+        Assert((await unprimed.ProcessAsync(NextFrame(frame), context)).Count == 0, "unprimed build-surface evidence must still stabilize");
+        var unprimedObservation = await unprimed.ProcessAsync(NextFrame(frame), context);
+        Assert(unprimedObservation.Count == 1, "visible ingredient already on build surface should remain reviewable evidence");
+        Assert(unprimedObservation[0].Action == "seen", "unproven transfer must be seen, not added");
+        Assert(Math.Abs(unprimedObservation[0].Confidence - 0.74f) < 0.0001f, "unproven transfer must remain below Gelato auto-confirm confidence");
+        Assert(unprimedObservation[0].EvidenceKind == "WorkSurfaceUnprimed", "reviewable unprimed evidence must remain explainable");
+        Assert(unprimed.Diagnostics.UnprimedWorkSurfaceDetections == 2, "unprimed work-surface evidence must be measurable");
+
+        var baconDetector = new ScriptedVisionDetector(
+            D("ingredient:43", "Bacon", "bacon-transfer", 0.91f, 1f, 0.30f, 0.20f, 0.08f, 0.08f),
+            D("ingredient:43", "Bacon", "bacon-transfer", 0.92f, 1f, 0.31f, 0.20f, 0.08f, 0.08f),
+            D("ingredient:43", "Bacon", "bacon-transfer", 0.82f, 1f, 0.52f, 0.57f, 0.08f, 0.08f),
+            D("ingredient:43", "Bacon", "bacon-transfer", 0.83f, 1f, 0.53f, 0.57f, 0.08f, 0.08f)
+        );
+        var baconPipeline = new VisionPipeline(baconDetector);
+        await baconPipeline.ProcessAsync(NextFrame(frame), context);
+        await baconPipeline.ProcessAsync(NextFrame(frame), context);
+        await baconPipeline.ProcessAsync(NextFrame(frame), context);
+        var baconTransfer = await baconPipeline.ProcessAsync(NextFrame(frame), context);
+        Assert(baconTransfer.Count == 1, "valid Bacon transfer may still be recognized even when cook order differs");
+        Assert(Math.Abs(baconTransfer[0].Confidence - 0.91f) < 0.0001f, "out-of-sequence transfer gets transfer support but not current-step sequence boost");
+        Assert(baconPipeline.Diagnostics.SequenceSupports == 0, "non-current recipe step must not receive sequence support");
+
+        var unexpectedOutsideDetector = new ScriptedVisionDetector(
+            DU("vision:unexpected:cheese", "Swiss Cheese", "cheese-counter", 0.96f, 0.78f, 0.20f, 0.08f, 0.08f),
+            DU("vision:unexpected:cheese", "Swiss Cheese", "cheese-counter", 0.97f, 0.78f, 0.20f, 0.08f, 0.08f)
+        );
+        var unexpectedOutside = new VisionPipeline(unexpectedOutsideDetector);
+        Assert((await unexpectedOutside.ProcessAsync(NextFrame(frame), context)).Count == 0, "unexpected ingredient away from build surface must not create a false product exception");
+        Assert((await unexpectedOutside.ProcessAsync(NextFrame(frame), context)).Count == 0, "persistent unexpected ingredient off-product must remain held");
+
+        var unexpectedBuildDetector = new ScriptedVisionDetector(
+            DU("vision:unexpected:cheese", "Swiss Cheese", "cheese-build", 0.95f, 0.52f, 0.58f, 0.08f, 0.08f),
+            DU("vision:unexpected:cheese", "Swiss Cheese", "cheese-build", 0.96f, 0.53f, 0.58f, 0.08f, 0.08f)
+        );
+        var unexpectedBuild = new VisionPipeline(unexpectedBuildDetector);
+        Assert((await unexpectedBuild.ProcessAsync(NextFrame(frame), context)).Count == 0, "unexpected product evidence still requires temporal stability");
+        var unexpectedProduct = await unexpectedBuild.ProcessAsync(NextFrame(frame), context);
+        Assert(unexpectedProduct.Count == 1 && unexpectedProduct[0].ComponentKey == "vision:unexpected:cheese", "unexpected ingredient on build surface must still reach product validation");
+
+        var noRegionsCalibration = new StationCalibration
+        {
+            PublicId = "station-cal-no-work-region",
+            FrameWidth = 640,
+            FrameHeight = 480,
+            PixelFormat = "grayscale8",
+            Compatibility = new CalibrationCompatibility { Compatible = true },
+            Zones = calibration.Zones
+        };
+        var fallbackContext = new VisionFrameContext
+        {
+            BuildSessionPublicId = "build-transfer-fallback",
+            ExpectedComponents = new[] { turkey },
+            StationCalibration = noRegionsCalibration
+        };
+        var fallbackDetector = new ScriptedVisionDetector(
+            D("ingredient:42", "Turkey", "fallback-a", 0.90f, 1f, 0.10f, 0.20f, 0.08f, 0.08f),
+            D("ingredient:42", "Turkey", "fallback-a", 0.91f, 1f, 0.11f, 0.20f, 0.08f, 0.08f)
+        );
+        var fallbackPipeline = new VisionPipeline(fallbackDetector);
+        await fallbackPipeline.ProcessAsync(NextFrame(frame), fallbackContext);
+        var fallback = await fallbackPipeline.ProcessAsync(NextFrame(frame), fallbackContext);
+        Assert(fallback.Count == 1, "stations without a build-surface region must preserve Section 12 visual/spatial behavior instead of breaking service");
     }
 
     private static async Task VisionPipelineContract()

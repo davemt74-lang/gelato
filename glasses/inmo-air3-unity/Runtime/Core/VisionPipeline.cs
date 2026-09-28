@@ -12,9 +12,11 @@ namespace Gelato.Ar.Core
         private readonly IVisionDetector _detector;
         private readonly VisionPipelineOptions _options;
         private readonly List<TrackState> _tracks = new List<TrackState>();
+        private readonly TransferEvidenceTracker _transferEvidence = new TransferEvidenceTracker();
         private string _sessionPublicId = string.Empty;
         private int _nextTrackId = 1;
         private long _lastFrameTimestampNanoseconds = long.MinValue;
+        private long _frameOrdinal;
 
         public VisionPipeline(IVisionDetector detector, VisionPipelineOptions? options = null)
         {
@@ -32,6 +34,8 @@ namespace Gelato.Ar.Core
             _tracks.Clear();
             _nextTrackId = 1;
             _lastFrameTimestampNanoseconds = long.MinValue;
+            _frameOrdinal = 0;
+            _transferEvidence.Reset();
             _sessionPublicId = buildSessionPublicId?.Trim() ?? string.Empty;
             Diagnostics.Reset();
         }
@@ -64,6 +68,7 @@ namespace Gelato.Ar.Core
 
             cancellationToken.ThrowIfCancellationRequested();
             Diagnostics.FramesProcessed++;
+            _frameOrdinal++;
 
             var detections = await _detector.DetectAsync(frame, context, cancellationToken).ConfigureAwait(false)
                 ?? Array.Empty<VisionDetection>();
@@ -142,6 +147,42 @@ namespace Gelato.Ar.Core
                     continue;
                 }
 
+                var transfer = _transferEvidence.Evaluate(
+                    detection,
+                    context,
+                    _frameOrdinal,
+                    _options
+                );
+
+                if (transfer.Kind == TransferEvidenceKind.SourcePrimed)
+                    Diagnostics.TransferSourcesPrimed++;
+                else if (transfer.Kind == TransferEvidenceKind.TransferConfirmed)
+                {
+                    Diagnostics.TransfersConfirmed++;
+                    if (transfer.SequenceSupported) Diagnostics.SequenceSupports++;
+                }
+                else if (transfer.Kind == TransferEvidenceKind.WorkSurfaceUnprimed)
+                    Diagnostics.UnprimedWorkSurfaceDetections++;
+
+                if (transfer.Hold)
+                {
+                    Diagnostics.TransferHeldDetections++;
+                    continue;
+                }
+
+                detection.Confidence = transfer.EffectiveConfidence;
+                detection.Action = transfer.Action;
+                detection.EvidenceKind = transfer.Kind.ToString();
+                detection.EvidenceSourceZoneKey = transfer.SourceZoneKey ?? string.Empty;
+                detection.EvidenceDestinationRegionKey = transfer.DestinationRegionKey ?? string.Empty;
+                detection.EvidenceSequenceSupported = transfer.SequenceSupported;
+
+                if (detection.Confidence < _options.MinimumConfidence)
+                {
+                    Diagnostics.DetectionsRejected++;
+                    continue;
+                }
+
                 accepted.Add(detection);
                 Diagnostics.DetectionsAccepted++;
             }
@@ -175,7 +216,11 @@ namespace Gelato.Ar.Core
                         Confidence = detection.Confidence,
                         Quantity = detection.Quantity,
                         Action = NormalizeAction(detection.Action),
-                        IsUnexpected = detection.IsUnexpected
+                        IsUnexpected = detection.IsUnexpected,
+                        EvidenceKind = detection.EvidenceKind,
+                        EvidenceSourceZoneKey = detection.EvidenceSourceZoneKey,
+                        EvidenceDestinationRegionKey = detection.EvidenceDestinationRegionKey,
+                        EvidenceSequenceSupported = detection.EvidenceSequenceSupported
                     };
                     _tracks.Add(track);
                 }
@@ -191,6 +236,10 @@ namespace Gelato.Ar.Core
                         ? track.DisplayName
                         : detection.DisplayName;
                     track.IsUnexpected = detection.IsUnexpected;
+                    track.EvidenceKind = detection.EvidenceKind;
+                    track.EvidenceSourceZoneKey = detection.EvidenceSourceZoneKey;
+                    track.EvidenceDestinationRegionKey = detection.EvidenceDestinationRegionKey;
+                    track.EvidenceSequenceSupported = detection.EvidenceSequenceSupported;
                     if (!string.IsNullOrWhiteSpace(detection.InstanceKey)) track.InstanceKey = detection.InstanceKey;
                 }
 
@@ -208,10 +257,15 @@ namespace Gelato.Ar.Core
                     Quantity = track.Quantity,
                     Confidence = track.Confidence,
                     TrackingId = "vision-track-" + track.TrackId,
-                    BoundingBox = track.Box.ToArray()
+                    BoundingBox = track.Box.ToArray(),
+                    EvidenceKind = track.EvidenceKind,
+                    EvidenceSourceZoneKey = track.EvidenceSourceZoneKey,
+                    EvidenceDestinationRegionKey = track.EvidenceDestinationRegionKey,
+                    EvidenceSequenceSupported = track.EvidenceSequenceSupported
                 };
                 observations.Add(observation);
                 Diagnostics.ObservationsEmitted++;
+                _transferEvidence.MarkObservationEmitted(track.ComponentKey, track.InstanceKey);
             }
 
             for (var i = _tracks.Count - 1; i >= 0; i--)
@@ -357,6 +411,10 @@ namespace Gelato.Ar.Core
             public float Confidence;
             public float Quantity;
             public bool IsUnexpected;
+            public string EvidenceKind = string.Empty;
+            public string EvidenceSourceZoneKey = string.Empty;
+            public string EvidenceDestinationRegionKey = string.Empty;
+            public bool EvidenceSequenceSupported;
             public bool Emitted;
         }
     }

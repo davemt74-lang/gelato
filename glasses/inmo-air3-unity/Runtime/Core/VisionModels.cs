@@ -60,12 +60,19 @@ namespace Gelato.Ar.Core
         public float Confidence { get; set; }
         public float[] BoundingBox { get; set; } = Array.Empty<float>();
         public bool IsUnexpected { get; set; }
+
+        // Filled by the hardware-neutral evidence pipeline after detector output.
+        public string EvidenceKind { get; set; } = string.Empty;
+        public string EvidenceSourceZoneKey { get; set; } = string.Empty;
+        public string EvidenceDestinationRegionKey { get; set; } = string.Empty;
+        public bool EvidenceSequenceSupported { get; set; }
     }
 
     public sealed class VisionFrameContext
     {
         public string BuildSessionPublicId { get; set; } = string.Empty;
         public IReadOnlyList<BuildComponent> ExpectedComponents { get; set; } = Array.Empty<BuildComponent>();
+        public IReadOnlyList<BuildStep> BuildSteps { get; set; } = Array.Empty<BuildStep>();
         public StationCalibration? StationCalibration { get; set; }
         public CameraCalibration? Calibration { get; set; }
         public PoseState? Pose { get; set; }
@@ -91,6 +98,11 @@ namespace Gelato.Ar.Core
         public bool RequireMonotonicTimestamps { get; set; } = true;
         public float SpatialSupportBoost { get; set; } = 0.06f;
         public float SpatialConflictPenalty { get; set; } = 0.20f;
+        public bool EnableTransferEvidence { get; set; } = true;
+        public int MaxTransferFrames { get; set; } = 60;
+        public float TransferSupportBoost { get; set; } = 0.08f;
+        public float SequenceSupportBoost { get; set; } = 0.03f;
+        public float UnprimedWorkSurfaceConfidenceCap { get; set; } = 0.74f;
 
         public void Validate()
         {
@@ -110,6 +122,14 @@ namespace Gelato.Ar.Core
                 throw new InvalidOperationException("Vision spatial support boost is invalid.");
             if (SpatialConflictPenalty < 0f || SpatialConflictPenalty > 0.50f)
                 throw new InvalidOperationException("Vision spatial conflict penalty is invalid.");
+            if (MaxTransferFrames < 1 || MaxTransferFrames > 1800)
+                throw new InvalidOperationException("Vision transfer-frame window is invalid.");
+            if (TransferSupportBoost < 0f || TransferSupportBoost > 0.25f)
+                throw new InvalidOperationException("Vision transfer support boost is invalid.");
+            if (SequenceSupportBoost < 0f || SequenceSupportBoost > 0.15f)
+                throw new InvalidOperationException("Vision sequence support boost is invalid.");
+            if (UnprimedWorkSurfaceConfidenceCap < 0.50f || UnprimedWorkSurfaceConfidenceCap >= 0.85f)
+                throw new InvalidOperationException("Vision unprimed work-surface confidence cap must remain below auto-confirm confidence.");
         }
     }
 
@@ -123,6 +143,11 @@ namespace Gelato.Ar.Core
         public long ObservationsEmitted { get; internal set; }
         public long SpatialSupports { get; internal set; }
         public long SpatialConflicts { get; internal set; }
+        public long TransferSourcesPrimed { get; internal set; }
+        public long TransfersConfirmed { get; internal set; }
+        public long SequenceSupports { get; internal set; }
+        public long UnprimedWorkSurfaceDetections { get; internal set; }
+        public long TransferHeldDetections { get; internal set; }
 
         internal void Reset()
         {
@@ -134,6 +159,11 @@ namespace Gelato.Ar.Core
             ObservationsEmitted = 0;
             SpatialSupports = 0;
             SpatialConflicts = 0;
+            TransferSourcesPrimed = 0;
+            TransfersConfirmed = 0;
+            SequenceSupports = 0;
+            UnprimedWorkSurfaceDetections = 0;
+            TransferHeldDetections = 0;
         }
     }
 }

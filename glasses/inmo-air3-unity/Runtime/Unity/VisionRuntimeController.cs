@@ -86,6 +86,7 @@ namespace Gelato.Ar.Unity
                 {
                     BuildSessionPublicId = build.PublicId,
                     ExpectedComponents = build.Components,
+                    BuildSteps = build.BuildSteps,
                     StationCalibration = stationCalibration,
                     Calibration = coordinator.Platform.TryGetCameraCalibration(),
                     Pose = coordinator.Platform.GetPose()
