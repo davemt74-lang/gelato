@@ -789,17 +789,39 @@ function glasses_vision_model_rollout_advance(PDO $pdo,int $org,string $publicId
         $previous=(float)$row['canary_percent'];
         if($nextPercent<=$previous)throw new InvalidArgumentException('Canary advancement must increase the current percentage.');
         if(glasses_vision_canary_ready($pdo)){
-            $expected=glasses_vision_canary_next_stage($previous);
-            if($expected===null||abs($nextPercent-$expected)>0.0001)
-                throw new InvalidArgumentException('Canary advancement must follow the governed 5/10/25/50/100 stage sequence.');
-            $health=glasses_vision_canary_health($pdo,$org,$publicId);
-            if(!$health['promotionEligible'])
-                throw new InvalidArgumentException('Canary health is not eligible for advancement.');
+            $targetPackage=glasses_vision_model_package_row($pdo,$org,(string)$row['target_public_id'],false);
+            $targetMetadata=json_decode((string)($targetPackage['metadata_json']??'null'),true);
+            if(is_array($targetMetadata)&&isset($targetMetadata['modelComparison'])){
+                $expected=glasses_vision_canary_next_stage($previous);
+                if($expected===null||abs($nextPercent-$expected)>0.0001)
+                    throw new InvalidArgumentException('Canary advancement must follow the governed 5/10/25/50/100 stage sequence.');
+                $health=glasses_vision_canary_health($pdo,$org,$publicId);
+                if(!$health['promotionEligible'])
+                    throw new InvalidArgumentException('Canary health is not eligible for advancement.');
+            }
         }
 
         $pdo->prepare("UPDATE glasses_vision_model_rollouts SET canary_percent=?,updated_at=NOW(6) WHERE organization_id=? AND id=?")
             ->execute([$nextPercent,$org,(int)$row['id']]);
         glasses_vision_model_rollout_event($pdo,$org,(int)$row['id'],'advanced','active','active',$previous,$nextPercent,$userId);
+        return glasses_vision_model_rollout_public(glasses_vision_model_rollout_row($pdo,$org,$publicId,false));
+    });
+}
+
+function glasses_vision_model_rollout_advance_override(PDO $pdo,int $org,string $publicId,float $nextPercent,int $userId,string $reason): array
+{
+    $reason=mb_substr(trim($reason),0,1000,'UTF-8');if($reason==='')throw new InvalidArgumentException('Canary advancement override requires a documented reason.');
+    if(!is_finite($nextPercent)||$nextPercent<0||$nextPercent>100)throw new InvalidArgumentException('Canary percentage must be between 0 and 100.');
+    $nextPercent=round($nextPercent,2);
+    return glasses_transaction($pdo,function()use($pdo,$org,$publicId,$nextPercent,$userId,$reason):array{
+        $row=glasses_vision_model_rollout_row($pdo,$org,$publicId,true);
+        if((string)$row['status']!=='active')throw new InvalidArgumentException('Only an active rollout can advance.');
+        $previous=(float)$row['canary_percent'];$expected=glasses_vision_canary_next_stage($previous);
+        if($expected===null||abs($nextPercent-$expected)>0.0001)throw new InvalidArgumentException('Override must still follow the governed canary stage sequence.');
+        $health=glasses_vision_canary_health($pdo,$org,$publicId);
+        if($health['state']==='rollback_required')throw new InvalidArgumentException('Rollback-required canary health cannot be overridden for advancement.');
+        $pdo->prepare("UPDATE glasses_vision_model_rollouts SET canary_percent=?,updated_at=NOW(6) WHERE organization_id=? AND id=?")->execute([$nextPercent,$org,(int)$row['id']]);
+        glasses_vision_model_rollout_event($pdo,$org,(int)$row['id'],'advanced_override','active','active',$previous,$nextPercent,$userId,['reason'=>$reason,'health'=>$health]);
         return glasses_vision_model_rollout_public(glasses_vision_model_rollout_row($pdo,$org,$publicId,false));
     });
 }
