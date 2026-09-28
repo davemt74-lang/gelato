@@ -9,7 +9,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Web Glasses Simulator · Gelato</title>
-<link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20260928-s1">
+<link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20260928-svg1">
 </head>
 <body>
 <header class="sim-topbar">
@@ -23,6 +23,8 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
     <button id="refreshWork" type="button">Refresh work</button>
     <label class="asset-load">Scene <input id="sceneFile" type="file" accept="image/*"></label>
     <label class="asset-load">Glasses <input id="glassesFile" type="file" accept="image/*"></label>
+    <label>Frame <select id="frameModeSelect"><option value="svg">SVG</option><option value="image">Uploaded</option><option value="none">None</option></select></label>
+    <label class="mask-toggle"><input id="opticalMaskToggle" type="checkbox" checked> Lens mask</label>
     <button id="calibrationToggle" type="button" aria-pressed="false">Calibrate</button>
     <a href="kds.php">KDS</a>
     <a href="pos.php">POS</a>
@@ -43,11 +45,50 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
         <div class="scene-copy" id="scenePlaceholder">Drop your final kitchen/glasses artwork in later — the HUD is already live.</div>
       </div>
       <img id="glassesImage" class="glasses-image" alt="" hidden>
-      <div class="glasses-frame" id="cssGlassesFrame" aria-hidden="true">
-        <div class="bridge"></div>
-        <div class="lens left-lens"></div>
-        <div class="lens right-lens"></div>
-      </div>
+      <svg id="svgGlassesLayer" class="svg-glasses-layer" viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+        <defs>
+          <linearGradient id="frameMetal" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#555f62"/>
+            <stop offset="35%" stop-color="#1d2325"/>
+            <stop offset="70%" stop-color="#050708"/>
+            <stop offset="100%" stop-color="#394246"/>
+          </linearGradient>
+          <linearGradient id="lensTint" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#7fa2a8" stop-opacity=".15"/>
+            <stop offset="60%" stop-color="#d8ffff" stop-opacity=".04"/>
+            <stop offset="100%" stop-color="#3b545b" stop-opacity=".12"/>
+          </linearGradient>
+          <filter id="frameShadow" x="-20%" y="-20%" width="140%" height="160%">
+            <feDropShadow dx="0" dy="18" stdDeviation="14" flood-color="#000" flood-opacity=".5"/>
+          </filter>
+          <mask id="outsideLensMask">
+            <rect width="1200" height="700" fill="white"/>
+            <path d="M115 160 C215 112 398 108 535 143 C552 148 564 165 562 186 L541 455 C538 500 505 535 460 541 C350 558 248 547 170 515 C126 497 100 459 96 414 L76 230 C72 197 86 175 115 160 Z" fill="black"/>
+            <path d="M665 143 C802 108 985 112 1085 160 C1114 175 1128 197 1124 230 L1104 414 C1100 459 1074 497 1030 515 C952 547 850 558 740 541 C695 535 662 500 659 455 L638 186 C636 165 648 148 665 143 Z" fill="black"/>
+          </mask>
+          <clipPath id="leftLensClip">
+            <path d="M115 160 C215 112 398 108 535 143 C552 148 564 165 562 186 L541 455 C538 500 505 535 460 541 C350 558 248 547 170 515 C126 497 100 459 96 414 L76 230 C72 197 86 175 115 160 Z"/>
+          </clipPath>
+          <clipPath id="rightLensClip">
+            <path d="M665 143 C802 108 985 112 1085 160 C1114 175 1128 197 1124 230 L1104 414 C1100 459 1074 497 1030 515 C952 547 850 558 740 541 C695 535 662 500 659 455 L638 186 C636 165 648 148 665 143 Z"/>
+          </clipPath>
+        </defs>
+        <g id="svgOpticalMask" class="svg-optical-mask">
+          <rect width="1200" height="700" fill="#020403" fill-opacity=".68" mask="url(#outsideLensMask)"/>
+          <path d="M115 160 C215 112 398 108 535 143 C552 148 564 165 562 186 L541 455 C538 500 505 535 460 541 C350 558 248 547 170 515 C126 497 100 459 96 414 L76 230 C72 197 86 175 115 160 Z" fill="url(#lensTint)"/>
+          <path d="M665 143 C802 108 985 112 1085 160 C1114 175 1128 197 1124 230 L1104 414 C1100 459 1074 497 1030 515 C952 547 850 558 740 541 C695 535 662 500 659 455 L638 186 C636 165 648 148 665 143 Z" fill="url(#lensTint)"/>
+        </g>
+        <g id="svgFrameArtwork" class="svg-frame-artwork" filter="url(#frameShadow)">
+          <path d="M78 188 C120 126 245 96 393 99 C473 101 531 112 574 134 C590 142 610 142 626 134 C669 112 727 101 807 99 C955 96 1080 126 1122 188" fill="none" stroke="url(#frameMetal)" stroke-width="30" stroke-linecap="round"/>
+          <path d="M115 160 C215 112 398 108 535 143 C552 148 564 165 562 186 L541 455 C538 500 505 535 460 541 C350 558 248 547 170 515 C126 497 100 459 96 414 L76 230 C72 197 86 175 115 160 Z" fill="none" stroke="url(#frameMetal)" stroke-width="26"/>
+          <path d="M665 143 C802 108 985 112 1085 160 C1114 175 1128 197 1124 230 L1104 414 C1100 459 1074 497 1030 515 C952 547 850 558 740 541 C695 535 662 500 659 455 L638 186 C636 165 648 148 665 143 Z" fill="none" stroke="url(#frameMetal)" stroke-width="26"/>
+          <path d="M551 175 C575 155 625 155 649 175" fill="none" stroke="url(#frameMetal)" stroke-width="24" stroke-linecap="round"/>
+          <path d="M74 196 C35 212 18 238 7 282" fill="none" stroke="url(#frameMetal)" stroke-width="24" stroke-linecap="round"/>
+          <path d="M1126 196 C1165 212 1182 238 1193 282" fill="none" stroke="url(#frameMetal)" stroke-width="24" stroke-linecap="round"/>
+          <path d="M158 147 C268 112 423 115 523 143" fill="none" stroke="#aeb8ba" stroke-opacity=".28" stroke-width="4" stroke-linecap="round"/>
+          <path d="M677 143 C777 115 932 112 1042 147" fill="none" stroke="#aeb8ba" stroke-opacity=".28" stroke-width="4" stroke-linecap="round"/>
+        </g>
+      </svg>
 
       <div id="leftEyeGuide" class="eye-guide left-eye-guide"><span>LEFT EYE</span></div>
       <div id="rightEyeGuide" class="eye-guide right-eye-guide"><span>RIGHT EYE</span></div>
@@ -143,6 +184,6 @@ window.GELATO_GLASSES_SIMULATOR={
   api:'api/glasses-simulator.php'
 };
 </script>
-<script src="assets/js/glasses-web-simulator.js?v=20260928-s1"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20260928-svg1"></script>
 </body>
 </html>
