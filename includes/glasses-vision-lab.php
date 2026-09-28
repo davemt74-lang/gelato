@@ -97,9 +97,25 @@ function glasses_vision_lab_freeze_dataset(PDO $pdo,int $org,string $publicId,in
           ->execute([$hash,count($items),count($classes),json_encode($quality),json_encode($manifest,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),$actor,$org,(int)$d['id']]);return glasses_vision_lab_dataset($pdo,$org,$publicId);
     });
 }
+function glasses_vision_lab_import_corrected(PDO $pdo,int $org,?string $missionPublic,int $actor,int $limit=500): array {
+    $limit=max(1,min(5000,$limit));$missionId=null;
+    if($missionPublic){$mq=$pdo->prepare("SELECT id FROM glasses_vision_training_missions WHERE organization_id=? AND public_id=? LIMIT 1");$mq->execute([$org,$missionPublic]);$missionId=(int)$mq->fetchColumn()?:null;}
+    $q=$pdo->prepare("SELECT o.observation_key FROM glasses_build_observations o JOIN glasses_observation_corrections c ON c.observation_id=o.id AND c.organization_id=o.organization_id LEFT JOIN glasses_vision_training_samples s ON s.organization_id=o.organization_id AND s.observation_id=o.id WHERE o.organization_id=? AND s.id IS NULL GROUP BY o.id,o.observation_key ORDER BY MAX(c.id) DESC LIMIT ".$limit);
+    $q->execute([$org]);$count=0;foreach($q->fetchAll(PDO::FETCH_COLUMN) as $key){glasses_vision_lab_queue_observation($pdo,$org,(string)$key,$missionPublic,$actor);$count++;}
+    return ['imported'=>$count,'missionPublicId'=>$missionPublic];
+}
+function glasses_vision_lab_dataset_coverage(PDO $pdo,int $org,string $publicId): array {
+    $q=$pdo->prepare("SELECT d.id FROM glasses_vision_dataset_versions d WHERE d.organization_id=? AND d.public_id=? LIMIT 1");$q->execute([$org,$publicId]);$id=(int)$q->fetchColumn();if(!$id)throw new InvalidArgumentException('Vision dataset was not found.');
+    $cq=$pdo->prepare("SELECT COALESCE(class_label,'(negative)') label,COUNT(*) n FROM glasses_vision_dataset_items WHERE organization_id=? AND dataset_id=? GROUP BY class_label ORDER BY n DESC,label");$cq->execute([$org,$id]);$classes=$cq->fetchAll();
+    $sq=$pdo->prepare("SELECT split_name,COUNT(*) n FROM glasses_vision_dataset_items WHERE organization_id=? AND dataset_id=? GROUP BY split_name");$sq->execute([$org,$id]);$splits=['train'=>0,'val'=>0,'test'=>0];foreach($sq->fetchAll() as $r)$splits[(string)$r['split_name']]=(int)$r['n'];
+    $uq=$pdo->prepare("SELECT COUNT(DISTINCT x.user_id) FROM (SELECT operator_user_id user_id FROM glasses_vision_training_samples s JOIN glasses_vision_dataset_items i ON i.sample_id=s.id WHERE i.organization_id=? AND i.dataset_id=? UNION SELECT reviewer_user_id FROM glasses_vision_training_samples s JOIN glasses_vision_dataset_items i ON i.sample_id=s.id WHERE i.organization_id=? AND i.dataset_id=?) x WHERE x.user_id IS NOT NULL");$uq->execute([$org,$id,$org,$id]);
+    return ['classes'=>array_map(static fn($r)=>['label'=>$r['label'],'count'=>(int)$r['n']],$classes),'splits'=>$splits,'contributors'=>(int)$uq->fetchColumn(),'hasValidation'=>$splits['val']>0,'hasTest'=>$splits['test']>0];
+}
 function glasses_vision_lab_catalog(PDO $pdo,array $user): array {
     $org=(int)$user['organization_id'];if(!glasses_vision_lab_ready($pdo))return ['ready'=>false,'assignments'=>[],'missions'=>[],'samples'=>[],'datasets'=>[],'users'=>[],'devices'=>[]];
     $uq=$pdo->prepare("SELECT u.id,u.display_name,m.employee_number,m.job_title FROM organization_memberships m JOIN users u ON u.id=m.user_id WHERE m.organization_id=? AND m.status='active' AND u.status='active' ORDER BY u.display_name");$uq->execute([$org]);
     $dq=$pdo->prepare("SELECT public_id,display_name,location_id,station_id FROM glasses_devices WHERE organization_id=? AND status='active' ORDER BY display_name");$dq->execute([$org]);
-    return ['ready'=>true,'assignments'=>glasses_vision_lab_assignments($pdo,$org),'missions'=>glasses_vision_lab_missions($pdo,$org),'samples'=>glasses_vision_lab_samples($pdo,$org),'datasets'=>glasses_vision_lab_datasets($pdo,$org),'users'=>$uq->fetchAll(),'devices'=>$dq->fetchAll(),'canManage'=>app_has_permission('glasses.manage',$user)];
+    $datasets=glasses_vision_lab_datasets($pdo,$org);foreach($datasets as &$dataset)$dataset['coverage']=glasses_vision_lab_dataset_coverage($pdo,$org,(string)$dataset['publicId']);unset($dataset);
+    $iq=$pdo->prepare("SELECT public_id,severity,category,recovery_status,reasons_json FROM glasses_vision_drift_incidents WHERE organization_id=? AND recovery_status<>'resolved' ORDER BY last_seen_at DESC LIMIT 50");$iq->execute([$org]);$incidents=array_map(static fn($r)=>['publicId'=>$r['public_id'],'severity'=>$r['severity'],'category'=>$r['category'],'recoveryStatus'=>$r['recovery_status'],'reasons'=>json_decode((string)$r['reasons_json'],true)?:[]],$iq->fetchAll());
+    return ['ready'=>true,'assignments'=>glasses_vision_lab_assignments($pdo,$org),'missions'=>glasses_vision_lab_missions($pdo,$org),'samples'=>glasses_vision_lab_samples($pdo,$org),'datasets'=>$datasets,'users'=>$uq->fetchAll(),'devices'=>$dq->fetchAll(),'driftIncidents'=>$incidents,'canManage'=>app_has_permission('glasses.manage',$user)];
 }
