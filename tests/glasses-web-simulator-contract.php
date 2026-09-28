@@ -63,5 +63,17 @@ gws_assert(str_contains($css,'.hud-orders-left')&&str_contains($css,'.hud-next-c
 gws_assert(str_contains($css,'.detection-box.low-confidence')&&str_contains($css,'.detection-box.unexpected'),'Detection overlays must communicate verification and unexpected states.');
 gws_assert(str_contains($css,'.glasses-stage.calibrating .hud-orders-left')&&str_contains($css,'.glasses-stage.calibrating .hud-next-center'),'New HUD rails must honor calibration geometry.');
 gws_assert(str_contains($css,'.glasses-stage.calibrating .hud-right-build')&&str_contains($css,'.glasses-stage.calibrating .hud-topbar'),'Build and status HUD regions must honor calibration geometry.');
+gws_assert(str_contains($page,'syncBadge'),'Simulator must expose live station synchronization state.');
+gws_assert(str_contains($api,"\$action==='work'")&&str_contains($api,"Cache-Control: no-store"),'Read-only GET work synchronization must be uncached.');
+gws_assert(str_contains($js,'LIVE_SYNC_BASE_MS=1500'),'Live station synchronization must use bounded near-real-time polling.');
+gws_assert(str_contains($js,'function liveWorkFingerprint'),'Live sync must suppress no-op renders/logs using work fingerprints.');
+gws_assert(str_contains($js,'function syncLiveStationWork'),'Simulator must continuously synchronize station work in Live mode.');
+gws_assert(str_contains($js,'visibilitychange'),'Live sync must pause when the simulator tab is hidden.');
+gws_assert(str_contains($js,'LIVE_SYNC_MAX_BACKOFF_MS'),'Live sync must back off on repeated transport failures.');
+gws_assert(str_contains($js,'activeBuildItem'),'Live sync must preserve active build selection across station refreshes.');
+gws_assert(str_contains($js,'syncEpoch'),'Live sync must discard stale in-flight polls after mode/device changes.');
+gws_assert(str_contains($js,'devicePublicId=state.device.publicId'),'Live sync requests must bind to the device selected when each poll begins.');
+gws_assert(!str_contains($api,'app_verify_request_csrf($_GET'),'Read-only station synchronization must not pretend GET is a mutation.');
+gws_assert(str_contains($css,'.sim-sync-badge.live')&&str_contains($css,'.sim-sync-badge.error'),'Simulator must visibly distinguish healthy and retrying synchronization.');
 
 echo "glasses-web-simulator-ok\n";

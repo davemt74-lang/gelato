@@ -1,7 +1,7 @@
 (()=>{'use strict';
 const cfg=window.GELATO_GLASSES_SIMULATOR||{};
 const $=id=>document.getElementById(id);
-const state={mode:'mock',devices:[],device:null,work:null,selectedKdsItemPublicId:'',build:null,validation:null,seq:1,logs:[],autoPlayTimer:null};
+const state={mode:'mock',devices:[],device:null,work:null,selectedKdsItemPublicId:'',build:null,validation:null,seq:1,logs:[],autoPlayTimer:null,syncTimer:null,syncBusy:false,syncErrors:0,syncFingerprint:'',syncAbort:null,syncEpoch:0,lastSyncAt:null};
 const mock={
   work:{assignmentRequired:false,station:{publicId:'station-mock',name:'Sandwich / Pizza Line'},revision:'mock-revision',focusItem:{kdsItemPublicId:'kds-mock-1',status:'queued',ticket:{checkNumber:'1042',serviceMode:'dine_in',tableName:'Table 12',guestCount:2},posLine:{id:1,menuItemId:1,name:'Club Sandwich + Fries',optionName:'Regular',quantity:1,specialInstructions:'NO TOMATO · EXTRA BACON',modifiers:[{name:'Extra Bacon'}]},menu:{preparationNotes:'Build, slice and plate with fries.'},recipeSource:{status:'exact_name',recipe:{instructions:['Toast bread','Add mayo','Add turkey','Add bacon','Add lettuce','Add tomato','Top and slice','Plate with fries']}}},items:[],metrics:{queued:1,inProgress:0,ready:0,held:0}},
   components:['Toasted Bread','Mayo','Turkey','Bacon','Lettuce','Tomato','Fries'].map((name,i)=>({componentKey:'mock:'+i,displayName:name,expectedQuantity:i===0?3:1,detectedQuantity:0,unit:i===0?'slices':'portion',optional:false,status:'waiting',sortOrder:i+1})),
@@ -10,6 +10,100 @@ function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;',
 function log(type,msg){const line={at:new Date(),type,msg};state.logs.unshift(line);state.logs=state.logs.slice(0,80);renderLog();}
 function renderLog(){$('eventLog').innerHTML=state.logs.map(x=>'<div class="event-line"><b>'+escapeHtml(x.type)+'</b> '+escapeHtml(x.at.toLocaleTimeString())+' · '+escapeHtml(x.msg)+'</div>').join('')||'<span class="sim-muted">No events yet.</span>';}
 async function api(action,payload={}){const r=await fetch(cfg.api,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({csrf:cfg.csrf,action,devicePublicId:state.device?.publicId||'',...payload})});const d=await r.json().catch(()=>({ok:false,message:'Invalid server response.'}));if(!r.ok||!d.ok)throw new Error(d.message||'Simulator request failed.');return d;}
+const LIVE_SYNC_BASE_MS=1500;
+const LIVE_SYNC_MAX_BACKOFF_MS=10000;
+function setSyncBadge(status,label){
+  const badge=$('syncBadge');if(!badge)return;
+  badge.className='sim-sync-badge '+status;badge.textContent=label;
+}
+function liveWorkFingerprint(work){
+  const items=(work?.items||[]).map(x=>({
+    id:x.kdsItemPublicId||'',status:x.status||'',ticket:x.ticket?.checkNumber||'',
+    table:x.ticket?.tableName||'',service:x.ticket?.serviceMode||'',
+    name:x.posLine?.name||'',option:x.posLine?.optionName||'',
+    qty:x.posLine?.quantity??null,special:x.posLine?.specialInstructions||'',
+    modifiers:(x.posLine?.modifiers||[]).map(m=>m.name||m.label||String(m))
+  }));
+  return JSON.stringify({revision:work?.revision||'',station:work?.station?.publicId||'',focus:work?.focusItem?.kdsItemPublicId||'',items});
+}
+function stopLiveStationSync(reason='paused'){
+  state.syncEpoch+=1;
+  if(state.syncTimer){clearTimeout(state.syncTimer);state.syncTimer=null;}
+  if(state.syncAbort){state.syncAbort.abort();state.syncAbort=null;}
+  state.syncBusy=false;
+  if(reason==='mock')setSyncBadge('paused','SYNC OFF');
+  else if(reason==='hidden')setSyncBadge('paused','SYNC PAUSED');
+  else setSyncBadge('paused','SYNC IDLE');
+}
+function scheduleLiveStationSync(delay=LIVE_SYNC_BASE_MS){
+  if(state.syncTimer)clearTimeout(state.syncTimer);
+  if(state.mode!=='live'||!state.device||document.hidden)return;
+  state.syncTimer=setTimeout(()=>{state.syncTimer=null;syncLiveStationWork(false);},delay);
+}
+function applyLiveWork(work,{announce=false}={}){
+  const previous=state.syncFingerprint,next=liveWorkFingerprint(work);
+  const items=work?.items||[],ids=items.map(x=>x.kdsItemPublicId);
+  const activeBuildItem=state.build?.kdsItemPublicId||'';
+  state.work=work;
+  if(!ids.includes(state.selectedKdsItemPublicId)){
+    if(activeBuildItem&&ids.includes(activeBuildItem))state.selectedKdsItemPublicId=activeBuildItem;
+    else state.selectedKdsItemPublicId=work?.focusItem?.kdsItemPublicId||ids[0]||'';
+  }
+  state.syncFingerprint=next;state.lastSyncAt=Date.now();render();
+  if(announce&&previous&&previous!==next)log('SYNC','Station changed — '+items.length+' active KDS item(s).');
+  return previous!==next;
+}
+async function fetchLiveStationWork(devicePublicId){
+  if(!devicePublicId)throw new Error('Choose a device first.');
+  if(state.syncAbort)state.syncAbort.abort();
+  const controller=new AbortController();state.syncAbort=controller;
+  const timeout=setTimeout(()=>controller.abort(),4500);
+  try{
+    const url=new URL(cfg.api,window.location.href);
+    url.searchParams.set('action','work');url.searchParams.set('devicePublicId',devicePublicId);
+    const r=await fetch(url.toString(),{method:'GET',credentials:'same-origin',cache:'no-store',signal:controller.signal});
+    const d=await r.json().catch(()=>({ok:false,message:'Invalid server response.'}));
+    if(!r.ok||!d.ok)throw new Error(d.message||'Live station synchronization failed.');
+    return d;
+  }finally{
+    clearTimeout(timeout);if(state.syncAbort===controller)state.syncAbort=null;
+  }
+}
+async function syncLiveStationWork(announce=true){
+  if(state.mode!=='live'||!state.device){stopLiveStationSync(state.mode==='mock'?'mock':'idle');return false;}
+  if(document.hidden){stopLiveStationSync('hidden');return false;}
+  if(state.syncBusy)return false;
+  const epoch=state.syncEpoch,devicePublicId=state.device.publicId;
+  state.syncBusy=true;setSyncBadge('syncing','SYNCING');
+  try{
+    const d=await fetchLiveStationWork(devicePublicId);
+    if(epoch!==state.syncEpoch||state.mode!=='live'||state.device?.publicId!==devicePublicId)return false;
+    const changed=applyLiveWork(d.work,{announce});
+    const recovered=state.syncErrors>0;state.syncErrors=0;
+    setSyncBadge('live','LIVE SYNC');
+    if(recovered)log('SYNC','Live station synchronization recovered.');
+    return changed;
+  }catch(e){
+    if(epoch!==state.syncEpoch||state.mode!=='live'||state.device?.publicId!==devicePublicId)return false;
+    state.syncErrors+=1;
+    const message=e?.name==='AbortError'?'Live station synchronization timed out.':(e?.message||'Live station synchronization failed.');
+    setSyncBadge('error','SYNC RETRY');
+    if(state.syncErrors===1||state.syncErrors%4===0)log('SYNC',message);
+    return false;
+  }finally{
+    if(epoch===state.syncEpoch){
+      state.syncBusy=false;
+      const delay=state.syncErrors?Math.min(LIVE_SYNC_MAX_BACKOFF_MS,LIVE_SYNC_BASE_MS*Math.pow(2,Math.min(state.syncErrors,3))):LIVE_SYNC_BASE_MS;
+      scheduleLiveStationSync(delay);
+    }
+  }
+}
+function startLiveStationSync({immediate=true}={}){
+  stopLiveStationSync('idle');state.syncErrors=0;state.syncFingerprint='';
+  if(state.mode!=='live'||!state.device){setSyncBadge('paused',state.mode==='mock'?'SYNC OFF':'SYNC IDLE');return;}
+  if(document.hidden){setSyncBadge('paused','SYNC PAUSED');return;}
+  if(immediate)syncLiveStationWork(false);else scheduleLiveStationSync();
+}
 async function loadDevices(){try{const r=await fetch(cfg.api,{credentials:'same-origin'}),d=await r.json();if(!r.ok||!d.ok)throw new Error(d.message||'Device list failed.');state.devices=d.devices||[];$('deviceSelect').innerHTML='<option value="">Choose device…</option>'+state.devices.map(x=>'<option value="'+escapeHtml(x.publicId)+'">'+escapeHtml(x.displayName)+' · '+escapeHtml(x.stationName||'Unassigned')+'</option>').join('');if(state.devices[0]){$('deviceSelect').value=state.devices[0].publicId;state.device=state.devices[0];}log('SYSTEM','Loaded '+state.devices.length+' accessible glasses device(s).');}catch(e){$('deviceSelect').innerHTML='<option value="">No devices</option>';log('ERROR',e.message);}}
 function mockBuild(){return {publicId:'build-mock-1',status:'active',kdsItemPublicId:'kds-mock-1',kdsStatus:'queued',context:{itemName:'Club Sandwich + Fries',buildDefinition:{steps:mock.work.focusItem.recipeSource.recipe.instructions.map((text,i)=>({stepKey:'step-'+(i+1),order:i+1,text,componentKeys:[]}))}},summary:{required:mock.components.length,confirmed:0,verify:0,unexpected:0,accounted:false,currentComponentKey:mock.components[0].componentKey},components:structuredClone(mock.components)};}
 function selectedItem(){const items=state.work?.items||[];if(state.selectedKdsItemPublicId){const chosen=items.find(x=>x.kdsItemPublicId===state.selectedKdsItemPublicId);if(chosen)return chosen;}return state.work?.focusItem||items[0]||null;}
@@ -102,7 +196,17 @@ function flashDetection(component,options={}){
   layer.appendChild(box);setTimeout(()=>box.remove(),2200);
 }
 function mockValidate(){const comps=state.build?.components||[],verify=comps.filter(c=>c.status==='verify').length,unexpected=comps.filter(c=>c.status==='unexpected').length,missing=comps.filter(c=>!c.optional&&!['confirmed','ignored','unexpected'].includes(c.status)).length,ready=missing===0&&verify===0&&unexpected===0;state.validation={status:ready?'ready_for_finishing':(verify||unexpected?'blocked':'pending'),nextStage:ready?'expo_finishing':null,summary:{allIngredientsAccountedFor:ready,requiredComponents:comps.filter(c=>!c.optional&&c.status!=='unexpected').length,passedComponents:comps.filter(c=>c.status==='confirmed').length,verifyComponents:verify,unexpectedComponents:unexpected,missingComponents:missing,next:{available:ready,label:'Expo / Finishing',message:ready?'All ingredients accounted for.':'Resolve build validation before finishing.'}}};}
-async function refreshWork(){try{if(state.mode==='mock'){state.work=structuredClone(mock.work);state.selectedKdsItemPublicId=state.work.focusItem?.kdsItemPublicId||'';log('MOCK','Loaded sample POS/KDS work.');render();return;}if(!state.device)throw new Error('Choose a device first.');const d=await api('work');state.work=d.work;const ids=(state.work.items||[]).map(x=>x.kdsItemPublicId);if(!ids.includes(state.selectedKdsItemPublicId))state.selectedKdsItemPublicId=state.work.focusItem?.kdsItemPublicId||ids[0]||'';log('LIVE','Loaded current KDS station work from Gelato.');render();}catch(e){log('ERROR',e.message);}}
+async function refreshWork(){
+  try{
+    if(state.mode==='mock'){
+      state.work=structuredClone(mock.work);state.selectedKdsItemPublicId=state.work.focusItem?.kdsItemPublicId||'';
+      setSyncBadge('paused','SYNC OFF');log('MOCK','Loaded sample POS/KDS work.');render();return;
+    }
+    if(!state.device)throw new Error('Choose a device first.');
+    await syncLiveStationWork(false);
+    log('LIVE','Refreshed current KDS station work.');
+  }catch(e){log('ERROR',e.message);}
+}
 async function startBuild(){try{if(state.mode==='mock'){state.build=mockBuild();state.validation=null;log('MOCK','Started mock build session.');render();return;}const item=selectedItem();if(!item)throw new Error('No selected KDS item.');const d=await api('build.start',{kdsItemPublicId:item.kdsItemPublicId,sourceRevision:state.work.revision});state.build=d.buildSession;state.validation=null;log('LIVE','Started build '+state.build.publicId+' against real KDS item.');render();}catch(e){log('ERROR',e.message);}}
 async function detect(key){try{if(!state.build)throw new Error('Start a build first.');const c=state.build.components.find(x=>x.componentKey===key);if(!c)return;const qty=Math.max(.001,Number(c.expectedQuantity||1)-Number(c.detectedQuantity||0));flashDetection(c,{confidence:.96,state:'confirmed'});if(state.mode==='mock'){c.detectedQuantity=Number(c.detectedQuantity||0)+qty;c.confidence=.96;c.status=c.detectedQuantity+.0001>=Number(c.expectedQuantity||1)?'confirmed':'detected';state.build.summary.currentComponentKey=currentComponent()?.componentKey||null;state.validation=null;log('VISION','Detected '+c.displayName+' in mock mode.');render();return;}const obs='websim-'+state.build.publicId+'-'+Date.now()+'-'+state.seq;const d=await api('build.observe',{buildSessionPublicId:state.build.publicId,observationKey:obs,componentKey:c.componentKey,displayName:c.displayName,observationAction:'added',quantity:qty,confidence:.96,trackingId:'websim-'+state.seq,bbox:{x:.18,y:.46,width:.18,height:.16},metadata:{source:'web_glasses_simulator'}});state.build=d.buildSession;state.validation=null;log('LIVE','Submitted simulated detection for '+c.displayName+'.');render();}catch(e){log('ERROR',e.message);}}
 function ensureMockBuild(){if(state.mode!=='mock')throw new Error('Demo controls are available only in Mock mode.');if(!state.build)state.build=mockBuild();}
@@ -131,10 +235,14 @@ async function resolveUnexpected(key){try{if(state.mode==='mock'){const c=state.
 async function validate(){try{if(!state.build)throw new Error('Start a build first.');if(state.mode==='mock'){mockValidate();log('VALIDATION','Mock result: '+state.validation.status);render();return;}const d=await api('validation.evaluate',{buildSessionPublicId:state.build.publicId});state.validation=d.validation;log('LIVE','Validation result: '+state.validation.status);render();}catch(e){log('ERROR',e.message);}}
 async function handoff(){try{if(!state.validation||state.validation.status!=='ready_for_finishing')throw new Error('Validation is not ready for Expo.');if(state.mode==='mock'){log('MOCK','Simulated Expo handoff.');state.build=null;state.validation=null;render();return;}const d=await api('handoff.expo',{buildSessionPublicId:state.build.publicId});log('LIVE','Expo handoff completed; KDS status '+(d.handoff.kdsStatus||'ready')+'.');state.build=null;state.validation=null;await refreshWork();}catch(e){log('ERROR',e.message);}}
 function resetSimulator(){state.build=null;state.validation=null;state.selectedKdsItemPublicId='';$('detectionLayer').innerHTML='';log('SYSTEM','Simulator build state reset; POS/KDS records were not changed.');refreshWork();}
-$('modeSelect').addEventListener('change',async e=>{state.mode=e.target.value;state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;log('MODE','Switched to '+state.mode+'.');await refreshWork();});
-$('deviceSelect').addEventListener('change',async e=>{state.device=state.devices.find(x=>x.publicId===e.target.value)||null;state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;if(state.mode==='live')await refreshWork();else render();});
+$('modeSelect').addEventListener('change',async e=>{stopAutoPlay();stopLiveStationSync('idle');state.mode=e.target.value;state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;state.syncFingerprint='';log('MODE','Switched to '+state.mode+'.');if(state.mode==='live')startLiveStationSync({immediate:true});else await refreshWork();});
+$('deviceSelect').addEventListener('change',async e=>{stopLiveStationSync('idle');state.device=state.devices.find(x=>x.publicId===e.target.value)||null;state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;state.syncFingerprint='';if(state.mode==='live')startLiveStationSync({immediate:true});else render();});
 $('workItemSelect').addEventListener('change',e=>{state.selectedKdsItemPublicId=e.target.value;state.validation=null;render();});
 $('refreshWork').addEventListener('click',refreshWork);$('startBuild').addEventListener('click',startBuild);$('resetSimulator').addEventListener('click',resetSimulator);$('injectUnexpected').addEventListener('click',injectUnexpected);$('evaluateBuild').addEventListener('click',validate);$('autoPlayBuild').addEventListener('click',toggleAutoPlay);$('nextDetection').addEventListener('click',playNextMockDetection);$('lowConfidenceDetection').addEventListener('click',injectLowConfidenceDetection);$('completeMockBuild').addEventListener('click',completeMockScenario);$('handoffExpo').addEventListener('click',handoff);$('clearLog').addEventListener('click',()=>{state.logs=[];renderLog();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stopLiveStationSync('hidden');else if(state.mode==='live'&&state.device)startLiveStationSync({immediate:true});});
+window.addEventListener('offline',()=>{stopLiveStationSync('idle');setSyncBadge('error','OFFLINE');});
+window.addEventListener('online',()=>{if(state.mode==='live'&&state.device)startLiveStationSync({immediate:true});});
+window.addEventListener('beforeunload',()=>stopLiveStationSync('idle'));
 const FRAME_MODE_KEY='gelato.webGlassesSimulator.frameMode.v1';
 const OPTICAL_MASK_KEY='gelato.webGlassesSimulator.opticalMask.v1';
 let frameMode=['svg','image','none'].includes(localStorage.getItem(FRAME_MODE_KEY))?localStorage.getItem(FRAME_MODE_KEY):'svg';
@@ -254,5 +362,5 @@ function bindRegionEditor(regionName){
 bindRegionEditor('hudRight');bindRegionEditor('hudStatus');bindRegionEditor('hudOrdersRegion');bindRegionEditor('hudNextRegion');
 refreshPresets();applyCalibration();applyFrameMode();
 $('exceptions').addEventListener('click',e=>{const b=e.target.closest('[data-resolve]');if(b)resolveUnexpected(b.dataset.resolve);});
-(async()=>{await loadDevices();state.work=structuredClone(mock.work);state.selectedKdsItemPublicId=state.work.focusItem?.kdsItemPublicId||'';refreshPresets();applyCalibration();render();setInterval(renderTopStatus,30000);log('SYSTEM','Simulator ready. Pizza Line Reference HUD loaded.');})();
+(async()=>{await loadDevices();state.work=structuredClone(mock.work);state.selectedKdsItemPublicId=state.work.focusItem?.kdsItemPublicId||'';refreshPresets();applyCalibration();setSyncBadge('paused','SYNC OFF');render();setInterval(renderTopStatus,30000);log('SYSTEM','Simulator ready. Pizza Line Reference HUD loaded.');})();
 })();
