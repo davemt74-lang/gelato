@@ -8,6 +8,7 @@ if(!app_has_permission('glasses.view',$user))app_json_response(['ok'=>false,'mes
 $pdo=app_pdo();$org=(int)$user['organization_id'];
 
 if($_SERVER['REQUEST_METHOD']==='GET' && !empty($_GET['publicId'])){
+    if(!app_has_permission('glasses.manage',$user)){http_response_code(403);exit('AR glasses management permission required.');}
     try{
         $row=glasses_vision_training_media_row($pdo,$org,(string)$_GET['publicId'],false);
         if((string)$row['status']!=='active'){http_response_code(410);exit('Training media is no longer available.');}
