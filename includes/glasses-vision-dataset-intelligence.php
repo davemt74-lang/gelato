@@ -240,10 +240,10 @@ function glasses_vision_dataset_intelligence_environment(PDO $pdo,int $org,?int 
     return $out;
 }
 
-function glasses_vision_dataset_intelligence_menu_readiness(PDO $pdo,int $org,int $minimumPerIngredient=20): array
+function glasses_vision_dataset_intelligence_menu_readiness(PDO $pdo,int $org,int $minimumPerIngredient=20,?int $datasetId=null): array
 {
-    $aq=$pdo->prepare("SELECT canonical_label,COUNT(*) n FROM glasses_vision_training_samples WHERE organization_id=? AND review_status='approved' GROUP BY canonical_label");
-    $aq->execute([$org]);
+    if($datasetId===null){$aq=$pdo->prepare("SELECT canonical_label,COUNT(*) n FROM glasses_vision_training_samples WHERE organization_id=? AND review_status='approved' GROUP BY canonical_label");$aq->execute([$org]);}
+    else{$aq=$pdo->prepare("SELECT s.canonical_label,COUNT(*) n FROM glasses_vision_training_samples s JOIN glasses_vision_dataset_items di ON di.organization_id=s.organization_id AND di.sample_id=s.id AND di.dataset_id=? WHERE s.organization_id=? AND s.review_status='approved' GROUP BY s.canonical_label");$aq->execute([$datasetId,$org]);}
     $approved=[];
     foreach ($aq->fetchAll() as $r) $approved[(string)$r['canonical_label']]=(int)$r['n'];
 
@@ -329,7 +329,7 @@ function glasses_vision_dataset_intelligence_analyze(PDO $pdo,int $org,?string $
     $leakage=$datasetId!==null?glasses_vision_dataset_intelligence_split_leakage($pdo,$org,$datasetId):[];
     $disagreements=glasses_vision_dataset_intelligence_disagreements($pdo,$org,$datasetId);
     $environment=glasses_vision_dataset_intelligence_environment($pdo,$org,$datasetId);
-    $menu=glasses_vision_dataset_intelligence_menu_readiness($pdo,$org,$minimumPerClass);
+    $menu=glasses_vision_dataset_intelligence_menu_readiness($pdo,$org,$minimumPerClass,$datasetId);
 
     $gaps=[];
     foreach ($metrics['classes'] as $class) {
