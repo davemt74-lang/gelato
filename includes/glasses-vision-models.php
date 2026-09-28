@@ -426,15 +426,16 @@ function glasses_vision_shadow_rollout_for_device(PDO $pdo,array $device,string 
         WHERE r.organization_id=? AND r.detector_name=? AND r.status='draft'
           AND (r.location_id IS NULL OR r.location_id=?)
           AND (r.station_id IS NULL OR r.station_id=?)
-        ORDER BY (r.station_id IS NOT NULL) DESC,(r.location_id IS NOT NULL) DESC,r.updated_at DESC,r.id DESC LIMIT 1");
+        ORDER BY (r.station_id IS NOT NULL) DESC,(r.location_id IS NOT NULL) DESC,r.updated_at DESC,r.id DESC");
     $q->execute([$org,$detector,$location,$station]);
-    $public=$q->fetchColumn();if(!$public)return null;
-    $row=glasses_vision_model_rollout_row($pdo,$org,(string)$public,false);
-    $target=glasses_vision_model_package_row($pdo,$org,(string)$row['target_public_id'],false);
-    $meta=json_decode((string)($target['metadata_json']??'null'),true);
-    $comparison=glasses_vision_model_comparison_metadata(is_array($meta)?$meta:[]);
-    if(!$comparison||!$comparison['eligible'])return null;
-    return $row;
+    foreach($q->fetchAll(PDO::FETCH_COLUMN) as $public){
+        $row=glasses_vision_model_rollout_row($pdo,$org,(string)$public,false);
+        $target=glasses_vision_model_package_row($pdo,$org,(string)$row['target_public_id'],false);
+        $meta=json_decode((string)($target['metadata_json']??'null'),true);
+        $comparison=glasses_vision_model_comparison_metadata(is_array($meta)?$meta:[]);
+        if($comparison&&$comparison['eligible'])return $row;
+    }
+    return null;
 }
 
 function glasses_vision_shadow_summary(PDO $pdo,int $org,string $runPublicId): array
