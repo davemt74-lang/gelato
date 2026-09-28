@@ -79,7 +79,8 @@ function glasses_vision_active_learning_scan(PDO $pdo,int $org,int $actor,string
 
     $q=$pdo->prepare("SELECT e.id,e.frame_key,e.critical_mismatch,e.champion_only_count,e.challenger_only_count,e.mean_iou,e.correction_alignment,e.created_at,r.device_id,b.location_id,b.station_id
       FROM glasses_vision_shadow_events e JOIN glasses_vision_shadow_runs r ON r.id=e.shadow_run_id AND r.organization_id=e.organization_id
-      JOIN glasses_build_sessions b ON b.id=r.build_session_id AND b.organization_id=r.organization_id
+      JOIN glasses_build_sessions bs ON bs.id=r.build_session_id AND bs.organization_id=r.organization_id
+      JOIN kds_order_items b ON b.id=bs.kds_order_item_id AND b.organization_id=bs.organization_id
       WHERE e.organization_id=? AND (e.critical_mismatch=1 OR e.champion_only_count>0 OR e.challenger_only_count>0) ORDER BY e.critical_mismatch DESC,e.id DESC LIMIT 500");
     $q->execute([$org]);
     foreach($q->fetchAll() as $r){
@@ -96,7 +97,8 @@ function glasses_vision_active_learning_scan(PDO $pdo,int $org,int $actor,string
     }
 
     $q=$pdo->prepare("SELECT cs.id,cs.sample_key,cs.device_id,cs.build_session_id,cs.validation_failed,cs.low_confidence_count,cs.unexpected_count,cs.runtime_error_count,b.location_id,b.station_id
-      FROM glasses_vision_canary_samples cs JOIN glasses_build_sessions b ON b.id=cs.build_session_id AND b.organization_id=cs.organization_id
+      FROM glasses_vision_canary_samples cs JOIN glasses_build_sessions bs ON bs.id=cs.build_session_id AND bs.organization_id=cs.organization_id
+      JOIN kds_order_items b ON b.id=bs.kds_order_item_id AND b.organization_id=bs.organization_id
       WHERE cs.organization_id=? AND (cs.validation_failed=1 OR cs.runtime_error_count>0 OR cs.low_confidence_count>=3 OR cs.unexpected_count>=2) ORDER BY cs.id DESC LIMIT 500");
     $q->execute([$org]);
     foreach($q->fetchAll() as $r){
