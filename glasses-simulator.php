@@ -147,6 +147,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
         </aside>
 
         <div id="detectionLayer" class="detection-layer"></div>
+        <div id="visionDetectionLayer" class="vision-detection-layer"></div>
       </section>
     </div>
   </section>
@@ -194,6 +195,16 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
         <button id="clearCameraTarget" type="button" disabled>Clear Target</button>
       </div>
       <div class="camera-meta" id="cameraMeta"><span>No active camera stream.</span></div>
+      <div class="vision-runtime-panel">
+        <div class="console-heading"><div><small>BROWSER VISION</small><strong>Detection runtime</strong></div><span id="visionHealth">VISION IDLE</span></div>
+        <div class="camera-grid">
+          <label><span>Mode</span><select id="visionMode"><option value="manual">Manual</option><option value="assisted">Assisted</option><option value="automatic">Automatic</option></select></label>
+          <label><span>FPS limit</span><select id="visionFpsLimit"><option value="2">2 FPS</option><option value="4" selected>4 FPS</option><option value="6">6 FPS</option><option value="8">8 FPS</option></select></label>
+        </div>
+        <label class="vision-confidence"><span>Auto confidence threshold</span><input id="visionConfidenceThreshold" type="range" min="40" max="99" value="75"><output id="visionConfidenceValue">75%</output></label>
+        <div id="visionMetrics" class="vision-metrics">FPS 0.0 · 0ms · 0 det</div>
+        <p class="calibration-note">Assisted draws tracked detections only. Automatic also submits governed build observations. The fixture adapter is deterministic until the production browser model adapter is connected.</p>
+      </div>
     </section>
 
     <section class="console-card">
