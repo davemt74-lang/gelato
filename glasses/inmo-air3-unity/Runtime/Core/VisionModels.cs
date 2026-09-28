@@ -60,6 +60,12 @@ namespace Gelato.Ar.Core
         public float Confidence { get; set; }
         public float[] BoundingBox { get; set; } = Array.Empty<float>();
         public bool IsUnexpected { get; set; }
+
+        // Filled by the hardware-neutral evidence pipeline after detector output.
+        public string EvidenceKind { get; set; } = string.Empty;
+        public string EvidenceSourceZoneKey { get; set; } = string.Empty;
+        public string EvidenceDestinationRegionKey { get; set; } = string.Empty;
+        public bool EvidenceSequenceSupported { get; set; }
     }
 
     public sealed class VisionFrameContext
