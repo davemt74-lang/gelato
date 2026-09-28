@@ -85,3 +85,17 @@
 .camera-target-marker span{position:absolute;left:0;bottom:100%;margin-bottom:4px;background:rgba(4,18,24,.8);border:1px solid rgba(139,213,255,.5);padding:3px 5px;border-radius:4px;font-size:8px;white-space:nowrap}
 .glasses-stage.camera-targeting{cursor:crosshair}
 @media(max-width:640px){.camera-grid,.camera-target-controls{grid-template-columns:1fr}}
+
+
+/* Browser Automatic Vision Runtime */
+.vision-runtime-panel{margin-top:10px;border:1px solid #244454;border-radius:9px;padding:9px;background:#0b1215;display:grid;gap:8px}
+.vision-confidence{display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center}
+.vision-confidence span{grid-column:1/-1;font-size:7px;color:var(--muted);font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+.vision-confidence input{width:100%}
+.vision-confidence output{font-size:8px;color:var(--blue)}
+.vision-metrics{border:1px solid #20333c;border-radius:7px;padding:7px;font-size:8px;color:var(--muted);font-variant-numeric:tabular-nums}
+.vision-detection-layer{position:absolute;inset:0;z-index:5;pointer-events:none}
+.vision-auto-box{position:absolute;border:2px solid var(--good);border-radius:9px;box-shadow:0 0 16px rgba(121,242,166,.45),inset 0 0 14px rgba(121,242,166,.06)}
+.vision-auto-box.verify{border-color:var(--warn);box-shadow:0 0 16px rgba(255,190,92,.4),inset 0 0 14px rgba(255,190,92,.05)}
+.vision-auto-box span{position:absolute;left:0;bottom:100%;margin-bottom:4px;background:rgba(4,18,24,.9);border:1px solid currentColor;padding:3px 5px;border-radius:4px;font-size:8px;white-space:nowrap;color:var(--good)}
+.vision-auto-box.verify span{color:var(--warn)}
