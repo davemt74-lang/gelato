@@ -11,8 +11,8 @@
 .lens-projection{opacity:var(--hud-opacity,1);filter:brightness(var(--hud-brightness,1));transform:scale(var(--hud-scale,1));transform-origin:center center}
 .editable-region{--region-x:0%;--region-y:0%;--region-w:auto;--region-h:auto}
 .glasses-stage.calibrating .editable-region{pointer-events:auto;outline:1px dashed rgba(255,211,123,.85);background-color:rgba(255,211,123,.03)}
-.glasses-stage.calibrating .hud-right{right:auto;left:var(--region-x,68%);top:var(--region-y,0%);width:var(--region-w,32%);height:var(--region-h,100%)}
-.glasses-stage.calibrating .hud-status{left:var(--region-x,0%);top:var(--region-y,0%);width:var(--region-w,auto);height:var(--region-h,auto);min-width:110px;min-height:28px}
+.glasses-stage.calibrating .hud-right-build{right:auto;left:var(--region-x,71%);top:var(--region-y,16%);width:var(--region-w,27%);height:var(--region-h,67%)}
+.glasses-stage.calibrating .hud-topbar{left:var(--region-x,2%);top:var(--region-y,1%);width:var(--region-w,96%);height:var(--region-h,12%);min-width:110px;min-height:28px}
 .region-handle{display:none;position:absolute!important;z-index:20!important;pointer-events:auto!important;border:1px solid #6f6338!important;background:#211f14!important;color:var(--warn)!important;border-radius:5px!important;font-size:7px!important;line-height:1!important;padding:4px 5px!important;text-shadow:none!important}
 .region-move{top:-22px!important;left:0!important;cursor:move!important}
 .region-resize{right:-1px!important;bottom:-1px!important;width:22px!important;height:22px!important;padding:0!important;cursor:nwse-resize!important}
@@ -54,3 +54,6 @@
 .glasses-stage.calibrating .hud-orders-left,.glasses-stage.calibrating .hud-next-center,.glasses-stage.calibrating .hud-right-build,.glasses-stage.calibrating .hud-topbar{pointer-events:auto}
 .glasses-stage.calibrating .hud-orders-left,.glasses-stage.calibrating .hud-next-center,.glasses-stage.calibrating .hud-right-build,.glasses-stage.calibrating .hud-topbar{outline:1px dashed rgba(255,211,123,.85)}
 @media(max-width:760px){.hud-orders-left{width:28%}.hud-right-build{width:31%}.hud-next-center{left:30%;width:38%}.hud-next-center strong{font-size:15px}}
+
+.glasses-stage.calibrating .hud-orders-left{left:var(--region-x,1%);top:var(--region-y,17%);width:var(--region-w,23%);height:var(--region-h,61%);max-height:none}
+.glasses-stage.calibrating .hud-next-center{left:var(--region-x,34%);top:var(--region-y,29%);width:var(--region-w,31%);height:var(--region-h,25%)}
