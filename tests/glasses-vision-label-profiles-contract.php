@@ -8,6 +8,7 @@ require_once __DIR__.'/../includes/glasses-core.php';
 require_once __DIR__.'/../includes/glasses-work.php';
 require_once __DIR__.'/../includes/glasses-build.php';
 require_once __DIR__.'/../includes/glasses-vision-profiles.php';
+require_once __DIR__.'/../includes/glasses-learning.php';
 require_once __DIR__.'/../includes/admin-control-core.php';
 
 $pdo=app_pdo();
@@ -132,6 +133,44 @@ gvlp_assert($baconMap['minimumConfidence']===null&&$baconMap['hasMinimumConfiden
 
 $profileAgain=glasses_vision_profile_for_build($pdo,$device,$sessionPublic,'food-model-v3');
 gvlp_assert((string)$profileAgain['profileHash']===(string)$profile['profileHash'],'Identical build/profile input must produce the same profile hash.');
+
+$sessionAfterObservation=glasses_build_observe($pdo,$device,$sessionPublic,[
+    'observationKey'=>'profiled-turkey-observation',
+    'componentKey'=>(string)$turkey['componentKey'],
+    'displayName'=>'Turkey',
+    'observationAction'=>'added',
+    'quantity'=>1,
+    'confidence'=>0.88,
+    'trackingId'=>'profile-track-1',
+    'metadata'=>[
+        'detectorLabel'=>'turkey_slice',
+        'profileMatched'=>true,
+        'profileMinimumConfidence'=>0.82,
+        'hasProfileMinimumConfidence'=>true,
+        'evidenceKind'=>'TransferConfirmed',
+        'sourceZoneKey'=>'turkey-pan',
+        'destinationRegionKey'=>'build-main',
+        'sequenceSupported'=>true,
+    ],
+]);
+gvlp_assert((string)$sessionAfterObservation['status']==='active','Profiled observation must use the existing active build workflow.');
+glasses_build_correct_observation($pdo,$device,$sessionPublic,[
+    'correctionKey'=>'reject-profiled-turkey',
+    'observationKey'=>'profiled-turkey-observation',
+    'resolution'=>'reject',
+    'reason'=>'Test human correction for model-label analytics.',
+]);
+$learning=glasses_learning_analytics($pdo,$org,$location,(string)$station['public_id'],30);
+$labelRows=array_values(array_filter($learning['modelLabels'],static fn(array $row):bool=>$row['detectorLabel']==='turkey_slice'&&$row['profileMatched']===true));
+gvlp_assert(count($labelRows)===1,'Vision Learning must aggregate the original detector label from profiled observation metadata.');
+gvlp_assert((int)$labelRows[0]['observations']===1&&(int)$labelRows[0]['corrected']===1&&(int)$labelRows[0]['rejected']===1,'Model-label analytics must measure human intervention on profiled evidence.');
+gvlp_assert(abs((float)$labelRows[0]['minimumConfidence']-0.82)<0.0001,'Vision Learning must retain the per-label confidence floor for tuning analysis.');
+gvlp_assert((float)$labelRows[0]['correctionRate']===1.0,'One corrected profiled observation must report a 100% intervention rate without calling it accuracy.');
+$learningDataset=glasses_learning_dataset($pdo,$org,$location,(string)$station['public_id'],30,true,100);
+$profiledRows=array_values(array_filter($learningDataset['rows'],static fn(array $row):bool=>$row['observationKey']==='profiled-turkey-observation'));
+gvlp_assert(count($profiledRows)===1,'Governed learning dataset must include human-reviewed profiled evidence.');
+gvlp_assert((string)$profiledRows[0]['source']['detectorLabel']==='turkey_slice'&&$profiledRows[0]['source']['profileMatched']===true,'Learning export must retain the model label and registry-match decision.');
+gvlp_assert(abs((float)$profiledRows[0]['source']['profileMinimumConfidence']-0.82)<0.0001,'Learning export must retain the applied profile threshold.');
 
 $otherDetector=glasses_vision_profile_for_build($pdo,$device,$sessionPublic,'other-model');
 $generic=gvlp_mapping($otherDetector,'turkey slice');
