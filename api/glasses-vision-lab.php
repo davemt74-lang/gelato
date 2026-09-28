@@ -13,6 +13,7 @@ try{
  if($action==='assignment.release')app_json_response(['ok'=>true,'assignment'=>glasses_vision_lab_release_device($pdo,$org,(string)($in['publicId']??''),(string)($in['reason']??''),$actor)]);
  if($action==='mission.create')app_json_response(['ok'=>true,'mission'=>glasses_vision_lab_create_mission($pdo,$org,$in,$actor)],201);
  if($action==='sample.queue_observation')app_json_response(['ok'=>true,'sample'=>glasses_vision_lab_queue_observation($pdo,$org,(string)($in['observationKey']??''),!empty($in['missionPublicId'])?(string)$in['missionPublicId']:null,$actor)],201);
+ if($action==='sample.import_corrected')app_json_response(['ok'=>true,'result'=>glasses_vision_lab_import_corrected($pdo,$org,!empty($in['missionPublicId'])?(string)$in['missionPublicId']:null,$actor,(int)($in['limit']??500))]);
  if($action==='sample.review')app_json_response(['ok'=>true,'sample'=>glasses_vision_lab_review_sample($pdo,$org,(string)($in['publicId']??''),$in,$actor)]);
  if($action==='dataset.create')app_json_response(['ok'=>true,'dataset'=>glasses_vision_lab_create_dataset($pdo,$org,$in,$actor)],201);
  if($action==='dataset.add_sample')app_json_response(['ok'=>true,'dataset'=>glasses_vision_lab_add_dataset_sample($pdo,$org,(string)($in['datasetPublicId']??''),(string)($in['samplePublicId']??''),(string)($in['split']??'train'))]);
