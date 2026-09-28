@@ -34,3 +34,19 @@ The projection contract keeps the optical center clear:
 ## Future image integration
 
 Replace the placeholder scene with the final kitchen POV artwork and, if desired, replace the CSS glasses frame with transparent glasses-frame artwork. The HUD remains a separate DOM layer, so artwork changes do not affect POS/KDS integration.
+
+
+## Visual calibration pass
+
+The simulator now includes a browser-local projection calibration layer designed for the real kitchen POV and glasses artwork.
+
+- Calibrate / Lock layout mode.
+- Projection safe-area guide.
+- Independent left-eye and right-eye alignment offsets.
+- HUD opacity, brightness, and scale.
+- Adjustable safe-area width and height.
+- Draggable/resizable status and right-rail projection regions.
+- Named layout presets persisted in localStorage.
+- Factory reset for deterministic baseline geometry.
+
+Calibration settings never alter POS, KDS, build sessions, observations, validation, or Expo state. They are presentation-only simulator data.
