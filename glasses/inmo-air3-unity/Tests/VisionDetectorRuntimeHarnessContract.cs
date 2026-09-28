@@ -68,6 +68,7 @@ internal static class VisionDetectorRuntimeHarnessContract
         };
         var options = Options();
         options.ConsecutiveFailuresBeforeRestart = 9;
+        options.ConsecutiveFailuresBeforeFailed = 12;
         var harness = new VisionDetectorRuntimeHarness(detector, options);
         await harness.WarmupAsync();
 
