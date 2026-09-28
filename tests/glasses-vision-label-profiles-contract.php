@@ -78,6 +78,18 @@ $cheese=glasses_vision_profile_save($pdo,$org,[
     'modelLabel'=>'cheese_slice',
     'minimumConfidence'=>0.91,
 ],$user);
+$genericMystery=glasses_vision_profile_save($pdo,$org,[
+    'ingredientId'=>$ingredients['Turkey'],
+    'detectorName'=>'*',
+    'modelLabel'=>'mystery_slice',
+    'minimumConfidence'=>0.72,
+],$user);
+$specificMystery=glasses_vision_profile_save($pdo,$org,[
+    'ingredientId'=>$ingredients['Swiss Cheese'],
+    'detectorName'=>'Food Model V3',
+    'modelLabel'=>'mystery slice',
+    'minimumConfidence'=>0.93,
+],$user);
 
 gvlp_assert((string)$specificTurkey['detectorName']==='food-model-v3','Saved detector name must use normalized runtime identity.');
 gvlp_assert((string)$specificTurkey['normalizedLabel']==='turkey slice','Saved model label must use stable normalized label.');
@@ -106,7 +118,8 @@ gvlp_assert($weak,'Per-label profile cannot weaken the 0.50 global safety floor.
 $profile=glasses_vision_profile_for_build($pdo,$device,$sessionPublic,'Food Model V3');
 gvlp_assert((string)$profile['schema']==='gelato.vision_label_profile.v1','Runtime vision profile schema must be versioned.');
 gvlp_assert((string)$profile['detectorName']==='food-model-v3','Runtime detector identity must be normalized.');
-gvlp_assert(count($profile['mappings'])===2,'Runtime profile must include only recipe ingredients, excluding unrelated Cheese.');
+gvlp_assert(count($profile['mappings'])===2,'Runtime profile must include only recipe ingredients, excluding unrelated Cheese and detector-specific non-recipe overrides.');
+gvlp_assert(count(array_filter($profile['mappings'],static fn(array $row):bool=>$row['normalizedLabel']==='mystery slice'))===0,'Detector-specific non-recipe override must suppress the generic recipe mapping and fail closed.');
 gvlp_assert(strlen((string)$profile['profileHash'])===64,'Runtime profile must carry a deterministic SHA-256 hash.');
 
 $turkey=gvlp_mapping($profile,'turkey slice');
@@ -135,7 +148,7 @@ $catalog=glasses_vision_profile_catalog($pdo,[
     'is_owner_role'=>1,
 ]);
 gvlp_assert($catalog['ready']===true&&$catalog['canManage']===true,'Owner vision registry catalog must be manageable.');
-gvlp_assert(count($catalog['profiles'])===4&&count($catalog['ingredients'])===3,'Registry catalog must expose organization-scoped mappings and ingredients.');
+gvlp_assert(count($catalog['profiles'])===6&&count($catalog['ingredients'])===3,'Registry catalog must expose organization-scoped mappings and ingredients.');
 
 $modules=admin_modules(['permissions'=>['glasses.view'],'is_owner_role'=>0]);
 $module=array_values(array_filter($modules,static fn(array $row):bool=>($row['href']??'')==='glasses-vision-profiles.php'));
