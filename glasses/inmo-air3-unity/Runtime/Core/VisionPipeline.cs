@@ -265,6 +265,7 @@ namespace Gelato.Ar.Core
                 };
                 observations.Add(observation);
                 Diagnostics.ObservationsEmitted++;
+                _transferEvidence.MarkObservationEmitted(track.ComponentKey, track.InstanceKey);
             }
 
             for (var i = _tracks.Count - 1; i >= 0; i--)
