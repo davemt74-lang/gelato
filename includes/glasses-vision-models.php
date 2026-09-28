@@ -925,6 +925,18 @@ function glasses_vision_drift_rollout_summary(PDO $pdo,int $org,string $rolloutP
 {
     if(!glasses_vision_drift_ready($pdo))return ['schema'=>'gelato.vision_drift_summary.v1','state'=>'unavailable','promotionBlocked'=>false,'reasons'=>[]];
     $rollout=glasses_vision_model_rollout_row($pdo,$org,$rolloutPublicId,false);
+    if(glasses_vision_drift_recovery_ready($pdo)){
+        $iq=$pdo->prepare("SELECT drift_state,reasons_json,last_seen_at,recovery_status,validation_stable_samples
+            FROM glasses_vision_drift_incidents
+            WHERE organization_id=? AND rollout_id=? AND package_id=? AND recovery_status<>'resolved'
+            ORDER BY FIELD(drift_state,'critical','drifted','watch','stable','calibrating') ASC,last_seen_at DESC,id DESC LIMIT 1");
+        $iq->execute([$org,(int)$rollout['id'],(int)$rollout['target_package_id']]);$incident=$iq->fetch();
+        if($incident){
+            return ['schema'=>'gelato.vision_drift_summary.v1','state'=>(string)$incident['drift_state'],'score'=>null,'promotionBlocked'=>true,
+                'reasons'=>json_decode((string)($incident['reasons_json']??'[]'),true)?:[],'latestAt'=>$incident['last_seen_at'],
+                'recoveryStatus'=>(string)$incident['recovery_status'],'validationStableSamples'=>(int)$incident['validation_stable_samples']];
+        }
+    }
     $q=$pdo->prepare("SELECT drift_state,drift_score,reasons_json,created_at FROM glasses_vision_drift_samples WHERE organization_id=? AND rollout_id=? AND package_id=? ORDER BY id DESC LIMIT 1");
     $q->execute([$org,(int)$rollout['id'],(int)$rollout['target_package_id']]);$row=$q->fetch();
     if(!$row)return ['schema'=>'gelato.vision_drift_summary.v1','state'=>'unknown','promotionBlocked'=>false,'reasons'=>[],'latestAt'=>null];
