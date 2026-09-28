@@ -235,6 +235,23 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
           <div id="datasetAnnotationList" class="dataset-annotation-list"><span class="sim-muted">No annotations on the current frame.</span></div>
           <p class="calibration-note">Dataset capture stays local to this browser. Export contains JPEG frames, YOLO labels, data.yaml and a Gelato manifest; it does not modify POS, KDS, builds or validation.</p>
         </div>
+        <div class="active-learning-panel">
+          <div class="console-heading"><div><small>ACTIVE LEARNING</small><strong>Hard-example review queue</strong></div><span id="activeLearningState">0 QUEUED</span></div>
+          <div class="camera-toggle-row"><label><input id="activeLearningEnabled" type="checkbox" checked> Capture hard examples</label><span class="sim-muted">Local review required.</span></div>
+          <label class="work-picker"><span>RECLASSIFY AS</span><select id="activeLearningClassSelect"><option value="">Use suggested label</option></select></label>
+          <div id="activeLearningCurrent" class="active-learning-current"><span class="sim-muted">No hard examples queued.</span></div>
+          <div class="inline-actions">
+            <button id="activeLearningAccept" type="button" disabled>Accept Labels</button>
+            <button id="activeLearningReclassify" type="button" disabled>Reclassify + Accept</button>
+          </div>
+          <div class="inline-actions">
+            <button id="activeLearningNegative" type="button" disabled>Keep as Negative</button>
+            <button id="activeLearningDiscard" type="button" disabled>Discard</button>
+            <button id="activeLearningClear" type="button" disabled>Clear Queue</button>
+          </div>
+          <div id="activeLearningQueue" class="active-learning-queue"><span class="sim-muted">Low confidence, sequence violations, disappearance/replacement, and manual low-confidence cases will appear here.</span></div>
+          <p class="calibration-note">Queued frames never train automatically. Human-reviewed examples are copied into the existing YOLO dataset only after Accept, Reclassify, or Keep as Negative.</p>
+        </div>
       </div>
     </section>
 
@@ -284,6 +301,6 @@ window.GELATO_GLASSES_SIMULATOR={
   api:'api/glasses-simulator.php'
 };
 </script>
-<script src="assets/js/glasses-web-simulator.js?v=20260928-dataset1"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20260928-activelearning1"></script>
 </body>
 </html>
