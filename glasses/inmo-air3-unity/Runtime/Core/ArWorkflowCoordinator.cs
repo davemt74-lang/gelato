@@ -22,6 +22,7 @@ namespace Gelato.Ar.Core
         public string? LastError { get; private set; }
         public string? LastCalibrationError { get; private set; }
         public string? LastSubmittedObservationKey { get; private set; }
+        public ReviewFeedback? ReviewFeedback { get; private set; }
 
         public ArWorkflowCoordinator(IGlassesPlatform platform, IGelatoGateway gateway, IDeviceTokenStore tokenStore)
         {
@@ -69,6 +70,7 @@ namespace Gelato.Ar.Core
         {
             EnsurePaired();
             State = WorkflowState.LoadingWork;
+            ReviewFeedback = null;
 
             return await GuardAsync(async () =>
             {
@@ -118,6 +120,7 @@ namespace Gelato.Ar.Core
             if (CurrentWork?.FocusItem == null) throw new InvalidOperationException("There is no focused KDS item to build.");
 
             State = WorkflowState.StartingBuild;
+            ReviewFeedback = null;
             return await GuardAsync(async () =>
             {
                 BuildSession = await _gateway.StartBuildAsync(
@@ -141,6 +144,7 @@ namespace Gelato.Ar.Core
             if (observation == null) throw new ArgumentNullException(nameof(observation));
             if (string.IsNullOrWhiteSpace(observation.ObservationKey)) throw new ArgumentException("Observation key is required.", nameof(observation));
             if (string.IsNullOrWhiteSpace(observation.ComponentKey)) throw new ArgumentException("Component key is required.", nameof(observation));
+            ReviewFeedback = null;
 
             return await GuardAsync(async () =>
             {
@@ -155,6 +159,7 @@ namespace Gelato.Ar.Core
         public async Task<ProductValidation> ConfirmComponentAsync(string componentKey, CancellationToken cancellationToken = default)
         {
             EnsureActiveBuild();
+            ReviewFeedback = null;
             if (string.IsNullOrWhiteSpace(componentKey)) throw new ArgumentException("Component key is required.", nameof(componentKey));
 
             return await GuardAsync(async () =>
@@ -169,6 +174,7 @@ namespace Gelato.Ar.Core
         public async Task<ProductValidation> ResolveUnexpectedAsync(string componentKey, CancellationToken cancellationToken = default)
         {
             EnsureActiveBuild();
+            ReviewFeedback = null;
             if (string.IsNullOrWhiteSpace(componentKey)) throw new ArgumentException("Component key is required.", nameof(componentKey));
 
             return await GuardAsync(async () =>
@@ -183,6 +189,7 @@ namespace Gelato.Ar.Core
         public async Task<ProductValidation> CorrectObservationAsync(ObservationCorrection correction, CancellationToken cancellationToken = default)
         {
             EnsureActiveBuild();
+            ReviewFeedback = null;
             if (correction == null) throw new ArgumentNullException(nameof(correction));
             if (string.IsNullOrWhiteSpace(correction.ObservationKey)) throw new ArgumentException("Observation key is required.", nameof(correction));
             if (string.IsNullOrWhiteSpace(correction.CorrectionKey)) throw new ArgumentException("Correction key is required.", nameof(correction));
@@ -241,6 +248,7 @@ namespace Gelato.Ar.Core
         public async Task<ProductValidation> EvaluateAsync(CancellationToken cancellationToken = default)
         {
             EnsureActiveBuild();
+            ReviewFeedback = null;
             return await GuardAsync(async () =>
             {
                 Validation = await _gateway.EvaluateAsync(BuildSession!.PublicId, cancellationToken).ConfigureAwait(false);
@@ -252,6 +260,7 @@ namespace Gelato.Ar.Core
         public async Task<ExpoHandoff> HandoffToExpoAsync(CancellationToken cancellationToken = default)
         {
             EnsureActiveBuild();
+            ReviewFeedback = null;
             if (!IsReadyForFinishing(Validation))
                 throw new InvalidOperationException("Product validation is not ready for Expo / Finishing.");
 
@@ -265,6 +274,16 @@ namespace Gelato.Ar.Core
             }).ConfigureAwait(false);
         }
 
+        public void SetReviewFeedback(ReviewFeedback? feedback)
+        {
+            ReviewFeedback = feedback;
+        }
+
+        public void ClearReviewFeedback()
+        {
+            ReviewFeedback = null;
+        }
+
         public void ResetForNextWork()
         {
             CurrentWork = null;
@@ -275,6 +294,7 @@ namespace Gelato.Ar.Core
             LastError = null;
             LastCalibrationError = null;
             LastSubmittedObservationKey = null;
+            ReviewFeedback = null;
             State = string.IsNullOrWhiteSpace(_deviceToken) ? WorkflowState.Unpaired : WorkflowState.Idle;
         }
 

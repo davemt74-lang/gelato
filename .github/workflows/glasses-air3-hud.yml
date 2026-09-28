@@ -7,7 +7,7 @@ on:
       - 'docs/GLASSES-AIR3-HUD.md'
       - '.github/workflows/glasses-air3-hud.yml'
   push:
-    branches: [main, 'feature/glasses-air3-hud']
+    branches: [main, 'feature/glasses-air3-hud', 'feature/glasses-hands-free-review']
 
 jobs:
   air3-hud:
@@ -28,8 +28,9 @@ jobs:
           grep -q '"ITEM"' glasses/inmo-air3-unity/Runtime/Unity/ArHudController.cs
           grep -q '"BUILD STEPS"' glasses/inmo-air3-unity/Runtime/Unity/ArHudController.cs
           grep -q '"PRODUCT VALIDATION"' glasses/inmo-air3-unity/Runtime/Unity/ArHudController.cs
+          grep -q '"HANDS-FREE"' glasses/inmo-air3-unity/Runtime/Unity/ArHudController.cs
           grep -q '"NEXT"' glasses/inmo-air3-unity/Runtime/Unity/ArHudController.cs
-          test "$(grep -c 'CreateSection(rail.transform' glasses/inmo-air3-unity/Runtime/Unity/ArHudController.cs)" = "4"
+          test "$(grep -c 'CreateSection(rail.transform' glasses/inmo-air3-unity/Runtime/Unity/ArHudController.cs)" = "5"
           grep -q '_nextPanel.SetActive(false)' glasses/inmo-air3-unity/Runtime/Unity/ArHudController.cs
           grep -q 'TransientOutlineSeconds' glasses/inmo-air3-unity/Runtime/Unity/IngredientOutlineOverlay.cs
           grep -q 'WaitForSeconds' glasses/inmo-air3-unity/Runtime/Unity/IngredientOutlineOverlay.cs

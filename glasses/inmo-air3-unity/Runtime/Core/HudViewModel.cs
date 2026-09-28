@@ -59,6 +59,10 @@ namespace Gelato.Ar.Core
         public string ItemBody { get; set; } = string.Empty;
         public string BuildBody { get; set; } = string.Empty;
         public string ValidationBody { get; set; } = string.Empty;
+        public bool ShowReview { get; set; }
+        public bool ReviewAttention { get; set; }
+        public string ReviewTitle { get; set; } = string.Empty;
+        public string ReviewBody { get; set; } = string.Empty;
         public bool ShowNext { get; set; }
         public string NextTitle { get; set; } = string.Empty;
         public string NextBody { get; set; } = string.Empty;
@@ -70,7 +74,8 @@ namespace Gelato.Ar.Core
             CurrentWork? work,
             BuildSession? build,
             ProductValidation? validation,
-            ExpoHandoff? handoff)
+            ExpoHandoff? handoff,
+            ReviewFeedback? reviewFeedback = null)
         {
             var focus = work?.FocusItem;
             var model = new HudViewModel
@@ -78,7 +83,11 @@ namespace Gelato.Ar.Core
                 ItemTitle = string.IsNullOrWhiteSpace(focus?.Name) ? "NO ACTIVE ITEM" : focus!.Name,
                 ItemBody = FormatItemBody(focus),
                 BuildBody = FormatBuild(build),
-                ValidationBody = FormatValidation(build, validation)
+                ValidationBody = FormatValidation(build, validation),
+                ShowReview = reviewFeedback != null,
+                ReviewAttention = reviewFeedback?.Attention ?? false,
+                ReviewTitle = reviewFeedback?.Title ?? string.Empty,
+                ReviewBody = reviewFeedback?.Message ?? string.Empty
             };
 
             if (handoff != null)

@@ -17,6 +17,7 @@ namespace Gelato.Ar.Unity
         private readonly List<string> _log = new List<string>();
         private int _observationSequence;
         private bool _busy;
+        private HandsFreeCommandRouter _commands;
 
         public IReadOnlyList<string> Log => _log;
         public bool Busy => _busy;
@@ -33,15 +34,15 @@ namespace Gelato.Ar.Unity
             try
             {
                 if (Input.GetKeyDown(KeyCode.P)) await PairAsync();
-                else if (Input.GetKeyDown(KeyCode.F1)) await RefreshWorkAsync();
-                else if (Input.GetKeyDown(KeyCode.F2)) await StartBuildAsync();
-                else if (Input.GetKeyDown(KeyCode.V)) await EvaluateAsync();
-                else if (Input.GetKeyDown(KeyCode.E)) await HandoffAsync();
+                else if (Input.GetKeyDown(KeyCode.F1)) await ExecuteHandsFreeCommandAsync("refresh work");
+                else if (Input.GetKeyDown(KeyCode.F2)) await ExecuteHandsFreeCommandAsync("start build");
+                else if (Input.GetKeyDown(KeyCode.V)) await ExecuteHandsFreeCommandAsync("validate product");
+                else if (Input.GetKeyDown(KeyCode.E)) await ExecuteHandsFreeCommandAsync("send to expo");
                 else if (Input.GetKeyDown(KeyCode.R)) ResetWorkflow();
                 else if (Input.GetKeyDown(KeyCode.U)) await SimulateUnexpectedAsync();
-                else if (Input.GetKeyDown(KeyCode.C)) await ConfirmFirstVerifyAsync();
-                else if (Input.GetKeyDown(KeyCode.X)) await ResolveFirstUnexpectedAsync();
-                else if (Input.GetKeyDown(KeyCode.Z)) await RejectLastObservationAsync();
+                else if (Input.GetKeyDown(KeyCode.C)) await ExecuteHandsFreeCommandAsync("confirm");
+                else if (Input.GetKeyDown(KeyCode.X)) await ExecuteHandsFreeCommandAsync("resolve unexpected");
+                else if (Input.GetKeyDown(KeyCode.Z)) await ExecuteHandsFreeCommandAsync("undo last");
                 else
                 {
                     for (var i = 0; i < 9; i++)
@@ -77,24 +78,35 @@ namespace Gelato.Ar.Unity
             });
         }
 
-        public async Task RefreshWorkAsync()
+        private HandsFreeCommandRouter Commands
+        {
+            get
+            {
+                if (_commands != null) return _commands;
+                if (bootstrap == null || bootstrap.Coordinator == null)
+                    throw new InvalidOperationException("Gelato AR workflow is not initialized.");
+                _commands = new HandsFreeCommandRouter(bootstrap.Coordinator);
+                return _commands;
+            }
+        }
+
+        public async Task ExecuteHandsFreeCommandAsync(string command)
         {
             await RunBusyAsync(async () =>
             {
-                var work = await bootstrap.Coordinator.RefreshWorkAsync();
-                LogLine(work.FocusItem == null
-                    ? "No focused station work."
-                    : "Focused: " + work.FocusItem.Name + " [" + work.FocusItem.Status + "]");
+                var result = await Commands.ExecuteAsync(command);
+                LogLine((result.Succeeded ? "ACTION: " : "REVIEW: ") + command + " → " + result.Message);
             });
         }
 
-        public async Task StartBuildAsync()
+        public Task RefreshWorkAsync()
         {
-            await RunBusyAsync(async () =>
-            {
-                var build = await bootstrap.Coordinator.StartFocusBuildAsync();
-                LogLine("Build started: " + build.PublicId + " (" + build.Components.Count + " components)");
-            });
+            return ExecuteHandsFreeCommandAsync("refresh work");
+        }
+
+        public Task StartBuildAsync()
+        {
+            return ExecuteHandsFreeCommandAsync("start build");
         }
 
         public async Task SimulateComponentAsync(int componentIndex, bool lowConfidence)
@@ -140,86 +152,35 @@ namespace Gelato.Ar.Unity
             });
         }
 
-        public async Task ConfirmFirstVerifyAsync()
+        public Task ConfirmFirstVerifyAsync()
         {
-            var build = bootstrap.Coordinator.BuildSession;
-            if (build == null) throw new InvalidOperationException("There is no active build session.");
-
-            BuildComponent target = null;
-            foreach (var component in build.Components)
-            {
-                if (string.Equals(component.Status, "verify", StringComparison.Ordinal))
-                {
-                    target = component;
-                    break;
-                }
-            }
-            if (target == null) throw new InvalidOperationException("No Verify component is waiting for manual confirmation.");
-
-            await RunBusyAsync(async () =>
-            {
-                var validation = await bootstrap.Coordinator.ConfirmComponentAsync(target.ComponentKey);
-                LogLine("Confirmed " + target.DisplayName + " → " + validation.Status);
-            });
+            return ExecuteHandsFreeCommandAsync("confirm");
         }
 
-        public async Task ResolveFirstUnexpectedAsync()
+        public Task ResolveFirstUnexpectedAsync()
         {
-            var build = bootstrap.Coordinator.BuildSession;
-            if (build == null) throw new InvalidOperationException("There is no active build session.");
-
-            BuildComponent target = null;
-            foreach (var component in build.Components)
-            {
-                if (string.Equals(component.Status, "unexpected", StringComparison.Ordinal))
-                {
-                    target = component;
-                    break;
-                }
-            }
-            if (target == null) throw new InvalidOperationException("No unexpected component is waiting for resolution.");
-
-            await RunBusyAsync(async () =>
-            {
-                var validation = await bootstrap.Coordinator.ResolveUnexpectedAsync(target.ComponentKey);
-                LogLine("Resolved unexpected " + target.DisplayName + " → " + validation.Status);
-            });
+            return ExecuteHandsFreeCommandAsync("resolve unexpected");
         }
 
-        public async Task RejectLastObservationAsync()
+        public Task RejectLastObservationAsync()
         {
-            await RunBusyAsync(async () =>
-            {
-                var key = bootstrap.Coordinator.LastSubmittedObservationKey;
-                if (string.IsNullOrWhiteSpace(key))
-                    throw new InvalidOperationException("No submitted observation is available to reject.");
-
-                var validation = await bootstrap.Coordinator.RejectLastObservationAsync("Desktop simulator correction");
-                LogLine("Rejected observation " + key + " → " + validation.Status);
-            });
+            return ExecuteHandsFreeCommandAsync("undo last");
         }
 
-        public async Task EvaluateAsync()
+        public Task EvaluateAsync()
         {
-            await RunBusyAsync(async () =>
-            {
-                var validation = await bootstrap.Coordinator.EvaluateAsync();
-                LogLine("Validation: " + validation.Status + (validation.Next.Available ? " | NEXT available" : string.Empty));
-            });
+            return ExecuteHandsFreeCommandAsync("validate product");
         }
 
-        public async Task HandoffAsync()
+        public Task HandoffAsync()
         {
-            await RunBusyAsync(async () =>
-            {
-                var handoff = await bootstrap.Coordinator.HandoffToExpoAsync();
-                LogLine("Handoff: " + handoff.Label + " | KDS " + handoff.KdsStatus);
-            });
+            return ExecuteHandsFreeCommandAsync("send to expo");
         }
 
         public void ResetWorkflow()
         {
             bootstrap.Coordinator.ResetForNextWork();
+            _commands = null;
             if (hudBinder != null) hudBinder.ClearIngredientOutline();
             LogLine("Workflow reset.");
         }
