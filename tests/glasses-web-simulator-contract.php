@@ -31,6 +31,8 @@ gws_assert(str_contains($js,"validation.status!=='ready_for_finishing'"),'Expo c
 gws_assert(str_contains($js,'function selectedItem()'),'Live simulator must allow explicit KDS work selection.');
 gws_assert(str_contains($js,'resetSimulator'),'Simulator must support releasing local build UI state for the next ticket.');
 gws_assert(str_contains($page,'workItemSelect'),'Page must expose KDS item selector.');
+gws_assert(str_contains($page,'sceneFile')&&str_contains($page,'glassesFile'),'Simulator must support local artwork previews without server upload.');
+gws_assert(str_contains($js,"bindLocalImage('sceneFile'"),'Simulator must bind local scene artwork preview.');
 gws_assert(str_contains($css,'.hud-right'),'HUD must keep persistent projection on the right side.');
 gws_assert(str_contains($css,'.detection-box'),'HUD must support ingredient bounding boxes.');
 
