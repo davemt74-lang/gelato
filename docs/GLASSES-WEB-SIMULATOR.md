@@ -357,3 +357,33 @@ Active-learning images remain local to the browser unless the user explicitly ex
 The intended loop is:
 
 Camera inference → hard condition → local candidate → human review → YOLO export → training/evaluation pipeline → governed ONNX release.
+
+
+## Live champion / challenger shadow evaluation
+
+The simulator can now run a governed challenger beside the loaded champion on the same live kitchen camera frames.
+
+Use **Start Shadow Challenger** after:
+
+- Live mode is active;
+- a build is running;
+- the governed champion ONNX model is loaded;
+- an eligible comparison-aware draft rollout exists for the same detector/scope.
+
+Gelato verifies the draft rollout and returns its baseline as champion and target as challenger. The browser refuses shadow startup if that champion does not match the currently loaded authoritative model.
+
+The challenger artifact receives the same HTTPS, byte-size, SHA-256 and ONNX-session verification used by governed browser models.
+
+For each shadow frame:
+
+1. champion inference runs through the normal authoritative path;
+2. challenger inference runs separately on the same camera frame;
+3. mapped detections are paired by component identity and IoU;
+4. disagreement, confidence and critical mismatch metadata are reported;
+5. only champion detections enter temporal tracking and build observations.
+
+Shadow telemetry never contains camera image bytes.
+
+The simulator reports current shadow frame count, disagreement rate, critical mismatch rate, and whether the accumulated run currently satisfies the canary gate.
+
+**Complete Shadow Run** closes the run explicitly. Completion alone does not promote a model. Rollout activation remains a separate governed action and will reject comparison-aware challengers unless a completed passing shadow run exists.
