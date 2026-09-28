@@ -67,6 +67,7 @@ namespace Gelato.Ar.Core
         public string SdkVersion { get; set; } = string.Empty;
         public string AppVersion { get; set; } = string.Empty;
         public string SystemVersion { get; set; } = string.Empty;
+        public IReadOnlyList<string> VisionModelRuntimes { get; set; } = Array.Empty<string>();
     }
 
     public sealed class PairResult
