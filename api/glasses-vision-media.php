@@ -30,6 +30,7 @@ try{
     if($action==='delete')app_json_response(['ok'=>true,'media'=>glasses_vision_training_media_delete($pdo,$org,(string)($in['publicId']??''),(string)($in['reason']??''),(int)$user['id'])]);
     if($action==='expire')app_json_response(['ok'=>true,'result'=>glasses_vision_training_media_expire($pdo,$org,(int)$user['id'],(int)($in['limit']??500))]);
     if($action==='dataset_quality')app_json_response(['ok'=>true,'quality'=>glasses_vision_training_media_dataset_quality($pdo,$org,!empty($in['datasetPublicId'])?(string)$in['datasetPublicId']:null)]);
+    if($action==='export_manifest')app_json_response(['ok'=>true,'manifest'=>glasses_vision_training_media_export_manifest($pdo,$org,!empty($in['datasetPublicId'])?(string)$in['datasetPublicId']:null)]);
     app_json_response(['ok'=>false,'message'=>'Unsupported training-media action.'],422);
 }catch(InvalidArgumentException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);}
 catch(Throwable $e){error_log('[gelato-vision-training-media] '.$e->getMessage());app_json_response(['ok'=>false,'message'=>'Training-media request could not be completed.'],500);}
