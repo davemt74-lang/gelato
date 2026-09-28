@@ -80,6 +80,37 @@ function glasses_vision_model_version_at_least(?string $actual,?string $minimum)
     return version_compare($actualParsed,$minimumParsed,'>=');
 }
 
+function glasses_vision_model_comparison_metadata(mixed $metadata): ?array
+{
+    if(!is_array($metadata))return null;
+    $comparison=is_array($metadata['modelComparison']??null)?$metadata['modelComparison']:null;
+    if($comparison===null)return null;
+    if((string)($comparison['schema']??'')!=='gelato.vision_model_comparison.v1')
+        throw new InvalidArgumentException('Model comparison schema is unsupported.');
+    $hash=strtolower(trim((string)($comparison['goldenTestHash']??'')));
+    if(!preg_match('/^[a-f0-9]{64}$/',$hash))
+        throw new InvalidArgumentException('Model comparison golden test hash is invalid.');
+    $eligible=!empty($comparison['eligible']);
+    $override=!empty($comparison['override']);
+    $reason=mb_substr(trim((string)($comparison['overrideReason']??'')),0,1000,'UTF-8');
+    if($override&&$reason==='')throw new InvalidArgumentException('Model comparison override requires a documented reason.');
+    $regressions=array_values(array_map(static fn($v):string=>mb_substr(trim((string)$v),0,240,'UTF-8'),array_filter((array)($comparison['regressions']??[]),static fn($v)=>trim((string)$v)!=='')));
+    $summary=is_array($comparison['summary']??null)?$comparison['summary']:[];
+    return [
+        'schema'=>'gelato.vision_model_comparison.v1',
+        'eligible'=>$eligible,
+        'override'=>$override,
+        'overrideReason'=>$override?$reason:null,
+        'goldenTestHash'=>$hash,
+        'regressions'=>$regressions,
+        'summary'=>[
+            'map50Delta'=>(float)($summary['map50Delta']??0),
+            'recallDelta'=>(float)($summary['recallDelta']??0),
+            'demonstratedGain'=>!empty($summary['demonstratedGain']),
+        ],
+    ];
+}
+
 function glasses_vision_browser_inference_metadata(mixed $metadata,string $runtime): ?array
 {
     if($runtime!=='onnx')return null;
@@ -193,6 +224,8 @@ function glasses_vision_model_package_create(PDO $pdo,int $org,array $input,int 
     $metadataInput=is_array($input['metadata']??null)?$input['metadata']:[];
     $browserInference=glasses_vision_browser_inference_metadata($metadataInput,$runtime);
     if($browserInference!==null)$metadataInput['browserInference']=$browserInference;
+    $modelComparison=glasses_vision_model_comparison_metadata($metadataInput);
+    if($modelComparison!==null)$metadataInput['modelComparison']=$modelComparison;
     $metadata=glasses_json_object($metadataInput?:null,12000);
     $public=glasses_public_id('vision-model');
 
@@ -381,6 +414,13 @@ function glasses_vision_model_rollout_activate(PDO $pdo,int $org,string $publicI
             throw new InvalidArgumentException('Only draft or paused rollouts can be activated.');
         if((string)$row['target_status']!=='ready')
             throw new InvalidArgumentException('Target model package is not ready.');
+        $targetPackage=glasses_vision_model_package_row($pdo,$org,(string)$row['target_public_id'],false);
+        $targetMetadata=json_decode((string)($targetPackage['metadata_json']??'null'),true);
+        if(is_array($targetMetadata)&&isset($targetMetadata['modelComparison'])){
+            $comparison=glasses_vision_model_comparison_metadata($targetMetadata);
+            if(!$comparison||!$comparison['eligible'])
+                throw new InvalidArgumentException('Target model package failed champion/challenger eligibility.');
+        }
         $baseline=glasses_vision_model_package_row($pdo,$org,(string)$row['baseline_public_id'],false);
         if((string)$baseline['status']!=='ready')throw new InvalidArgumentException('Baseline model package is not ready.');
         if(glasses_vision_model_rollout_conflict($pdo,$org,$row))
