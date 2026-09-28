@@ -41,8 +41,9 @@ internal static class VisionDetectorRuntimeHarnessContract
 
         Assert(result.Count == 0, "timed-out inference must produce no evidence");
         Assert(harness.Health.TimedOutInferences == 1, "timeout telemetry must increment");
-        await WaitUntilAsync(() => detector.RestartCalls == 1, "watchdog threshold must restart detector after the timed-out call exits");
-        Assert(harness.Health.RestartSuccesses == 1, "successful restart must be recorded");
+        await WaitUntilAsync(() => harness.Health.RestartSuccesses == 1, "watchdog restart and warm-up must complete after the timed-out call exits");
+        Assert(detector.RestartCalls == 1, "successful watchdog recovery must restart the detector exactly once");
+        Assert(harness.Health.State == VisionDetectorRuntimeState.Ready, "successful watchdog recovery must return runtime health to ready");
     }
 
     private static async Task BackpressureDropsConcurrentFrame()
