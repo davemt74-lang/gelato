@@ -260,6 +260,61 @@ namespace Gelato.Ar.Core
         public IReadOnlyList<VisionLabelMapping> Mappings { get; set; } = Array.Empty<VisionLabelMapping>();
     }
 
+    public sealed class VisionModelPackage
+    {
+        public string PublicId { get; set; } = string.Empty;
+        public string DetectorName { get; set; } = string.Empty;
+        public string ModelName { get; set; } = string.Empty;
+        public string ModelVersion { get; set; } = string.Empty;
+        public string RuntimeType { get; set; } = string.Empty;
+        public string Platform { get; set; } = string.Empty;
+        public string ArtifactUrl { get; set; } = string.Empty;
+        public string ArtifactSha256 { get; set; } = string.Empty;
+        public long? ArtifactBytes { get; set; }
+        public string MinimumSdkVersion { get; set; } = string.Empty;
+        public string MinimumAppVersion { get; set; } = string.Empty;
+    }
+
+    public sealed class VisionModelCompatibility
+    {
+        public bool Compatible { get; set; }
+        public IReadOnlyList<string> Reasons { get; set; } = Array.Empty<string>();
+    }
+
+    public sealed class VisionModelRolloutAssignment
+    {
+        public string PublicId { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public float CanaryPercent { get; set; }
+    }
+
+    public sealed class VisionModelAssignment
+    {
+        public string Schema { get; set; } = string.Empty;
+        public string DetectorName { get; set; } = string.Empty;
+        public string BuildSessionPublicId { get; set; } = string.Empty;
+        public string Action { get; set; } = "hold";
+        public string Reason { get; set; } = string.Empty;
+        public string AssignmentKey { get; set; } = string.Empty;
+        public string Selection { get; set; } = string.Empty;
+        public float CanaryBucket { get; set; }
+        public VisionModelRolloutAssignment? Rollout { get; set; }
+        public VisionModelPackage? Package { get; set; }
+        public VisionModelCompatibility Compatibility { get; set; } = new VisionModelCompatibility();
+    }
+
+    public sealed class VisionModelReport
+    {
+        public string ReportKey { get; set; } = string.Empty;
+        public string ReportType { get; set; } = string.Empty;
+        public string RolloutPublicId { get; set; } = string.Empty;
+        public string PackagePublicId { get; set; } = string.Empty;
+        public string RuntimeState { get; set; } = string.Empty;
+        public string ArtifactSha256 { get; set; } = string.Empty;
+        public string ErrorCode { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+    }
+
     public sealed class IngredientObservation
     {
         public string ObservationKey { get; set; } = string.Empty;
@@ -331,6 +386,8 @@ namespace Gelato.Ar.Core
         public const string CurrentWork = "current_work";
         public const string CalibrationGet = "calibration.get";
         public const string VisionProfile = "vision.profile";
+        public const string VisionModelAssignment = "vision.model_assignment";
+        public const string VisionModelReport = "vision.model_report";
         public const string BuildStart = "build.start";
         public const string BuildObserve = "build.observe";
         public const string BuildConfirm = "build.confirm";
