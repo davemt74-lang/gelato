@@ -228,6 +228,7 @@ function glasses_vision_profile_for_build(
                 'displayName'=>$component['displayName'],
                 'ingredientId'=>$ingredientId,
                 'minimumConfidence'=>$row['minimum_confidence']!==null?(float)$row['minimum_confidence']:null,
+                'hasMinimumConfidence'=>$row['minimum_confidence']!==null,
                 'sourceDetector'=>(string)$row['detector_name'],
             ];
         }
