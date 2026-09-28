@@ -68,6 +68,10 @@ function glasses_learning_rows(
             k.public_id kds_item_public_id,
             ks.public_id station_public_id,ks.name station_name,
             d.public_id device_public_id,d.platform device_platform,d.sdk_version,d.app_version,
+            (SELECT a.user_id FROM glasses_user_device_assignments a WHERE a.organization_id=o.organization_id AND a.device_id=s.device_id AND a.assigned_at<=o.created_at AND (a.released_at IS NULL OR a.released_at>o.created_at) ORDER BY a.assigned_at DESC,a.id DESC LIMIT 1) wearer_user_id,
+            (SELECT u.display_name FROM glasses_user_device_assignments a JOIN users u ON u.id=a.user_id WHERE a.organization_id=o.organization_id AND a.device_id=s.device_id AND a.assigned_at<=o.created_at AND (a.released_at IS NULL OR a.released_at>o.created_at) ORDER BY a.assigned_at DESC,a.id DESC LIMIT 1) wearer_user_name,
+            (SELECT a.user_id FROM glasses_user_device_assignments a WHERE a.organization_id=o.organization_id AND a.device_id=COALESCE(c.actor_device_id,s.device_id) AND a.assigned_at<=c.created_at AND (a.released_at IS NULL OR a.released_at>c.created_at) ORDER BY a.assigned_at DESC,a.id DESC LIMIT 1) corrector_user_id,
+            (SELECT u.display_name FROM glasses_user_device_assignments a JOIN users u ON u.id=a.user_id WHERE a.organization_id=o.organization_id AND a.device_id=COALESCE(c.actor_device_id,s.device_id) AND a.assigned_at<=c.created_at AND (a.released_at IS NULL OR a.released_at>c.created_at) ORDER BY a.assigned_at DESC,a.id DESC LIMIT 1) corrector_user_name,
             bc.display_name source_component_name,
             c.id correction_id,c.correction_key,c.resolution correction_resolution,c.target_component_key,c.corrected_quantity,c.reason correction_reason,c.metadata_json correction_metadata_json,c.created_at correction_created_at,
             tbc.display_name target_component_name
@@ -127,6 +131,10 @@ function glasses_learning_public_row(array $row): array
         'stationName'=>$row['station_name'],
         'menuItemId'=>(int)$row['menu_item_id'],
         'menuItemName'=>(string)$row['menu_item_name'],
+        'operator'=>[
+            'userId'=>$row['wearer_user_id']!==null?(int)$row['wearer_user_id']:null,
+            'userName'=>$row['wearer_user_name']??null,
+        ],
         'device'=>[
             'publicId'=>(string)$row['device_public_id'],
             'platform'=>(string)($row['device_platform']??''),
@@ -153,6 +161,8 @@ function glasses_learning_public_row(array $row): array
         ],
         'humanReview'=>[
             'reviewed'=>$row['correction_id']!==null,
+            'correctorUserId'=>$row['corrector_user_id']!==null?(int)$row['corrector_user_id']:null,
+            'correctorUserName'=>$row['corrector_user_name']??null,
             'outcome'=>$outcome,
             'correctionKey'=>$row['correction_key'],
             'resolution'=>$row['correction_resolution'],
