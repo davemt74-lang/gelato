@@ -314,25 +314,25 @@ internal static class Program
             AssociationIouThreshold = 0.25f
         });
 
-        var r1 = await pipeline.ProcessAsync(frame, context);
+        var r1 = await pipeline.ProcessAsync(NextFrame(frame), context);
         Assert(r1.Count == 0, "single-frame vision evidence must not emit before stability threshold");
 
-        var r2 = await pipeline.ProcessAsync(frame, context);
+        var r2 = await pipeline.ProcessAsync(NextFrame(frame), context);
         Assert(r2.Count == 1, "stable two-frame ingredient detection must emit once");
         Assert(r2[0].ComponentKey == "ingredient:bread" && r2[0].Action == "added", "vision observation must preserve component/action");
         Assert(r2[0].BoundingBox.Length == 4, "vision observation must preserve normalized bounding box");
 
-        var r3 = await pipeline.ProcessAsync(frame, context);
+        var r3 = await pipeline.ProcessAsync(NextFrame(frame), context);
         Assert(r3.Count == 0, "persistent visible ingredient must not be double-counted");
 
-        await pipeline.ProcessAsync(frame, context);
-        await pipeline.ProcessAsync(frame, context);
-        await pipeline.ProcessAsync(frame, context);
+        await pipeline.ProcessAsync(NextFrame(frame), context);
+        await pipeline.ProcessAsync(NextFrame(frame), context);
+        await pipeline.ProcessAsync(NextFrame(frame), context);
         Assert(pipeline.ActiveTrackCount == 0, "track must retire after configured missing frames");
 
-        var r7 = await pipeline.ProcessAsync(frame, context);
+        var r7 = await pipeline.ProcessAsync(NextFrame(frame), context);
         Assert(r7.Count == 0, "reappearing ingredient must restabilize after track retirement");
-        var r8 = await pipeline.ProcessAsync(frame, context);
+        var r8 = await pipeline.ProcessAsync(NextFrame(frame), context);
         Assert(r8.Count == 1, "reappearing ingredient may emit as a new addition after restabilization");
         Assert(r8[0].ObservationKey != r2[0].ObservationKey, "retired/reappearing track must receive a distinct idempotency key");
 
@@ -344,11 +344,11 @@ internal static class Program
             DU("vision:swiss", "Swiss Cheese", "swiss-a", 0.95f, 0.32f, 0.44f, 0.11f, 0.11f)
         );
         var constrained = new VisionPipeline(constrainedDetector);
-        Assert((await constrained.ProcessAsync(frame, context)).Count == 0, "below-threshold detection must be rejected");
-        Assert((await constrained.ProcessAsync(frame, context)).Count == 0, "non-recipe detection must be rejected even at high confidence");
-        Assert((await constrained.ProcessAsync(frame, context)).Count == 0, "non-recipe detection must never stabilize into a normal observation");
-        Assert((await constrained.ProcessAsync(frame, context)).Count == 0, "unexpected evidence must still satisfy temporal stability");
-        var unexpected = await constrained.ProcessAsync(frame, context);
+        Assert((await constrained.ProcessAsync(NextFrame(frame), context)).Count == 0, "below-threshold detection must be rejected");
+        Assert((await constrained.ProcessAsync(NextFrame(frame), context)).Count == 0, "non-recipe detection must be rejected even at high confidence");
+        Assert((await constrained.ProcessAsync(NextFrame(frame), context)).Count == 0, "non-recipe detection must never stabilize into a normal observation");
+        Assert((await constrained.ProcessAsync(NextFrame(frame), context)).Count == 0, "unexpected evidence must still satisfy temporal stability");
+        var unexpected = await constrained.ProcessAsync(NextFrame(frame), context);
         Assert(unexpected.Count == 1 && unexpected[0].ComponentKey == "vision:swiss", "explicit unexpected detector evidence must pass through after stabilization");
 
         var multiDetector = new ScriptedVisionDetector(
@@ -364,12 +364,12 @@ internal static class Program
             }
         );
         var multi = new VisionPipeline(multiDetector);
-        await multi.ProcessAsync(frame, new VisionFrameContext
+        await multi.ProcessAsync(NextFrame(frame), new VisionFrameContext
         {
             BuildSessionPublicId = "build-vision-multi",
             ExpectedComponents = new[] { bread }
         });
-        var multiOutput = await multi.ProcessAsync(frame, new VisionFrameContext
+        var multiOutput = await multi.ProcessAsync(NextFrame(frame), new VisionFrameContext
         {
             BuildSessionPublicId = "build-vision-multi",
             ExpectedComponents = new[] { bread }
@@ -377,12 +377,114 @@ internal static class Program
         Assert(multiOutput.Count == 2, "distinct detector instance keys must allow multiple same-ingredient objects to emit separately");
         Assert(multiOutput[0].ObservationKey != multiOutput[1].ObservationKey, "same-ingredient instances must receive unique observation keys");
 
+        var labelDetector = new ScriptedVisionDetector(
+            DL("Turkey", "turkey-label-a", 0.93f, 1f, 0.24f, 0.42f, 0.10f, 0.10f),
+            DL("Turkey", "turkey-label-a", 0.95f, 1f, 0.245f, 0.425f, 0.10f, 0.10f)
+        );
+        var labelPipeline = new VisionPipeline(labelDetector);
+        var turkeyContext = new VisionFrameContext
+        {
+            BuildSessionPublicId = "build-vision-label-map",
+            ExpectedComponents = new[]
+            {
+                new BuildComponent
+                {
+                    ComponentKey = "ingredient:turkey",
+                    DisplayName = "Turkey",
+                    ExpectedQuantity = 3f,
+                    Status = "waiting"
+                }
+            }
+        };
+        Assert((await labelPipeline.ProcessAsync(NextFrame(frame), turkeyContext)).Count == 0, "label-only detector evidence must still satisfy temporal stability");
+        var labelMapped = await labelPipeline.ProcessAsync(NextFrame(frame), turkeyContext);
+        Assert(labelMapped.Count == 1 && labelMapped[0].ComponentKey == "ingredient:turkey", "detector labels must map deterministically to the active Gelato component without knowing its database key");
+
+        var unknownLabelDetector = new ScriptedVisionDetector(
+            DL("Swiss Cheese", "unknown-a", 0.96f, 1f, 0.3f, 0.4f, 0.1f, 0.1f),
+            DL("Swiss Cheese", "unknown-a", 0.96f, 1f, 0.3f, 0.4f, 0.1f, 0.1f)
+        );
+        var unknownLabelPipeline = new VisionPipeline(unknownLabelDetector);
+        Assert((await unknownLabelPipeline.ProcessAsync(NextFrame(frame), turkeyContext)).Count == 0, "unknown normal labels must fail closed");
+        Assert((await unknownLabelPipeline.ProcessAsync(NextFrame(frame), turkeyContext)).Count == 0, "unknown normal labels must never become unexpected implicitly");
+
+        var generatedUnexpectedDetector = new ScriptedVisionDetector(
+            DUL("Swiss Cheese", "unexpected-label-a", 0.95f, 0.34f, 0.45f, 0.1f, 0.1f),
+            DUL("Swiss Cheese", "unexpected-label-a", 0.96f, 0.34f, 0.45f, 0.1f, 0.1f)
+        );
+        var generatedUnexpectedPipeline = new VisionPipeline(generatedUnexpectedDetector);
+        await generatedUnexpectedPipeline.ProcessAsync(NextFrame(frame), turkeyContext);
+        var generatedUnexpected = await generatedUnexpectedPipeline.ProcessAsync(NextFrame(frame), turkeyContext);
+        Assert(generatedUnexpected.Count == 1 && generatedUnexpected[0].ComponentKey == "vision:unexpected:swiss-cheese", "explicit unexpected model evidence must receive a stable generated component key when the detector does not know Gelato IDs");
+
+        var duplicateFrameDetector = new ScriptedVisionDetector(
+            D("ingredient:bread", "Bread", "dup-a", 0.96f, 1f, 0.2f, 0.4f, 0.1f, 0.1f),
+            D("ingredient:bread", "Bread", "dup-a", 0.97f, 1f, 0.2f, 0.4f, 0.1f, 0.1f)
+        );
+        var duplicatePipeline = new VisionPipeline(duplicateFrameDetector);
+        var duplicateContext = new VisionFrameContext
+        {
+            BuildSessionPublicId = "build-duplicate-frame",
+            ExpectedComponents = new[] { bread }
+        };
+        var duplicateFrame = NextFrame(frame);
+        Assert((await duplicatePipeline.ProcessAsync(duplicateFrame, duplicateContext)).Count == 0, "first unique frame starts stability tracking");
+        Assert((await duplicatePipeline.ProcessAsync(duplicateFrame, duplicateContext)).Count == 0, "the same camera timestamp must not count as a second stable frame");
+        Assert(duplicatePipeline.Diagnostics.DuplicateOrStaleFramesSkipped == 1, "duplicate/stale frame skips must be observable in diagnostics");
+        Assert((await duplicatePipeline.ProcessAsync(NextFrame(frame), duplicateContext)).Count == 1, "a genuinely new second frame may satisfy stability");
+        Assert(duplicatePipeline.Diagnostics.ObservationsEmitted == 1, "vision diagnostics must count emitted observations");
+
         var a = new VisionBoundingBox(0.1f, 0.1f, 0.2f, 0.2f);
         var b = new VisionBoundingBox(0.15f, 0.15f, 0.2f, 0.2f);
         Assert(VisionBoundingBox.IntersectionOverUnion(a, b) > 0f, "vision tracker IoU must detect overlapping boxes");
 
         var clamped = new VisionBoundingBox(-1f, 0.9f, 4f, 4f);
         Assert(clamped.X == 0f && clamped.Y == 0.9f && clamped.Right <= 1f && clamped.Bottom <= 1f, "vision bounding boxes must be clamped to normalized image coordinates");
+    }
+
+    private static CameraFrame NextFrame(CameraFrame frame)
+    {
+        frame.TimestampNanoseconds++;
+        return frame;
+    }
+
+    private static IReadOnlyList<VisionDetection> DL(
+        string label, string instanceKey, float confidence, float quantity,
+        float x, float y, float width, float height)
+    {
+        return new[]
+        {
+            new VisionDetection
+            {
+                Label = label,
+                DisplayName = label,
+                InstanceKey = instanceKey,
+                Action = "added",
+                Quantity = quantity,
+                Confidence = confidence,
+                BoundingBox = new[] { x, y, width, height }
+            }
+        };
+    }
+
+    private static IReadOnlyList<VisionDetection> DUL(
+        string label, string instanceKey, float confidence,
+        float x, float y, float width, float height)
+    {
+        return new[]
+        {
+            new VisionDetection
+            {
+                Label = label,
+                DisplayName = label,
+                InstanceKey = instanceKey,
+                Action = "added",
+                Quantity = 1f,
+                Confidence = confidence,
+                BoundingBox = new[] { x, y, width, height },
+                IsUnexpected = true
+            }
+        };
     }
 
     private static IReadOnlyList<VisionDetection> D(
