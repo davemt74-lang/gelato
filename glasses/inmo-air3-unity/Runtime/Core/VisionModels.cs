@@ -66,6 +66,7 @@ namespace Gelato.Ar.Core
     {
         public string BuildSessionPublicId { get; set; } = string.Empty;
         public IReadOnlyList<BuildComponent> ExpectedComponents { get; set; } = Array.Empty<BuildComponent>();
+        public StationCalibration? StationCalibration { get; set; }
         public CameraCalibration? Calibration { get; set; }
         public PoseState? Pose { get; set; }
     }
