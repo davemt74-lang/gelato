@@ -24,6 +24,7 @@ namespace Gelato.Ar.Unity
         private bool _processing;
         private string _activeSession = string.Empty;
         private bool _stationCalibrationLoaded;
+        private bool _visionProfileLoaded;
 
         public string DetectorName => _pipeline == null ? string.Empty : _pipeline.DetectorName;
         public int ActiveTrackCount => _pipeline == null ? 0 : _pipeline.ActiveTrackCount;
@@ -60,6 +61,7 @@ namespace Gelato.Ar.Unity
                 _activeSession = build.PublicId;
                 _pipeline.Reset(_activeSession);
                 _stationCalibrationLoaded = false;
+                _visionProfileLoaded = false;
             }
 
             var frame = coordinator.Platform.TryGetLatestFrame();
@@ -78,6 +80,14 @@ namespace Gelato.Ar.Unity
                         Debug.LogWarning("Gelato AR station calibration unavailable: " + coordinator.LastCalibrationError);
                 }
 
+                if (!_visionProfileLoaded)
+                {
+                    await coordinator.RefreshVisionLabelProfileAsync(_pipeline.DetectorName, _lifetime.Token);
+                    _visionProfileLoaded = true;
+                    if (!string.IsNullOrWhiteSpace(coordinator.LastVisionProfileError))
+                        Debug.LogWarning("Gelato AR vision label profile unavailable; using recipe-name fallback: " + coordinator.LastVisionProfileError);
+                }
+
                 var stationCalibration = StationCalibrationPolicy.CanUse(coordinator.StationCalibration, frame)
                     ? coordinator.StationCalibration
                     : null;
@@ -88,6 +98,7 @@ namespace Gelato.Ar.Unity
                     ExpectedComponents = build.Components,
                     BuildSteps = build.BuildSteps,
                     StationCalibration = stationCalibration,
+                    VisionProfile = coordinator.VisionLabelProfile,
                     Calibration = coordinator.Platform.TryGetCameraCalibration(),
                     Pose = coordinator.Platform.GetPose()
                 };
