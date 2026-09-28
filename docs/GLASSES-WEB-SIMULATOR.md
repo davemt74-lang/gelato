@@ -63,3 +63,19 @@ Frame modes:
 - **None** — scene/HUD-only development view with no frame or mask.
 
 Frame and mask preferences persist only in browser localStorage. They do not alter POS, KDS, AR build, validation, or Expo data.
+
+
+## HUD fidelity pass
+
+The simulator now follows the kitchen AR reference layout while retaining the real Gelato POS/KDS workflow underneath it.
+
+- Top optical status strip with clock, station, runtime, connection and battery indicators.
+- Left-side **Active Orders** rail backed by the station KDS work projection.
+- Center **NEXT** instruction with target quantity and optical leader line.
+- Right-side active build rail with ticket, product metadata, build sequence and current-step emphasis.
+- Lower-right ingredient validation panel with accounted, missing and unexpected counts.
+- Detection boxes now distinguish confirmed, verify/low-confidence and unexpected observations.
+- Mock-only demo controls provide Auto Play, Next Detection, Low Confidence and Complete Mock actions. These controls are disabled in Live Gelato mode.
+- The built-in **Pizza Line Reference** calibration preset seeds the reference HUD geometry and remains editable through the existing calibration system.
+
+No new HUD control bypasses the existing build, validation or KDS/Expo authority boundaries.
