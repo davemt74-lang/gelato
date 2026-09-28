@@ -71,6 +71,8 @@ gws_assert(str_contains($js,'function syncLiveStationWork'),'Simulator must cont
 gws_assert(str_contains($js,'visibilitychange'),'Live sync must pause when the simulator tab is hidden.');
 gws_assert(str_contains($js,'LIVE_SYNC_MAX_BACKOFF_MS'),'Live sync must back off on repeated transport failures.');
 gws_assert(str_contains($js,'activeBuildItem'),'Live sync must preserve active build selection across station refreshes.');
+gws_assert(str_contains($js,'syncEpoch'),'Live sync must discard stale in-flight polls after mode/device changes.');
+gws_assert(str_contains($js,'devicePublicId=state.device.publicId'),'Live sync requests must bind to the device selected when each poll begins.');
 gws_assert(!str_contains($api,'app_verify_request_csrf($_GET'),'Read-only station synchronization must not pretend GET is a mutation.');
 gws_assert(str_contains($css,'.sim-sync-badge.live')&&str_contains($css,'.sim-sync-badge.error'),'Simulator must visibly distinguish healthy and retrying synchronization.');
 
