@@ -99,6 +99,25 @@ namespace Gelato.Ar.Unity
                 }
             }
 
+            var workAreas = new List<StationWorkArea>();
+            if (dto.workAreas != null)
+            {
+                foreach (var area in dto.workAreas)
+                {
+                    workAreas.Add(new StationWorkArea
+                    {
+                        AreaKey = area.areaKey ?? string.Empty,
+                        Role = area.role ?? "assembly",
+                        DisplayName = area.displayName ?? string.Empty,
+                        X = area.x,
+                        Y = area.y,
+                        Width = area.width,
+                        Height = area.height,
+                        Priority = area.priority
+                    });
+                }
+            }
+
             var compatibility = dto.compatibility ?? new CalibrationCompatibilityDto();
             return new StationCalibration
             {
@@ -112,6 +131,7 @@ namespace Gelato.Ar.Unity
                 PixelFormat = dto.frame != null ? dto.frame.pixelFormat ?? string.Empty : string.Empty,
                 SourceHash = dto.sourceHash ?? string.Empty,
                 Zones = zones,
+                WorkAreas = workAreas,
                 Compatibility = new CalibrationCompatibility
                 {
                     Compatible = compatibility.compatible,
@@ -145,7 +165,15 @@ namespace Gelato.Ar.Unity
                 quantity = observation.Quantity,
                 confidence = observation.Confidence,
                 trackingId = observation.TrackingId,
-                bbox = observation.BoundingBox ?? Array.Empty<float>()
+                bbox = observation.BoundingBox ?? Array.Empty<float>(),
+                metadata = new ObservationMetadataRequest
+                {
+                    evidenceType = observation.EvidenceType ?? "visual",
+                    sourceZoneKey = observation.SourceZoneKey ?? string.Empty,
+                    workAreaKey = observation.WorkAreaKey ?? string.Empty,
+                    rawConfidence = observation.RawConfidence.HasValue ? observation.RawConfidence.Value : observation.Confidence,
+                    effectiveConfidence = observation.Confidence
+                }
             }, true, cancellationToken);
 
             return MapBuild(response.buildSession);
@@ -381,6 +409,15 @@ namespace Gelato.Ar.Unity
             public float confidence;
             public string trackingId;
             public float[] bbox;
+            public ObservationMetadataRequest metadata;
+        }
+        [Serializable] private sealed class ObservationMetadataRequest
+        {
+            public string evidenceType;
+            public string sourceZoneKey;
+            public string workAreaKey;
+            public float rawConfidence;
+            public float effectiveConfidence;
         }
 
         [Serializable] private sealed class ErrorResponse { public bool ok; public string message; }
@@ -418,6 +455,7 @@ namespace Gelato.Ar.Unity
             public CalibrationFrameDto frame;
             public string sourceHash;
             public IngredientZoneDto[] zones;
+            public StationWorkAreaDto[] workAreas;
             public CalibrationCompatibilityDto compatibility;
         }
         [Serializable] private sealed class CalibrationFrameDto
@@ -431,6 +469,17 @@ namespace Gelato.Ar.Unity
             public string zoneKey;
             public int ingredientId;
             public string canonicalName;
+            public string displayName;
+            public float x;
+            public float y;
+            public float width;
+            public float height;
+            public int priority;
+        }
+        [Serializable] private sealed class StationWorkAreaDto
+        {
+            public string areaKey;
+            public string role;
             public string displayName;
             public float x;
             public float y;
