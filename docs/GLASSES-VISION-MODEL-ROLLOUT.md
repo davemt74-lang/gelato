@@ -383,3 +383,96 @@ Legacy packages without comparison metadata retain their existing rollout behavi
 The intended progression is:
 
 Offline golden-set comparison → draft rollout → live shadow evaluation → explicit completion → shadow gate → explicit canary activation.
+
+
+## Canary production evaluation and automatic rollback
+
+After a comparison-aware challenger passes offline evaluation and live shadow mode, its authoritative rollout enters a governed production canary.
+
+### Governed stages
+
+Comparison-aware production rollouts must begin at **5%** and advance only through:
+
+`5% → 10% → 25% → 50% → 100%`
+
+Advancement is explicit; Gelato never advances a canary automatically.
+
+Before normal advancement, the current production health window must contain at least:
+
+- 20 baseline samples;
+- 20 target/canary samples;
+- 2 baseline devices;
+- 2 target devices.
+
+Legacy packages without champion/challenger metadata retain their previous manual rollout behavior.
+
+### Production health telemetry
+
+Authenticated glasses runtimes can submit `vision.canary_sample` against an issued model assignment and build session.
+
+Each idempotent sample can report:
+
+- observation count;
+- correction count;
+- low-confidence count;
+- unexpected-ingredient count;
+- validation failure;
+- build duration;
+- inference count;
+- total inference latency;
+- timeout count;
+- runtime error count.
+
+The server derives comparable rates for the baseline and target cohorts inside the same rollout operating window.
+
+### Health classification
+
+The production evaluator classifies a rollout as:
+
+- **collecting** — minimum evidence has not been reached;
+- **healthy** — sufficient evidence and no promotion-blocking regression;
+- **warning** — sufficient evidence but one or more target regressions exceed the normal promotion limits;
+- **rollback_required** — severe target regression after the minimum rollback evidence threshold.
+
+Normal promotion limits include correction rate, validation-failure rate, low-confidence rate, unexpected rate, timeout rate, runtime-error rate, inference latency, and build-duration regression.
+
+### Automatic rollback
+
+After at least 10 samples in both target and baseline cohorts, severe regression can trigger an automatic rollback.
+
+Automatic rollback:
+
+1. changes the rollout to `rolled_back`;
+2. immediately restores baseline assignment behavior for subsequent device assignments;
+3. appends an immutable `auto_rolled_back` rollout event containing the health evidence and reasons;
+4. stores a health snapshot;
+5. places the target package on a 24-hour cooldown hold.
+
+A package under automatic rollback cooldown cannot be activated in another rollout until the hold expires.
+
+### Operator override
+
+If a canary is collecting or warning, an authorized operator may advance **only to the next governed stage** with an explicit rationale.
+
+The override is recorded as `advanced_override` with:
+
+- operator identity;
+- reason;
+- current health state;
+- baseline and target metrics.
+
+A `rollback_required` state cannot be overridden forward.
+
+### Persistence
+
+Migration `20261023_glasses_vision_canary_production.sql` adds:
+
+- `glasses_vision_canary_samples`;
+- `glasses_vision_canary_health_snapshots`;
+- `glasses_vision_canary_package_holds`.
+
+The canary ledger stores production metrics and governance evidence, not kitchen camera frames.
+
+The complete promotion path is now:
+
+Offline quality gate → golden-set champion comparison → live shadow → 5% canary → health-gated 10% → 25% → 50% → 100%, with automatic rollback available at every production stage.

@@ -274,7 +274,7 @@ function glasses_vision_model_rollout_event(
     PDO $pdo,int $org,int $rolloutId,string $eventType,
     ?string $previousStatus,?string $nextStatus,
     ?float $previousPercent,?float $nextPercent,
-    int $userId,array $metadata=[]
+    ?int $userId,array $metadata=[]
 ): void {
     $pdo->prepare("INSERT INTO glasses_vision_model_rollout_events
         (organization_id,rollout_id,event_type,previous_status,next_status,previous_canary_percent,next_canary_percent,metadata_json,actor_user_id)
@@ -548,6 +548,193 @@ function glasses_vision_shadow_rollout_gate(PDO $pdo,int $org,int $rolloutId): a
     return ['eligible'=>false,'reason'=>$runs?'shadow_failed':'shadow_required'];
 }
 
+
+function glasses_vision_canary_ready(PDO $pdo): bool
+{
+    foreach(['glasses_vision_canary_samples','glasses_vision_canary_health_snapshots','glasses_vision_canary_package_holds'] as $table){
+        $q=$pdo->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?");
+        $q->execute([$table]);if((int)$q->fetchColumn()!==1)return false;
+    }
+    return true;
+}
+
+function glasses_vision_canary_stages(): array
+{
+    return [5.0,10.0,25.0,50.0,100.0];
+}
+
+function glasses_vision_canary_next_stage(float $current): ?float
+{
+    foreach(glasses_vision_canary_stages() as $stage)if($stage>$current+0.0001)return $stage;
+    return null;
+}
+
+function glasses_vision_canary_package_hold(PDO $pdo,int $org,int $packageId): ?array
+{
+    if(!glasses_vision_canary_ready($pdo))return null;
+    $q=$pdo->prepare("SELECT * FROM glasses_vision_canary_package_holds WHERE organization_id=? AND package_id=? AND hold_until>NOW(6) LIMIT 1");
+    $q->execute([$org,$packageId]);$row=$q->fetch();return $row?:null;
+}
+
+function glasses_vision_canary_metric_row(array $row): array
+{
+    $samples=(int)($row['samples']??0);$observations=(int)($row['observations']??0);$inferences=(int)($row['inferences']??0);
+    $buildSamples=(int)($row['build_samples']??0);
+    return [
+        'samples'=>$samples,'devices'=>(int)($row['devices']??0),
+        'correctionRate'=>$observations>0?round((int)$row['corrections']/$observations,6):0.0,
+        'lowConfidenceRate'=>$observations>0?round((int)$row['low_confidence']/$observations,6):0.0,
+        'unexpectedRate'=>$observations>0?round((int)$row['unexpected']/$observations,6):0.0,
+        'validationFailureRate'=>$samples>0?round((int)$row['validation_failed']/$samples,6):0.0,
+        'avgBuildDurationMs'=>$buildSamples>0?round((int)$row['build_duration_total']/$buildSamples,2):null,
+        'avgInferenceLatencyMs'=>$inferences>0?round((int)$row['inference_latency_total']/$inferences,3):null,
+        'timeoutRate'=>$inferences>0?round((int)$row['timeouts']/$inferences,6):0.0,
+        'runtimeErrorRate'=>$inferences>0?round((int)$row['runtime_errors']/$inferences,6):0.0,
+        'observations'=>$observations,'inferences'=>$inferences,
+    ];
+}
+
+function glasses_vision_canary_health(PDO $pdo,int $org,string $rolloutPublicId): array
+{
+    $rollout=glasses_vision_model_rollout_row($pdo,$org,$rolloutPublicId,false);
+    if(!glasses_vision_canary_ready($pdo))return [
+        'schema'=>'gelato.vision_canary_health.v1','state'=>'unavailable','promotionEligible'=>false,'reasons'=>['canary_migration_missing']
+    ];
+    $q=$pdo->prepare("SELECT cohort,COUNT(*) samples,COUNT(DISTINCT device_id) devices,
+        COALESCE(SUM(observation_count),0) observations,COALESCE(SUM(correction_count),0) corrections,
+        COALESCE(SUM(low_confidence_count),0) low_confidence,COALESCE(SUM(unexpected_count),0) unexpected,
+        COALESCE(SUM(validation_failed),0) validation_failed,
+        COALESCE(SUM(CASE WHEN build_duration_ms IS NOT NULL THEN 1 ELSE 0 END),0) build_samples,
+        COALESCE(SUM(build_duration_ms),0) build_duration_total,
+        COALESCE(SUM(inference_count),0) inferences,COALESCE(SUM(inference_latency_ms),0) inference_latency_total,
+        COALESCE(SUM(timeout_count),0) timeouts,COALESCE(SUM(runtime_error_count),0) runtime_errors
+        FROM glasses_vision_canary_samples WHERE organization_id=? AND rollout_id=? GROUP BY cohort");
+    $q->execute([$org,(int)$rollout['id']]);$rows=[];
+    foreach($q->fetchAll() as $row)$rows[(string)$row['cohort']]=glasses_vision_canary_metric_row($row);
+    $empty=glasses_vision_canary_metric_row([]);
+    $baseline=$rows['baseline']??$empty;$target=$rows['target']??$empty;
+    $enoughPromotion=$baseline['samples']>=20&&$target['samples']>=20&&$baseline['devices']>=2&&$target['devices']>=2;
+    $enoughRollback=$baseline['samples']>=10&&$target['samples']>=10;
+    $reasons=[];$rollback=[];$warnings=[];
+    $rateRules=[
+        'correctionRate'=>[0.03,0.08],'validationFailureRate'=>[0.05,0.10],
+        'lowConfidenceRate'=>[0.10,0.20],'unexpectedRate'=>[0.05,0.10],
+        'timeoutRate'=>[0.03,0.08],'runtimeErrorRate'=>[0.02,0.05],
+    ];
+    foreach($rateRules as $metric=>$limits){
+        $delta=(float)$target[$metric]-(float)$baseline[$metric];
+        if($delta>$limits[0])$reasons[]=$metric.'_regression';
+        elseif($delta>$limits[0]/2)$warnings[]=$metric.'_warning';
+        if($enoughRollback&&$delta>$limits[1])$rollback[]=$metric.'_severe_regression';
+    }
+    foreach(['avgInferenceLatencyMs'=>[1.35,1.75],'avgBuildDurationMs'=>[1.20,1.35]] as $metric=>$limits){
+        $base=$baseline[$metric];$chall=$target[$metric];
+        if($base!==null&&$chall!==null&&$base>0){
+            $ratio=$chall/$base;
+            if($ratio>$limits[0])$reasons[]=$metric.'_regression';
+            elseif($ratio>1+(($limits[0]-1)/2))$warnings[]=$metric.'_warning';
+            if($enoughRollback&&$ratio>$limits[1])$rollback[]=$metric.'_severe_regression';
+        }
+    }
+    $state='collecting';
+    if($rollback)$state='rollback_required';
+    elseif($enoughPromotion&&$reasons)$state='warning';
+    elseif($enoughPromotion)$state='healthy';
+    $promotionEligible=$state==='healthy';
+    return [
+        'schema'=>'gelato.vision_canary_health.v1','rolloutPublicId'=>$rolloutPublicId,
+        'state'=>$state,'promotionEligible'=>$promotionEligible,'reasons'=>array_values(array_unique(array_merge($reasons,$warnings))),
+        'rollbackReasons'=>array_values(array_unique($rollback)),
+        'baseline'=>$baseline,'target'=>$target,'currentCanaryPercent'=>(float)$rollout['canary_percent'],
+        'nextStage'=>glasses_vision_canary_next_stage((float)$rollout['canary_percent']),
+        'minimums'=>['promotionSamplesPerCohort'=>20,'promotionDevicesPerCohort'=>2,'rollbackSamplesPerCohort'=>10],
+    ];
+}
+
+function glasses_vision_canary_snapshot(PDO $pdo,int $org,array $rollout,array $health,?string $autoAction=null): void
+{
+    if(!glasses_vision_canary_ready($pdo))return;
+    $pdo->prepare("INSERT INTO glasses_vision_canary_health_snapshots
+        (organization_id,rollout_id,health_state,target_samples,baseline_samples,target_devices,baseline_devices,metrics_json,reasons_json,auto_action)
+        VALUES (?,?,?,?,?,?,?,?,?,?)")->execute([
+            $org,(int)$rollout['id'],(string)$health['state'],(int)$health['target']['samples'],(int)$health['baseline']['samples'],
+            (int)$health['target']['devices'],(int)$health['baseline']['devices'],
+            glasses_json_object(['baseline'=>$health['baseline'],'target'=>$health['target'],'nextStage'=>$health['nextStage']],12000),
+            glasses_json_object(['reasons'=>$health['reasons'],'rollbackReasons'=>$health['rollbackReasons']],6000),$autoAction
+        ]);
+}
+
+function glasses_vision_canary_auto_rollback(PDO $pdo,int $org,string $rolloutPublicId,array $health): array
+{
+    return glasses_transaction($pdo,function()use($pdo,$org,$rolloutPublicId,$health):array{
+        $row=glasses_vision_model_rollout_row($pdo,$org,$rolloutPublicId,true);
+        if((string)$row['status']!=='active')return glasses_vision_model_rollout_public($row);
+        if($row['baseline_package_id']===null)throw new RuntimeException('Automatic canary rollback requires a baseline package.');
+        $reason='Automatic rollback: '.implode(', ',$health['rollbackReasons']??[]);
+        $percent=(float)$row['canary_percent'];
+        $pdo->prepare("UPDATE glasses_vision_model_rollouts SET status='rolled_back',rolled_back_by=NULL,rolled_back_at=NOW(6),updated_at=NOW(6) WHERE organization_id=? AND id=?")
+            ->execute([$org,(int)$row['id']]);
+        $pdo->prepare("INSERT INTO glasses_vision_canary_package_holds
+            (organization_id,package_id,source_rollout_id,reason,hold_until)
+            VALUES (?,?,?,?,DATE_ADD(NOW(6),INTERVAL 24 HOUR))
+            ON DUPLICATE KEY UPDATE source_rollout_id=VALUES(source_rollout_id),reason=VALUES(reason),hold_until=VALUES(hold_until),updated_at=NOW(6)")
+            ->execute([$org,(int)$row['target_package_id'],(int)$row['id'],mb_substr($reason,0,1000,'UTF-8')]);
+        glasses_vision_model_rollout_event($pdo,$org,(int)$row['id'],'auto_rolled_back','active','rolled_back',$percent,0.0,null,[
+            'automatic'=>true,'reason'=>$reason,'health'=>$health,'packageHoldHours'=>24
+        ]);
+        return glasses_vision_model_rollout_public(glasses_vision_model_rollout_row($pdo,$org,$rolloutPublicId,false));
+    });
+}
+
+function glasses_vision_canary_evaluate_and_enforce(PDO $pdo,int $org,string $rolloutPublicId): array
+{
+    $health=glasses_vision_canary_health($pdo,$org,$rolloutPublicId);
+    $rollout=glasses_vision_model_rollout_row($pdo,$org,$rolloutPublicId,false);
+    $action=null;
+    if($health['state']==='rollback_required'&&(string)$rollout['status']==='active'){
+        glasses_vision_canary_auto_rollback($pdo,$org,$rolloutPublicId,$health);$action='auto_rollback';
+    }
+    glasses_vision_canary_snapshot($pdo,$org,$rollout,$health,$action);
+    if($action!==null)$health['autoAction']=$action;
+    return $health;
+}
+
+function glasses_vision_canary_sample(PDO $pdo,array $device,array $input): array
+{
+    if(!glasses_vision_canary_ready($pdo))throw new RuntimeException('Canary production evaluation migration is not installed.');
+    $org=(int)$device['organization_id'];$assignmentKey=strtolower(trim((string)($input['assignmentKey']??'')));
+    if(!preg_match('/^[a-f0-9]{64}$/',$assignmentKey))throw new InvalidArgumentException('Canary sample requires a valid assignment key.');
+    $sampleKey=mb_substr(trim((string)($input['sampleKey']??'')),0,190,'UTF-8');if($sampleKey==='')throw new InvalidArgumentException('Canary sample key is required.');
+    $q=$pdo->prepare("SELECT a.*,r.public_id rollout_public_id,r.status rollout_status
+        FROM glasses_vision_model_assignments a JOIN glasses_vision_model_rollouts r ON r.id=a.rollout_id AND r.organization_id=a.organization_id
+        WHERE a.organization_id=? AND a.device_id=? AND a.assignment_key=? LIMIT 1");
+    $q->execute([$org,(int)$device['id'],$assignmentKey]);$assignment=$q->fetch();
+    if(!$assignment)throw new InvalidArgumentException('Canary sample references an assignment not issued to this device.');
+    if((string)$assignment['action']!=='apply'||!in_array((string)$assignment['selection'],['baseline','target'],true))
+        throw new InvalidArgumentException('Canary sample requires an applied baseline or target assignment.');
+    if((string)$assignment['rollout_status']!=='active'&&(string)$assignment['rollout_status']!=='rolled_back')
+        throw new InvalidArgumentException('Canary sample assignment is not from an active production rollout.');
+    $session=glasses_build_session_row($pdo,$org,(string)($input['buildSessionPublicId']??''),false);glasses_build_assert_device_session($device,$session);
+    if((int)$assignment['build_session_id']!==(int)$session['id'])throw new InvalidArgumentException('Canary sample build does not match the issued assignment.');
+    $intFields=['observationCount'=>10000,'correctionCount'=>10000,'lowConfidenceCount'=>10000,'unexpectedCount'=>10000,'inferenceCount'=>100000,'inferenceLatencyMs'=>1000000000,'timeoutCount'=>100000,'runtimeErrorCount'=>100000];
+    $v=[];foreach($intFields as $key=>$max){$n=(int)($input[$key]??0);if($n<0||$n>$max)throw new InvalidArgumentException('Canary production metric is out of range.');$v[$key]=$n;}
+    if($v['correctionCount']>$v['observationCount']||$v['lowConfidenceCount']>$v['observationCount']||$v['unexpectedCount']>$v['observationCount'])
+        throw new InvalidArgumentException('Canary observation-derived counts cannot exceed observation count.');
+    if($v['timeoutCount']>$v['inferenceCount']||$v['runtimeErrorCount']>$v['inferenceCount'])
+        throw new InvalidArgumentException('Canary inference failures cannot exceed inference count.');
+    $duration=null;if(array_key_exists('buildDurationMs',$input)&&$input['buildDurationMs']!==null){$duration=(int)$input['buildDurationMs'];if($duration<0||$duration>86400000)throw new InvalidArgumentException('Canary build duration is invalid.');}
+    $validationFailed=!empty($input['validationFailed'])?1:0;$cohort=(string)$assignment['selection'];
+    $metadata=glasses_json_object(is_array($input['metadata']??null)?$input['metadata']:null,6000);
+    $insert=$pdo->prepare("INSERT IGNORE INTO glasses_vision_canary_samples
+        (organization_id,rollout_id,assignment_id,device_id,build_session_id,sample_key,cohort,observation_count,correction_count,low_confidence_count,unexpected_count,validation_failed,build_duration_ms,inference_count,inference_latency_ms,timeout_count,runtime_error_count,metadata_json)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+    $insert->execute([$org,(int)$assignment['rollout_id'],(int)$assignment['id'],(int)$device['id'],(int)$session['id'],$sampleKey,$cohort,
+        $v['observationCount'],$v['correctionCount'],$v['lowConfidenceCount'],$v['unexpectedCount'],$validationFailed,$duration,
+        $v['inferenceCount'],$v['inferenceLatencyMs'],$v['timeoutCount'],$v['runtimeErrorCount'],$metadata]);
+    $health=glasses_vision_canary_evaluate_and_enforce($pdo,$org,(string)$assignment['rollout_public_id']);
+    return ['idempotent'=>$insert->rowCount()===0,'cohort'=>$cohort,'health'=>$health];
+}
+
 function glasses_vision_model_rollout_activate(PDO $pdo,int $org,string $publicId,int $userId): array
 {
     return glasses_transaction($pdo,function()use($pdo,$org,$publicId,$userId):array{
@@ -557,6 +744,8 @@ function glasses_vision_model_rollout_activate(PDO $pdo,int $org,string $publicI
             throw new InvalidArgumentException('Only draft or paused rollouts can be activated.');
         if((string)$row['target_status']!=='ready')
             throw new InvalidArgumentException('Target model package is not ready.');
+        if(glasses_vision_canary_ready($pdo)&&glasses_vision_canary_package_hold($pdo,$org,(int)$row['target_package_id']))
+            throw new InvalidArgumentException('Target model package is in automatic rollback cooldown.');
         $targetPackage=glasses_vision_model_package_row($pdo,$org,(string)$row['target_public_id'],false);
         $targetMetadata=json_decode((string)($targetPackage['metadata_json']??'null'),true);
         if(is_array($targetMetadata)&&isset($targetMetadata['modelComparison'])){
@@ -568,6 +757,10 @@ function glasses_vision_model_rollout_activate(PDO $pdo,int $org,string $publicI
             $shadowGate=glasses_vision_shadow_rollout_gate($pdo,$org,(int)$row['id']);
             if(!$shadowGate['eligible'])
                 throw new InvalidArgumentException('Target model package requires a passing live shadow evaluation before canary activation.');
+        }
+        if(is_array($targetMetadata)&&isset($targetMetadata['modelComparison'])&&glasses_vision_canary_ready($pdo)){
+            if(abs((float)$row['canary_percent']-5.0)>0.0001)
+                throw new InvalidArgumentException('Comparison-aware production rollout must begin at the 5% canary stage.');
         }
         $baseline=glasses_vision_model_package_row($pdo,$org,(string)$row['baseline_public_id'],false);
         if((string)$baseline['status']!=='ready')throw new InvalidArgumentException('Baseline model package is not ready.');
@@ -595,10 +788,40 @@ function glasses_vision_model_rollout_advance(PDO $pdo,int $org,string $publicId
         if((string)$row['status']!=='active')throw new InvalidArgumentException('Only an active rollout can advance.');
         $previous=(float)$row['canary_percent'];
         if($nextPercent<=$previous)throw new InvalidArgumentException('Canary advancement must increase the current percentage.');
+        if(glasses_vision_canary_ready($pdo)){
+            $targetPackage=glasses_vision_model_package_row($pdo,$org,(string)$row['target_public_id'],false);
+            $targetMetadata=json_decode((string)($targetPackage['metadata_json']??'null'),true);
+            if(is_array($targetMetadata)&&isset($targetMetadata['modelComparison'])){
+                $expected=glasses_vision_canary_next_stage($previous);
+                if($expected===null||abs($nextPercent-$expected)>0.0001)
+                    throw new InvalidArgumentException('Canary advancement must follow the governed 5/10/25/50/100 stage sequence.');
+                $health=glasses_vision_canary_health($pdo,$org,$publicId);
+                if(!$health['promotionEligible'])
+                    throw new InvalidArgumentException('Canary health is not eligible for advancement.');
+            }
+        }
 
         $pdo->prepare("UPDATE glasses_vision_model_rollouts SET canary_percent=?,updated_at=NOW(6) WHERE organization_id=? AND id=?")
             ->execute([$nextPercent,$org,(int)$row['id']]);
         glasses_vision_model_rollout_event($pdo,$org,(int)$row['id'],'advanced','active','active',$previous,$nextPercent,$userId);
+        return glasses_vision_model_rollout_public(glasses_vision_model_rollout_row($pdo,$org,$publicId,false));
+    });
+}
+
+function glasses_vision_model_rollout_advance_override(PDO $pdo,int $org,string $publicId,float $nextPercent,int $userId,string $reason): array
+{
+    $reason=mb_substr(trim($reason),0,1000,'UTF-8');if($reason==='')throw new InvalidArgumentException('Canary advancement override requires a documented reason.');
+    if(!is_finite($nextPercent)||$nextPercent<0||$nextPercent>100)throw new InvalidArgumentException('Canary percentage must be between 0 and 100.');
+    $nextPercent=round($nextPercent,2);
+    return glasses_transaction($pdo,function()use($pdo,$org,$publicId,$nextPercent,$userId,$reason):array{
+        $row=glasses_vision_model_rollout_row($pdo,$org,$publicId,true);
+        if((string)$row['status']!=='active')throw new InvalidArgumentException('Only an active rollout can advance.');
+        $previous=(float)$row['canary_percent'];$expected=glasses_vision_canary_next_stage($previous);
+        if($expected===null||abs($nextPercent-$expected)>0.0001)throw new InvalidArgumentException('Override must still follow the governed canary stage sequence.');
+        $health=glasses_vision_canary_health($pdo,$org,$publicId);
+        if($health['state']==='rollback_required')throw new InvalidArgumentException('Rollback-required canary health cannot be overridden for advancement.');
+        $pdo->prepare("UPDATE glasses_vision_model_rollouts SET canary_percent=?,updated_at=NOW(6) WHERE organization_id=? AND id=?")->execute([$nextPercent,$org,(int)$row['id']]);
+        glasses_vision_model_rollout_event($pdo,$org,(int)$row['id'],'advanced_override','active','active',$previous,$nextPercent,$userId,['reason'=>$reason,'health'=>$health]);
         return glasses_vision_model_rollout_public(glasses_vision_model_rollout_row($pdo,$org,$publicId,false));
     });
 }
@@ -939,7 +1162,9 @@ function glasses_vision_model_rollout_metrics(PDO $pdo,int $org,string $publicId
     foreach($q->fetchAll() as $row)$byType[(string)$row['report_type']]=[
         'reports'=>(int)$row['total'],'devices'=>(int)$row['devices']
     ];
-    return ['rolloutPublicId'=>$publicId,'byType'=>$byType];
+    $result=['rolloutPublicId'=>$publicId,'byType'=>$byType];
+    if(glasses_vision_canary_ready($pdo))$result['canaryHealth']=glasses_vision_canary_health($pdo,$org,$publicId);
+    return $result;
 }
 
 function glasses_vision_model_catalog(PDO $pdo,array $user): array
