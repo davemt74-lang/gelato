@@ -1136,7 +1136,7 @@ internal static class Program
         Assert(profiledObservation[0].DetectorLabel == "turkey_slice", "emitted observation must retain the detector's original model label");
         Assert(profiledObservation[0].VisionProfileMatched, "emitted observation must state that a registry mapping resolved it");
         Assert(profiledObservation[0].VisionProfileMinimumConfidence.HasValue
-            && Math.Abs(profiledObservation[0].VisionProfileMinimumConfidence.Value - 0.85f) < 0.0001f,
+            && Math.Abs(profiledObservation[0].VisionProfileMinimumConfidence.GetValueOrDefault() - 0.85f) < 0.0001f,
             "emitted observation must retain the applied profile confidence floor");
         Assert(profiledPipeline.Diagnostics.ProfileLabelMatches == 4, "profile matches must remain observable even when threshold policy rejects a candidate");
         Assert(profiledPipeline.Diagnostics.ProfileThresholdRejects == 2, "profile-threshold rejections must be counted separately");
