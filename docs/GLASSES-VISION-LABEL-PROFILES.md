@@ -51,9 +51,9 @@ Gelato returns schema:
 
 `gelato.vision_label_profile.v1`
 
-containing only mappings usable by that active build after precedence is resolved.
+containing mappings usable by that active build after precedence is resolved, plus an explicit `blockedLabels` set for labels whose winning registry mapping intentionally targets an ingredient outside the active recipe.
 
-The response includes a deterministic SHA-256 `profileHash`.
+The response includes a deterministic SHA-256 `profileHash` over both usable mappings and blocked labels.
 
 Device/build isolation is enforced by the existing AR build-session authorization contract.
 
@@ -63,14 +63,17 @@ For normal recipe evidence, `VisionPipeline` resolves in this order:
 
 1. explicit component key from a trusted adapter/test detector;
 2. active Vision Label Profile;
-3. exact normalized recipe display-name fallback;
-4. reject.
+3. reject any explicit blocked label;
+4. exact normalized recipe display-name fallback only when the label is not blocked;
+5. reject.
 
 Unexpected detections continue to use the explicit unexpected-evidence path and are never legitimized by a recipe label profile.
 
 A profile from another build session or another detector is ignored.
 
 Duplicate client mappings for one normalized label fail closed.
+
+If the governed profile cannot be loaded because of a transport/runtime error, automated vision evidence is held fail-closed and the client retries. The cook workflow, manual confirmations, and KDS flow remain available; the client does not silently downgrade to ungoverned recipe-name matching.
 
 ## Confidence thresholds
 
