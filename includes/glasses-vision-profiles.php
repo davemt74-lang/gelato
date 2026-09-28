@@ -203,24 +203,28 @@ function glasses_vision_profile_for_build(
 
     $mappings=[];
     if($ingredientIds){
-        $placeholders=implode(',',array_fill(0,count($ingredientIds),'?'));
-        $sql="SELECT p.*,i.canonical_name ingredient_name
+        // Resolve generic vs detector-specific precedence across the entire organization
+        // before recipe filtering. This matters when a detector-specific mapping points a
+        // label at an ingredient that is not part of the current recipe: the specific
+        // mapping must suppress the generic mapping, then fail closed for this build.
+        $q=$pdo->prepare("SELECT p.*,i.canonical_name ingredient_name
             FROM glasses_vision_label_profiles p
             JOIN ingredients i ON i.id=p.ingredient_id AND i.organization_id=p.organization_id
             WHERE p.organization_id=? AND p.status='active'
-              AND p.ingredient_id IN ({$placeholders})
               AND p.detector_name IN ('*',?)
-            ORDER BY CASE WHEN p.detector_name='*' THEN 0 ELSE 1 END,p.id";
-        $args=[$org,...array_values($ingredientIds),$detector];
-        $q=$pdo->prepare($sql);
-        $q->execute($args);
+            ORDER BY CASE WHEN p.detector_name='*' THEN 0 ELSE 1 END,p.id");
+        $q->execute([$org,$detector]);
+
+        $resolvedByLabel=[];
+        foreach($q->fetchAll() as $row){
+            $resolvedByLabel[(string)$row['normalized_label']]=$row;
+        }
 
         $byLabel=[];
-        foreach($q->fetchAll() as $row){
+        foreach($resolvedByLabel as $normalized=>$row){
             $ingredientId=(int)$row['ingredient_id'];
             if(!isset($components[$ingredientId]))continue;
             $component=$components[$ingredientId];
-            $normalized=(string)$row['normalized_label'];
             $byLabel[$normalized]=[
                 'modelLabel'=>(string)$row['model_label'],
                 'normalizedLabel'=>$normalized,
