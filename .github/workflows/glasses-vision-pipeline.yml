@@ -1,0 +1,49 @@
+name: AR Glasses Vision Pipeline
+
+on:
+  pull_request:
+    paths:
+      - 'glasses/inmo-air3-unity/**'
+      - 'docs/GLASSES-VISION-PIPELINE.md'
+      - '.github/workflows/glasses-vision-pipeline.yml'
+  push:
+    branches: [main, 'feature/glasses-vision-pipeline']
+
+jobs:
+  vision-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Vision architecture contract
+        run: |
+          grep -q 'interface IVisionDetector' glasses/inmo-air3-unity/Runtime/Core/VisionModels.cs
+          grep -q 'public string Label' glasses/inmo-air3-unity/Runtime/Core/VisionModels.cs
+          grep -q 'class VisionPipeline' glasses/inmo-air3-unity/Runtime/Core/VisionPipeline.cs
+          grep -q 'RequireMonotonicTimestamps' glasses/inmo-air3-unity/Runtime/Core/VisionPipeline.cs
+          grep -q 'DuplicateOrStaleFramesSkipped' glasses/inmo-air3-unity/Runtime/Core/VisionPipeline.cs
+          grep -q 'MaxDetectionsPerFrame' glasses/inmo-air3-unity/Runtime/Core/VisionModels.cs
+          grep -q 'MaxActiveTracks' glasses/inmo-air3-unity/Runtime/Core/VisionModels.cs
+          grep -q 'vision:unexpected:' glasses/inmo-air3-unity/Runtime/Core/VisionPipeline.cs
+          grep -q 'class VisionRuntimeController' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
+          grep -q 'TryGetLatestFrame' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
+          grep -q 'ShowIngredientObservation' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
+          grep -q 'SubmitObservationAsync' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
+          grep -q 'class NoOpVisionDetector' glasses/inmo-air3-unity/Runtime/Unity/VisionDetectorBehaviour.cs
+          ! grep -R 'ArPoseManager' glasses/inmo-air3-unity/Runtime/Core/VisionModels.cs glasses/inmo-air3-unity/Runtime/Core/VisionPipeline.cs
+          ! grep -R 'InmoAir3SDK' glasses/inmo-air3-unity/Runtime/Core/VisionModels.cs glasses/inmo-air3-unity/Runtime/Core/VisionPipeline.cs
+
+      - name: Compile hardware-neutral AR core
+        run: dotnet build glasses/inmo-air3-unity/Runtime/Core/Gelato.Ar.Core.csproj -c Release --nologo
+
+      - name: Run workflow, HUD, simulator and vision contracts
+        run: dotnet run --project glasses/inmo-air3-unity/Tests/Gelato.Ar.Core.Tests.csproj -c Release
+
+      - name: Vendor isolation contract
+        run: |
+          test "$(grep -R -l 'ArPoseManager' glasses/inmo-air3-unity/Runtime/Unity | wc -l)" -le 1
+          grep -q 'ArPoseManager.GetAir3ImageData' glasses/inmo-air3-unity/Runtime/Unity/InmoAir3Platform.cs
+          grep -q 'ArPoseManager.GetAir3CameraParams' glasses/inmo-air3-unity/Runtime/Unity/InmoAir3Platform.cs
