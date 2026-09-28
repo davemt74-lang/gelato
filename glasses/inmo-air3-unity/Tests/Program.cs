@@ -11,6 +11,7 @@ internal static class Program
         await PairingAndBuildFlow();
         await ExistingCredentialFlow();
         await ErrorStateFlow();
+        await ObservationCorrectionFlow();
         HudContract();
         SimulatorSupportContract();
         await StationCalibrationContract();
@@ -102,6 +103,56 @@ internal static class Program
         coordinator.ResetForNextWork();
         Assert(coordinator.State == WorkflowState.Idle, "paired reset must return to Idle");
         Assert(coordinator.BuildSession == null && coordinator.Validation == null && coordinator.Handoff == null, "reset must clear per-item runtime state");
+    }
+
+    private static async Task ObservationCorrectionFlow()
+    {
+        var platform = new FakePlatform();
+        var gateway = new FakeGateway();
+        var coordinator = new ArWorkflowCoordinator(platform, gateway, new FakeTokenStore("existing-token"));
+
+        await coordinator.InitializeAsync();
+        await coordinator.RefreshWorkAsync();
+        await coordinator.StartFocusBuildAsync();
+
+        await coordinator.SubmitObservationAsync(new IngredientObservation
+        {
+            ObservationKey = "vision-build-1-track-7",
+            ComponentKey = "ingredient:42",
+            DisplayName = "Turkey",
+            Action = "added",
+            Quantity = 1,
+            Confidence = 0.93f
+        });
+
+        Assert(coordinator.LastSubmittedObservationKey == "vision-build-1-track-7", "coordinator must retain the last submitted observation key for hands-free correction");
+
+        var corrected = await coordinator.RejectLastObservationAsync("Wrong transfer");
+        Assert(corrected.Status == "pending", "rejecting one observation must re-evaluate product validation");
+        Assert(gateway.CorrectionCalls == 1, "reject-last must call the correction endpoint once");
+        Assert(gateway.LastCorrection != null && gateway.LastCorrection.Resolution == "reject", "reject-last must send an immutable rejection correction");
+        Assert(gateway.LastCorrection!.CorrectionKey == "reject:vision-build-1-track-7", "reject-last must use a deterministic idempotency key");
+
+        var evidence = await coordinator.GetEvidenceAsync();
+        Assert(gateway.EvidenceCalls == 1, "evidence review must use the build.evidence endpoint");
+        Assert(evidence.Count == 1 && evidence[0].ObservationKey == "vision-build-1-track-7", "evidence review must preserve the original vision observation");
+        Assert(evidence[0].LatestCorrection?.Resolution == "reject", "evidence review must expose the latest human correction");
+
+        var replace = await coordinator.CorrectObservationAsync(new ObservationCorrection
+        {
+            CorrectionKey = "replace:vision-build-1-track-7:1",
+            ObservationKey = "vision-build-1-track-7",
+            Resolution = "replace",
+            TargetComponentKey = "ingredient:84",
+            CorrectedQuantity = 2,
+            Reason = "This was Bacon, not Turkey"
+        });
+        Assert(replace.Status == "pending", "replacement correction must re-evaluate validation");
+        Assert(gateway.CorrectionCalls == 2, "explicit replacement must call the correction endpoint");
+        Assert(gateway.LastCorrection?.TargetComponentKey == "ingredient:84" && gateway.LastCorrection.CorrectedQuantity == 2, "replacement component and quantity must reach the gateway");
+
+        coordinator.ResetForNextWork();
+        Assert(coordinator.LastSubmittedObservationKey == null, "reset must clear last-observation correction state");
     }
 
     private static async Task ExistingCredentialFlow()
@@ -1076,6 +1127,9 @@ internal static class Program
         public int HandoffCalls { get; private set; }
         public int ConfirmCalls { get; private set; }
         public int ResolveCalls { get; private set; }
+        public int CorrectionCalls { get; private set; }
+        public int EvidenceCalls { get; private set; }
+        public ObservationCorrection? LastCorrection { get; private set; }
 
         public void SetDeviceToken(string token) { DeviceToken = token; }
 
@@ -1167,6 +1221,49 @@ internal static class Program
                 KdsItemPublicId = "kds-item-1",
                 Components = Array.Empty<BuildComponent>()
             });
+        }
+
+        public Task<BuildSession> CorrectObservationAsync(
+            string buildSessionPublicId,
+            ObservationCorrection correction,
+            CancellationToken cancellationToken)
+        {
+            CorrectionCalls++;
+            LastCorrection = correction;
+            return Task.FromResult(new BuildSession
+            {
+                PublicId = buildSessionPublicId,
+                Status = "active",
+                KdsItemPublicId = "kds-item-1"
+            });
+        }
+
+        public Task<IReadOnlyList<ObservationEvidence>> GetEvidenceAsync(
+            string buildSessionPublicId,
+            int limit,
+            CancellationToken cancellationToken)
+        {
+            EvidenceCalls++;
+            IReadOnlyList<ObservationEvidence> evidence = new[]
+            {
+                new ObservationEvidence
+                {
+                    ObservationKey = "vision-build-1-track-7",
+                    ComponentKey = "ingredient:42",
+                    Action = "added",
+                    Quantity = 1,
+                    Confidence = 0.93f,
+                    TrackingId = "vision-track-7",
+                    LatestCorrection = new ObservationCorrection
+                    {
+                        CorrectionKey = "reject:vision-build-1-track-7",
+                        ObservationKey = "vision-build-1-track-7",
+                        Resolution = "reject",
+                        Reason = "Wrong transfer"
+                    }
+                }
+            };
+            return Task.FromResult(evidence);
         }
 
         public Task<ProductValidation> EvaluateAsync(string buildSessionPublicId, CancellationToken cancellationToken)
