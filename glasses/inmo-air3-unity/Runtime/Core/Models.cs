@@ -168,7 +168,7 @@ namespace Gelato.Ar.Core
         {
             if (calibration == null || component == null || calibration.Zones == null) return Array.Empty<IngredientZone>();
 
-            var ingredientId = ParseIngredientId(component.ComponentKey);
+            var ingredientId = IngredientIdForComponent(component.ComponentKey);
             if (ingredientId <= 0) return Array.Empty<IngredientZone>();
 
             var zones = new List<IngredientZone>();
@@ -192,7 +192,7 @@ namespace Gelato.Ar.Core
             return best;
         }
 
-        private static int ParseIngredientId(string componentKey)
+        public static int IngredientIdForComponent(string componentKey)
         {
             if (string.IsNullOrWhiteSpace(componentKey)) return 0;
             const string prefix = "ingredient:";
