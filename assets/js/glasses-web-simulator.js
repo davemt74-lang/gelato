@@ -131,7 +131,7 @@ async function enumerateCameras(){
 function stopCamera(reason='stopped'){
   stopVisionRuntime(reason);
   if(state.cameraStream)state.cameraStream.getTracks().forEach(t=>t.stop());
-  state.dataset.frozen=false;state.dataset.drag=null;state.dataset.annotations=[];renderDatasetAnnotations();
+  state.dataset.frozen=false;state.dataset.drag=null;state.dataset.annotations=[];state.dataset.captureGroup=null;state.dataset.burstSeq=0;renderDatasetAnnotations();
   state.cameraStream=null;state.cameraTrack=null;
   const video=$('cameraVideo');video.srcObject=null;video.hidden=true;
   $('startCamera').disabled=false;$('stopCamera').disabled=true;$('captureFrame').disabled=true;
