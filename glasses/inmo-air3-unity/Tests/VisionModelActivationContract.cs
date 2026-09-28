@@ -10,6 +10,7 @@ internal static class VisionModelActivationContract
     public static async Task RunAsync()
     {
         await VerifiedActivationFlow();
+        await AlreadyActiveSkipsDownloadAndSwap();
         await ChecksumMismatchFailsClosed();
         await PrepareFailureKeepsKnownGood();
         await ActivationFailureRestoresKnownGood();
@@ -39,6 +40,31 @@ internal static class VisionModelActivationContract
         Assert(runtime.ActivePackagePublicId == "vision-model-v2", "atomic activation must make the verified target current");
         Assert(HasReport(reports, "download_started") && HasReport(reports, "downloaded") && HasReport(reports, "verified") && HasReport(reports, "activated"), "activation telemetry must cover download, verification and activation");
         Assert(!HasReport(reports, "failed"), "successful activation must not report failure");
+    }
+
+    private static async Task AlreadyActiveSkipsDownloadAndSwap()
+    {
+        var bytes = Encoding.UTF8.GetBytes("gelato-model-v2");
+        var assignment = Assignment(bytes, "target");
+        var fetcher = new FakeFetcher(bytes);
+        var runtime = new FakeRuntime("scripted-test-detector", "onnx")
+        {
+            ActivePackagePublicId = assignment.Package!.PublicId,
+            ActiveArtifactSha256 = assignment.Package.ArtifactSha256
+        };
+        var reports = new List<VisionModelReport>();
+        var service = new VisionModelActivationService(fetcher, runtime, (report, token) =>
+        {
+            reports.Add(report);
+            return Task.FromResult(true);
+        });
+
+        var result = await service.ApplyAsync(assignment);
+
+        Assert(result.Activated && result.State == "already_active", "matching known-good package must be treated as already active");
+        Assert(fetcher.Calls == 0, "already-active package must not be downloaded again");
+        Assert(runtime.PrepareCalls == 0 && runtime.SelfTestCalls == 0 && runtime.ActivateCalls == 0, "already-active package must not be prepared, tested or swapped again");
+        Assert(HasReport(reports, "activated"), "already-active assignment must still emit governed activation telemetry for this assignment");
     }
 
     private static async Task ChecksumMismatchFailsClosed()
