@@ -120,6 +120,19 @@ $boot=[
 
 <section class="gl-panel gl-components">
     <div class="gl-panel-head">
+        <div><div class="admin-eyebrow">Model Labels</div><h2>Detector label intervention signals</h2></div>
+        <small>Profile-mapped and fallback labels are tracked separately.</small>
+    </div>
+    <div class="gl-table-wrap">
+        <table>
+            <thead><tr><th>Detector label</th><th>Mapping</th><th>Min confidence</th><th>Observations</th><th>Corrected</th><th>Rejected</th><th>Reclassified</th><th>Correction rate</th></tr></thead>
+            <tbody id="glLabelsBody"><tr><td colspan="8">No data loaded.</td></tr></tbody>
+        </table>
+    </div>
+</section>
+
+<section class="gl-panel gl-components">
+    <div class="gl-panel-head">
         <div><div class="admin-eyebrow">Ingredient Detail</div><h2>Components requiring intervention</h2></div>
         <small>Sorted by human correction rate, then observation volume.</small>
     </div>
