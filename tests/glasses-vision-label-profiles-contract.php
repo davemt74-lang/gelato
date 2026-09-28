@@ -121,6 +121,7 @@ gvlp_assert((string)$profile['schema']==='gelato.vision_label_profile.v1','Runti
 gvlp_assert((string)$profile['detectorName']==='food-model-v3','Runtime detector identity must be normalized.');
 gvlp_assert(count($profile['mappings'])===2,'Runtime profile must include only recipe ingredients, excluding unrelated Cheese and detector-specific non-recipe overrides.');
 gvlp_assert(count(array_filter($profile['mappings'],static fn(array $row):bool=>$row['normalizedLabel']==='mystery slice'))===0,'Detector-specific non-recipe override must suppress the generic recipe mapping and fail closed.');
+gvlp_assert(in_array('mystery slice',$profile['blockedLabels'],true),'Suppressed detector-specific non-recipe labels must be explicitly blocked so the client cannot recipe-name fallback them.');
 gvlp_assert(strlen((string)$profile['profileHash'])===64,'Runtime profile must carry a deterministic SHA-256 hash.');
 
 $turkey=gvlp_mapping($profile,'turkey slice');
