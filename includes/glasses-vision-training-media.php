@@ -213,9 +213,9 @@ function glasses_vision_training_media_store(PDO $pdo,int $org,array $input,int 
         try{
             $pdo->prepare("INSERT INTO glasses_vision_training_media
               (organization_id,public_id,sample_id,mission_id,device_id,operator_user_id,build_session_id,capture_group,burst_index,source_type,storage_relative_path,mime_type,byte_size,width,height,sha256,perceptual_hash,perceptual_hash_source,brightness_mean,contrast_mean,blur_score,exposure_state,camera_facing,camera_device_key,camera_width,camera_height,camera_fps,camera_pitch,camera_yaw,camera_roll,distance_bucket,occlusion_bucket,quality_state,quality_flags_json,annotation_json,metadata_json,consent_basis,retention_until,status,created_by,created_at)
-              VALUES (?,?,?,?,?,?,?,?,?,'browser_training_capture',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'active',?,?)")
+              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
               ->execute([
-                  $org,$public,$sampleId,$mission?(int)$mission['id']:null,$device?(int)$device['id']:null,$operator,$build?(int)$build['id']:null,$captureGroup,$burstIndex,
+                  $org,$public,$sampleId,$mission?(int)$mission['id']:null,$device?(int)$device['id']:null,$operator,$build?(int)$build['id']:null,$captureGroup,$burstIndex,'browser_training_capture',
                   $relative,$mime,$size,$width,$height,$sha,$pHash,$pHash!==null?'browser_dhash_v1':null,
                   isset($input['brightnessMean'])?(float)$input['brightnessMean']:null,isset($input['contrastMean'])?(float)$input['contrastMean']:null,isset($input['blurScore'])?(float)$input['blurScore']:null,$quality['exposure'],
                   mb_substr(trim((string)($camera['facing']??'')),0,24)?:null,mb_substr(trim((string)($camera['deviceKey']??'')),0,190)?:null,
@@ -223,7 +223,7 @@ function glasses_vision_training_media_store(PDO $pdo,int $org,array $input,int 
                   isset($pose['pitch'])?(float)$pose['pitch']:null,isset($pose['yaw'])?(float)$pose['yaw']:null,isset($pose['roll'])?(float)$pose['roll']:null,
                   mb_substr(trim((string)($input['distanceBucket']??'')),0,24)?:null,mb_substr(trim((string)($input['occlusionBucket']??'')),0,24)?:null,
                   $quality['state'],json_encode($quality['flags']),json_encode($annotationCheck['annotations'],JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),json_encode($meta,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),
-                  'training_media_opt_in',$retentionUntil,$actor,$capturedAt,
+                  'training_media_opt_in',$retentionUntil,'active',$actor,$capturedAt,
               ]);
             $mediaId=(int)$pdo->lastInsertId();
             glasses_vision_training_media_event($pdo,$org,$mediaId,'uploaded',$actor,['sha256'=>$sha,'samplePublicId'=>$samplePublic,'qualityState'=>$quality['state'],'retentionUntil'=>$retentionUntil]);
