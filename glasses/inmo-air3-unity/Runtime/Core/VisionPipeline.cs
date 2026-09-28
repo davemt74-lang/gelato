@@ -172,6 +172,10 @@ namespace Gelato.Ar.Core
 
                 detection.Confidence = transfer.EffectiveConfidence;
                 detection.Action = transfer.Action;
+                detection.EvidenceKind = transfer.Kind.ToString();
+                detection.EvidenceSourceZoneKey = transfer.SourceZoneKey ?? string.Empty;
+                detection.EvidenceDestinationRegionKey = transfer.DestinationRegionKey ?? string.Empty;
+                detection.EvidenceSequenceSupported = transfer.SequenceSupported;
 
                 if (detection.Confidence < _options.MinimumConfidence)
                 {
@@ -212,7 +216,11 @@ namespace Gelato.Ar.Core
                         Confidence = detection.Confidence,
                         Quantity = detection.Quantity,
                         Action = NormalizeAction(detection.Action),
-                        IsUnexpected = detection.IsUnexpected
+                        IsUnexpected = detection.IsUnexpected,
+                        EvidenceKind = detection.EvidenceKind,
+                        EvidenceSourceZoneKey = detection.EvidenceSourceZoneKey,
+                        EvidenceDestinationRegionKey = detection.EvidenceDestinationRegionKey,
+                        EvidenceSequenceSupported = detection.EvidenceSequenceSupported
                     };
                     _tracks.Add(track);
                 }
@@ -228,6 +236,10 @@ namespace Gelato.Ar.Core
                         ? track.DisplayName
                         : detection.DisplayName;
                     track.IsUnexpected = detection.IsUnexpected;
+                    track.EvidenceKind = detection.EvidenceKind;
+                    track.EvidenceSourceZoneKey = detection.EvidenceSourceZoneKey;
+                    track.EvidenceDestinationRegionKey = detection.EvidenceDestinationRegionKey;
+                    track.EvidenceSequenceSupported = detection.EvidenceSequenceSupported;
                     if (!string.IsNullOrWhiteSpace(detection.InstanceKey)) track.InstanceKey = detection.InstanceKey;
                 }
 
@@ -245,7 +257,11 @@ namespace Gelato.Ar.Core
                     Quantity = track.Quantity,
                     Confidence = track.Confidence,
                     TrackingId = "vision-track-" + track.TrackId,
-                    BoundingBox = track.Box.ToArray()
+                    BoundingBox = track.Box.ToArray(),
+                    EvidenceKind = track.EvidenceKind,
+                    EvidenceSourceZoneKey = track.EvidenceSourceZoneKey,
+                    EvidenceDestinationRegionKey = track.EvidenceDestinationRegionKey,
+                    EvidenceSequenceSupported = track.EvidenceSequenceSupported
                 };
                 observations.Add(observation);
                 Diagnostics.ObservationsEmitted++;
@@ -394,6 +410,10 @@ namespace Gelato.Ar.Core
             public float Confidence;
             public float Quantity;
             public bool IsUnexpected;
+            public string EvidenceKind = string.Empty;
+            public string EvidenceSourceZoneKey = string.Empty;
+            public string EvidenceDestinationRegionKey = string.Empty;
+            public bool EvidenceSequenceSupported;
             public bool Emitted;
         }
     }
