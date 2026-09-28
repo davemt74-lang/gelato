@@ -245,6 +245,9 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
             <label><span>Retention</span><select id="datasetRetentionDays"><option value="30">30 days</option><option value="90">90 days</option><option value="365" selected>1 year</option><option value="1095">3 years</option></select></label>
             <label><span>Distance</span><select id="datasetDistanceBucket"><option value="">Unspecified</option><option value="close">Close</option><option value="normal">Normal</option><option value="far">Far</option></select></label>
             <label><span>Occlusion</span><select id="datasetOcclusionBucket"><option value="">Unspecified</option><option value="none">None</option><option value="partial">Partial</option><option value="heavy">Heavy</option></select></label>
+            <label><span>Camera pitch°</span><input id="datasetCameraPitch" type="number" step="0.1" min="-90" max="90" placeholder="optional"></label>
+            <label><span>Camera yaw°</span><input id="datasetCameraYaw" type="number" step="0.1" min="-180" max="180" placeholder="optional"></label>
+            <label><span>Camera roll°</span><input id="datasetCameraRoll" type="number" step="0.1" min="-180" max="180" placeholder="optional"></label>
           </div>
           <div class="inline-actions"><button id="datasetUpload" type="button" disabled>Upload Captures to Vision Lab</button><span id="datasetUploadState" class="sim-muted">Local only</span></div>
           <div id="datasetStats" class="vision-metrics">0 boxes on frame · 0 samples · 0 classes</div>
