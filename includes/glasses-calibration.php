@@ -5,7 +5,7 @@ require_once __DIR__.'/glasses-core.php';
 
 function glasses_station_calibration_ready(PDO $pdo): bool
 {
-    foreach(['glasses_station_calibrations','glasses_station_calibration_zones'] as $table){
+    foreach(['glasses_station_calibrations','glasses_station_calibration_zones','glasses_station_calibration_work_areas'] as $table){
         $q=$pdo->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?");
         $q->execute([$table]);
         if((int)$q->fetchColumn()!==1)return false;
@@ -65,6 +65,42 @@ function glasses_station_calibration_zone(PDO $pdo,int $org,array $zone,int $ind
     ];
 }
 
+function glasses_station_calibration_work_area(array $area,int $index): array
+{
+    $areaKey=mb_substr(trim((string)($area['areaKey']??'')),0,160,'UTF-8');
+    if($areaKey==='')$areaKey='assembly:'.($index+1);
+
+    $role=mb_substr(mb_strtolower(trim((string)($area['role']??'assembly')),'UTF-8'),0,40,'UTF-8')?:'assembly';
+    if(!preg_match('/^[a-z0-9_-]+$/',$role))throw new InvalidArgumentException('Calibration work-area role is invalid.');
+
+    $displayName=mb_substr(trim((string)($area['displayName']??'Assembly Area')),0,180,'UTF-8')?:'Assembly Area';
+    $x=(float)($area['x']??-1);
+    $y=(float)($area['y']??-1);
+    $width=(float)($area['width']??0);
+    $height=(float)($area['height']??0);
+
+    foreach(['x'=>$x,'y'=>$y,'width'=>$width,'height'=>$height] as $name=>$value){
+        if(!is_finite($value))throw new InvalidArgumentException('Calibration work-area '.$name.' is invalid.');
+    }
+    if($x<0||$y<0||$width<=0||$height<=0||$x>1||$y>1||$x+$width>1.000001||$y+$height>1.000001)
+        throw new InvalidArgumentException('Calibration work areas must use positive normalized coordinates inside the camera frame.');
+
+    $priority=max(-1000,min(1000,(int)($area['priority']??0)));
+    $metadata=isset($area['metadata'])?glasses_json_object(is_array($area['metadata'])?$area['metadata']:null,8000):null;
+
+    return [
+        'areaKey'=>$areaKey,
+        'role'=>$role,
+        'displayName'=>$displayName,
+        'x'=>round($x,6),
+        'y'=>round($y,6),
+        'width'=>round($width,6),
+        'height'=>round($height,6),
+        'priority'=>$priority,
+        'metadataJson'=>$metadata,
+    ];
+}
+
 function glasses_station_calibration_payload(PDO $pdo,int $org,string $publicId,?array $runtime=null): array
 {
     $q=$pdo->prepare("SELECT c.*,s.public_id station_public_id,s.name station_name,l.name location_name
@@ -95,6 +131,25 @@ function glasses_station_calibration_payload(PDO $pdo,int $org,string $publicId,
             'height'=>(float)$zone['height_norm'],
             'priority'=>(int)$zone['priority'],
             'metadata'=>json_decode((string)($zone['metadata_json']??'null'),true),
+        ];
+    }
+
+    $q=$pdo->prepare("SELECT * FROM glasses_station_calibration_work_areas
+        WHERE organization_id=? AND calibration_id=?
+        ORDER BY priority DESC,id");
+    $q->execute([$org,(int)$row['id']]);
+    $workAreas=[];
+    foreach($q->fetchAll() as $area){
+        $workAreas[]=[
+            'areaKey'=>(string)$area['area_key'],
+            'role'=>(string)$area['role'],
+            'displayName'=>(string)$area['display_name'],
+            'x'=>(float)$area['x_norm'],
+            'y'=>(float)$area['y_norm'],
+            'width'=>(float)$area['width_norm'],
+            'height'=>(float)$area['height_norm'],
+            'priority'=>(int)$area['priority'],
+            'metadata'=>json_decode((string)($area['metadata_json']??'null'),true),
         ];
     }
 
@@ -140,6 +195,7 @@ function glasses_station_calibration_payload(PDO $pdo,int $org,string $publicId,
         'sourceHash'=>(string)$row['source_hash'],
         'notes'=>(string)($row['notes']??''),
         'zones'=>$zones,
+        'workAreas'=>$workAreas,
         'compatibility'=>$compatibility,
         'activatedAt'=>$row['activated_at'],
         'createdAt'=>$row['created_at'],
@@ -163,15 +219,18 @@ function glasses_station_calibration_save(
     $pixelFormat=mb_substr(mb_strtolower(trim((string)($input['pixelFormat']??'grayscale8')),'UTF-8'),0,40,'UTF-8');
     $notes=mb_substr(trim((string)($input['notes']??'')),0,1000,'UTF-8')?:null;
     $zonesInput=$input['zones']??null;
+    $workAreasInput=$input['workAreas']??[];
 
     if($frameWidth<16||$frameWidth>8192||$frameHeight<16||$frameHeight>8192)
         throw new InvalidArgumentException('Calibration camera dimensions are invalid.');
     if($pixelFormat==='')throw new InvalidArgumentException('Calibration pixel format is required.');
     if(!is_array($zonesInput)||count($zonesInput)<1)throw new InvalidArgumentException('At least one ingredient calibration zone is required.');
     if(count($zonesInput)>200)throw new InvalidArgumentException('Calibration contains too many ingredient zones.');
+    if(!is_array($workAreasInput))throw new InvalidArgumentException('Calibration work-area payload is invalid.');
+    if(count($workAreasInput)>50)throw new InvalidArgumentException('Calibration contains too many work areas.');
 
     return glasses_transaction($pdo,function()use(
-        $pdo,$org,$locationId,$stationPublicId,$input,$userId,$platform,$frameWidth,$frameHeight,$pixelFormat,$notes,$zonesInput
+        $pdo,$org,$locationId,$stationPublicId,$input,$userId,$platform,$frameWidth,$frameHeight,$pixelFormat,$notes,$zonesInput,$workAreasInput
     ):array{
         $location=glasses_location($pdo,$org,$locationId);
         $station=glasses_station_calibration_station($pdo,$org,$locationId,$stationPublicId);
@@ -191,6 +250,17 @@ function glasses_station_calibration_save(
         }
 
         usort($zones,static fn(array $a,array $b):int=>strcmp($a['zoneKey'],$b['zoneKey']));
+
+        $workAreas=[];$areaKeys=[];
+        foreach(array_values($workAreasInput) as $index=>$areaInput){
+            if(!is_array($areaInput))throw new InvalidArgumentException('Calibration work-area payload is invalid.');
+            $area=glasses_station_calibration_work_area($areaInput,$index);
+            if(isset($areaKeys[$area['areaKey']]))throw new InvalidArgumentException('Calibration work-area keys must be unique.');
+            $areaKeys[$area['areaKey']]=true;
+            $workAreas[]=$area;
+        }
+        usort($workAreas,static fn(array $a,array $b):int=>strcmp($a['areaKey'],$b['areaKey']));
+
         $sourceMaterial=[
             'platform'=>$platform,
             'frameWidth'=>$frameWidth,
@@ -201,6 +271,11 @@ function glasses_station_calibration_save(
                 'x'=>$z['x'],'y'=>$z['y'],'width'=>$z['width'],'height'=>$z['height'],'priority'=>$z['priority'],
                 'metadata'=>$z['metadataJson']!==null?json_decode($z['metadataJson'],true):null,
             ],$zones),
+            'workAreas'=>array_map(static fn(array $a):array=>[
+                'areaKey'=>$a['areaKey'],'role'=>$a['role'],'displayName'=>$a['displayName'],
+                'x'=>$a['x'],'y'=>$a['y'],'width'=>$a['width'],'height'=>$a['height'],'priority'=>$a['priority'],
+                'metadata'=>$a['metadataJson']!==null?json_decode($a['metadataJson'],true):null,
+            ],$workAreas),
         ];
         $sourceHash=hash('sha256',json_encode($sourceMaterial,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR));
 
@@ -230,6 +305,18 @@ function glasses_station_calibration_save(
                 $org,$calibrationId,$zone['ingredientId'],$zone['zoneKey'],$zone['displayName'],
                 $zone['x'],$zone['y'],$zone['width'],$zone['height'],$zone['priority'],$zone['metadataJson']
             ]);
+        }
+
+        if($workAreas){
+            $insertArea=$pdo->prepare("INSERT INTO glasses_station_calibration_work_areas
+                (organization_id,calibration_id,area_key,role,display_name,x_norm,y_norm,width_norm,height_norm,priority,metadata_json)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)");
+            foreach($workAreas as $area){
+                $insertArea->execute([
+                    $org,$calibrationId,$area['areaKey'],$area['role'],$area['displayName'],
+                    $area['x'],$area['y'],$area['width'],$area['height'],$area['priority'],$area['metadataJson']
+                ]);
+            }
         }
 
         return glasses_station_calibration_payload($pdo,$org,$public,null);
