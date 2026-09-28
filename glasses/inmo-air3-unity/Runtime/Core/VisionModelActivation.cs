@@ -57,6 +57,7 @@ namespace Gelato.Ar.Core
         private readonly IVisionModelRuntimeHost _runtime;
         private readonly Func<VisionModelReport, CancellationToken, Task<bool>> _report;
         private readonly IVisionModelRuntimePersistence? _persistence;
+        private readonly SemaphoreSlim _activationGate = new SemaphoreSlim(1, 1);
         private readonly long _maximumArtifactBytes;
 
         public VisionModelActivationService(
@@ -77,6 +78,21 @@ namespace Gelato.Ar.Core
         public async Task<VisionModelActivationResult> ApplyAsync(
             VisionModelAssignment assignment,
             CancellationToken cancellationToken = default)
+        {
+            await _activationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                return await ApplyCoreAsync(assignment, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                _activationGate.Release();
+            }
+        }
+
+        private async Task<VisionModelActivationResult> ApplyCoreAsync(
+            VisionModelAssignment assignment,
+            CancellationToken cancellationToken)
         {
             if (assignment == null) throw new ArgumentNullException(nameof(assignment));
 
@@ -116,7 +132,18 @@ namespace Gelato.Ar.Core
 
             if (_persistence != null)
             {
-                await _persistence.BeginActivationAsync(assignment, previous, cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    await _persistence.BeginActivationAsync(assignment, previous, cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    return await FailAsync(assignment, "runtime_persistence_begin_failed", ex.Message, cancellationToken).ConfigureAwait(false);
+                }
             }
 
             byte[] artifact;
@@ -153,7 +180,18 @@ namespace Gelato.Ar.Core
             await ReportBestEffortAsync(CreateReport(assignment, "verified", "verified", actualSha), cancellationToken).ConfigureAwait(false);
             if (_persistence != null)
             {
-                await _persistence.StageVerifiedAsync(assignment, artifact, actualSha, cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    await _persistence.StageVerifiedAsync(assignment, artifact, actualSha, cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    return await FailAsync(assignment, "runtime_persistence_stage_failed", ex.Message, cancellationToken).ConfigureAwait(false);
+                }
             }
 
             VisionModelPreparedArtifact prepared;
@@ -203,8 +241,51 @@ namespace Gelato.Ar.Core
 
             if (_persistence != null)
             {
-                await _persistence.CommitActiveAsync(assignment, previous, cancellationToken).ConfigureAwait(false);
-                await _persistence.CleanupAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    await _persistence.CommitActiveAsync(assignment, previous, cancellationToken).ConfigureAwait(false);
+                    await _persistence.CleanupAsync(cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    var restored = await RestoreAfterFailureAsync(previous).ConfigureAwait(false);
+                    if (restored)
+                    {
+                        try
+                        {
+                            await _persistence.CommitRestoredAsync(
+                                previous,
+                                "runtime_persistence_commit_cancelled",
+                                "Activation persistence commit was cancelled after runtime swap.",
+                                CancellationToken.None).ConfigureAwait(false);
+                        }
+                        catch { }
+                    }
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    var restored = await RestoreAfterFailureAsync(previous).ConfigureAwait(false);
+                    if (restored)
+                    {
+                        try
+                        {
+                            await _persistence.CommitRestoredAsync(
+                                previous,
+                                "runtime_persistence_commit_failed",
+                                ex.Message,
+                                CancellationToken.None).ConfigureAwait(false);
+                        }
+                        catch { }
+                    }
+                    var result = await FailAsync(
+                        assignment,
+                        "runtime_persistence_commit_failed",
+                        ex.Message,
+                        cancellationToken).ConfigureAwait(false);
+                    result.RestoredPrevious = restored;
+                    return result;
+                }
             }
 
             var reportType = string.Equals(assignment.Selection, "rollback", StringComparison.Ordinal)
