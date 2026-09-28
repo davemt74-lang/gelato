@@ -29,6 +29,7 @@ namespace Gelato.Ar.Core
         Task<PairResult> PairAsync(string pairingCode, DeviceDescriptor device, CancellationToken cancellationToken);
         Task<CurrentWork> GetCurrentWorkAsync(CancellationToken cancellationToken);
         Task<StationCalibration?> GetStationCalibrationAsync(CameraFrame frame, CancellationToken cancellationToken);
+        Task<VisionLabelProfile?> GetVisionLabelProfileAsync(string buildSessionPublicId, string detectorName, CancellationToken cancellationToken);
         Task<BuildSession> StartBuildAsync(string kdsItemPublicId, string? sourceRevision, CancellationToken cancellationToken);
         Task<BuildSession> SubmitObservationAsync(string buildSessionPublicId, IngredientObservation observation, CancellationToken cancellationToken);
         Task<BuildSession> ConfirmComponentAsync(string buildSessionPublicId, string componentKey, CancellationToken cancellationToken);
