@@ -102,17 +102,18 @@ namespace Gelato.Ar.Core
         {
             var state = await _persistence.LoadAsync(cancellationToken).ConfigureAwait(false)
                 ?? new VisionModelDurableState();
+            var interrupted = interrupted;
 
             if (!string.IsNullOrWhiteSpace(state.DetectorName)
                 && !string.Equals(state.DetectorName, _runtime.DetectorName, StringComparison.Ordinal))
             {
-                return Fail("durable_detector_mismatch", "Durable model state belongs to another detector.", state.Pending != null);
+                return Fail("durable_detector_mismatch", "Durable model state belongs to another detector.", interrupted);
             }
 
             if (!string.IsNullOrWhiteSpace(state.RuntimeType)
                 && !string.Equals(state.RuntimeType, _runtime.RuntimeType, StringComparison.OrdinalIgnoreCase))
             {
-                return Fail("durable_runtime_mismatch", "Durable model state belongs to another runtime type.", state.Pending != null);
+                return Fail("durable_runtime_mismatch", "Durable model state belongs to another runtime type.", interrupted);
             }
 
             var current = _runtime.CaptureActive();
@@ -130,14 +131,14 @@ namespace Gelato.Ar.Core
                 {
                     Ready = true,
                     Recovered = false,
-                    InterruptedActivationFound = state.Pending != null,
-                    State = state.Pending != null ? "interrupted_without_known_good" : "empty"
+                    InterruptedActivationFound = interrupted,
+                    State = interrupted ? "interrupted_without_known_good" : "empty"
                 };
             }
 
             if (Matches(current, expectedPackage, expectedSha))
             {
-                if (state.Pending != null)
+                if (interrupted)
                 {
                     await _persistence.CommitRestoredAsync(
                         current,
@@ -149,8 +150,8 @@ namespace Gelato.Ar.Core
                 return new VisionModelRecoveryResult
                 {
                     Ready = true,
-                    Recovered = state.Pending != null,
-                    InterruptedActivationFound = state.Pending != null,
+                    Recovered = interrupted,
+                    InterruptedActivationFound = interrupted,
                     State = "current_matches_durable"
                 };
             }
@@ -160,7 +161,7 @@ namespace Gelato.Ar.Core
                 return Fail(
                     "runtime_recovery_adapter_required",
                     "Durable known-good model exists but the runtime host cannot reload it until the vendor loader adapter is installed.",
-                    state.Pending != null);
+                    interrupted);
             }
 
             var artifact = await _persistence.TryReadVerifiedArtifactAsync(
@@ -169,11 +170,11 @@ namespace Gelato.Ar.Core
                 cancellationToken).ConfigureAwait(false);
 
             if (artifact == null || artifact.Length == 0)
-                return Fail("known_good_artifact_missing", "Durable known-good model artifact is unavailable.", state.Pending != null);
+                return Fail("known_good_artifact_missing", "Durable known-good model artifact is unavailable.", interrupted);
 
             var actualSha = VisionModelActivationService.ComputeSha256(artifact);
             if (!string.Equals(actualSha, expectedSha.Trim().ToLowerInvariant(), StringComparison.Ordinal))
-                return Fail("known_good_artifact_corrupt", "Durable known-good model artifact failed SHA-256 verification.", state.Pending != null);
+                return Fail("known_good_artifact_corrupt", "Durable known-good model artifact failed SHA-256 verification.", interrupted);
 
             var snapshot = new VisionModelRuntimeSnapshot
             {
@@ -186,12 +187,12 @@ namespace Gelato.Ar.Core
                 await recoverable.RecoverAsync(snapshot, artifact, cancellationToken).ConfigureAwait(false);
                 var recovered = _runtime.CaptureActive();
                 if (!Matches(recovered, expectedPackage, expectedSha))
-                    return Fail("runtime_recovery_unconfirmed", "Runtime recovery did not confirm the durable known-good model.", state.Pending != null);
+                    return Fail("runtime_recovery_unconfirmed", "Runtime recovery did not confirm the durable known-good model.", interrupted);
 
                 await _persistence.CommitRestoredAsync(
                     recovered,
-                    state.Pending != null ? "restart_interrupted_activation" : string.Empty,
-                    state.Pending != null ? "Recovered known-good runtime after interrupted activation." : "Recovered known-good runtime after restart.",
+                    interrupted ? "restart_interrupted_activation" : string.Empty,
+                    interrupted ? "Recovered known-good runtime after interrupted activation." : "Recovered known-good runtime after restart.",
                     cancellationToken).ConfigureAwait(false);
                 await _persistence.CleanupAsync(cancellationToken).ConfigureAwait(false);
 
@@ -199,7 +200,7 @@ namespace Gelato.Ar.Core
                 {
                     Ready = true,
                     Recovered = true,
-                    InterruptedActivationFound = state.Pending != null,
+                    InterruptedActivationFound = interrupted,
                     State = "known_good_recovered"
                 };
             }
@@ -209,7 +210,7 @@ namespace Gelato.Ar.Core
             }
             catch (Exception ex)
             {
-                return Fail("runtime_recovery_failed", ex.Message, state.Pending != null);
+                return Fail("runtime_recovery_failed", ex.Message, interrupted);
             }
         }
 
