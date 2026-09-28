@@ -204,7 +204,7 @@ function glasses_station_calibration_save(
         ];
         $sourceHash=hash('sha256',json_encode($sourceMaterial,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR));
 
-        $q=$pdo->prepare('SELECT COALESCE(MAX(version),0) FROM glasses_station_calibrations WHERE organization_id=? AND station_id=? FOR UPDATE');
+        $q=$pdo->prepare('SELECT COALESCE(MAX(version),0) FROM glasses_station_calibrations WHERE organization_id=? AND station_id=?');
         $q->execute([$org,$station['id']]);
         $version=(int)$q->fetchColumn()+1;
         $public=glasses_public_id('station-cal');
