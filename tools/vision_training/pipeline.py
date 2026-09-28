@@ -8,9 +8,17 @@ from typing import Any
 SCHEMA_DATASET="gelato.vision_training_dataset.v1"
 SCHEMA_RELEASE="gelato.vision_model_release.v1"
 SCHEMA_BROWSER="gelato.browser_onnx_detector.v1"
+SCHEMA_COMPARISON="gelato.vision_model_comparison.v1"
 IMAGE_EXTS={".jpg",".jpeg",".png",".webp"}
 
 class PipelineError(RuntimeError): pass
+
+@dataclass(frozen=True)
+class ComparisonPolicy:
+    max_overall_regression: float=.01
+    max_class_regression: float=.03
+    min_map50_gain: float=.005
+    min_recall_gain: float=.005
 
 @dataclass(frozen=True)
 class Thresholds:
@@ -144,6 +152,56 @@ def quality_gate(metrics:dict[str,Any],thresholds:Thresholds)->dict[str,Any]:
             if value<minimum: failures.append(f"{name} {key} {value:.4f} < {minimum:.4f}")
     return {"passed":not failures,"failures":failures,"thresholds":thresholds.__dict__}
 
+def golden_test_fingerprint(workspace:Path)->str:
+    root=workspace.resolve(); parts=[]
+    for folder in ("images/test","labels/test"):
+        base=root/folder
+        if not base.is_dir(): raise PipelineError("Golden test split is missing.")
+        for path in sorted(p for p in base.iterdir() if p.is_file()):
+            rel=path.relative_to(root).as_posix()
+            parts.append(rel.encode("utf-8")+b"\0"+hashlib.sha256(path.read_bytes()).digest())
+    if not parts: raise PipelineError("Golden test split is empty.")
+    h=hashlib.sha256()
+    for part in parts:h.update(part)
+    return h.hexdigest()
+
+def comparison_metrics_map(metrics:dict[str,Any])->dict[str,dict[str,float]]:
+    out={}
+    for row in metrics.get("perClass") or []:
+        name=str(row.get("name","")).strip()
+        if not name: continue
+        out[name]={k:float(row.get(k,0)) for k in ("precision","recall","map50","map5095")}
+    return out
+
+def compare_models(champion:dict[str,Any],challenger:dict[str,Any],policy:ComparisonPolicy,override_reason:str="")->dict[str,Any]:
+    ch_hash=str(champion.get("goldenTestHash","")); ca_hash=str(challenger.get("goldenTestHash",""))
+    if len(ch_hash)!=64 or ch_hash!=ca_hash: raise PipelineError("Champion and challenger must use the same golden test set hash.")
+    champion_overall=champion.get("overall") or {}; challenger_overall=challenger.get("overall") or {}
+    regressions=[]; improvements=[]
+    for key in ("precision","recall","map50","map5095"):
+        before=float(champion_overall.get(key,0)); after=float(challenger_overall.get(key,0)); delta=after-before
+        if delta < -policy.max_overall_regression: regressions.append(f"overall {key} regression {delta:.4f}")
+        if delta > 0: improvements.append({"scope":"overall","metric":key,"delta":round(delta,6)})
+    ch_classes=comparison_metrics_map(champion); ca_classes=comparison_metrics_map(challenger)
+    if set(ch_classes)!=set(ca_classes): raise PipelineError("Champion and challenger class sets must match for comparison.")
+    for name in sorted(ch_classes):
+        for key in ("precision","recall","map50"):
+            delta=ca_classes[name][key]-ch_classes[name][key]
+            if delta < -policy.max_class_regression: regressions.append(f"{name} {key} regression {delta:.4f}")
+            if delta > 0: improvements.append({"scope":"class","class":name,"metric":key,"delta":round(delta,6)})
+    map_gain=float(challenger_overall.get("map50",0))-float(champion_overall.get("map50",0))
+    recall_gain=float(challenger_overall.get("recall",0))-float(champion_overall.get("recall",0))
+    demonstrated_gain=map_gain>=policy.min_map50_gain or recall_gain>=policy.min_recall_gain
+    override_reason=override_reason.strip()
+    override=bool(override_reason)
+    eligible=(not regressions and demonstrated_gain) or override
+    return {
+        "schema":SCHEMA_COMPARISON,"eligible":eligible,"override":override,"overrideReason":override_reason or None,
+        "goldenTestHash":ca_hash,"policy":policy.__dict__,"regressions":regressions,"improvements":improvements,
+        "summary":{"map50Delta":round(map_gain,6),"recallDelta":round(recall_gain,6),"demonstratedGain":demonstrated_gain},
+        "champion":{"overall":champion_overall},"challenger":{"overall":challenger_overall},
+    }
+
 def extract_ultralytics_metrics(metrics:Any,names:dict[int,str]|list[str])->dict[str,Any]:
     names_map={int(k):str(v) for k,v in (names.items() if isinstance(names,dict) else enumerate(names))}
     rd=getattr(metrics,"results_dict",{}) or {}
@@ -212,15 +270,30 @@ def train_release(args:argparse.Namespace)->dict[str,Any]:
     best=YOLO(str(best_path))
     val=best.val(data=str(workspace/"data.yaml"),split="test",imgsz=args.imgsz,project=str(Path(args.output)/"runs"),name="test")
     metrics=extract_ultralytics_metrics(val,best.names)
+    metrics["goldenTestHash"]=golden_test_fingerprint(workspace)
     thresholds=Thresholds(args.min_precision,args.min_recall,args.min_map50,args.min_map5095,args.min_class_precision,args.min_class_recall,args.min_class_map50)
     gate=quality_gate(metrics,thresholds)
     metrics["qualityGate"]=gate
     metrics_path=Path(args.output)/"metrics.json";metrics_path.parent.mkdir(parents=True,exist_ok=True);metrics_path.write_text(json.dumps(metrics,indent=2)+"\n",encoding="utf-8")
     if not gate["passed"]: raise PipelineError("Training finished but release gate failed: "+"; ".join(gate["failures"]))
+    comparison=None
+    if args.champion_metrics:
+        champion=json.loads(Path(args.champion_metrics).read_text("utf-8"))
+        comparison=compare_models(champion,metrics,ComparisonPolicy(args.max_overall_regression,args.max_class_regression,args.min_map50_gain,args.min_recall_gain),args.comparison_override_reason)
+        (Path(args.output)/"model-comparison.json").write_text(json.dumps(comparison,indent=2)+"\n",encoding="utf-8")
+        if not comparison["eligible"]: raise PipelineError("Challenger is not eligible against champion: "+"; ".join(comparison["regressions"] or ["no required gain demonstrated"]))
     exported=Path(str(best.export(format="onnx",imgsz=args.imgsz,simplify=True,dynamic=False,opset=17)))
     verification=verify_onnx(exported,args.imgsz)
     labels=[str(best.names[i]) for i in sorted(best.names)]
-    return release_package(exported,labels,metrics,Path(args.output)/"release",args.detector_name,args.model_name,args.model_version,args.imgsz,verification,thresholds)
+    package=release_package(exported,labels,metrics,Path(args.output)/"release",args.detector_name,args.model_name,args.model_version,args.imgsz,verification,thresholds)
+    if comparison is not None:
+        package["metadata"]["modelComparison"]=comparison
+        release_dir=Path(args.output)/"release";(release_dir/"gelato-package.json").write_text(json.dumps(package,indent=2)+"\n",encoding="utf-8")
+        release_zip=release_dir/package["releaseZip"]
+        with zipfile.ZipFile(release_zip,"w",compression=zipfile.ZIP_DEFLATED,compresslevel=9) as z:
+            z.write(release_dir/package["artifactFile"],package["artifactFile"]);z.write(release_dir/"gelato-package.json","gelato-package.json");z.writestr("metrics.json",json.dumps(metrics,indent=2)+"\n");z.writestr("model-comparison.json",json.dumps(comparison,indent=2)+"\n")
+        package["releaseZipSha256"]=sha256_file(release_zip);(release_dir/"release-summary.json").write_text(json.dumps(package,indent=2)+"\n",encoding="utf-8")
+    return package
 
 def parser()->argparse.ArgumentParser:
     p=argparse.ArgumentParser(description="Gelato vision training/evaluation/ONNX release pipeline")
@@ -228,8 +301,12 @@ def parser()->argparse.ArgumentParser:
     v=sp.add_parser("validate");v.add_argument("dataset")
     prep=sp.add_parser("prepare");prep.add_argument("dataset");prep.add_argument("output");prep.add_argument("--seed",type=int,default=74);prep.add_argument("--train-ratio",type=float,default=.70);prep.add_argument("--val-ratio",type=float,default=.15);prep.add_argument("--test-ratio",type=float,default=.15)
     gate=sp.add_parser("gate");gate.add_argument("metrics"); add_threshold_args(gate)
-    tr=sp.add_parser("train-release");tr.add_argument("dataset");tr.add_argument("output");tr.add_argument("--base-model",default="yolo11n.pt");tr.add_argument("--detector-name",default="food-detector");tr.add_argument("--model-name",required=True);tr.add_argument("--model-version",required=True);tr.add_argument("--epochs",type=int,default=100);tr.add_argument("--imgsz",type=int,default=640);tr.add_argument("--batch",type=int,default=16);tr.add_argument("--patience",type=int,default=20);tr.add_argument("--seed",type=int,default=74);tr.add_argument("--train-ratio",type=float,default=.70);tr.add_argument("--val-ratio",type=float,default=.15);tr.add_argument("--test-ratio",type=float,default=.15);add_threshold_args(tr)
+    cmp=sp.add_parser("compare");cmp.add_argument("champion_metrics");cmp.add_argument("challenger_metrics");cmp.add_argument("--override-reason",default="");add_comparison_args(cmp)
+    tr=sp.add_parser("train-release");tr.add_argument("dataset");tr.add_argument("output");tr.add_argument("--base-model",default="yolo11n.pt");tr.add_argument("--detector-name",default="food-detector");tr.add_argument("--model-name",required=True);tr.add_argument("--model-version",required=True);tr.add_argument("--epochs",type=int,default=100);tr.add_argument("--imgsz",type=int,default=640);tr.add_argument("--batch",type=int,default=16);tr.add_argument("--patience",type=int,default=20);tr.add_argument("--seed",type=int,default=74);tr.add_argument("--train-ratio",type=float,default=.70);tr.add_argument("--val-ratio",type=float,default=.15);tr.add_argument("--test-ratio",type=float,default=.15);tr.add_argument("--champion-metrics");tr.add_argument("--comparison-override-reason",default="");add_threshold_args(tr);add_comparison_args(tr)
     return p
+
+def add_comparison_args(p:argparse.ArgumentParser)->None:
+    p.add_argument("--max-overall-regression",type=float,default=.01);p.add_argument("--max-class-regression",type=float,default=.03);p.add_argument("--min-map50-gain",type=float,default=.005);p.add_argument("--min-recall-gain",type=float,default=.005)
 
 def add_threshold_args(p:argparse.ArgumentParser)->None:
     p.add_argument("--min-precision",type=float,default=.70);p.add_argument("--min-recall",type=float,default=.70);p.add_argument("--min-map50",type=float,default=.75);p.add_argument("--min-map5095",type=float,default=.45);p.add_argument("--min-class-precision",type=float,default=.60);p.add_argument("--min-class-recall",type=float,default=.60);p.add_argument("--min-class-map50",type=float,default=.65)
@@ -246,6 +323,8 @@ def main(argv:list[str]|None=None)->int:
         elif args.command=="prepare": print(json.dumps(prepare_workspace(Path(args.dataset),Path(args.output),args.seed,args.train_ratio,args.val_ratio,args.test_ratio),indent=2))
         elif args.command=="gate":
             m=json.loads(Path(args.metrics).read_text("utf-8"));t=Thresholds(args.min_precision,args.min_recall,args.min_map50,args.min_map5095,args.min_class_precision,args.min_class_recall,args.min_class_map50);result=quality_gate(m,t);print(json.dumps(result,indent=2));return 0 if result["passed"] else 3
+        elif args.command=="compare":
+            champion=json.loads(Path(args.champion_metrics).read_text("utf-8"));challenger=json.loads(Path(args.challenger_metrics).read_text("utf-8"));result=compare_models(champion,challenger,ComparisonPolicy(args.max_overall_regression,args.max_class_regression,args.min_map50_gain,args.min_recall_gain),args.override_reason);print(json.dumps(result,indent=2));return 0 if result["eligible"] else 4
         elif args.command=="train-release": print(json.dumps(train_release(args),indent=2))
         return 0
     except (PipelineError,ValueError,json.JSONDecodeError) as e:
