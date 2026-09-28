@@ -519,9 +519,11 @@ function glasses_build_correct_observation(PDO $pdo,array $device,string $sessio
             if(!$target||(float)$target['expected_quantity']<=0.0)
                 throw new InvalidArgumentException('Replacement must target a configured recipe component.');
 
-            $correctedQuantity=isset($input['correctedQuantity'])
-                ?(float)$input['correctedQuantity']
-                :(float)$observation['quantity'];
+            $correctedQuantity=!empty($input['hasCorrectedQuantity'])
+                ?(float)($input['correctedQuantity']??0)
+                :(isset($input['correctedQuantity'])&&!array_key_exists('hasCorrectedQuantity',$input)
+                    ?(float)$input['correctedQuantity']
+                    :(float)$observation['quantity']);
             if(!is_finite($correctedQuantity)||$correctedQuantity<0.001||$correctedQuantity>100.0)
                 throw new InvalidArgumentException('Corrected quantity must be between 0.001 and 100.');
         }
