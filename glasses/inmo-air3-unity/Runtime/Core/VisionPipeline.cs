@@ -173,6 +173,12 @@ namespace Gelato.Ar.Core
                 detection.Confidence = transfer.EffectiveConfidence;
                 detection.Action = transfer.Action;
 
+                if (detection.Confidence < _options.MinimumConfidence)
+                {
+                    Diagnostics.DetectionsRejected++;
+                    continue;
+                }
+
                 accepted.Add(detection);
                 Diagnostics.DetectionsAccepted++;
             }
