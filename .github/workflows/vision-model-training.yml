@@ -1,0 +1,36 @@
+name: Vision Model Training Pipeline
+
+on:
+  pull_request:
+    paths:
+      - 'tools/vision_training/**'
+      - 'tests/vision-training-pipeline.test.py'
+      - 'docs/VISION-MODEL-TRAINING.md'
+      - '.github/workflows/vision-model-training.yml'
+  push:
+    branches: [main, 'feature/vision-training-release-pipeline']
+
+jobs:
+  training-pipeline-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Python syntax
+        run: python -m py_compile tools/vision_training/pipeline.py tests/vision-training-pipeline.test.py
+      - name: Pipeline contracts
+        run: python -m unittest tests/vision-training-pipeline.test.py -v
+      - name: CLI smoke
+        run: python tools/vision_training/pipeline.py --help
+      - name: Governance contract
+        run: |
+          grep -q 'gelato.vision_training_dataset.v1' tools/vision_training/pipeline.py
+          grep -q 'gelato.vision_model_release.v1' tools/vision_training/pipeline.py
+          grep -q 'gelato.browser_onnx_detector.v1' tools/vision_training/pipeline.py
+          grep -q 'quality_gate' tools/vision_training/pipeline.py
+          grep -q 'verify_onnx' tools/vision_training/pipeline.py
+          grep -q 'artifactSha256' tools/vision_training/pipeline.py
+          grep -q 'ultralytics==8.4.164' tools/vision_training/requirements-train.txt
+          grep -q 'onnxruntime==1.30.0' tools/vision_training/requirements-train.txt
