@@ -54,10 +54,13 @@ function glasses_vision_ops_devices(PDO $pdo,int $org): array
       cal.public_id calibration_public_id,cal.version calibration_version,cal.source_hash calibration_source_hash,
       ds.drift_state,ds.drift_score,ds.created_at drift_created_at,
       di.public_id incident_public_id,di.severity incident_severity,di.category incident_category,di.recovery_status,
-      di.validation_stable_samples,di.last_seen_at incident_last_seen_at
+      di.validation_stable_samples,di.last_seen_at incident_last_seen_at,
+      ua.public_id wearer_assignment_public_id,ua.assignment_role wearer_role,u.id wearer_user_id,u.display_name wearer_user_name
     FROM glasses_devices d
     JOIN locations l ON l.organization_id=d.organization_id AND l.id=d.location_id
     LEFT JOIN kds_stations s ON s.organization_id=d.organization_id AND s.id=d.station_id
+    LEFT JOIN glasses_user_device_assignments ua ON ua.id=(SELECT ua2.id FROM glasses_user_device_assignments ua2 WHERE ua2.organization_id=d.organization_id AND ua2.device_id=d.id AND ua2.released_at IS NULL ORDER BY ua2.assigned_at DESC,ua2.id DESC LIMIT 1)
+    LEFT JOIN users u ON u.id=ua.user_id
     LEFT JOIN glasses_vision_model_assignments a ON a.id=(
       SELECT a2.id FROM glasses_vision_model_assignments a2
       WHERE a2.organization_id=d.organization_id AND a2.device_id=d.id
@@ -100,6 +103,7 @@ function glasses_vision_ops_devices(PDO $pdo,int $org): array
             'locationId'=>(int)$row['location_id'],'locationName'=>(string)$row['location_name'],
             'stationPublicId'=>$row['station_public_id'],'stationName'=>$row['station_name'],
             'sdkVersion'=>$row['sdk_version'],'appVersion'=>$row['app_version'],'systemVersion'=>$row['system_version'],
+            'wearer'=>$row['wearer_user_id']!==null?['assignmentPublicId'=>$row['wearer_assignment_public_id'],'userId'=>(int)$row['wearer_user_id'],'userName'=>$row['wearer_user_name'],'role'=>$row['wearer_role']]:null,
             'lastSeenAt'=>$row['last_seen_at'],'pairedAt'=>$row['paired_at'],
             'assignmentKey'=>$row['assignment_key'],'detectorName'=>$row['detector_name'],'assignmentAction'=>$row['assignment_action'],
             'selection'=>$row['selection'],'assignmentRolloutStatus'=>$row['rollout_status'],'assignmentIssuedAt'=>$row['assignment_issued_at'],
@@ -180,7 +184,7 @@ function glasses_vision_ops_catalog(PDO $pdo,array $user): array
       'ready'=>true,'generatedAt'=>gmdate('c'),'devices'=>$devices,'summary'=>$summary,
       'needsAttention'=>array_slice($needs,0,30),'timeline'=>glasses_vision_ops_timeline($pdo,$org,80),
       'locations'=>$lq->fetchAll(),'links'=>[
-        'models'=>'glasses-vision-models.php','calibration'=>'glasses-calibration-studio.php','learning'=>'glasses-learning.php','labels'=>'glasses-vision-profiles.php'
+        'models'=>'glasses-vision-models.php','calibration'=>'glasses-calibration-studio.php','learning'=>'glasses-learning.php','lab'=>'glasses-vision-lab.php','labels'=>'glasses-vision-profiles.php'
       ],
     ];
 }
