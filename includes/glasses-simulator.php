@@ -7,6 +7,8 @@ require_once __DIR__.'/glasses-work.php';
 require_once __DIR__.'/glasses-build.php';
 require_once __DIR__.'/glasses-validation.php';
 require_once __DIR__.'/glasses-handoff.php';
+require_once __DIR__.'/glasses-vision-models.php';
+require_once __DIR__.'/glasses-vision-profiles.php';
 
 function glasses_simulator_can_write(array $user): bool
 {
@@ -86,6 +88,16 @@ function glasses_simulator_dispatch(PDO $pdo,array $user,array $in): array
 
     if($action==='build.get'){
         return ['buildSession'=>glasses_simulator_build_payload($pdo,$device,$session)];
+    }
+    if($action==='vision.model_assignment'){
+        $detector=trim((string)($in['detectorName']??''));
+        if($detector==='')throw new InvalidArgumentException('Detector name is required.');
+        return ['assignment'=>glasses_vision_model_assignment($pdo,$device,$session,$detector)];
+    }
+    if($action==='vision.profile'){
+        $detector=trim((string)($in['detectorName']??''));
+        if($detector==='')throw new InvalidArgumentException('Detector name is required.');
+        return ['profile'=>glasses_vision_profile_for_build($pdo,$device,$session,$detector)];
     }
     if($action==='build.observe'){
         return ['buildSession'=>glasses_build_observe($pdo,$device,$session,$in)];

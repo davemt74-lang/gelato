@@ -200,10 +200,17 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
         <div class="camera-grid">
           <label><span>Mode</span><select id="visionMode"><option value="manual">Manual</option><option value="assisted">Assisted</option><option value="automatic">Automatic</option></select></label>
           <label><span>FPS limit</span><select id="visionFpsLimit"><option value="2">2 FPS</option><option value="4" selected>4 FPS</option><option value="6">6 FPS</option><option value="8">8 FPS</option></select></label>
+          <label><span>Detector adapter</span><select id="visionAdapterSelect"><option value="fixture">Deterministic Fixture</option><option value="onnx">Governed ONNX</option></select></label>
+          <label><span>Detector name</span><input id="visionDetectorName" value="food-detector" maxlength="120" autocomplete="off"></label>
         </div>
+        <div class="inline-actions">
+          <button id="loadVisionModel" type="button">Load Governed Model</button>
+          <button id="unloadVisionModel" type="button" disabled>Unload Model</button>
+        </div>
+        <div id="visionModelStatus" class="vision-model-status"><strong>FIXTURE</strong><span>No governed browser model loaded.</span></div>
         <label class="vision-confidence"><span>Auto confidence threshold</span><input id="visionConfidenceThreshold" type="range" min="40" max="99" value="75"><output id="visionConfidenceValue">75%</output></label>
         <div id="visionMetrics" class="vision-metrics">FPS 0.0 · 0ms · 0 det</div>
-        <p class="calibration-note">Assisted draws tracked detections only. Automatic also submits governed build observations. The fixture adapter is deterministic until the production browser model adapter is connected.</p>
+        <p class="calibration-note">Governed ONNX loads only the model package assigned to the selected device/build, verifies its registered byte size and SHA-256 in the browser, and applies the active Gelato label profile before detections enter temporal tracking.</p>
         <div class="temporal-validation-panel">
           <div class="console-heading"><div><small>TEMPORAL PRODUCT VALIDATION</small><strong>Multi-ingredient state</strong></div><span id="temporalValidationState">IDLE</span></div>
           <div id="temporalValidationDetail" class="vision-metrics">0 missing · 0 verify · 0 unexpected · 0 sequence · 0 pending</div>
@@ -258,6 +265,6 @@ window.GELATO_GLASSES_SIMULATOR={
   api:'api/glasses-simulator.php'
 };
 </script>
-<script src="assets/js/glasses-web-simulator.js?v=20260928-temporal1"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20260928-browsermodel1"></script>
 </body>
 </html>

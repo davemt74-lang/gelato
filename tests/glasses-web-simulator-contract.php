@@ -124,6 +124,28 @@ gws_assert(str_contains($js,"temporalSource:'web_glasses_simulator_temporal_visi
 gws_assert(str_contains($js,"visionMode()==='automatic'&&!state.temporalGate?.ready"),'Expo handoff must remain blocked when automatic temporal validation is not ready.');
 gws_assert(str_contains($js,'function clearTemporalRuntime'),'Temporal state must reset at build, mode and device boundaries.');
 gws_assert(str_contains($css,'.temporal-event')&&str_contains($css,'.vision-auto-box.pending'),'Temporal events and pre-stable tracks must have visible, distinct UI states.');
+gws_assert(str_contains($core,"require_once __DIR__.'/glasses-vision-models.php'")&&str_contains($core,"require_once __DIR__.'/glasses-vision-profiles.php'"),'Simulator must reuse governed model assignment and vision profile services.');
+gws_assert(str_contains($core,"\$action==='vision.model_assignment'")&&str_contains($core,'glasses_vision_model_assignment'),'Simulator must expose governed model assignment for the active device/build.');
+gws_assert(str_contains($core,"\$action==='vision.profile'")&&str_contains($core,'glasses_vision_profile_for_build'),'Simulator must expose the active governed label profile.');
+gws_assert(str_contains($page,'visionAdapterSelect')&&str_contains($page,'loadVisionModel'),'Simulator must expose fixture versus governed ONNX runtime selection.');
+gws_assert(str_contains($page,'visionDetectorName')&&str_contains($page,'visionModelStatus'),'Simulator must expose detector identity and verified model state.');
+gws_assert(str_contains($js,"const ORT_WEB_VERSION='1.30.0'"),'Browser ONNX runtime dependency must be explicitly version-pinned.');
+gws_assert(str_contains($js,'BROWSER_MODEL_MAX_BYTES'),'Browser model downloads must enforce a hard artifact size ceiling.');
+gws_assert(str_contains($js,'crypto.subtle.digest'),'Browser model activation must verify SHA-256 over downloaded bytes.');
+gws_assert(str_contains($js,'pkg.artifactBytes')&&str_contains($js,'pkg.artifactSha256'),'Browser model activation must enforce the immutable package manifest.');
+gws_assert(str_contains($js,"pkg.runtimeType!=='onnx'"),'Browser runtime must fail closed for non-ONNX governed assignments.');
+gws_assert(str_contains($js,"gelato.browser_onnx_detector.v1"),'ONNX packages must declare an explicit browser inference metadata schema.');
+gws_assert(str_contains($js,'ort.InferenceSession.create'),'Real browser inference must create an ONNX Runtime Web session from verified bytes.');
+gws_assert(str_contains($js,'preprocessOnnxFrame'),'Real browser inference must preprocess live camera frames into model tensors.');
+gws_assert(str_contains($js,'decodeYoloV8'),'Real browser inference must decode supported detector output into normalized detections.');
+gws_assert(str_contains($js,'nmsDetections'),'Real browser inference must suppress overlapping duplicate detections.');
+gws_assert(str_contains($js,'applyVisionProfile'),'Raw model labels must pass through the existing Gelato label-profile authority.');
+gws_assert(str_contains($js,'blockedLabels'),'Blocked detector labels must fail closed in browser inference.');
+gws_assert(str_contains($js,'profileMinimumConfidence'),'Per-label profile confidence policy must remain observable in browser detections.');
+gws_assert(str_contains($js,"id:'onnx'"),'Browser vision adapter registry must include a real ONNX adapter.');
+gws_assert(str_contains($js,'unloadGovernedVisionModel'),'Build/device boundaries must release governed browser model sessions.');
+gws_assert(str_contains($css,'.vision-model-status'),'Governed model verification state must be visible in the simulator.');
+
 
 
 

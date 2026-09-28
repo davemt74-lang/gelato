@@ -111,3 +111,12 @@
 .temporal-event.removed b,.temporal-event.sequence_violation b{color:var(--warn)}
 .temporal-event.replaced b{color:var(--blue)}
 .vision-auto-box.pending{border-style:dashed;opacity:.78}
+
+
+/* Governed real browser model inference */
+.vision-model-status{display:grid;grid-template-columns:auto 1fr;gap:8px;align-items:center;border:1px solid #253942;border-radius:7px;padding:7px 8px;font-size:8px;color:var(--muted)}
+.vision-model-status strong{font-size:7px;letter-spacing:.08em;color:var(--blue)}
+.vision-model-status[data-state="ready"]{border-color:#2d6644}.vision-model-status[data-state="ready"] strong{color:var(--good)}
+.vision-model-status[data-state="loading"],.vision-model-status[data-state="verifying"]{border-color:#31596b}
+.vision-model-status[data-state="error"]{border-color:#6b3b31}.vision-model-status[data-state="error"] strong{color:var(--warn)}
+.vision-runtime-panel input[type="text"],.vision-runtime-panel input:not([type]){width:100%;border:1px solid #2c3930;background:#111914;color:var(--ink);border-radius:8px;padding:7px;font-size:9px}

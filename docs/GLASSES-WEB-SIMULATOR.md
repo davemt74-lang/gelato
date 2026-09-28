@@ -158,3 +158,68 @@ Automatic browser vision now reasons across time instead of treating every detec
 - The simulator shows current temporal status plus recent added, removed, replaced and sequence-violation events.
 
 This layer does not replace the Gelato build ledger or product validator. It filters noisy detector timing into canonical `added` / `removed` observations and adds a stricter simulator-side readiness gate before the existing validation and handoff authority.
+
+
+## Governed real browser ONNX inference
+
+The browser simulator can now execute an actual governed ONNX detector against the live camera feed instead of relying only on the deterministic fixture.
+
+### Governed load path
+
+A Live Gelato build selects a detector name and requests the existing vision-model assignment for the selected device and build session.
+
+The browser accepts an assignment only when:
+
+- assignment action is `apply`;
+- package compatibility is true;
+- the selected package runtime is `onnx`;
+- the artifact URL comes from the immutable registered package;
+- downloaded bytes stay below the 512 MiB browser safety ceiling;
+- optional registered artifact byte size matches exactly;
+- SHA-256 computed with Web Crypto matches the registered package SHA-256;
+- package metadata contains the supported `gelato.browser_onnx_detector.v1` contract.
+
+Only after those checks does the simulator create an ONNX Runtime Web inference session.
+
+ONNX Runtime Web is explicitly version-pinned by the simulator. The model artifact itself continues to come only from Gelato's governed package assignment.
+
+### Browser inference metadata
+
+An ONNX package intended for browser preview declares `metadata.browserInference` similar to:
+
+```json
+{
+  "schema": "gelato.browser_onnx_detector.v1",
+  "decoder": "yolo_v8",
+  "input": {
+    "name": "images",
+    "width": 640,
+    "height": 640,
+    "layout": "nchw"
+  },
+  "output": {
+    "name": "output0",
+    "layout": "channels_first",
+    "boxScale": "pixels"
+  },
+  "labels": ["turkey_slice", "bacon_strip", "lettuce"],
+  "nmsIou": 0.45,
+  "maxDetections": 25
+}
+```
+
+The first supported decoder is YOLOv8-style output. Unsupported decoder/runtime metadata fails closed rather than guessing model semantics.
+
+### Inference path
+
+Live camera frame → RGB tensor preprocessing → ONNX Runtime Web → YOLOv8 decode → non-maximum suppression → active Gelato Vision Label Profile → temporal multi-ingredient tracking → canonical observations → canonical product validation.
+
+Raw detector labels do not directly become recipe evidence.
+
+The active `gelato.vision_label_profile.v1` is requested for the same build and detector. Explicit blocked labels are rejected, detector-specific mappings are honored, per-label minimum confidence can only tighten the UI confidence floor, and exact normalized recipe display-name fallback remains available only when the label is not blocked.
+
+### Lifecycle
+
+The ONNX session is build-specific for governance purposes. It is released on build reset, device switch, mode switch, explicit unload, or page teardown. A model from a prior ticket therefore cannot silently continue producing evidence for a new build.
+
+The deterministic fixture remains available as a simulator/test adapter and is visually distinct from the Governed ONNX adapter.
