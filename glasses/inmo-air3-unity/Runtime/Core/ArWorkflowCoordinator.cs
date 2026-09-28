@@ -20,6 +20,7 @@ namespace Gelato.Ar.Core
         public ExpoHandoff? Handoff { get; private set; }
         public string? LastError { get; private set; }
         public string? LastCalibrationError { get; private set; }
+        public string? LastSubmittedObservationKey { get; private set; }
 
         public ArWorkflowCoordinator(IGlassesPlatform platform, IGelatoGateway gateway, IDeviceTokenStore tokenStore)
         {
@@ -141,6 +142,7 @@ namespace Gelato.Ar.Core
             return await GuardAsync(async () =>
             {
                 BuildSession = await _gateway.SubmitObservationAsync(BuildSession!.PublicId, observation, cancellationToken).ConfigureAwait(false);
+                LastSubmittedObservationKey = observation.ObservationKey;
                 Validation = await _gateway.EvaluateAsync(BuildSession.PublicId, cancellationToken).ConfigureAwait(false);
                 State = IsReadyForFinishing(Validation) ? WorkflowState.ReadyForFinishing : WorkflowState.Building;
                 return Validation;
@@ -173,6 +175,64 @@ namespace Gelato.Ar.Core
                 State = IsReadyForFinishing(Validation) ? WorkflowState.ReadyForFinishing : WorkflowState.Building;
                 return Validation;
             }).ConfigureAwait(false);
+        }
+
+        public async Task<ProductValidation> CorrectObservationAsync(ObservationCorrection correction, CancellationToken cancellationToken = default)
+        {
+            EnsureActiveBuild();
+            if (correction == null) throw new ArgumentNullException(nameof(correction));
+            if (string.IsNullOrWhiteSpace(correction.ObservationKey)) throw new ArgumentException("Observation key is required.", nameof(correction));
+            if (string.IsNullOrWhiteSpace(correction.CorrectionKey)) throw new ArgumentException("Correction key is required.", nameof(correction));
+            if (!string.Equals(correction.Resolution, "reject", StringComparison.Ordinal)
+                && !string.Equals(correction.Resolution, "replace", StringComparison.Ordinal))
+                throw new ArgumentException("Correction resolution is invalid.", nameof(correction));
+
+            return await GuardAsync(async () =>
+            {
+                BuildSession = await _gateway.CorrectObservationAsync(
+                    BuildSession!.PublicId,
+                    correction,
+                    cancellationToken
+                ).ConfigureAwait(false);
+                Validation = await _gateway.EvaluateAsync(BuildSession.PublicId, cancellationToken).ConfigureAwait(false);
+                State = IsReadyForFinishing(Validation) ? WorkflowState.ReadyForFinishing : WorkflowState.Building;
+                return Validation;
+            }).ConfigureAwait(false);
+        }
+
+        public Task<ProductValidation> RejectObservationAsync(
+            string observationKey,
+            string reason = "",
+            CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(observationKey))
+                throw new ArgumentException("Observation key is required.", nameof(observationKey));
+
+            return CorrectObservationAsync(new ObservationCorrection
+            {
+                CorrectionKey = "reject:" + observationKey.Trim(),
+                ObservationKey = observationKey.Trim(),
+                Resolution = "reject",
+                Reason = reason ?? string.Empty
+            }, cancellationToken);
+        }
+
+        public Task<ProductValidation> RejectLastObservationAsync(
+            string reason = "",
+            CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(LastSubmittedObservationKey))
+                throw new InvalidOperationException("There is no submitted observation to reject.");
+
+            return RejectObservationAsync(LastSubmittedObservationKey, reason, cancellationToken);
+        }
+
+        public Task<IReadOnlyList<ObservationEvidence>> GetEvidenceAsync(
+            int limit = 20,
+            CancellationToken cancellationToken = default)
+        {
+            EnsureActiveBuild();
+            return _gateway.GetEvidenceAsync(BuildSession!.PublicId, limit, cancellationToken);
         }
 
         public async Task<ProductValidation> EvaluateAsync(CancellationToken cancellationToken = default)
@@ -211,6 +271,7 @@ namespace Gelato.Ar.Core
             Handoff = null;
             LastError = null;
             LastCalibrationError = null;
+            LastSubmittedObservationKey = null;
             State = string.IsNullOrWhiteSpace(_deviceToken) ? WorkflowState.Unpaired : WorkflowState.Idle;
         }
 
