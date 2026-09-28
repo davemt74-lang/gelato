@@ -9,7 +9,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Web Glasses Simulator · Gelato</title>
-<link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20260928-sync1">
+<link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20260928-camera1">
 </head>
 <body>
 <header class="sim-topbar">
@@ -21,7 +21,8 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
     <label>Mode <select id="modeSelect"><option value="mock">Mock</option><option value="live">Live Gelato</option></select></label>
     <label>Device <select id="deviceSelect"><option value="">Loading…</option></select></label>
     <button id="refreshWork" type="button">Refresh work</button>
-    <label class="asset-load">Scene <input id="sceneFile" type="file" accept="image/*"></label>
+    <label>Scene <select id="sceneSourceSelect"><option value="image">Image</option><option value="camera">Browser Camera</option></select></label>
+    <label class="asset-load" id="sceneFileLabel">Scene Image <input id="sceneFile" type="file" accept="image/*"></label>
     <label class="asset-load">Glasses <input id="glassesFile" type="file" accept="image/*"></label>
     <label>Frame <select id="frameModeSelect"><option value="svg">SVG</option><option value="image">Uploaded</option><option value="none">None</option></select></label>
     <label class="mask-toggle"><input id="opticalMaskToggle" type="checkbox" checked> Lens mask</label>
@@ -43,7 +44,9 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
     <div class="glasses-stage" id="glassesStage">
       <div class="scene-placeholder">
         <img id="sceneImage" alt="" hidden>
-        <div class="scene-copy" id="scenePlaceholder">Drop your final kitchen/glasses artwork in later — the HUD is already live.</div>
+        <video id="cameraVideo" class="camera-video" autoplay muted playsinline hidden></video>
+        <canvas id="cameraCaptureCanvas" hidden></canvas>
+        <div class="scene-copy" id="scenePlaceholder">Drop your final kitchen artwork in or switch Scene to Browser Camera.</div>
       </div>
       <img id="glassesImage" class="glasses-image" alt="" hidden>
       <svg id="svgGlassesLayer" class="svg-glasses-layer" viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
@@ -171,6 +174,28 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
       </div>
       <p class="calibration-note">Enable Calibrate, then drag the MOVE handle or resize from ↘. Presets are saved only in this browser.</p>
     </section>
+    <section class="console-card camera-card">
+      <div class="console-heading"><div><small>BROWSER CAMERA</small><strong>Vision preview source</strong></div><span id="cameraHealth">OFF</span></div>
+      <label class="work-picker"><span>CAMERA</span><select id="cameraDeviceSelect"><option value="">Default camera</option></select></label>
+      <div class="camera-grid">
+        <label><span>Resolution</span><select id="cameraResolution"><option value="1280x720">1280×720</option><option value="1920x1080">1920×1080</option><option value="640x480">640×480</option></select></label>
+        <label><span>Fit</span><select id="cameraFit"><option value="cover">Cover</option><option value="contain">Contain</option></select></label>
+      </div>
+      <div class="camera-toggle-row">
+        <label><input id="cameraMirror" type="checkbox"> Mirror</label>
+        <label><input id="cameraManualTarget" type="checkbox"> Manual target</label>
+      </div>
+      <div class="inline-actions">
+        <button id="startCamera" type="button">Start Camera</button>
+        <button id="stopCamera" type="button" disabled>Stop Camera</button>
+      </div>
+      <div class="inline-actions">
+        <button id="captureFrame" type="button" disabled>Capture Frame</button>
+        <button id="clearCameraTarget" type="button" disabled>Clear Target</button>
+      </div>
+      <div class="camera-meta" id="cameraMeta"><span>No active camera stream.</span></div>
+    </section>
+
     <section class="console-card">
       <div class="console-heading"><div><small>WORK</small><strong id="consoleItem">Club Sandwich + Fries</strong></div><span id="workStatus">queued</span></div>
       <label class="work-picker"><span>KDS ITEM</span><select id="workItemSelect"><option value="">No work loaded</option></select></label>
@@ -185,6 +210,11 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
         <button id="nextDetection" type="button">Next Detection</button>
         <button id="lowConfidenceDetection" type="button">Low Confidence</button>
         <button id="completeMockBuild" type="button">Complete Mock</button>
+      </div>
+      <div class="camera-target-controls" id="cameraTargetControls">
+        <label><span>Manual component</span><select id="cameraTargetComponent"><option value="">Current required component</option></select></label>
+        <label><span>Confidence</span><input id="cameraTargetConfidence" type="range" min="40" max="100" value="96"><output id="cameraTargetConfidenceValue">96%</output></label>
+        <button id="submitCameraTarget" type="button" disabled>Submit Target Observation</button>
       </div>
       <div id="componentControls" class="component-controls"></div>
       <div class="inline-actions">
@@ -212,6 +242,6 @@ window.GELATO_GLASSES_SIMULATOR={
   api:'api/glasses-simulator.php'
 };
 </script>
-<script src="assets/js/glasses-web-simulator.js?v=20260928-sync1"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20260928-camera1"></script>
 </body>
 </html>
