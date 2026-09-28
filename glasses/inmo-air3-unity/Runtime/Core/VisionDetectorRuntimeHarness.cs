@@ -27,6 +27,7 @@ namespace Gelato.Ar.Core
         public long RestartSuccesses { get; internal set; }
         public double LastLatencyMs { get; internal set; }
         public double AverageLatencyMs { get; internal set; }
+        public double LastInferenceFps { get; internal set; }
         public string LastErrorCode { get; internal set; } = string.Empty;
         public string LastErrorMessage { get; internal set; } = string.Empty;
     }
@@ -59,6 +60,7 @@ namespace Gelato.Ar.Core
         private readonly SemaphoreSlim _inferenceGate = new SemaphoreSlim(1, 1);
         private int _consecutiveFailures;
         private double _totalLatencyMs;
+        private long _lastSuccessTimestamp;
 
         public VisionDetectorRuntimeHarness(IVisionDetector inner, VisionDetectorRuntimeOptions? options = null)
         {
@@ -129,6 +131,12 @@ namespace Gelato.Ar.Core
                 _totalLatencyMs += Health.LastLatencyMs;
                 Health.SuccessfulInferences++;
                 Health.AverageLatencyMs = _totalLatencyMs / Math.Max(1, Health.SuccessfulInferences);
+                var successTimestamp = Stopwatch.GetTimestamp();
+                if (_lastSuccessTimestamp > 0 && successTimestamp > _lastSuccessTimestamp)
+                {
+                    Health.LastInferenceFps = (double)Stopwatch.Frequency / (successTimestamp - _lastSuccessTimestamp);
+                }
+                _lastSuccessTimestamp = successTimestamp;
                 _consecutiveFailures = 0;
                 Health.State = VisionDetectorRuntimeState.Ready;
                 Health.LastErrorCode = string.Empty;
@@ -209,6 +217,8 @@ namespace Gelato.Ar.Core
                 Health.RestartSuccesses++;
                 _consecutiveFailures = 0;
                 Health.State = VisionDetectorRuntimeState.Ready;
+                Health.LastErrorCode = string.Empty;
+                Health.LastErrorMessage = string.Empty;
             }
             catch (OperationCanceledException)
             {
