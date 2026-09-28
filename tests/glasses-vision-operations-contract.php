@@ -44,7 +44,7 @@ $js=file_get_contents(__DIR__.'/../assets/js/glasses-vision-operations.js');
 gvo_assert(str_contains($page,'Vision Operations &amp; Fleet Health')&&str_contains($page,'gvoAttention')&&str_contains($page,'gvoTimeline')&&str_contains($page,'gvoDetails'),'Dashboard must expose summary, attention, timeline and device drill-down surfaces.');
 gvo_assert(str_contains($page,'This dashboard aggregates existing ledgers only'),'Dashboard must state its read-only authority boundary.');
 gvo_assert(str_contains($api,'glasses_vision_ops_catalog')&&!str_contains($api,'glasses_build_observe'),'Operations API must remain read-only and never mutate build truth.');
-gvo_assert(str_contains($js,'All locations')&&str_contains($js,'All health states')&&str_contains($js,'renderAttention')&&str_contains($js,'renderDetails'),'Dashboard must support fleet filtering, needs-attention rendering and device drill-down.');
+gvo_assert(str_contains($page,'All health states')&&str_contains($js,'All locations')&&str_contains($js,'function filtered')&&str_contains($js,'renderAttention')&&str_contains($js,'renderDetails'),'Dashboard must support fleet filtering, needs-attention rendering and device drill-down.');
 gvo_assert(str_contains($js,'Model / rollout / incident')&&str_contains($js,'Calibration')&&str_contains($js,'Learning evidence'),'Drill-down must navigate to governed source workspaces rather than mutating state.');
 
 echo "glasses-vision-operations-ok\n";
