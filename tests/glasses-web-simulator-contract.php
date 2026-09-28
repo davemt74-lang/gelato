@@ -86,5 +86,8 @@ gws_assert(str_contains($js,"metadata:{source:'web_glasses_simulator_camera'"),'
 gws_assert(str_contains($js,'cameraStream.getTracks().forEach'),'Camera stop must release hardware tracks.');
 gws_assert(str_contains($js,'NotAllowedError')&&str_contains($js,'NotFoundError'),'Camera runtime must handle permission denial and missing hardware.');
 gws_assert(str_contains($css,'.camera-target-marker')&&str_contains($css,'.camera-video'),'Camera preview and target overlay must be styled independently of HUD.');
+gws_assert(str_contains($js,'function cameraPointerGeometry'),'Manual targets must map through rendered video geometry.');
+gws_assert(str_contains($js,'videoX')&&str_contains($js,'videoY'),'Submitted camera boxes must use normalized video-frame coordinates.');
+gws_assert(str_contains($js,"state.cameraTrack.enabled=!document.hidden"),'Camera capture must pause while the simulator tab is hidden.');
 
 echo "glasses-web-simulator-ok\n";
