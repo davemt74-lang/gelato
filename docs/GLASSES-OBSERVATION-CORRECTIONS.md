@@ -147,3 +147,8 @@ That produces a future model-evaluation/training signal without changing product
 ## Scope boundary
 
 Section 15 creates the correction and learning foundation. It does not automatically retrain or deploy a model from those corrections. Model training/export and governed rollout remain separate release units.
+
+
+## Release gate
+
+Section 15 is not eligible for PR/merge until the correction ledger contract, deterministic recomputation, AIR3 client workflow, all prior glasses/KDS regressions, and upgrade idempotence pass on the exact feature head.
