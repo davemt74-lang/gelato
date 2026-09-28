@@ -202,6 +202,70 @@ namespace Gelato.Ar.Unity
             return MapBuild(response.buildSession);
         }
 
+        public async Task<BuildSession> CorrectObservationAsync(
+            string buildSessionPublicId,
+            ObservationCorrection correction,
+            CancellationToken cancellationToken)
+        {
+            if (correction == null) throw new ArgumentNullException(nameof(correction));
+
+            var response = await PostAsync<CorrectionResponse>(new CorrectionRequest
+            {
+                action = DeviceApiActions.CorrectObservation,
+                buildSessionPublicId = buildSessionPublicId,
+                correctionKey = correction.CorrectionKey ?? string.Empty,
+                observationKey = correction.ObservationKey ?? string.Empty,
+                resolution = correction.Resolution ?? string.Empty,
+                targetComponentKey = correction.TargetComponentKey ?? string.Empty,
+                correctedQuantity = correction.CorrectedQuantity ?? 0f,
+                hasCorrectedQuantity = correction.CorrectedQuantity.HasValue,
+                reason = correction.Reason ?? string.Empty
+            }, true, cancellationToken);
+
+            return MapBuild(response.buildSession);
+        }
+
+        public async Task<IReadOnlyList<ObservationEvidence>> GetEvidenceAsync(
+            string buildSessionPublicId,
+            int limit,
+            CancellationToken cancellationToken)
+        {
+            var response = await PostAsync<EvidenceResponse>(new EvidenceRequest
+            {
+                action = DeviceApiActions.BuildEvidence,
+                buildSessionPublicId = buildSessionPublicId,
+                limit = Math.Max(1, Math.Min(100, limit))
+            }, true, cancellationToken);
+
+            var items = new List<ObservationEvidence>();
+            if (response.evidence == null) return items;
+
+            foreach (var dto in response.evidence)
+            {
+                var correction = dto.latestCorrection;
+                items.Add(new ObservationEvidence
+                {
+                    ObservationKey = dto.observationKey ?? string.Empty,
+                    ComponentKey = dto.componentKey ?? string.Empty,
+                    Action = dto.action ?? string.Empty,
+                    Quantity = dto.quantity,
+                    Confidence = dto.confidence,
+                    TrackingId = dto.trackingId ?? string.Empty,
+                    LatestCorrection = correction == null ? null : new ObservationCorrection
+                    {
+                        CorrectionKey = correction.correctionKey ?? string.Empty,
+                        ObservationKey = correction.observationKey ?? string.Empty,
+                        Resolution = correction.resolution ?? string.Empty,
+                        TargetComponentKey = correction.targetComponentKey ?? string.Empty,
+                        CorrectedQuantity = correction.hasCorrectedQuantity ? correction.correctedQuantity : (float?)null,
+                        Reason = correction.reason ?? string.Empty
+                    }
+                });
+            }
+
+            return items;
+        }
+
         public async Task<ProductValidation> EvaluateAsync(string buildSessionPublicId, CancellationToken cancellationToken)
         {
             var response = await PostAsync<ValidationResponse>(new BuildSessionRequest
@@ -410,6 +474,20 @@ namespace Gelato.Ar.Unity
             public float[] bbox;
             public ObservationMetadataRequest metadata;
         }
+        [Serializable] private sealed class CorrectionRequest : BuildSessionRequest
+        {
+            public string correctionKey;
+            public string observationKey;
+            public string resolution;
+            public string targetComponentKey;
+            public float correctedQuantity;
+            public bool hasCorrectedQuantity;
+            public string reason;
+        }
+        [Serializable] private sealed class EvidenceRequest : BuildSessionRequest
+        {
+            public int limit;
+        }
         [Serializable] private sealed class ObservationMetadataRequest
         {
             public string evidenceKind;
@@ -489,6 +567,38 @@ namespace Gelato.Ar.Unity
         {
             public bool compatible;
             public string[] reasons;
+        }
+
+        [Serializable] private sealed class CorrectionResponse
+        {
+            public bool ok;
+            public BuildSessionDto buildSession;
+            public CorrectionDto correction;
+        }
+        [Serializable] private sealed class EvidenceResponse
+        {
+            public bool ok;
+            public EvidenceDto[] evidence;
+        }
+        [Serializable] private sealed class EvidenceDto
+        {
+            public string observationKey;
+            public string componentKey;
+            public string action;
+            public float quantity;
+            public float confidence;
+            public string trackingId;
+            public CorrectionDto latestCorrection;
+        }
+        [Serializable] private sealed class CorrectionDto
+        {
+            public string correctionKey;
+            public string observationKey;
+            public string resolution;
+            public string targetComponentKey;
+            public float correctedQuantity;
+            public bool hasCorrectedQuantity;
+            public string reason;
         }
 
         [Serializable] private sealed class BuildResponse { public bool ok; public BuildSessionDto buildSession; }
