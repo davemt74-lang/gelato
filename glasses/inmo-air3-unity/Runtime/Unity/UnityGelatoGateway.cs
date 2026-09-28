@@ -184,7 +184,8 @@ namespace Gelato.Ar.Unity
                 DetectorName = dto.detectorName ?? string.Empty,
                 BuildSessionPublicId = dto.buildSessionPublicId ?? string.Empty,
                 ProfileHash = dto.profileHash ?? string.Empty,
-                Mappings = mappings
+                Mappings = mappings,
+                BlockedLabels = dto.blockedLabels ?? Array.Empty<string>()
             };
         }
 
@@ -734,6 +735,7 @@ namespace Gelato.Ar.Unity
             public string buildSessionPublicId;
             public string profileHash;
             public VisionLabelMappingDto[] mappings;
+            public string[] blockedLabels;
         }
         [Serializable] private sealed class VisionLabelMappingDto
         {
