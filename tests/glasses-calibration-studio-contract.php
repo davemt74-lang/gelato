@@ -30,12 +30,16 @@ $pdo->prepare("INSERT INTO locations (organization_id,name,city,state,status,is_
     ->execute([$org]);
 $secondLocation=(int)$pdo->lastInsertId();
 
+$pdo->prepare("INSERT INTO users (email,password_hash,first_name,last_name,display_name,status) VALUES (?,?,?,?,?,'active')")
+    ->execute([$slug.'@example.test',password_hash('CI-only-password',PASSWORD_DEFAULT),'Calibration','Manager','Calibration Manager']);
+$userId=(int)$pdo->lastInsertId();
+
 $station=kds_station_save($pdo,$org,$mainLocation,[
     'name'=>'Sandwich','slug'=>'sandwich','targetSeconds'=>300,'sortOrder'=>10
-],1);
+],$userId);
 $station2=kds_station_save($pdo,$org,$secondLocation,[
     'name'=>'Fry','slug'=>'fry','targetSeconds'=>240,'sortOrder'=>20
-],1);
+],$userId);
 
 foreach(['Turkey','Bacon','Lettuce'] as $name){
     $pdo->prepare("INSERT INTO ingredients (organization_id,canonical_name,slug,category,verification_status) VALUES (?,?,?,'food','verified')")
