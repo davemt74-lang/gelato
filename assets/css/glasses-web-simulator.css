@@ -57,3 +57,9 @@
 
 .glasses-stage.calibrating .hud-orders-left{left:var(--region-x,1%);top:var(--region-y,17%);width:var(--region-w,23%);height:var(--region-h,61%);max-height:none}
 .glasses-stage.calibrating .hud-next-center{left:var(--region-x,34%);top:var(--region-y,29%);width:var(--region-w,31%);height:var(--region-h,25%)}
+
+.sim-sync-badge{font-size:8px;font-weight:900;letter-spacing:.07em;border-radius:999px;padding:5px 8px;border:1px solid #31463a;background:#111a15;color:var(--muted)}
+.sim-sync-badge.live{border-color:#2d6644;color:var(--good);box-shadow:0 0 10px rgba(121,242,166,.12)}
+.sim-sync-badge.syncing{border-color:#31596b;color:var(--blue)}
+.sim-sync-badge.error{border-color:#6b4e31;color:var(--warn)}
+.sim-sync-badge.paused{border-color:#303a33;color:var(--muted)}
