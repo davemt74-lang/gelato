@@ -223,3 +223,74 @@ The active `gelato.vision_label_profile.v1` is requested for the same build and 
 The ONNX session is build-specific for governance purposes. It is released on build reset, device switch, mode switch, explicit unload, or page teardown. A model from a prior ticket therefore cannot silently continue producing evidence for a new build.
 
 The deterministic fixture remains available as a simulator/test adapter and is visually distinct from the Governed ONNX adapter.
+
+
+## Vision dataset capture and YOLO training export
+
+The Web Glasses Simulator now includes a browser-local dataset collection surface so kitchen footage can become training data for the production ingredient detector.
+
+### Capture workflow
+
+1. Start the browser camera.
+2. Start/select a Gelato build so canonical ingredient classes are available.
+3. Enable **Label mode**.
+4. Optionally freeze the camera frame.
+5. Choose the ingredient class.
+6. Drag one or more bounding boxes over the visible ingredient instances.
+7. Capture the labeled sample.
+8. Repeat across ingredients, lighting, angles, stations and build stages.
+9. Export the dataset as a YOLO ZIP.
+
+Bounding boxes reuse the existing camera/video geometry calculation, including Cover/Contain and mirror handling, so exported annotations are normalized against the original camera frame rather than screen coordinates.
+
+### Local-only dataset state
+
+Dataset capture does not create a server-side Gelato record.
+
+Frames, annotations and samples remain in browser memory until export or page exit. Capturing training data therefore does not:
+
+- update POS;
+- update KDS;
+- change build observations;
+- change validation;
+- alter model rollout state;
+- upload kitchen images to Gelato.
+
+### Export format
+
+The generated ZIP contains:
+
+- `images/train/frame-000001.jpg` style camera frames;
+- matching `labels/train/frame-000001.txt` YOLO detection labels;
+- `data.yaml` with deterministic class indexes;
+- `gelato-manifest.json` using schema `gelato.vision_training_dataset.v1`;
+- a short README.
+
+YOLO label rows use:
+
+`class_index center_x center_y width height`
+
+with all geometry normalized to 0–1.
+
+Class indexes are generated deterministically from the captured class names sorted alphabetically.
+
+The ZIP is written directly in the browser with store-mode ZIP entries and CRC-32 checksums, so dataset export does not depend on an external ZIP library or server endpoint.
+
+### Training intent
+
+This section prepares the data needed to train the actual ingredient-recognition model. It does not claim that a production detector exists yet.
+
+A useful production dataset should include broad variation in:
+
+- ingredient appearance;
+- portion size;
+- hands and utensils;
+- partial occlusion;
+- containers and packaging;
+- lighting;
+- camera angle;
+- station layout;
+- recipe stage;
+- negative/background frames.
+
+The exported dataset can be used by a YOLO-family training pipeline and then exported to ONNX for the governed browser inference runtime already implemented in Gelato.
