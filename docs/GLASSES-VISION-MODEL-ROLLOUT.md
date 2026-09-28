@@ -269,3 +269,46 @@ It does not bypass:
 - KDS lifecycle authority.
 
 Actual binary model installation/activation remains a separate hardware-dependent section.
+
+
+## Browser ONNX package onboarding and preflight
+
+The model registry now supports the browser inference metadata consumed by the Web Glasses Simulator.
+
+For ONNX packages, the admin registration form captures:
+
+- input tensor name;
+- output tensor name;
+- input width and height;
+- NCHW or NHWC input layout;
+- channel-first or row-style YOLOv8 output layout;
+- pixel or normalized bounding-box scale;
+- ordered detector labels;
+- non-maximum-suppression IoU;
+- maximum detections per frame.
+
+The server validates and normalizes this as immutable package metadata under:
+
+`metadata.browserInference.schema = gelato.browser_onnx_detector.v1`
+
+Malformed tensor dimensions, layouts, labels, NMS values, or unsupported decoder contracts fail closed during registration.
+
+### Verify browser artifact
+
+Before registering an ONNX package, an administrator can run **Verify browser artifact**.
+
+The preflight happens entirely in the administrator's browser and does not upload model bytes to Gelato. It performs:
+
+1. cross-origin HTTPS artifact fetch using browser CORS;
+2. 512 MiB browser safety ceiling enforcement;
+3. optional registered byte-count comparison;
+4. SHA-256 calculation with Web Crypto and exact comparison to the package form;
+5. version-pinned ONNX Runtime Web load;
+6. creation of an ONNX inference session from the downloaded bytes;
+7. validation that the declared input tensor name exists in the model;
+8. validation that the declared output tensor name exists in the model;
+9. session release after the check.
+
+A successful preflight reports **Browser-ready** and the registry marks packages carrying the supported metadata contract with a Browser ONNX capability badge.
+
+Preflight does not replace rollout governance or runtime verification. Registration remains immutable; canary assignment, compatibility, download verification, activation and rollback continue to use the existing model-governance system.
