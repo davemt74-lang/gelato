@@ -1,7 +1,7 @@
 (()=>{'use strict';
 const cfg=window.GELATO_GLASSES_SIMULATOR||{};
 const $=id=>document.getElementById(id);
-const state={mode:'mock',devices:[],device:null,work:null,selectedKdsItemPublicId:'',build:null,validation:null,seq:1,logs:[],autoPlayTimer:null,syncTimer:null,syncBusy:false,syncErrors:0,syncFingerprint:'',syncAbort:null,syncEpoch:0,lastSyncAt:null,cameraStream:null,cameraTrack:null,cameraTarget:null,cameraDevices:[],cameraSource:'image',visionMode:'manual',visionTimer:null,visionBusy:false,visionFrameSeq:0,visionLastAt:0,visionLatencyMs:0,visionFps:0,visionDetections:[],visionTracks:new Map(),visionSubmitted:new Set(),visionAdapter:null,temporalTracks:new Map(),temporalEvents:[],temporalSequence:[],temporalViolations:[],temporalValidationBusy:false,temporalValidationFingerprint:'',temporalReadySince:0,temporalGate:null,browserModel:{status:'idle',session:null,assignment:null,profile:null,config:null,package:null,verifiedSha256:null,loadEpoch:0},dataset:{annotations:[],samples:[],drag:null,frozen:false},activeLearning:{enabled:true,candidates:[],capturing:false,lastCaptureByKey:new Map(),maxQueue:30,cooldownMs:10000},shadowModel:{status:'idle',session:null,assignment:null,config:null,package:null,verifiedSha256:null,runPublicId:null,summary:null,frameSeq:0,busy:false}};
+const state={mode:'mock',devices:[],device:null,work:null,selectedKdsItemPublicId:'',build:null,validation:null,seq:1,logs:[],autoPlayTimer:null,syncTimer:null,syncBusy:false,syncErrors:0,syncFingerprint:'',syncAbort:null,syncEpoch:0,lastSyncAt:null,cameraStream:null,cameraTrack:null,cameraTarget:null,cameraDevices:[],cameraSource:'image',visionMode:'manual',visionTimer:null,visionBusy:false,visionFrameSeq:0,visionLastAt:0,visionLatencyMs:0,visionFps:0,visionDetections:[],visionTracks:new Map(),visionSubmitted:new Set(),visionAdapter:null,temporalTracks:new Map(),temporalEvents:[],temporalSequence:[],temporalViolations:[],temporalValidationBusy:false,temporalValidationFingerprint:'',temporalReadySince:0,temporalGate:null,browserModel:{status:'idle',session:null,assignment:null,profile:null,config:null,package:null,verifiedSha256:null,loadEpoch:0},dataset:{annotations:[],samples:[],drag:null,frozen:false,captureGroup:null,burstSeq:0,uploading:false},activeLearning:{enabled:true,candidates:[],capturing:false,lastCaptureByKey:new Map(),maxQueue:30,cooldownMs:10000},shadowModel:{status:'idle',session:null,assignment:null,config:null,package:null,verifiedSha256:null,runPublicId:null,summary:null,frameSeq:0,busy:false}};
 const mock={
   work:{assignmentRequired:false,station:{publicId:'station-mock',name:'Sandwich / Pizza Line'},revision:'mock-revision',focusItem:{kdsItemPublicId:'kds-mock-1',status:'queued',ticket:{checkNumber:'1042',serviceMode:'dine_in',tableName:'Table 12',guestCount:2},posLine:{id:1,menuItemId:1,name:'Club Sandwich + Fries',optionName:'Regular',quantity:1,specialInstructions:'NO TOMATO · EXTRA BACON',modifiers:[{name:'Extra Bacon'}]},menu:{preparationNotes:'Build, slice and plate with fries.'},recipeSource:{status:'exact_name',recipe:{instructions:['Toast bread','Add mayo','Add turkey','Add bacon','Add lettuce','Add tomato','Top and slice','Plate with fries']}}},items:[],metrics:{queued:1,inProgress:0,ready:0,held:0}},
   components:['Toasted Bread','Mayo','Turkey','Bacon','Lettuce','Tomato','Fries'].map((name,i)=>({componentKey:'mock:'+i,displayName:name,expectedQuantity:i===0?3:1,detectedQuantity:0,unit:i===0?'slices':'portion',optional:false,status:'waiting',sortOrder:i+1})),
@@ -131,7 +131,7 @@ async function enumerateCameras(){
 function stopCamera(reason='stopped'){
   stopVisionRuntime(reason);
   if(state.cameraStream)state.cameraStream.getTracks().forEach(t=>t.stop());
-  state.dataset.frozen=false;state.dataset.drag=null;state.dataset.annotations=[];renderDatasetAnnotations();
+  state.dataset.frozen=false;state.dataset.drag=null;state.dataset.annotations=[];state.dataset.captureGroup=null;state.dataset.burstSeq=0;renderDatasetAnnotations();
   state.cameraStream=null;state.cameraTrack=null;
   const video=$('cameraVideo');video.srcObject=null;video.hidden=true;
   $('startCamera').disabled=false;$('stopCamera').disabled=true;$('captureFrame').disabled=true;
@@ -247,6 +247,7 @@ function renderDatasetAnnotations(){
   if($('datasetFreezeFrame'))$('datasetFreezeFrame').disabled=!cameraReady||state.dataset.frozen;
   if($('datasetResumeFrame'))$('datasetResumeFrame').disabled=!cameraReady||!state.dataset.frozen;
   if($('datasetCaptureSample'))$('datasetCaptureSample').disabled=!cameraReady;
+  if($('datasetUpload'))$('datasetUpload').disabled=!cfg.canManageMedia||state.dataset.uploading||!$('datasetServerOptIn')?.checked||!state.dataset.samples.some(s=>!s.mediaPublicId);
 }
 function datasetPoint(event){
   const g=cameraPointerGeometry(event);return g?{x:g.videoX,y:g.videoY}:null;
@@ -281,14 +282,48 @@ async function resumeDatasetFrame(){
   const video=$('cameraVideo');if(!state.cameraStream)return;await video.play();state.dataset.frozen=false;state.dataset.annotations=[];renderDatasetAnnotations();log('DATASET','Camera resumed; current annotations cleared.');
 }
 function canvasToBlob(canvas,type='image/jpeg',quality=.92){return new Promise(resolve=>canvas.toBlob(resolve,type,quality));}
+function hexNibble(n){return Number(n).toString(16);}
+function datasetVisualFeatures(canvas){
+  const sample=document.createElement('canvas');sample.width=96;sample.height=72;const sctx=sample.getContext('2d',{willReadFrequently:true});sctx.drawImage(canvas,0,0,sample.width,sample.height);
+  const data=sctx.getImageData(0,0,sample.width,sample.height).data,gray=new Float32Array(sample.width*sample.height);let sum=0;
+  for(let i=0;i<gray.length;i++){const g=(data[i*4]*0.2126+data[i*4+1]*0.7152+data[i*4+2]*0.0722)/255;gray[i]=g;sum+=g;}
+  const mean=sum/gray.length;let variance=0,lapSum=0,lapSq=0,lapN=0;
+  for(const g of gray)variance+=(g-mean)*(g-mean);
+  for(let y=1;y<sample.height-1;y++)for(let x=1;x<sample.width-1;x++){const i=y*sample.width+x,lap=4*gray[i]-gray[i-1]-gray[i+1]-gray[i-sample.width]-gray[i+sample.width];lapSum+=lap;lapSq+=lap*lap;lapN++;}
+  const contrast=Math.sqrt(variance/gray.length),lapMean=lapN?lapSum/lapN:0,blurScore=lapN?Math.max(0,(lapSq/lapN-lapMean*lapMean)*10000):0;
+  const hashCanvas=document.createElement('canvas');hashCanvas.width=9;hashCanvas.height=8;const hctx=hashCanvas.getContext('2d',{willReadFrequently:true});hctx.drawImage(canvas,0,0,9,8);const hd=hctx.getImageData(0,0,9,8).data;let bits='',hex='';
+  for(let y=0;y<8;y++)for(let x=0;x<8;x++){const i=(y*9+x)*4,j=i+4;const a=hd[i]*.2126+hd[i+1]*.7152+hd[i+2]*.0722,b=hd[j]*.2126+hd[j+1]*.7152+hd[j+2]*.0722;bits+=a>b?'1':'0';}
+  for(let i=0;i<64;i+=4)hex+=hexNibble(parseInt(bits.slice(i,i+4),2));
+  return {brightnessMean:Number(mean.toFixed(5)),contrastMean:Number(contrast.toFixed(5)),blurScore:Number(blurScore.toFixed(4)),perceptualHash:hex};
+}
+function bytesToBase64(bytes){let out='';const step=0x8000;for(let i=0;i<bytes.length;i+=step)out+=String.fromCharCode(...bytes.subarray(i,Math.min(bytes.length,i+step)));return btoa(out);}
+async function uploadDatasetSamples(){
+  if(!$('datasetServerOptIn')?.checked){log('MEDIA','Enable explicit Vision Lab media opt-in first.');return;}
+  if(state.dataset.uploading)return;
+  const pending=state.dataset.samples.filter(s=>!s.mediaPublicId);if(!pending.length){log('MEDIA','All local captures are already uploaded.');return;}
+  state.dataset.uploading=true;renderDatasetAnnotations();$('datasetUploadState').textContent='Uploading '+pending.length+'…';
+  let uploaded=0;
+  try{
+    for(const sample of pending){
+      const settings=state.cameraTrack?.getSettings?.()||{};
+      const payload={action:'upload',csrf_token:cfg.csrf,consentBasis:'training_media_opt_in',retentionDays:Number($('datasetRetentionDays')?.value||365),imageBase64:bytesToBase64(sample.bytes),annotations:sample.annotations,capturedAt:sample.capturedAt,devicePublicId:state.device?.publicId||null,buildSessionPublicId:sample.buildPublicId||null,captureGroup:sample.captureGroup||null,burstIndex:sample.burstIndex,perceptualHash:sample.features?.perceptualHash||null,brightnessMean:sample.features?.brightnessMean,contrastMean:sample.features?.contrastMean,blurScore:sample.features?.blurScore,distanceBucket:$('datasetDistanceBucket')?.value||null,occlusionBucket:$('datasetOcclusionBucket')?.value||null,pose:{pitch:$('datasetCameraPitch')?.value!==''?Number($('datasetCameraPitch').value):null,yaw:$('datasetCameraYaw')?.value!==''?Number($('datasetCameraYaw').value):null,roll:$('datasetCameraRoll')?.value!==''?Number($('datasetCameraRoll').value):null},camera:{facing:settings.facingMode||null,deviceKey:settings.deviceId||null,width:settings.width||sample.width,height:settings.height||sample.height,fps:settings.frameRate||null},detectorConfidence:sample.detectorConfidence,metadata:{source:'web_glasses_simulator',localSampleIndex:sample.index}};
+      const r=await fetch(cfg.mediaApi,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload)}),d=await r.json().catch(()=>({ok:false,message:'Invalid media response.'}));
+      if(!r.ok||!d.ok)throw new Error(d.message||'Training media upload failed.');
+      sample.mediaPublicId=d.media.publicId;sample.samplePublicId=d.media.samplePublicId;uploaded++;$('datasetUploadState').textContent='Uploaded '+uploaded+'/'+pending.length;
+    }
+    log('MEDIA','Uploaded '+uploaded+' capture(s) into governed Vision Lab media.');$('datasetUploadState').textContent=uploaded+' uploaded · private storage';
+  }finally{state.dataset.uploading=false;renderDatasetAnnotations();}
+}
 async function captureDatasetSample(){
   const video=$('cameraVideo');if(!state.cameraStream||!video.videoWidth||!video.videoHeight)throw new Error('Start the browser camera first.');
   const canvas=document.createElement('canvas');canvas.width=video.videoWidth;canvas.height=video.videoHeight;const ctx=canvas.getContext('2d');ctx.drawImage(video,0,0,canvas.width,canvas.height);
   const blob=await canvasToBlob(canvas,'image/jpeg',.92);if(!blob)throw new Error('Camera frame could not be encoded.');
   const bytes=new Uint8Array(await blob.arrayBuffer()),index=state.dataset.samples.length+1;
   const annotations=state.dataset.annotations.map(a=>({label:a.label,bbox:{...a.bbox}}));
-  state.dataset.samples.push({index,width:canvas.width,height:canvas.height,bytes,annotations,capturedAt:new Date().toISOString(),buildPublicId:state.build?.publicId||null,station:state.work?.station?.name||null});
-  state.dataset.annotations=[];renderDatasetAnnotations();log('DATASET','Captured labeled sample #'+index+' with '+annotations.length+' box(es).');
+  if(!state.dataset.captureGroup)state.dataset.captureGroup='websim-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7);
+  const features=datasetVisualFeatures(canvas),burstIndex=state.dataset.burstSeq++;const confidences=(state.visionDetections||[]).map(d=>Number(d.confidence)).filter(Number.isFinite);const detectorConfidence=confidences.length?confidences.reduce((a,b)=>a+b,0)/confidences.length:null;
+  state.dataset.samples.push({index,width:canvas.width,height:canvas.height,bytes,annotations,capturedAt:new Date().toISOString(),buildPublicId:state.build?.publicId||null,station:state.work?.station?.name||null,captureGroup:state.dataset.captureGroup,burstIndex,features,detectorConfidence,mediaPublicId:null,samplePublicId:null});
+  state.dataset.annotations=[];renderDatasetAnnotations();log('DATASET','Captured labeled sample #'+index+' with '+annotations.length+' box(es) · dHash '+features.perceptualHash+'.');
 }
 
 function activeLearningClasses(){
@@ -937,6 +972,8 @@ $('activeLearningNegative').addEventListener('click',()=>acceptActiveLearning('n
 $('activeLearningDiscard').addEventListener('click',()=>{if(state.activeLearning.candidates.length){state.activeLearning.candidates.shift();renderActiveLearning();log('LEARNING','Discarded hard example.');}});
 $('activeLearningClear').addEventListener('click',()=>{state.activeLearning.candidates=[];renderActiveLearning();log('LEARNING','Cleared hard-example queue.');});
 $('datasetAnnotationList').addEventListener('click',e=>{const b=e.target.closest('[data-dataset-remove]');if(!b)return;state.dataset.annotations.splice(Number(b.dataset.datasetRemove),1);renderDatasetAnnotations();});
+if(!cfg.canManageMedia){$('datasetServerOptIn').disabled=true;$('datasetUploadState').textContent='Glasses manage permission required';}$('datasetServerOptIn').addEventListener('change',()=>{renderDatasetAnnotations();$('datasetUploadState').textContent=$('datasetServerOptIn').checked?'Opted in · not uploaded':'Local only';});
+$('datasetUpload').addEventListener('click',()=>{uploadDatasetSamples().catch(e=>{log('ERROR',e.message);$('datasetUploadState').textContent='Upload failed';});});
 $('cameraTargetConfidence').addEventListener('input',e=>{$('cameraTargetConfidenceValue').textContent=e.target.value+'%';});
 document.addEventListener('visibilitychange',()=>{if(state.cameraTrack){state.cameraTrack.enabled=!document.hidden;setCameraHealth(document.hidden?'paused':'ready',document.hidden?'PAUSED':'READY');}if(document.hidden){stopVisionRuntime('paused');stopLiveStationSync('hidden');}else{if(state.cameraStream)startVisionRuntime();if(state.mode==='live'&&state.device)startLiveStationSync({immediate:true});}});
 window.addEventListener('offline',()=>{stopLiveStationSync('idle');setSyncBadge('error','OFFLINE');});

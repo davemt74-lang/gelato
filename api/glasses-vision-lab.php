@@ -4,10 +4,11 @@ require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/glasses-vision-lab.php';
 require_once __DIR__.'/../includes/glasses-vision-active-learning.php';
 require_once __DIR__.'/../includes/glasses-vision-dataset-intelligence.php';
+require_once __DIR__.'/../includes/glasses-vision-training-media.php';
 $user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];
 if(!app_has_permission('glasses.view',$user))app_json_response(['ok'=>false,'message'=>'AR glasses permission required.'],403);
 try{
- if($_SERVER['REQUEST_METHOD']==='GET'){$catalog=glasses_vision_lab_catalog($pdo,$user);$catalog['activeLearning']=glasses_vision_active_learning_catalog($pdo,$org);$catalog['datasetIntelligence']=glasses_vision_dataset_intelligence_catalog($pdo,$org);app_json_response(['ok'=>true,'catalog'=>$catalog]);}
+ if($_SERVER['REQUEST_METHOD']==='GET'){$catalog=glasses_vision_lab_catalog($pdo,$user);$catalog['activeLearning']=glasses_vision_active_learning_catalog($pdo,$org);$catalog['datasetIntelligence']=glasses_vision_dataset_intelligence_catalog($pdo,$org);$catalog['trainingMedia']=glasses_vision_training_media_catalog($pdo,$org);app_json_response(['ok'=>true,'catalog'=>$catalog]);}
  if($_SERVER['REQUEST_METHOD']!=='POST'){header('Allow: GET, POST');app_json_response(['ok'=>false,'message'=>'Method not allowed.'],405);}
  if(!app_has_permission('glasses.manage',$user))app_json_response(['ok'=>false,'message'=>'AR glasses management permission required.'],403);
  $in=app_json_input();app_verify_request_csrf($in);$action=(string)($in['action']??'');$actor=(int)$user['id'];
