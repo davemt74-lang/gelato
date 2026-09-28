@@ -136,18 +136,34 @@ namespace Gelato.Ar.Core
                     && frameOrdinal - state.SourceFrameOrdinal <= options.MaxTransferFrames)
                 {
                     state.LastFrameOrdinal = frameOrdinal;
-                    state.Completed = true;
-                    _states[stateKey] = state;
 
-                    result.Kind = TransferEvidenceKind.TransferConfirmed;
-                    result.TransferConfirmed = true;
-                    result.SourceZoneKey = state.SourceZoneKey;
-                    result.SequenceSupported = IsCurrentRecipeStep(detection.ComponentKey, context);
-                    result.Action = "added";
-                    result.EffectiveConfidence = Clamp01(
-                        detection.Confidence
-                        + options.TransferSupportBoost
-                        + (result.SequenceSupported ? options.SequenceSupportBoost : 0f)
+                    if (!state.Completed)
+                    {
+                        state.Completed = true;
+                        _states[stateKey] = state;
+
+                        result.Kind = TransferEvidenceKind.TransferConfirmed;
+                        result.TransferConfirmed = true;
+                        result.SourceZoneKey = state.SourceZoneKey;
+                        result.SequenceSupported = IsCurrentRecipeStep(detection.ComponentKey, context);
+                        result.Action = "added";
+                        result.EffectiveConfidence = Clamp01(
+                            detection.Confidence
+                            + options.TransferSupportBoost
+                            + (result.SequenceSupported ? options.SequenceSupportBoost : 0f)
+                        );
+                        return result;
+                    }
+
+                    // The same tracked physical instance already completed this transfer. Do not
+                    // create another additive event unless it is observed back in its source zone
+                    // and a new source → build movement is established.
+                    _states[stateKey] = state;
+                    result.Kind = TransferEvidenceKind.WorkSurfaceUnprimed;
+                    result.Action = "seen";
+                    result.EffectiveConfidence = Math.Min(
+                        Clamp01(detection.Confidence),
+                        options.UnprimedWorkSurfaceConfidenceCap
                     );
                     return result;
                 }
