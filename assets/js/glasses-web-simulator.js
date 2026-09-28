@@ -1,7 +1,7 @@
 (()=>{'use strict';
 const cfg=window.GELATO_GLASSES_SIMULATOR||{};
 const $=id=>document.getElementById(id);
-const state={mode:'mock',devices:[],device:null,work:null,selectedKdsItemPublicId:'',build:null,validation:null,seq:1,logs:[],autoPlayTimer:null,syncTimer:null,syncBusy:false,syncErrors:0,syncFingerprint:'',syncAbort:null,syncEpoch:0,lastSyncAt:null,cameraStream:null,cameraTrack:null,cameraTarget:null,cameraDevices:[],cameraSource:'image',visionMode:'manual',visionTimer:null,visionBusy:false,visionFrameSeq:0,visionLastAt:0,visionLatencyMs:0,visionFps:0,visionDetections:[],visionTracks:new Map(),visionSubmitted:new Set(),visionAdapter:null,temporalTracks:new Map(),temporalEvents:[],temporalSequence:[],temporalViolations:[],temporalValidationBusy:false,temporalValidationFingerprint:'',temporalReadySince:0,temporalGate:null};
+const state={mode:'mock',devices:[],device:null,work:null,selectedKdsItemPublicId:'',build:null,validation:null,seq:1,logs:[],autoPlayTimer:null,syncTimer:null,syncBusy:false,syncErrors:0,syncFingerprint:'',syncAbort:null,syncEpoch:0,lastSyncAt:null,cameraStream:null,cameraTrack:null,cameraTarget:null,cameraDevices:[],cameraSource:'image',visionMode:'manual',visionTimer:null,visionBusy:false,visionFrameSeq:0,visionLastAt:0,visionLatencyMs:0,visionFps:0,visionDetections:[],visionTracks:new Map(),visionSubmitted:new Set(),visionAdapter:null,temporalTracks:new Map(),temporalEvents:[],temporalSequence:[],temporalViolations:[],temporalValidationBusy:false,temporalValidationFingerprint:'',temporalReadySince:0,temporalGate:null,browserModel:{status:'idle',session:null,assignment:null,profile:null,config:null,package:null,verifiedSha256:null,loadEpoch:0}};
 const mock={
   work:{assignmentRequired:false,station:{publicId:'station-mock',name:'Sandwich / Pizza Line'},revision:'mock-revision',focusItem:{kdsItemPublicId:'kds-mock-1',status:'queued',ticket:{checkNumber:'1042',serviceMode:'dine_in',tableName:'Table 12',guestCount:2},posLine:{id:1,menuItemId:1,name:'Club Sandwich + Fries',optionName:'Regular',quantity:1,specialInstructions:'NO TOMATO · EXTRA BACON',modifiers:[{name:'Extra Bacon'}]},menu:{preparationNotes:'Build, slice and plate with fries.'},recipeSource:{status:'exact_name',recipe:{instructions:['Toast bread','Add mayo','Add turkey','Add bacon','Add lettuce','Add tomato','Top and slice','Plate with fries']}}},items:[],metrics:{queued:1,inProgress:0,ready:0,held:0}},
   components:['Toasted Bread','Mayo','Turkey','Bacon','Lettuce','Tomato','Fries'].map((name,i)=>({componentKey:'mock:'+i,displayName:name,expectedQuantity:i===0?3:1,detectedQuantity:0,unit:i===0?'slices':'portion',optional:false,status:'waiting',sortOrder:i+1})),
@@ -223,6 +223,136 @@ const VISION_STABLE_FRAMES=3;
 const VISION_REMOVAL_GRACE_MS=2200;
 const VISION_READY_STABLE_MS=900;
 const VISION_REPLACEMENT_IOU=.35;
+const ORT_WEB_VERSION='1.30.0';
+const ORT_WEB_BASE='https://cdn.jsdelivr.net/npm/onnxruntime-web@'+ORT_WEB_VERSION+'/dist/';
+const BROWSER_MODEL_MAX_BYTES=512*1024*1024;
+let ortLoadPromise=null;
+function setVisionModelStatus(status,message){
+  state.browserModel.status=status;
+  const el=$('visionModelStatus');if(!el)return;
+  el.dataset.state=status;el.innerHTML='<strong>'+escapeHtml(status.toUpperCase())+'</strong><span>'+escapeHtml(message||'')+'</span>';
+}
+async function ensureOrtWeb(){
+  if(window.ort)return window.ort;
+  if(ortLoadPromise)return ortLoadPromise;
+  ortLoadPromise=new Promise((resolve,reject)=>{
+    const script=document.createElement('script');script.src=ORT_WEB_BASE+'ort.min.js';script.async=true;script.crossOrigin='anonymous';
+    script.onload=()=>{if(!window.ort){reject(new Error('ONNX Runtime Web loaded without exposing ort.'));return;}window.ort.env.wasm.wasmPaths=ORT_WEB_BASE;resolve(window.ort);};
+    script.onerror=()=>reject(new Error('ONNX Runtime Web could not be loaded.'));document.head.appendChild(script);
+  });
+  return ortLoadPromise;
+}
+function hexFromBytes(bytes){return [...new Uint8Array(bytes)].map(b=>b.toString(16).padStart(2,'0')).join('');}
+function browserInferenceConfig(pkg){
+  const cfg=pkg?.metadata?.browserInference;
+  if(!cfg||cfg.schema!=='gelato.browser_onnx_detector.v1')throw new Error('Assigned package is missing gelato.browser_onnx_detector.v1 metadata.');
+  if(cfg.decoder!=='yolo_v8')throw new Error('Browser model decoder is unsupported.');
+  const input=cfg.input||{},output=cfg.output||{};
+  const width=Math.max(32,Math.min(4096,Number(input.width||0))),height=Math.max(32,Math.min(4096,Number(input.height||0)));
+  if(!Number.isFinite(width)||!Number.isFinite(height))throw new Error('Browser model input dimensions are invalid.');
+  if(!Array.isArray(cfg.labels)||cfg.labels.length<1)throw new Error('Browser model metadata must provide labels.');
+  return {schema:cfg.schema,decoder:cfg.decoder,input:{name:String(input.name||''),width,height,layout:input.layout==='nhwc'?'nhwc':'nchw'},output:{name:String(output.name||''),layout:output.layout==='rows'?'rows':'channels_first',boxScale:output.boxScale==='normalized'?'normalized':'pixels'},labels:cfg.labels.map(String),nmsIou:Math.max(.05,Math.min(.95,Number(cfg.nmsIou||.45))),maxDetections:Math.max(1,Math.min(100,Number(cfg.maxDetections||25)))};
+}
+function normalizeVisionLabel(value){return String(value||'').trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').replace(/\s+/g,' ').trim().slice(0,160);}
+function applyVisionProfile(raw){
+  if(raw.componentKey)return raw;
+  const profile=state.browserModel.profile;if(!profile)return null;
+  const normalized=normalizeVisionLabel(raw.label);
+  if((profile.blockedLabels||[]).includes(normalized))return null;
+  const mapping=(profile.mappings||[]).find(m=>m.normalizedLabel===normalized);
+  if(mapping){
+    const floor=Math.max(Number($('visionConfidenceThreshold')?.value||75)/100,Number(mapping.minimumConfidence||0));
+    if(raw.confidence<floor)return null;
+    return {...raw,componentKey:mapping.componentKey,label:mapping.displayName,detectorLabel:raw.label,profileMatched:true,profileMinimumConfidence:mapping.minimumConfidence??null};
+  }
+  const component=(state.build?.components||[]).find(c=>normalizeVisionLabel(c.displayName)===normalized);
+  return component?{...raw,componentKey:component.componentKey,label:component.displayName,detectorLabel:raw.label,profileMatched:false,profileMinimumConfidence:null}:null;
+}
+function preprocessOnnxFrame(video,config,ort){
+  const canvas=document.createElement('canvas');canvas.width=config.input.width;canvas.height=config.input.height;
+  const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(video,0,0,canvas.width,canvas.height);
+  const image=ctx.getImageData(0,0,canvas.width,canvas.height).data,pixels=canvas.width*canvas.height;
+  const data=new Float32Array(pixels*3);
+  if(config.input.layout==='nhwc'){
+    for(let i=0;i<pixels;i++){data[i*3]=image[i*4]/255;data[i*3+1]=image[i*4+1]/255;data[i*3+2]=image[i*4+2]/255;}
+    return new ort.Tensor('float32',data,[1,canvas.height,canvas.width,3]);
+  }
+  for(let i=0;i<pixels;i++){data[i]=image[i*4]/255;data[pixels+i]=image[i*4+1]/255;data[pixels*2+i]=image[i*4+2]/255;}
+  return new ort.Tensor('float32',data,[1,3,canvas.height,canvas.width]);
+}
+function nmsDetections(items,iouThreshold,maxDetections){
+  const sorted=[...items].sort((a,b)=>b.confidence-a.confidence),kept=[];
+  while(sorted.length&&kept.length<maxDetections){
+    const best=sorted.shift();kept.push(best);
+    for(let i=sorted.length-1;i>=0;i--)if(sorted[i].label===best.label&&bboxIou(sorted[i].bbox,best.bbox)>=iouThreshold)sorted.splice(i,1);
+  }
+  return kept;
+}
+function decodeYoloV8(tensor,config){
+  const dims=tensor.dims||[],data=tensor.data;if(dims.length!==3)throw new Error('YOLO output must be rank 3.');
+  const labels=config.labels,channels=4+labels.length;let rows,get;
+  if(config.output.layout==='rows'){
+    rows=dims[1];if(dims[2]<channels)throw new Error('YOLO row output does not contain configured classes.');
+    get=(r,c)=>Number(data[r*dims[2]+c]);
+  }else{
+    if(dims[1]<channels)throw new Error('YOLO channel output does not contain configured classes.');
+    rows=dims[2];get=(r,c)=>Number(data[c*rows+r]);
+  }
+  const floor=Number($('visionConfidenceThreshold')?.value||75)/100,out=[];
+  for(let r=0;r<rows;r++){
+    let cls=-1,score=-Infinity;for(let c=0;c<labels.length;c++){const s=get(r,4+c);if(s>score){score=s;cls=c;}}
+    if(cls<0||score<floor)continue;
+    let cx=get(r,0),cy=get(r,1),w=get(r,2),h=get(r,3);
+    if(config.output.boxScale!=='normalized'){cx/=config.input.width;w/=config.input.width;cy/=config.input.height;h/=config.input.height;}
+    const bbox={x:clamp(cx-w/2,0,1),y:clamp(cy-h/2,0,1),width:clamp(w,0,1),height:clamp(h,0,1)};
+    if(bbox.width<=0||bbox.height<=0)continue;out.push({label:labels[cls],confidence:score,bbox});
+  }
+  return nmsDetections(out,config.nmsIou,config.maxDetections);
+}
+async function unloadGovernedVisionModel(reason='unloaded'){
+  state.browserModel.loadEpoch+=1;const session=state.browserModel.session;
+  state.browserModel.session=null;state.browserModel.assignment=null;state.browserModel.profile=null;state.browserModel.config=null;state.browserModel.package=null;state.browserModel.verifiedSha256=null;
+  try{if(session&&typeof session.release==='function')await session.release();}catch{}
+  $('unloadVisionModel').disabled=true;setVisionModelStatus('idle',reason==='build_reset'?'Model released for build boundary.':'No governed browser model loaded.');
+  if($('visionAdapterSelect')?.value==='onnx')state.visionAdapter=null;
+}
+async function loadGovernedVisionModel(){
+  if(state.mode!=='live')throw new Error('Governed browser models require Live Gelato mode.');
+  if(!state.device)throw new Error('Choose a glasses device first.');
+  if(!state.build)throw new Error('Start a build before loading its governed model assignment.');
+  const detector=String($('visionDetectorName').value||'').trim();if(!detector)throw new Error('Detector name is required.');
+  const epoch=++state.browserModel.loadEpoch;setVisionModelStatus('loading','Requesting governed assignment…');$('loadVisionModel').disabled=true;
+  try{
+    const [assignmentResult,profileResult]=await Promise.all([
+      api('vision.model_assignment',{buildSessionPublicId:state.build.publicId,detectorName:detector}),
+      api('vision.profile',{buildSessionPublicId:state.build.publicId,detectorName:detector})
+    ]);
+    if(epoch!==state.browserModel.loadEpoch)return;
+    const assignment=assignmentResult.assignment,pkg=assignment?.package;
+    if(assignment?.action!=='apply'||!assignment?.compatibility?.compatible||!pkg)throw new Error('Governed model assignment is on hold'+(assignment?.reason?' ('+assignment.reason+')':'')+'.');
+    if(pkg.runtimeType!=='onnx')throw new Error('Assigned model runtime is '+pkg.runtimeType+'; browser preview currently supports ONNX only.');
+    const config=browserInferenceConfig(pkg);
+    setVisionModelStatus('loading','Downloading '+pkg.modelName+' '+pkg.modelVersion+'…');
+    const response=await fetch(pkg.artifactUrl,{mode:'cors',credentials:'omit',cache:'no-store'});
+    if(!response.ok)throw new Error('Model artifact download failed with HTTP '+response.status+'.');
+    const declared=Number(response.headers.get('content-length')||0);if(declared>BROWSER_MODEL_MAX_BYTES)throw new Error('Model artifact exceeds browser safety ceiling.');
+    const bytes=await response.arrayBuffer();if(bytes.byteLength>BROWSER_MODEL_MAX_BYTES)throw new Error('Model artifact exceeds browser safety ceiling.');
+    if(pkg.artifactBytes!==null&&Number(pkg.artifactBytes)!==bytes.byteLength)throw new Error('Model artifact byte size does not match governed package.');
+    setVisionModelStatus('verifying','Verifying SHA-256…');
+    const digest=hexFromBytes(await crypto.subtle.digest('SHA-256',bytes));
+    if(digest!==String(pkg.artifactSha256||'').toLowerCase())throw new Error('Model artifact SHA-256 verification failed.');
+    const ort=await ensureOrtWeb();setVisionModelStatus('loading','Preparing ONNX Runtime Web session…');
+    const session=await ort.InferenceSession.create(bytes,{executionProviders:['wasm']});
+    if(epoch!==state.browserModel.loadEpoch){if(typeof session.release==='function')await session.release();return;}
+    const inputName=config.input.name||session.inputNames?.[0],outputName=config.output.name||session.outputNames?.[0];
+    if(!inputName||!outputName)throw new Error('ONNX model input/output names could not be resolved.');
+    config.input.name=inputName;config.output.name=outputName;
+    state.browserModel={...state.browserModel,status:'ready',session,assignment,profile:profileResult.profile,config,package:pkg,verifiedSha256:digest,loadEpoch:epoch};
+    $('visionAdapterSelect').value='onnx';$('unloadVisionModel').disabled=false;
+    setVisionModelStatus('ready',pkg.modelName+' '+pkg.modelVersion+' · '+digest.slice(0,12)+'…');
+    log('VISION','Governed ONNX model verified and activated in browser preview.');startVisionRuntime();
+  }finally{$('loadVisionModel').disabled=false;}
+}
 const VISION_ADAPTERS={
   fixture:{
     id:'fixture',
@@ -234,6 +364,16 @@ const VISION_ADAPTERS={
         const col=index%4,row=Math.floor(index/4),phase=((frame.seq+index*3)%18)/18;
         return {label:component.displayName,componentKey:component.componentKey,confidence:Math.max(.4,Number($('visionConfidenceThreshold')?.value||75)/100+.1),bbox:{x:.12+col*.19+phase*.015,y:.38+row*.2,width:.14,height:.13}};
       });
+    }
+  },
+  onnx:{
+    id:'onnx',
+    async detect(frame){
+      const model=state.browserModel;if(model.status!=='ready'||!model.session||!model.config)throw new Error('Governed ONNX model is not loaded.');
+      const ort=await ensureOrtWeb(),tensor=preprocessOnnxFrame(frame.video,model.config,ort);
+      const result=await model.session.run({[model.config.input.name]:tensor});
+      const output=result[model.config.output.name];if(!output)throw new Error('Configured ONNX detector output was not returned.');
+      return decodeYoloV8(output,model.config).map(applyVisionProfile).filter(Boolean);
     }
   }
 };
@@ -382,7 +522,7 @@ async function runVisionFrame(){
   state.visionBusy=true;
   const started=performance.now(),seq=state.visionFrameSeq+1,nowWall=Date.now();
   try{
-    state.visionAdapter=state.visionAdapter||VISION_ADAPTERS.fixture;
+    const adapterName=$('visionAdapterSelect')?.value||'fixture';state.visionAdapter=VISION_ADAPTERS[adapterName]||VISION_ADAPTERS.fixture;
     const raw=await state.visionAdapter.detect({seq,video:$('cameraVideo'),build:state.build,temporalTracks:state.temporalTracks});
     const threshold=Number($('visionConfidenceThreshold')?.value||75)/100;
     const filtered=(raw||[]).filter(d=>d&&d.bbox&&d.confidence>=threshold);
@@ -397,7 +537,7 @@ async function runVisionFrame(){
   finally{state.visionBusy=false;if(visionMode()!=='manual'&&state.cameraStream&&!document.hidden)state.visionTimer=setTimeout(runVisionFrame,visionIntervalMs());}
 }
 function startVisionRuntime(){
-  stopVisionRuntime('idle');state.visionMode=visionMode();state.visionSubmitted.clear();state.visionTracks.clear();state.visionFrameSeq=0;state.visionLastAt=0;
+  stopVisionRuntime('idle');state.visionMode=visionMode();state.visionSubmitted.clear();state.visionTracks.clear();state.visionFrameSeq=0;state.visionLastAt=0;state.visionAdapter=VISION_ADAPTERS[$('visionAdapterSelect')?.value||'fixture']||VISION_ADAPTERS.fixture;
   if(state.visionMode!=='manual'&&state.cameraStream&&!document.hidden){state.visionTimer=setTimeout(runVisionFrame,0);renderVisionHealth('ready');}
 }
 
@@ -504,7 +644,7 @@ async function refreshWork(){
     log('LIVE','Refreshed current KDS station work.');
   }catch(e){log('ERROR',e.message);}
 }
-async function startBuild(){try{clearTemporalRuntime();if(state.mode==='mock'){state.build=mockBuild();state.validation=null;log('MOCK','Started mock build session.');render();return;}const item=selectedItem();if(!item)throw new Error('No selected KDS item.');const d=await api('build.start',{kdsItemPublicId:item.kdsItemPublicId,sourceRevision:state.work.revision});state.build=d.buildSession;state.validation=null;log('LIVE','Started build '+state.build.publicId+' against real KDS item.');render();}catch(e){log('ERROR',e.message);}}
+async function startBuild(){try{await unloadGovernedVisionModel('build_reset');clearTemporalRuntime();if(state.mode==='mock'){state.build=mockBuild();state.validation=null;log('MOCK','Started mock build session.');render();return;}const item=selectedItem();if(!item)throw new Error('No selected KDS item.');const d=await api('build.start',{kdsItemPublicId:item.kdsItemPublicId,sourceRevision:state.work.revision});state.build=d.buildSession;state.validation=null;log('LIVE','Started build '+state.build.publicId+' against real KDS item.');render();}catch(e){log('ERROR',e.message);}}
 async function detect(key){try{if(!state.build)throw new Error('Start a build first.');const c=state.build.components.find(x=>x.componentKey===key);if(!c)return;const qty=Math.max(.001,Number(c.expectedQuantity||1)-Number(c.detectedQuantity||0));flashDetection(c,{confidence:.96,state:'confirmed'});if(state.mode==='mock'){c.detectedQuantity=Number(c.detectedQuantity||0)+qty;c.confidence=.96;c.status=c.detectedQuantity+.0001>=Number(c.expectedQuantity||1)?'confirmed':'detected';state.build.summary.currentComponentKey=currentComponent()?.componentKey||null;state.validation=null;log('VISION','Detected '+c.displayName+' in mock mode.');render();return;}const obs='websim-'+state.build.publicId+'-'+Date.now()+'-'+state.seq;const d=await api('build.observe',{buildSessionPublicId:state.build.publicId,observationKey:obs,componentKey:c.componentKey,displayName:c.displayName,observationAction:'added',quantity:qty,confidence:.96,trackingId:'websim-'+state.seq,bbox:{x:.18,y:.46,width:.18,height:.16},metadata:{source:'web_glasses_simulator'}});state.build=d.buildSession;state.validation=null;log('LIVE','Submitted simulated detection for '+c.displayName+'.');render();}catch(e){log('ERROR',e.message);}}
 function ensureMockBuild(){if(state.mode!=='mock')throw new Error('Demo controls are available only in Mock mode.');if(!state.build)state.build=mockBuild();}
 async function playNextMockDetection(){
@@ -531,9 +671,9 @@ async function injectUnexpected(){try{if(!state.build)throw new Error('Start a b
 async function resolveUnexpected(key){try{if(state.mode==='mock'){const c=state.build?.components.find(x=>x.componentKey===key);if(c)c.status='ignored';state.validation=null;log('MOCK','Resolved unexpected ingredient.');render();return;}const d=await api('build.resolve_unexpected',{buildSessionPublicId:state.build.publicId,componentKey:key});state.build=d.buildSession;state.validation=null;log('LIVE','Resolved unexpected ingredient.');render();}catch(e){log('ERROR',e.message);}}
 async function validate(){try{if(!state.build)throw new Error('Start a build first.');if(state.mode==='mock'){mockValidate();log('VALIDATION','Mock result: '+state.validation.status);render();return;}const d=await api('validation.evaluate',{buildSessionPublicId:state.build.publicId});state.validation=d.validation;log('LIVE','Validation result: '+state.validation.status);render();}catch(e){log('ERROR',e.message);}}
 async function handoff(){try{if(!state.validation||state.validation.status!=='ready_for_finishing')throw new Error('Validation is not ready for Expo.');if(state.mode==='mock'){log('MOCK','Simulated Expo handoff.');state.build=null;state.validation=null;render();return;}const d=await api('handoff.expo',{buildSessionPublicId:state.build.publicId});log('LIVE','Expo handoff completed; KDS status '+(d.handoff.kdsStatus||'ready')+'.');state.build=null;state.validation=null;await refreshWork();}catch(e){log('ERROR',e.message);}}
-function resetSimulator(){state.build=null;state.validation=null;state.selectedKdsItemPublicId='';clearTemporalRuntime();clearCameraTarget();$('detectionLayer').innerHTML='';log('SYSTEM','Simulator build state reset; POS/KDS records were not changed.');refreshWork();}
-$('modeSelect').addEventListener('change',async e=>{stopAutoPlay();stopLiveStationSync('idle');state.mode=e.target.value;state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;clearTemporalRuntime();state.syncFingerprint='';log('MODE','Switched to '+state.mode+'.');if(state.mode==='live')startLiveStationSync({immediate:true});else await refreshWork();});
-$('deviceSelect').addEventListener('change',async e=>{stopLiveStationSync('idle');state.device=state.devices.find(x=>x.publicId===e.target.value)||null;state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;clearTemporalRuntime();state.syncFingerprint='';if(state.mode==='live')startLiveStationSync({immediate:true});else render();});
+function resetSimulator(){unloadGovernedVisionModel('build_reset');state.build=null;state.validation=null;state.selectedKdsItemPublicId='';clearTemporalRuntime();clearCameraTarget();$('detectionLayer').innerHTML='';log('SYSTEM','Simulator build state reset; POS/KDS records were not changed.');refreshWork();}
+$('modeSelect').addEventListener('change',async e=>{stopAutoPlay();stopLiveStationSync('idle');await unloadGovernedVisionModel('build_reset');state.mode=e.target.value;state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;clearTemporalRuntime();state.syncFingerprint='';log('MODE','Switched to '+state.mode+'.');if(state.mode==='live')startLiveStationSync({immediate:true});else await refreshWork();});
+$('deviceSelect').addEventListener('change',async e=>{stopLiveStationSync('idle');await unloadGovernedVisionModel('build_reset');state.device=state.devices.find(x=>x.publicId===e.target.value)||null;state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;clearTemporalRuntime();state.syncFingerprint='';if(state.mode==='live')startLiveStationSync({immediate:true});else render();});
 $('workItemSelect').addEventListener('change',e=>{state.selectedKdsItemPublicId=e.target.value;state.validation=null;render();});
 $('refreshWork').addEventListener('click',refreshWork);$('startBuild').addEventListener('click',startBuild);$('resetSimulator').addEventListener('click',resetSimulator);$('injectUnexpected').addEventListener('click',injectUnexpected);$('evaluateBuild').addEventListener('click',validate);$('autoPlayBuild').addEventListener('click',toggleAutoPlay);$('nextDetection').addEventListener('click',playNextMockDetection);$('lowConfidenceDetection').addEventListener('click',injectLowConfidenceDetection);$('completeMockBuild').addEventListener('click',completeMockScenario);$('handoffExpo').addEventListener('click',handoff);$('clearLog').addEventListener('click',()=>{state.logs=[];renderLog();});
 $('sceneSourceSelect').addEventListener('change',async e=>{state.cameraSource=e.target.value;if(state.cameraSource==='camera'){await startCamera();}else{stopCamera();$('sceneImage').hidden=!$('sceneImage').src;$('scenePlaceholder').hidden=!!$('sceneImage').src;}});
@@ -543,6 +683,9 @@ $('cameraDeviceSelect').addEventListener('change',async()=>{saveCameraPrefs();if
 $('cameraResolution').addEventListener('change',async()=>{saveCameraPrefs();if(state.cameraStream)await startCamera();});
 $('cameraManualTarget').addEventListener('change',e=>{$('glassesStage').classList.toggle('camera-targeting',e.target.checked);if(!e.target.checked)clearCameraTarget();});
 $('visionMode').addEventListener('change',()=>{state.visionMode=visionMode();startVisionRuntime();});
+$('visionAdapterSelect').addEventListener('change',()=>{state.visionAdapter=VISION_ADAPTERS[$('visionAdapterSelect').value]||VISION_ADAPTERS.fixture;clearTemporalRuntime();startVisionRuntime();});
+$('loadVisionModel').addEventListener('click',()=>loadGovernedVisionModel().catch(e=>{setVisionModelStatus('error',e.message);log('ERROR',e.message);}));
+$('unloadVisionModel').addEventListener('click',()=>unloadGovernedVisionModel());
 $('visionFpsLimit').addEventListener('change',startVisionRuntime);
 $('visionConfidenceThreshold').addEventListener('input',e=>{$('visionConfidenceValue').textContent=e.target.value+'%';});
 $('glassesStage').addEventListener('click',setCameraTargetFromPointer);
@@ -550,7 +693,7 @@ $('cameraTargetConfidence').addEventListener('input',e=>{$('cameraTargetConfiden
 document.addEventListener('visibilitychange',()=>{if(state.cameraTrack){state.cameraTrack.enabled=!document.hidden;setCameraHealth(document.hidden?'paused':'ready',document.hidden?'PAUSED':'READY');}if(document.hidden){stopVisionRuntime('paused');stopLiveStationSync('hidden');}else{if(state.cameraStream)startVisionRuntime();if(state.mode==='live'&&state.device)startLiveStationSync({immediate:true});}});
 window.addEventListener('offline',()=>{stopLiveStationSync('idle');setSyncBadge('error','OFFLINE');});
 window.addEventListener('online',()=>{if(state.mode==='live'&&state.device)startLiveStationSync({immediate:true});});
-window.addEventListener('beforeunload',()=>{stopVisionRuntime('idle');stopLiveStationSync('idle');});
+window.addEventListener('beforeunload',()=>{stopVisionRuntime('idle');stopLiveStationSync('idle');if(state.browserModel.session&&typeof state.browserModel.session.release==='function')state.browserModel.session.release();});
 const FRAME_MODE_KEY='gelato.webGlassesSimulator.frameMode.v1';
 const OPTICAL_MASK_KEY='gelato.webGlassesSimulator.opticalMask.v1';
 let frameMode=['svg','image','none'].includes(localStorage.getItem(FRAME_MODE_KEY))?localStorage.getItem(FRAME_MODE_KEY):'svg';
