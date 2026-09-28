@@ -66,6 +66,13 @@ function glasses_vision_dataset_intelligence_record_review(PDO $pdo,int $org,str
     if ($disagrees) {
         $pdo->prepare("UPDATE glasses_vision_training_samples SET review_status='needs_adjudication',updated_at=NOW(6) WHERE organization_id=? AND id=?")
           ->execute([$org,(int)$sample['id']]);
+    } elseif (count($reviews)>=2) {
+        $first=$reviews[0];
+        $consensusDecision=(string)$first['decision'];
+        $consensusLabel=(string)$first['label'];
+        $status=in_array($consensusDecision,['approve','relabel'],true)?'approved':($consensusDecision==='reject'?'rejected':'needs_adjudication');
+        $pdo->prepare("UPDATE glasses_vision_training_samples SET review_status=?,review_outcome=?,canonical_label=CASE WHEN ?<>'' THEN ? ELSE canonical_label END,adjudicator_user_id=?,reviewed_at=NOW(6),updated_at=NOW(6) WHERE organization_id=? AND id=?")
+          ->execute([$status,$consensusDecision,$consensusLabel,$consensusLabel,$reviewerId,$org,(int)$sample['id']]);
     }
 
     return ['samplePublicId'=>$samplePublic,'reviewCount'=>count($reviews),'hasDisagreement'=>$disagrees];
