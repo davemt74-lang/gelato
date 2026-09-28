@@ -209,6 +209,15 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
           <button id="unloadVisionModel" type="button" disabled>Unload Model</button>
         </div>
         <div id="visionModelStatus" class="vision-model-status"><strong>FIXTURE</strong><span>No governed browser model loaded.</span></div>
+        <div class="shadow-model-panel">
+          <div class="console-heading"><div><small>LIVE SHADOW MODEL</small><strong>Champion vs challenger</strong></div><span id="shadowSummary">0 frames · shadow inactive</span></div>
+          <div class="inline-actions">
+            <button id="startShadowModel" type="button">Start Shadow Challenger</button>
+            <button id="completeShadowModel" type="button" disabled>Complete Shadow Run</button>
+          </div>
+          <div id="shadowModelStatus" class="vision-model-status"><strong>IDLE</strong><span>No shadow challenger loaded.</span></div>
+          <p class="calibration-note">The challenger scores the same camera frames but never writes build observations, validation, KDS state, or rollout selection.</p>
+        </div>
         <label class="vision-confidence"><span>Auto confidence threshold</span><input id="visionConfidenceThreshold" type="range" min="40" max="99" value="75"><output id="visionConfidenceValue">75%</output></label>
         <div id="visionMetrics" class="vision-metrics">FPS 0.0 · 0ms · 0 det</div>
         <p class="calibration-note">Governed ONNX loads only the model package assigned to the selected device/build, verifies its registered byte size and SHA-256 in the browser, and applies the active Gelato label profile before detections enter temporal tracking.</p>
@@ -301,6 +310,6 @@ window.GELATO_GLASSES_SIMULATOR={
   api:'api/glasses-simulator.php'
 };
 </script>
-<script src="assets/js/glasses-web-simulator.js?v=20260928-activelearning1"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20260928-shadow1"></script>
 </body>
 </html>
