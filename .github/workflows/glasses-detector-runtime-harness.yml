@@ -1,0 +1,49 @@
+name: AR Glasses Detector Runtime Harness
+
+on:
+  pull_request:
+    paths:
+      - 'glasses/inmo-air3-unity/Runtime/Core/VisionDetectorRuntimeHarness.cs'
+      - 'glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs'
+      - 'glasses/inmo-air3-unity/Runtime/Unity/DesktopSimulatorVisionDetector.cs'
+      - 'glasses/inmo-air3-unity/Tests/**'
+      - 'docs/GLASSES-DETECTOR-RUNTIME-HARNESS.md'
+      - '.github/workflows/glasses-detector-runtime-harness.yml'
+  push:
+    branches: ['feature/glasses-detector-runtime-harness']
+
+jobs:
+  detector-runtime-harness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Architecture and runtime contract
+        run: |
+          grep -q 'class VisionDetectorRuntimeHarness' glasses/inmo-air3-unity/Runtime/Core/VisionDetectorRuntimeHarness.cs
+          grep -q 'SemaphoreSlim' glasses/inmo-air3-unity/Runtime/Core/VisionDetectorRuntimeHarness.cs
+          grep -q 'InferenceTimeout' glasses/inmo-air3-unity/Runtime/Core/VisionDetectorRuntimeHarness.cs
+          grep -q 'BackpressureDrops' glasses/inmo-air3-unity/Runtime/Core/VisionDetectorRuntimeHarness.cs
+          grep -q 'VisionDetectorRuntimeState.Failed' glasses/inmo-air3-unity/Runtime/Core/VisionDetectorRuntimeHarness.cs
+          grep -q 'ContinueWith' glasses/inmo-air3-unity/Runtime/Core/VisionDetectorRuntimeHarness.cs
+          grep -q 'VisionDetectorRuntimeHarness' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
+          grep -q 'automated vision is held fail-closed' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
+          grep -q 'class DesktopSimulatorVisionDetector' glasses/inmo-air3-unity/Runtime/Unity/DesktopSimulatorVisionDetector.cs
+          grep -q 'IVisionDetectorRuntimeControl' glasses/inmo-air3-unity/Runtime/Unity/DesktopSimulatorVisionDetector.cs
+          ! grep -R 'ArPoseManager' glasses/inmo-air3-unity/Runtime/Core
+
+      - name: Compile hardware-neutral AR core
+        run: dotnet build glasses/inmo-air3-unity/Runtime/Core/Gelato.Ar.Core.csproj -c Release --nologo
+
+      - name: Run full AIR3 behavior contracts
+        run: dotnet run --project glasses/inmo-air3-unity/Tests/Gelato.Ar.Core.Tests.csproj -c Release
+
+      - name: Preserve Sections 18-21A safety chain
+        run: |
+          grep -q 'BlockedLabels' glasses/inmo-air3-unity/Runtime/Core/Models.cs
+          grep -q 'VisionModelAssignmentPolicy.CanApply' glasses/inmo-air3-unity/Runtime/Core/VisionModelActivation.cs
+          grep -q 'VisionModelRecoveryService' glasses/inmo-air3-unity/Runtime/Core/VisionModelRuntimePersistence.cs
+          grep -q 'DuplicateOrStaleFramesSkipped' glasses/inmo-air3-unity/Runtime/Core/VisionPipeline.cs
