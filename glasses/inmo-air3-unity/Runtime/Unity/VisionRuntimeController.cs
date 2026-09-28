@@ -23,6 +23,7 @@ namespace Gelato.Ar.Unity
         private float _nextInferenceAt;
         private bool _processing;
         private string _activeSession = string.Empty;
+        private bool _stationCalibrationLoaded;
 
         public string DetectorName => _pipeline == null ? string.Empty : _pipeline.DetectorName;
         public int ActiveTrackCount => _pipeline == null ? 0 : _pipeline.ActiveTrackCount;
@@ -58,6 +59,7 @@ namespace Gelato.Ar.Unity
             {
                 _activeSession = build.PublicId;
                 _pipeline.Reset(_activeSession);
+                _stationCalibrationLoaded = false;
             }
 
             var frame = coordinator.Platform.TryGetLatestFrame();
@@ -68,10 +70,23 @@ namespace Gelato.Ar.Unity
 
             try
             {
+                if (!_stationCalibrationLoaded)
+                {
+                    await coordinator.RefreshStationCalibrationAsync(frame, _lifetime.Token);
+                    _stationCalibrationLoaded = true;
+                    if (!string.IsNullOrWhiteSpace(coordinator.LastCalibrationError))
+                        Debug.LogWarning("Gelato AR station calibration unavailable: " + coordinator.LastCalibrationError);
+                }
+
+                var stationCalibration = StationCalibrationPolicy.CanUse(coordinator.StationCalibration, frame)
+                    ? coordinator.StationCalibration
+                    : null;
+
                 var context = new VisionFrameContext
                 {
                     BuildSessionPublicId = build.PublicId,
                     ExpectedComponents = build.Components,
+                    StationCalibration = stationCalibration,
                     Calibration = coordinator.Platform.TryGetCameraCalibration(),
                     Pose = coordinator.Platform.GetPose()
                 };
