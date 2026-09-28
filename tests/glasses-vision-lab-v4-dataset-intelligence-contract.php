@@ -122,6 +122,8 @@ v4_assert($accepted['status']==='accepted'&&$accepted['missionsCreated']>=1,'Acc
 
 $frozen=glasses_vision_lab_freeze_dataset($pdo,$org,(string)$dataset['publicId'],$admin);
 v4_assert($frozen['status']==='frozen'&&strlen((string)$frozen['datasetHash'])===64,'Remediated dataset must freeze with immutable hash.');
+$refrozen=glasses_vision_lab_freeze_dataset($pdo,$org,(string)$dataset['publicId'],$admin);
+v4_assert($refrozen['status']==='frozen'&&$refrozen['datasetHash']===$frozen['datasetHash'],'Repeated freeze must remain idempotent for immutable historical datasets.');
 
 $moveBlocked=false;
 try{glasses_vision_dataset_intelligence_consolidate_build_split($pdo,$org,(string)$dataset['publicId'],$buildA,'test');}catch(InvalidArgumentException){$moveBlocked=true;}
