@@ -16,6 +16,7 @@ internal static class Program
         HudContract();
         SimulatorSupportContract();
         await StationCalibrationContract();
+        await VisionLabelProfileContract();
         await SpatialEvidenceFusionContract();
         await TransferSequenceEvidenceContract();
         await VisionPipelineContract();
@@ -545,6 +546,64 @@ internal static class Program
         Assert(unavailable == null, "calibration transport failure must degrade to no spatial profile");
         Assert(coordinator.State == WorkflowState.Idle, "optional calibration failure must not put the kitchen workflow into Error");
         Assert(coordinator.LastCalibrationError == "simulated calibration failure", "optional calibration failure must remain diagnosable");
+    }
+
+    private static async Task VisionLabelProfileContract()
+    {
+        var profile = new VisionLabelProfile
+        {
+            Schema = "gelato.vision_label_profile.v1",
+            DetectorName = "scripted-test-detector",
+            BuildSessionPublicId = "build-1",
+            ProfileHash = new string('b', 64),
+            Mappings = new[]
+            {
+                new VisionLabelMapping
+                {
+                    ModelLabel = "turkey_slice",
+                    NormalizedLabel = "turkey slice",
+                    ComponentKey = "ingredient:42",
+                    DisplayName = "Turkey",
+                    IngredientId = 42,
+                    MinimumConfidence = 0.85f,
+                    SourceDetector = "scripted-test-detector"
+                }
+            }
+        };
+
+        var gateway = new FakeGateway
+        {
+            VisionProfile = profile,
+            StartComponents = new[]
+            {
+                new BuildComponent
+                {
+                    ComponentKey = "ingredient:42",
+                    DisplayName = "Turkey",
+                    ExpectedQuantity = 1f,
+                    Status = "waiting"
+                }
+            }
+        };
+        var coordinator = new ArWorkflowCoordinator(new FakePlatform(), gateway, new FakeTokenStore("existing-token"));
+
+        await coordinator.InitializeAsync();
+        await coordinator.RefreshWorkAsync();
+        await coordinator.StartFocusBuildAsync();
+
+        var loaded = await coordinator.RefreshVisionLabelProfileAsync("scripted-test-detector");
+        Assert(loaded != null && loaded.ProfileHash == profile.ProfileHash, "coordinator must load the active build's detector label profile");
+        Assert(gateway.VisionProfileCalls == 1, "vision profile must use the dedicated gateway action");
+        Assert(coordinator.State == WorkflowState.Building, "optional vision-profile load must not disturb build workflow state");
+
+        gateway.FailVisionProfile = true;
+        var unavailable = await coordinator.RefreshVisionLabelProfileAsync("scripted-test-detector");
+        Assert(unavailable == null, "vision profile transport failure must degrade to recipe-name fallback");
+        Assert(coordinator.State == WorkflowState.Building, "optional vision-profile failure must not put the kitchen workflow into Error");
+        Assert(coordinator.LastVisionProfileError == "simulated vision profile failure", "vision-profile fallback reason must remain diagnosable");
+
+        coordinator.ResetForNextWork();
+        Assert(coordinator.VisionLabelProfile == null && coordinator.LastVisionProfileError == null, "reset must clear per-build vision profile state");
     }
 
     private static async Task SpatialEvidenceFusionContract()
@@ -1240,7 +1299,10 @@ internal static class Program
         public string DeviceToken { get; private set; } = string.Empty;
         public bool FailCurrentWork { get; set; }
         public bool FailCalibration { get; set; }
+        public bool FailVisionProfile { get; set; }
         public StationCalibration? Calibration { get; set; }
+        public VisionLabelProfile? VisionProfile { get; set; }
+        public int VisionProfileCalls { get; private set; }
         public int HandoffCalls { get; private set; }
         public int ConfirmCalls { get; private set; }
         public int ResolveCalls { get; private set; }
@@ -1280,6 +1342,17 @@ internal static class Program
             cancellationToken.ThrowIfCancellationRequested();
             if (FailCalibration) throw new InvalidOperationException("simulated calibration failure");
             return Task.FromResult(Calibration);
+        }
+
+        public Task<VisionLabelProfile?> GetVisionLabelProfileAsync(
+            string buildSessionPublicId,
+            string detectorName,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            VisionProfileCalls++;
+            if (FailVisionProfile) throw new InvalidOperationException("simulated vision profile failure");
+            return Task.FromResult(VisionProfile);
         }
 
         public Task<BuildSession> StartBuildAsync(string kdsItemPublicId, string? sourceRevision, CancellationToken cancellationToken)
