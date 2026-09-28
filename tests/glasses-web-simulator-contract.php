@@ -106,6 +106,25 @@ gws_assert(str_contains($js,"visionMode()!=='manual'"),'Assisted and Automatic m
 gws_assert(str_contains($js,'visionSubmitted'),'Automatic vision must suppress duplicate component submissions for the active build.');
 gws_assert(str_contains($js,'stopVisionRuntime'),'Browser vision must stop on camera/tab lifecycle transitions.');
 gws_assert(str_contains($css,'.vision-auto-box')&&str_contains($css,'.vision-detection-layer'),'Automatic detections must have an independent tracked overlay.');
+gws_assert(str_contains($page,'temporalValidationState')&&str_contains($page,'temporalEventList'),'Simulator must expose temporal multi-ingredient validation state and event history.');
+gws_assert(str_contains($js,'VISION_STABLE_FRAMES=3'),'Temporal detections must require repeated-frame stability before mutation.');
+gws_assert(str_contains($js,'VISION_REMOVAL_GRACE_MS=2200'),'Temporal removals must use a bounded absence grace period to reject detector flicker.');
+gws_assert(str_contains($js,'VISION_REPLACEMENT_IOU'),'Temporal tracking must use spatial overlap when classifying replacement events.');
+gws_assert(str_contains($js,'function bboxIou'),'Temporal tracking must calculate overlap for replacement inference.');
+gws_assert(str_contains($js,'function processTemporalEvents'),'Automatic vision must reconcile stable additions and removals over time.');
+gws_assert(str_contains($js,"submitTemporalObservation(lost,'removed'"),'Stable ingredient disappearance must use the canonical removed observation action.');
+gws_assert(str_contains($js,"submitTemporalObservation(track,'added'"),'Stable ingredient appearance must use the canonical added observation action.');
+gws_assert(str_contains($js,'function sequenceViolationFor'),'Temporal product validation must detect out-of-order required ingredients.');
+gws_assert(str_contains($js,'temporalViolations'),'Sequence violations must remain explicit validation state rather than being silently ignored.');
+gws_assert(str_contains($js,'function temporalAssessment'),'Temporal runtime must calculate complete-product readiness from missing, verify, unexpected, sequence and pending states.');
+gws_assert(str_contains($js,'VISION_READY_STABLE_MS'),'Automatic product validation must require a stable-ready dwell period.');
+gws_assert(str_contains($js,'function autoEvaluateTemporalReadiness'),'Temporal runtime must automatically invoke canonical product validation only after stable readiness.');
+gws_assert(str_contains($js,"api('validation.evaluate'"),'Automatic temporal readiness must reuse canonical product validation.');
+gws_assert(str_contains($js,"metadata:{source:'web_glasses_simulator_temporal_vision'"),'Temporal observations must be explicitly source-labelled.');
+gws_assert(str_contains($js,"visionMode()==='automatic'&&!state.temporalGate?.ready"),'Expo handoff must remain blocked when automatic temporal validation is not ready.');
+gws_assert(str_contains($js,'function clearTemporalRuntime'),'Temporal state must reset at build, mode and device boundaries.');
+gws_assert(str_contains($css,'.temporal-event')&&str_contains($css,'.vision-auto-box.pending'),'Temporal events and pre-stable tracks must have visible, distinct UI states.');
+
 
 
 echo "glasses-web-simulator-ok\n";
