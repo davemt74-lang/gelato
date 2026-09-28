@@ -89,5 +89,23 @@ gws_assert(str_contains($css,'.camera-target-marker')&&str_contains($css,'.camer
 gws_assert(str_contains($js,'function cameraPointerGeometry'),'Manual targets must map through rendered video geometry.');
 gws_assert(str_contains($js,'videoX')&&str_contains($js,'videoY'),'Submitted camera boxes must use normalized video-frame coordinates.');
 gws_assert(str_contains($js,"state.cameraTrack.enabled=!document.hidden"),'Camera capture must pause while the simulator tab is hidden.');
+gws_assert(str_contains($page,'visionMode')&&str_contains($page,'visionFpsLimit'),'Simulator must expose Manual, Assisted and Automatic browser vision controls.');
+gws_assert(str_contains($page,'visionConfidenceThreshold')&&str_contains($page,'visionMetrics'),'Simulator must expose automatic vision threshold and health telemetry.');
+gws_assert(str_contains($page,'visionDetectionLayer'),'Simulator must expose a dedicated automatic vision overlay layer.');
+gws_assert(str_contains($js,'const VISION_ADAPTERS'),'Browser vision must use a detector adapter contract rather than hard-coding vendor APIs.');
+gws_assert(str_contains($js,"id:'fixture'"),'Browser vision must provide a deterministic detector fixture while the production model adapter is pending.');
+gws_assert(str_contains($js,'function runVisionFrame'),'Browser vision must run a bounded continuous inference loop.');
+gws_assert(str_contains($js,'function trackDetections'),'Browser vision must assign persistent tracking IDs across frames.');
+gws_assert(str_contains($js,'VISION_TRACK_TTL_MS'),'Browser vision tracks must expire rather than persist stale detections.');
+gws_assert(str_contains($js,'visionIntervalMs'),'Browser vision must apply an explicit FPS budget.');
+gws_assert(str_contains($js,'visionConfidenceThreshold'),'Automatic vision must filter detections by operator-visible confidence threshold.');
+gws_assert(str_contains($js,'function normalizedBoxToStage'),'Automatic detections must map normalized video boxes through rendered camera geometry.');
+gws_assert(str_contains($js,"metadata:{source:'web_glasses_simulator_auto_vision'"),'Automatic browser observations must be source-labelled.');
+gws_assert(str_contains($js,"visionMode()==='automatic'"),'Only Automatic mode may submit detector observations.');
+gws_assert(str_contains($js,"visionMode()!=='manual'"),'Assisted and Automatic modes must share the detector loop while Manual remains isolated.');
+gws_assert(str_contains($js,'visionSubmitted'),'Automatic vision must suppress duplicate component submissions for the active build.');
+gws_assert(str_contains($js,'stopVisionRuntime'),'Browser vision must stop on camera/tab lifecycle transitions.');
+gws_assert(str_contains($css,'.vision-auto-box')&&str_contains($css,'.vision-detection-layer'),'Automatic detections must have an independent tracked overlay.');
+
 
 echo "glasses-web-simulator-ok\n";
