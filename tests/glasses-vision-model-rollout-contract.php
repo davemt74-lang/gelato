@@ -498,6 +498,54 @@ gvm_assert((int)gvm_one($pdo,"SELECT COUNT(*) FROM glasses_vision_model_rollout_
 $driftSummary=glasses_vision_drift_rollout_summary($pdo,$org,(string)$driftRollout['publicId']);
 gvm_assert($driftSummary['promotionBlocked']===true&&$driftSummary['state']==='critical','Rollout drift summary must block promotion while critical drift remains.');
 
+gvm_assert(glasses_vision_drift_recovery_ready($pdo),'Drift recovery migration must be installed.');
+$incidentPublic=(string)gvm_one($pdo,"SELECT public_id FROM glasses_vision_drift_incidents WHERE organization_id=? AND package_id=? ORDER BY id DESC LIMIT 1",[$org,(int)$driftTargetRow['id']]);
+$incident=glasses_vision_drift_incident_public(glasses_vision_drift_incident_row($pdo,$org,$incidentPublic,false));
+gvm_assert($incident['category']==='lighting'&&$incident['recoveryStatus']==='open','Critical lighting drift must open a recoverable incident with cause classification.');
+gvm_assert(($incident['recommendation']['type']??'')==='recalibrate_environment','Lighting drift must recommend environment recalibration.');
+
+$diagnosed=glasses_vision_drift_recovery_action($pdo,$org,$incidentPublic,'diagnose',['notes'=>'Confirmed station lighting was changed.'],$user);
+gvm_assert($diagnosed['recoveryStatus']==='diagnosing','Incident must enter diagnosing state.');
+$remediated=glasses_vision_drift_recovery_action($pdo,$org,$incidentPublic,'remediate',[
+    'remediationType'=>'recalibrate_environment','notes'=>'Restored lighting and verified camera mount.'
+],$user);
+gvm_assert($remediated['recoveryStatus']==='remediation_required','Recorded remediation must be auditable before validation.');
+$validating=glasses_vision_drift_recovery_action($pdo,$org,$incidentPublic,'validate',['resetBaseline'=>true,'notes'=>'Re-establish baseline after environment fix.'],$user);
+gvm_assert($validating['recoveryStatus']==='validating'&&$validating['validationStableSamples']===0,'Environment recovery must begin a fresh validation window.');
+gvm_assert((int)gvm_one($pdo,"SELECT COUNT(*) FROM glasses_vision_drift_baselines WHERE organization_id=? AND package_id=? AND status='superseded'",[$org,(int)$driftTargetRow['id']])===1,'Approved environment reset must preserve the old baseline as superseded evidence.');
+
+for($i=1;$i<=20;$i++)glasses_vision_drift_sample($pdo,$device,[
+    'assignmentKey'=>$driftAssignment['assignmentKey'],'buildSessionPublicId'=>$sessionPublic,'sampleKey'=>'drift-rebase-'.$i,
+    'frameWidth'=>640,'frameHeight'=>480,'pixelFormat'=>'grayscale8',
+    'brightnessMean'=>0.52,'contrastMean'=>0.40,'cameraPitch'=>1.0,'cameraYaw'=>2.0,'cameraRoll'=>0.5,
+    'confidenceMean'=>0.92,'latencyMeanMs'=>50,'observationCount'=>10,'correctionCount'=>0,'lowConfidenceCount'=>1,
+]);
+$afterRebase=glasses_vision_drift_incident_public(glasses_vision_drift_incident_row($pdo,$org,$incidentPublic,false));
+gvm_assert($afterRebase['recoveryStatus']==='validating','Re-baselining alone must not resolve the incident.');
+
+for($i=1;$i<=10;$i++)glasses_vision_drift_sample($pdo,$device,[
+    'assignmentKey'=>$driftAssignment['assignmentKey'],'buildSessionPublicId'=>$sessionPublic,'sampleKey'=>'drift-validate-'.$i,
+    'frameWidth'=>640,'frameHeight'=>480,'pixelFormat'=>'grayscale8',
+    'brightnessMean'=>0.52,'contrastMean'=>0.40,'cameraPitch'=>1.0,'cameraYaw'=>2.0,'cameraRoll'=>0.5,
+    'confidenceMean'=>0.92,'latencyMeanMs'=>50,'observationCount'=>10,'correctionCount'=>0,'lowConfidenceCount'=>1,
+]);
+$resolved=glasses_vision_drift_incident_public(glasses_vision_drift_incident_row($pdo,$org,$incidentPublic,false));
+gvm_assert($resolved['recoveryStatus']==='resolved'&&$resolved['validationStableSamples']>=10&&$resolved['resolvedAt']!==null,'Ten stable post-remediation samples must automatically resolve the incident.');
+
+glasses_vision_drift_incident($pdo,$org,['package_id'=>$driftTargetRow['id'],'rollout_id'=>$driftRow['id']],['location_id'=>$location,'station_id'=>$station['id']],['state'=>'drifted','score'=>0.5,'reasons'=>['lighting_shift'],'categories'=>['lighting']]);
+$reopened=glasses_vision_drift_incident_public(glasses_vision_drift_incident_row($pdo,$org,$incidentPublic,false));
+gvm_assert($reopened['recoveryStatus']==='reopened'&&$reopened['reopenedCount']>=1,'A resolved incident must reopen when the same drift returns.');
+
+$modelIncidentKey=hash('sha256',implode('|',[(string)$driftTargetRow['id'],(string)$location,(string)$station['id'],'model_quality','confidence_collapse']));
+$pdo->prepare("INSERT INTO glasses_vision_drift_incidents
+ (organization_id,public_id,package_id,rollout_id,location_id,station_id,incident_key,severity,drift_state,category,reasons_json,metadata_json)
+ VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")->execute([$org,'vision-drift-model-quality-'.$slug,(int)$driftTargetRow['id'],null,$location,(int)$station['id'],$modelIncidentKey,'critical','critical','model_quality','["confidence_collapse"]','{}']);
+glasses_vision_drift_recovery_action($pdo,$org,'vision-drift-model-quality-'.$slug,'remediate',['remediationType'=>'retrain_model','notes'=>'Collect hard examples and train a challenger.'],$user);
+$modelResetBlocked=false;
+try{glasses_vision_drift_recovery_action($pdo,$org,'vision-drift-model-quality-'.$slug,'validate',['resetBaseline'=>true],$user);}catch(InvalidArgumentException){$modelResetBlocked=true;}
+gvm_assert($modelResetBlocked,'Model-quality drift must never be hidden by resetting the production baseline.');
+gvm_assert((int)gvm_one($pdo,"SELECT COUNT(*) FROM glasses_vision_drift_recovery_events WHERE organization_id=? AND incident_id=(SELECT id FROM glasses_vision_drift_incidents WHERE organization_id=? AND public_id=?)",[$org,$org,$incidentPublic])>=4,'Diagnosis, remediation, validation, resolution/reopen must leave immutable recovery history.');
+
 $catalog=glasses_vision_model_catalog($pdo,[
     'organization_id'=>$org,'permissions'=>['*'],'is_owner_role'=>1,
 ]);
@@ -507,6 +555,7 @@ gvm_assert(count($catalog['rollouts'])===8,'Catalog must expose all rollout plan
 gvm_assert(isset($catalog['metricsByRollout'][(string)$draft['publicId']]),'Catalog must expose rollout telemetry.');
 gvm_assert(($catalog['metricsByRollout'][(string)$canaryDraft['publicId']]['canaryHealth']['state']??'')==='rollback_required','Catalog must expose production canary health evidence.');
 gvm_assert(($catalog['metricsByRollout'][(string)$driftRollout['publicId']]['drift']['state']??'')==='critical','Catalog must expose latest production drift state.');
+gvm_assert(count($catalog['driftIncidents'])>=2,'Catalog must expose guided drift recovery incidents.');
 
 $modules=admin_modules(['permissions'=>['glasses.view'],'is_owner_role'=>0]);
 $modelModules=array_values(array_filter($modules,static fn(array $row):bool=>($row['href']??'')==='glasses-vision-models.php'));
