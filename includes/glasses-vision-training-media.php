@@ -293,7 +293,7 @@ function glasses_vision_training_media_list(PDO $pdo,int $org,int $limit=250): a
     return array_map(fn($id)=>glasses_vision_training_media_public(glasses_vision_training_media_row($pdo,$org,(string)$id,false)),$q->fetchAll(PDO::FETCH_COLUMN));
 }
 
-function glasses_vision_training_media_delete(PDO $pdo,int $org,string $publicId,string $reason,int $actor): array
+function glasses_vision_training_media_delete(PDO $pdo,int $org,string $publicId,string $reason,?int $actor): array
 {
     $reason=mb_substr(trim($reason),0,500);
     if($reason==='')throw new InvalidArgumentException('Training-media deletion requires a reason.');
@@ -316,7 +316,7 @@ function glasses_vision_training_media_expire(PDO $pdo,int $org,?int $actor=null
     $q=$pdo->prepare("SELECT public_id FROM glasses_vision_training_media WHERE organization_id=? AND status='active' AND retention_until IS NOT NULL AND retention_until<=NOW(6) ORDER BY retention_until,id LIMIT ".$limit);
     $q->execute([$org]);$count=0;
     foreach($q->fetchAll(PDO::FETCH_COLUMN) as $publicId){
-        glasses_vision_training_media_delete($pdo,$org,(string)$publicId,'retention_expired',$actor??0);$count++;
+        glasses_vision_training_media_delete($pdo,$org,(string)$publicId,'retention_expired',$actor);$count++;
     }
     return ['expired'=>$count];
 }
