@@ -330,7 +330,7 @@ $shadowTarget=glasses_vision_model_package_create($pdo,$org,[
 ],$user);
 $shadowDraft=glasses_vision_model_rollout_create($pdo,$org,[
     'targetPackagePublicId'=>$shadowTarget['publicId'],'baselinePackagePublicId'=>$baseline['publicId'],
-    'locationId'=>$location,'stationPublicId'=>(string)$station['public_id'],'canaryPercent'=>10,
+    'locationId'=>$location,'stationPublicId'=>(string)$station['public_id'],'canaryPercent'=>5,
     'notes'=>'Shadow challenger before canary.',
 ],$user);
 $shadowBlocked=false;
@@ -363,13 +363,102 @@ $shadowActive=glasses_vision_model_rollout_activate($pdo,$org,(string)$shadowDra
 gvm_assert((string)$shadowActive['status']==='active','Passing shadow evidence must unlock explicit canary activation.');
 glasses_vision_model_rollout_rollback($pdo,$org,(string)$shadowDraft['publicId'],$user,'Shadow gate contract complete.');
 
+gvm_assert(glasses_vision_canary_ready($pdo),'Canary production evaluation migration must be installed.');
+gvm_assert(glasses_vision_canary_next_stage(5.0)===10.0&&glasses_vision_canary_next_stage(50.0)===100.0&&glasses_vision_canary_next_stage(100.0)===null,'Canary stages must be governed as 5/10/25/50/100.');
+
+$canaryDraft=glasses_vision_model_rollout_create($pdo,$org,[
+    'targetPackagePublicId'=>$shadowTarget['publicId'],'baselinePackagePublicId'=>$baseline['publicId'],
+    'locationId'=>$location,'stationPublicId'=>(string)$station['public_id'],'canaryPercent'=>5,
+    'notes'=>'Production canary health contract.',
+],$user);
+$canaryShadow=glasses_vision_shadow_assignment($pdo,$device,$sessionPublic,'food-model-v3');
+for($i=1;$i<=30;$i++)glasses_vision_shadow_report($pdo,$device,$sessionPublic,[
+    'shadowRunPublicId'=>$canaryShadow['runPublicId'],'frameKey'=>'canary-shadow-'.$i,
+    'championDetectionCount'=>1,'challengerDetectionCount'=>1,'matchedCount'=>1,'meanIou'=>0.88,
+    'championMeanConfidence'=>0.91,'challengerMeanConfidence'=>0.94,'criticalMismatch'=>false,
+]);
+glasses_vision_shadow_complete($pdo,$device,$sessionPublic,(string)$canaryShadow['runPublicId']);
+$canaryActive=glasses_vision_model_rollout_activate($pdo,$org,(string)$canaryDraft['publicId'],$user);
+gvm_assert((float)$canaryActive['canaryPercent']===5.0,'Comparison-aware production rollout must begin at 5%.');
+
+$advanceBlocked=false;
+try{glasses_vision_model_rollout_advance($pdo,$org,(string)$canaryDraft['publicId'],10,$user);}catch(InvalidArgumentException){$advanceBlocked=true;}
+gvm_assert($advanceBlocked,'Canary must not advance without sufficient healthy production evidence.');
+$override=glasses_vision_model_rollout_advance_override($pdo,$org,(string)$canaryDraft['publicId'],10,$user,'CI override verifies explicit audited tradeoff path.');
+gvm_assert((float)$override['canaryPercent']===10.0,'Documented override must advance only to the next governed stage.');
+
+$canaryRow=glasses_vision_model_rollout_row($pdo,$org,(string)$canaryDraft['publicId'],false);
+$baseRow=glasses_vision_model_package_row($pdo,$org,(string)$baseline['publicId'],false);
+$targetRow=glasses_vision_model_package_row($pdo,$org,(string)$shadowTarget['publicId'],false);
+$deviceIds=[(int)$device['id']];
+for($d=1;$d<=3;$d++){
+    $g=glasses_create_pairing_grant($pdo,$org,$location,(string)$station['public_id'],$user,10);
+    $p=glasses_pair_device($pdo,(string)$g['pairingCode'],[
+        'hardwareIdentifier'=>'AIR3-CANARY-'.$d.'-'.$slug,'displayName'=>'Canary AIR3 '.$d,'platform'=>'inmo_air3',
+        'sdkVersion'=>'1.5.0','appVersion'=>'2.0.0','capabilities'=>['visionModelRuntimes'=>['onnx']]
+    ]);
+    $pd=glasses_authenticate_token($pdo,(string)$p['deviceToken']);$deviceIds[]=(int)$pd['id'];
+}
+$assignmentIds=['baseline'=>[],'target'=>[]];
+foreach(['baseline','baseline','target','target'] as $idx=>$cohort){
+    $key=hash('sha256','canary-ci-'.$cohort.'-'.$idx.'-'.$slug);
+    $packageId=$cohort==='target'?(int)$targetRow['id']:(int)$baseRow['id'];
+    $bucket=$cohort==='target'?1.0:90.0;
+    $pdo->prepare("INSERT INTO glasses_vision_model_assignments
+        (organization_id,device_id,build_session_id,assignment_key,detector_name,rollout_id,package_id,action,selection,rollout_status,canary_percent,canary_bucket,compatibility_json)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")->execute([
+            $org,$deviceIds[$idx],(int)$session['id'],$key,'food-model-v3',(int)$canaryRow['id'],$packageId,'apply',$cohort,'active',10,$bucket,'{"compatible":true,"reasons":[]}'
+        ]);
+    $assignmentIds[$cohort][]=(int)$pdo->lastInsertId();
+}
+foreach(['baseline','target'] as $cohort){
+    for($i=1;$i<=20;$i++){
+        $assignmentId=$assignmentIds[$cohort][$i%2];
+        $deviceId=$deviceIds[$cohort==='baseline'?($i%2):2+($i%2)];
+        $pdo->prepare("INSERT INTO glasses_vision_canary_samples
+            (organization_id,rollout_id,assignment_id,device_id,build_session_id,sample_key,cohort,observation_count,correction_count,low_confidence_count,unexpected_count,validation_failed,build_duration_ms,inference_count,inference_latency_ms,timeout_count,runtime_error_count)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")->execute([
+                $org,(int)$canaryRow['id'],$assignmentId,$deviceId,(int)$session['id'],$cohort.'-healthy-'.$i,$cohort,
+                10,0,$cohort==='target'?1:1,0,0,$cohort==='target'?102000:100000,100,$cohort==='target'?5200:5000,0,0
+            ]);
+    }
+}
+$healthy=glasses_vision_canary_health($pdo,$org,(string)$canaryDraft['publicId']);
+gvm_assert($healthy['state']==='healthy'&&$healthy['promotionEligible']===true,'Balanced production evidence must classify the canary as healthy.');
+$advancedCanary=glasses_vision_model_rollout_advance($pdo,$org,(string)$canaryDraft['publicId'],25,$user);
+gvm_assert((float)$advancedCanary['canaryPercent']===25.0,'Healthy canary must advance only to the next governed stage.');
+
+for($i=1;$i<=10;$i++){
+    $pdo->prepare("INSERT INTO glasses_vision_canary_samples
+        (organization_id,rollout_id,assignment_id,device_id,build_session_id,sample_key,cohort,observation_count,correction_count,low_confidence_count,unexpected_count,validation_failed,build_duration_ms,inference_count,inference_latency_ms,timeout_count,runtime_error_count)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")->execute([
+            $org,(int)$canaryRow['id'],$assignmentIds['target'][$i%2],$deviceIds[2+($i%2)],(int)$session['id'],'target-severe-'.$i,'target',
+            10,10,8,4,1,180000,100,12000,12,8
+        ]);
+}
+$severe=glasses_vision_canary_evaluate_and_enforce($pdo,$org,(string)$canaryDraft['publicId']);
+gvm_assert($severe['state']==='rollback_required'&&($severe['autoAction']??'')==='auto_rollback','Severe canary regression must trigger automatic rollback.');
+$rolledCanary=glasses_vision_model_rollout_row($pdo,$org,(string)$canaryDraft['publicId'],false);
+gvm_assert((string)$rolledCanary['status']==='rolled_back','Automatic rollback must restore rollout baseline state.');
+gvm_assert(glasses_vision_canary_package_hold($pdo,$org,(int)$targetRow['id'])!==null,'Automatically rolled-back target package must enter cooldown.');
+gvm_assert((int)gvm_one($pdo,"SELECT COUNT(*) FROM glasses_vision_model_rollout_events WHERE organization_id=? AND rollout_id=? AND event_type='auto_rolled_back'",[$org,(int)$canaryRow['id']])===1,'Automatic rollback must append immutable rollout evidence.');
+
+$cooldownDraft=glasses_vision_model_rollout_create($pdo,$org,[
+    'targetPackagePublicId'=>$shadowTarget['publicId'],'baselinePackagePublicId'=>$baseline['publicId'],
+    'locationId'=>$location,'stationPublicId'=>(string)$station['public_id'],'canaryPercent'=>5,
+],$user);
+$cooldownBlocked=false;
+try{glasses_vision_model_rollout_activate($pdo,$org,(string)$cooldownDraft['publicId'],$user);}catch(InvalidArgumentException){$cooldownBlocked=true;}
+gvm_assert($cooldownBlocked,'A target package in automatic rollback cooldown must not re-enter canary.');
+
 $catalog=glasses_vision_model_catalog($pdo,[
     'organization_id'=>$org,'permissions'=>['*'],'is_owner_role'=>1,
 ]);
 gvm_assert($catalog['ready']===true&&$catalog['canManage']===true,'Owner model catalog must be ready/manageable.');
 gvm_assert(count($catalog['packages'])===5,'Catalog must expose registered model packages.');
-gvm_assert(count($catalog['rollouts'])===5,'Catalog must expose all rollout plans.');
+gvm_assert(count($catalog['rollouts'])===7,'Catalog must expose all rollout plans.');
 gvm_assert(isset($catalog['metricsByRollout'][(string)$draft['publicId']]),'Catalog must expose rollout telemetry.');
+gvm_assert(($catalog['metricsByRollout'][(string)$canaryDraft['publicId']]['canaryHealth']['state']??'')==='rollback_required','Catalog must expose production canary health evidence.');
 
 $modules=admin_modules(['permissions'=>['glasses.view'],'is_owner_role'=>0]);
 $modelModules=array_values(array_filter($modules,static fn(array $row):bool=>($row['href']??'')==='glasses-vision-models.php'));
