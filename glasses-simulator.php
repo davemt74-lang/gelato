@@ -240,6 +240,13 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
             <button id="datasetClearBoxes" type="button" disabled>Clear Boxes</button>
             <button id="datasetExport" type="button" disabled>Export YOLO ZIP</button>
           </div>
+          <div class="camera-toggle-row"><label><input id="datasetServerOptIn" type="checkbox"> Store selected captures in private Vision Lab media</label><span class="sim-muted">Explicit opt-in required.</span></div>
+          <div class="camera-grid">
+            <label><span>Retention</span><select id="datasetRetentionDays"><option value="30">30 days</option><option value="90">90 days</option><option value="365" selected>1 year</option><option value="1095">3 years</option></select></label>
+            <label><span>Distance</span><select id="datasetDistanceBucket"><option value="">Unspecified</option><option value="close">Close</option><option value="normal">Normal</option><option value="far">Far</option></select></label>
+            <label><span>Occlusion</span><select id="datasetOcclusionBucket"><option value="">Unspecified</option><option value="none">None</option><option value="partial">Partial</option><option value="heavy">Heavy</option></select></label>
+          </div>
+          <div class="inline-actions"><button id="datasetUpload" type="button" disabled>Upload Captures to Vision Lab</button><span id="datasetUploadState" class="sim-muted">Local only</span></div>
           <div id="datasetStats" class="vision-metrics">0 boxes on frame · 0 samples · 0 classes</div>
           <div id="datasetAnnotationList" class="dataset-annotation-list"><span class="sim-muted">No annotations on the current frame.</span></div>
           <p class="calibration-note">Dataset capture stays local to this browser. Export contains JPEG frames, YOLO labels, data.yaml and a Gelato manifest; it does not modify POS, KDS, builds or validation.</p>
@@ -307,9 +314,10 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <script>
 window.GELATO_GLASSES_SIMULATOR={
   csrf:<?=json_encode(app_csrf_token(),JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT)?>,
-  api:'api/glasses-simulator.php'
+  api:'api/glasses-simulator.php',
+  mediaApi:'api/glasses-vision-media.php'
 };
 </script>
-<script src="assets/js/glasses-web-simulator.js?v=20260928-shadow1"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20260928-media1"></script>
 </body>
 </html>
