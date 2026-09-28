@@ -1,0 +1,61 @@
+name: AR Glasses Vision Operations
+
+on:
+  pull_request:
+    paths:
+      - 'glasses-vision-operations.php'
+      - 'api/glasses-vision-operations.php'
+      - 'includes/glasses-vision-operations.php'
+      - 'assets/js/glasses-vision-operations.js'
+      - 'assets/css/glasses-vision-operations.css'
+      - 'includes/admin-control-core.php'
+      - 'tests/glasses-vision-operations-contract.php'
+      - '.github/workflows/glasses-vision-operations.yml'
+  push:
+    branches: [main, 'feature/vision-operations-fleet-health']
+
+jobs:
+  vision-operations:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_NAME: gelato_restaurant_ai_ci
+      DB_USER: root
+      DB_PASS: root
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with: {php-version: '8.3', extensions: pdo_mysql, mbstring}
+      - name: Syntax
+        run: |
+          php -l includes/glasses-vision-operations.php
+          php -l glasses-vision-operations.php
+          php -l api/glasses-vision-operations.php
+          php -l tests/glasses-vision-operations-contract.php
+          node --check assets/js/glasses-vision-operations.js
+      - name: Read-only architecture
+        run: |
+          grep -q 'glasses_vision_ops_catalog' includes/glasses-vision-operations.php
+          grep -q 'needsAttention' includes/glasses-vision-operations.php
+          grep -q 'timeline' includes/glasses-vision-operations.php
+          grep -q 'glasses-vision-operations.php' includes/admin-control-core.php
+          ! grep -q 'glasses_build_observe' includes/glasses-vision-operations.php
+          ! grep -q 'UPDATE pos_' includes/glasses-vision-operations.php
+          ! grep -q 'UPDATE kds_' includes/glasses-vision-operations.php
+      - name: Install schema
+        run: php upgrade.php --yes
+      - name: Fleet behavior contract
+        run: php tests/glasses-vision-operations-contract.php
+      - name: Upgrade idempotence
+        run: php upgrade.php --yes
