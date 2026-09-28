@@ -40,7 +40,7 @@ internal static class VisionDetectorRuntimeHarnessContract
 
         Assert(result.Count == 0, "timed-out inference must produce no evidence");
         Assert(harness.Health.TimedOutInferences == 1, "timeout telemetry must increment");
-        Assert(detector.RestartCalls == 1, "watchdog threshold must restart detector");
+        await WaitUntilAsync(() => detector.RestartCalls == 1, "watchdog threshold must restart detector after the timed-out call exits");
         Assert(harness.Health.RestartSuccesses == 1, "successful restart must be recorded");
     }
 
@@ -67,8 +67,8 @@ internal static class VisionDetectorRuntimeHarnessContract
             IgnoreCancellationGate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously)
         };
         var options = Options();
-        options.ConsecutiveFailuresBeforeRestart = 9;
-        options.ConsecutiveFailuresBeforeFailed = 12;
+        options.ConsecutiveFailuresBeforeRestart = 1;
+        options.ConsecutiveFailuresBeforeFailed = 4;
         var harness = new VisionDetectorRuntimeHarness(detector, options);
         await harness.WarmupAsync();
 
@@ -77,9 +77,10 @@ internal static class VisionDetectorRuntimeHarnessContract
 
         var second = await harness.DetectAsync(Frame(41), Context(), CancellationToken.None);
         Assert(second.Count == 0 && harness.Health.BackpressureDrops == 1, "timed-out underlying call must continue holding the inference gate until it exits");
+        Assert(detector.RestartCalls == 0, "watchdog must not restart while the timed-out detector call is still executing");
 
         detector.IgnoreCancellationGate.SetResult(true);
-        await Task.Delay(5);
+        await WaitUntilAsync(() => detector.RestartCalls == 1, "watchdog must restart only after the timed-out call exits");
         var third = await harness.DetectAsync(Frame(42), Context(), CancellationToken.None);
         Assert(third.Count == 1, "new inference may resume only after the timed-out underlying call exits");
     }
@@ -120,6 +121,16 @@ internal static class VisionDetectorRuntimeHarnessContract
         BuildSessionPublicId = "build-21b",
         ExpectedComponents = Array.Empty<BuildComponent>()
     };
+
+    private static async Task WaitUntilAsync(Func<bool> condition, string message)
+    {
+        for (var i = 0; i < 100; i++)
+        {
+            if (condition()) return;
+            await Task.Delay(5);
+        }
+        throw new InvalidOperationException(message);
+    }
 
     private static void Assert(bool condition, string message)
     {
