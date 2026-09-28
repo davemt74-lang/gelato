@@ -31,6 +31,7 @@ $boot=['apiUrl'=>'api/glasses-vision-operations.php','catalog'=>$catalog];
  <section class="gvo-panel"><div class="gvo-panel-head"><div><div class="admin-eyebrow">Recent Activity</div><h2>Fleet health timeline</h2></div></div><div id="gvoTimeline" class="gvo-timeline"></div></section>
 </section>
 <section class="gvo-panel gvo-table-panel"><div class="gvo-panel-head"><div><div class="admin-eyebrow">Fleet</div><h2>Devices &amp; current vision state</h2></div><span id="gvoDeviceCount"></span></div><div class="gvo-table-wrap"><table><thead><tr><th>Device</th><th>Location / station</th><th>Health</th><th>Model / cohort</th><th>Calibration</th><th>Drift / recovery</th><th>Runtime</th><th>Last seen</th></tr></thead><tbody id="gvoRows"></tbody></table></div></section>
+<section id="gvoDetails" class="gvo-panel gvo-details"><div class="gvo-empty">Select a fleet device for drill-down details.</div></section>
 <section class="gvo-panel gvo-links"><div><div class="admin-eyebrow">Governed Actions</div><h2>Open the source workspace</h2></div><a class="admin-button dark" href="glasses-vision-models.php">Model rollout &amp; remediation</a><a class="admin-button" href="glasses-calibration-studio.php">Station calibration</a><a class="admin-button" href="glasses-learning.php">Vision learning</a><a class="admin-button" href="glasses-vision-profiles.php">Label profiles</a></section>
 </main>
 <script>window.GELATO_VISION_OPERATIONS=<?=json_encode($boot,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE|JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT)?>;</script>
