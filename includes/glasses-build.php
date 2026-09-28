@@ -344,3 +344,260 @@ function glasses_build_resolve_unexpected(PDO $pdo,array $device,string $session
         return glasses_build_payload($pdo,$org,$sessionPublicId);
     });
 }
+
+
+function glasses_build_correction_ready(PDO $pdo): bool
+{
+    $q=$pdo->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='glasses_observation_corrections'");
+    $q->execute();
+    return (int)$q->fetchColumn()===1;
+}
+
+function glasses_build_manual_event_keys(PDO $pdo,int $org,int $sessionId,string $eventType): array
+{
+    $q=$pdo->prepare("SELECT component_key FROM glasses_build_events
+        WHERE organization_id=? AND build_session_id=? AND event_type=? AND component_key IS NOT NULL
+        ORDER BY id");
+    $q->execute([$org,$sessionId,$eventType]);
+    $keys=[];
+    foreach($q->fetchAll(PDO::FETCH_COLUMN) as $key){
+        $key=(string)$key;
+        if($key!=='')$keys[$key]=true;
+    }
+    return $keys;
+}
+
+function glasses_build_latest_corrections(PDO $pdo,int $org,int $sessionId): array
+{
+    if(!glasses_build_correction_ready($pdo))return [];
+    $q=$pdo->prepare("SELECT * FROM glasses_observation_corrections
+        WHERE organization_id=? AND build_session_id=?
+        ORDER BY id");
+    $q->execute([$org,$sessionId]);
+    $latest=[];
+    foreach($q->fetchAll() as $row)$latest[(int)$row['observation_id']]=$row;
+    return $latest;
+}
+
+function glasses_build_recompute_from_evidence(PDO $pdo,int $org,int $sessionId): void
+{
+    $components=glasses_build_components($pdo,$org,$sessionId,true);
+    $componentByKey=[];
+    $aggregate=[];
+    foreach($components as $component){
+        $key=(string)$component['component_key'];
+        $componentByKey[$key]=$component;
+        $aggregate[$key]=['detected'=>0.0,'confidence'=>0.0,'hasConfidence'=>false];
+    }
+
+    $corrections=glasses_build_latest_corrections($pdo,$org,$sessionId);
+    $q=$pdo->prepare("SELECT * FROM glasses_build_observations
+        WHERE organization_id=? AND build_session_id=?
+        ORDER BY id");
+    $q->execute([$org,$sessionId]);
+
+    foreach($q->fetchAll() as $observation){
+        $correction=$corrections[(int)$observation['id']]??null;
+        if($correction&&(string)$correction['resolution']==='reject')continue;
+
+        $componentKey=(string)$observation['component_key'];
+        $quantity=(float)$observation['quantity'];
+        if($correction&&(string)$correction['resolution']==='replace'){
+            $replacement=trim((string)($correction['target_component_key']??''));
+            if($replacement!=='')$componentKey=$replacement;
+            if($correction['corrected_quantity']!==null)$quantity=(float)$correction['corrected_quantity'];
+        }
+        if(!isset($aggregate[$componentKey]))continue;
+
+        $action=(string)$observation['action'];
+        if($action==='added')$aggregate[$componentKey]['detected']+=$quantity;
+        elseif($action==='removed')$aggregate[$componentKey]['detected']=max(0.0,$aggregate[$componentKey]['detected']-$quantity);
+        elseif($action==='seen')$aggregate[$componentKey]['detected']=max($aggregate[$componentKey]['detected'],$quantity);
+
+        $confidence=(float)$observation['confidence'];
+        $aggregate[$componentKey]['confidence']=max($aggregate[$componentKey]['confidence'],$confidence);
+        $aggregate[$componentKey]['hasConfidence']=true;
+    }
+
+    $manualConfirmed=glasses_build_manual_event_keys($pdo,$org,$sessionId,'component_confirmed');
+    $manualResolved=glasses_build_manual_event_keys($pdo,$org,$sessionId,'unexpected_resolved');
+
+    $update=$pdo->prepare("UPDATE glasses_build_components
+        SET detected_quantity=?,confidence=?,status=?,confirmed_at=?,updated_at=NOW(6)
+        WHERE organization_id=? AND id=?");
+
+    foreach($components as $component){
+        $key=(string)$component['component_key'];
+        $detected=max(0.0,(float)$aggregate[$key]['detected']);
+        $confidence=$aggregate[$key]['hasConfidence']?(float)$aggregate[$key]['confidence']:null;
+        $expected=(float)$component['expected_quantity'];
+        $status='waiting';
+        $confirmedAt=null;
+
+        if($expected<=0.0){
+            if(isset($manualResolved[$key]))$status='ignored';
+            elseif($detected>0.0)$status='unexpected';
+            else $status='ignored';
+        }elseif(isset($manualConfirmed[$key])){
+            $detected=max($detected,$expected);
+            $confidence=1.0;
+            $status='confirmed';
+            $confirmedAt=$component['confirmed_at']??(new DateTimeImmutable())->format('Y-m-d H:i:s.u');
+        }else{
+            $status=glasses_build_component_state($detected,$expected,$confidence??0.0,false);
+            if($status==='confirmed')$confirmedAt=$component['confirmed_at']??(new DateTimeImmutable())->format('Y-m-d H:i:s.u');
+        }
+
+        $update->execute([$detected,$confidence,$status,$confirmedAt,$org,(int)$component['id']]);
+    }
+}
+
+function glasses_build_correction_public(array $row): array
+{
+    return [
+        'correctionKey'=>(string)$row['correction_key'],
+        'observationKey'=>(string)($row['observation_key']??''),
+        'resolution'=>(string)$row['resolution'],
+        'targetComponentKey'=>$row['target_component_key'],
+        'correctedQuantity'=>$row['corrected_quantity']!==null?(float)$row['corrected_quantity']:null,
+        'hasCorrectedQuantity'=>$row['corrected_quantity']!==null,
+        'reason'=>(string)($row['reason']??''),
+        'createdAt'=>$row['created_at'],
+    ];
+}
+
+function glasses_build_correct_observation(PDO $pdo,array $device,string $sessionPublicId,array $input): array
+{
+    if(!glasses_build_correction_ready($pdo))throw new RuntimeException('Glasses observation-correction migration is not installed.');
+    $org=(int)$device['organization_id'];
+    $observationKey=mb_substr(trim((string)($input['observationKey']??'')),0,190,'UTF-8');
+    $correctionKey=mb_substr(trim((string)($input['correctionKey']??'')),0,190,'UTF-8');
+    $resolution=trim((string)($input['resolution']??''));
+    $reason=mb_substr(trim((string)($input['reason']??'')),0,500,'UTF-8')?:null;
+
+    if($observationKey==='')throw new InvalidArgumentException('Observation key is required.');
+    if($correctionKey==='')throw new InvalidArgumentException('Correction key is required for idempotency.');
+    if(!in_array($resolution,['reject','replace'],true))throw new InvalidArgumentException('Correction resolution is invalid.');
+
+    return glasses_transaction($pdo,function()use(
+        $pdo,$device,$org,$sessionPublicId,$input,$observationKey,$correctionKey,$resolution,$reason
+    ):array{
+        $session=glasses_build_session_row($pdo,$org,$sessionPublicId,true);
+        glasses_build_assert_device_session($device,$session);
+        $sessionId=(int)$session['id'];
+
+        $q=$pdo->prepare("SELECT c.*,o.observation_key
+            FROM glasses_observation_corrections c
+            JOIN glasses_build_observations o ON o.id=c.observation_id AND o.organization_id=c.organization_id
+            WHERE c.organization_id=? AND c.build_session_id=? AND c.correction_key=?
+            LIMIT 1");
+        $q->execute([$org,$sessionId,$correctionKey]);
+        if($existing=$q->fetch()){
+            return [
+                'buildSession'=>glasses_build_payload($pdo,$org,$sessionPublicId),
+                'correction'=>glasses_build_correction_public($existing),
+            ];
+        }
+
+        $q=$pdo->prepare("SELECT * FROM glasses_build_observations
+            WHERE organization_id=? AND build_session_id=? AND observation_key=?
+            LIMIT 1 FOR UPDATE");
+        $q->execute([$org,$sessionId,$observationKey]);
+        $observation=$q->fetch();
+        if(!$observation)throw new InvalidArgumentException('Build observation was not found.');
+
+        $targetComponentKey=null;
+        $correctedQuantity=null;
+        if($resolution==='replace'){
+            $targetComponentKey=mb_substr(trim((string)($input['targetComponentKey']??$observation['component_key'])),0,160,'UTF-8');
+            if($targetComponentKey==='')throw new InvalidArgumentException('Replacement component is required.');
+            $q=$pdo->prepare("SELECT component_key,expected_quantity,status FROM glasses_build_components
+                WHERE organization_id=? AND build_session_id=? AND component_key=?
+                LIMIT 1 FOR UPDATE");
+            $q->execute([$org,$sessionId,$targetComponentKey]);
+            $target=$q->fetch();
+            if(!$target||(float)$target['expected_quantity']<=0.0)
+                throw new InvalidArgumentException('Replacement must target a configured recipe component.');
+
+            $correctedQuantity=!empty($input['hasCorrectedQuantity'])
+                ?(float)($input['correctedQuantity']??0)
+                :(isset($input['correctedQuantity'])&&!array_key_exists('hasCorrectedQuantity',$input)
+                    ?(float)$input['correctedQuantity']
+                    :(float)$observation['quantity']);
+            if(!is_finite($correctedQuantity)||$correctedQuantity<0.001||$correctedQuantity>100.0)
+                throw new InvalidArgumentException('Corrected quantity must be between 0.001 and 100.');
+        }
+
+        $metadata=isset($input['metadata'])
+            ?glasses_json_object(is_array($input['metadata'])?$input['metadata']:null,8000)
+            :null;
+
+        $pdo->prepare("INSERT INTO glasses_observation_corrections
+            (organization_id,build_session_id,observation_id,correction_key,resolution,target_component_key,corrected_quantity,reason,actor_device_id,metadata_json)
+            VALUES (?,?,?,?,?,?,?,?,?,?)")
+            ->execute([
+                $org,$sessionId,(int)$observation['id'],$correctionKey,$resolution,$targetComponentKey,$correctedQuantity,
+                $reason,(int)$device['id'],$metadata
+            ]);
+
+        $correctionId=(int)$pdo->lastInsertId();
+        glasses_build_recompute_from_evidence($pdo,$org,$sessionId);
+
+        glasses_build_event($pdo,$org,$sessionId,'observation_corrected',(string)$observation['component_key'],[
+            'observationKey'=>$observationKey,
+            'correctionKey'=>$correctionKey,
+            'resolution'=>$resolution,
+            'targetComponentKey'=>$targetComponentKey,
+            'correctedQuantity'=>$correctedQuantity,
+            'reason'=>$reason,
+        ],(int)$device['id']);
+
+        $pdo->prepare("UPDATE glasses_build_sessions SET updated_at=NOW(6) WHERE organization_id=? AND id=?")
+            ->execute([$org,$sessionId]);
+
+        $q=$pdo->prepare("SELECT c.*,o.observation_key
+            FROM glasses_observation_corrections c
+            JOIN glasses_build_observations o ON o.id=c.observation_id AND o.organization_id=c.organization_id
+            WHERE c.organization_id=? AND c.id=? LIMIT 1");
+        $q->execute([$org,$correctionId]);
+        $correction=$q->fetch();
+        if(!$correction)throw new RuntimeException('Observation correction could not be loaded.');
+
+        return [
+            'buildSession'=>glasses_build_payload($pdo,$org,$sessionPublicId),
+            'correction'=>glasses_build_correction_public($correction),
+        ];
+    });
+}
+
+function glasses_build_evidence(PDO $pdo,array $device,string $sessionPublicId,int $limit=50): array
+{
+    $org=(int)$device['organization_id'];
+    $session=glasses_build_session_row($pdo,$org,$sessionPublicId,false);
+    glasses_build_assert_device_session($device,$session);
+    $sessionId=(int)$session['id'];
+    $limit=max(1,min(100,$limit));
+    $latest=glasses_build_latest_corrections($pdo,$org,$sessionId);
+
+    $q=$pdo->prepare("SELECT * FROM glasses_build_observations
+        WHERE organization_id=? AND build_session_id=?
+        ORDER BY id DESC LIMIT {$limit}");
+    $q->execute([$org,$sessionId]);
+    $items=[];
+    foreach($q->fetchAll() as $observation){
+        $correction=$latest[(int)$observation['id']]??null;
+        $items[]=[
+            'observationKey'=>(string)$observation['observation_key'],
+            'componentKey'=>(string)$observation['component_key'],
+            'action'=>(string)$observation['action'],
+            'quantity'=>(float)$observation['quantity'],
+            'confidence'=>$observation['confidence']!==null?(float)$observation['confidence']:null,
+            'trackingId'=>$observation['tracking_id'],
+            'bbox'=>json_decode((string)($observation['bbox_json']??'null'),true),
+            'metadata'=>json_decode((string)($observation['metadata_json']??'null'),true),
+            'createdAt'=>$observation['created_at'],
+            'latestCorrection'=>$correction?glasses_build_correction_public($correction):null,
+        ];
+    }
+    return $items;
+}

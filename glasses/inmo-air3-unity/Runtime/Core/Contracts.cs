@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -32,6 +33,8 @@ namespace Gelato.Ar.Core
         Task<BuildSession> SubmitObservationAsync(string buildSessionPublicId, IngredientObservation observation, CancellationToken cancellationToken);
         Task<BuildSession> ConfirmComponentAsync(string buildSessionPublicId, string componentKey, CancellationToken cancellationToken);
         Task<BuildSession> ResolveUnexpectedAsync(string buildSessionPublicId, string componentKey, CancellationToken cancellationToken);
+        Task<BuildSession> CorrectObservationAsync(string buildSessionPublicId, ObservationCorrection correction, CancellationToken cancellationToken);
+        Task<IReadOnlyList<ObservationEvidence>> GetEvidenceAsync(string buildSessionPublicId, int limit, CancellationToken cancellationToken);
         Task<ProductValidation> EvaluateAsync(string buildSessionPublicId, CancellationToken cancellationToken);
         Task<ExpoHandoff> HandoffExpoAsync(string buildSessionPublicId, CancellationToken cancellationToken);
     }

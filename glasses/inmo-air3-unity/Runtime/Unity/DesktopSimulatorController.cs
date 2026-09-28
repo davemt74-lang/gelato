@@ -41,6 +41,7 @@ namespace Gelato.Ar.Unity
                 else if (Input.GetKeyDown(KeyCode.U)) await SimulateUnexpectedAsync();
                 else if (Input.GetKeyDown(KeyCode.C)) await ConfirmFirstVerifyAsync();
                 else if (Input.GetKeyDown(KeyCode.X)) await ResolveFirstUnexpectedAsync();
+                else if (Input.GetKeyDown(KeyCode.Z)) await RejectLastObservationAsync();
                 else
                 {
                     for (var i = 0; i < 9; i++)
@@ -182,6 +183,19 @@ namespace Gelato.Ar.Unity
             {
                 var validation = await bootstrap.Coordinator.ResolveUnexpectedAsync(target.ComponentKey);
                 LogLine("Resolved unexpected " + target.DisplayName + " → " + validation.Status);
+            });
+        }
+
+        public async Task RejectLastObservationAsync()
+        {
+            await RunBusyAsync(async () =>
+            {
+                var key = bootstrap.Coordinator.LastSubmittedObservationKey;
+                if (string.IsNullOrWhiteSpace(key))
+                    throw new InvalidOperationException("No submitted observation is available to reject.");
+
+                var validation = await bootstrap.Coordinator.RejectLastObservationAsync("Desktop simulator correction");
+                LogLine("Rejected observation " + key + " → " + validation.Status);
             });
         }
 
