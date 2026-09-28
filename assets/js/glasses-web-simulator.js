@@ -1,7 +1,7 @@
 (()=>{'use strict';
 const cfg=window.GELATO_GLASSES_SIMULATOR||{};
 const $=id=>document.getElementById(id);
-const state={mode:'mock',devices:[],device:null,work:null,selectedKdsItemPublicId:'',build:null,validation:null,seq:1,logs:[],autoPlayTimer:null,syncTimer:null,syncBusy:false,syncErrors:0,syncFingerprint:'',syncAbort:null,lastSyncAt:null};
+const state={mode:'mock',devices:[],device:null,work:null,selectedKdsItemPublicId:'',build:null,validation:null,seq:1,logs:[],autoPlayTimer:null,syncTimer:null,syncBusy:false,syncErrors:0,syncFingerprint:'',syncAbort:null,syncEpoch:0,lastSyncAt:null};
 const mock={
   work:{assignmentRequired:false,station:{publicId:'station-mock',name:'Sandwich / Pizza Line'},revision:'mock-revision',focusItem:{kdsItemPublicId:'kds-mock-1',status:'queued',ticket:{checkNumber:'1042',serviceMode:'dine_in',tableName:'Table 12',guestCount:2},posLine:{id:1,menuItemId:1,name:'Club Sandwich + Fries',optionName:'Regular',quantity:1,specialInstructions:'NO TOMATO · EXTRA BACON',modifiers:[{name:'Extra Bacon'}]},menu:{preparationNotes:'Build, slice and plate with fries.'},recipeSource:{status:'exact_name',recipe:{instructions:['Toast bread','Add mayo','Add turkey','Add bacon','Add lettuce','Add tomato','Top and slice','Plate with fries']}}},items:[],metrics:{queued:1,inProgress:0,ready:0,held:0}},
   components:['Toasted Bread','Mayo','Turkey','Bacon','Lettuce','Tomato','Fries'].map((name,i)=>({componentKey:'mock:'+i,displayName:name,expectedQuantity:i===0?3:1,detectedQuantity:0,unit:i===0?'slices':'portion',optional:false,status:'waiting',sortOrder:i+1})),
@@ -27,6 +27,7 @@ function liveWorkFingerprint(work){
   return JSON.stringify({revision:work?.revision||'',station:work?.station?.publicId||'',focus:work?.focusItem?.kdsItemPublicId||'',items});
 }
 function stopLiveStationSync(reason='paused'){
+  state.syncEpoch+=1;
   if(state.syncTimer){clearTimeout(state.syncTimer);state.syncTimer=null;}
   if(state.syncAbort){state.syncAbort.abort();state.syncAbort=null;}
   state.syncBusy=false;
@@ -52,14 +53,14 @@ function applyLiveWork(work,{announce=false}={}){
   if(announce&&previous&&previous!==next)log('SYNC','Station changed — '+items.length+' active KDS item(s).');
   return previous!==next;
 }
-async function fetchLiveStationWork(){
-  if(!state.device)throw new Error('Choose a device first.');
+async function fetchLiveStationWork(devicePublicId){
+  if(!devicePublicId)throw new Error('Choose a device first.');
   if(state.syncAbort)state.syncAbort.abort();
   const controller=new AbortController();state.syncAbort=controller;
   const timeout=setTimeout(()=>controller.abort(),4500);
   try{
     const url=new URL(cfg.api,window.location.href);
-    url.searchParams.set('action','work');url.searchParams.set('devicePublicId',state.device.publicId);
+    url.searchParams.set('action','work');url.searchParams.set('devicePublicId',devicePublicId);
     const r=await fetch(url.toString(),{method:'GET',credentials:'same-origin',cache:'no-store',signal:controller.signal});
     const d=await r.json().catch(()=>({ok:false,message:'Invalid server response.'}));
     if(!r.ok||!d.ok)throw new Error(d.message||'Live station synchronization failed.');
@@ -72,24 +73,29 @@ async function syncLiveStationWork(announce=true){
   if(state.mode!=='live'||!state.device){stopLiveStationSync(state.mode==='mock'?'mock':'idle');return false;}
   if(document.hidden){stopLiveStationSync('hidden');return false;}
   if(state.syncBusy)return false;
+  const epoch=state.syncEpoch,devicePublicId=state.device.publicId;
   state.syncBusy=true;setSyncBadge('syncing','SYNCING');
   try{
-    const d=await fetchLiveStationWork();
+    const d=await fetchLiveStationWork(devicePublicId);
+    if(epoch!==state.syncEpoch||state.mode!=='live'||state.device?.publicId!==devicePublicId)return false;
     const changed=applyLiveWork(d.work,{announce});
     const recovered=state.syncErrors>0;state.syncErrors=0;
     setSyncBadge('live','LIVE SYNC');
     if(recovered)log('SYNC','Live station synchronization recovered.');
     return changed;
   }catch(e){
+    if(epoch!==state.syncEpoch||state.mode!=='live'||state.device?.publicId!==devicePublicId)return false;
     state.syncErrors+=1;
     const message=e?.name==='AbortError'?'Live station synchronization timed out.':(e?.message||'Live station synchronization failed.');
     setSyncBadge('error','SYNC RETRY');
     if(state.syncErrors===1||state.syncErrors%4===0)log('SYNC',message);
     return false;
   }finally{
-    state.syncBusy=false;
-    const delay=state.syncErrors?Math.min(LIVE_SYNC_MAX_BACKOFF_MS,LIVE_SYNC_BASE_MS*Math.pow(2,Math.min(state.syncErrors,3))):LIVE_SYNC_BASE_MS;
-    scheduleLiveStationSync(delay);
+    if(epoch===state.syncEpoch){
+      state.syncBusy=false;
+      const delay=state.syncErrors?Math.min(LIVE_SYNC_MAX_BACKOFF_MS,LIVE_SYNC_BASE_MS*Math.pow(2,Math.min(state.syncErrors,3))):LIVE_SYNC_BASE_MS;
+      scheduleLiveStationSync(delay);
+    }
   }
 }
 function startLiveStationSync({immediate=true}={}){
