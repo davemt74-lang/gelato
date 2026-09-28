@@ -140,6 +140,48 @@ namespace Gelato.Ar.Unity
             };
         }
 
+        public async Task<VisionLabelProfile> GetVisionLabelProfileAsync(
+            string buildSessionPublicId,
+            string detectorName,
+            CancellationToken cancellationToken)
+        {
+            var response = await PostAsync<VisionProfileResponse>(new VisionProfileRequest
+            {
+                action = DeviceApiActions.VisionProfile,
+                buildSessionPublicId = buildSessionPublicId,
+                detectorName = detectorName ?? string.Empty
+            }, true, cancellationToken);
+
+            if (response.visionProfile == null) return null;
+            var dto = response.visionProfile;
+            var mappings = new List<VisionLabelMapping>();
+            if (dto.mappings != null)
+            {
+                foreach (var mapping in dto.mappings)
+                {
+                    mappings.Add(new VisionLabelMapping
+                    {
+                        ModelLabel = mapping.modelLabel ?? string.Empty,
+                        NormalizedLabel = mapping.normalizedLabel ?? string.Empty,
+                        ComponentKey = mapping.componentKey ?? string.Empty,
+                        DisplayName = mapping.displayName ?? string.Empty,
+                        IngredientId = mapping.ingredientId,
+                        MinimumConfidence = mapping.hasMinimumConfidence ? mapping.minimumConfidence : (float?)null,
+                        SourceDetector = mapping.sourceDetector ?? string.Empty
+                    });
+                }
+            }
+
+            return new VisionLabelProfile
+            {
+                Schema = dto.schema ?? string.Empty,
+                DetectorName = dto.detectorName ?? string.Empty,
+                BuildSessionPublicId = dto.buildSessionPublicId ?? string.Empty,
+                ProfileHash = dto.profileHash ?? string.Empty,
+                Mappings = mappings
+            };
+        }
+
         public async Task<BuildSession> StartBuildAsync(string kdsItemPublicId, string sourceRevision, CancellationToken cancellationToken)
         {
             var response = await PostAsync<BuildResponse>(new BuildStartRequest
@@ -171,7 +213,11 @@ namespace Gelato.Ar.Unity
                     evidenceKind = observation.EvidenceKind ?? string.Empty,
                     sourceZoneKey = observation.EvidenceSourceZoneKey ?? string.Empty,
                     destinationRegionKey = observation.EvidenceDestinationRegionKey ?? string.Empty,
-                    sequenceSupported = observation.EvidenceSequenceSupported
+                    sequenceSupported = observation.EvidenceSequenceSupported,
+                    detectorLabel = observation.DetectorLabel ?? string.Empty,
+                    profileMatched = observation.VisionProfileMatched,
+                    profileMinimumConfidence = observation.VisionProfileMinimumConfidence ?? 0f,
+                    hasProfileMinimumConfidence = observation.VisionProfileMinimumConfidence.HasValue
                 }
             }, true, cancellationToken);
 
@@ -445,6 +491,10 @@ namespace Gelato.Ar.Unity
         [Serializable] private class ActionRequest { public string action; }
         [Serializable] private class BuildSessionRequest : ActionRequest { public string buildSessionPublicId; }
         [Serializable] private sealed class BuildStartRequest : ActionRequest { public string kdsItemPublicId; public string sourceRevision; }
+        [Serializable] private sealed class VisionProfileRequest : BuildSessionRequest
+        {
+            public string detectorName;
+        }
         [Serializable] private sealed class CalibrationRequest : ActionRequest
         {
             public int frameWidth;
@@ -494,6 +544,10 @@ namespace Gelato.Ar.Unity
             public string sourceZoneKey;
             public string destinationRegionKey;
             public bool sequenceSupported;
+            public string detectorLabel;
+            public bool profileMatched;
+            public float profileMinimumConfidence;
+            public bool hasProfileMinimumConfidence;
         }
 
         [Serializable] private sealed class ErrorResponse { public bool ok; public string message; }
@@ -514,6 +568,31 @@ namespace Gelato.Ar.Unity
             public PosLineDto posLine;
         }
         [Serializable] private sealed class PosLineDto { public string name; public string specialInstructions; }
+
+        [Serializable] private sealed class VisionProfileResponse
+        {
+            public bool ok;
+            public VisionLabelProfileDto visionProfile;
+        }
+        [Serializable] private sealed class VisionLabelProfileDto
+        {
+            public string schema;
+            public string detectorName;
+            public string buildSessionPublicId;
+            public string profileHash;
+            public VisionLabelMappingDto[] mappings;
+        }
+        [Serializable] private sealed class VisionLabelMappingDto
+        {
+            public string modelLabel;
+            public string normalizedLabel;
+            public string componentKey;
+            public string displayName;
+            public int ingredientId;
+            public float minimumConfidence;
+            public bool hasMinimumConfidence;
+            public string sourceDetector;
+        }
 
         [Serializable] private sealed class CalibrationResponse
         {
