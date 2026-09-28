@@ -39,6 +39,15 @@ namespace Gelato.Ar.Core
             _states.Clear();
         }
 
+        public void MarkObservationEmitted(string componentKey, string instanceKey)
+        {
+            if (string.IsNullOrWhiteSpace(componentKey) || string.IsNullOrWhiteSpace(instanceKey)) return;
+            var key = componentKey.Trim() + "|" + instanceKey.Trim();
+            if (!_states.TryGetValue(key, out var state) || !state.Completed) return;
+            state.Consumed = true;
+            _states[key] = state;
+        }
+
         public TransferEvidenceResult Evaluate(
             VisionDetection detection,
             VisionFrameContext context,
@@ -120,7 +129,8 @@ namespace Gelato.Ar.Core
                         SourceZoneKey = sourceZone.ZoneKey,
                         SourceFrameOrdinal = frameOrdinal,
                         LastFrameOrdinal = frameOrdinal,
-                        Completed = false
+                        Completed = false,
+                        Consumed = false
                     };
                 }
                 return result;
@@ -140,6 +150,13 @@ namespace Gelato.Ar.Core
                     if (!state.Completed)
                     {
                         state.Completed = true;
+                        state.Consumed = false;
+                        _states[stateKey] = state;
+                    }
+
+                    if (!state.Consumed)
+                    {
+                        state.LastFrameOrdinal = frameOrdinal;
                         _states[stateKey] = state;
 
                         result.Kind = TransferEvidenceKind.TransferConfirmed;
@@ -155,9 +172,10 @@ namespace Gelato.Ar.Core
                         return result;
                     }
 
-                    // The same tracked physical instance already completed this transfer. Do not
-                    // create another additive event unless it is observed back in its source zone
-                    // and a new source → build movement is established.
+                    // The same tracked physical instance already produced its durable observation.
+                    // Do not create another additive event unless it returns to the source zone and
+                    // a new source → build movement is established.
+                    state.LastFrameOrdinal = frameOrdinal;
                     _states[stateKey] = state;
                     result.Kind = TransferEvidenceKind.WorkSurfaceUnprimed;
                     result.Action = "seen";
@@ -297,6 +315,7 @@ namespace Gelato.Ar.Core
             public long SourceFrameOrdinal;
             public long LastFrameOrdinal;
             public bool Completed;
+            public bool Consumed;
         }
     }
 }
