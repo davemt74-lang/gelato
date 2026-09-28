@@ -1,0 +1,111 @@
+using System;
+using System.Threading;
+using Gelato.Ar.Core;
+using UnityEngine;
+
+namespace Gelato.Ar.Unity
+{
+    public sealed class VisionRuntimeController : MonoBehaviour
+    {
+        [SerializeField] private GelatoArBootstrap bootstrap;
+        [SerializeField] private VisionDetectorBehaviour detector;
+        [SerializeField] private ArHudRuntimeBinder hudBinder;
+
+        [Header("Inference")]
+        [SerializeField, Range(1f, 30f)] private float maximumInferenceFps = 6f;
+        [SerializeField, Range(0f, 1f)] private float minimumConfidence = 0.50f;
+        [SerializeField, Range(1, 10)] private int stableFramesRequired = 2;
+        [SerializeField, Range(1, 30)] private int maxMissingFrames = 3;
+        [SerializeField, Range(0f, 1f)] private float associationIouThreshold = 0.25f;
+
+        private VisionPipeline _pipeline;
+        private CancellationTokenSource _lifetime;
+        private float _nextInferenceAt;
+        private bool _processing;
+        private string _activeSession = string.Empty;
+
+        public string DetectorName => _pipeline == null ? string.Empty : _pipeline.DetectorName;
+        public int ActiveTrackCount => _pipeline == null ? 0 : _pipeline.ActiveTrackCount;
+
+        private void Awake()
+        {
+            _lifetime = new CancellationTokenSource();
+            if (detector == null)
+            {
+                Debug.LogWarning("Gelato AR vision detector is not assigned. Vision processing is disabled.");
+                return;
+            }
+
+            _pipeline = new VisionPipeline(detector, new VisionPipelineOptions
+            {
+                MinimumConfidence = minimumConfidence,
+                StableFramesRequired = stableFramesRequired,
+                MaxMissingFrames = maxMissingFrames,
+                AssociationIouThreshold = associationIouThreshold
+            });
+        }
+
+        private async void Update()
+        {
+            if (_processing || _pipeline == null || bootstrap == null || bootstrap.Coordinator == null) return;
+            if (Time.unscaledTime < _nextInferenceAt) return;
+
+            var coordinator = bootstrap.Coordinator;
+            var build = coordinator.BuildSession;
+            if (build == null || !string.Equals(build.Status, "active", StringComparison.Ordinal)) return;
+
+            if (!string.Equals(_activeSession, build.PublicId, StringComparison.Ordinal))
+            {
+                _activeSession = build.PublicId;
+                _pipeline.Reset(_activeSession);
+            }
+
+            var frame = coordinator.Platform.TryGetLatestFrame();
+            if (frame == null || frame.Data == null || frame.Data.Length == 0) return;
+
+            _nextInferenceAt = Time.unscaledTime + (1f / Mathf.Max(1f, maximumInferenceFps));
+            _processing = true;
+
+            try
+            {
+                var context = new VisionFrameContext
+                {
+                    BuildSessionPublicId = build.PublicId,
+                    ExpectedComponents = build.Components,
+                    Calibration = coordinator.Platform.TryGetCameraCalibration(),
+                    Pose = coordinator.Platform.GetPose()
+                };
+
+                var observations = await _pipeline.ProcessAsync(frame, context, _lifetime.Token);
+                foreach (var observation in observations)
+                {
+                    if (_lifetime.IsCancellationRequested) break;
+                    if (hudBinder != null) hudBinder.ShowIngredientObservation(observation);
+                    await coordinator.SubmitObservationAsync(observation, _lifetime.Token);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Scene/application shutdown.
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError("Gelato AR local vision pipeline failed: " + ex.Message);
+            }
+            finally
+            {
+                _processing = false;
+            }
+        }
+
+        private void OnDestroy()
+        {
+            if (_lifetime != null)
+            {
+                _lifetime.Cancel();
+                _lifetime.Dispose();
+                _lifetime = null;
+            }
+        }
+    }
+}
