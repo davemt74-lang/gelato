@@ -71,7 +71,7 @@ namespace Gelato.Ar.Core
                 result.Kind = HandsFreeCommandKind.RejectLastObservation;
                 return result;
             }
-            if (Is(normalized, "send expo", "send to expo", "expo", "finish", "finish item"))
+            if (Is(normalized, "send expo", "send to expo", "expo"))
             {
                 result.Kind = HandsFreeCommandKind.SendToExpo;
                 return result;
@@ -146,6 +146,7 @@ namespace Gelato.Ar.Core
     public sealed class HandsFreeCommandRouter
     {
         private readonly ArWorkflowCoordinator _coordinator;
+        private readonly SemaphoreSlim _gate = new SemaphoreSlim(1, 1);
 
         public HandsFreeCommandRouter(ArWorkflowCoordinator coordinator)
         {
@@ -153,6 +154,19 @@ namespace Gelato.Ar.Core
         }
 
         public async Task<HandsFreeCommandResult> ExecuteAsync(string rawCommand, CancellationToken cancellationToken = default)
+        {
+            await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                return await ExecuteCoreAsync(rawCommand, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                _gate.Release();
+            }
+        }
+
+        private async Task<HandsFreeCommandResult> ExecuteCoreAsync(string rawCommand, CancellationToken cancellationToken)
         {
             var command = HandsFreeCommandParser.Parse(rawCommand);
             if (command.Kind == HandsFreeCommandKind.Unknown)
@@ -203,6 +217,8 @@ namespace Gelato.Ar.Core
                     }
                     case HandsFreeCommandKind.SendToExpo:
                     {
+                        if (_coordinator.Handoff != null || _coordinator.State == WorkflowState.HandedOff)
+                            return Feedback(command.Kind, true, false, "ALREADY SENT TO EXPO", "This item has already been handed off.");
                         if (!ArWorkflowCoordinator.IsReadyForFinishing(_coordinator.Validation))
                             return Feedback(command.Kind, false, true, "EXPO BLOCKED", "Product validation is not ready for Expo / Finishing.");
                         var handoff = await _coordinator.HandoffToExpoAsync(cancellationToken).ConfigureAwait(false);
