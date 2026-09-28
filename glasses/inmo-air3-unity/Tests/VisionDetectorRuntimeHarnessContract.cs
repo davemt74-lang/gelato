@@ -12,6 +12,7 @@ internal static class VisionDetectorRuntimeHarnessContract
         await TimeoutFailsClosedAndRestarts();
         await BackpressureDropsConcurrentFrame();
         await TimedOutIgnoringCancellationDoesNotOverlap();
+        await DetectorRestartDoesNotDuplicateObservation();
         await RepeatedRestartFailureTransitionsFailed();
     }
 
@@ -85,6 +86,44 @@ internal static class VisionDetectorRuntimeHarnessContract
         Assert(third.Count == 1, "new inference may resume only after the timed-out underlying call exits");
     }
 
+    private static async Task DetectorRestartDoesNotDuplicateObservation()
+    {
+        var detector = new RestartDuplicateDetector();
+        var options = Options();
+        options.ConsecutiveFailuresBeforeRestart = 1;
+        var harness = new VisionDetectorRuntimeHarness(detector, options);
+        await harness.WarmupAsync();
+
+        var pipeline = new VisionPipeline(harness, new VisionPipelineOptions
+        {
+            MinimumConfidence = 0.5f,
+            StableFramesRequired = 1,
+            MaxMissingFrames = 3
+        });
+        var bread = new BuildComponent
+        {
+            ComponentKey = "ingredient:bread",
+            DisplayName = "Bread",
+            ExpectedQuantity = 1f
+        };
+        var context = new VisionFrameContext
+        {
+            BuildSessionPublicId = "build-restart-no-duplicate",
+            ExpectedComponents = new[] { bread }
+        };
+
+        var first = await pipeline.ProcessAsync(Frame(50), context);
+        Assert(first.Count == 1, "first stable detection must emit once");
+
+        detector.FailNext = true;
+        var failed = await pipeline.ProcessAsync(Frame(51), context);
+        Assert(failed.Count == 0 && detector.RestartCalls == 1, "detector failure must restart without emitting evidence");
+
+        var afterRestart = await pipeline.ProcessAsync(Frame(52), context);
+        Assert(afterRestart.Count == 0, "same tracked ingredient must not re-emit after detector restart");
+        Assert(pipeline.Diagnostics.ObservationsEmitted == 1, "detector restart must preserve exactly-once observation emission within the build");
+    }
+
     private static async Task RepeatedRestartFailureTransitionsFailed()
     {
         var detector = new ControlledDetector { Throw = true, FailRestart = true };
@@ -135,6 +174,50 @@ internal static class VisionDetectorRuntimeHarnessContract
     private static void Assert(bool condition, string message)
     {
         if (!condition) throw new InvalidOperationException(message);
+    }
+
+    private sealed class RestartDuplicateDetector : IVisionDetector, IVisionDetectorRuntimeControl
+    {
+        public string DetectorName => "restart-duplicate-detector";
+        public bool FailNext { get; set; }
+        public int RestartCalls { get; private set; }
+
+        public Task WarmupAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task RestartAsync(CancellationToken cancellationToken)
+        {
+            RestartCalls++;
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<VisionDetection>> DetectAsync(
+            CameraFrame frame,
+            VisionFrameContext context,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (FailNext)
+            {
+                FailNext = false;
+                throw new InvalidOperationException("simulated detector restart");
+            }
+
+            IReadOnlyList<VisionDetection> result = new[]
+            {
+                new VisionDetection
+                {
+                    ComponentKey = "ingredient:bread",
+                    Label = "Bread",
+                    DisplayName = "Bread",
+                    InstanceKey = "bread-instance-1",
+                    Action = "added",
+                    Quantity = 1f,
+                    Confidence = 0.95f,
+                    BoundingBox = new[] { 0.1f, 0.1f, 0.2f, 0.2f }
+                }
+            };
+            return Task.FromResult(result);
+        }
     }
 
     private sealed class ControlledDetector : IVisionDetector, IVisionDetectorRuntimeControl
