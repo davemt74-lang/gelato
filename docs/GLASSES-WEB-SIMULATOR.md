@@ -79,3 +79,20 @@ The simulator now follows the kitchen AR reference layout while retaining the re
 - The built-in **Pizza Line Reference** calibration preset seeds the reference HUD geometry and remains editable through the existing calibration system.
 
 No new HUD control bypasses the existing build, validation or KDS/Expo authority boundaries.
+
+
+## Live station synchronization
+
+In **Live Gelato** mode the simulator now keeps the selected glasses/KDS station synchronized automatically.
+
+- Read-only station work is polled about every 1.5 seconds through the authenticated simulator API.
+- Newly entered POS orders appear once normal Gelato routing places their items on the selected KDS station.
+- Ticket status, table/service mode, item/option, special instructions, modifiers, focus and Active Orders update without pressing **Refresh work**.
+- A stable station fingerprint suppresses no-op change logging.
+- The selected KDS item is preserved while it still exists; an active build item takes precedence if the previous selection leaves the queue.
+- Synchronization pauses while the browser tab is hidden and resumes immediately when visible.
+- Network/timeout failures back off to a maximum 10-second retry interval and recover automatically.
+- Browser offline/online events explicitly suspend/restart synchronization.
+- A visible **LIVE SYNC / SYNCING / SYNC RETRY / SYNC PAUSED** badge reports synchronization health.
+
+The synchronization endpoint is read-only and does not bypass any POS, KDS, build-session, validation or Expo mutation authority.
