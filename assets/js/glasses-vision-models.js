@@ -221,12 +221,13 @@ function scopeLabel(r){
  return 'Organization-wide';
 }
 function reportsLabel(r){
- var all=metrics[r.publicId]||{},m=all.byType||{},h=all.canaryHealth||null;
+ var all=metrics[r.publicId]||{},m=all.byType||{},h=all.canaryHealth||null,d=all.drift||null;
  var activated=m.activated?m.activated.devices:0;
  var failed=m.failed?m.failed.devices:0;
  var seen=m.assignment_seen?m.assignment_seen.devices:0;
  var health=h?'<span class="gvm-health '+esc(h.state)+'">'+esc(h.state.replaceAll('_',' '))+' · '+Number(h.target.samples||0)+'T/'+Number(h.baseline.samples||0)+'B</span>':'';
- return '<span>'+Number(seen)+' seen</span><span>'+Number(activated)+' activated</span><span'+(failed?' class="danger"':'')+'>'+Number(failed)+' failed</span>'+health;
+ var drift=d?'<span class="gvm-drift '+esc(d.state)+'">drift '+esc(String(d.state||'unknown').replaceAll('_',' '))+'</span>':'';
+ return '<span>'+Number(seen)+' seen</span><span>'+Number(activated)+' activated</span><span'+(failed?' class="danger"':'')+'>'+Number(failed)+' failed</span>'+health+drift;
 }
 function rolloutControls(r){
  if(!catalog.canManage)return '';

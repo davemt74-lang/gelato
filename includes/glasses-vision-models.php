@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__.'/glasses-core.php';
 require_once __DIR__.'/glasses-build.php';
 require_once __DIR__.'/glasses-vision-profiles.php';
+require_once __DIR__.'/glasses-calibration.php';
 
 function glasses_vision_models_ready(PDO $pdo): bool
 {
@@ -735,6 +736,193 @@ function glasses_vision_canary_sample(PDO $pdo,array $device,array $input): arra
     return ['idempotent'=>$insert->rowCount()===0,'cohort'=>$cohort,'health'=>$health];
 }
 
+
+function glasses_vision_drift_ready(PDO $pdo): bool
+{
+    foreach(['glasses_vision_drift_baselines','glasses_vision_drift_samples','glasses_vision_drift_incidents'] as $table){
+        $q=$pdo->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?");
+        $q->execute([$table]);if((int)$q->fetchColumn()!==1)return false;
+    }
+    return true;
+}
+
+function glasses_vision_drift_hash(?string $value): ?string
+{
+    $value=strtolower(trim((string)$value));if($value==='')return null;
+    if(!preg_match('/^[a-f0-9]{64}$/',$value))throw new InvalidArgumentException('Vision drift signature must be SHA-256.');
+    return $value;
+}
+
+function glasses_vision_drift_context(PDO $pdo,array $device,array $session): array
+{
+    $org=(int)$device['organization_id'];$components=glasses_build_components($pdo,$org,(int)$session['id'],false);
+    $ingredientMaterial=[];
+    foreach($components as $row){
+        if((float)$row['expected_quantity']<=0)continue;
+        $ingredientMaterial[]=[(string)$row['component_key'],(float)$row['expected_quantity'],(string)($row['unit']??''),(bool)$row['is_optional']];
+    }
+    $ingredientSignature=hash('sha256',json_encode($ingredientMaterial,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR));
+    $menuMaterial=[
+        'sourceRevision'=>$session['source_revision']??null,
+        'buildDefinitionPublicId'=>$session['build_definition_public_id']??null,
+        'buildDefinitionVersion'=>$session['build_definition_version']??null,
+        'kdsPublicId'=>$session['kds_public_id']??null,
+    ];
+    $menuSignature=hash('sha256',json_encode($menuMaterial,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR));
+    $calibration=glasses_station_calibration_active($pdo,$org,(int)$session['location_id'],$session['station_id']!==null?(int)$session['station_id']:null,null);
+    return [
+        'menuSignature'=>$menuSignature,'ingredientSignature'=>$ingredientSignature,
+        'calibrationSourceHash'=>$calibration?glasses_vision_drift_hash((string)$calibration['sourceHash']):null,
+        'calibrationPublicId'=>$calibration['publicId']??null,
+    ];
+}
+
+function glasses_vision_drift_baseline_row(PDO $pdo,int $org,int $packageId,int $locationId,?int $stationId): ?array
+{
+    $sql="SELECT * FROM glasses_vision_drift_baselines WHERE organization_id=? AND package_id=? AND location_id=? AND ".($stationId===null?'station_id IS NULL':'station_id=?')." AND status='active' ORDER BY id DESC LIMIT 1";
+    $q=$pdo->prepare($sql);$args=[$org,$packageId,$locationId];if($stationId!==null)$args[]=$stationId;$q->execute($args);$row=$q->fetch();return $row?:null;
+}
+
+function glasses_vision_drift_establish_baseline(PDO $pdo,int $org,array $assignment,array $session,array $ctx): ?array
+{
+    $packageId=(int)$assignment['package_id'];$locationId=(int)$session['location_id'];$stationId=$session['station_id']!==null?(int)$session['station_id']:null;
+    if($existing=glasses_vision_drift_baseline_row($pdo,$org,$packageId,$locationId,$stationId))return $existing;
+    $whereStation=$stationId===null?'station_id IS NULL':'station_id=?';
+    $sql="SELECT COUNT(*) samples,
+        AVG(brightness_mean) brightness_mean,AVG(contrast_mean) contrast_mean,
+        AVG(camera_pitch) camera_pitch_mean,AVG(camera_yaw) camera_yaw_mean,AVG(camera_roll) camera_roll_mean,
+        AVG(confidence_mean) confidence_mean,AVG(latency_mean_ms) latency_mean_ms,
+        MAX(frame_width) frame_width,MAX(frame_height) frame_height,MAX(pixel_format) pixel_format,
+        COALESCE(SUM(observation_count),0) observations,COALESCE(SUM(correction_count),0) corrections,
+        COALESCE(SUM(low_confidence_count),0) low_confidence
+        FROM (SELECT * FROM glasses_vision_drift_samples
+          WHERE organization_id=? AND package_id=? AND location_id=? AND {$whereStation}
+            AND drift_state='calibrating'
+            AND ((calibration_source_hash IS NULL AND ? IS NULL) OR calibration_source_hash=?)
+            AND menu_signature=? AND ingredient_signature=?
+          ORDER BY id DESC LIMIT 20) x";
+    $args=[$org,$packageId,$locationId];if($stationId!==null)$args[]=$stationId;
+    $args[]=$ctx['calibrationSourceHash'];$args[]=$ctx['calibrationSourceHash'];$args[]=$ctx['menuSignature'];$args[]=$ctx['ingredientSignature'];
+    $q=$pdo->prepare($sql);$q->execute($args);$agg=$q->fetch();
+    if(!$agg||(int)$agg['samples']<20)return null;
+    $observations=(int)$agg['observations'];
+    $pdo->prepare("INSERT INTO glasses_vision_drift_baselines
+      (organization_id,package_id,location_id,station_id,detector_name,calibration_source_hash,menu_signature,ingredient_signature,
+       frame_width,frame_height,pixel_format,sample_count,brightness_mean,contrast_mean,camera_pitch_mean,camera_yaw_mean,camera_roll_mean,
+       confidence_mean,latency_mean_ms,correction_rate,low_confidence_rate)
+      SELECT ?,?,?,?,?,?,?,?,?,?,?,20,?,?,?,?,?,?,?,?,?
+      FROM glasses_vision_drift_samples
+      WHERE organization_id=? AND package_id=? AND location_id=? AND ".($stationId===null?'station_id IS NULL':'station_id=?')."
+      ORDER BY id DESC LIMIT 1")
+      ->execute(array_merge([
+        $org,$packageId,$locationId,$stationId,(string)$assignment['detector_name'],$ctx['calibrationSourceHash'],$ctx['menuSignature'],$ctx['ingredientSignature'],
+        $agg['frame_width'],$agg['frame_height'],$agg['pixel_format'],
+        $agg['brightness_mean'],$agg['contrast_mean'],$agg['camera_pitch_mean'],$agg['camera_yaw_mean'],$agg['camera_roll_mean'],
+        $agg['confidence_mean'],$agg['latency_mean_ms'],$observations>0?(int)$agg['corrections']/$observations:0,$observations>0?(int)$agg['low_confidence']/$observations:0,
+        $org,$packageId,$locationId
+      ],$stationId===null?[]:[$stationId]));
+    return glasses_vision_drift_baseline_row($pdo,$org,$packageId,$locationId,$stationId);
+}
+
+function glasses_vision_drift_compare(array $baseline,array $sample,array $ctx): array
+{
+    $reasons=[];$categories=[];$score=0.0;$critical=false;
+    $add=function(string $reason,string $category,float $weight,bool $isCritical=false)use(&$reasons,&$categories,&$score,&$critical):void{
+        $reasons[]=$reason;$categories[$category]=true;$score=min(1.0,$score+$weight);if($isCritical)$critical=true;
+    };
+    foreach(['calibration_source_hash'=>'calibration_changed','menu_signature'=>'menu_changed','ingredient_signature'=>'ingredient_set_changed'] as $field=>$reason){
+        $base=$baseline[$field]??null;$cur=$field==='calibration_source_hash'?$ctx['calibrationSourceHash']:($field==='menu_signature'?$ctx['menuSignature']:$ctx['ingredientSignature']);
+        if($base!==null&&$cur!==null&&!hash_equals((string)$base,(string)$cur))$add($reason,$field==='calibration_source_hash'?'environment':'data_domain',$field==='calibration_source_hash'?.35:.30,false);
+    }
+    if($baseline['frame_width']!==null&&$sample['frameWidth']!==null&&((int)$baseline['frame_width']!==(int)$sample['frameWidth']||(int)$baseline['frame_height']!==(int)$sample['frameHeight']))$add('frame_geometry_changed','camera_config',.65,true);
+    if($baseline['pixel_format']!==null&&$sample['pixelFormat']!==null&&!hash_equals((string)$baseline['pixel_format'],(string)$sample['pixelFormat']))$add('pixel_format_changed','camera_config',.65,true);
+    if($sample['brightnessMean']!==null&&$baseline['brightness_mean']!==null){$brightness=abs((float)$sample['brightnessMean']-(float)$baseline['brightness_mean']);if($brightness>.30)$add('lighting_shift_critical','lighting',.55,true);elseif($brightness>.18)$add('lighting_shift','lighting',.25);}
+    if($sample['contrastMean']!==null&&$baseline['contrast_mean']!==null){$contrast=abs((float)$sample['contrastMean']-(float)$baseline['contrast_mean']);if($contrast>.30)$add('contrast_shift_critical','lighting',.50,true);elseif($contrast>.18)$add('contrast_shift','lighting',.22);}
+    if($sample['cameraPitch']!==null&&$sample['cameraYaw']!==null&&$sample['cameraRoll']!==null&&$baseline['camera_pitch_mean']!==null&&$baseline['camera_yaw_mean']!==null&&$baseline['camera_roll_mean']!==null){$pose=max(abs((float)$sample['cameraPitch']-(float)$baseline['camera_pitch_mean']),abs((float)$sample['cameraYaw']-(float)$baseline['camera_yaw_mean']),abs((float)$sample['cameraRoll']-(float)$baseline['camera_roll_mean']));if($pose>25)$add('camera_pose_shift_critical','camera_pose',.55,true);elseif($pose>12)$add('camera_pose_shift','camera_pose',.28);}
+    if($sample['confidenceMean']!==null&&$baseline['confidence_mean']!==null){$confDrop=(float)$baseline['confidence_mean']-(float)$sample['confidenceMean'];if($confDrop>.25)$add('confidence_collapse','model_quality',.55,true);elseif($confDrop>.12)$add('confidence_degradation','model_quality',.25);}
+    $baseLatency=(float)($baseline['latency_mean_ms']??0);
+    if($baseLatency>0&&$sample['latencyMeanMs']!==null){$ratio=(float)$sample['latencyMeanMs']/$baseLatency;if($ratio>2)$add('latency_spike_critical','runtime',.50,true);elseif($ratio>1.5)$add('latency_spike','runtime',.22);}
+    $obs=max(0,(int)$sample['observationCount']);$corrRate=$obs>0?(int)$sample['correctionCount']/$obs:0;$lowRate=$obs>0?(int)$sample['lowConfidenceCount']/$obs:0;
+    $corrDelta=$corrRate-(float)($baseline['correction_rate']??0);if($corrDelta>.15)$add('correction_rate_critical','model_quality',.55,true);elseif($corrDelta>.08)$add('correction_rate_drift','model_quality',.25);
+    $lowDelta=$lowRate-(float)($baseline['low_confidence_rate']??0);if($lowDelta>.25)$add('low_confidence_critical','model_quality',.50,true);elseif($lowDelta>.15)$add('low_confidence_drift','model_quality',.22);
+    $state=$critical?'critical':($score>=.45?'drifted':($score>=.18?'watch':'stable'));
+    return ['schema'=>'gelato.vision_drift_evaluation.v1','state'=>$state,'score'=>round($score,6),'reasons'=>array_values(array_unique($reasons)),'categories'=>array_keys($categories)];
+}
+
+function glasses_vision_drift_incident(PDO $pdo,int $org,array $assignment,array $session,array $evaluation): void
+{
+    if(in_array($evaluation['state'],['stable','calibrating'],true))return;
+    $category=$evaluation['categories'][0]??'mixed';$severity=$evaluation['state']==='critical'?'critical':($evaluation['state']==='drifted'?'high':'warning');
+    $key=hash('sha256',implode('|',[(string)$assignment['package_id'],(string)$session['location_id'],(string)($session['station_id']??0),$category,implode(',',$evaluation['reasons'])]));
+    $pdo->prepare("INSERT INTO glasses_vision_drift_incidents
+      (organization_id,package_id,rollout_id,location_id,station_id,incident_key,severity,drift_state,category,reasons_json,metadata_json)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)
+      ON DUPLICATE KEY UPDATE severity=VALUES(severity),drift_state=VALUES(drift_state),last_seen_at=NOW(6),resolved_at=NULL,reasons_json=VALUES(reasons_json),metadata_json=VALUES(metadata_json)")
+      ->execute([$org,(int)$assignment['package_id'],$assignment['rollout_id']!==null?(int)$assignment['rollout_id']:null,(int)$session['location_id'],$session['station_id']!==null?(int)$session['station_id']:null,$key,$severity,$evaluation['state'],$category,glasses_json_object($evaluation['reasons'],4000),glasses_json_object(['score'=>$evaluation['score'],'categories'=>$evaluation['categories']],4000)]);
+}
+
+function glasses_vision_drift_auto_rollback(PDO $pdo,int $org,int $rolloutId,array $evaluation): void
+{
+    $q=$pdo->prepare("SELECT public_id FROM glasses_vision_model_rollouts WHERE organization_id=? AND id=? AND status='active' LIMIT 1");$q->execute([$org,$rolloutId]);$public=$q->fetchColumn();if(!$public)return;
+    glasses_transaction($pdo,function()use($pdo,$org,$rolloutId,$public,$evaluation):void{
+        $row=glasses_vision_model_rollout_row($pdo,$org,(string)$public,true);if((string)$row['status']!=='active'||$row['baseline_package_id']===null)return;
+        $percent=(float)$row['canary_percent'];$reason='Production drift automatic rollback: '.implode(', ',$evaluation['reasons']);
+        $pdo->prepare("UPDATE glasses_vision_model_rollouts SET status='rolled_back',rolled_back_by=NULL,rolled_back_at=NOW(6),updated_at=NOW(6) WHERE organization_id=? AND id=?")->execute([$org,$rolloutId]);
+        if(glasses_vision_canary_ready($pdo))$pdo->prepare("INSERT INTO glasses_vision_canary_package_holds
+          (organization_id,package_id,source_rollout_id,reason,hold_until) VALUES (?,?,?,?,DATE_ADD(NOW(6),INTERVAL 24 HOUR))
+          ON DUPLICATE KEY UPDATE source_rollout_id=VALUES(source_rollout_id),reason=VALUES(reason),hold_until=VALUES(hold_until),updated_at=NOW(6)")
+          ->execute([$org,(int)$row['target_package_id'],$rolloutId,mb_substr($reason,0,1000,'UTF-8')]);
+        glasses_vision_model_rollout_event($pdo,$org,$rolloutId,'drift_auto_rolled_back','active','rolled_back',$percent,0.0,null,['automatic'=>true,'reason'=>$reason,'drift'=>$evaluation,'packageHoldHours'=>24]);
+    });
+}
+
+function glasses_vision_drift_sample(PDO $pdo,array $device,array $input): array
+{
+    if(!glasses_vision_drift_ready($pdo))throw new RuntimeException('Vision drift migration is not installed.');
+    $org=(int)$device['organization_id'];$assignmentKey=strtolower(trim((string)($input['assignmentKey']??'')));if(!preg_match('/^[a-f0-9]{64}$/',$assignmentKey))throw new InvalidArgumentException('Drift sample requires a valid assignment key.');
+    $sampleKey=mb_substr(trim((string)($input['sampleKey']??'')),0,190,'UTF-8');if($sampleKey==='')throw new InvalidArgumentException('Drift sample key is required.');
+    $q=$pdo->prepare("SELECT * FROM glasses_vision_model_assignments WHERE organization_id=? AND device_id=? AND assignment_key=? LIMIT 1");$q->execute([$org,(int)$device['id'],$assignmentKey]);$assignment=$q->fetch();
+    if(!$assignment||(string)$assignment['action']!=='apply'||$assignment['package_id']===null)throw new InvalidArgumentException('Drift sample requires an applied model assignment issued to this device.');
+    $session=glasses_build_session_row($pdo,$org,(string)($input['buildSessionPublicId']??''),false);glasses_build_assert_device_session($device,$session);if((int)$assignment['build_session_id']!==(int)$session['id'])throw new InvalidArgumentException('Drift sample build does not match the model assignment.');
+    $bounded=function(string $key,float $min,float $max)use($input):?float{if(!array_key_exists($key,$input)||$input[$key]===null)return null;$v=(float)$input[$key];if(!is_finite($v)||$v<$min||$v>$max)throw new InvalidArgumentException('Vision drift metric '.$key.' is out of range.');return $v;};
+    $sample=[
+      'brightnessMean'=>$bounded('brightnessMean',0,1),'contrastMean'=>$bounded('contrastMean',0,1),
+      'cameraPitch'=>$bounded('cameraPitch',-180,180),'cameraYaw'=>$bounded('cameraYaw',-180,180),'cameraRoll'=>$bounded('cameraRoll',-180,180),
+      'confidenceMean'=>$bounded('confidenceMean',0,1),'latencyMeanMs'=>$bounded('latencyMeanMs',0,60000),
+      'frameWidth'=>isset($input['frameWidth'])?(int)$input['frameWidth']:null,'frameHeight'=>isset($input['frameHeight'])?(int)$input['frameHeight']:null,
+      'pixelFormat'=>isset($input['pixelFormat'])?mb_substr(mb_strtolower(trim((string)$input['pixelFormat']),'UTF-8'),0,40,'UTF-8'):null,
+      'observationCount'=>max(0,min(10000,(int)($input['observationCount']??0))),'correctionCount'=>max(0,min(10000,(int)($input['correctionCount']??0))),'lowConfidenceCount'=>max(0,min(10000,(int)($input['lowConfidenceCount']??0))),
+    ];
+    if($sample['correctionCount']>$sample['observationCount']||$sample['lowConfidenceCount']>$sample['observationCount'])throw new InvalidArgumentException('Drift observation-derived counts cannot exceed observation count.');
+    if(($sample['frameWidth']!==null&&($sample['frameWidth']<16||$sample['frameWidth']>8192))||($sample['frameHeight']!==null&&($sample['frameHeight']<16||$sample['frameHeight']>8192)))throw new InvalidArgumentException('Drift frame dimensions are invalid.');
+    $ctx=glasses_vision_drift_context($pdo,$device,$session);
+    $baseline=glasses_vision_drift_baseline_row($pdo,$org,(int)$assignment['package_id'],(int)$session['location_id'],$session['station_id']!==null?(int)$session['station_id']:null);
+    $evaluation=$baseline?glasses_vision_drift_compare($baseline,$sample,$ctx):['schema'=>'gelato.vision_drift_evaluation.v1','state'=>'calibrating','score'=>0.0,'reasons'=>[],'categories'=>[]];
+    $metadata=glasses_json_object(is_array($input['metadata']??null)?$input['metadata']:null,6000);
+    $ins=$pdo->prepare("INSERT IGNORE INTO glasses_vision_drift_samples
+      (organization_id,assignment_id,rollout_id,package_id,device_id,build_session_id,location_id,station_id,sample_key,calibration_source_hash,menu_signature,ingredient_signature,
+       frame_width,frame_height,pixel_format,brightness_mean,contrast_mean,camera_pitch,camera_yaw,camera_roll,confidence_mean,latency_mean_ms,observation_count,correction_count,low_confidence_count,drift_state,drift_score,reasons_json,metadata_json)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+    $ins->execute([$org,(int)$assignment['id'],$assignment['rollout_id']!==null?(int)$assignment['rollout_id']:null,(int)$assignment['package_id'],(int)$device['id'],(int)$session['id'],(int)$session['location_id'],$session['station_id']!==null?(int)$session['station_id']:null,$sampleKey,$ctx['calibrationSourceHash'],$ctx['menuSignature'],$ctx['ingredientSignature'],
+      $sample['frameWidth'],$sample['frameHeight'],$sample['pixelFormat'],$sample['brightnessMean'],$sample['contrastMean'],$sample['cameraPitch'],$sample['cameraYaw'],$sample['cameraRoll'],$sample['confidenceMean'],$sample['latencyMeanMs'],$sample['observationCount'],$sample['correctionCount'],$sample['lowConfidenceCount'],$evaluation['state'],$evaluation['score'],glasses_json_object($evaluation['reasons'],4000),$metadata]);
+    if($ins->rowCount()===0)return ['idempotent'=>true,'evaluation'=>$evaluation,'baselineEstablished'=>$baseline!==null];
+    if(!$baseline){$baseline=glasses_vision_drift_establish_baseline($pdo,$org,$assignment,$session,$ctx);if($baseline)$evaluation=['schema'=>'gelato.vision_drift_evaluation.v1','state'=>'stable','score'=>0.0,'reasons'=>['baseline_established'],'categories'=>[]];}
+    if($baseline&&$evaluation['state']!=='calibrating')glasses_vision_drift_incident($pdo,$org,$assignment,$session,$evaluation);
+    if($evaluation['state']==='critical'&&$assignment['rollout_id']!==null)glasses_vision_drift_auto_rollback($pdo,$org,(int)$assignment['rollout_id'],$evaluation);
+    return ['idempotent'=>false,'evaluation'=>$evaluation,'baselineEstablished'=>$baseline!==null,'baselineSampleCount'=>$baseline?(int)$baseline['sample_count']:0];
+}
+
+function glasses_vision_drift_rollout_summary(PDO $pdo,int $org,string $rolloutPublicId): array
+{
+    if(!glasses_vision_drift_ready($pdo))return ['schema'=>'gelato.vision_drift_summary.v1','state'=>'unavailable','promotionBlocked'=>false,'reasons'=>[]];
+    $rollout=glasses_vision_model_rollout_row($pdo,$org,$rolloutPublicId,false);
+    $q=$pdo->prepare("SELECT drift_state,drift_score,reasons_json,created_at FROM glasses_vision_drift_samples WHERE organization_id=? AND rollout_id=? AND package_id=? ORDER BY id DESC LIMIT 1");
+    $q->execute([$org,(int)$rollout['id'],(int)$rollout['target_package_id']]);$row=$q->fetch();
+    if(!$row)return ['schema'=>'gelato.vision_drift_summary.v1','state'=>'unknown','promotionBlocked'=>false,'reasons'=>[],'latestAt'=>null];
+    $state=(string)$row['drift_state'];
+    return ['schema'=>'gelato.vision_drift_summary.v1','state'=>$state,'score'=>(float)$row['drift_score'],'promotionBlocked'=>in_array($state,['drifted','critical'],true),'reasons'=>json_decode((string)($row['reasons_json']??'[]'),true)?:[],'latestAt'=>$row['created_at']];
+}
+
 function glasses_vision_model_rollout_activate(PDO $pdo,int $org,string $publicId,int $userId): array
 {
     return glasses_transaction($pdo,function()use($pdo,$org,$publicId,$userId):array{
@@ -798,6 +986,10 @@ function glasses_vision_model_rollout_advance(PDO $pdo,int $org,string $publicId
                 $health=glasses_vision_canary_health($pdo,$org,$publicId);
                 if(!$health['promotionEligible'])
                     throw new InvalidArgumentException('Canary health is not eligible for advancement.');
+                if(glasses_vision_drift_ready($pdo)){
+                    $drift=glasses_vision_drift_rollout_summary($pdo,$org,$publicId);
+                    if($drift['promotionBlocked'])throw new InvalidArgumentException('Production drift blocks canary advancement until the environment/model issue is resolved.');
+                }
             }
         }
 
@@ -1164,6 +1356,7 @@ function glasses_vision_model_rollout_metrics(PDO $pdo,int $org,string $publicId
     ];
     $result=['rolloutPublicId'=>$publicId,'byType'=>$byType];
     if(glasses_vision_canary_ready($pdo))$result['canaryHealth']=glasses_vision_canary_health($pdo,$org,$publicId);
+    if(glasses_vision_drift_ready($pdo))$result['drift']=glasses_vision_drift_rollout_summary($pdo,$org,$publicId);
     return $result;
 }
 

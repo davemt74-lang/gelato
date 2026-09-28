@@ -452,14 +452,61 @@ $cooldownBlocked=false;
 try{glasses_vision_model_rollout_activate($pdo,$org,(string)$cooldownDraft['publicId'],$user);}catch(InvalidArgumentException){$cooldownBlocked=true;}
 gvm_assert($cooldownBlocked,'A target package in automatic rollback cooldown must not re-enter canary.');
 
+gvm_assert(glasses_vision_drift_ready($pdo),'Production drift migration must be installed.');
+$driftBaselinePackage=glasses_vision_model_package_create($pdo,$org,[
+    'detectorName'=>'food-model-drift','modelName'=>'drift-detector','modelVersion'=>'1.0.0','runtimeType'=>'onnx','platform'=>'inmo_air3',
+    'artifactUrl'=>'https://models.example.test/drift-baseline.onnx','artifactSha256'=>str_repeat('5',64),
+],$user);
+$driftTargetPackage=glasses_vision_model_package_create($pdo,$org,[
+    'detectorName'=>'food-model-drift','modelName'=>'drift-detector','modelVersion'=>'2.0.0','runtimeType'=>'onnx','platform'=>'inmo_air3',
+    'artifactUrl'=>'https://models.example.test/drift-target.onnx','artifactSha256'=>str_repeat('6',64),
+],$user);
+$driftRollout=glasses_vision_model_rollout_create($pdo,$org,[
+    'targetPackagePublicId'=>$driftTargetPackage['publicId'],'baselinePackagePublicId'=>$driftBaselinePackage['publicId'],
+    'locationId'=>$location,'stationPublicId'=>(string)$station['public_id'],'canaryPercent'=>100,
+    'notes'=>'Continuous drift contract.',
+],$user);
+glasses_vision_model_rollout_activate($pdo,$org,(string)$driftRollout['publicId'],$user);
+$driftAssignment=glasses_vision_model_assignment($pdo,$device,$sessionPublic,'food-model-drift');
+gvm_assert(($driftAssignment['selection']??'')==='target','100% drift test rollout must assign target package.');
+for($i=1;$i<=20;$i++){
+    $d=glasses_vision_drift_sample($pdo,$device,[
+        'assignmentKey'=>$driftAssignment['assignmentKey'],'buildSessionPublicId'=>$sessionPublic,'sampleKey'=>'drift-base-'.$i,
+        'frameWidth'=>640,'frameHeight'=>480,'pixelFormat'=>'grayscale8',
+        'brightnessMean'=>0.50,'contrastMean'=>0.40,'cameraPitch'=>1.0,'cameraYaw'=>2.0,'cameraRoll'=>0.5,
+        'confidenceMean'=>0.92,'latencyMeanMs'=>50,'observationCount'=>10,'correctionCount'=>0,'lowConfidenceCount'=>1,
+        'metadata'=>['source'=>'ci_drift'],
+    ]);
+}
+gvm_assert(($d['baselineEstablished']??false)===true,'Twenty stable production samples must establish a package/station drift baseline.');
+$driftTargetRow=glasses_vision_model_package_row($pdo,$org,(string)$driftTargetPackage['publicId'],false);
+$baselineRow=glasses_vision_drift_baseline_row($pdo,$org,(int)$driftTargetRow['id'],$location,(int)$station['id']);
+gvm_assert($baselineRow!==null&&(int)$baselineRow['sample_count']===20,'Drift baseline must persist its evidence count.');
+gvm_assert((int)$baselineRow['frame_width']===640&&(string)$baselineRow['pixel_format']==='grayscale8','Drift baseline must preserve camera geometry and pixel format.');
+
+$criticalDrift=glasses_vision_drift_sample($pdo,$device,[
+    'assignmentKey'=>$driftAssignment['assignmentKey'],'buildSessionPublicId'=>$sessionPublic,'sampleKey'=>'drift-critical',
+    'frameWidth'=>640,'frameHeight'=>480,'pixelFormat'=>'grayscale8',
+    'brightnessMean'=>0.90,'contrastMean'=>0.40,'cameraPitch'=>1.0,'cameraYaw'=>2.0,'cameraRoll'=>0.5,
+    'confidenceMean'=>0.92,'latencyMeanMs'=>50,'observationCount'=>10,'correctionCount'=>0,'lowConfidenceCount'=>1,
+]);
+gvm_assert(($criticalDrift['evaluation']['state']??'')==='critical','Large sustained lighting deviation must classify as critical drift.');
+$driftRow=glasses_vision_model_rollout_row($pdo,$org,(string)$driftRollout['publicId'],false);
+gvm_assert((string)$driftRow['status']==='rolled_back','Critical production drift must automatically restore the rollout baseline.');
+gvm_assert((int)gvm_one($pdo,"SELECT COUNT(*) FROM glasses_vision_drift_incidents WHERE organization_id=? AND package_id=? AND severity='critical' AND resolved_at IS NULL",[$org,(int)$driftTargetRow['id']])===1,'Critical drift must open a durable incident.');
+gvm_assert((int)gvm_one($pdo,"SELECT COUNT(*) FROM glasses_vision_model_rollout_events WHERE organization_id=? AND event_type='drift_auto_rolled_back'",[$org])===1,'Critical drift rollback must append immutable rollout evidence.');
+$driftSummary=glasses_vision_drift_rollout_summary($pdo,$org,(string)$driftRollout['publicId']);
+gvm_assert($driftSummary['promotionBlocked']===true&&$driftSummary['state']==='critical','Rollout drift summary must block promotion while critical drift remains.');
+
 $catalog=glasses_vision_model_catalog($pdo,[
     'organization_id'=>$org,'permissions'=>['*'],'is_owner_role'=>1,
 ]);
 gvm_assert($catalog['ready']===true&&$catalog['canManage']===true,'Owner model catalog must be ready/manageable.');
-gvm_assert(count($catalog['packages'])===5,'Catalog must expose registered model packages.');
-gvm_assert(count($catalog['rollouts'])===7,'Catalog must expose all rollout plans.');
+gvm_assert(count($catalog['packages'])===7,'Catalog must expose registered model packages.');
+gvm_assert(count($catalog['rollouts'])===8,'Catalog must expose all rollout plans.');
 gvm_assert(isset($catalog['metricsByRollout'][(string)$draft['publicId']]),'Catalog must expose rollout telemetry.');
 gvm_assert(($catalog['metricsByRollout'][(string)$canaryDraft['publicId']]['canaryHealth']['state']??'')==='rollback_required','Catalog must expose production canary health evidence.');
+gvm_assert(($catalog['metricsByRollout'][(string)$driftRollout['publicId']]['drift']['state']??'')==='critical','Catalog must expose latest production drift state.');
 
 $modules=admin_modules(['permissions'=>['glasses.view'],'is_owner_role'=>0]);
 $modelModules=array_values(array_filter($modules,static fn(array $row):bool=>($row['href']??'')==='glasses-vision-models.php'));
