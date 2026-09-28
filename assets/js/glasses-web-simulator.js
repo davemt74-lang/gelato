@@ -1,7 +1,7 @@
 (()=>{'use strict';
 const cfg=window.GELATO_GLASSES_SIMULATOR||{};
 const $=id=>document.getElementById(id);
-const state={mode:'mock',devices:[],device:null,work:null,selectedKdsItemPublicId:'',build:null,validation:null,seq:1,logs:[],autoPlayTimer:null,syncTimer:null,syncBusy:false,syncErrors:0,syncFingerprint:'',syncAbort:null,syncEpoch:0,lastSyncAt:null,cameraStream:null,cameraTrack:null,cameraTarget:null,cameraDevices:[],cameraSource:'image',visionMode:'manual',visionTimer:null,visionBusy:false,visionFrameSeq:0,visionLastAt:0,visionLatencyMs:0,visionFps:0,visionDetections:[],visionTracks:new Map(),visionSubmitted:new Set(),visionAdapter:null,temporalTracks:new Map(),temporalEvents:[],temporalSequence:[],temporalViolations:[],temporalValidationBusy:false,temporalValidationFingerprint:'',temporalReadySince:0,temporalGate:null,browserModel:{status:'idle',session:null,assignment:null,profile:null,config:null,package:null,verifiedSha256:null,loadEpoch:0},dataset:{annotations:[],samples:[],drag:null,frozen:false}};
+const state={mode:'mock',devices:[],device:null,work:null,selectedKdsItemPublicId:'',build:null,validation:null,seq:1,logs:[],autoPlayTimer:null,syncTimer:null,syncBusy:false,syncErrors:0,syncFingerprint:'',syncAbort:null,syncEpoch:0,lastSyncAt:null,cameraStream:null,cameraTrack:null,cameraTarget:null,cameraDevices:[],cameraSource:'image',visionMode:'manual',visionTimer:null,visionBusy:false,visionFrameSeq:0,visionLastAt:0,visionLatencyMs:0,visionFps:0,visionDetections:[],visionTracks:new Map(),visionSubmitted:new Set(),visionAdapter:null,temporalTracks:new Map(),temporalEvents:[],temporalSequence:[],temporalViolations:[],temporalValidationBusy:false,temporalValidationFingerprint:'',temporalReadySince:0,temporalGate:null,browserModel:{status:'idle',session:null,assignment:null,profile:null,config:null,package:null,verifiedSha256:null,loadEpoch:0},dataset:{annotations:[],samples:[],drag:null,frozen:false},activeLearning:{enabled:true,candidates:[],capturing:false,lastCaptureByKey:new Map(),maxQueue:30,cooldownMs:10000}};
 const mock={
   work:{assignmentRequired:false,station:{publicId:'station-mock',name:'Sandwich / Pizza Line'},revision:'mock-revision',focusItem:{kdsItemPublicId:'kds-mock-1',status:'queued',ticket:{checkNumber:'1042',serviceMode:'dine_in',tableName:'Table 12',guestCount:2},posLine:{id:1,menuItemId:1,name:'Club Sandwich + Fries',optionName:'Regular',quantity:1,specialInstructions:'NO TOMATO · EXTRA BACON',modifiers:[{name:'Extra Bacon'}]},menu:{preparationNotes:'Build, slice and plate with fries.'},recipeSource:{status:'exact_name',recipe:{instructions:['Toast bread','Add mayo','Add turkey','Add bacon','Add lettuce','Add tomato','Top and slice','Plate with fries']}}},items:[],metrics:{queued:1,inProgress:0,ready:0,held:0}},
   components:['Toasted Bread','Mayo','Turkey','Bacon','Lettuce','Tomato','Fries'].map((name,i)=>({componentKey:'mock:'+i,displayName:name,expectedQuantity:i===0?3:1,detectedQuantity:0,unit:i===0?'slices':'portion',optional:false,status:'waiting',sortOrder:i+1})),
@@ -208,6 +208,7 @@ async function submitCameraTargetObservation(){
     if(!c)throw new Error('No build component is available for this target.');
     const confidence=Number($('cameraTargetConfidence').value)/100,qty=Math.max(.001,Number(c.expectedQuantity||1)-Number(c.detectedQuantity||0));
     flashDetection(c,{confidence,state:confidence<.75?'low-confidence':'confirmed'});
+    if(confidence<.75)captureHardExample('manual_low_confidence',[{label:c.displayName,componentKey:c.componentKey,confidence,bbox:state.cameraTarget}],{key:'manual-low|'+c.componentKey,summary:c.displayName+' '+Math.round(confidence*100)+'% manual review'});
     if(state.mode==='mock'){
       c.detectedQuantity=Number(c.detectedQuantity||0)+qty;c.confidence=confidence;c.status=confidence<.75?'verify':'confirmed';state.validation=null;render();log('VISION','Submitted camera target for '+c.displayName+' in mock mode.');return;
     }
@@ -289,6 +290,64 @@ async function captureDatasetSample(){
   state.dataset.samples.push({index,width:canvas.width,height:canvas.height,bytes,annotations,capturedAt:new Date().toISOString(),buildPublicId:state.build?.publicId||null,station:state.work?.station?.name||null});
   state.dataset.annotations=[];renderDatasetAnnotations();log('DATASET','Captured labeled sample #'+index+' with '+annotations.length+' box(es).');
 }
+
+function activeLearningClasses(){
+  return (state.build?.components||[]).filter(c=>c.status!=='unexpected'&&c.status!=='ignored').map(c=>c.displayName);
+}
+function renderActiveLearning(){
+  const queue=state.activeLearning.candidates,current=queue[0]||null;
+  const stateEl=$('activeLearningState');if(stateEl)stateEl.textContent=queue.length+' QUEUED';
+  const classSelect=$('activeLearningClassSelect');if(classSelect){
+    const prev=classSelect.value,classes=activeLearningClasses();
+    classSelect.innerHTML='<option value="">Use suggested label</option>'+classes.map(name=>'<option value="'+escapeHtml(name)+'">'+escapeHtml(name)+'</option>').join('');
+    if(classes.includes(prev))classSelect.value=prev;
+  }
+  const cur=$('activeLearningCurrent');
+  if(cur)cur.innerHTML=current?'<div><strong>'+escapeHtml(current.reason.replaceAll('_',' ').toUpperCase())+'</strong><span>'+escapeHtml(current.summary||'Hard example')+'</span><small>'+escapeHtml(new Date(current.capturedAt).toLocaleTimeString())+' · '+current.annotations.length+' suggested box(es)</small></div>':'<span class="sim-muted">No hard examples queued.</span>';
+  const list=$('activeLearningQueue');
+  if(list)list.innerHTML=queue.length?queue.slice(0,8).map((q,i)=>'<div class="active-learning-row '+(i===0?'active':'')+'"><b>'+escapeHtml(q.reason.replaceAll('_',' '))+'</b><span>'+escapeHtml(q.summary||'candidate')+'</span></div>').join(''):'<span class="sim-muted">Low confidence, sequence violations, disappearance/replacement, and manual low-confidence cases will appear here.</span>';
+  const disabled=!current;
+  for(const id of ['activeLearningAccept','activeLearningReclassify','activeLearningNegative','activeLearningDiscard'])if($(id))$(id).disabled=disabled;
+  if($('activeLearningClear'))$('activeLearningClear').disabled=queue.length===0;
+}
+async function captureFrameBytes(){
+  const video=$('cameraVideo');if(!state.cameraStream||!video.videoWidth||!video.videoHeight)return null;
+  const canvas=document.createElement('canvas');canvas.width=video.videoWidth;canvas.height=video.videoHeight;
+  const ctx=canvas.getContext('2d');ctx.drawImage(video,0,0,canvas.width,canvas.height);
+  const blob=await canvasToBlob(canvas,'image/jpeg',.9);if(!blob)return null;
+  return {bytes:new Uint8Array(await blob.arrayBuffer()),width:canvas.width,height:canvas.height};
+}
+async function captureHardExample(reason,detections=[],metadata={}){
+  if(!$('activeLearningEnabled')?.checked||!state.activeLearning.enabled||state.activeLearning.capturing||!state.cameraStream)return;
+  const key=String(metadata.key||reason+'|'+detections.map(d=>d.componentKey||d.label||'').join(','));
+  const now=Date.now(),last=state.activeLearning.lastCaptureByKey.get(key)||0;
+  if(now-last<state.activeLearning.cooldownMs)return;
+  state.activeLearning.lastCaptureByKey.set(key,now);state.activeLearning.capturing=true;
+  try{
+    const frame=await captureFrameBytes();if(!frame)return;
+    const annotations=(detections||[]).filter(d=>d&&d.bbox).map(d=>({label:d.label||d.componentKey||'unknown',bbox:{...d.bbox},confidence:Number(d.confidence??0),componentKey:d.componentKey||null}));
+    const candidate={id:'hard-'+now+'-'+Math.random().toString(36).slice(2,7),reason,capturedAt:new Date().toISOString(),width:frame.width,height:frame.height,bytes:frame.bytes,annotations,summary:metadata.summary||annotations.map(a=>a.label+(a.confidence?(' '+Math.round(a.confidence*100)+'%'):'')).join(', '),metadata:{...metadata,buildPublicId:state.build?.publicId||null,station:state.work?.station?.name||null}};
+    state.activeLearning.candidates.unshift(candidate);state.activeLearning.candidates=state.activeLearning.candidates.slice(0,state.activeLearning.maxQueue);
+    renderActiveLearning();log('LEARNING','Queued hard example: '+reason.replaceAll('_',' ')+'.');
+  }finally{state.activeLearning.capturing=false;}
+}
+function candidateToDataset(candidate,annotations,reviewOutcome){
+  const index=state.dataset.samples.length+1;
+  state.dataset.samples.push({index,width:candidate.width,height:candidate.height,bytes:candidate.bytes,annotations,capturedAt:candidate.capturedAt,buildPublicId:candidate.metadata?.buildPublicId||null,station:candidate.metadata?.station||null,activeLearning:{reason:candidate.reason,reviewOutcome,sourceCandidateId:candidate.id}});
+  state.activeLearning.candidates.shift();renderDatasetAnnotations();renderActiveLearning();
+}
+function acceptActiveLearning(mode){
+  const candidate=state.activeLearning.candidates[0];if(!candidate)return;
+  let annotations=candidate.annotations.map(a=>({label:a.label,bbox:{...a.bbox}}));
+  if(mode==='reclassify'){
+    const label=$('activeLearningClassSelect')?.value||'';if(!label){log('LEARNING','Choose a reclassification label first.');return;}
+    annotations=annotations.map(a=>({...a,label}));
+  }
+  if(mode==='negative')annotations=[];
+  candidateToDataset(candidate,annotations,mode);
+  log('LEARNING','Reviewed hard example as '+mode+'.');
+}
+
 function crc32(bytes){
   let crc=0xffffffff;for(const b of bytes){crc^=b;for(let k=0;k<8;k++)crc=(crc>>>1)^((crc&1)?0xedb88320:0);}return (crc^0xffffffff)>>>0;
 }
@@ -310,7 +369,10 @@ function exportDatasetZip(){
   const classes=[...new Set(state.dataset.samples.flatMap(s=>s.annotations.map(a=>a.label)))].sort((a,b)=>a.localeCompare(b)),classMap=new Map(classes.map((c,i)=>[c,i])),entries=[];
   for(const sample of state.dataset.samples){const id=String(sample.index).padStart(6,'0');entries.push({name:'images/train/frame-'+id+'.jpg',data:sample.bytes});entries.push({name:'labels/train/frame-'+id+'.txt',data:sample.annotations.map(a=>yoloLine(classMap.get(a.label),a.bbox)).join('\n')+(sample.annotations.length?'\n':'')});}
   const yaml=['path: .','train: images/train','val: images/train','names:',...classes.map((c,i)=>'  '+i+': '+JSON.stringify(c)),''].join('\n');
-  const manifest={schema:'gelato.vision_training_dataset.v1',createdAt:new Date().toISOString(),format:'yolo_detection',sampleCount:state.dataset.samples.length,classCount:classes.length,classes:classes.map((name,index)=>({index,name,slug:datasetSlug(name)})),samples:state.dataset.samples.map(s=>({index:s.index,width:s.width,height:s.height,annotations:s.annotations.length,capturedAt:s.capturedAt,buildPublicId:s.buildPublicId,station:s.station}))};
+  if(!classes.length){log('DATASET','At least one positively labeled class is required before YOLO export.');return;}
+  const activeLearningSamples=state.dataset.samples.filter(s=>s.activeLearning);
+  const reviewCounts=activeLearningSamples.reduce((acc,s)=>{const key=s.activeLearning.reviewOutcome||'unknown';acc[key]=(acc[key]||0)+1;return acc;},{});
+  const manifest={schema:'gelato.vision_training_dataset.v1',createdAt:new Date().toISOString(),format:'yolo_detection',sampleCount:state.dataset.samples.length,classCount:classes.length,classes:classes.map((name,index)=>({index,name,slug:datasetSlug(name)})),activeLearning:{schema:'gelato.vision_active_learning.v1',reviewedSampleCount:activeLearningSamples.length,reviewOutcomes:reviewCounts},samples:state.dataset.samples.map(s=>({index:s.index,width:s.width,height:s.height,annotations:s.annotations.length,capturedAt:s.capturedAt,buildPublicId:s.buildPublicId,station:s.station,activeLearning:s.activeLearning||null}))};
   entries.push({name:'data.yaml',data:yaml},{name:'gelato-manifest.json',data:JSON.stringify(manifest,null,2)+'\n'},{name:'README.txt',data:'Gelato local vision training dataset\nFormat: YOLO object detection\nImages and labels were captured in the Web Glasses Simulator.\nNo POS/KDS/build state is modified by dataset capture.\n'});
   const blob=zipStore(entries),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='gelato-vision-dataset-'+new Date().toISOString().replace(/[:.]/g,'-')+'.zip';a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);log('DATASET','Exported '+state.dataset.samples.length+' YOLO training sample(s).');
 }
@@ -566,7 +628,7 @@ async function processTemporalEvents(now){
     if(track.present&&track.stable&&!track.submitted){
       const component=state.build.components?.find(c=>c.componentKey===track.componentKey);
       const violation=sequenceViolationFor(track.componentKey);
-      if(violation&&!state.temporalViolations.some(v=>v.componentKey===track.componentKey)){state.temporalViolations.push({...violation,at:now});pushTemporalEvent('sequence_violation',track,{message:violation.message});log('VISION',violation.message+'.');}
+      if(violation&&!state.temporalViolations.some(v=>v.componentKey===track.componentKey)){state.temporalViolations.push({...violation,at:now});pushTemporalEvent('sequence_violation',track,{message:violation.message});captureHardExample('sequence_violation',[track],{key:'sequence|'+track.componentKey,summary:violation.message});log('VISION',violation.message+'.');}
       const qty=component?Math.max(.001,Number(component.expectedQuantity||1)-Number(component.detectedQuantity||0)):1;
       if(await submitTemporalObservation(track,'added',qty,{sequenceViolation:!!violation})){
         track.submitted=true;track.submittedQuantity=qty;track.removed=false;state.temporalSequence.push({componentKey:track.componentKey,at:now,action:'added'});pushTemporalEvent('added',track,{quantity:qty});
@@ -578,6 +640,7 @@ async function processTemporalEvents(now){
     const replacement=[...state.temporalTracks.values()].find(t=>t!==lost&&t.present&&t.stable&&!t.submitted&&bboxIou(lost.bbox,t.bbox)>=VISION_REPLACEMENT_IOU);
     if(await submitTemporalObservation(lost,'removed',Math.max(.001,lost.submittedQuantity||1),{reason:replacement?'replacement':'track_absent'})){
       lost.removed=true;lost.submitted=false;state.temporalSequence.push({componentKey:lost.componentKey,at:now,action:'removed'});pushTemporalEvent(replacement?'replaced':'removed',lost,{replacementComponentKey:replacement?.componentKey||null});
+      captureHardExample(replacement?'replacement':'track_disappearance',[lost,...(replacement?[replacement]:[])],{key:(replacement?'replacement|':'disappear|')+lost.componentKey,summary:replacement?(lost.label||lost.componentKey)+' → '+(replacement.label||replacement.componentKey):(lost.label||lost.componentKey)+' disappeared after stable presence'});
       if(replacement)log('VISION',(lost.label||lost.componentKey)+' replaced by '+(replacement.label||replacement.componentKey)+'.');else log('VISION',(lost.label||lost.componentKey)+' removed after stable absence.');
     }
   }
@@ -622,6 +685,8 @@ async function runVisionFrame(){
     const adapterName=$('visionAdapterSelect')?.value||'fixture';state.visionAdapter=VISION_ADAPTERS[adapterName]||VISION_ADAPTERS.fixture;
     const raw=await state.visionAdapter.detect({seq,video:$('cameraVideo'),build:state.build,temporalTracks:state.temporalTracks});
     const threshold=Number($('visionConfidenceThreshold')?.value||75)/100;
+    const uncertain=(raw||[]).filter(d=>d&&d.bbox&&d.confidence<threshold&&d.confidence>=Math.max(.2,threshold-.25));
+    if(uncertain.length)captureHardExample('low_confidence',uncertain,{key:'low|'+uncertain.map(d=>d.componentKey||d.label).join(','),summary:'Below threshold: '+uncertain.map(d=>(d.label||d.componentKey)+' '+Math.round(d.confidence*100)+'%').join(', ')});
     const filtered=(raw||[]).filter(d=>d&&d.bbox&&d.confidence>=threshold);
     state.visionDetections=trackDetections(filtered,nowWall);
     renderVisionOverlay();
@@ -708,7 +773,7 @@ function render(){
   ].map(([a,b])=>'<div><small>'+escapeHtml(a)+'</small><strong>'+escapeHtml(b)+'</strong></div>').join('');
   const steps=deriveSteps(),comp=currentComponent(),comps=build?.components||[];
   renderTopStatus();renderOrdersQueue(item);renderNextInstruction(comp,validation);renderBuildRail(item,steps,comps);renderValidationPanel(comps,validation);
-  $('componentCount').textContent=String(comps.length);renderCameraTargetComponents();renderDatasetClassOptions();renderDatasetAnnotations();
+  $('componentCount').textContent=String(comps.length);renderCameraTargetComponents();renderDatasetClassOptions();renderDatasetAnnotations();renderActiveLearning();
   $('componentControls').innerHTML=comps.filter(c=>c.status!=='unexpected'&&c.status!=='ignored').map(c=>'<div class="component-row '+escapeHtml(c.status)+'"><div class="copy"><strong>'+escapeHtml(c.displayName)+'</strong><small>'+escapeHtml(c.status)+' · '+Number(c.detectedQuantity||0)+' / '+Number(c.expectedQuantity||0)+' '+escapeHtml(c.unit||'')+'</small></div><button type="button" data-detect="'+escapeHtml(c.componentKey)+'" '+(c.status==='confirmed'?'disabled':'')+'>Detect</button></div>').join('')||'<span class="sim-muted">Start a build to simulate detections.</span>';
   const unexpected=comps.filter(c=>c.status==='unexpected');
   $('exceptions').innerHTML=unexpected.map(c=>'<div class="exception-row"><span>'+escapeHtml(c.displayName)+'</span><button data-resolve="'+escapeHtml(c.componentKey)+'" type="button">Resolve</button></div>').join('')||'<span class="sim-muted">No build exceptions.</span>';
@@ -797,6 +862,12 @@ $('datasetCaptureSample').addEventListener('click',()=>captureDatasetSample().ca
 $('datasetUndoBox').addEventListener('click',()=>{state.dataset.annotations.pop();renderDatasetAnnotations();});
 $('datasetClearBoxes').addEventListener('click',()=>{state.dataset.annotations=[];renderDatasetAnnotations();});
 $('datasetExport').addEventListener('click',exportDatasetZip);
+$('activeLearningEnabled').addEventListener('change',e=>{state.activeLearning.enabled=e.target.checked;renderActiveLearning();});
+$('activeLearningAccept').addEventListener('click',()=>acceptActiveLearning('accepted'));
+$('activeLearningReclassify').addEventListener('click',()=>acceptActiveLearning('reclassify'));
+$('activeLearningNegative').addEventListener('click',()=>acceptActiveLearning('negative'));
+$('activeLearningDiscard').addEventListener('click',()=>{if(state.activeLearning.candidates.length){state.activeLearning.candidates.shift();renderActiveLearning();log('LEARNING','Discarded hard example.');}});
+$('activeLearningClear').addEventListener('click',()=>{state.activeLearning.candidates=[];renderActiveLearning();log('LEARNING','Cleared hard-example queue.');});
 $('datasetAnnotationList').addEventListener('click',e=>{const b=e.target.closest('[data-dataset-remove]');if(!b)return;state.dataset.annotations.splice(Number(b.dataset.datasetRemove),1);renderDatasetAnnotations();});
 $('cameraTargetConfidence').addEventListener('input',e=>{$('cameraTargetConfidenceValue').textContent=e.target.value+'%';});
 document.addEventListener('visibilitychange',()=>{if(state.cameraTrack){state.cameraTrack.enabled=!document.hidden;setCameraHealth(document.hidden?'paused':'ready',document.hidden?'PAUSED':'READY');}if(document.hidden){stopVisionRuntime('paused');stopLiveStationSync('hidden');}else{if(state.cameraStream)startVisionRuntime();if(state.mode==='live'&&state.device)startLiveStationSync({immediate:true});}});
