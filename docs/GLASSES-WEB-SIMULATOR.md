@@ -117,3 +117,23 @@ The simulator can now use a real browser camera as the scene underneath the exis
 - Live Station Sync continues independently while the camera preview is active.
 
 This browser camera runtime is a development/preview input and does not claim AIR3 hardware or vendor model-loader parity.
+
+
+## Browser automatic vision runtime
+
+The browser camera preview now includes a hardware-neutral detector loop that can be exercised before the proprietary AIR3 model-loader SDK is available.
+
+- Vision mode can be **Manual**, **Assisted** or **Automatic**.
+- Manual preserves the existing click-to-target workflow.
+- Assisted runs detections and draws tracked boxes without writing observations.
+- Automatic runs the same detector loop and submits accepted detections through the canonical build observation endpoint.
+- Inference runs on a bounded operator-selectable FPS budget.
+- A detector adapter contract keeps the simulator independent from any specific browser model runtime.
+- A deterministic fixture adapter is included so CI and simulator demos do not require a physical camera or proprietary model package.
+- Detections are confidence-filtered, normalized to the video frame, mapped through Cover/Contain and mirror presentation geometry, and assigned persistent tracking IDs.
+- Tracks expire on a bounded TTL and duplicate component submissions are suppressed for the active build.
+- Vision processing pauses with hidden tabs and stops with the camera lifecycle.
+- The simulator reports approximate detection FPS, inference latency and active detection count.
+- Automatic live observations are explicitly labelled `web_glasses_simulator_auto_vision`.
+
+The automatic browser detector remains a development runtime. It does not claim production model accuracy and does not bypass governed label profiles, build-session authority, product validation, KDS lifecycle or Expo handoff.

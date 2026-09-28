@@ -1,7 +1,7 @@
 (()=>{'use strict';
 const cfg=window.GELATO_GLASSES_SIMULATOR||{};
 const $=id=>document.getElementById(id);
-const state={mode:'mock',devices:[],device:null,work:null,selectedKdsItemPublicId:'',build:null,validation:null,seq:1,logs:[],autoPlayTimer:null,syncTimer:null,syncBusy:false,syncErrors:0,syncFingerprint:'',syncAbort:null,syncEpoch:0,lastSyncAt:null,cameraStream:null,cameraTrack:null,cameraTarget:null,cameraDevices:[],cameraSource:'image'};
+const state={mode:'mock',devices:[],device:null,work:null,selectedKdsItemPublicId:'',build:null,validation:null,seq:1,logs:[],autoPlayTimer:null,syncTimer:null,syncBusy:false,syncErrors:0,syncFingerprint:'',syncAbort:null,syncEpoch:0,lastSyncAt:null,cameraStream:null,cameraTrack:null,cameraTarget:null,cameraDevices:[],cameraSource:'image',visionMode:'manual',visionTimer:null,visionBusy:false,visionFrameSeq:0,visionLastAt:0,visionLatencyMs:0,visionFps:0,visionDetections:[],visionTracks:new Map(),visionSubmitted:new Set(),visionAdapter:null};
 const mock={
   work:{assignmentRequired:false,station:{publicId:'station-mock',name:'Sandwich / Pizza Line'},revision:'mock-revision',focusItem:{kdsItemPublicId:'kds-mock-1',status:'queued',ticket:{checkNumber:'1042',serviceMode:'dine_in',tableName:'Table 12',guestCount:2},posLine:{id:1,menuItemId:1,name:'Club Sandwich + Fries',optionName:'Regular',quantity:1,specialInstructions:'NO TOMATO · EXTRA BACON',modifiers:[{name:'Extra Bacon'}]},menu:{preparationNotes:'Build, slice and plate with fries.'},recipeSource:{status:'exact_name',recipe:{instructions:['Toast bread','Add mayo','Add turkey','Add bacon','Add lettuce','Add tomato','Top and slice','Plate with fries']}}},items:[],metrics:{queued:1,inProgress:0,ready:0,held:0}},
   components:['Toasted Bread','Mayo','Turkey','Bacon','Lettuce','Tomato','Fries'].map((name,i)=>({componentKey:'mock:'+i,displayName:name,expectedQuantity:i===0?3:1,detectedQuantity:0,unit:i===0?'slices':'portion',optional:false,status:'waiting',sortOrder:i+1})),
@@ -129,6 +129,7 @@ async function enumerateCameras(){
   if(saved&&state.cameraDevices.some(d=>d.deviceId===saved))$('cameraDeviceSelect').value=saved;
 }
 function stopCamera(reason='stopped'){
+  stopVisionRuntime(reason);
   if(state.cameraStream)state.cameraStream.getTracks().forEach(t=>t.stop());
   state.cameraStream=null;state.cameraTrack=null;
   const video=$('cameraVideo');video.srcObject=null;video.hidden=true;
@@ -152,7 +153,7 @@ async function startCamera(){
     state.cameraSource='camera';$('sceneSourceSelect').value='camera';applyCameraPresentation();await enumerateCameras();
     const settings=state.cameraTrack?.getSettings?.()||{};
     $('cameraMeta').innerHTML='<span>'+escapeHtml(state.cameraTrack?.label||'Camera')+'</span><span>'+escapeHtml(String(settings.width||w))+'×'+escapeHtml(String(settings.height||h))+' · '+escapeHtml(String(Math.round(settings.frameRate||30)))+' fps</span>';
-    setCameraHealth('ready','READY');log('CAMERA','Browser camera preview started.');
+    setCameraHealth('ready','READY');log('CAMERA','Browser camera preview started.');startVisionRuntime();
     state.cameraTrack?.addEventListener('ended',()=>{stopCamera('error');log('CAMERA','Camera stream ended.');},{once:true});
   }catch(e){
     stopCamera('error');
@@ -216,6 +217,97 @@ function renderCameraTargetComponents(){
   const comps=state.build?.components||[];
   $('cameraTargetComponent').innerHTML='<option value="">Current required component</option>'+comps.filter(c=>c.status!=='unexpected'&&c.status!=='ignored').map(c=>'<option value="'+escapeHtml(c.componentKey)+'">'+escapeHtml(c.displayName)+'</option>').join('');
 }
+
+const VISION_TRACK_TTL_MS=1800;
+const VISION_SUBMIT_COOLDOWN_MS=1200;
+const VISION_ADAPTERS={
+  fixture:{
+    id:'fixture',
+    async detect(frame){
+      const component=currentComponent();
+      if(!component)return [];
+      const phase=(frame.seq%24)/24;
+      return [{label:component.displayName,componentKey:component.componentKey,confidence:Math.max(.4,Number($('visionConfidenceThreshold')?.value||75)/100+.08),bbox:{x:.28+phase*.18,y:.46,width:.16,height:.14}}];
+    }
+  }
+};
+function stopVisionRuntime(reason='idle'){
+  if(state.visionTimer){clearTimeout(state.visionTimer);state.visionTimer=null;}
+  state.visionBusy=false;state.visionDetections=[];renderVisionOverlay();renderVisionHealth(reason);
+}
+function visionIntervalMs(){const fps=Math.max(1,Math.min(10,Number($('visionFpsLimit')?.value||4)));return Math.round(1000/fps);}
+function visionMode(){return $('visionMode')?.value||'manual';}
+function renderVisionHealth(status='ready'){
+  const el=$('visionHealth');if(!el)return;
+  const active=visionMode()!=='manual'&&state.cameraStream&&!document.hidden;
+  el.textContent=active?(status==='error'?'VISION ERROR':'VISION '+visionMode().toUpperCase()):'VISION IDLE';
+  const metrics=$('visionMetrics');if(metrics)metrics.textContent='FPS '+state.visionFps.toFixed(1)+' · '+Math.round(state.visionLatencyMs)+'ms · '+state.visionDetections.length+' det';
+}
+function normalizedBoxToStage(box){
+  const video=$('cameraVideo'),stage=$('glassesStage'),rect=stage.getBoundingClientRect();
+  if(!video.videoWidth||!video.videoHeight||!rect.width||!rect.height)return null;
+  const srcRatio=video.videoWidth/video.videoHeight,dstRatio=rect.width/rect.height,fit=$('cameraFit').value;
+  let drawW,drawH,offsetX,offsetY;
+  if((fit==='cover'&&srcRatio>dstRatio)||(fit==='contain'&&srcRatio<dstRatio)){drawH=rect.height;drawW=drawH*srcRatio;offsetX=(rect.width-drawW)/2;offsetY=0;}
+  else{drawW=rect.width;drawH=drawW/srcRatio;offsetX=0;offsetY=(rect.height-drawH)/2;}
+  let x=box.x;if($('cameraMirror').checked)x=1-box.x-box.width;
+  return {left:(offsetX+x*drawW)/rect.width,top:(offsetY+box.y*drawH)/rect.height,width:box.width*drawW/rect.width,height:box.height*drawH/rect.height};
+}
+function renderVisionOverlay(){
+  const layer=$('visionDetectionLayer');if(!layer)return;layer.innerHTML='';
+  for(const d of state.visionDetections){
+    const g=normalizedBoxToStage(d.bbox);if(!g)continue;
+    const el=document.createElement('div');el.className='vision-auto-box '+(d.confidence<.75?'verify':'confirmed');
+    el.style.left=(g.left*100)+'%';el.style.top=(g.top*100)+'%';el.style.width=(g.width*100)+'%';el.style.height=(g.height*100)+'%';
+    el.innerHTML='<span>'+escapeHtml(d.label)+' · '+Math.round(d.confidence*100)+'%</span>';layer.appendChild(el);
+  }
+}
+function trackDetections(detections,now){
+  const next=new Map();
+  for(const d of detections){
+    const key=d.componentKey||d.label;
+    const prev=state.visionTracks.get(key);
+    const trackId=prev&&now-prev.lastSeen<VISION_TRACK_TTL_MS?prev.trackId:'webvision-'+(++state.visionFrameSeq)+'-'+Date.now();
+    const track={...d,trackId,lastSeen:now};next.set(key,track);
+  }
+  state.visionTracks=next;return [...next.values()];
+}
+async function submitAutomaticDetection(d){
+  if(!state.build||!d.componentKey)return;
+  const c=state.build.components?.find(x=>x.componentKey===d.componentKey);if(!c||['confirmed','ignored'].includes(c.status))return;
+  const dedupe=state.build.publicId+'|'+d.componentKey;if(state.visionSubmitted.has(dedupe))return;
+  state.visionSubmitted.add(dedupe);
+  const qty=Math.max(.001,Number(c.expectedQuantity||1)-Number(c.detectedQuantity||0));
+  try{
+    if(state.mode==='mock'){c.detectedQuantity=Number(c.detectedQuantity||0)+qty;c.confidence=d.confidence;c.status=d.confidence<.75?'verify':'confirmed';state.validation=null;render();return;}
+    const result=await api('build.observe',{buildSessionPublicId:state.build.publicId,observationKey:'browser-vision-'+Date.now()+'-'+state.seq,componentKey:c.componentKey,displayName:c.displayName,observationAction:'added',quantity:qty,confidence:d.confidence,trackingId:d.trackId,bbox:d.bbox,metadata:{source:'web_glasses_simulator_auto_vision',automatic:true,adapter:state.visionAdapter?.id||'fixture'}});
+    state.build=result.buildSession;state.validation=null;render();log('VISION','Automatic observation accepted for '+c.displayName+'.');
+  }catch(e){state.visionSubmitted.delete(dedupe);log('ERROR',e.message);}
+}
+async function runVisionFrame(){
+  if(visionMode()==='manual'||!state.cameraStream||document.hidden){stopVisionRuntime(document.hidden?'paused':'idle');return;}
+  if(state.visionBusy){state.visionTimer=setTimeout(runVisionFrame,visionIntervalMs());return;}
+  state.visionBusy=true;
+  const started=performance.now(),seq=state.visionFrameSeq+1;
+  try{
+    state.visionAdapter=state.visionAdapter||VISION_ADAPTERS.fixture;
+    const raw=await state.visionAdapter.detect({seq,video:$('cameraVideo'),build:state.build});
+    const threshold=Number($('visionConfidenceThreshold')?.value||75)/100;
+    const filtered=(raw||[]).filter(d=>d&&d.bbox&&d.confidence>=threshold);
+    state.visionDetections=trackDetections(filtered,Date.now());
+    renderVisionOverlay();
+    if(visionMode()==='automatic')for(const d of state.visionDetections)await submitAutomaticDetection(d);
+    const elapsed=performance.now()-started;state.visionLatencyMs=elapsed;
+    const now=performance.now();if(state.visionLastAt){const instant=1000/Math.max(1,now-state.visionLastAt);state.visionFps=state.visionFps?state.visionFps*.7+instant*.3:instant;}state.visionLastAt=now;
+    renderVisionHealth('ready');
+  }catch(e){renderVisionHealth('error');log('VISION',e.message||'Browser detector failed.');}
+  finally{state.visionBusy=false;if(visionMode()!=='manual'&&state.cameraStream&&!document.hidden)state.visionTimer=setTimeout(runVisionFrame,visionIntervalMs());}
+}
+function startVisionRuntime(){
+  stopVisionRuntime('idle');state.visionMode=visionMode();state.visionSubmitted.clear();state.visionTracks.clear();state.visionFrameSeq=0;state.visionLastAt=0;
+  if(state.visionMode!=='manual'&&state.cameraStream&&!document.hidden){state.visionTimer=setTimeout(runVisionFrame,0);renderVisionHealth('ready');}
+}
+
 function mockBuild(){return {publicId:'build-mock-1',status:'active',kdsItemPublicId:'kds-mock-1',kdsStatus:'queued',context:{itemName:'Club Sandwich + Fries',buildDefinition:{steps:mock.work.focusItem.recipeSource.recipe.instructions.map((text,i)=>({stepKey:'step-'+(i+1),order:i+1,text,componentKeys:[]}))}},summary:{required:mock.components.length,confirmed:0,verify:0,unexpected:0,accounted:false,currentComponentKey:mock.components[0].componentKey},components:structuredClone(mock.components)};}
 function selectedItem(){const items=state.work?.items||[];if(state.selectedKdsItemPublicId){const chosen=items.find(x=>x.kdsItemPublicId===state.selectedKdsItemPublicId);if(chosen)return chosen;}return state.work?.focusItem||items[0]||null;}
 function deriveSteps(){const item=selectedItem();const fromBuild=state.build?.context?.buildDefinition?.steps;if(Array.isArray(fromBuild)&&fromBuild.length)return fromBuild.map(x=>typeof x==='string'?x:(x.text||x.label||''));const rx=item?.recipeSource?.recipe?.instructions;return Array.isArray(rx)&&rx.length?rx:['Load work','Build item','Validate','Send to Expo'];}
@@ -356,12 +448,15 @@ $('cameraFit').addEventListener('change',applyCameraPresentation);$('cameraMirro
 $('cameraDeviceSelect').addEventListener('change',async()=>{saveCameraPrefs();if(state.cameraStream)await startCamera();});
 $('cameraResolution').addEventListener('change',async()=>{saveCameraPrefs();if(state.cameraStream)await startCamera();});
 $('cameraManualTarget').addEventListener('change',e=>{$('glassesStage').classList.toggle('camera-targeting',e.target.checked);if(!e.target.checked)clearCameraTarget();});
+$('visionMode').addEventListener('change',()=>{state.visionMode=visionMode();startVisionRuntime();});
+$('visionFpsLimit').addEventListener('change',startVisionRuntime);
+$('visionConfidenceThreshold').addEventListener('input',e=>{$('visionConfidenceValue').textContent=e.target.value+'%';});
 $('glassesStage').addEventListener('click',setCameraTargetFromPointer);
 $('cameraTargetConfidence').addEventListener('input',e=>{$('cameraTargetConfidenceValue').textContent=e.target.value+'%';});
-document.addEventListener('visibilitychange',()=>{if(state.cameraTrack){state.cameraTrack.enabled=!document.hidden;setCameraHealth(document.hidden?'paused':'ready',document.hidden?'PAUSED':'READY');}if(document.hidden)stopLiveStationSync('hidden');else if(state.mode==='live'&&state.device)startLiveStationSync({immediate:true});});
+document.addEventListener('visibilitychange',()=>{if(state.cameraTrack){state.cameraTrack.enabled=!document.hidden;setCameraHealth(document.hidden?'paused':'ready',document.hidden?'PAUSED':'READY');}if(document.hidden){stopVisionRuntime('paused');stopLiveStationSync('hidden');}else{if(state.cameraStream)startVisionRuntime();if(state.mode==='live'&&state.device)startLiveStationSync({immediate:true});}});
 window.addEventListener('offline',()=>{stopLiveStationSync('idle');setSyncBadge('error','OFFLINE');});
 window.addEventListener('online',()=>{if(state.mode==='live'&&state.device)startLiveStationSync({immediate:true});});
-window.addEventListener('beforeunload',()=>stopLiveStationSync('idle'));
+window.addEventListener('beforeunload',()=>{stopVisionRuntime('idle');stopLiveStationSync('idle');});
 const FRAME_MODE_KEY='gelato.webGlassesSimulator.frameMode.v1';
 const OPTICAL_MASK_KEY='gelato.webGlassesSimulator.opticalMask.v1';
 let frameMode=['svg','image','none'].includes(localStorage.getItem(FRAME_MODE_KEY))?localStorage.getItem(FRAME_MODE_KEY):'svg';
