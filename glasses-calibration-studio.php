@@ -155,7 +155,7 @@ $boot=[
             </div>
         </div>
         <div class="gcs-canvas-footer">
-            <span>Center coordinates and dimensions are stored as normalized 0–1 values.</span>
+            <span>Top-left coordinates and dimensions are stored as normalized 0–1 values.</span>
             <span>Delete selected shape: <kbd>Delete</kbd></span>
         </div>
     </section>
@@ -204,6 +204,7 @@ $boot=[
 <script>
 window.GELATO_CALIBRATION_STUDIO=<?=json_encode($boot,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE|JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT)?>;
 </script>
+<script src="assets/js/glasses-calibration-geometry.js?v=20260928-1"></script>
 <script src="assets/js/glasses-calibration-studio.js?v=20260928-1"></script>
 <script src="js/universal-admin-page-shell.js?v=20260915-2"></script>
 </body>
