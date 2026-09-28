@@ -645,11 +645,16 @@ function glasses_vision_model_catalog(PDO $pdo,array $user): array
         );
     }
 
+    $rollouts=glasses_vision_model_rollouts($pdo,$org);
+    $metrics=[];
+    foreach($rollouts as $rollout)$metrics[(string)$rollout['publicId']]=glasses_vision_model_rollout_metrics($pdo,$org,(string)$rollout['publicId']);
+
     return [
         'ready'=>glasses_vision_models_ready($pdo),
         'canManage'=>app_has_permission('glasses.manage',$user),
         'packages'=>glasses_vision_model_packages($pdo,$org),
-        'rollouts'=>glasses_vision_model_rollouts($pdo,$org),
+        'rollouts'=>$rollouts,
+        'metricsByRollout'=>$metrics,
         'locations'=>array_map(static fn(array $location):array=>[
             'id'=>(int)$location['id'],'name'=>(string)$location['name'],'primary'=>(bool)$location['is_primary']
         ],$locations),
