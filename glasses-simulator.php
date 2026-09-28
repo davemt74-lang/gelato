@@ -318,7 +318,8 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 window.GELATO_GLASSES_SIMULATOR={
   csrf:<?=json_encode(app_csrf_token(),JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT)?>,
   api:'api/glasses-simulator.php',
-  mediaApi:'api/glasses-vision-media.php'
+  mediaApi:'api/glasses-vision-media.php',
+  canManageMedia:<?=app_has_permission('glasses.manage',$user)?'true':'false'?>
 };
 </script>
 <script src="assets/js/glasses-web-simulator.js?v=20260928-media1"></script>
