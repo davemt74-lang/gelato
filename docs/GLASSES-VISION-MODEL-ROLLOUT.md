@@ -185,24 +185,9 @@ The real INMO adapter must advertise only runtimes actually supported by the fin
 
 `VisionRuntimeController` requests the governed assignment once per active build and records an idempotent `assignment_seen` event.
 
-If the assignment is valid and says `apply`, the runtime logs that the package is eligible.
+Section 19 remains the authority for desired model state, compatibility, canary selection, pause and rollback. Section 20 consumes only assignments that pass this contract and performs verified artifact installation/activation through the hardware-neutral runtime host.
 
-It does **not** report:
-
-- downloaded;
-- verified;
-- activated.
-
-Those states require a real package loader that:
-
-1. downloads the artifact;
-2. verifies byte size when supplied;
-3. verifies SHA-256;
-4. loads the declared runtime safely;
-5. performs atomic activation;
-6. retains or restores the previous known-good model.
-
-That final loader remains intentionally outside this section until the necessary glasses SDK/runtime API is available.
+Every issued assignment is persisted in `glasses_vision_model_assignments` against the exact device and build session. Assignment keys include build-session identity, so telemetry and activation history cannot collapse across separate kitchen builds.
 
 ## Device rollout ledger
 
@@ -220,12 +205,14 @@ supports:
 - `failed`
 - `rollback_activated`
 
-Reports use idempotent per-device report keys.
+Reports use idempotent assignment-derived keys and must include the exact assignment key originally issued to that device/build.
 
-Verified/activated reports must:
+The server binds every report to the immutable assignment ledger before accepting it. A device cannot claim a target package when its issued assignment selected baseline, and a rollback activation cannot be reported from a non-rollback assignment.
 
-- reference a rollout;
-- reference a package belonging to that rollout;
+Verified/activated reports must additionally:
+
+- reference the rollout recorded on the issued assignment;
+- reference the exact package recorded on the issued assignment;
 - provide the registered artifact SHA-256;
 - pass current device/package compatibility.
 
