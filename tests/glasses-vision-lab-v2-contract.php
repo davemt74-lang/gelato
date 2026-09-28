@@ -50,5 +50,5 @@ $page=file_get_contents(__DIR__.'/../glasses-vision-lab.php');$api=file_get_cont
 vl_assert(str_contains($page,'Vision Lab V2')&&str_contains($page,'Training Missions')&&str_contains($page,'Review Queue'),'Vision Lab must expose its core governed work areas.');
 vl_assert(str_contains($api,'app_verify_request_csrf')&&str_contains($api,"sample.import_corrected"),'Vision Lab mutations must be CSRF protected and support corrected evidence intake.');
 vl_assert(!str_contains($api,'kds_transition')&&!str_contains($api,'glasses_build_observe'),'Vision Lab must not mutate KDS or production build truth.');
-vl_assert(str_contains($js,'Add to dataset')&&str_contains($page,'Import corrected evidence')&&str_contains($js,"sample.import_corrected"),'Vision Lab UI must support corrected-evidence intake and review-to-dataset flow.');
+vl_assert(str_contains($js,'data-dataset-add')&&str_contains($js,"dataset.add_sample")&&str_contains($page,'Import corrected evidence')&&str_contains($js,"sample.import_corrected"),'Vision Lab UI must support corrected-evidence intake and review-to-dataset flow.');
 echo "vision-lab-v2-ok\n";
