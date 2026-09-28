@@ -319,7 +319,7 @@ async function submitTemporalObservation(track,action,quantity,metadata={}){
       component.status=component.detectedQuantity<=0?'waiting':track.confidence<.75?'verify':component.detectedQuantity+.0001>=Number(component.expectedQuantity||1)?'confirmed':'detected';
       state.validation=null;render();return true;
     }
-    const result=await api('build.observe',{buildSessionPublicId:state.build.publicId,observationKey:'browser-temporal-'+action+'-'+Date.now()+'-'+state.seq,componentKey:track.componentKey,displayName,observationAction:action,quantity,confidence:track.confidence||.9,trackingId:track.trackId,bbox:track.bbox,metadata:{source:'web_glasses_simulator_temporal_vision',automatic:true,temporal:true,adapter:state.visionAdapter?.id||'fixture',...metadata}});
+    const result=await api('build.observe',{buildSessionPublicId:state.build.publicId,observationKey:'browser-temporal-'+action+'-'+Date.now()+'-'+state.seq,componentKey:track.componentKey,displayName,observationAction:action,quantity,confidence:track.confidence||.9,trackingId:track.trackId,bbox:track.bbox,metadata:{source:'web_glasses_simulator_auto_vision',temporalSource:'web_glasses_simulator_temporal_vision',automatic:true,temporal:true,adapter:state.visionAdapter?.id||'fixture',...metadata}});
     state.build=result.buildSession;state.validation=null;render();return true;
   }catch(e){log('ERROR',e.message);return false;}
 }
