@@ -247,7 +247,7 @@ function renderDatasetAnnotations(){
   if($('datasetFreezeFrame'))$('datasetFreezeFrame').disabled=!cameraReady||state.dataset.frozen;
   if($('datasetResumeFrame'))$('datasetResumeFrame').disabled=!cameraReady||!state.dataset.frozen;
   if($('datasetCaptureSample'))$('datasetCaptureSample').disabled=!cameraReady;
-  if($('datasetUpload'))$('datasetUpload').disabled=state.dataset.uploading||!$('datasetServerOptIn')?.checked||!state.dataset.samples.some(s=>!s.mediaPublicId);
+  if($('datasetUpload'))$('datasetUpload').disabled=!cfg.canManageMedia||state.dataset.uploading||!$('datasetServerOptIn')?.checked||!state.dataset.samples.some(s=>!s.mediaPublicId);
 }
 function datasetPoint(event){
   const g=cameraPointerGeometry(event);return g?{x:g.videoX,y:g.videoY}:null;
@@ -972,7 +972,7 @@ $('activeLearningNegative').addEventListener('click',()=>acceptActiveLearning('n
 $('activeLearningDiscard').addEventListener('click',()=>{if(state.activeLearning.candidates.length){state.activeLearning.candidates.shift();renderActiveLearning();log('LEARNING','Discarded hard example.');}});
 $('activeLearningClear').addEventListener('click',()=>{state.activeLearning.candidates=[];renderActiveLearning();log('LEARNING','Cleared hard-example queue.');});
 $('datasetAnnotationList').addEventListener('click',e=>{const b=e.target.closest('[data-dataset-remove]');if(!b)return;state.dataset.annotations.splice(Number(b.dataset.datasetRemove),1);renderDatasetAnnotations();});
-$('datasetServerOptIn').addEventListener('change',()=>{renderDatasetAnnotations();$('datasetUploadState').textContent=$('datasetServerOptIn').checked?'Opted in · not uploaded':'Local only';});
+if(!cfg.canManageMedia){$('datasetServerOptIn').disabled=true;$('datasetUploadState').textContent='Glasses manage permission required';}$('datasetServerOptIn').addEventListener('change',()=>{renderDatasetAnnotations();$('datasetUploadState').textContent=$('datasetServerOptIn').checked?'Opted in · not uploaded':'Local only';});
 $('datasetUpload').addEventListener('click',()=>{uploadDatasetSamples().catch(e=>{log('ERROR',e.message);$('datasetUploadState').textContent='Upload failed';});});
 $('cameraTargetConfidence').addEventListener('input',e=>{$('cameraTargetConfidenceValue').textContent=e.target.value+'%';});
 document.addEventListener('visibilitychange',()=>{if(state.cameraTrack){state.cameraTrack.enabled=!document.hidden;setCameraHealth(document.hidden?'paused':'ready',document.hidden?'PAUSED':'READY');}if(document.hidden){stopVisionRuntime('paused');stopLiveStationSync('hidden');}else{if(state.cameraStream)startVisionRuntime();if(state.mode==='live'&&state.device)startLiveStationSync({immediate:true});}});
