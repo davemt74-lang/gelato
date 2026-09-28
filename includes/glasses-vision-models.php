@@ -792,6 +792,7 @@ function glasses_vision_drift_establish_baseline(PDO $pdo,int $org,array $assign
         AVG(brightness_mean) brightness_mean,AVG(contrast_mean) contrast_mean,
         AVG(camera_pitch) camera_pitch_mean,AVG(camera_yaw) camera_yaw_mean,AVG(camera_roll) camera_roll_mean,
         AVG(confidence_mean) confidence_mean,AVG(latency_mean_ms) latency_mean_ms,
+        MAX(frame_width) frame_width,MAX(frame_height) frame_height,MAX(pixel_format) pixel_format,
         COALESCE(SUM(observation_count),0) observations,COALESCE(SUM(correction_count),0) corrections,
         COALESCE(SUM(low_confidence_count),0) low_confidence
         FROM (SELECT * FROM glasses_vision_drift_samples
@@ -815,7 +816,7 @@ function glasses_vision_drift_establish_baseline(PDO $pdo,int $org,array $assign
       ORDER BY id DESC LIMIT 1")
       ->execute(array_merge([
         $org,$packageId,$locationId,$stationId,(string)$assignment['detector_name'],$ctx['calibrationSourceHash'],$ctx['menuSignature'],$ctx['ingredientSignature'],
-        null,null,null,
+        $agg['frame_width'],$agg['frame_height'],$agg['pixel_format'],
         $agg['brightness_mean'],$agg['contrast_mean'],$agg['camera_pitch_mean'],$agg['camera_yaw_mean'],$agg['camera_roll_mean'],
         $agg['confidence_mean'],$agg['latency_mean_ms'],$observations>0?(int)$agg['corrections']/$observations:0,$observations>0?(int)$agg['low_confidence']/$observations:0,
         $org,$packageId,$locationId
