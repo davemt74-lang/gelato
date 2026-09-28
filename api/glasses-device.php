@@ -118,6 +118,20 @@ try{
         app_json_response(['ok'=>true,'buildSession'=>$session]);
     }
 
+    if($action==='build.correct_observation'){
+        $sessionPublicId=trim((string)($in['buildSessionPublicId']??''));
+        if($sessionPublicId==='')throw new InvalidArgumentException('Build session is required.');
+        $result=glasses_build_correct_observation($pdo,$device,$sessionPublicId,$in);
+        app_json_response(['ok'=>true]+$result);
+    }
+
+    if($action==='build.evidence'){
+        $sessionPublicId=trim((string)($in['buildSessionPublicId']??''));
+        if($sessionPublicId==='')throw new InvalidArgumentException('Build session is required.');
+        $items=glasses_build_evidence($pdo,$device,$sessionPublicId,(int)($in['limit']??50));
+        app_json_response(['ok'=>true,'evidence'=>$items]);
+    }
+
     if($action==='validation.evaluate'){
         $sessionPublicId=trim((string)($in['buildSessionPublicId']??''));
         if($sessionPublicId==='')throw new InvalidArgumentException('Build session is required.');
