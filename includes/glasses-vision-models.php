@@ -862,9 +862,9 @@ function glasses_vision_drift_incident(PDO $pdo,int $org,array $assignment,array
       (organization_id,public_id,package_id,rollout_id,location_id,station_id,incident_key,severity,drift_state,category,reasons_json,metadata_json)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
       ON DUPLICATE KEY UPDATE severity=VALUES(severity),drift_state=VALUES(drift_state),last_seen_at=NOW(6),resolved_at=NULL,
-        recovery_status=CASE WHEN recovery_status IN ('resolved','validating') THEN 'reopened' ELSE recovery_status END,
         reopened_count=reopened_count+CASE WHEN recovery_status IN ('resolved','validating') THEN 1 ELSE 0 END,
         validation_stable_samples=CASE WHEN recovery_status IN ('resolved','validating') THEN 0 ELSE validation_stable_samples END,
+        recovery_status=CASE WHEN recovery_status IN ('resolved','validating') THEN 'reopened' ELSE recovery_status END,
         reasons_json=VALUES(reasons_json),metadata_json=VALUES(metadata_json)")
       ->execute([$org,$public,(int)$assignment['package_id'],$assignment['rollout_id']!==null?(int)$assignment['rollout_id']:null,(int)$session['location_id'],$session['station_id']!==null?(int)$session['station_id']:null,$key,$severity,$evaluation['state'],$category,glasses_json_object($evaluation['reasons'],4000),glasses_json_object(['score'=>$evaluation['score'],'categories'=>$evaluation['categories']],4000)]);
 }
