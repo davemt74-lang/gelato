@@ -14,6 +14,19 @@ if(!glasses_ready($pdo))
 
 try{
     if($_SERVER['REQUEST_METHOD']==='GET'){
+        header('Cache-Control: no-store, max-age=0');
+        $action=trim((string)($_GET['action']??'devices'));
+        if($action==='work'){
+            $device=glasses_simulator_device($pdo,$user,(string)($_GET['devicePublicId']??''),false);
+            app_json_response([
+                'ok'=>true,
+                'work'=>glasses_current_work($pdo,$device),
+                'sync'=>[
+                    'serverTime'=>gmdate('c'),
+                    'devicePublicId'=>(string)$device['public_id'],
+                ],
+            ]);
+        }
         app_json_response([
             'ok'=>true,
             'devices'=>glasses_simulator_devices($pdo,$user),
