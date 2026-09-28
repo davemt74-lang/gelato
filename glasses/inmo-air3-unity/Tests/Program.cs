@@ -14,6 +14,7 @@ internal static class Program
         HudContract();
         SimulatorSupportContract();
         await StationCalibrationContract();
+        await SpatialEvidenceFusionContract();
         await VisionPipelineContract();
         Console.WriteLine("air3-unity-shell-ok");
     }
@@ -358,6 +359,134 @@ internal static class Program
         Assert(unavailable == null, "calibration transport failure must degrade to no spatial profile");
         Assert(coordinator.State == WorkflowState.Idle, "optional calibration failure must not put the kitchen workflow into Error");
         Assert(coordinator.LastCalibrationError == "simulated calibration failure", "optional calibration failure must remain diagnosable");
+    }
+
+    private static async Task SpatialEvidenceFusionContract()
+    {
+        var frame = new CameraFrame
+        {
+            Data = new byte[640 * 480],
+            Width = 640,
+            Height = 480,
+            TimestampNanoseconds = 200,
+            PixelFormat = "grayscale8"
+        };
+
+        var calibration = new StationCalibration
+        {
+            PublicId = "station-cal-fusion",
+            FrameWidth = 640,
+            FrameHeight = 480,
+            PixelFormat = "grayscale8",
+            Compatibility = new CalibrationCompatibility { Compatible = true },
+            Zones = new[]
+            {
+                new IngredientZone
+                {
+                    ZoneKey = "turkey-pan",
+                    IngredientId = 42,
+                    DisplayName = "Turkey Pan",
+                    X = 0.10f,
+                    Y = 0.20f,
+                    Width = 0.20f,
+                    Height = 0.20f,
+                    Priority = 20
+                },
+                new IngredientZone
+                {
+                    ZoneKey = "bacon-pan",
+                    IngredientId = 43,
+                    DisplayName = "Bacon Pan",
+                    X = 0.50f,
+                    Y = 0.20f,
+                    Width = 0.20f,
+                    Height = 0.20f,
+                    Priority = 20
+                }
+            }
+        };
+
+        var supportedDetection = new VisionDetection
+        {
+            ComponentKey = "ingredient:42",
+            DisplayName = "Turkey",
+            Confidence = 0.81f,
+            Quantity = 1f,
+            BoundingBox = new[] { 0.14f, 0.24f, 0.08f, 0.08f }
+        };
+        var supported = VisionEvidenceFusion.Evaluate(supportedDetection, calibration, frame, 0.06f, 0.20f);
+        Assert(supported.Kind == SpatialEvidenceKind.Support, "detection centered in its calibrated ingredient zone must receive supporting spatial evidence");
+        Assert(Math.Abs(supported.EffectiveConfidence - 0.87f) < 0.0001f, "supporting station evidence must apply only the configured bounded boost");
+        Assert(supported.ZoneKey == "turkey-pan", "support evidence must identify the contributing station zone");
+
+        var conflictingDetection = new VisionDetection
+        {
+            ComponentKey = "ingredient:42",
+            DisplayName = "Turkey",
+            Confidence = 0.93f,
+            Quantity = 1f,
+            BoundingBox = new[] { 0.54f, 0.24f, 0.08f, 0.08f }
+        };
+        var conflicting = VisionEvidenceFusion.Evaluate(conflictingDetection, calibration, frame, 0.06f, 0.20f);
+        Assert(conflicting.Kind == SpatialEvidenceKind.Conflict, "Turkey detected in the calibrated Bacon zone must be spatially conflicting");
+        Assert(Math.Abs(conflicting.EffectiveConfidence - 0.73f) < 0.0001f, "conflicting station evidence must lower confidence by the configured penalty");
+        Assert(conflicting.ZoneIngredientId == 43, "conflict evidence must identify the conflicting calibrated ingredient");
+
+        var neutralDetection = new VisionDetection
+        {
+            ComponentKey = "ingredient:42",
+            DisplayName = "Turkey",
+            Confidence = 0.81f,
+            Quantity = 1f,
+            BoundingBox = new[] { 0.80f, 0.70f, 0.08f, 0.08f }
+        };
+        var neutral = VisionEvidenceFusion.Evaluate(neutralDetection, calibration, frame, 0.06f, 0.20f);
+        Assert(neutral.Kind == SpatialEvidenceKind.None && Math.Abs(neutral.EffectiveConfidence - 0.81f) < 0.0001f, "detection outside calibrated zones must keep raw visual confidence");
+
+        var unexpectedDetection = new VisionDetection
+        {
+            ComponentKey = "vision:unexpected:cheese",
+            DisplayName = "Cheese",
+            Confidence = 0.94f,
+            Quantity = 1f,
+            BoundingBox = new[] { 0.14f, 0.24f, 0.08f, 0.08f },
+            IsUnexpected = true
+        };
+        var unexpected = VisionEvidenceFusion.Evaluate(unexpectedDetection, calibration, frame, 0.06f, 0.20f);
+        Assert(unexpected.Kind == SpatialEvidenceKind.None && Math.Abs(unexpected.EffectiveConfidence - 0.94f) < 0.0001f, "unexpected evidence must not be legitimized by a recipe ingredient zone");
+
+        var turkey = new BuildComponent
+        {
+            ComponentKey = "ingredient:42",
+            DisplayName = "Turkey",
+            ExpectedQuantity = 3f,
+            Status = "waiting"
+        };
+        var context = new VisionFrameContext
+        {
+            BuildSessionPublicId = "build-spatial-fusion",
+            ExpectedComponents = new[] { turkey },
+            StationCalibration = calibration
+        };
+        var detector = new ScriptedVisionDetector(
+            D("ingredient:42", "Turkey", "turkey-spatial", 0.81f, 1f, 0.14f, 0.24f, 0.08f, 0.08f),
+            D("ingredient:42", "Turkey", "turkey-spatial", 0.81f, 1f, 0.145f, 0.245f, 0.08f, 0.08f)
+        );
+        var pipeline = new VisionPipeline(detector);
+        Assert((await pipeline.ProcessAsync(NextFrame(frame), context)).Count == 0, "spatial support must not bypass temporal stability");
+        var fusedObservation = await pipeline.ProcessAsync(NextFrame(frame), context);
+        Assert(fusedObservation.Count == 1, "stable visually detected ingredient should emit after spatial fusion");
+        Assert(Math.Abs(fusedObservation[0].Confidence - 0.87f) < 0.0001f, "emitted observation must carry effective fused confidence");
+        Assert(pipeline.Diagnostics.SpatialSupports == 2, "spatial support diagnostics must count candidate-frame evidence");
+
+        var lowDetector = new ScriptedVisionDetector(
+            D("ingredient:42", "Turkey", "turkey-too-low", 0.48f, 1f, 0.14f, 0.24f, 0.08f, 0.08f),
+            D("ingredient:42", "Turkey", "turkey-too-low", 0.48f, 1f, 0.145f, 0.245f, 0.08f, 0.08f)
+        );
+        var lowPipeline = new VisionPipeline(lowDetector);
+        Assert((await lowPipeline.ProcessAsync(NextFrame(frame), context)).Count == 0, "below-floor raw visual evidence must be rejected before spatial support");
+        Assert((await lowPipeline.ProcessAsync(NextFrame(frame), context)).Count == 0, "station location alone must never create a recipe observation");
+        Assert(lowPipeline.Diagnostics.SpatialSupports == 0, "rejected raw visual candidates must not be counted as spatially supported observations");
     }
 
     private static async Task VisionPipelineContract()
