@@ -160,6 +160,22 @@ gws_assert(str_contains($js,'function crc32'),'Dataset ZIP writer must provide v
 gws_assert(str_contains($js,'state.dataset.samples'),'Dataset samples must remain browser-local state.');
 gws_assert(!str_contains($core,'vision_training_dataset'),'Dataset capture must not add a server-side mutation path.');
 gws_assert(str_contains($css,'.dataset-annotation-layer')&&str_contains($css,'.dataset-box'),'Dataset annotations must have visible independent overlay styling.');
+gws_assert(str_contains($page,'activeLearningEnabled')&&str_contains($page,'activeLearningCurrent'),'Simulator must expose a local hard-example capture/review queue.');
+gws_assert(str_contains($page,'activeLearningAccept')&&str_contains($page,'activeLearningReclassify')&&str_contains($page,'activeLearningNegative'),'Hard examples must require explicit human acceptance, reclassification, or negative-frame review.');
+gws_assert(str_contains($js,'captureHardExample'),'Vision runtime must capture hard examples through a bounded local candidate path.');
+gws_assert(str_contains($js,'activeLearning.lastCaptureByKey')&&str_contains($js,'cooldownMs:10000'),'Hard-example capture must deduplicate repeated detector failures with a bounded cooldown.');
+gws_assert(str_contains($js,'maxQueue:30'),'Active-learning browser memory must use a bounded candidate queue.');
+gws_assert(str_contains($js,"captureHardExample('low_confidence'"),'Below-threshold detector outputs must be eligible as hard examples.');
+gws_assert(str_contains($js,"captureHardExample('sequence_violation'"),'Temporal sequence violations must be eligible as hard examples.');
+gws_assert(str_contains($js,"replacement?'replacement':'track_disappearance'"),'Stable disappearance/replacement events must be eligible as hard examples.');
+gws_assert(str_contains($js,"captureHardExample('manual_low_confidence'"),'Manual low-confidence review must be eligible as a hard example.');
+gws_assert(str_contains($js,'function candidateToDataset'),'Reviewed hard examples must enter the existing training dataset only through an explicit review step.');
+gws_assert(str_contains($js,"mode==='negative'")&&str_contains($js,'annotations=[]'),'False-positive review must support negative/background training frames.');
+gws_assert(str_contains($js,"schema:'gelato.vision_active_learning.v1'"),'YOLO export must identify reviewed active-learning samples with a versioned manifest contract.');
+gws_assert(str_contains($js,'reviewOutcomes:reviewCounts'),'YOLO export must summarize active-learning human review outcomes.');
+gws_assert(!str_contains($core,'vision_active_learning'),'Active-learning image capture must remain browser-local with no new server image mutation path.');
+gws_assert(str_contains($css,'.active-learning-panel')&&str_contains($css,'.active-learning-row'),'Active-learning candidates must have visible review UI states.');
+
 
 
 
