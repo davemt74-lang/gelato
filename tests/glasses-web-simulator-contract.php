@@ -145,6 +145,22 @@ gws_assert(str_contains($js,'profileMinimumConfidence'),'Per-label profile confi
 gws_assert(str_contains($js,"id:'onnx'"),'Browser vision adapter registry must include a real ONNX adapter.');
 gws_assert(str_contains($js,'unloadGovernedVisionModel'),'Build/device boundaries must release governed browser model sessions.');
 gws_assert(str_contains($css,'.vision-model-status'),'Governed model verification state must be visible in the simulator.');
+gws_assert(str_contains($page,'datasetLabelMode')&&str_contains($page,'datasetClassSelect'),'Simulator must expose local dataset labeling controls.');
+gws_assert(str_contains($page,'datasetCaptureSample')&&str_contains($page,'datasetExport'),'Simulator must support labeled frame capture and dataset export.');
+gws_assert(str_contains($page,'datasetAnnotationLayer'),'Dataset boxes must render in a dedicated camera overlay layer.');
+gws_assert(str_contains($js,'function startDatasetBox')&&str_contains($js,'function finishDatasetBox'),'Dataset labeling must support drag-defined bounding boxes.');
+gws_assert(str_contains($js,'cameraPointerGeometry(event)'),'Dataset boxes must reuse camera/video geometry rather than screen-only coordinates.');
+gws_assert(str_contains($js,"canvasToBlob(canvas,'image/jpeg'"),'Dataset samples must capture real camera frames as JPEG bytes.');
+gws_assert(str_contains($js,'gelato.vision_training_dataset.v1'),'Dataset export must include a versioned Gelato training manifest.');
+gws_assert(str_contains($js,"format:'yolo_detection'"),'Dataset export must declare YOLO object-detection format.');
+gws_assert(str_contains($js,"images/train/frame-")&&str_contains($js,"labels/train/frame-"),'Dataset export must use YOLO image/label directory structure.');
+gws_assert(str_contains($js,"name:'data.yaml'"),'Dataset export must include YOLO data.yaml.');
+gws_assert(str_contains($js,'function zipStore'),'Dataset export must create a self-contained ZIP without a server upload dependency.');
+gws_assert(str_contains($js,'function crc32'),'Dataset ZIP writer must provide valid CRC-32 entries.');
+gws_assert(str_contains($js,'state.dataset.samples'),'Dataset samples must remain browser-local state.');
+gws_assert(!str_contains($core,'vision_training_dataset'),'Dataset capture must not add a server-side mutation path.');
+gws_assert(str_contains($css,'.dataset-annotation-layer')&&str_contains($css,'.dataset-box'),'Dataset annotations must have visible independent overlay styling.');
+
 
 
 
