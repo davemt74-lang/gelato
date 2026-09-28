@@ -93,6 +93,10 @@ namespace Gelato.Ar.Core
                 list.Add(component);
             }
 
+            var visionProfile = ProfileApplies(context.VisionProfile, _detector.DetectorName, context.BuildSessionPublicId)
+                ? context.VisionProfile
+                : null;
+
             var accepted = new List<VisionDetection>();
             var detectionLimit = Math.Min(detections.Count, _options.MaxDetectionsPerFrame);
             for (var i = 0; i < detectionLimit; i++)
@@ -118,8 +122,19 @@ namespace Gelato.Ar.Core
                     continue;
                 }
 
-                if (!TryResolveDetection(detection, expectedByKey, expectedByName))
+                if (!TryResolveDetection(detection, expectedByKey, expectedByName, visionProfile, out var displayNameFallback))
                 {
+                    Diagnostics.DetectionsRejected++;
+                    continue;
+                }
+
+                if (detection.ProfileMatched) Diagnostics.ProfileLabelMatches++;
+                else if (displayNameFallback) Diagnostics.DisplayNameFallbackMatches++;
+
+                if (detection.ProfileMinimumConfidence.HasValue
+                    && detection.Confidence < Math.Max(_options.MinimumConfidence, detection.ProfileMinimumConfidence.Value))
+                {
+                    Diagnostics.ProfileThresholdRejects++;
                     Diagnostics.DetectionsRejected++;
                     continue;
                 }
@@ -220,7 +235,10 @@ namespace Gelato.Ar.Core
                         EvidenceKind = detection.EvidenceKind,
                         EvidenceSourceZoneKey = detection.EvidenceSourceZoneKey,
                         EvidenceDestinationRegionKey = detection.EvidenceDestinationRegionKey,
-                        EvidenceSequenceSupported = detection.EvidenceSequenceSupported
+                        EvidenceSequenceSupported = detection.EvidenceSequenceSupported,
+                        DetectorLabel = detection.Label ?? string.Empty,
+                        ProfileMatched = detection.ProfileMatched,
+                        ProfileMinimumConfidence = detection.ProfileMinimumConfidence
                     };
                     _tracks.Add(track);
                 }
@@ -240,6 +258,9 @@ namespace Gelato.Ar.Core
                     track.EvidenceSourceZoneKey = detection.EvidenceSourceZoneKey;
                     track.EvidenceDestinationRegionKey = detection.EvidenceDestinationRegionKey;
                     track.EvidenceSequenceSupported = detection.EvidenceSequenceSupported;
+                    track.DetectorLabel = detection.Label ?? string.Empty;
+                    track.ProfileMatched = detection.ProfileMatched;
+                    track.ProfileMinimumConfidence = detection.ProfileMinimumConfidence;
                     if (!string.IsNullOrWhiteSpace(detection.InstanceKey)) track.InstanceKey = detection.InstanceKey;
                 }
 
@@ -261,7 +282,10 @@ namespace Gelato.Ar.Core
                     EvidenceKind = track.EvidenceKind,
                     EvidenceSourceZoneKey = track.EvidenceSourceZoneKey,
                     EvidenceDestinationRegionKey = track.EvidenceDestinationRegionKey,
-                    EvidenceSequenceSupported = track.EvidenceSequenceSupported
+                    EvidenceSequenceSupported = track.EvidenceSequenceSupported,
+                    DetectorLabel = track.DetectorLabel,
+                    VisionProfileMatched = track.ProfileMatched,
+                    VisionProfileMinimumConfidence = track.ProfileMinimumConfidence
                 };
                 observations.Add(observation);
                 Diagnostics.ObservationsEmitted++;
@@ -283,12 +307,19 @@ namespace Gelato.Ar.Core
         private static bool TryResolveDetection(
             VisionDetection detection,
             IReadOnlyDictionary<string, BuildComponent> expectedByKey,
-            IReadOnlyDictionary<string, List<BuildComponent>> expectedByName)
+            IReadOnlyDictionary<string, List<BuildComponent>> expectedByName,
+            VisionLabelProfile? visionProfile,
+            out bool displayNameFallback)
         {
+            displayNameFallback = false;
+            detection.ProfileMatched = false;
+            detection.ProfileMinimumConfidence = null;
+
             var componentKey = detection.ComponentKey?.Trim() ?? string.Empty;
             var label = !string.IsNullOrWhiteSpace(detection.Label)
                 ? detection.Label.Trim()
                 : detection.DisplayName?.Trim() ?? string.Empty;
+            detection.Label = label;
 
             if (detection.IsUnexpected)
             {
@@ -297,7 +328,6 @@ namespace Gelato.Ar.Core
                     : (!string.IsNullOrWhiteSpace(label) ? label : "Unexpected Ingredient");
 
                 detection.DisplayName = display;
-                detection.Label = label;
                 detection.ComponentKey = componentKey.Length > 0
                     ? componentKey
                     : "vision:unexpected:" + Slug(display);
@@ -314,6 +344,32 @@ namespace Gelato.Ar.Core
 
             var normalized = NormalizeLabel(label);
             if (normalized.Length == 0) return false;
+
+            if (visionProfile?.Mappings != null && visionProfile.Mappings.Count > 0)
+            {
+                VisionLabelMapping? profileMatch = null;
+                foreach (var mapping in visionProfile.Mappings)
+                {
+                    if (mapping == null) continue;
+                    var mappingLabel = !string.IsNullOrWhiteSpace(mapping.NormalizedLabel)
+                        ? NormalizeLabel(mapping.NormalizedLabel)
+                        : NormalizeLabel(mapping.ModelLabel);
+                    if (!string.Equals(mappingLabel, normalized, StringComparison.Ordinal)) continue;
+                    if (profileMatch != null) return false; // Duplicate client mapping fails closed.
+                    profileMatch = mapping;
+                }
+
+                if (profileMatch != null)
+                {
+                    if (!expectedByKey.TryGetValue(profileMatch.ComponentKey, out var mapped)) return false;
+                    detection.ComponentKey = mapped.ComponentKey;
+                    detection.DisplayName = mapped.DisplayName;
+                    detection.ProfileMatched = true;
+                    detection.ProfileMinimumConfidence = profileMatch.MinimumConfidence;
+                    return true;
+                }
+            }
+
             if (!expectedByName.TryGetValue(normalized, out var matches) || matches.Count != 1) return false;
 
             var resolved = matches[0];
@@ -321,7 +377,20 @@ namespace Gelato.Ar.Core
             detection.DisplayName = string.IsNullOrWhiteSpace(detection.DisplayName)
                 ? resolved.DisplayName
                 : detection.DisplayName.Trim();
+            displayNameFallback = true;
             return true;
+        }
+
+        private static bool ProfileApplies(VisionLabelProfile? profile, string detectorName, string buildSessionPublicId)
+        {
+            if (profile == null) return false;
+            if (!string.Equals(profile.BuildSessionPublicId?.Trim(), buildSessionPublicId?.Trim(), StringComparison.Ordinal))
+                return false;
+            return string.Equals(
+                NormalizeDetector(profile.DetectorName),
+                NormalizeDetector(detectorName),
+                StringComparison.Ordinal
+            );
         }
 
         private TrackState? FindTrack(VisionDetection detection, HashSet<int> alreadyMatched)
@@ -383,6 +452,27 @@ namespace Gelato.Ar.Core
             return builder.ToString();
         }
 
+        private static string NormalizeDetector(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return "*";
+            var builder = new StringBuilder(value.Length);
+            var pendingDash = false;
+            foreach (var ch in value.Trim().ToLowerInvariant())
+            {
+                if (char.IsLetterOrDigit(ch) || ch == '.' || ch == '_' || ch == '-')
+                {
+                    if (pendingDash && builder.Length > 0 && builder[builder.Length - 1] != '-') builder.Append('-');
+                    builder.Append(ch);
+                    pendingDash = false;
+                }
+                else
+                {
+                    pendingDash = true;
+                }
+            }
+            return builder.ToString().Trim('-');
+        }
+
         private static string Slug(string value)
         {
             var normalized = NormalizeLabel(value);
@@ -415,6 +505,9 @@ namespace Gelato.Ar.Core
             public string EvidenceSourceZoneKey = string.Empty;
             public string EvidenceDestinationRegionKey = string.Empty;
             public bool EvidenceSequenceSupported;
+            public string DetectorLabel = string.Empty;
+            public bool ProfileMatched;
+            public float? ProfileMinimumConfidence;
             public bool Emitted;
         }
     }
