@@ -12,7 +12,7 @@ on:
       - 'docs/GLASSES-WEB-SIMULATOR.md'
       - '.github/workflows/glasses-web-simulator.yml'
   push:
-    branches: ['feature/web-glasses-simulator', 'feature/web-glasses-calibration', 'feature/web-glasses-svg-optics', 'feature/web-glasses-hud-fidelity', 'feature/web-glasses-live-station-sync', 'feature/web-glasses-browser-camera', 'feature/web-glasses-auto-vision', 'feature/web-glasses-temporal-validation', 'feature/web-glasses-real-browser-model', 'feature/vision-dataset-capture-export', 'feature/vision-active-learning-hard-examples']
+    branches: ['feature/web-glasses-simulator', 'feature/web-glasses-calibration', 'feature/web-glasses-svg-optics', 'feature/web-glasses-hud-fidelity', 'feature/web-glasses-live-station-sync', 'feature/web-glasses-browser-camera', 'feature/web-glasses-auto-vision', 'feature/web-glasses-temporal-validation', 'feature/web-glasses-real-browser-model', 'feature/vision-dataset-capture-export', 'feature/vision-active-learning-hard-examples', 'feature/vision-shadow-live-evaluation']
 
 jobs:
   web-glasses-simulator:
