@@ -9,7 +9,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Web Glasses Simulator · Gelato</title>
-<link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20260928-hud1">
+<link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20260928-sync1">
 </head>
 <body>
 <header class="sim-topbar">
@@ -37,6 +37,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
       <span id="connectionBadge" class="sim-badge">MOCK</span>
       <span id="stationBadge" class="sim-muted">Simulator station</span>
       <span id="buildBadge" class="sim-muted">No active build</span>
+      <span id="syncBadge" class="sim-sync-badge paused">SYNC PAUSED</span>
     </div>
 
     <div class="glasses-stage" id="glassesStage">
@@ -211,6 +212,6 @@ window.GELATO_GLASSES_SIMULATOR={
   api:'api/glasses-simulator.php'
 };
 </script>
-<script src="assets/js/glasses-web-simulator.js?v=20260928-hud1"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20260928-sync1"></script>
 </body>
 </html>
