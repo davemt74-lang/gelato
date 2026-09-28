@@ -28,7 +28,9 @@ jobs:
           grep -q 'InferenceTimeout' glasses/inmo-air3-unity/Runtime/Core/VisionDetectorRuntimeHarness.cs
           grep -q 'BackpressureDrops' glasses/inmo-air3-unity/Runtime/Core/VisionDetectorRuntimeHarness.cs
           grep -q 'VisionDetectorRuntimeState.Failed' glasses/inmo-air3-unity/Runtime/Core/VisionDetectorRuntimeHarness.cs
-          grep -q 'ContinueWith' glasses/inmo-air3-unity/Runtime/Core/VisionDetectorRuntimeHarness.cs
+          grep -q 'DrainTimedOutInferenceAndRecoverAsync' glasses/inmo-air3-unity/Runtime/Core/VisionDetectorRuntimeHarness.cs
+          grep -q 'LastInferenceFps' glasses/inmo-air3-unity/Runtime/Core/VisionDetectorRuntimeHarness.cs
+          grep -q 'detector restart must preserve exactly-once observation emission' glasses/inmo-air3-unity/Tests/VisionDetectorRuntimeHarnessContract.cs
           grep -q 'VisionDetectorRuntimeHarness' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
           grep -q 'automated vision is held fail-closed' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
           grep -q 'class DesktopSimulatorVisionDetector' glasses/inmo-air3-unity/Runtime/Unity/DesktopSimulatorVisionDetector.cs
