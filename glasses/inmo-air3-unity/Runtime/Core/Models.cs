@@ -307,6 +307,7 @@ namespace Gelato.Ar.Core
 
     public sealed class VisionModelReport
     {
+        public string AssignmentKey { get; set; } = string.Empty;
         public string ReportKey { get; set; } = string.Empty;
         public string ReportType { get; set; } = string.Empty;
         public string RolloutPublicId { get; set; } = string.Empty;
