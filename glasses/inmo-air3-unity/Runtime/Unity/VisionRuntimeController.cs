@@ -10,6 +10,7 @@ namespace Gelato.Ar.Unity
         [SerializeField] private GelatoArBootstrap bootstrap;
         [SerializeField] private VisionDetectorBehaviour detector;
         [SerializeField] private ArHudRuntimeBinder hudBinder;
+        [SerializeField] private VisionModelRuntimeHostBehaviour modelRuntimeHost;
 
         [Header("Inference")]
         [SerializeField, Range(1f, 30f)] private float maximumInferenceFps = 6f;
@@ -26,6 +27,7 @@ namespace Gelato.Ar.Unity
         private bool _stationCalibrationLoaded;
         private bool _visionProfileLoaded;
         private bool _visionModelAssignmentLoaded;
+        private VisionModelActivationService _modelActivationService;
 
         public string DetectorName => _pipeline == null ? string.Empty : _pipeline.DetectorName;
         public int ActiveTrackCount => _pipeline == null ? 0 : _pipeline.ActiveTrackCount;
@@ -46,6 +48,19 @@ namespace Gelato.Ar.Unity
                 MaxMissingFrames = maxMissingFrames,
                 AssociationIouThreshold = associationIouThreshold
             });
+
+            if (modelRuntimeHost != null)
+            {
+                _modelActivationService = new VisionModelActivationService(
+                    new UnityVisionModelArtifactFetcher(),
+                    modelRuntimeHost,
+                    async (report, token) =>
+                    {
+                        if (bootstrap == null || bootstrap.Coordinator == null) return false;
+                        return await bootstrap.Coordinator.ReportVisionModelAsync(report, token);
+                    }
+                );
+            }
         }
 
         private async void Update()
@@ -100,16 +115,33 @@ namespace Gelato.Ar.Unity
 
                         if (string.Equals(assignment.Action, "apply", StringComparison.Ordinal))
                         {
-                            if (VisionModelAssignmentPolicy.CanApply(assignment, _pipeline.DetectorName, out var reasons))
+                            if (!VisionModelAssignmentPolicy.CanApply(assignment, _pipeline.DetectorName, out var reasons))
                             {
-                                Debug.Log("Gelato AR governed model package is eligible for runtime activation: "
-                                    + (assignment.Package?.ModelName ?? "unknown") + " "
-                                    + (assignment.Package?.ModelVersion ?? string.Empty)
-                                    + ". Activation is deferred until a verified model-loader implementation is installed.");
+                                Debug.LogWarning("Gelato AR governed model assignment failed client policy: " + string.Join(",", reasons));
+                            }
+                            else if (_modelActivationService == null)
+                            {
+                                Debug.LogWarning("Gelato AR governed model assignment is valid, but no runtime host is configured. The current known-good detector remains active.");
+                            }
+                            else if (!string.Equals(modelRuntimeHost.DetectorName, _pipeline.DetectorName, StringComparison.Ordinal))
+                            {
+                                Debug.LogWarning("Gelato AR model runtime host detector does not match the active vision pipeline. The current known-good detector remains active.");
                             }
                             else
                             {
-                                Debug.LogWarning("Gelato AR governed model assignment failed client policy: " + string.Join(",", reasons));
+                                var activation = await _modelActivationService.ApplyAsync(assignment, _lifetime.Token);
+                                if (activation.Activated)
+                                {
+                                    Debug.Log("Gelato AR verified model activated atomically: "
+                                        + (activation.Package?.ModelName ?? "unknown") + " "
+                                        + (activation.Package?.ModelVersion ?? string.Empty));
+                                }
+                                else
+                                {
+                                    Debug.LogWarning("Gelato AR model activation failed closed: "
+                                        + activation.ErrorCode + " " + activation.Message
+                                        + (activation.RestoredPrevious ? " Previous known-good runtime restored." : string.Empty));
+                                }
                             }
                         }
                     }

@@ -1,0 +1,55 @@
+name: AR Glasses Verified Model Activation
+
+on:
+  pull_request:
+    paths:
+      - 'glasses/inmo-air3-unity/Runtime/Core/VisionModelActivation.cs'
+      - 'glasses/inmo-air3-unity/Runtime/Core/VisionModelRolloutPolicy.cs'
+      - 'glasses/inmo-air3-unity/Runtime/Core/Models.cs'
+      - 'glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs'
+      - 'glasses/inmo-air3-unity/Runtime/Unity/UnityVisionModelArtifactFetcher.cs'
+      - 'glasses/inmo-air3-unity/Runtime/Unity/VisionModelRuntimeHostBehaviour.cs'
+      - 'glasses/inmo-air3-unity/Tests/**'
+      - 'docs/GLASSES-VISION-MODEL-ACTIVATION.md'
+      - '.github/workflows/glasses-vision-model-activation.yml'
+  push:
+    branches: [main, 'feature/glasses-model-artifact-activation']
+
+jobs:
+  verified-model-activation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Architecture and safety contract
+        run: |
+          grep -q 'class VisionModelActivationService' glasses/inmo-air3-unity/Runtime/Core/VisionModelActivation.cs
+          grep -q 'interface IVisionModelArtifactFetcher' glasses/inmo-air3-unity/Runtime/Core/VisionModelActivation.cs
+          grep -q 'interface IVisionModelRuntimeHost' glasses/inmo-air3-unity/Runtime/Core/VisionModelActivation.cs
+          grep -q 'artifact_sha256_mismatch' glasses/inmo-air3-unity/Runtime/Core/VisionModelActivation.cs
+          grep -q 'artifact_size_mismatch' glasses/inmo-air3-unity/Runtime/Core/VisionModelActivation.cs
+          grep -q 'runtime_activation_failed' glasses/inmo-air3-unity/Runtime/Core/VisionModelActivation.cs
+          grep -q 'RestoreAsync(previous, CancellationToken.None)' glasses/inmo-air3-unity/Runtime/Core/VisionModelActivation.cs
+          grep -q 'UnityVisionModelArtifactFetcher' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
+          grep -q '_modelActivationService.ApplyAsync' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
+          grep -q 'VisionModelRuntimeHostBehaviour' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
+          grep -q 'Uri.UriSchemeHttps' glasses/inmo-air3-unity/Runtime/Unity/UnityVisionModelArtifactFetcher.cs
+          ! grep -R 'ArPoseManager' glasses/inmo-air3-unity/Runtime/Core
+          ! grep -q 'kds_transition' glasses/inmo-air3-unity/Runtime/Core/VisionModelActivation.cs
+
+      - name: Compile hardware-neutral AR core
+        run: dotnet build glasses/inmo-air3-unity/Runtime/Core/Gelato.Ar.Core.csproj -c Release --nologo
+
+      - name: Run full AIR3 behavior contracts
+        run: dotnet run --project glasses/inmo-air3-unity/Tests/Gelato.Ar.Core.Tests.csproj -c Release
+
+      - name: Preserve Section 19 rollout boundary
+        run: |
+          grep -q 'VisionModelAssignmentPolicy.CanApply' glasses/inmo-air3-unity/Runtime/Core/VisionModelActivation.cs
+          grep -q 'VisionLabelProfile' glasses/inmo-air3-unity/Runtime/Core/Models.cs
+          grep -q 'MinimumConfidence' glasses/inmo-air3-unity/Runtime/Core/VisionModels.cs
+          grep -q 'VisionProfile' glasses/inmo-air3-unity/Runtime/Core/VisionPipeline.cs
+          grep -q 'RefreshVisionLabelProfileAsync' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
