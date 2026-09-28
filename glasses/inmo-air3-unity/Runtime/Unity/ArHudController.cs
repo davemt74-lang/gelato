@@ -10,6 +10,9 @@ namespace Gelato.Ar.Unity
         private Text _itemBody;
         private Text _buildBody;
         private Text _validationBody;
+        private Text _reviewTitle;
+        private Text _reviewBody;
+        private GameObject _reviewPanel;
         private Text _nextTitle;
         private Text _nextBody;
         private GameObject _nextPanel;
@@ -27,6 +30,12 @@ namespace Gelato.Ar.Unity
             _itemBody.text = model.ItemBody ?? string.Empty;
             _buildBody.text = model.BuildBody ?? string.Empty;
             _validationBody.text = model.ValidationBody ?? string.Empty;
+            _reviewTitle.text = model.ReviewTitle ?? string.Empty;
+            _reviewBody.text = model.ReviewBody ?? string.Empty;
+            _reviewTitle.color = model.ReviewAttention
+                ? new Color(1f, 0.76f, 0.34f, 1f)
+                : new Color(0.55f, 0.9f, 1f, 1f);
+            _reviewPanel.SetActive(model.ShowReview);
             _nextTitle.text = model.NextTitle ?? string.Empty;
             _nextBody.text = model.NextBody ?? string.Empty;
             _nextPanel.SetActive(model.ShowNext);
@@ -65,17 +74,23 @@ namespace Gelato.Ar.Unity
             layout.childControlHeight = false;
             layout.childForceExpandHeight = false;
 
-            var item = CreateSection(rail.transform, "ITEM", 142f);
+            var item = CreateSection(rail.transform, "ITEM", 125f);
             _itemTitle = item.Title;
             _itemBody = item.Body;
 
-            var build = CreateSection(rail.transform, "BUILD STEPS", 400f);
+            var build = CreateSection(rail.transform, "BUILD STEPS", 315f);
             _buildBody = build.Body;
 
-            var validation = CreateSection(rail.transform, "PRODUCT VALIDATION", 282f);
+            var validation = CreateSection(rail.transform, "PRODUCT VALIDATION", 240f);
             _validationBody = validation.Body;
 
-            var next = CreateSection(rail.transform, "NEXT", 124f);
+            var review = CreateSection(rail.transform, "HANDS-FREE", 105f);
+            _reviewPanel = review.Root;
+            _reviewTitle = review.Title;
+            _reviewBody = review.Body;
+            _reviewPanel.SetActive(false);
+
+            var next = CreateSection(rail.transform, "NEXT", 110f);
             _nextPanel = next.Root;
             _nextTitle = next.Title;
             _nextBody = next.Body;
