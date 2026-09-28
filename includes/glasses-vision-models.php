@@ -836,14 +836,10 @@ function glasses_vision_drift_compare(array $baseline,array $sample,array $ctx):
     }
     if($baseline['frame_width']!==null&&$sample['frameWidth']!==null&&((int)$baseline['frame_width']!==(int)$sample['frameWidth']||(int)$baseline['frame_height']!==(int)$sample['frameHeight']))$add('frame_geometry_changed','camera_config',.65,true);
     if($baseline['pixel_format']!==null&&$sample['pixelFormat']!==null&&!hash_equals((string)$baseline['pixel_format'],(string)$sample['pixelFormat']))$add('pixel_format_changed','camera_config',.65,true);
-    $brightness=abs((float)$sample['brightnessMean']-(float)($baseline['brightness_mean']??$sample['brightnessMean']));
-    if($brightness>.30)$add('lighting_shift_critical','lighting',.55,true);elseif($brightness>.18)$add('lighting_shift','lighting',.25);
-    $contrast=abs((float)$sample['contrastMean']-(float)($baseline['contrast_mean']??$sample['contrastMean']));
-    if($contrast>.30)$add('contrast_shift_critical','lighting',.50,true);elseif($contrast>.18)$add('contrast_shift','lighting',.22);
-    $pose=max(abs((float)$sample['cameraPitch']-(float)($baseline['camera_pitch_mean']??$sample['cameraPitch'])),abs((float)$sample['cameraYaw']-(float)($baseline['camera_yaw_mean']??$sample['cameraYaw'])),abs((float)$sample['cameraRoll']-(float)($baseline['camera_roll_mean']??$sample['cameraRoll'])));
-    if($pose>25)$add('camera_pose_shift_critical','camera_pose',.55,true);elseif($pose>12)$add('camera_pose_shift','camera_pose',.28);
-    $confDrop=(float)($baseline['confidence_mean']??$sample['confidenceMean'])-(float)$sample['confidenceMean'];
-    if($confDrop>.25)$add('confidence_collapse','model_quality',.55,true);elseif($confDrop>.12)$add('confidence_degradation','model_quality',.25);
+    if($sample['brightnessMean']!==null&&$baseline['brightness_mean']!==null){$brightness=abs((float)$sample['brightnessMean']-(float)$baseline['brightness_mean']);if($brightness>.30)$add('lighting_shift_critical','lighting',.55,true);elseif($brightness>.18)$add('lighting_shift','lighting',.25);}
+    if($sample['contrastMean']!==null&&$baseline['contrast_mean']!==null){$contrast=abs((float)$sample['contrastMean']-(float)$baseline['contrast_mean']);if($contrast>.30)$add('contrast_shift_critical','lighting',.50,true);elseif($contrast>.18)$add('contrast_shift','lighting',.22);}
+    if($sample['cameraPitch']!==null&&$sample['cameraYaw']!==null&&$sample['cameraRoll']!==null&&$baseline['camera_pitch_mean']!==null&&$baseline['camera_yaw_mean']!==null&&$baseline['camera_roll_mean']!==null){$pose=max(abs((float)$sample['cameraPitch']-(float)$baseline['camera_pitch_mean']),abs((float)$sample['cameraYaw']-(float)$baseline['camera_yaw_mean']),abs((float)$sample['cameraRoll']-(float)$baseline['camera_roll_mean']));if($pose>25)$add('camera_pose_shift_critical','camera_pose',.55,true);elseif($pose>12)$add('camera_pose_shift','camera_pose',.28);}
+    if($sample['confidenceMean']!==null&&$baseline['confidence_mean']!==null){$confDrop=(float)$baseline['confidence_mean']-(float)$sample['confidenceMean'];if($confDrop>.25)$add('confidence_collapse','model_quality',.55,true);elseif($confDrop>.12)$add('confidence_degradation','model_quality',.25);}
     $baseLatency=(float)($baseline['latency_mean_ms']??0);
     if($baseLatency>0&&$sample['latencyMeanMs']!==null){$ratio=(float)$sample['latencyMeanMs']/$baseLatency;if($ratio>2)$add('latency_spike_critical','runtime',.50,true);elseif($ratio>1.5)$add('latency_spike','runtime',.22);}
     $obs=max(0,(int)$sample['observationCount']);$corrRate=$obs>0?(int)$sample['correctionCount']/$obs:0;$lowRate=$obs>0?(int)$sample['lowConfidenceCount']/$obs:0;
