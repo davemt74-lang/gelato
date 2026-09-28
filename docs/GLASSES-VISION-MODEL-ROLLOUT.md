@@ -476,3 +476,99 @@ The canary ledger stores production metrics and governance evidence, not kitchen
 The complete promotion path is now:
 
 Offline quality gate → golden-set champion comparison → live shadow → 5% canary → health-gated 10% → 25% → 50% → 100%, with automatic rollback available at every production stage.
+
+
+## Continuous production drift detection
+
+Gelato now monitors whether a previously healthy model/environment combination changes materially after deployment.
+
+### Baseline scope
+
+A production drift baseline is scoped by:
+
+- organization;
+- model package;
+- location;
+- station;
+- detector.
+
+The baseline is established from the first 20 stable production samples for that package/station combination. It stores only numerical/environment metadata, never kitchen images.
+
+Baseline signals include:
+
+- active station-calibration `sourceHash`;
+- server-derived menu/build-definition signature;
+- server-derived expected-ingredient signature;
+- frame width / height / pixel format;
+- brightness and contrast;
+- camera pitch / yaw / roll;
+- mean detector confidence;
+- mean inference latency;
+- correction rate;
+- low-confidence rate.
+
+Menu and ingredient signatures are derived server-side from the active build session so a device cannot redefine those identities.
+
+### Drift states
+
+Each subsequent authenticated `vision.drift_sample` is classified as:
+
+- **calibrating** — baseline has not yet reached 20 samples;
+- **stable** — current environment/model behavior remains near baseline;
+- **watch** — small but meaningful change;
+- **drifted** — promotion-blocking change;
+- **critical** — severe change requiring production safety action.
+
+Examples include:
+
+- lighting/contrast shift;
+- camera-pose movement;
+- frame geometry or pixel-format change;
+- station calibration replacement;
+- menu/build-definition change;
+- expected-ingredient set change;
+- detector confidence degradation;
+- inference-latency spike;
+- correction-rate or low-confidence-rate growth.
+
+### Environment vs data-domain awareness
+
+Drift reasons carry categories so operators can distinguish:
+
+- `lighting`;
+- `camera_pose`;
+- `camera_config`;
+- `environment` / calibration change;
+- `data_domain` / menu or ingredient change;
+- `model_quality`;
+- `runtime`.
+
+This prevents a station move or new recipe from being mislabeled simply as “the model got worse.”
+
+### Durable incidents
+
+Migration `20261024_glasses_vision_production_drift.sql` adds:
+
+- `glasses_vision_drift_baselines`;
+- `glasses_vision_drift_samples`;
+- `glasses_vision_drift_incidents`.
+
+Drift incidents are deduplicated by package/scope/category/reason signature and retain first/last-seen timestamps.
+
+### Rollout safety integration
+
+A `drifted` or `critical` target blocks normal canary advancement.
+
+A **critical** drift sample on an active rollout:
+
+1. changes the rollout to `rolled_back`;
+2. restores subsequent assignments to the declared baseline package;
+3. writes an immutable `drift_auto_rolled_back` rollout event;
+4. places the target package on the existing 24-hour production cooldown when canary governance is installed;
+5. leaves a durable drift incident explaining whether the likely cause was environment, data-domain, model-quality, or runtime change.
+
+No drift path mutates POS, KDS, build observations, validation, or Expo state.
+
+The production safety loop is now:
+
+Train → golden test → shadow → canary → production → continuous drift awareness → hold/rollback when the deployed environment or data distribution materially changes.
