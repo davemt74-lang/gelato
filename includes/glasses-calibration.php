@@ -22,6 +22,45 @@ function glasses_station_calibration_station(PDO $pdo,int $org,int $locationId,s
     return ['id'=>(int)$row['id'],'publicId'=>(string)$row['public_id'],'name'=>(string)$row['name']];
 }
 
+function glasses_station_calibration_region(array $region,int $index): array
+{
+    $allowed=['build_surface','plate_surface','handoff_surface','discard_surface'];
+    $type=mb_strtolower(trim((string)($region['regionType']??'build_surface')),'UTF-8');
+    if(!in_array($type,$allowed,true))throw new InvalidArgumentException('Calibration region type is invalid.');
+
+    $regionKey=mb_substr(trim((string)($region['regionKey']??'')),0,160,'UTF-8');
+    if($regionKey==='')$regionKey=$type.':'.($index+1);
+
+    $displayName=mb_substr(trim((string)($region['displayName']??ucwords(str_replace('_',' ',$type)))),0,180,'UTF-8');
+    if($displayName==='')$displayName=ucwords(str_replace('_',' ',$type));
+
+    $x=(float)($region['x']??-1);
+    $y=(float)($region['y']??-1);
+    $width=(float)($region['width']??0);
+    $height=(float)($region['height']??0);
+
+    foreach(['x'=>$x,'y'=>$y,'width'=>$width,'height'=>$height] as $name=>$value){
+        if(!is_finite($value))throw new InvalidArgumentException('Calibration region '.$name.' is invalid.');
+    }
+    if($x<0||$y<0||$width<=0||$height<=0||$x>1||$y>1||$x+$width>1.000001||$y+$height>1.000001)
+        throw new InvalidArgumentException('Calibration regions must use positive normalized coordinates inside the camera frame.');
+
+    $priority=max(-1000,min(1000,(int)($region['priority']??0)));
+    $metadata=isset($region['metadata'])?glasses_json_object(is_array($region['metadata'])?$region['metadata']:null,8000):null;
+
+    return [
+        'regionKey'=>$regionKey,
+        'regionType'=>$type,
+        'displayName'=>$displayName,
+        'x'=>round($x,6),
+        'y'=>round($y,6),
+        'width'=>round($width,6),
+        'height'=>round($height,6),
+        'priority'=>$priority,
+        'metadataJson'=>$metadata,
+    ];
+}
+
 function glasses_station_calibration_zone(PDO $pdo,int $org,array $zone,int $index): array
 {
     $ingredientId=(int)($zone['ingredientId']??0);
@@ -98,6 +137,30 @@ function glasses_station_calibration_payload(PDO $pdo,int $org,string $publicId,
         ];
     }
 
+    $regions=[];
+    $q=$pdo->prepare("SELECT * FROM glasses_station_calibration_regions
+        WHERE organization_id=? AND calibration_id=?
+        ORDER BY priority DESC,id");
+    try{
+        $q->execute([$org,(int)$row['id']]);
+        foreach($q->fetchAll() as $region){
+            $regions[]=[
+                'regionKey'=>(string)$region['region_key'],
+                'regionType'=>(string)$region['region_type'],
+                'displayName'=>(string)$region['display_name'],
+                'x'=>(float)$region['x_norm'],
+                'y'=>(float)$region['y_norm'],
+                'width'=>(float)$region['width_norm'],
+                'height'=>(float)$region['height_norm'],
+                'priority'=>(int)$region['priority'],
+                'metadata'=>json_decode((string)($region['metadata_json']??'null'),true),
+            ];
+        }
+    }catch(PDOException $e){
+        // Backward compatibility while older installs have not yet applied Section 13.
+        if($e->getCode()!=='42S02')throw $e;
+    }
+
     $compatibility=['compatible'=>true,'reasons'=>[]];
     if($runtime!==null){
         $platform=trim((string)($runtime['platform']??''));
@@ -140,6 +203,7 @@ function glasses_station_calibration_payload(PDO $pdo,int $org,string $publicId,
         'sourceHash'=>(string)$row['source_hash'],
         'notes'=>(string)($row['notes']??''),
         'zones'=>$zones,
+        'regions'=>$regions,
         'compatibility'=>$compatibility,
         'activatedAt'=>$row['activated_at'],
         'createdAt'=>$row['created_at'],
@@ -163,15 +227,18 @@ function glasses_station_calibration_save(
     $pixelFormat=mb_substr(mb_strtolower(trim((string)($input['pixelFormat']??'grayscale8')),'UTF-8'),0,40,'UTF-8');
     $notes=mb_substr(trim((string)($input['notes']??'')),0,1000,'UTF-8')?:null;
     $zonesInput=$input['zones']??null;
+    $regionsInput=$input['regions']??[];
 
     if($frameWidth<16||$frameWidth>8192||$frameHeight<16||$frameHeight>8192)
         throw new InvalidArgumentException('Calibration camera dimensions are invalid.');
     if($pixelFormat==='')throw new InvalidArgumentException('Calibration pixel format is required.');
     if(!is_array($zonesInput)||count($zonesInput)<1)throw new InvalidArgumentException('At least one ingredient calibration zone is required.');
     if(count($zonesInput)>200)throw new InvalidArgumentException('Calibration contains too many ingredient zones.');
+    if(!is_array($regionsInput))throw new InvalidArgumentException('Calibration regions payload is invalid.');
+    if(count($regionsInput)>40)throw new InvalidArgumentException('Calibration contains too many station regions.');
 
     return glasses_transaction($pdo,function()use(
-        $pdo,$org,$locationId,$stationPublicId,$input,$userId,$platform,$frameWidth,$frameHeight,$pixelFormat,$notes,$zonesInput
+        $pdo,$org,$locationId,$stationPublicId,$input,$userId,$platform,$frameWidth,$frameHeight,$pixelFormat,$notes,$zonesInput,$regionsInput
     ):array{
         $location=glasses_location($pdo,$org,$locationId);
         $station=glasses_station_calibration_station($pdo,$org,$locationId,$stationPublicId);
@@ -191,6 +258,17 @@ function glasses_station_calibration_save(
         }
 
         usort($zones,static fn(array $a,array $b):int=>strcmp($a['zoneKey'],$b['zoneKey']));
+
+        $regions=[];$regionKeys=[];
+        foreach(array_values($regionsInput) as $index=>$regionInput){
+            if(!is_array($regionInput))throw new InvalidArgumentException('Calibration region payload is invalid.');
+            $region=glasses_station_calibration_region($regionInput,$index);
+            if(isset($regionKeys[$region['regionKey']]))throw new InvalidArgumentException('Calibration region keys must be unique.');
+            $regionKeys[$region['regionKey']]=true;
+            $regions[]=$region;
+        }
+        usort($regions,static fn(array $a,array $b):int=>strcmp($a['regionKey'],$b['regionKey']));
+
         $sourceMaterial=[
             'platform'=>$platform,
             'frameWidth'=>$frameWidth,
@@ -201,6 +279,11 @@ function glasses_station_calibration_save(
                 'x'=>$z['x'],'y'=>$z['y'],'width'=>$z['width'],'height'=>$z['height'],'priority'=>$z['priority'],
                 'metadata'=>$z['metadataJson']!==null?json_decode($z['metadataJson'],true):null,
             ],$zones),
+            'regions'=>array_map(static fn(array $r):array=>[
+                'regionKey'=>$r['regionKey'],'regionType'=>$r['regionType'],'displayName'=>$r['displayName'],
+                'x'=>$r['x'],'y'=>$r['y'],'width'=>$r['width'],'height'=>$r['height'],'priority'=>$r['priority'],
+                'metadata'=>$r['metadataJson']!==null?json_decode($r['metadataJson'],true):null,
+            ],$regions),
         ];
         $sourceHash=hash('sha256',json_encode($sourceMaterial,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR));
 
@@ -230,6 +313,18 @@ function glasses_station_calibration_save(
                 $org,$calibrationId,$zone['ingredientId'],$zone['zoneKey'],$zone['displayName'],
                 $zone['x'],$zone['y'],$zone['width'],$zone['height'],$zone['priority'],$zone['metadataJson']
             ]);
+        }
+
+        if($regions){
+            $insertRegion=$pdo->prepare("INSERT INTO glasses_station_calibration_regions
+                (organization_id,calibration_id,region_key,region_type,display_name,x_norm,y_norm,width_norm,height_norm,priority,metadata_json)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)");
+            foreach($regions as $region){
+                $insertRegion->execute([
+                    $org,$calibrationId,$region['regionKey'],$region['regionType'],$region['displayName'],
+                    $region['x'],$region['y'],$region['width'],$region['height'],$region['priority'],$region['metadataJson']
+                ]);
+            }
         }
 
         return glasses_station_calibration_payload($pdo,$org,$public,null);
