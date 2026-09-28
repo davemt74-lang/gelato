@@ -25,6 +25,8 @@ namespace Gelato.Ar.Core
         public string ActiveArtifactSha256 { get; set; } = string.Empty;
         public string KnownGoodPackagePublicId { get; set; } = string.Empty;
         public string KnownGoodArtifactSha256 { get; set; } = string.Empty;
+        public string LastErrorCode { get; set; } = string.Empty;
+        public string LastErrorMessage { get; set; } = string.Empty;
         public VisionModelPendingActivation? Pending { get; set; }
     }
 
