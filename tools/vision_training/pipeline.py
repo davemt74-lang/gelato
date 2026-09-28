@@ -101,25 +101,39 @@ def inspect_dataset(root: Path)->dict[str,Any]:
     if declared!=len(images): raise PipelineError(f"Manifest sampleCount={declared} but {len(images)} images were found.")
     return {"root":str(root),"manifest":manifest,"classes":classes,"images":images,"boxCounts":dict(zip(classes,counts)),"emptyImages":empty}
 
-def deterministic_split(images:list[Path],seed:int,ratios:tuple[float,float,float])->dict[str,list[Path]]:
+def deterministic_split(images:list[Path],seed:int,ratios:tuple[float,float,float],manifest:dict[str,Any]|None=None)->tuple[dict[str,list[Path]],dict[str,Any]]:
     if len(images)<3: raise PipelineError("At least 3 images are required for train/val/test splitting.")
     if abs(sum(ratios)-1.0)>1e-9 or min(ratios)<=0: raise PipelineError("Split ratios must be positive and sum to 1.")
-    keyed=[]
+    samples=(manifest or {}).get("samples") or []
+    sample_by_index={int(s.get("index")):s for s in samples if isinstance(s,dict) and str(s.get("index","")).isdigit()}
+    groups:dict[str,list[Path]]={}
+    grouped=False
     for p in images:
-        digest=hashlib.sha256(f"{seed}|{p.name}".encode()).hexdigest()
-        keyed.append((digest,p))
-    ordered=[p for _,p in sorted(keyed)]
-    n=len(ordered); n_val=max(1,round(n*ratios[1])); n_test=max(1,round(n*ratios[2])); n_train=n-n_val-n_test
-    if n_train<1:
-        n_train=1
-        if n_val>n_test:n_val-=1
-        else:n_test-=1
-    return {"train":ordered[:n_train],"val":ordered[n_train:n_train+n_val],"test":ordered[n_train+n_val:]}
+        idx=None
+        if p.stem.startswith("frame-"):
+            try: idx=int(p.stem.split("-",1)[1])
+            except ValueError: idx=None
+        meta=sample_by_index.get(idx or -1,{})
+        group=(str(meta.get("captureGroup") or "").strip() or str(meta.get("buildPublicId") or "").strip())
+        if group:
+            grouped=True; key="lineage:"+group
+        else:key="sample:"+p.name
+        groups.setdefault(key,[]).append(p)
+    if grouped and len(groups)<3: raise PipelineError("Group-aware splitting requires at least 3 independent lineage groups.")
+    ordered=sorted(groups.items(),key=lambda kv: hashlib.sha256(f"{seed}|{kv[0]}".encode()).hexdigest())
+    total=len(images); targets={"train":total*ratios[0],"val":total*ratios[1],"test":total*ratios[2]}; counts={"train":0,"val":0,"test":0}; splits={"train":[],"val":[],"test":[]}
+    for i,(key,members) in enumerate(ordered):
+        if i<3: split=("train","val","test")[i]
+        else: split=max(counts,key=lambda name: targets[name]-counts[name])
+        splits[split].extend(members);counts[split]+=len(members)
+    if not all(splits.values()): raise PipelineError("Split engine could not produce non-empty train/val/test sets.")
+    provenance={"mode":"group_aware" if grouped else "sample_fallback","groupCount":len(groups),"protectedBy":["captureGroup","buildPublicId"] if grouped else [],"counts":counts}
+    return splits,provenance
 
 def prepare_workspace(dataset: Path,out: Path,seed:int=74,train_ratio:float=.70,val_ratio:float=.15,test_ratio:float=.15)->dict[str,Any]:
     root,tmp=materialize_dataset(dataset)
     try:
-        info=inspect_dataset(root); splits=deterministic_split(info["images"],seed,(train_ratio,val_ratio,test_ratio))
+        info=inspect_dataset(root); splits,split_provenance=deterministic_split(info["images"],seed,(train_ratio,val_ratio,test_ratio),info["manifest"])
         if out.exists(): shutil.rmtree(out)
         for split,images in splits.items():
             (out/"images"/split).mkdir(parents=True,exist_ok=True);(out/"labels"/split).mkdir(parents=True,exist_ok=True)
@@ -132,7 +146,7 @@ def prepare_workspace(dataset: Path,out: Path,seed:int=74,train_ratio:float=.70,
         yaml_lines=["path: "+out.as_posix(),"train: images/train","val: images/val","test: images/test","names:"]
         yaml_lines += [f"  {i}: {json.dumps(name)}" for i,name in enumerate(names)]
         (out/"data.yaml").write_text("\n".join(yaml_lines)+"\n",encoding="utf-8")
-        split_manifest={"schema":"gelato.vision_training_split.v1","seed":seed,"ratios":{"train":train_ratio,"val":val_ratio,"test":test_ratio},"counts":{k:len(v) for k,v in splits.items()},"classes":names,"sourceManifest":info["manifest"]}
+        split_manifest={"schema":"gelato.vision_training_split.v2","seed":seed,"ratios":{"train":train_ratio,"val":val_ratio,"test":test_ratio},"counts":{k:len(v) for k,v in splits.items()},"classes":names,"grouping":split_provenance,"sourceManifest":info["manifest"]}
         (out/"split-manifest.json").write_text(json.dumps(split_manifest,indent=2)+"\n",encoding="utf-8")
         return split_manifest
     finally:
