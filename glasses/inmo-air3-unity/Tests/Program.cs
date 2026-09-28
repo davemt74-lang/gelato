@@ -12,6 +12,7 @@ internal static class Program
         await ExistingCredentialFlow();
         await ErrorStateFlow();
         await ObservationCorrectionFlow();
+        await HandsFreeReviewFlow();
         HudContract();
         SimulatorSupportContract();
         await StationCalibrationContract();
@@ -153,6 +154,122 @@ internal static class Program
 
         coordinator.ResetForNextWork();
         Assert(coordinator.LastSubmittedObservationKey == null, "reset must clear last-observation correction state");
+    }
+
+    private static async Task HandsFreeReviewFlow()
+    {
+        Assert(HandsFreeCommandParser.Parse("confirm turkey").Kind == HandsFreeCommandKind.ConfirmVerify, "confirm ingredient speech must parse deterministically");
+        Assert(HandsFreeCommandParser.Parse("UNDO last").Kind == HandsFreeCommandKind.RejectLastObservation, "undo-last alias must normalize case");
+        Assert(HandsFreeCommandParser.Parse("send to expo").Kind == HandsFreeCommandKind.SendToExpo, "explicit Expo command must parse");
+        Assert(HandsFreeCommandParser.Parse("finish").Kind == HandsFreeCommandKind.Unknown, "ambiguous finish command must fail closed");
+
+        var platform = new FakePlatform();
+        var gateway = new FakeGateway
+        {
+            StartComponents = new[]
+            {
+                new BuildComponent
+                {
+                    ComponentKey = "ingredient:turkey",
+                    DisplayName = "Turkey",
+                    ExpectedQuantity = 1,
+                    DetectedQuantity = 1,
+                    Status = "verify",
+                    Confidence = 0.74f
+                },
+                new BuildComponent
+                {
+                    ComponentKey = "ingredient:bacon",
+                    DisplayName = "Bacon",
+                    ExpectedQuantity = 1,
+                    DetectedQuantity = 1,
+                    Status = "verify",
+                    Confidence = 0.73f
+                },
+                new BuildComponent
+                {
+                    ComponentKey = "vision:unexpected:cheese",
+                    DisplayName = "Swiss Cheese",
+                    ExpectedQuantity = 0,
+                    DetectedQuantity = 1,
+                    Status = "unexpected",
+                    Confidence = 0.95f
+                }
+            }
+        };
+        var coordinator = new ArWorkflowCoordinator(platform, gateway, new FakeTokenStore("existing-token"));
+        var router = new HandsFreeCommandRouter(coordinator);
+
+        await coordinator.InitializeAsync();
+        var refresh = await router.ExecuteAsync("refresh work");
+        Assert(refresh.Handled && refresh.Succeeded && coordinator.State == WorkflowState.WorkReady, "hands-free refresh must load focused KDS work");
+
+        var start = await router.ExecuteAsync("start build");
+        Assert(start.Succeeded && coordinator.State == WorkflowState.Building, "hands-free start must create the active build");
+
+        var ambiguous = await router.ExecuteAsync("confirm");
+        Assert(ambiguous.Handled && !ambiguous.Succeeded, "confirm without a target must fail closed when multiple Verify items exist");
+        Assert(gateway.ConfirmCalls == 0, "ambiguous hands-free confirm must not mutate build state");
+        Assert(coordinator.ReviewFeedback?.Attention == true && coordinator.ReviewFeedback?.Title == "SAY THE INGREDIENT", "ambiguous review must create visible HUD guidance");
+
+        var confirm = await router.ExecuteAsync("confirm turkey");
+        Assert(confirm.Succeeded && gateway.ConfirmCalls == 1, "targeted hands-free confirmation must call build.confirm once");
+        Assert(coordinator.ReviewFeedback?.Title == "CONFIRMED", "successful confirm must be visible in HUD feedback");
+
+        var resolve = await router.ExecuteAsync("ignore unexpected swiss cheese");
+        Assert(resolve.Succeeded && gateway.ResolveCalls == 1, "targeted unexpected resolution must call the resolution endpoint");
+
+        var blockedExpo = await router.ExecuteAsync("send expo");
+        Assert(blockedExpo.Handled && !blockedExpo.Succeeded && gateway.HandoffCalls == 0, "Expo command must fail closed before validation readiness");
+        Assert(coordinator.ReviewFeedback?.Title == "EXPO BLOCKED", "blocked Expo must explain itself in the HUD rail");
+
+        await coordinator.SubmitObservationAsync(new IngredientObservation
+        {
+            ObservationKey = "handsfree-obs-1",
+            ComponentKey = "ingredient:turkey",
+            DisplayName = "Turkey",
+            Action = "added",
+            Quantity = 1,
+            Confidence = 0.96f
+        });
+        await coordinator.SubmitObservationAsync(new IngredientObservation
+        {
+            ObservationKey = "handsfree-obs-2",
+            ComponentKey = "ingredient:bacon",
+            DisplayName = "Bacon",
+            Action = "added",
+            Quantity = 1,
+            Confidence = 0.97f
+        });
+
+        var check = await router.ExecuteAsync("check product");
+        Assert(check.Succeeded && coordinator.State == WorkflowState.ReadyForFinishing, "hands-free product check must surface readiness");
+
+        var undo = await router.ExecuteAsync("undo last");
+        Assert(undo.Succeeded && gateway.CorrectionCalls == 1, "undo last must use the immutable observation-correction path");
+        Assert(gateway.LastCorrection?.ObservationKey == "handsfree-obs-2", "undo last must target the most recent submitted observation");
+        Assert(gateway.LastCorrection?.CorrectionKey == "reject:handsfree-obs-2", "undo last must remain idempotent");
+
+        var send = await router.ExecuteAsync("send to expo");
+        Assert(send.Succeeded && gateway.HandoffCalls == 1 && coordinator.State == WorkflowState.HandedOff, "ready hands-free Expo command must hand off exactly once");
+
+        var duplicateSend = await router.ExecuteAsync("expo");
+        Assert(duplicateSend.Succeeded && gateway.HandoffCalls == 1, "duplicate Expo speech/event must not create a second handoff");
+        Assert(coordinator.ReviewFeedback?.Title == "ALREADY SENT TO EXPO", "duplicate Expo must return deterministic feedback");
+
+        var unknown = await router.ExecuteAsync("make it perfect");
+        Assert(!unknown.Handled && !unknown.Succeeded, "unknown speech must not mutate the workflow");
+        Assert(gateway.HandoffCalls == 1 && gateway.ConfirmCalls == 1 && gateway.ResolveCalls == 1, "unknown speech must have zero kitchen side effects");
+
+        var feedbackHud = HudViewModelFactory.Create(
+            coordinator.CurrentWork,
+            coordinator.BuildSession,
+            coordinator.Validation,
+            coordinator.Handoff,
+            coordinator.ReviewFeedback
+        );
+        Assert(feedbackHud.ShowReview, "hands-free result must render in the right-side HUD rail");
+        Assert(feedbackHud.ReviewTitle == "COMMAND NOT RECOGNIZED", "HUD must display the latest command result without covering the center view");
     }
 
     private static async Task ExistingCredentialFlow()
@@ -1130,6 +1247,8 @@ internal static class Program
         public int CorrectionCalls { get; private set; }
         public int EvidenceCalls { get; private set; }
         public ObservationCorrection? LastCorrection { get; private set; }
+        public IReadOnlyList<BuildComponent> StartComponents { get; set; } = Array.Empty<BuildComponent>();
+        private readonly List<BuildComponent> _currentComponents = new List<BuildComponent>();
 
         public void SetDeviceToken(string token) { DeviceToken = token; }
 
@@ -1167,12 +1286,15 @@ internal static class Program
         {
             Assert(kdsItemPublicId == "kds-item-1", "focused KDS ID must start build");
             Assert(sourceRevision == "revision-1", "work revision must be forwarded");
+            _currentComponents.Clear();
+            foreach (var component in StartComponents) _currentComponents.Add(CloneComponent(component));
             return Task.FromResult(new BuildSession
             {
                 PublicId = "build-1",
                 Status = "active",
                 KdsItemPublicId = kdsItemPublicId,
-                SourceRevision = sourceRevision ?? string.Empty
+                SourceRevision = sourceRevision ?? string.Empty,
+                Components = SnapshotComponents()
             });
         }
 
@@ -1184,42 +1306,42 @@ internal static class Program
             {
                 PublicId = buildSessionPublicId,
                 Status = "active",
-                KdsItemPublicId = "kds-item-1"
+                KdsItemPublicId = "kds-item-1",
+                Components = SnapshotComponents()
             });
         }
 
         public Task<BuildSession> ConfirmComponentAsync(string buildSessionPublicId, string componentKey, CancellationToken cancellationToken)
         {
             ConfirmCalls++;
+            foreach (var component in _currentComponents)
+            {
+                if (!string.Equals(component.ComponentKey, componentKey, StringComparison.Ordinal)) continue;
+                component.Status = "confirmed";
+                component.DetectedQuantity = Math.Max(component.DetectedQuantity, component.ExpectedQuantity);
+                component.Confidence = 1f;
+            }
             return Task.FromResult(new BuildSession
             {
                 PublicId = buildSessionPublicId,
                 Status = "active",
                 KdsItemPublicId = "kds-item-1",
-                Components = new[]
-                {
-                    new BuildComponent
-                    {
-                        ComponentKey = componentKey,
-                        DisplayName = "Verified component",
-                        ExpectedQuantity = 1f,
-                        DetectedQuantity = 1f,
-                        Status = "confirmed",
-                        Confidence = 1f
-                    }
-                }
+                Components = SnapshotComponents()
             });
         }
 
         public Task<BuildSession> ResolveUnexpectedAsync(string buildSessionPublicId, string componentKey, CancellationToken cancellationToken)
         {
             ResolveCalls++;
+            foreach (var component in _currentComponents)
+                if (string.Equals(component.ComponentKey, componentKey, StringComparison.Ordinal)) component.Status = "ignored";
+
             return Task.FromResult(new BuildSession
             {
                 PublicId = buildSessionPublicId,
                 Status = "active",
                 KdsItemPublicId = "kds-item-1",
-                Components = Array.Empty<BuildComponent>()
+                Components = SnapshotComponents()
             });
         }
 
@@ -1234,7 +1356,8 @@ internal static class Program
             {
                 PublicId = buildSessionPublicId,
                 Status = "active",
-                KdsItemPublicId = "kds-item-1"
+                KdsItemPublicId = "kds-item-1",
+                Components = SnapshotComponents()
             });
         }
 
@@ -1306,6 +1429,27 @@ internal static class Program
                 KdsStatus = "ready",
                 Label = "Sent to Expo / Finishing"
             });
+        }
+
+        private IReadOnlyList<BuildComponent> SnapshotComponents()
+        {
+            var snapshot = new List<BuildComponent>();
+            foreach (var component in _currentComponents) snapshot.Add(CloneComponent(component));
+            return snapshot;
+        }
+
+        private static BuildComponent CloneComponent(BuildComponent component)
+        {
+            return new BuildComponent
+            {
+                ComponentKey = component.ComponentKey,
+                DisplayName = component.DisplayName,
+                ExpectedQuantity = component.ExpectedQuantity,
+                DetectedQuantity = component.DetectedQuantity,
+                Unit = component.Unit,
+                Status = component.Status,
+                Confidence = component.Confidence
+            };
         }
     }
 }
