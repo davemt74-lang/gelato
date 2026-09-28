@@ -120,7 +120,7 @@ gws_assert(str_contains($js,'function temporalAssessment'),'Temporal runtime mus
 gws_assert(str_contains($js,'VISION_READY_STABLE_MS'),'Automatic product validation must require a stable-ready dwell period.');
 gws_assert(str_contains($js,'function autoEvaluateTemporalReadiness'),'Temporal runtime must automatically invoke canonical product validation only after stable readiness.');
 gws_assert(str_contains($js,"api('validation.evaluate'"),'Automatic temporal readiness must reuse canonical product validation.');
-gws_assert(str_contains($js,"metadata:{source:'web_glasses_simulator_temporal_vision'"),'Temporal observations must be explicitly source-labelled.');
+gws_assert(str_contains($js,"temporalSource:'web_glasses_simulator_temporal_vision'"),'Temporal observations must retain explicit temporal pipeline provenance.');
 gws_assert(str_contains($js,"visionMode()==='automatic'&&!state.temporalGate?.ready"),'Expo handoff must remain blocked when automatic temporal validation is not ready.');
 gws_assert(str_contains($js,'function clearTemporalRuntime'),'Temporal state must reset at build, mode and device boundaries.');
 gws_assert(str_contains($css,'.temporal-event')&&str_contains($css,'.vision-auto-box.pending'),'Temporal events and pre-stable tracks must have visible, distinct UI states.');
