@@ -91,6 +91,7 @@ function glasses_vision_model_package_public(array $row): array
         'artifactUrl'=>(string)$row['artifact_url'],
         'artifactSha256'=>(string)$row['artifact_sha256'],
         'artifactBytes'=>$row['artifact_bytes']!==null?(int)$row['artifact_bytes']:null,
+        'hasArtifactBytes'=>$row['artifact_bytes']!==null,
         'minimumSdkVersion'=>$row['minimum_sdk_version'],
         'minimumAppVersion'=>$row['minimum_app_version'],
         'status'=>(string)$row['status'],
