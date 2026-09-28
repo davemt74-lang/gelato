@@ -374,6 +374,15 @@ function glasses_vision_training_media_dataset_quality(PDO $pdo,int $org,?string
     ];
 }
 
+function glasses_vision_training_media_freeze_guard(PDO $pdo,int $org,string $datasetPublic): void
+{
+    $quality=glasses_vision_training_media_dataset_quality($pdo,$org,$datasetPublic);
+    $blockers=$quality['releaseBlockers']??[];
+    if((int)($blockers['captureGroupLeakage']??0)>0)throw new InvalidArgumentException('Dataset freeze blocked: capture-group media leakage must be resolved.');
+    if((int)($blockers['exactDuplicates']??0)>0)throw new InvalidArgumentException('Dataset freeze blocked: exact duplicate training media must be removed or excluded.');
+    if((int)($blockers['poorMedia']??0)>0)throw new InvalidArgumentException('Dataset freeze blocked: poor-quality training media must be removed or recaptured.');
+}
+
 function glasses_vision_training_media_catalog(PDO $pdo,int $org): array
 {
     if(!glasses_vision_training_media_ready($pdo))return ['ready'=>false,'media'=>[],'quality'=>null];
