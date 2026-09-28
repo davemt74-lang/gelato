@@ -66,6 +66,8 @@ namespace Gelato.Ar.Core
         public string EvidenceSourceZoneKey { get; set; } = string.Empty;
         public string EvidenceDestinationRegionKey { get; set; } = string.Empty;
         public bool EvidenceSequenceSupported { get; set; }
+        public bool ProfileMatched { get; set; }
+        public float? ProfileMinimumConfidence { get; set; }
     }
 
     public sealed class VisionFrameContext
@@ -74,6 +76,7 @@ namespace Gelato.Ar.Core
         public IReadOnlyList<BuildComponent> ExpectedComponents { get; set; } = Array.Empty<BuildComponent>();
         public IReadOnlyList<BuildStep> BuildSteps { get; set; } = Array.Empty<BuildStep>();
         public StationCalibration? StationCalibration { get; set; }
+        public VisionLabelProfile? VisionProfile { get; set; }
         public CameraCalibration? Calibration { get; set; }
         public PoseState? Pose { get; set; }
     }
@@ -148,6 +151,9 @@ namespace Gelato.Ar.Core
         public long SequenceSupports { get; internal set; }
         public long UnprimedWorkSurfaceDetections { get; internal set; }
         public long TransferHeldDetections { get; internal set; }
+        public long ProfileLabelMatches { get; internal set; }
+        public long ProfileThresholdRejects { get; internal set; }
+        public long DisplayNameFallbackMatches { get; internal set; }
 
         internal void Reset()
         {
@@ -164,6 +170,9 @@ namespace Gelato.Ar.Core
             SequenceSupports = 0;
             UnprimedWorkSurfaceDetections = 0;
             TransferHeldDetections = 0;
+            ProfileLabelMatches = 0;
+            ProfileThresholdRejects = 0;
+            DisplayNameFallbackMatches = 0;
         }
     }
 }
