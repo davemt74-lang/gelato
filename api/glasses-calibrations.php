@@ -54,6 +54,7 @@ try{
             'version'=>$calibration['version'],
             'sourceHash'=>$calibration['sourceHash'],
             'zoneCount'=>count($calibration['zones']),
+            'workAreaCount'=>count($calibration['workAreas']??[]),
         ]);
         app_json_response(['ok'=>true,'calibration'=>$calibration],201);
     }
