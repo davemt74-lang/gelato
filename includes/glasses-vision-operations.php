@@ -170,8 +170,8 @@ function glasses_vision_ops_catalog(PDO $pdo,array $user): array
     $org=(int)$user['organization_id'];
     if(!glasses_vision_ops_ready($pdo))return ['ready'=>false,'devices'=>[],'summary'=>[],'needsAttention'=>[],'timeline'=>[],'locations'=>[]];
     $devices=glasses_vision_ops_devices($pdo,$org);
-    $summary=['total'=>count($devices),'healthy'=>0,'warning'=>0,'critical'=>0,'offline'=>0,'stale'=>0,'revoked'=>0,'activeRollouts'=>0,'openIncidents'=>0];
-    foreach($devices as $d){$state=(string)$d['health']['state'];if(isset($summary[$state]))$summary[$state]++;}
+    $summary=['total'=>count($devices),'healthy'=>0,'warning'=>0,'critical'=>0,'offline'=>0,'stale'=>0,'revoked'=>0,'rolledBack'=>0,'activeRollouts'=>0,'openIncidents'=>0];
+    foreach($devices as $d){$state=(string)$d['health']['state'];if(isset($summary[$state]))$summary[$state]++;if((string)($d['rolloutStatus']??'')==='rolled_back'||(string)($d['assignmentRolloutStatus']??'')==='rolled_back')$summary['rolledBack']++;}
     $q=$pdo->prepare("SELECT COUNT(*) FROM glasses_vision_model_rollouts WHERE organization_id=? AND status='active'");$q->execute([$org]);$summary['activeRollouts']=(int)$q->fetchColumn();
     $q=$pdo->prepare("SELECT COUNT(*) FROM glasses_vision_drift_incidents WHERE organization_id=? AND recovery_status<>'resolved'");$q->execute([$org]);$summary['openIncidents']=(int)$q->fetchColumn();
     $needs=array_values(array_filter($devices,static fn(array $d):bool=>$d['health']['state']!=='healthy'));
