@@ -43,6 +43,7 @@ $boot=[
 <header class="admin-top">
     <a class="admin-brand" href="admin.php"><span class="admin-logo">SF</span><span><strong>Restaurant Admin</strong><small>AR model rollout governance</small></span></a>
     <nav class="admin-top-actions">
+        <a class="admin-button dark" href="glasses-vision-operations.php">Vision Operations</a>
         <a class="admin-button" href="glasses-vision-profiles.php">Vision Labels</a>
         <a class="admin-button" href="glasses-learning.php">Vision Learning</a>
         <a class="admin-button" href="admin.php">Admin</a>
