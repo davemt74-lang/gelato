@@ -1,7 +1,7 @@
 import json,tempfile,unittest,zipfile,sys
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from tools.vision_training.pipeline import PipelineError,Thresholds,inspect_dataset,prepare_workspace,quality_gate,release_package,safe_extract_zip
+from tools.vision_training.pipeline import ComparisonPolicy,PipelineError,Thresholds,compare_models,golden_test_fingerprint,inspect_dataset,prepare_workspace,quality_gate,release_package,safe_extract_zip
 
 class VisionTrainingPipelineTests(unittest.TestCase):
     def make_dataset(self,root:Path,count=10):
@@ -32,6 +32,21 @@ class VisionTrainingPipelineTests(unittest.TestCase):
         self.assertTrue(quality_gate(good,Thresholds())['passed'])
         bad=json.loads(json.dumps(good));bad['perClass'][0]['recall']=.2
         self.assertFalse(quality_gate(bad,Thresholds())['passed'])
+    def test_golden_fingerprint_and_challenger_gate(self):
+        with tempfile.TemporaryDirectory() as td:
+            src=Path(td)/'src';self.make_dataset(src,10);work=Path(td)/'work';prepare_workspace(src,work,seed=74)
+            fingerprint=golden_test_fingerprint(work);self.assertEqual(len(fingerprint),64)
+            champion={'goldenTestHash':fingerprint,'overall':{'precision':.80,'recall':.80,'map50':.80,'map5095':.55},'perClass':[{'name':'Bacon','precision':.75,'recall':.75,'map50':.75,'map5095':.5},{'name':'Lettuce','precision':.75,'recall':.75,'map50':.75,'map5095':.5}]}
+            challenger={'goldenTestHash':fingerprint,'overall':{'precision':.81,'recall':.81,'map50':.82,'map5095':.56},'perClass':[{'name':'Bacon','precision':.76,'recall':.76,'map50':.77,'map5095':.51},{'name':'Lettuce','precision':.75,'recall':.76,'map50':.76,'map5095':.51}]}
+            result=compare_models(champion,challenger,ComparisonPolicy())
+            self.assertTrue(result['eligible']);self.assertFalse(result['override']);self.assertTrue(result['summary']['demonstratedGain'])
+            regressed=json.loads(json.dumps(challenger));regressed['overall']['precision']=.70
+            blocked=compare_models(champion,regressed,ComparisonPolicy());self.assertFalse(blocked['eligible']);self.assertTrue(blocked['regressions'])
+            overridden=compare_models(champion,regressed,ComparisonPolicy(),'Recall gain accepted for shadow canary only.')
+            self.assertTrue(overridden['eligible']);self.assertTrue(overridden['override'])
+            mismatch=json.loads(json.dumps(challenger));mismatch['goldenTestHash']='f'*64
+            with self.assertRaises(PipelineError):compare_models(champion,mismatch,ComparisonPolicy())
+
     def test_release_package_requires_gate_and_emits_metadata(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td);onnx=root/'model.onnx';onnx.write_bytes(b'fake-onnx-for-packaging-contract')

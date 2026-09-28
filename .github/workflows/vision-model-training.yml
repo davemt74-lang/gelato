@@ -8,7 +8,7 @@ on:
       - 'docs/VISION-MODEL-TRAINING.md'
       - '.github/workflows/vision-model-training.yml'
   push:
-    branches: [main, 'feature/vision-training-release-pipeline']
+    branches: [main, 'feature/vision-training-release-pipeline', 'feature/vision-champion-challenger-evaluation']
 
 jobs:
   training-pipeline-contract:
@@ -30,6 +30,9 @@ jobs:
           grep -q 'gelato.vision_model_release.v1' tools/vision_training/pipeline.py
           grep -q 'gelato.browser_onnx_detector.v1' tools/vision_training/pipeline.py
           grep -q 'quality_gate' tools/vision_training/pipeline.py
+          grep -q 'gelato.vision_model_comparison.v1' tools/vision_training/pipeline.py
+          grep -q 'golden_test_fingerprint' tools/vision_training/pipeline.py
+          grep -q 'compare_models' tools/vision_training/pipeline.py
           grep -q 'verify_onnx' tools/vision_training/pipeline.py
           grep -q 'artifactSha256' tools/vision_training/pipeline.py
           grep -q 'ultralytics==8.4.164' tools/vision_training/requirements-train.txt

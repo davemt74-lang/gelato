@@ -82,3 +82,60 @@ The generated package metadata matches the browser ONNX contract already consume
 ## Important training practice
 
 The code pipeline can be complete before model quality is. Production accuracy depends on a representative dataset. Include negative/background frames and variation in ingredients, portion sizes, occlusion, hands, utensils, containers, lighting, camera angle, station layout, and build stage. Keep the test split held out from training decisions.
+
+
+## Champion / challenger evaluation
+
+A newly trained model can now be evaluated against the currently deployed champion before it becomes eligible for rollout.
+
+Both models must be evaluated on the **same golden test split**. Gelato hashes every file in `images/test` and `labels/test` to produce a deterministic `goldenTestHash`. A comparison is rejected if the champion and challenger hashes differ.
+
+### Standalone comparison
+
+```bash
+python tools/vision_training/pipeline.py compare champion-metrics.json challenger-metrics.json
+```
+
+The default comparison policy allows at most:
+
+- 0.01 overall regression in precision, recall, mAP50, or mAP50-95;
+- 0.03 per-class regression in precision, recall, or mAP50.
+
+The challenger must also demonstrate at least one material gain:
+
+- mAP50 improvement of 0.005 or more; or
+- recall improvement of 0.005 or more.
+
+The absolute release-quality gate still applies separately.
+
+### Training directly against a champion
+
+```bash
+python tools/vision_training/pipeline.py train-release dataset.zip build/vision-model \
+  --model-name gelato-kitchen-food \
+  --model-version 1.1.0 \
+  --champion-metrics champion-metrics.json
+```
+
+A challenger that fails the comparison is not packaged.
+
+### Explicit tradeoff override
+
+A comparison may be made eligible with an explicit engineering rationale:
+
+```bash
+python tools/vision_training/pipeline.py compare champion.json challenger.json \
+  --override-reason "Recall improved materially for bacon while precision regression is accepted for a shadow-only canary."
+```
+
+Overrides are not silent. The reason, regressions, golden-test hash, deltas, and override flag are written into immutable `gelato.vision_model_comparison.v1` metadata.
+
+### Rollout governance
+
+Comparison-aware model packages cannot be activated when their immutable comparison metadata says `eligible=false`.
+
+Legacy model packages without comparison metadata remain supported. This preserves compatibility with packages registered before the champion/challenger gate existed while making newly evaluated releases fail closed.
+
+The intended path is:
+
+Golden test set → champion evaluation → challenger evaluation → deterministic comparison → absolute quality gate → ONNX verification → immutable comparison metadata → governed canary rollout.

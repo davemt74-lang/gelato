@@ -130,6 +130,23 @@ gvm_assert((string)$baseline['detectorName']==='food-model-v3','Detector identit
 gvm_assert($target['hasArtifactBytes']===true&&(int)$target['artifactBytes']===2048,'Package manifest must preserve artifact byte size.');
 gvm_assert(($target['metadata']['browserInference']['schema']??'')==='gelato.browser_onnx_detector.v1','Registered ONNX package must preserve validated browser inference metadata.');
 gvm_assert(($target['metadata']['browserInference']['input']['name']??'')==='images','Registered ONNX package must preserve validated input tensor identity.');
+$comparisonMeta=[
+    'modelComparison'=>[
+        'schema'=>'gelato.vision_model_comparison.v1',
+        'eligible'=>true,
+        'override'=>false,
+        'goldenTestHash'=>str_repeat('a',64),
+        'regressions'=>[],
+        'summary'=>['map50Delta'=>0.02,'recallDelta'=>0.01,'demonstratedGain'=>true],
+    ],
+];
+$normalizedComparison=glasses_vision_model_comparison_metadata($comparisonMeta);
+gvm_assert($normalizedComparison['eligible']===true&&$normalizedComparison['summary']['map50Delta']===0.02,'Champion/challenger metadata must normalize deterministic eligibility.');
+$badComparison=false;
+try{glasses_vision_model_comparison_metadata(['modelComparison'=>['schema'=>'gelato.vision_model_comparison.v1','eligible'=>true,'override'=>true,'goldenTestHash'=>str_repeat('b',64)]]);}catch(InvalidArgumentException){$badComparison=true;}
+gvm_assert($badComparison,'Comparison overrides must require a documented tradeoff reason.');
+
+
 
 $duplicate=false;
 try{
@@ -139,6 +156,24 @@ try{
     ],$user);
 }catch(InvalidArgumentException){$duplicate=true;}
 gvm_assert($duplicate,'Registered model identity must be immutable/unique.');
+
+
+$ineligible=glasses_vision_model_package_create($pdo,$org,[
+    'detectorName'=>'food-model-v3','modelName'=>'sandwich-detector','modelVersion'=>'1.9.0','runtimeType'=>'onnx','platform'=>'inmo_air3',
+    'artifactUrl'=>'https://models.example.test/sandwich-detector-ineligible.onnx','artifactSha256'=>str_repeat('9',64),
+    'metadata'=>['modelComparison'=>[
+        'schema'=>'gelato.vision_model_comparison.v1','eligible'=>false,'override'=>false,
+        'goldenTestHash'=>str_repeat('c',64),'regressions'=>['overall precision regression -0.0400'],
+        'summary'=>['map50Delta'=>0.01,'recallDelta'=>0.01,'demonstratedGain'=>true],
+    ]],
+],$user);
+$ineligibleDraft=glasses_vision_model_rollout_create($pdo,$org,[
+    'targetPackagePublicId'=>$ineligible['publicId'],'baselinePackagePublicId'=>$baseline['publicId'],
+    'locationId'=>$location,'stationPublicId'=>(string)$station['public_id'],'canaryPercent'=>10,
+],$user);
+$comparisonBlocked=false;
+try{glasses_vision_model_rollout_activate($pdo,$org,(string)$ineligibleDraft['publicId'],$user);}catch(InvalidArgumentException){$comparisonBlocked=true;}
+gvm_assert($comparisonBlocked,'Comparison-aware package marked ineligible must never activate for canary rollout.');
 
 $draft=glasses_vision_model_rollout_create($pdo,$org,[
     'targetPackagePublicId'=>$target['publicId'],'baselinePackagePublicId'=>$baseline['publicId'],
@@ -287,8 +322,8 @@ $catalog=glasses_vision_model_catalog($pdo,[
     'organization_id'=>$org,'permissions'=>['*'],'is_owner_role'=>1,
 ]);
 gvm_assert($catalog['ready']===true&&$catalog['canManage']===true,'Owner model catalog must be ready/manageable.');
-gvm_assert(count($catalog['packages'])===3,'Catalog must expose registered model packages.');
-gvm_assert(count($catalog['rollouts'])===3,'Catalog must expose all rollout plans.');
+gvm_assert(count($catalog['packages'])===4,'Catalog must expose registered model packages.');
+gvm_assert(count($catalog['rollouts'])===4,'Catalog must expose all rollout plans.');
 gvm_assert(isset($catalog['metricsByRollout'][(string)$draft['publicId']]),'Catalog must expose rollout telemetry.');
 
 $modules=admin_modules(['permissions'=>['glasses.view'],'is_owner_role'=>0]);
