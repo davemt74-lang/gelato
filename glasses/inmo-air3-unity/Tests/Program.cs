@@ -16,6 +16,7 @@ internal static class Program
         HudContract();
         SimulatorSupportContract();
         await StationCalibrationContract();
+        await VisionLabelProfileContract();
         await SpatialEvidenceFusionContract();
         await TransferSequenceEvidenceContract();
         await VisionPipelineContract();
@@ -547,6 +548,64 @@ internal static class Program
         Assert(coordinator.LastCalibrationError == "simulated calibration failure", "optional calibration failure must remain diagnosable");
     }
 
+    private static async Task VisionLabelProfileContract()
+    {
+        var profile = new VisionLabelProfile
+        {
+            Schema = "gelato.vision_label_profile.v1",
+            DetectorName = "scripted-test-detector",
+            BuildSessionPublicId = "build-1",
+            ProfileHash = new string('b', 64),
+            Mappings = new[]
+            {
+                new VisionLabelMapping
+                {
+                    ModelLabel = "turkey_slice",
+                    NormalizedLabel = "turkey slice",
+                    ComponentKey = "ingredient:42",
+                    DisplayName = "Turkey",
+                    IngredientId = 42,
+                    MinimumConfidence = 0.85f,
+                    SourceDetector = "scripted-test-detector"
+                }
+            }
+        };
+
+        var gateway = new FakeGateway
+        {
+            VisionProfile = profile,
+            StartComponents = new[]
+            {
+                new BuildComponent
+                {
+                    ComponentKey = "ingredient:42",
+                    DisplayName = "Turkey",
+                    ExpectedQuantity = 1f,
+                    Status = "waiting"
+                }
+            }
+        };
+        var coordinator = new ArWorkflowCoordinator(new FakePlatform(), gateway, new FakeTokenStore("existing-token"));
+
+        await coordinator.InitializeAsync();
+        await coordinator.RefreshWorkAsync();
+        await coordinator.StartFocusBuildAsync();
+
+        var loaded = await coordinator.RefreshVisionLabelProfileAsync("scripted-test-detector");
+        Assert(loaded != null && loaded.ProfileHash == profile.ProfileHash, "coordinator must load the active build's detector label profile");
+        Assert(gateway.VisionProfileCalls == 1, "vision profile must use the dedicated gateway action");
+        Assert(coordinator.State == WorkflowState.Building, "optional vision-profile load must not disturb build workflow state");
+
+        gateway.FailVisionProfile = true;
+        var unavailable = await coordinator.RefreshVisionLabelProfileAsync("scripted-test-detector");
+        Assert(unavailable == null, "vision profile transport failure must degrade to recipe-name fallback");
+        Assert(coordinator.State == WorkflowState.Building, "optional vision-profile failure must not put the kitchen workflow into Error");
+        Assert(coordinator.LastVisionProfileError == "simulated vision profile failure", "vision-profile fallback reason must remain diagnosable");
+
+        coordinator.ResetForNextWork();
+        Assert(coordinator.VisionLabelProfile == null && coordinator.LastVisionProfileError == null, "reset must clear per-build vision profile state");
+    }
+
     private static async Task SpatialEvidenceFusionContract()
     {
         var frame = new CameraFrame
@@ -1036,6 +1095,95 @@ internal static class Program
         Assert((await labelPipeline.ProcessAsync(NextFrame(frame), turkeyContext)).Count == 0, "label-only detector evidence must still satisfy temporal stability");
         var labelMapped = await labelPipeline.ProcessAsync(NextFrame(frame), turkeyContext);
         Assert(labelMapped.Count == 1 && labelMapped[0].ComponentKey == "ingredient:turkey", "detector labels must map deterministically to the active Gelato component without knowing its database key");
+        Assert(labelPipeline.Diagnostics.DisplayNameFallbackMatches == 2, "exact recipe-name fallback must remain measurable when no registry mapping is used");
+
+        var profileContext = new VisionFrameContext
+        {
+            BuildSessionPublicId = "build-profile-label-map",
+            ExpectedComponents = turkeyContext.ExpectedComponents,
+            VisionProfile = new VisionLabelProfile
+            {
+                Schema = "gelato.vision_label_profile.v1",
+                DetectorName = "scripted-test-detector",
+                BuildSessionPublicId = "build-profile-label-map",
+                ProfileHash = new string('c', 64),
+                Mappings = new[]
+                {
+                    new VisionLabelMapping
+                    {
+                        ModelLabel = "turkey_slice",
+                        NormalizedLabel = "turkey slice",
+                        ComponentKey = "ingredient:turkey",
+                        DisplayName = "Turkey",
+                        MinimumConfidence = 0.85f,
+                        SourceDetector = "scripted-test-detector"
+                    }
+                }
+            }
+        };
+        var profiledDetector = new ScriptedVisionDetector(
+            DL("turkey_slice", "profile-turkey", 0.80f, 1f, 0.24f, 0.42f, 0.10f, 0.10f),
+            DL("turkey_slice", "profile-turkey", 0.81f, 1f, 0.24f, 0.42f, 0.10f, 0.10f),
+            DL("turkey_slice", "profile-turkey", 0.90f, 1f, 0.24f, 0.42f, 0.10f, 0.10f),
+            DL("turkey_slice", "profile-turkey", 0.91f, 1f, 0.245f, 0.425f, 0.10f, 0.10f)
+        );
+        var profiledPipeline = new VisionPipeline(profiledDetector);
+        Assert((await profiledPipeline.ProcessAsync(NextFrame(frame), profileContext)).Count == 0, "profile threshold must reject raw detector confidence below its configured floor");
+        Assert((await profiledPipeline.ProcessAsync(NextFrame(frame), profileContext)).Count == 0, "repeated below-profile-floor evidence must remain rejected");
+        Assert((await profiledPipeline.ProcessAsync(NextFrame(frame), profileContext)).Count == 0, "first above-profile-floor frame must still satisfy temporal stability");
+        var profiledObservation = await profiledPipeline.ProcessAsync(NextFrame(frame), profileContext);
+        Assert(profiledObservation.Count == 1 && profiledObservation[0].ComponentKey == "ingredient:turkey", "registry label must resolve to the active recipe component");
+        Assert(profiledObservation[0].DetectorLabel == "turkey_slice", "emitted observation must retain the detector's original model label");
+        Assert(profiledObservation[0].VisionProfileMatched, "emitted observation must state that a registry mapping resolved it");
+        Assert(profiledObservation[0].VisionProfileMinimumConfidence.HasValue
+            && Math.Abs(profiledObservation[0].VisionProfileMinimumConfidence.GetValueOrDefault() - 0.85f) < 0.0001f,
+            "emitted observation must retain the applied profile confidence floor");
+        Assert(profiledPipeline.Diagnostics.ProfileLabelMatches == 4, "profile matches must remain observable even when threshold policy rejects a candidate");
+        Assert(profiledPipeline.Diagnostics.ProfileThresholdRejects == 2, "profile-threshold rejections must be counted separately");
+
+        var staleProfileContext = new VisionFrameContext
+        {
+            BuildSessionPublicId = "build-profile-stale",
+            ExpectedComponents = turkeyContext.ExpectedComponents,
+            VisionProfile = profileContext.VisionProfile
+        };
+        var staleProfileDetector = new ScriptedVisionDetector(
+            DL("turkey_slice", "stale-profile", 0.96f, 1f, 0.24f, 0.42f, 0.10f, 0.10f),
+            DL("turkey_slice", "stale-profile", 0.97f, 1f, 0.245f, 0.425f, 0.10f, 0.10f)
+        );
+        var staleProfilePipeline = new VisionPipeline(staleProfileDetector);
+        Assert((await staleProfilePipeline.ProcessAsync(NextFrame(frame), staleProfileContext)).Count == 0, "profile from another build session must be ignored");
+        Assert((await staleProfilePipeline.ProcessAsync(NextFrame(frame), staleProfileContext)).Count == 0, "stale profile must never resolve a label that lacks exact-name fallback");
+        Assert(staleProfilePipeline.Diagnostics.ProfileLabelMatches == 0, "stale profile must not be counted as applied");
+
+        var nonRecipeProfileContext = new VisionFrameContext
+        {
+            BuildSessionPublicId = "build-profile-nonrecipe",
+            ExpectedComponents = turkeyContext.ExpectedComponents,
+            VisionProfile = new VisionLabelProfile
+            {
+                DetectorName = "scripted-test-detector",
+                BuildSessionPublicId = "build-profile-nonrecipe",
+                Mappings = new[]
+                {
+                    new VisionLabelMapping
+                    {
+                        ModelLabel = "turkey_slice",
+                        NormalizedLabel = "turkey slice",
+                        ComponentKey = "ingredient:bacon",
+                        DisplayName = "Bacon",
+                        MinimumConfidence = 0.60f
+                    }
+                }
+            }
+        };
+        var nonRecipeDetector = new ScriptedVisionDetector(
+            DL("turkey_slice", "wrong-target", 0.96f, 1f, 0.24f, 0.42f, 0.10f, 0.10f),
+            DL("turkey_slice", "wrong-target", 0.97f, 1f, 0.245f, 0.425f, 0.10f, 0.10f)
+        );
+        var nonRecipePipeline = new VisionPipeline(nonRecipeDetector);
+        Assert((await nonRecipePipeline.ProcessAsync(NextFrame(frame), nonRecipeProfileContext)).Count == 0, "profile mapping to a non-recipe component must fail closed");
+        Assert((await nonRecipePipeline.ProcessAsync(NextFrame(frame), nonRecipeProfileContext)).Count == 0, "non-recipe profile target must never become a build observation");
 
         var unknownLabelDetector = new ScriptedVisionDetector(
             DL("Swiss Cheese", "unknown-a", 0.96f, 1f, 0.3f, 0.4f, 0.1f, 0.1f),
@@ -1240,7 +1388,10 @@ internal static class Program
         public string DeviceToken { get; private set; } = string.Empty;
         public bool FailCurrentWork { get; set; }
         public bool FailCalibration { get; set; }
+        public bool FailVisionProfile { get; set; }
         public StationCalibration? Calibration { get; set; }
+        public VisionLabelProfile? VisionProfile { get; set; }
+        public int VisionProfileCalls { get; private set; }
         public int HandoffCalls { get; private set; }
         public int ConfirmCalls { get; private set; }
         public int ResolveCalls { get; private set; }
@@ -1280,6 +1431,17 @@ internal static class Program
             cancellationToken.ThrowIfCancellationRequested();
             if (FailCalibration) throw new InvalidOperationException("simulated calibration failure");
             return Task.FromResult(Calibration);
+        }
+
+        public Task<VisionLabelProfile?> GetVisionLabelProfileAsync(
+            string buildSessionPublicId,
+            string detectorName,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            VisionProfileCalls++;
+            if (FailVisionProfile) throw new InvalidOperationException("simulated vision profile failure");
+            return Task.FromResult(VisionProfile);
         }
 
         public Task<BuildSession> StartBuildAsync(string kdsItemPublicId, string? sourceRevision, CancellationToken cancellationToken)

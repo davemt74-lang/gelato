@@ -16,11 +16,13 @@ namespace Gelato.Ar.Core
         public WorkflowState State { get; private set; } = WorkflowState.Uninitialized;
         public CurrentWork? CurrentWork { get; private set; }
         public StationCalibration? StationCalibration { get; private set; }
+        public VisionLabelProfile? VisionLabelProfile { get; private set; }
         public BuildSession? BuildSession { get; private set; }
         public ProductValidation? Validation { get; private set; }
         public ExpoHandoff? Handoff { get; private set; }
         public string? LastError { get; private set; }
         public string? LastCalibrationError { get; private set; }
+        public string? LastVisionProfileError { get; private set; }
         public string? LastSubmittedObservationKey { get; private set; }
         public ReviewFeedback? ReviewFeedback { get; private set; }
 
@@ -76,6 +78,8 @@ namespace Gelato.Ar.Core
             {
                 CurrentWork = await _gateway.GetCurrentWorkAsync(cancellationToken).ConfigureAwait(false);
                 StationCalibration = null;
+                VisionLabelProfile = null;
+                LastVisionProfileError = null;
                 BuildSession = null;
                 LastSubmittedObservationKey = null;
                 Validation = null;
@@ -114,6 +118,36 @@ namespace Gelato.Ar.Core
             }
         }
 
+        public async Task<VisionLabelProfile?> RefreshVisionLabelProfileAsync(
+            string detectorName,
+            CancellationToken cancellationToken = default)
+        {
+            EnsureActiveBuild();
+            if (string.IsNullOrWhiteSpace(detectorName))
+                throw new ArgumentException("Vision detector name is required.", nameof(detectorName));
+
+            try
+            {
+                LastVisionProfileError = null;
+                VisionLabelProfile = await _gateway.GetVisionLabelProfileAsync(
+                    BuildSession!.PublicId,
+                    detectorName.Trim(),
+                    cancellationToken
+                ).ConfigureAwait(false);
+                return VisionLabelProfile;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                VisionLabelProfile = null;
+                LastVisionProfileError = ex.Message;
+                return null;
+            }
+        }
+
         public async Task<BuildSession> StartFocusBuildAsync(CancellationToken cancellationToken = default)
         {
             EnsurePaired();
@@ -132,6 +166,8 @@ namespace Gelato.Ar.Core
                 Validation = null;
                 Handoff = null;
                 LastSubmittedObservationKey = null;
+                VisionLabelProfile = null;
+                LastVisionProfileError = null;
                 _platform.StartTracking();
                 State = WorkflowState.Building;
                 return BuildSession;
@@ -288,11 +324,13 @@ namespace Gelato.Ar.Core
         {
             CurrentWork = null;
             StationCalibration = null;
+            VisionLabelProfile = null;
             BuildSession = null;
             Validation = null;
             Handoff = null;
             LastError = null;
             LastCalibrationError = null;
+            LastVisionProfileError = null;
             LastSubmittedObservationKey = null;
             ReviewFeedback = null;
             State = string.IsNullOrWhiteSpace(_deviceToken) ? WorkflowState.Unpaired : WorkflowState.Idle;

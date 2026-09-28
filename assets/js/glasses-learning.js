@@ -16,6 +16,7 @@
         cards:document.getElementById('glCards'),
         confidence:document.getElementById('glConfidenceBody'),
         evidence:document.getElementById('glEvidenceBody'),
+        labels:document.getElementById('glLabelsBody'),
         components:document.getElementById('glComponentsBody'),
         toast:document.getElementById('glToast')
     };
@@ -157,6 +158,27 @@
         el.evidence.innerHTML=html;
     }
 
+    function renderLabels(rows){
+        if(!rows||!rows.length){
+            el.labels.innerHTML='<tr><td colspan="8">No detector-label metadata in this window.</td></tr>';
+            return;
+        }
+        var html='';
+        rows.forEach(function(row){
+            html+='<tr>';
+            html+='<td><strong>'+escapeHtml(row.detectorLabel)+'</strong></td>';
+            html+='<td>'+(row.profileMatched?'Profile':'Name fallback')+'</td>';
+            html+='<td>'+confidence(row.minimumConfidence)+'</td>';
+            html+='<td>'+number(row.observations)+'</td>';
+            html+='<td>'+number(row.corrected)+'</td>';
+            html+='<td>'+number(row.rejected)+'</td>';
+            html+='<td>'+number(row.reclassified)+'</td>';
+            html+='<td>'+pct(row.correctionRate)+'</td>';
+            html+='</tr>';
+        });
+        el.labels.innerHTML=html;
+    }
+
     function renderComponents(rows){
         if(!rows||!rows.length){
             el.components.innerHTML='<tr><td colspan="7">No component evidence in this window.</td></tr>';
@@ -196,6 +218,7 @@
             renderCards(analytics.totals||{});
             renderConfidence(analytics.confidenceBands||[]);
             renderEvidence(analytics.evidenceKinds||[]);
+            renderLabels(analytics.modelLabels||[]);
             renderComponents(analytics.components||[]);
             var count=Number((analytics.totals||{}).observations||0);
             el.status.textContent=count

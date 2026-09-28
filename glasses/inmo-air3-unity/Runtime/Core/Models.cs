@@ -240,6 +240,26 @@ namespace Gelato.Ar.Core
         }
     }
 
+    public sealed class VisionLabelMapping
+    {
+        public string ModelLabel { get; set; } = string.Empty;
+        public string NormalizedLabel { get; set; } = string.Empty;
+        public string ComponentKey { get; set; } = string.Empty;
+        public string DisplayName { get; set; } = string.Empty;
+        public int IngredientId { get; set; }
+        public float? MinimumConfidence { get; set; }
+        public string SourceDetector { get; set; } = string.Empty;
+    }
+
+    public sealed class VisionLabelProfile
+    {
+        public string Schema { get; set; } = string.Empty;
+        public string DetectorName { get; set; } = string.Empty;
+        public string BuildSessionPublicId { get; set; } = string.Empty;
+        public string ProfileHash { get; set; } = string.Empty;
+        public IReadOnlyList<VisionLabelMapping> Mappings { get; set; } = Array.Empty<VisionLabelMapping>();
+    }
+
     public sealed class IngredientObservation
     {
         public string ObservationKey { get; set; } = string.Empty;
@@ -254,6 +274,9 @@ namespace Gelato.Ar.Core
         public string EvidenceSourceZoneKey { get; set; } = string.Empty;
         public string EvidenceDestinationRegionKey { get; set; } = string.Empty;
         public bool EvidenceSequenceSupported { get; set; }
+        public string DetectorLabel { get; set; } = string.Empty;
+        public bool VisionProfileMatched { get; set; }
+        public float? VisionProfileMinimumConfidence { get; set; }
     }
 
     public sealed class ObservationCorrection
@@ -307,6 +330,7 @@ namespace Gelato.Ar.Core
         public const string Pair = "pair";
         public const string CurrentWork = "current_work";
         public const string CalibrationGet = "calibration.get";
+        public const string VisionProfile = "vision.profile";
         public const string BuildStart = "build.start";
         public const string BuildObserve = "build.observe";
         public const string BuildConfirm = "build.confirm";
