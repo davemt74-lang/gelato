@@ -55,6 +55,13 @@ try{
         app_json_response(['ok'=>true,'rollout'=>$rollout]);
     }
 
+    if($action==='rollout.advance_override'){
+        $rollout=glasses_vision_model_rollout_advance_override(
+            $pdo,$org,(string)($in['publicId']??''),(float)($in['canaryPercent']??-1),(int)$user['id'],(string)($in['reason']??'')
+        );
+        app_json_response(['ok'=>true,'rollout'=>$rollout]);
+    }
+
     if($action==='rollout.pause'){
         $rollout=glasses_vision_model_rollout_pause($pdo,$org,(string)($in['publicId']??''),(int)$user['id']);
         app_json_response(['ok'=>true,'rollout'=>$rollout]);
