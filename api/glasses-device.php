@@ -7,6 +7,7 @@ require_once __DIR__.'/../includes/glasses-work.php';
 require_once __DIR__.'/../includes/glasses-build.php';
 require_once __DIR__.'/../includes/glasses-validation.php';
 require_once __DIR__.'/../includes/glasses-handoff.php';
+require_once __DIR__.'/../includes/glasses-calibration.php';
 
 $pdo=app_pdo();
 if(!glasses_ready($pdo))app_json_response(['ok'=>false,'message'=>'Glasses plugin migration is not installed.'],503);
@@ -56,6 +57,27 @@ try{
     if($action==='current_work'){
         $work=glasses_current_work($pdo,$device);
         app_json_response(['ok'=>true,'work'=>$work,'serverTime'=>(new DateTimeImmutable())->format(DATE_ATOM)]);
+    }
+
+    if($action==='calibration.get'){
+        $runtime=[
+            'platform'=>(string)($device['platform']??''),
+            'frameWidth'=>(int)($in['frameWidth']??0),
+            'frameHeight'=>(int)($in['frameHeight']??0),
+            'pixelFormat'=>(string)($in['pixelFormat']??''),
+        ];
+        $calibration=glasses_station_calibration_active(
+            $pdo,
+            (int)$device['organization_id'],
+            (int)$device['location_id'],
+            $device['station_id']!==null?(int)$device['station_id']:null,
+            $runtime
+        );
+        app_json_response([
+            'ok'=>true,
+            'assignmentRequired'=>$device['station_id']===null,
+            'calibration'=>$calibration,
+        ]);
     }
 
     if($action==='build.start'){
