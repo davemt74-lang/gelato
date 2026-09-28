@@ -61,5 +61,7 @@ gws_assert(str_contains($js,"presets['Pizza Line Reference']"),'Reference HUD la
 gws_assert(str_contains($js,'function toggleAutoPlay'),'Mock demo must support scripted playback.');
 gws_assert(str_contains($css,'.hud-orders-left')&&str_contains($css,'.hud-next-center'),'Reference HUD styling must preserve left rail and open center.');
 gws_assert(str_contains($css,'.detection-box.low-confidence')&&str_contains($css,'.detection-box.unexpected'),'Detection overlays must communicate verification and unexpected states.');
+gws_assert(str_contains($css,'.glasses-stage.calibrating .hud-orders-left')&&str_contains($css,'.glasses-stage.calibrating .hud-next-center'),'New HUD rails must honor calibration geometry.');
+gws_assert(str_contains($css,'.glasses-stage.calibrating .hud-right-build')&&str_contains($css,'.glasses-stage.calibrating .hud-topbar'),'Build and status HUD regions must honor calibration geometry.');
 
 echo "glasses-web-simulator-ok\n";
