@@ -1,0 +1,116 @@
+name: AR Glasses Transfer Sequence Evidence
+
+on:
+  pull_request:
+    paths:
+      - 'database/20261017_glasses_station_work_regions.sql'
+      - 'includes/glasses-calibration.php'
+      - 'tests/glasses-transfer-sequence-contract.php'
+      - 'glasses/inmo-air3-unity/**'
+      - 'docs/GLASSES-TRANSFER-SEQUENCE.md'
+      - '.github/workflows/glasses-transfer-sequence.yml'
+  push:
+    branches: [main, 'feature/glasses-transfer-sequence-evidence']
+
+jobs:
+  transfer-sequence:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Syntax and architecture contract
+        run: |
+          php -l includes/glasses-calibration.php
+          php -l tests/glasses-transfer-sequence-contract.php
+          grep -q 'CREATE TABLE glasses_station_calibration_regions' database/20261017_glasses_station_work_regions.sql
+          grep -q 'build_surface' includes/glasses-calibration.php
+          grep -q 'class StationRegion' glasses/inmo-air3-unity/Runtime/Core/Models.cs
+          grep -q 'class TransferEvidenceTracker' glasses/inmo-air3-unity/Runtime/Core/TransferEvidence.cs
+          grep -q 'TransferConfirmed' glasses/inmo-air3-unity/Runtime/Core/TransferEvidence.cs
+          grep -q 'WorkSurfaceUnprimed' glasses/inmo-air3-unity/Runtime/Core/TransferEvidence.cs
+          grep -q 'UnprimedWorkSurfaceConfidenceCap' glasses/inmo-air3-unity/Runtime/Core/VisionModels.cs
+          grep -q 'BuildSteps = build.BuildSteps' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
+          grep -q 'evidenceKind' glasses/inmo-air3-unity/Runtime/Unity/UnityGelatoGateway.cs
+          grep -q 'sourceZoneKey' glasses/inmo-air3-unity/Runtime/Unity/UnityGelatoGateway.cs
+          grep -q 'destinationRegionKey' glasses/inmo-air3-unity/Runtime/Unity/UnityGelatoGateway.cs
+          ! grep -R 'ArPoseManager' glasses/inmo-air3-unity/Runtime/Core
+
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_restaurant_ai_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->ensureTrackingTables();
+          $s->bootstrapLegacyHistory(null);
+          $s->applyPending(null);
+          if($s->pendingMigrations()) exit(1);
+          PHP
+
+      - name: Transfer-region backend contract
+        run: php tests/glasses-transfer-sequence-contract.php
+
+      - name: Compile hardware-neutral AR core
+        run: dotnet build glasses/inmo-air3-unity/Runtime/Core/Gelato.Ar.Core.csproj -c Release --nologo
+
+      - name: Run workflow, HUD, simulator, vision, calibration, spatial and transfer contracts
+        run: dotnet run --project glasses/inmo-air3-unity/Tests/Gelato.Ar.Core.Tests.csproj -c Release
+
+      - name: Existing glasses + KDS regressions
+        run: |
+          php tests/glasses-foundation-contract.php
+          php tests/glasses-work-api-contract.php
+          php tests/glasses-build-session-contract.php
+          php tests/glasses-build-definition-contract.php
+          php tests/glasses-product-validation-contract.php
+          php tests/glasses-expo-handoff-contract.php
+          php tests/glasses-station-calibration-contract.php
+          php tests/kds-contract.php
+          php tests/kds-production-expo-contract.php
+
+      - name: Upgrade idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->assertAppliedChecksumsUnchanged();
+          if($s->pendingMigrations()) exit(2);
+          if($s->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP
+
+      - name: Vendor isolation
+        run: |
+          ! grep -R 'ArPoseManager' glasses/inmo-air3-unity/Runtime/Core
