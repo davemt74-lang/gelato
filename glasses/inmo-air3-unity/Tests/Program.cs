@@ -18,6 +18,7 @@ internal static class Program
         await StationCalibrationContract();
         await VisionLabelProfileContract();
         await VisionModelRolloutContract();
+        await VisionModelActivationContract.RunAsync();
         await SpatialEvidenceFusionContract();
         await TransferSequenceEvidenceContract();
         await VisionPipelineContract();
