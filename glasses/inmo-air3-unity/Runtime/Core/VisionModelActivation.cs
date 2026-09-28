@@ -97,10 +97,6 @@ namespace Gelato.Ar.Core
             var previous = _runtime.CaptureActive();
             var expectedSha = (package.ArtifactSha256 ?? string.Empty).Trim().ToLowerInvariant();
 
-            if (_persistence != null)
-            {
-                await _persistence.BeginActivationAsync(assignment, previous, cancellationToken).ConfigureAwait(false);
-            }
             if (string.Equals(previous.PackagePublicId, package.PublicId, StringComparison.Ordinal)
                 && string.Equals((previous.ArtifactSha256 ?? string.Empty).Trim().ToLowerInvariant(), expectedSha, StringComparison.Ordinal))
             {
@@ -116,6 +112,11 @@ namespace Gelato.Ar.Core
                     Package = package,
                     Message = "Assigned verified model is already active."
                 };
+            }
+
+            if (_persistence != null)
+            {
+                await _persistence.BeginActivationAsync(assignment, previous, cancellationToken).ConfigureAwait(false);
             }
 
             byte[] artifact;
