@@ -256,6 +256,27 @@ namespace Gelato.Ar.Core
         public bool EvidenceSequenceSupported { get; set; }
     }
 
+    public sealed class ObservationCorrection
+    {
+        public string CorrectionKey { get; set; } = string.Empty;
+        public string ObservationKey { get; set; } = string.Empty;
+        public string Resolution { get; set; } = "reject";
+        public string TargetComponentKey { get; set; } = string.Empty;
+        public float? CorrectedQuantity { get; set; }
+        public string Reason { get; set; } = string.Empty;
+    }
+
+    public sealed class ObservationEvidence
+    {
+        public string ObservationKey { get; set; } = string.Empty;
+        public string ComponentKey { get; set; } = string.Empty;
+        public string Action { get; set; } = string.Empty;
+        public float Quantity { get; set; }
+        public float Confidence { get; set; }
+        public string TrackingId { get; set; } = string.Empty;
+        public ObservationCorrection? LatestCorrection { get; set; }
+    }
+
     public sealed class ValidationNext
     {
         public string Stage { get; set; } = string.Empty;
@@ -290,6 +311,8 @@ namespace Gelato.Ar.Core
         public const string BuildObserve = "build.observe";
         public const string BuildConfirm = "build.confirm";
         public const string ResolveUnexpected = "build.resolve_unexpected";
+        public const string CorrectObservation = "build.correct_observation";
+        public const string BuildEvidence = "build.evidence";
         public const string ValidationEvaluate = "validation.evaluate";
         public const string ValidationGet = "validation.get";
         public const string HandoffExpo = "handoff.expo";
