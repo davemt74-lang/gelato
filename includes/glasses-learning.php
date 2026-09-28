@@ -63,7 +63,7 @@ function glasses_learning_rows(
 
     $sql="SELECT
             o.id observation_id,o.observation_key,o.component_key,o.action,o.quantity,o.confidence,o.tracking_id,o.metadata_json,o.created_at,
-            s.public_id build_session_public_id,s.menu_item_id,s.location_id,
+            s.public_id build_session_public_id,s.menu_item_id,k.location_id,
             mi.name menu_item_name,
             k.public_id kds_item_public_id,
             ks.public_id station_public_id,ks.name station_name,
@@ -84,7 +84,7 @@ function glasses_learning_rows(
             WHERE c2.organization_id=o.organization_id AND c2.observation_id=o.id
         )
         LEFT JOIN glasses_build_components tbc ON tbc.build_session_id=s.id AND tbc.organization_id=s.organization_id AND tbc.component_key=c.target_component_key
-        WHERE o.organization_id=? AND s.location_id=?
+        WHERE o.organization_id=? AND k.location_id=?
           AND o.created_at>=DATE_SUB(NOW(6),INTERVAL {$days} DAY)";
     $args=[$org,$locationId];
 
