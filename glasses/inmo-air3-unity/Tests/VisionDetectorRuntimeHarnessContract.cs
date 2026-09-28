@@ -11,6 +11,7 @@ internal static class VisionDetectorRuntimeHarnessContract
         await WarmupAndHealthyInference();
         await TimeoutFailsClosedAndRestarts();
         await BackpressureDropsConcurrentFrame();
+        await TimedOutIgnoringCancellationDoesNotOverlap();
         await RepeatedRestartFailureTransitionsFailed();
     }
 
@@ -57,6 +58,29 @@ internal static class VisionDetectorRuntimeHarnessContract
         Assert(harness.Health.BackpressureDrops == 1, "backpressure drop must be observable");
         detector.Gate.SetResult(true);
         await first;
+    }
+
+    private static async Task TimedOutIgnoringCancellationDoesNotOverlap()
+    {
+        var detector = new ControlledDetector
+        {
+            IgnoreCancellationGate = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously)
+        };
+        var options = Options();
+        options.ConsecutiveFailuresBeforeRestart = 9;
+        var harness = new VisionDetectorRuntimeHarness(detector, options);
+        await harness.WarmupAsync();
+
+        var timedOut = await harness.DetectAsync(Frame(40), Context(), CancellationToken.None);
+        Assert(timedOut.Count == 0 && harness.Health.TimedOutInferences == 1, "hung inference must time out fail-closed");
+
+        var second = await harness.DetectAsync(Frame(41), Context(), CancellationToken.None);
+        Assert(second.Count == 0 && harness.Health.BackpressureDrops == 1, "timed-out underlying call must continue holding the inference gate until it exits");
+
+        detector.IgnoreCancellationGate.SetResult(true);
+        await Task.Delay(5);
+        var third = await harness.DetectAsync(Frame(42), Context(), CancellationToken.None);
+        Assert(third.Count == 1, "new inference may resume only after the timed-out underlying call exits");
     }
 
     private static async Task RepeatedRestartFailureTransitionsFailed()
@@ -107,6 +131,7 @@ internal static class VisionDetectorRuntimeHarnessContract
         public bool Hang { get; set; }
         public bool Throw { get; set; }
         public bool FailRestart { get; set; }
+        public TaskCompletionSource<bool>? IgnoreCancellationGate { get; set; }
         public int WarmupCalls { get; private set; }
         public int RestartCalls { get; private set; }
         public TaskCompletionSource<bool>? Gate { get; set; }
@@ -131,6 +156,11 @@ internal static class VisionDetectorRuntimeHarnessContract
         {
             Started.TrySetResult(true);
             if (Throw) throw new InvalidOperationException("simulated inference failure");
+            if (IgnoreCancellationGate != null)
+            {
+                await IgnoreCancellationGate.Task;
+                IgnoreCancellationGate = null;
+            }
             if (Hang) await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
             if (Gate != null) await Gate.Task;
             return new[]
