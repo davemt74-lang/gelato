@@ -175,12 +175,25 @@ function captureCameraFrame(){
 function clearCameraTarget(){
   state.cameraTarget=null;document.querySelector('.camera-target-marker')?.remove();$('submitCameraTarget').disabled=true;$('clearCameraTarget').disabled=true;
 }
+function cameraPointerGeometry(event){
+  const stage=$('glassesStage'),video=$('cameraVideo'),rect=stage.getBoundingClientRect();
+  if(!video.videoWidth||!video.videoHeight||!rect.width||!rect.height)return null;
+  const px=event.clientX-rect.left,py=event.clientY-rect.top,srcRatio=video.videoWidth/video.videoHeight,dstRatio=rect.width/rect.height,fit=$('cameraFit').value;
+  let drawW,drawH,offsetX,offsetY;
+  if((fit==='cover'&&srcRatio>dstRatio)||(fit==='contain'&&srcRatio<dstRatio)){drawH=rect.height;drawW=drawH*srcRatio;offsetX=(rect.width-drawW)/2;offsetY=0;}
+  else{drawW=rect.width;drawH=drawW/srcRatio;offsetX=0;offsetY=(rect.height-drawH)/2;}
+  let x=(px-offsetX)/drawW,y=(py-offsetY)/drawH;
+  if(x<0||x>1||y<0||y>1)return null;
+  if($('cameraMirror').checked)x=1-x;
+  return {stage,stageX:clamp(px/rect.width,0,1),stageY:clamp(py/rect.height,0,1),videoX:clamp(x,0,1),videoY:clamp(y,0,1)};
+}
 function setCameraTargetFromPointer(event){
   if(!$('cameraManualTarget').checked||state.cameraSource!=='camera'||!state.cameraStream)return;
-  const stage=$('glassesStage'),rect=stage.getBoundingClientRect(),x=clamp((event.clientX-rect.left)/rect.width,0,1),y=clamp((event.clientY-rect.top)/rect.height,0,1);
-  state.cameraTarget={x,y,width:.12,height:.12};
+  const g=cameraPointerGeometry(event);if(!g)return;
+  const boxW=.12,boxH=.12;
+  state.cameraTarget={x:clamp(g.videoX-boxW/2,0,1-boxW),y:clamp(g.videoY-boxH/2,0,1-boxH),width:boxW,height:boxH};
   document.querySelector('.camera-target-marker')?.remove();
-  const marker=document.createElement('div');marker.className='camera-target-marker';marker.style.left=(x*100)+'%';marker.style.top=(y*100)+'%';marker.innerHTML='<span>VISION TARGET</span>';stage.appendChild(marker);
+  const marker=document.createElement('div');marker.className='camera-target-marker';marker.style.left=(g.stageX*100)+'%';marker.style.top=(g.stageY*100)+'%';marker.innerHTML='<span>VISION TARGET</span>';g.stage.appendChild(marker);
   $('submitCameraTarget').disabled=false;$('clearCameraTarget').disabled=false;
 }
 async function submitCameraTargetObservation(){
@@ -345,7 +358,7 @@ $('cameraResolution').addEventListener('change',async()=>{saveCameraPrefs();if(s
 $('cameraManualTarget').addEventListener('change',e=>{$('glassesStage').classList.toggle('camera-targeting',e.target.checked);if(!e.target.checked)clearCameraTarget();});
 $('glassesStage').addEventListener('click',setCameraTargetFromPointer);
 $('cameraTargetConfidence').addEventListener('input',e=>{$('cameraTargetConfidenceValue').textContent=e.target.value+'%';});
-document.addEventListener('visibilitychange',()=>{if(document.hidden)stopLiveStationSync('hidden');else if(state.mode==='live'&&state.device)startLiveStationSync({immediate:true});});
+document.addEventListener('visibilitychange',()=>{if(state.cameraTrack){state.cameraTrack.enabled=!document.hidden;setCameraHealth(document.hidden?'paused':'ready',document.hidden?'PAUSED':'READY');}if(document.hidden)stopLiveStationSync('hidden');else if(state.mode==='live'&&state.device)startLiveStationSync({immediate:true});});
 window.addEventListener('offline',()=>{stopLiveStationSync('idle');setSyncBadge('error','OFFLINE');});
 window.addEventListener('online',()=>{if(state.mode==='live'&&state.device)startLiveStationSync({immediate:true});});
 window.addEventListener('beforeunload',()=>stopLiveStationSync('idle'));
