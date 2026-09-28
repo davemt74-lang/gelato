@@ -19,6 +19,7 @@ namespace Gelato.Ar.Core
         public ProductValidation? Validation { get; private set; }
         public ExpoHandoff? Handoff { get; private set; }
         public string? LastError { get; private set; }
+        public string? LastCalibrationError { get; private set; }
 
         public ArWorkflowCoordinator(IGlassesPlatform platform, IGelatoGateway gateway, IDeviceTokenStore tokenStore)
         {
@@ -90,11 +91,22 @@ namespace Gelato.Ar.Core
             if (frame.Width <= 0 || frame.Height <= 0 || string.IsNullOrWhiteSpace(frame.PixelFormat))
                 throw new InvalidOperationException("A valid camera frame is required to load station calibration.");
 
-            return await GuardAsync(async () =>
+            try
             {
+                LastCalibrationError = null;
                 StationCalibration = await _gateway.GetStationCalibrationAsync(frame, cancellationToken).ConfigureAwait(false);
                 return StationCalibration;
-            }).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                StationCalibration = null;
+                LastCalibrationError = ex.Message;
+                return null;
+            }
         }
 
         public async Task<BuildSession> StartFocusBuildAsync(CancellationToken cancellationToken = default)
@@ -198,6 +210,7 @@ namespace Gelato.Ar.Core
             Validation = null;
             Handoff = null;
             LastError = null;
+            LastCalibrationError = null;
             State = string.IsNullOrWhiteSpace(_deviceToken) ? WorkflowState.Unpaired : WorkflowState.Idle;
         }
 
