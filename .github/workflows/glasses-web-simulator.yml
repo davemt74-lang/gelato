@@ -1,0 +1,59 @@
+name: AR Glasses Web Simulator
+
+on:
+  pull_request:
+    paths:
+      - 'glasses-simulator.php'
+      - 'api/glasses-simulator.php'
+      - 'includes/glasses-simulator.php'
+      - 'assets/css/glasses-web-simulator.css'
+      - 'assets/js/glasses-web-simulator.js'
+      - 'tests/glasses-web-simulator-contract.php'
+      - 'docs/GLASSES-WEB-SIMULATOR.md'
+      - '.github/workflows/glasses-web-simulator.yml'
+  push:
+    branches: ['feature/web-glasses-simulator']
+
+jobs:
+  web-glasses-simulator:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: PHP syntax
+        run: |
+          php -l glasses-simulator.php
+          php -l api/glasses-simulator.php
+          php -l includes/glasses-simulator.php
+          php -l tests/glasses-web-simulator-contract.php
+
+      - name: JavaScript syntax
+        run: node --check assets/js/glasses-web-simulator.js
+
+      - name: Simulator architecture contract
+        run: php tests/glasses-web-simulator-contract.php
+
+      - name: Preserve real POS KDS and AR authority
+        run: |
+          grep -q 'glasses_current_work' includes/glasses-simulator.php
+          grep -q 'glasses_build_observe' includes/glasses-simulator.php
+          grep -q 'glasses_validation_evaluate' includes/glasses-simulator.php
+          grep -q 'glasses_handoff_to_expo' includes/glasses-simulator.php
+          grep -q "app_has_permission('kds.update'" includes/glasses-simulator.php
+          ! grep -q 'UPDATE kds_order_items' includes/glasses-simulator.php
+          grep -q "mode==='mock'" assets/js/glasses-web-simulator.js
+          grep -q "mode==='live'" assets/js/glasses-web-simulator.js
+
+      - name: Preserve existing AR contracts
+        run: |
+          php -l api/glasses-device.php
+          php -l includes/glasses-work.php
+          php -l includes/glasses-build.php
+          php -l includes/glasses-validation.php
+          php -l includes/glasses-handoff.php
