@@ -5,10 +5,11 @@ require_once __DIR__.'/../includes/glasses-vision-lab.php';
 require_once __DIR__.'/../includes/glasses-vision-active-learning.php';
 require_once __DIR__.'/../includes/glasses-vision-dataset-intelligence.php';
 require_once __DIR__.'/../includes/glasses-vision-training-media.php';
+require_once __DIR__.'/../includes/glasses-vision-curation.php';
 $user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];
 if(!app_has_permission('glasses.view',$user))app_json_response(['ok'=>false,'message'=>'AR glasses permission required.'],403);
 try{
- if($_SERVER['REQUEST_METHOD']==='GET'){$catalog=glasses_vision_lab_catalog($pdo,$user);$catalog['activeLearning']=glasses_vision_active_learning_catalog($pdo,$org);$catalog['datasetIntelligence']=glasses_vision_dataset_intelligence_catalog($pdo,$org);$catalog['trainingMedia']=glasses_vision_training_media_catalog($pdo,$org);app_json_response(['ok'=>true,'catalog'=>$catalog]);}
+ if($_SERVER['REQUEST_METHOD']==='GET'){$catalog=glasses_vision_lab_catalog($pdo,$user);$catalog['activeLearning']=glasses_vision_active_learning_catalog($pdo,$org);$catalog['datasetIntelligence']=glasses_vision_dataset_intelligence_catalog($pdo,$org);$catalog['trainingMedia']=glasses_vision_training_media_catalog($pdo,$org);$catalog['curation']=glasses_vision_curation_catalog($pdo,$org);app_json_response(['ok'=>true,'catalog'=>$catalog]);}
  if($_SERVER['REQUEST_METHOD']!=='POST'){header('Allow: GET, POST');app_json_response(['ok'=>false,'message'=>'Method not allowed.'],405);}
  if(!app_has_permission('glasses.manage',$user))app_json_response(['ok'=>false,'message'=>'AR glasses management permission required.'],403);
  $in=app_json_input();app_verify_request_csrf($in);$action=(string)($in['action']??'');$actor=(int)$user['id'];
@@ -29,5 +30,9 @@ try{
  if($action==='dataset_intelligence.accept_plan')app_json_response(['ok'=>true,'plan'=>glasses_vision_dataset_intelligence_accept_plan($pdo,$org,(string)($in['publicId']??''),$actor)]);
  if($action==='dataset_intelligence.set_split')app_json_response(['ok'=>true,'coverage'=>glasses_vision_dataset_intelligence_set_split($pdo,$org,(string)($in['datasetPublicId']??''),(string)($in['samplePublicId']??''),(string)($in['split']??''))]);
  if($action==='dataset_intelligence.consolidate_build_split')app_json_response(['ok'=>true,'result'=>glasses_vision_dataset_intelligence_consolidate_build_split($pdo,$org,(string)($in['datasetPublicId']??''),(string)($in['buildPublicId']??''),(string)($in['split']??''))]);
+ if($action==='curation.rows')app_json_response(['ok'=>true,'rows'=>glasses_vision_curation_rows($pdo,$org,(string)($in['datasetPublicId']??'')),'plans'=>glasses_vision_curation_split_plans($pdo,$org,(string)($in['datasetPublicId']??''))]);
+ if($action==='curation.decide')app_json_response(['ok'=>true,'decision'=>glasses_vision_curation_decide($pdo,$org,(string)($in['datasetPublicId']??''),(string)($in['samplePublicId']??''),(string)($in['decision']??''),(string)($in['reason']??''),$actor)]);
+ if($action==='curation.plan_split')app_json_response(['ok'=>true,'plan'=>glasses_vision_curation_create_split_plan($pdo,$org,(string)($in['datasetPublicId']??''),$in,$actor)],201);
+ if($action==='curation.apply_split')app_json_response(['ok'=>true,'plan'=>glasses_vision_curation_apply_split_plan($pdo,$org,(string)($in['publicId']??''),$actor)]);
  app_json_response(['ok'=>false,'message'=>'Unsupported Vision Lab action.'],422);
 }catch(InvalidArgumentException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);}catch(Throwable $e){error_log('[gelato-vision-lab] '.$e->getMessage());app_json_response(['ok'=>false,'message'=>'Vision Lab request could not be completed.'],500);}

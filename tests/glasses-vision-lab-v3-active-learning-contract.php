@@ -49,7 +49,7 @@ $open=glasses_vision_active_learning_candidates($pdo,$org,'open',20);if($open){$
 $summary=glasses_vision_active_learning_summary($pdo,$org);al_assert(($summary['states']['assigned']??0)>=1,'Active-learning summary must count accepted mission candidates.');
 
 $page=file_get_contents(__DIR__.'/../glasses-vision-lab.php');$api=file_get_contents(__DIR__.'/../api/glasses-vision-lab.php');$js=file_get_contents(__DIR__.'/../assets/js/glasses-vision-lab.js');
-al_assert((str_contains($page,'Vision Lab V3')||str_contains($page,'Vision Lab V4')||str_contains($page,'Vision Lab V5'))&&str_contains($page,'Scan production signals'),'Vision Lab V3 must expose the active-learning workspace.');
+al_assert((str_contains($page,'Vision Lab V3')||str_contains($page,'Vision Lab V4')||str_contains($page,'Vision Lab V5')||str_contains($page,'Vision Lab V6'))&&str_contains($page,'Scan production signals'),'Vision Lab V3 must expose the active-learning workspace.');
 al_assert(str_contains($api,"active_learning.scan")&&str_contains($api,"active_learning.create_mission")&&str_contains($api,'app_verify_request_csrf'),'Active-learning mutations must be explicit and CSRF protected.');
 al_assert(str_contains($js,'data-al-mission')&&str_contains($js,'data-al-dismiss'),'UI must expose candidate acceptance and dismissal.');
 al_assert(!str_contains($api,'glasses_build_observe')&&!str_contains($api,'kds_transition'),'Active learning API must not mutate production build or KDS truth.');
