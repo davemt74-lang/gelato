@@ -127,12 +127,19 @@ namespace Gelato.Ar.Core
             if (string.IsNullOrWhiteSpace(expectedPackage) || string.IsNullOrWhiteSpace(expectedSha))
             {
                 await _persistence.CleanupAsync(cancellationToken).ConfigureAwait(false);
+                if (interrupted)
+                {
+                    return Fail(
+                        "interrupted_without_known_good",
+                        "An interrupted model activation has no durable known-good runtime to restore.",
+                        true);
+                }
                 return new VisionModelRecoveryResult
                 {
                     Ready = true,
                     Recovered = false,
-                    InterruptedActivationFound = interrupted,
-                    State = interrupted ? "interrupted_without_known_good" : "empty"
+                    InterruptedActivationFound = false,
+                    State = "empty"
                 };
             }
 
