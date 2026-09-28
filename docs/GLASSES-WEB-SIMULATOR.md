@@ -96,3 +96,24 @@ In **Live Gelato** mode the simulator now keeps the selected glasses/KDS station
 - A visible **LIVE SYNC / SYNCING / SYNC RETRY / SYNC PAUSED** badge reports synchronization health.
 
 The synchronization endpoint is read-only and does not bypass any POS, KDS, build-session, validation or Expo mutation authority.
+
+
+## Browser camera and vision preview runtime
+
+The simulator can now use a real browser camera as the scene underneath the existing SVG glasses frame and HUD.
+
+- Scene source can switch between uploaded **Image** and **Browser Camera**.
+- Camera startup uses the browser MediaDevices API with environment-facing preference when no explicit device is selected.
+- Available video inputs are enumerated after camera permission is granted.
+- Resolution presets include 640×480, 1280×720 and 1920×1080.
+- Preview supports Cover/Contain fit and optional mirroring.
+- Camera health reports OFF, STARTING, READY, ERROR or UNSUPPORTED.
+- Permission denial, missing hardware and stream-ended conditions are surfaced without affecting POS/KDS state.
+- Camera tracks are released when stopped.
+- The current frame can be captured locally as PNG without server upload.
+- Manual Vision Target mode lets the operator click a location in the live scene, select the current or a specific build component, set confidence and submit an observation.
+- In Mock mode, targeted observations remain isolated to the local mock build.
+- In Live Gelato mode, targeted observations use the existing authenticated canonical build observation endpoint and are explicitly labelled `web_glasses_simulator_camera`.
+- Live Station Sync continues independently while the camera preview is active.
+
+This browser camera runtime is a development/preview input and does not claim AIR3 hardware or vendor model-loader parity.
