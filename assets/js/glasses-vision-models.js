@@ -7,6 +7,7 @@ var packages=Array.isArray(catalog.packages)?catalog.packages:[];
 var rollouts=Array.isArray(catalog.rollouts)?catalog.rollouts:[];
 var metrics=catalog.metricsByRollout||{};
 var locations=Array.isArray(catalog.locations)?catalog.locations:[];
+var driftIncidents=Array.isArray(catalog.driftIncidents)?catalog.driftIncidents:[];
 var stationsByLocation=catalog.stationsByLocation||{};
 
 var el={
@@ -36,6 +37,7 @@ var el={
  rolloutRows:document.getElementById('gvmRolloutRows'),
  packageSearch:document.getElementById('gvmPackageSearch'),
  refresh:document.getElementById('gvmRefresh'),
+ driftIncidentRows:document.getElementById('gvmDriftIncidentRows'),
  toast:document.getElementById('gvmToast')
 };
 
@@ -260,7 +262,42 @@ function renderRollouts(){
  }).join('');
 }
 
-function renderAll(){populatePackageSelects();populateLocations();renderPackages();renderRollouts();validatePackage();validateRollout();}
+function renderDriftIncidents(){
+ if(!el.driftIncidentRows)return;
+ if(!driftIncidents.length){el.driftIncidentRows.innerHTML='<tr><td colspan="6" class="gvm-empty">No drift incidents.</td></tr>';return;}
+ el.driftIncidentRows.innerHTML=driftIncidents.map(function(i){
+   var rec=i.recommendation||{},steps=Array.isArray(rec.steps)?rec.steps:[];
+   var controls='<div class="gvm-actions">';
+   if(i.recoveryStatus==='open'||i.recoveryStatus==='reopened')controls+='<button class="admin-button quiet" data-drift-action="diagnose" data-id="'+esc(i.publicId)+'">Diagnose</button>';
+   if(i.recoveryStatus==='diagnosing'||i.recoveryStatus==='reopened'||i.recoveryStatus==='open')controls+='<button class="admin-button quiet" data-drift-action="remediate" data-id="'+esc(i.publicId)+'">Set remediation</button>';
+   if(i.recoveryStatus==='remediation_required')controls+='<button class="admin-button quiet" data-drift-action="validate" data-id="'+esc(i.publicId)+'">Start validation</button>';
+   controls+='</div>';
+   return '<tr><td><strong>'+esc(i.severity.toUpperCase())+'</strong><small>'+esc(i.publicId)+'</small></td>'+
+    '<td><span class="gvm-pill '+esc(i.driftState)+'">'+esc(i.category)+'</span></td>'+
+    '<td><small>'+esc((i.reasons||[]).join(', ')||'—')+'</small></td>'+
+    '<td><strong>'+esc(rec.title||'Review incident')+'</strong><small>'+esc(steps.join(' · '))+'</small></td>'+
+    '<td><span class="gvm-recovery '+esc(i.recoveryStatus)+'">'+esc(i.recoveryStatus.replaceAll('_',' '))+'</span><small>'+Number(i.validationStableSamples||0)+'/10 stable · reopened '+Number(i.reopenedCount||0)+'</small></td>'+
+    '<td>'+controls+'</td></tr>';
+ }).join('');
+}
+async function driftAction(action,id){
+ var incident=driftIncidents.find(function(i){return i.publicId===id;});if(!incident)return;
+ var payload={action:'drift.'+action,csrf_token:String(boot.csrfToken||''),publicId:id};
+ if(action==='remediate'){
+   var type=window.prompt('Remediation type:',incident.recommendation&&incident.recommendation.type||'diagnose');if(type===null)return;
+   var notes=window.prompt('Remediation notes / evidence:','');if(notes===null)return;payload.remediationType=type;payload.notes=notes;
+ }
+ if(action==='validate'){
+   var allow=['lighting','camera_pose','camera_config','environment','data_domain'].includes(incident.category);
+   payload.resetBaseline=allow&&window.confirm('Reset the environment/data baseline before validation? Use Cancel to validate against the existing baseline.');
+ }
+ try{
+   var data=await request(payload),idx=driftIncidents.findIndex(function(i){return i.publicId===id;});if(idx>=0)driftIncidents[idx]=data.incident;
+   renderDriftIncidents();toast('Drift recovery '+action+' recorded.');
+ }catch(e){toast(e.message,true);}
+}
+
+function renderAll(){populatePackageSelects();populateLocations();renderPackages();renderRollouts();renderDriftIncidents();validatePackage();validateRollout();}
 
 async function createPackage(){
  if(!validatePackage())return;
@@ -334,6 +371,7 @@ el.packageSearch.addEventListener('input',renderPackages);
 el.refresh.addEventListener('click',reload);
 el.packageRows.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('[data-retire]');if(b)retire(b.getAttribute('data-retire'));});
 el.rolloutRows.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('[data-rollout-action]');if(b)rolloutAction(b.getAttribute('data-rollout-action'),b.getAttribute('data-id'));});
+if(el.driftIncidentRows)el.driftIncidentRows.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('[data-drift-action]');if(b)driftAction(b.getAttribute('data-drift-action'),b.getAttribute('data-id'));});
 
 renderAll();
 })();
