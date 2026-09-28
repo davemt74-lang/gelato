@@ -74,6 +74,13 @@ try{
         app_json_response(['ok'=>true,'rollout'=>$rollout]);
     }
 
+    if(str_starts_with($action,'drift.')){
+        $incident=glasses_vision_drift_recovery_action(
+            $pdo,$org,(string)($in['publicId']??''),substr($action,6),$in,(int)$user['id']
+        );
+        app_json_response(['ok'=>true,'incident'=>$incident]);
+    }
+
     app_json_response(['ok'=>false,'message'=>'Unsupported vision model action.'],422);
 }catch(InvalidArgumentException $e){
     app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);
