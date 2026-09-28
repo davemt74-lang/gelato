@@ -5,6 +5,14 @@ require_once __DIR__.'/operational-access.php';
 require_once __DIR__.'/kds-core.php';
 require_once __DIR__.'/glasses-calibration.php';
 
+function glasses_calibration_studio_ready(PDO $pdo): bool
+{
+    if(!glasses_station_calibration_ready($pdo))return false;
+    $q=$pdo->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='glasses_station_calibration_regions'");
+    $q->execute();
+    return (int)$q->fetchColumn()===1;
+}
+
 function glasses_calibration_studio_catalog(PDO $pdo,array $user): array
 {
     $org=(int)($user['organization_id']??0);
@@ -56,6 +64,6 @@ function glasses_calibration_studio_catalog(PDO $pdo,array $user): array
         'stationsByLocation'=>$stations,
         'ingredients'=>$ingredients,
         'canManage'=>app_has_permission('glasses.manage',$user),
-        'schemaReady'=>glasses_station_calibration_ready($pdo),
+        'schemaReady'=>glasses_calibration_studio_ready($pdo),
     ];
 }
