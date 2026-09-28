@@ -8,6 +8,7 @@ require_once __DIR__.'/../includes/glasses-build.php';
 require_once __DIR__.'/../includes/glasses-validation.php';
 require_once __DIR__.'/../includes/glasses-handoff.php';
 require_once __DIR__.'/../includes/glasses-calibration.php';
+require_once __DIR__.'/../includes/glasses-vision-profiles.php';
 
 $pdo=app_pdo();
 if(!glasses_ready($pdo))app_json_response(['ok'=>false,'message'=>'Glasses plugin migration is not installed.'],503);
@@ -78,6 +79,18 @@ try{
             'assignmentRequired'=>$device['station_id']===null,
             'calibration'=>$calibration,
         ]);
+    }
+
+    if($action==='vision.profile'){
+        $sessionPublicId=trim((string)($in['buildSessionPublicId']??''));
+        if($sessionPublicId==='')throw new InvalidArgumentException('Build session is required.');
+        $profile=glasses_vision_profile_for_build(
+            $pdo,
+            $device,
+            $sessionPublicId,
+            (string)($in['detectorName']??'')
+        );
+        app_json_response(['ok'=>true,'visionProfile'=>$profile]);
     }
 
     if($action==='build.start'){
