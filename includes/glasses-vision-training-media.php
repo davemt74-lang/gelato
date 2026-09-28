@@ -82,6 +82,8 @@ function glasses_vision_training_media_quality(array $input,int $width,int $heig
     }
     if($contrast!==null&&$contrast<0.08)$flags[]='low_contrast';
     if($blur!==null&&$blur<18)$flags[]='blurred';
+    $detectorConfidence=isset($input['detectorConfidence'])&&$input['detectorConfidence']!==null?(float)$input['detectorConfidence']:null;
+    if($detectorConfidence!==null&&$detectorConfidence>=0.98&&!empty($input['annotations']))$flags[]='too_easy';
 
     $flags=array_values(array_unique($flags));
     $state=$flags?'warning':'good';
@@ -205,6 +207,7 @@ function glasses_vision_training_media_store(PDO $pdo,int $org,array $input,int 
         $camera=is_array($input['camera']??null)?$input['camera']:[];
         $pose=is_array($input['pose']??null)?$input['pose']:[];
         $meta=is_array($input['metadata']??null)?$input['metadata']:[];
+        if(isset($input['detectorConfidence'])&&$input['detectorConfidence']!==null)$meta['detectorConfidence']=(float)$input['detectorConfidence'];
         $meta['featureProvenance']=['perceptualHash'=>'browser_dhash_v1','brightness'=>'browser_luma_v1','contrast'=>'browser_luma_stddev_v1','blur'=>'browser_laplacian_variance_v1'];
 
         try{
@@ -329,16 +332,25 @@ function glasses_vision_training_media_dataset_quality(PDO $pdo,int $org,?string
     $q=$pdo->prepare("SELECT m.*".($datasetId!==null?",di.split_name":"")." FROM glasses_vision_training_media m {$join} WHERE m.organization_id=? AND m.status='active' ORDER BY m.id DESC LIMIT 1000");
     $q->execute($args);$rows=$q->fetchAll();
 
-    $exact=[];$shaGroups=[];$captureSplits=[];$poor=0;$warning=0;$poseCount=0;$cameraKeys=[];$distance=[];$occlusion=[];$brightnessBuckets=['dark'=>0,'normal'=>0,'bright'=>0];
+    $exact=[];$shaGroups=[];$captureSplits=[];$poor=0;$warning=0;$tooEasy=0;$poseCount=0;$cameraKeys=[];$distance=[];$occlusion=[];$brightnessBuckets=['dark'=>0,'normal'=>0,'bright'=>0];$timeOfDay=['overnight'=>0,'morning'=>0,'afternoon'=>0,'evening'=>0];$poseCoverage=[];$qualityByMedia=[];
     foreach($rows as $row){
         $shaGroups[$row['sha256']][]=$row['public_id'];
+        $flags=json_decode((string)($row['quality_flags_json']??'[]'),true)?:[];$qualityByMedia[(string)$row['public_id']]=$flags;
         if((string)$row['quality_state']==='poor')$poor++;
         elseif((string)$row['quality_state']==='warning')$warning++;
-        if($row['camera_pitch']!==null||$row['camera_yaw']!==null||$row['camera_roll']!==null)$poseCount++;
+        if(in_array('too_easy',$flags,true))$tooEasy++;
+        if($row['camera_pitch']!==null||$row['camera_yaw']!==null||$row['camera_roll']!==null){
+            $poseCount++;
+            $pitch=$row['camera_pitch']!==null?(int)(round(((float)$row['camera_pitch'])/15)*15):0;
+            $yaw=$row['camera_yaw']!==null?(int)(round(((float)$row['camera_yaw'])/30)*30):0;
+            $roll=$row['camera_roll']!==null?(int)(round(((float)$row['camera_roll'])/15)*15):0;
+            $poseKey='p'.$pitch.'_y'.$yaw.'_r'.$roll;$poseCoverage[$poseKey]=($poseCoverage[$poseKey]??0)+1;
+        }
         if($row['camera_device_key'])$cameraKeys[(string)$row['camera_device_key']]=true;
         if($row['distance_bucket'])$distance[(string)$row['distance_bucket']]=($distance[(string)$row['distance_bucket']]??0)+1;
         if($row['occlusion_bucket'])$occlusion[(string)$row['occlusion_bucket']]=($occlusion[(string)$row['occlusion_bucket']]??0)+1;
         if($row['brightness_mean']!==null){$b=(float)$row['brightness_mean'];$brightnessBuckets[$b<.25?'dark':($b>.75?'bright':'normal')]++;}
+        $hour=(int)substr((string)$row['created_at'],11,2);$bucket=$hour<6?'overnight':($hour<12?'morning':($hour<17?'afternoon':'evening'));$timeOfDay[$bucket]++;
         if($datasetId!==null&&$row['capture_group'])$captureSplits[(string)$row['capture_group']][(string)$row['split_name']]=true;
     }
     foreach($shaGroups as $sha=>$ids)if(count($ids)>1)$exact[]=['sha256'=>$sha,'count'=>count($ids),'mediaPublicIds'=>$ids];
@@ -352,11 +364,21 @@ function glasses_vision_training_media_dataset_quality(PDO $pdo,int $org,?string
     }
     $captureLeakage=[];
     foreach($captureSplits as $group=>$splits)if(count($splits)>1)$captureLeakage[]=['captureGroup'=>$group,'splits'=>array_keys($splits)];
+    $recommendations=[];
+    foreach($exact as $cluster){$ids=$cluster['mediaPublicIds'];foreach(array_slice($ids,1) as $id)$recommendations[]=['mediaPublicId'=>$id,'action'=>'exclude','reason'=>'exact_duplicate','priority'=>100];}
+    foreach($near as $pair)$recommendations[]=['mediaPublicId'=>$pair['b'],'action'=>'review_or_exclude','reason'=>'near_duplicate','priority'=>75,'similarTo'=>$pair['a'],'distance'=>$pair['distance']];
+    foreach($rows as $row){
+        $flags=$qualityByMedia[(string)$row['public_id']]??[];
+        if((string)$row['quality_state']==='poor')$recommendations[]=['mediaPublicId'=>$row['public_id'],'action'=>'recapture_or_exclude','reason'=>'poor_visual_quality','priority'=>95,'flags'=>$flags];
+        elseif(in_array('too_easy',$flags,true))$recommendations[]=['mediaPublicId'=>$row['public_id'],'action'=>'deprioritize','reason'=>'too_easy','priority'=>40,'flags'=>$flags];
+    }
+    usort($recommendations,static fn($a,$b)=>($b['priority']<=>$a['priority']));
 
     return [
-        'mediaCount'=>count($rows),'poorCount'=>$poor,'warningCount'=>$warning,
+        'mediaCount'=>count($rows),'poorCount'=>$poor,'warningCount'=>$warning,'tooEasyCount'=>$tooEasy,
         'exactDuplicateClusters'=>$exact,'nearDuplicatePairs'=>$near,'captureGroupLeakage'=>$captureLeakage,
-        'cameraDeviceDiversity'=>count($cameraKeys),'poseInstrumentedCount'=>$poseCount,'distanceCoverage'=>$distance,'occlusionCoverage'=>$occlusion,'brightnessCoverage'=>$brightnessBuckets,
+        'cameraDeviceDiversity'=>count($cameraKeys),'poseInstrumentedCount'=>$poseCount,'poseCoverage'=>$poseCoverage,'distanceCoverage'=>$distance,'occlusionCoverage'=>$occlusion,'brightnessCoverage'=>$brightnessBuckets,'timeOfDayCoverage'=>$timeOfDay,
+        'exclusionRecommendations'=>$recommendations,
         'releaseBlockers'=>[
             'exactDuplicates'=>count($exact),
             'captureGroupLeakage'=>count($captureLeakage),
@@ -372,6 +394,26 @@ function glasses_vision_training_media_dataset_quality(PDO $pdo,int $org,?string
             'blur'=>'browser_laplacian_variance_v1',
         ],
     ];
+}
+
+function glasses_vision_training_media_export_manifest(PDO $pdo,int $org,?string $datasetPublic=null): array
+{
+    $datasetId=glasses_vision_dataset_intelligence_dataset_id($pdo,$org,$datasetPublic);
+    $join=$datasetId===null?'':" JOIN glasses_vision_dataset_items di ON di.organization_id=m.organization_id AND di.sample_id=m.sample_id AND di.dataset_id=? ";
+    $args=$datasetId===null?[$org]:[$datasetId,$org];
+    $q=$pdo->prepare("SELECT m.public_id,m.sample_id,m.sha256,m.perceptual_hash,m.perceptual_hash_source,m.mime_type,m.byte_size,m.width,m.height,m.capture_group,m.burst_index,m.quality_state,m.quality_flags_json,m.consent_basis,m.retention_until,m.created_at".($datasetId!==null?",di.split_name":"")."
+      FROM glasses_vision_training_media m {$join}
+      WHERE m.organization_id=? AND m.status='active' ORDER BY m.public_id");
+    $q->execute($args);$items=[];
+    foreach($q->fetchAll() as $row)$items[]=[
+        'publicId'=>$row['public_id'],'sha256'=>$row['sha256'],'perceptualHash'=>$row['perceptual_hash'],'perceptualHashSource'=>$row['perceptual_hash_source'],
+        'mimeType'=>$row['mime_type'],'byteSize'=>(int)$row['byte_size'],'width'=>(int)$row['width'],'height'=>(int)$row['height'],
+        'captureGroup'=>$row['capture_group'],'burstIndex'=>$row['burst_index']!==null?(int)$row['burst_index']:null,
+        'qualityState'=>$row['quality_state'],'qualityFlags'=>json_decode((string)$row['quality_flags_json'],true)?:[],
+        'consentBasis'=>$row['consent_basis'],'retentionUntil'=>$row['retention_until'],'createdAt'=>$row['created_at'],
+        'split'=>$datasetId!==null?$row['split_name']:null,
+    ];
+    return ['schema'=>'gelato.vision_training_media_export.v1','datasetPublicId'=>$datasetPublic,'generatedAt'=>gmdate('c'),'mediaCount'=>count($items),'items'=>$items,'privateBytesExcluded'=>true];
 }
 
 function glasses_vision_training_media_freeze_guard(PDO $pdo,int $org,string $datasetPublic): void
