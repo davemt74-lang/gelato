@@ -56,17 +56,20 @@ namespace Gelato.Ar.Core
         private readonly IVisionModelArtifactFetcher _fetcher;
         private readonly IVisionModelRuntimeHost _runtime;
         private readonly Func<VisionModelReport, CancellationToken, Task<bool>> _report;
+        private readonly IVisionModelRuntimePersistence? _persistence;
         private readonly long _maximumArtifactBytes;
 
         public VisionModelActivationService(
             IVisionModelArtifactFetcher fetcher,
             IVisionModelRuntimeHost runtime,
             Func<VisionModelReport, CancellationToken, Task<bool>> report,
-            long maximumArtifactBytes = DefaultMaximumArtifactBytes)
+            long maximumArtifactBytes = DefaultMaximumArtifactBytes,
+            IVisionModelRuntimePersistence? persistence = null)
         {
             _fetcher = fetcher ?? throw new ArgumentNullException(nameof(fetcher));
             _runtime = runtime ?? throw new ArgumentNullException(nameof(runtime));
             _report = report ?? throw new ArgumentNullException(nameof(report));
+            _persistence = persistence;
             if (maximumArtifactBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maximumArtifactBytes));
             _maximumArtifactBytes = maximumArtifactBytes;
         }
@@ -93,6 +96,11 @@ namespace Gelato.Ar.Core
 
             var previous = _runtime.CaptureActive();
             var expectedSha = (package.ArtifactSha256 ?? string.Empty).Trim().ToLowerInvariant();
+
+            if (_persistence != null)
+            {
+                await _persistence.BeginActivationAsync(assignment, previous, cancellationToken).ConfigureAwait(false);
+            }
             if (string.Equals(previous.PackagePublicId, package.PublicId, StringComparison.Ordinal)
                 && string.Equals((previous.ArtifactSha256 ?? string.Empty).Trim().ToLowerInvariant(), expectedSha, StringComparison.Ordinal))
             {
@@ -142,6 +150,10 @@ namespace Gelato.Ar.Core
                 return await FailAsync(assignment, "artifact_sha256_mismatch", "Downloaded artifact checksum does not match the immutable package manifest.", cancellationToken).ConfigureAwait(false);
 
             await ReportBestEffortAsync(CreateReport(assignment, "verified", "verified", actualSha), cancellationToken).ConfigureAwait(false);
+            if (_persistence != null)
+            {
+                await _persistence.StageVerifiedAsync(assignment, artifact, actualSha, cancellationToken).ConfigureAwait(false);
+            }
 
             VisionModelPreparedArtifact prepared;
             try
@@ -153,6 +165,10 @@ namespace Gelato.Ar.Core
                 if (!string.Equals((prepared.ArtifactSha256 ?? string.Empty).Trim().ToLowerInvariant(), actualSha, StringComparison.Ordinal))
                     throw new InvalidOperationException("Prepared model checksum does not match the verified artifact.");
                 await _runtime.SelfTestAsync(prepared, cancellationToken).ConfigureAwait(false);
+                if (_persistence != null)
+                {
+                    await _persistence.MarkPreparedAsync(assignment, cancellationToken).ConfigureAwait(false);
+                }
             }
             catch (OperationCanceledException)
             {
@@ -175,9 +191,19 @@ namespace Gelato.Ar.Core
             catch (Exception ex)
             {
                 var restored = await RestoreAfterFailureAsync(previous).ConfigureAwait(false);
+                if (_persistence != null && restored)
+                {
+                    await _persistence.CommitRestoredAsync(previous, "runtime_activation_failed", ex.Message, CancellationToken.None).ConfigureAwait(false);
+                }
                 var result = await FailAsync(assignment, "runtime_activation_failed", ex.Message, cancellationToken).ConfigureAwait(false);
                 result.RestoredPrevious = restored;
                 return result;
+            }
+
+            if (_persistence != null)
+            {
+                await _persistence.CommitActiveAsync(assignment, previous, cancellationToken).ConfigureAwait(false);
+                await _persistence.CleanupAsync(cancellationToken).ConfigureAwait(false);
             }
 
             var reportType = string.Equals(assignment.Selection, "rollback", StringComparison.Ordinal)
@@ -216,6 +242,21 @@ namespace Gelato.Ar.Core
             string message,
             CancellationToken cancellationToken)
         {
+            if (_persistence != null)
+            {
+                try
+                {
+                    await _persistence.MarkFailedAsync(assignment, code, message, cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch
+                {
+                    // Runtime persistence telemetry must not hide the primary activation failure.
+                }
+            }
             await ReportBestEffortAsync(CreateReport(assignment, "failed", "failed", assignment.Package?.ArtifactSha256 ?? string.Empty, code, message), cancellationToken).ConfigureAwait(false);
             return new VisionModelActivationResult
             {
