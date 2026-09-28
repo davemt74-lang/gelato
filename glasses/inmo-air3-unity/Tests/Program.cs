@@ -1095,6 +1095,95 @@ internal static class Program
         Assert((await labelPipeline.ProcessAsync(NextFrame(frame), turkeyContext)).Count == 0, "label-only detector evidence must still satisfy temporal stability");
         var labelMapped = await labelPipeline.ProcessAsync(NextFrame(frame), turkeyContext);
         Assert(labelMapped.Count == 1 && labelMapped[0].ComponentKey == "ingredient:turkey", "detector labels must map deterministically to the active Gelato component without knowing its database key");
+        Assert(labelPipeline.Diagnostics.DisplayNameFallbackMatches == 2, "exact recipe-name fallback must remain measurable when no registry mapping is used");
+
+        var profileContext = new VisionFrameContext
+        {
+            BuildSessionPublicId = "build-profile-label-map",
+            ExpectedComponents = turkeyContext.ExpectedComponents,
+            VisionProfile = new VisionLabelProfile
+            {
+                Schema = "gelato.vision_label_profile.v1",
+                DetectorName = "scripted-test-detector",
+                BuildSessionPublicId = "build-profile-label-map",
+                ProfileHash = new string('c', 64),
+                Mappings = new[]
+                {
+                    new VisionLabelMapping
+                    {
+                        ModelLabel = "turkey_slice",
+                        NormalizedLabel = "turkey slice",
+                        ComponentKey = "ingredient:turkey",
+                        DisplayName = "Turkey",
+                        MinimumConfidence = 0.85f,
+                        SourceDetector = "scripted-test-detector"
+                    }
+                }
+            }
+        };
+        var profiledDetector = new ScriptedVisionDetector(
+            DL("turkey_slice", "profile-turkey", 0.80f, 1f, 0.24f, 0.42f, 0.10f, 0.10f),
+            DL("turkey_slice", "profile-turkey", 0.81f, 1f, 0.24f, 0.42f, 0.10f, 0.10f),
+            DL("turkey_slice", "profile-turkey", 0.90f, 1f, 0.24f, 0.42f, 0.10f, 0.10f),
+            DL("turkey_slice", "profile-turkey", 0.91f, 1f, 0.245f, 0.425f, 0.10f, 0.10f)
+        );
+        var profiledPipeline = new VisionPipeline(profiledDetector);
+        Assert((await profiledPipeline.ProcessAsync(NextFrame(frame), profileContext)).Count == 0, "profile threshold must reject raw detector confidence below its configured floor");
+        Assert((await profiledPipeline.ProcessAsync(NextFrame(frame), profileContext)).Count == 0, "repeated below-profile-floor evidence must remain rejected");
+        Assert((await profiledPipeline.ProcessAsync(NextFrame(frame), profileContext)).Count == 0, "first above-profile-floor frame must still satisfy temporal stability");
+        var profiledObservation = await profiledPipeline.ProcessAsync(NextFrame(frame), profileContext);
+        Assert(profiledObservation.Count == 1 && profiledObservation[0].ComponentKey == "ingredient:turkey", "registry label must resolve to the active recipe component");
+        Assert(profiledObservation[0].DetectorLabel == "turkey_slice", "emitted observation must retain the detector's original model label");
+        Assert(profiledObservation[0].VisionProfileMatched, "emitted observation must state that a registry mapping resolved it");
+        Assert(profiledObservation[0].VisionProfileMinimumConfidence.HasValue
+            && Math.Abs(profiledObservation[0].VisionProfileMinimumConfidence.Value - 0.85f) < 0.0001f,
+            "emitted observation must retain the applied profile confidence floor");
+        Assert(profiledPipeline.Diagnostics.ProfileLabelMatches == 4, "profile matches must remain observable even when threshold policy rejects a candidate");
+        Assert(profiledPipeline.Diagnostics.ProfileThresholdRejects == 2, "profile-threshold rejections must be counted separately");
+
+        var staleProfileContext = new VisionFrameContext
+        {
+            BuildSessionPublicId = "build-profile-stale",
+            ExpectedComponents = turkeyContext.ExpectedComponents,
+            VisionProfile = profileContext.VisionProfile
+        };
+        var staleProfileDetector = new ScriptedVisionDetector(
+            DL("turkey_slice", "stale-profile", 0.96f, 1f, 0.24f, 0.42f, 0.10f, 0.10f),
+            DL("turkey_slice", "stale-profile", 0.97f, 1f, 0.245f, 0.425f, 0.10f, 0.10f)
+        );
+        var staleProfilePipeline = new VisionPipeline(staleProfileDetector);
+        Assert((await staleProfilePipeline.ProcessAsync(NextFrame(frame), staleProfileContext)).Count == 0, "profile from another build session must be ignored");
+        Assert((await staleProfilePipeline.ProcessAsync(NextFrame(frame), staleProfileContext)).Count == 0, "stale profile must never resolve a label that lacks exact-name fallback");
+        Assert(staleProfilePipeline.Diagnostics.ProfileLabelMatches == 0, "stale profile must not be counted as applied");
+
+        var nonRecipeProfileContext = new VisionFrameContext
+        {
+            BuildSessionPublicId = "build-profile-nonrecipe",
+            ExpectedComponents = turkeyContext.ExpectedComponents,
+            VisionProfile = new VisionLabelProfile
+            {
+                DetectorName = "scripted-test-detector",
+                BuildSessionPublicId = "build-profile-nonrecipe",
+                Mappings = new[]
+                {
+                    new VisionLabelMapping
+                    {
+                        ModelLabel = "turkey_slice",
+                        NormalizedLabel = "turkey slice",
+                        ComponentKey = "ingredient:bacon",
+                        DisplayName = "Bacon",
+                        MinimumConfidence = 0.60f
+                    }
+                }
+            }
+        };
+        var nonRecipeDetector = new ScriptedVisionDetector(
+            DL("turkey_slice", "wrong-target", 0.96f, 1f, 0.24f, 0.42f, 0.10f, 0.10f),
+            DL("turkey_slice", "wrong-target", 0.97f, 1f, 0.245f, 0.425f, 0.10f, 0.10f)
+        );
+        var nonRecipePipeline = new VisionPipeline(nonRecipeDetector);
+        Assert((await nonRecipePipeline.ProcessAsync(NextFrame(frame), nonRecipeProfileContext)).Count == 0, "profile mapping to a non-recipe component must fail closed");
+        Assert((await nonRecipePipeline.ProcessAsync(NextFrame(frame), nonRecipeProfileContext)).Count == 0, "non-recipe profile target must never become a build observation");
 
         var unknownLabelDetector = new ScriptedVisionDetector(
             DL("Swiss Cheese", "unknown-a", 0.96f, 1f, 0.3f, 0.4f, 0.1f, 0.1f),
