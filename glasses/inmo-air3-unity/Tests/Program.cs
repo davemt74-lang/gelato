@@ -626,6 +626,10 @@ internal static class Program
         Assert(transferred.Count == 1, "same tracked ingredient moving source → build surface must emit exactly one observation");
         Assert(transferred[0].Action == "added", "proven source → build transfer must be an added observation");
         Assert(Math.Abs(transferred[0].Confidence - 0.93f) < 0.0001f, "current-step transfer must receive bounded transfer + sequence support");
+        Assert(transferred[0].EvidenceKind == "TransferConfirmed", "durable observation must retain transfer evidence kind");
+        Assert(transferred[0].EvidenceSourceZoneKey == "turkey-pan", "durable observation must retain source ingredient zone");
+        Assert(transferred[0].EvidenceDestinationRegionKey == "build-main", "durable observation must retain destination build region");
+        Assert(transferred[0].EvidenceSequenceSupported, "durable observation must retain recipe-sequence support");
         Assert(transferPipeline.Diagnostics.TransferSourcesPrimed == 2, "source-zone evidence must be diagnosable");
         Assert(transferPipeline.Diagnostics.TransfersConfirmed == 2, "both stable build-surface transfer frames must retain transfer evidence");
         Assert(transferPipeline.Diagnostics.SequenceSupports == 2, "current recipe step must receive sequence support");
@@ -650,6 +654,7 @@ internal static class Program
         Assert(unprimedObservation.Count == 1, "visible ingredient already on build surface should remain reviewable evidence");
         Assert(unprimedObservation[0].Action == "seen", "unproven transfer must be seen, not added");
         Assert(Math.Abs(unprimedObservation[0].Confidence - 0.74f) < 0.0001f, "unproven transfer must remain below Gelato auto-confirm confidence");
+        Assert(unprimedObservation[0].EvidenceKind == "WorkSurfaceUnprimed", "reviewable unprimed evidence must remain explainable");
         Assert(unprimed.Diagnostics.UnprimedWorkSurfaceDetections == 2, "unprimed work-surface evidence must be measurable");
 
         var baconDetector = new ScriptedVisionDetector(
