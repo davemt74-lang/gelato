@@ -1,0 +1,56 @@
+name: AR Glasses Runtime Persistence Recovery
+
+on:
+  pull_request:
+    paths:
+      - 'glasses/inmo-air3-unity/Runtime/Core/VisionModelActivation.cs'
+      - 'glasses/inmo-air3-unity/Runtime/Core/VisionModelRuntimePersistence.cs'
+      - 'glasses/inmo-air3-unity/Runtime/Unity/UnityVisionModelRuntimePersistence.cs'
+      - 'glasses/inmo-air3-unity/Runtime/Unity/InmoAir3VisionModelRuntimeHost.cs'
+      - 'glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs'
+      - 'glasses/inmo-air3-unity/Tests/**'
+      - 'docs/GLASSES-VISION-MODEL-RUNTIME-PERSISTENCE.md'
+      - '.github/workflows/glasses-runtime-persistence-recovery.yml'
+  push:
+    branches: ['feature/glasses-runtime-persistence-recovery']
+
+jobs:
+  runtime-persistence-recovery:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Architecture and safety contract
+        run: |
+          grep -q 'interface IVisionModelRuntimePersistence' glasses/inmo-air3-unity/Runtime/Core/VisionModelRuntimePersistence.cs
+          grep -q 'class VisionModelRecoveryService' glasses/inmo-air3-unity/Runtime/Core/VisionModelRuntimePersistence.cs
+          grep -q 'IVisionModelRecoverableRuntimeHost' glasses/inmo-air3-unity/Runtime/Core/VisionModelRuntimePersistence.cs
+          grep -q 'runtime_recovery_adapter_required' glasses/inmo-air3-unity/Runtime/Core/VisionModelRuntimePersistence.cs
+          grep -q 'known_good_artifact_corrupt' glasses/inmo-air3-unity/Runtime/Core/VisionModelRuntimePersistence.cs
+          grep -q 'BeginActivationAsync' glasses/inmo-air3-unity/Runtime/Core/VisionModelActivation.cs
+          grep -q 'StageVerifiedAsync' glasses/inmo-air3-unity/Runtime/Core/VisionModelActivation.cs
+          grep -q 'CommitActiveAsync' glasses/inmo-air3-unity/Runtime/Core/VisionModelActivation.cs
+          grep -q 'UnityVisionModelRuntimePersistence' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
+          grep -q 'model runtime recovery is holding automated vision fail-closed' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
+          grep -q 'AtomicWriteBytes' glasses/inmo-air3-unity/Runtime/Unity/UnityVisionModelRuntimePersistence.cs
+          grep -q 'MaxCachedArtifacts = 4' glasses/inmo-air3-unity/Runtime/Unity/UnityVisionModelRuntimePersistence.cs
+          grep -q 'MaxCachedArtifactBytes = 1024L' glasses/inmo-air3-unity/Runtime/Unity/UnityVisionModelRuntimePersistence.cs
+          grep -q 'class InmoAir3VisionModelRuntimeHost' glasses/inmo-air3-unity/Runtime/Unity/InmoAir3VisionModelRuntimeHost.cs
+          ! grep -R 'ArPoseManager' glasses/inmo-air3-unity/Runtime/Core
+          ! grep -q 'kds_transition' glasses/inmo-air3-unity/Runtime/Core/VisionModelRuntimePersistence.cs
+
+      - name: Compile hardware-neutral AR core
+        run: dotnet build glasses/inmo-air3-unity/Runtime/Core/Gelato.Ar.Core.csproj -c Release --nologo
+
+      - name: Run full AIR3 behavior contracts
+        run: dotnet run --project glasses/inmo-air3-unity/Tests/Gelato.Ar.Core.Tests.csproj -c Release
+
+      - name: Preserve Sections 18-20 safety chain
+        run: |
+          grep -q 'BlockedLabels' glasses/inmo-air3-unity/Runtime/Core/Models.cs
+          grep -q 'VisionModelAssignmentPolicy.CanApply' glasses/inmo-air3-unity/Runtime/Core/VisionModelActivation.cs
+          grep -q 'artifact_sha256_mismatch' glasses/inmo-air3-unity/Runtime/Core/VisionModelActivation.cs
+          grep -q 'RestoreAsync(previous, CancellationToken.None)' glasses/inmo-air3-unity/Runtime/Core/VisionModelActivation.cs
