@@ -294,3 +294,66 @@ A useful production dataset should include broad variation in:
 - negative/background frames.
 
 The exported dataset can be used by a YOLO-family training pipeline and then exported to ONNX for the governed browser inference runtime already implemented in Gelato.
+
+
+## Active learning and hard-example capture
+
+The browser simulator now turns difficult vision cases into a **human-reviewed** retraining queue without changing Gelato's privacy or authority boundaries.
+
+### Candidate triggers
+
+When local hard-example capture is enabled and a browser camera is active, the simulator can queue a frame for review when it sees:
+
+- detector confidence below the current acceptance threshold but close enough to be informative;
+- a temporal sequence violation;
+- a previously stable ingredient track disappearing;
+- a spatial replacement event;
+- a manually reviewed low-confidence target.
+
+Capture is deliberately bounded:
+
+- candidates remain in browser memory only;
+- the queue is capped at 30 frames;
+- repeated trigger keys have a 10-second cooldown;
+- candidates never become training samples automatically.
+
+### Human review outcomes
+
+The first queued candidate can be reviewed as:
+
+- **Accept Labels** — preserve the suggested detector/ingredient boxes;
+- **Reclassify + Accept** — replace suggested labels with a selected canonical build ingredient;
+- **Keep as Negative** — retain the frame with no boxes, useful for false-positive/background training;
+- **Discard** — remove the candidate entirely.
+
+Only accepted, reclassified, or explicitly negative examples are copied into the existing local YOLO dataset.
+
+This prevents uncertain model output from silently becoming ground truth.
+
+### Export provenance
+
+Reviewed hard examples use:
+
+`gelato.vision_active_learning.v1`
+
+inside the existing `gelato.vision_training_dataset.v1` manifest.
+
+The manifest records:
+
+- reviewed hard-example count;
+- review outcome totals;
+- per-sample hard-example trigger reason;
+- human review outcome;
+- source candidate ID.
+
+The actual exported frames and YOLO labels remain compatible with the model training pipeline introduced after dataset capture.
+
+### Relationship to the correction ledger
+
+The existing server-side correction ledger remains metadata-only by design and does not store kitchen camera frames.
+
+Active-learning images remain local to the browser unless the user explicitly exports the training dataset. This keeps human correction analytics and image training data as separate governed surfaces.
+
+The intended loop is:
+
+Camera inference → hard condition → local candidate → human review → YOLO export → training/evaluation pipeline → governed ONNX release.
