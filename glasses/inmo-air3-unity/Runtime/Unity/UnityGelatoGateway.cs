@@ -32,7 +32,13 @@ namespace Gelato.Ar.Unity
                 platform = device.Platform,
                 sdkVersion = device.SdkVersion,
                 appVersion = device.AppVersion,
-                systemVersion = device.SystemVersion
+                systemVersion = device.SystemVersion,
+                capabilities = new PairCapabilitiesRequest
+                {
+                    visionModelRuntimes = device.VisionModelRuntimes == null
+                        ? Array.Empty<string>()
+                        : new List<string>(device.VisionModelRuntimes).ToArray()
+                }
             }, false, cancellationToken);
 
             return new PairResult
@@ -595,6 +601,11 @@ namespace Gelato.Ar.Unity
             public string sdkVersion;
             public string appVersion;
             public string systemVersion;
+            public PairCapabilitiesRequest capabilities;
+        }
+        [Serializable] private sealed class PairCapabilitiesRequest
+        {
+            public string[] visionModelRuntimes;
         }
         [Serializable] private sealed class ObservationRequest : BuildSessionRequest
         {
