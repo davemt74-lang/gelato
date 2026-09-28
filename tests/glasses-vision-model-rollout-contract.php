@@ -23,6 +23,31 @@ gvm_assert(glasses_vision_models_ready($pdo),'Vision model rollout migration mus
 gvm_assert(glasses_vision_model_version_at_least('v1.4.2','1.4.0'),'Version compatibility must accept newer SDK versions.');
 gvm_assert(!glasses_vision_model_version_at_least('1.3.9','1.4.0'),'Version compatibility must reject older SDK versions.');
 gvm_assert(!glasses_vision_model_version_at_least(null,'1.4.0'),'Missing runtime version must fail a declared minimum.');
+$browserMeta=glasses_vision_browser_inference_metadata([
+    'browserInference'=>[
+        'schema'=>'gelato.browser_onnx_detector.v1','decoder'=>'yolo_v8',
+        'input'=>['name'=>'images','width'=>640,'height'=>640,'layout'=>'nchw'],
+        'output'=>['name'=>'output0','layout'=>'channels_first','boxScale'=>'pixels'],
+        'labels'=>['turkey_slice','bacon_strip'],'nmsIou'=>0.45,'maxDetections'=>25,
+    ],
+],'onnx');
+gvm_assert(is_array($browserMeta)&&$browserMeta['input']['width']===640,'Browser ONNX metadata must normalize supported detector configuration.');
+gvm_assert($browserMeta['labels']===['turkey_slice','bacon_strip'],'Browser ONNX metadata must preserve ordered detector labels.');
+gvm_assert(glasses_vision_browser_inference_metadata(['browserInference'=>['schema'=>'ignored']],'tflite')===null,'Non-ONNX runtimes must ignore browser ONNX metadata.');
+
+$badBrowserMeta=false;
+try{
+    glasses_vision_browser_inference_metadata([
+        'browserInference'=>[
+            'schema'=>'gelato.browser_onnx_detector.v1','decoder'=>'yolo_v8',
+            'input'=>['name'=>'images','width'=>0,'height'=>640,'layout'=>'nchw'],
+            'output'=>['name'=>'output0','layout'=>'channels_first','boxScale'=>'pixels'],
+            'labels'=>['turkey_slice'],
+        ],
+    ],'onnx');
+}catch(InvalidArgumentException){$badBrowserMeta=true;}
+gvm_assert($badBrowserMeta,'Invalid browser ONNX tensor metadata must fail closed.');
+
 
 $slug='gvm-'.bin2hex(random_bytes(4));
 $pdo->prepare("INSERT INTO organizations (name,status,timezone) VALUES (?,'active','America/Phoenix')")
@@ -93,10 +118,18 @@ $target=glasses_vision_model_package_create($pdo,$org,[
     'modelName'=>'sandwich-detector','modelVersion'=>'2.0.0','runtimeType'=>'onnx','platform'=>'inmo_air3',
     'artifactUrl'=>'https://models.example.test/sandwich-detector-2.onnx','artifactSha256'=>str_repeat('2',64),
     'artifactBytes'=>2048,'minimumSdkVersion'=>'1.4.0','minimumAppVersion'=>'1.5.0',
+    'metadata'=>['browserInference'=>[
+        'schema'=>'gelato.browser_onnx_detector.v1','decoder'=>'yolo_v8',
+        'input'=>['name'=>'images','width'=>640,'height'=>640,'layout'=>'nchw'],
+        'output'=>['name'=>'output0','layout'=>'channels_first','boxScale'=>'pixels'],
+        'labels'=>['turkey_slice'],'nmsIou'=>0.45,'maxDetections'=>25,
+    ]],
 ],$user);
 
 gvm_assert((string)$baseline['detectorName']==='food-model-v3','Detector identity must normalize at package registration.');
 gvm_assert($target['hasArtifactBytes']===true&&(int)$target['artifactBytes']===2048,'Package manifest must preserve artifact byte size.');
+gvm_assert(($target['metadata']['browserInference']['schema']??'')==='gelato.browser_onnx_detector.v1','Registered ONNX package must preserve validated browser inference metadata.');
+gvm_assert(($target['metadata']['browserInference']['input']['name']??'')==='images','Registered ONNX package must preserve validated input tensor identity.');
 
 $duplicate=false;
 try{
