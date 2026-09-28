@@ -29,6 +29,9 @@ namespace Gelato.Ar.Unity
         private float _nextVisionProfileRetryAt;
         private bool _visionModelAssignmentLoaded;
         private VisionModelActivationService _modelActivationService;
+        private VisionModelRecoveryService _modelRecoveryService;
+        private bool _modelRecoveryReady;
+        private float _nextModelRecoveryRetryAt;
 
         public string DetectorName => _pipeline == null ? string.Empty : _pipeline.DetectorName;
         public int ActiveTrackCount => _pipeline == null ? 0 : _pipeline.ActiveTrackCount;
@@ -52,6 +55,9 @@ namespace Gelato.Ar.Unity
 
             if (modelRuntimeHost != null)
             {
+                var persistence = new UnityVisionModelRuntimePersistence(
+                    modelRuntimeHost.DetectorName,
+                    modelRuntimeHost.RuntimeType);
                 _modelActivationService = new VisionModelActivationService(
                     new UnityVisionModelArtifactFetcher(),
                     modelRuntimeHost,
@@ -59,8 +65,11 @@ namespace Gelato.Ar.Unity
                     {
                         if (bootstrap == null || bootstrap.Coordinator == null) return false;
                         return await bootstrap.Coordinator.ReportVisionModelAsync(report, token);
-                    }
+                    },
+                    VisionModelActivationService.DefaultMaximumArtifactBytes,
+                    persistence
                 );
+                _modelRecoveryService = new VisionModelRecoveryService(modelRuntimeHost, persistence);
             }
         }
 
@@ -72,6 +81,23 @@ namespace Gelato.Ar.Unity
             var coordinator = bootstrap.Coordinator;
             var build = coordinator.BuildSession;
             if (build == null || !string.Equals(build.Status, "active", StringComparison.Ordinal)) return;
+
+            if (_modelRecoveryService != null && !_modelRecoveryReady)
+            {
+                if (Time.unscaledTime < _nextModelRecoveryRetryAt) return;
+                var recovery = await _modelRecoveryService.ReconcileAsync(_lifetime.Token);
+                if (!recovery.Ready)
+                {
+                    _nextModelRecoveryRetryAt = Time.unscaledTime + 5f;
+                    Debug.LogWarning("Gelato AR model runtime recovery is holding automated vision fail-closed: "
+                        + recovery.ErrorCode + " " + recovery.Message);
+                    return;
+                }
+                _modelRecoveryReady = true;
+                _nextModelRecoveryRetryAt = 0f;
+                if (recovery.Recovered)
+                    Debug.Log("Gelato AR recovered the durable known-good model runtime after restart.");
+            }
 
             if (!string.Equals(_activeSession, build.PublicId, StringComparison.Ordinal))
             {
