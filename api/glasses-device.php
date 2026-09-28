@@ -96,6 +96,11 @@ try{
         app_json_response(['ok'=>true,'modelReport'=>$report]);
     }
 
+    if($action==='vision.canary_sample'){
+        $sample=glasses_vision_canary_sample($pdo,$device,$in);
+        app_json_response(['ok'=>true,'canarySample'=>$sample]);
+    }
+
     if($action==='vision.profile'){
         $sessionPublicId=trim((string)($in['buildSessionPublicId']??''));
         if($sessionPublicId==='')throw new InvalidArgumentException('Build session is required.');
