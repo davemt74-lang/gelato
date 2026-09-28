@@ -460,6 +460,7 @@ function glasses_build_correction_public(array $row): array
         'resolution'=>(string)$row['resolution'],
         'targetComponentKey'=>$row['target_component_key'],
         'correctedQuantity'=>$row['corrected_quantity']!==null?(float)$row['corrected_quantity']:null,
+        'hasCorrectedQuantity'=>$row['corrected_quantity']!==null,
         'reason'=>(string)($row['reason']??''),
         'createdAt'=>$row['created_at'],
     ];
