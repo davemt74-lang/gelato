@@ -362,6 +362,14 @@ function glasses_vision_dataset_intelligence_analyze(PDO $pdo,int $org,?string $
     usort($gaps,static fn($a,$b)=>($b['priority']<=>$a['priority'])?:strcmp((string)$a['key'],(string)$b['key']));
 
     $readyMenuItems=count(array_filter($menu,static fn($x)=>$x['ready']));
+    $mediaQuality=function_exists('glasses_vision_training_media_dataset_quality')?glasses_vision_training_media_dataset_quality($pdo,$org,$datasetPublic):null;
+    if($mediaQuality!==null){
+        foreach((array)($mediaQuality['exactDuplicateClusters']??[]) as $cluster)$gaps[]=['type'=>'visual_exact_duplicate','key'=>$cluster['sha256'],'gap'=>max(1,(int)$cluster['count']-1),'priority'=>95];
+        foreach((array)($mediaQuality['nearDuplicatePairs']??[]) as $pair)$gaps[]=['type'=>'visual_near_duplicate','key'=>$pair['a'].'|'.$pair['b'],'gap'=>1,'priority'=>70];
+        foreach((array)($mediaQuality['captureGroupLeakage']??[]) as $row)$gaps[]=['type'=>'capture_group_leakage','key'=>$row['captureGroup'],'gap'=>max(1,count((array)$row['splits'])-1),'priority'=>100];
+        if((int)($mediaQuality['poorCount']??0)>0)$gaps[]=['type'=>'poor_visual_quality','key'=>'poor_media','gap'=>(int)$mediaQuality['poorCount'],'priority'=>95];
+        usort($gaps,static fn($a,$b)=>($b['priority']<=>$a['priority'])?:strcmp((string)$a['key'],(string)$b['key']));
+    }
     $readiness=[
         'menuItems'=>$menu,
         'readyMenuItems'=>$readyMenuItems,
@@ -370,12 +378,18 @@ function glasses_vision_dataset_intelligence_analyze(PDO $pdo,int $org,?string $
         'hasTestSplit'=>$datasetId===null?null:((glasses_vision_lab_dataset_coverage($pdo,$org,(string)$datasetPublic)['hasTest']??false)===true),
         'splitLeakageClear'=>count($leakage)===0,
         'reviewDisagreementsClear'=>count($disagreements)===0,
+        'visualMediaClear'=>$mediaQuality===null?null:(
+            (int)(($mediaQuality['releaseBlockers']['exactDuplicates']??0))===0 &&
+            (int)(($mediaQuality['releaseBlockers']['captureGroupLeakage']??0))===0 &&
+            (int)(($mediaQuality['releaseBlockers']['poorMedia']??0))===0
+        ),
     ];
     $readiness['datasetReleaseReady']=$datasetId===null?null:(
         $readiness['hasValidationSplit'] &&
         $readiness['hasTestSplit'] &&
         $readiness['splitLeakageClear'] &&
-        $readiness['reviewDisagreementsClear']
+        $readiness['reviewDisagreementsClear'] &&
+        ($readiness['visualMediaClear']===null || $readiness['visualMediaClear'])
     );
     $snapshot=glasses_public_id('vision-intel');
     $pdo->prepare("INSERT INTO glasses_vision_dataset_intelligence_snapshots
@@ -391,11 +405,11 @@ function glasses_vision_dataset_intelligence_analyze(PDO $pdo,int $org,?string $
 
     return [
         'publicId'=>$snapshot,'datasetPublicId'=>$datasetPublic,'coverage'=>$metrics,'environment'=>$environment,
-        'duplicates'=>$duplicates,'splitLeakage'=>$leakage,'reviewDisagreements'=>$disagreements,'gaps'=>$gaps,'readiness'=>$readiness,
+        'duplicates'=>$duplicates,'splitLeakage'=>$leakage,'reviewDisagreements'=>$disagreements,'gaps'=>$gaps,'readiness'=>$readiness,'mediaQuality'=>$mediaQuality,
         'limitations'=>[
-            'perceptualDuplicateDetection'=>false,
-            'cameraAngleMetadata'=>false,
-            'message'=>'Image-level near-duplicate and camera-angle diversity require governed image fingerprints/pose metadata that are not stored server-side yet.',
+            'perceptualDuplicateDetection'=>$mediaQuality!==null,
+            'cameraAngleMetadata'=>$mediaQuality!==null&&((int)($mediaQuality['poseInstrumentedCount']??0)>0),
+            'message'=>$mediaQuality===null?'Governed media features are unavailable until Vision Lab V5 is installed.':'Perceptual dHash and visual-quality features are browser-derived with explicit provenance; SHA-256, MIME and dimensions are server verified.',
         ],
     ];
 }
