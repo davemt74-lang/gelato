@@ -37,7 +37,7 @@ $boot=[
 <meta name="robots" content="noindex,nofollow">
 <title>AR Vision Model Rollouts | Restaurant Admin</title>
 <link rel="stylesheet" href="assets/css/admin-control.css?v=20260914-1">
-<link rel="stylesheet" href="assets/css/glasses-vision-models.css?v=20260928-1">
+<link rel="stylesheet" href="assets/css/glasses-vision-models.css?v=20260928-browserpreflight1">
 </head>
 <body class="admin-control gvm-page">
 <header class="admin-top">
@@ -82,6 +82,21 @@ $boot=[
         <label><span>Minimum SDK version</span><input id="gvmMinSdk" maxlength="80" placeholder="Optional, e.g. 1.4.0"></label>
         <label><span>Minimum app version</span><input id="gvmMinApp" maxlength="80" placeholder="Optional, e.g. 1.9.0"></label>
         <label class="wide"><span>Notes</span><textarea id="gvmPackageNotes" rows="3" maxlength="1000"></textarea></label>
+        <div class="gvm-browser-config wide">
+            <div class="admin-eyebrow">Browser ONNX preview</div>
+            <label><span>Input name</span><input id="gvmBrowserInputName" maxlength="160" value="images"></label>
+            <label><span>Output name</span><input id="gvmBrowserOutputName" maxlength="160" value="output0"></label>
+            <label><span>Input width</span><input id="gvmBrowserWidth" type="number" min="32" max="4096" value="640"></label>
+            <label><span>Input height</span><input id="gvmBrowserHeight" type="number" min="32" max="4096" value="640"></label>
+            <label><span>Input layout</span><select id="gvmBrowserInputLayout"><option value="nchw">NCHW</option><option value="nhwc">NHWC</option></select></label>
+            <label><span>Output layout</span><select id="gvmBrowserOutputLayout"><option value="channels_first">Channels first</option><option value="rows">Rows</option></select></label>
+            <label><span>Box scale</span><select id="gvmBrowserBoxScale"><option value="pixels">Pixels</option><option value="normalized">Normalized</option></select></label>
+            <label><span>NMS IoU</span><input id="gvmBrowserNms" type="number" min="0.05" max="0.95" step="0.01" value="0.45"></label>
+            <label><span>Max detections</span><input id="gvmBrowserMaxDetections" type="number" min="1" max="100" value="25"></label>
+            <label class="wide"><span>Model labels</span><textarea id="gvmBrowserLabels" rows="4" placeholder="One detector label per line"></textarea></label>
+            <div class="wide inline-actions"><button type="button" id="gvmPreflightBrowserModel" class="admin-button quiet">Verify browser artifact</button></div>
+            <div id="gvmBrowserPreflight" class="gvm-preflight wide"><strong>Not verified</strong><span>Runs in this browser only; no model bytes are stored by Gelato.</span></div>
+        </div>
     </div>
     <div id="gvmPackageValidation" class="gvm-validation"></div>
     <button type="button" id="gvmCreatePackage" class="admin-button dark gvm-full" <?=$catalog['canManage']&&$catalog['ready']?'':'disabled'?>>Register immutable package</button>
@@ -142,7 +157,7 @@ $boot=[
 <script>
 window.GELATO_VISION_MODELS=<?=json_encode($boot,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE|JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT)?>;
 </script>
-<script src="assets/js/glasses-vision-models.js?v=20260928-1"></script>
+<script src="assets/js/glasses-vision-models.js?v=20260928-browserpreflight1"></script>
 <script src="js/universal-admin-page-shell.js?v=20260915-2"></script>
 </body>
 </html>
