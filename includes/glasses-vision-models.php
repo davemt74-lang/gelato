@@ -266,48 +266,50 @@ function glasses_vision_model_rollout_create(PDO $pdo,int $org,array $input,int 
 {
     if(!glasses_vision_models_ready($pdo))throw new RuntimeException('Vision model rollout migration is not installed.');
 
-    $target=glasses_vision_model_package_row($pdo,$org,(string)($input['targetPackagePublicId']??''),false);
-    $baseline=glasses_vision_model_package_row($pdo,$org,(string)($input['baselinePackagePublicId']??''),false);
+    return glasses_transaction($pdo,function()use($pdo,$org,$input,$userId):array{
+        $target=glasses_vision_model_package_row($pdo,$org,(string)($input['targetPackagePublicId']??''),true);
+        $baseline=glasses_vision_model_package_row($pdo,$org,(string)($input['baselinePackagePublicId']??''),true);
 
-    if((string)$target['status']!=='ready'||(string)$baseline['status']!=='ready')
-        throw new InvalidArgumentException('Target and baseline model packages must both be ready.');
-    if((int)$target['id']===(int)$baseline['id'])throw new InvalidArgumentException('Target and baseline packages must be different.');
-    foreach(['detector_name','platform','runtime_type'] as $field){
-        if((string)$target[$field]!== (string)$baseline[$field])
-            throw new InvalidArgumentException('Target and baseline packages must use the same detector, platform, and runtime.');
-    }
+        if((string)$target['status']!=='ready'||(string)$baseline['status']!=='ready')
+            throw new InvalidArgumentException('Target and baseline model packages must both be ready.');
+        if((int)$target['id']===(int)$baseline['id'])throw new InvalidArgumentException('Target and baseline packages must be different.');
+        foreach(['detector_name','platform','runtime_type'] as $field){
+            if((string)$target[$field]!== (string)$baseline[$field])
+                throw new InvalidArgumentException('Target and baseline packages must use the same detector, platform, and runtime.');
+        }
 
-    $locationId=null;
-    if(isset($input['locationId'])&&(int)$input['locationId']>0){
-        $locationId=(int)$input['locationId'];
-        glasses_location($pdo,$org,$locationId);
-    }
-    $stationId=null;
-    if(trim((string)($input['stationPublicId']??''))!==''){
-        if($locationId===null)throw new InvalidArgumentException('Station-scoped rollout requires a location.');
-        $station=glasses_station($pdo,$org,$locationId,(string)$input['stationPublicId']);
-        $stationId=(int)$station['id'];
-    }
+        $locationId=null;
+        if(isset($input['locationId'])&&(int)$input['locationId']>0){
+            $locationId=(int)$input['locationId'];
+            glasses_location($pdo,$org,$locationId);
+        }
+        $stationId=null;
+        if(trim((string)($input['stationPublicId']??''))!==''){
+            if($locationId===null)throw new InvalidArgumentException('Station-scoped rollout requires a location.');
+            $station=glasses_station($pdo,$org,$locationId,(string)$input['stationPublicId']);
+            $stationId=(int)$station['id'];
+        }
 
-    $percent=(float)($input['canaryPercent']??0);
-    if(!is_finite($percent)||$percent<0||$percent>100)throw new InvalidArgumentException('Canary percentage must be between 0 and 100.');
-    $percent=round($percent,2);
-    $notes=mb_substr(trim((string)($input['notes']??'')),0,1000,'UTF-8')?:null;
-    $public=glasses_public_id('vision-rollout');
+        $percent=(float)($input['canaryPercent']??0);
+        if(!is_finite($percent)||$percent<0||$percent>100)throw new InvalidArgumentException('Canary percentage must be between 0 and 100.');
+        $percent=round($percent,2);
+        $notes=mb_substr(trim((string)($input['notes']??'')),0,1000,'UTF-8')?:null;
+        $public=glasses_public_id('vision-rollout');
 
-    $pdo->prepare("INSERT INTO glasses_vision_model_rollouts
-        (organization_id,public_id,detector_name,target_package_id,baseline_package_id,location_id,station_id,canary_percent,status,notes,created_by)
-        VALUES (?,?,?,?,?,?,?,?,'draft',?,?)")
-        ->execute([
-            $org,$public,(string)$target['detector_name'],(int)$target['id'],(int)$baseline['id'],
-            $locationId,$stationId,$percent,$notes,$userId
-        ]);
-    $rollout=glasses_vision_model_rollout_row($pdo,$org,$public,false);
-    glasses_vision_model_rollout_event(
-        $pdo,$org,(int)$rollout['id'],'created',null,'draft',null,$percent,$userId,
-        ['targetPackagePublicId'=>(string)$target['public_id'],'baselinePackagePublicId'=>(string)$baseline['public_id']]
-    );
-    return glasses_vision_model_rollout_public($rollout);
+        $pdo->prepare("INSERT INTO glasses_vision_model_rollouts
+            (organization_id,public_id,detector_name,target_package_id,baseline_package_id,location_id,station_id,canary_percent,status,notes,created_by)
+            VALUES (?,?,?,?,?,?,?,?,'draft',?,?)")
+            ->execute([
+                $org,$public,(string)$target['detector_name'],(int)$target['id'],(int)$baseline['id'],
+                $locationId,$stationId,$percent,$notes,$userId
+            ]);
+        $rollout=glasses_vision_model_rollout_row($pdo,$org,$public,false);
+        glasses_vision_model_rollout_event(
+            $pdo,$org,(int)$rollout['id'],'created',null,'draft',null,$percent,$userId,
+            ['targetPackagePublicId'=>(string)$target['public_id'],'baselinePackagePublicId'=>(string)$baseline['public_id']]
+        );
+        return glasses_vision_model_rollout_public($rollout);
+    });
 }
 
 function glasses_vision_model_rollout_conflict(PDO $pdo,int $org,array $rollout): bool
