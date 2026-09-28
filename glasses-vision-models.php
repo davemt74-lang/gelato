@@ -37,7 +37,7 @@ $boot=[
 <meta name="robots" content="noindex,nofollow">
 <title>AR Vision Model Rollouts | Restaurant Admin</title>
 <link rel="stylesheet" href="assets/css/admin-control.css?v=20260914-1">
-<link rel="stylesheet" href="assets/css/glasses-vision-models.css?v=20260928-drift1">
+<link rel="stylesheet" href="assets/css/glasses-vision-models.css?v=20260928-recovery1">
 </head>
 <body class="admin-control gvm-page">
 <header class="admin-top">
@@ -145,6 +145,18 @@ $boot=[
     </div>
 </section>
 
+<section class="gvm-panel gvm-table-panel">
+    <div class="gvm-panel-head">
+        <div><div class="admin-eyebrow">Drift Recovery</div><h2>Incidents &amp; guided remediation</h2></div>
+    </div>
+    <div class="gvm-table-wrap">
+        <table>
+            <thead><tr><th>Incident</th><th>Cause</th><th>What changed</th><th>Recommended action</th><th>Recovery</th><th>Controls</th></tr></thead>
+            <tbody id="gvmDriftIncidentRows"></tbody>
+        </table>
+    </div>
+</section>
+
 <section class="gvm-panel gvm-explain">
     <div class="admin-eyebrow">Runtime boundary</div>
     <h2>What Section 19 does — and does not — activate</h2>
@@ -157,7 +169,7 @@ $boot=[
 <script>
 window.GELATO_VISION_MODELS=<?=json_encode($boot,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE|JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT)?>;
 </script>
-<script src="assets/js/glasses-vision-models.js?v=20260928-drift1"></script>
+<script src="assets/js/glasses-vision-models.js?v=20260928-recovery1"></script>
 <script src="js/universal-admin-page-shell.js?v=20260915-2"></script>
 </body>
 </html>
