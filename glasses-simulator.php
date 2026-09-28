@@ -9,7 +9,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Web Glasses Simulator · Gelato</title>
-<link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20260928-svg1">
+<link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20260928-hud1">
 </head>
 <body>
 <header class="sim-topbar">
@@ -95,32 +95,53 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
       <div id="safeAreaGuide" class="safe-area-guide"><span>PROJECTION SAFE AREA</span></div>
 
       <section class="lens-projection" id="lensProjection" aria-label="Simulated on-lens projection">
-        <div class="hud-status editable-region" id="hudStatus" data-region="hudStatus"><button class="region-handle region-move" type="button" tabindex="-1" aria-hidden="true">MOVE</button><button class="region-handle region-resize" type="button" tabindex="-1" aria-hidden="true">↘</button>
-          <span id="hudConnection">SIM</span>
-          <span id="hudStation">PIZZA LINE</span>
-        </div>
-        <aside class="hud-right editable-region" id="hudRight" data-region="hudRight">
+        <div class="hud-topbar editable-region" id="hudStatus" data-region="hudStatus">
           <button class="region-handle region-move" type="button" tabindex="-1" aria-hidden="true">MOVE</button>
           <button class="region-handle region-resize" type="button" tabindex="-1" aria-hidden="true">↘</button>
-          <div class="hud-card">
-            <small>ITEM</small>
-            <strong id="hudItem">Club Sandwich + Fries</strong>
-            <span id="hudTicket">Mock ticket · Table 12</span>
+          <div class="hud-clock"><strong id="hudClock">10:24</strong><span id="hudStatusTemp">HOT LINE · 74°F</span></div>
+          <div class="hud-system">
+            <span id="hudRuntimeState">READY</span>
+            <span id="hudConnectivity">BT · LIVE</span>
+            <span id="hudBattery">87%</span>
           </div>
-          <div class="hud-card hud-steps">
-            <small>BUILD STEPS</small>
-            <ol id="hudSteps"></ol>
+        </div>
+
+        <aside class="hud-orders-left editable-region" id="hudOrdersRegion" data-region="hudOrdersRegion">
+          <button class="region-handle region-move" type="button" tabindex="-1" aria-hidden="true">MOVE</button>
+          <button class="region-handle region-resize" type="button" tabindex="-1" aria-hidden="true">↘</button>
+          <div class="hud-panel-title"><small>ACTIVE ORDERS</small><span id="hudOrdersCount">0</span></div>
+          <div id="hudOrders" class="hud-orders-list"></div>
+        </aside>
+
+        <div class="hud-next-center editable-region" id="hudNextRegion" data-region="hudNextRegion">
+          <button class="region-handle region-move" type="button" tabindex="-1" aria-hidden="true">MOVE</button>
+          <button class="region-handle region-resize" type="button" tabindex="-1" aria-hidden="true">↘</button>
+          <small>NEXT</small>
+          <strong id="hudNextCenter">Add Toasted Bread</strong>
+          <span id="hudNextTarget">Target ingredient</span>
+          <div class="hud-leader-line" id="hudLeaderLine"><span></span></div>
+        </div>
+
+        <aside class="hud-right-build editable-region" id="hudRight" data-region="hudRight">
+          <button class="region-handle region-move" type="button" tabindex="-1" aria-hidden="true">MOVE</button>
+          <button class="region-handle region-resize" type="button" tabindex="-1" aria-hidden="true">↘</button>
+          <div class="hud-card hud-build-card">
+            <div class="hud-panel-title"><small>ACTIVE BUILD</small><span id="hudBuildTicket">#1042</span></div>
+            <strong id="hudBuildItem">Club Sandwich + Fries</strong>
+            <span id="hudBuildMeta">Table 12 · Regular</span>
+            <ol id="hudBuildSteps" class="hud-build-steps"></ol>
           </div>
-          <div class="hud-card next-card">
-            <small>NEXT</small>
-            <strong id="hudNext">Add Toasted Bread</strong>
-          </div>
-          <div class="hud-card validation-card" id="validationCard">
-            <small>PRODUCT VALIDATION</small>
-            <strong id="hudValidation">0 / 6 accounted</strong>
+          <div class="hud-card hud-validation-panel" id="validationCard">
+            <div class="hud-panel-title"><small>INGREDIENT VALIDATION</small><span id="hudValidationState">BUILDING</span></div>
+            <strong id="hudValidationCount">0 / 6 accounted</strong>
+            <div class="hud-validation-grid">
+              <span>Missing <b id="hudValidationMissing">6</b></span>
+              <span>Unexpected <b id="hudValidationUnexpected">0</b></span>
+            </div>
             <span id="hudValidationDetail">Build in progress</span>
           </div>
         </aside>
+
         <div id="detectionLayer" class="detection-layer"></div>
       </section>
     </div>
@@ -158,6 +179,12 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 
     <section class="console-card">
       <div class="console-heading"><div><small>SIMULATED VISION</small><strong>Ingredient detections</strong></div><span id="componentCount">0</span></div>
+      <div class="demo-controls">
+        <button id="autoPlayBuild" type="button">Auto Play</button>
+        <button id="nextDetection" type="button">Next Detection</button>
+        <button id="lowConfidenceDetection" type="button">Low Confidence</button>
+        <button id="completeMockBuild" type="button">Complete Mock</button>
+      </div>
       <div id="componentControls" class="component-controls"></div>
       <div class="inline-actions">
         <button id="injectUnexpected" type="button">Inject unexpected</button>
@@ -184,6 +211,6 @@ window.GELATO_GLASSES_SIMULATOR={
   api:'api/glasses-simulator.php'
 };
 </script>
-<script src="assets/js/glasses-web-simulator.js?v=20260928-svg1"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20260928-hud1"></script>
 </body>
 </html>
