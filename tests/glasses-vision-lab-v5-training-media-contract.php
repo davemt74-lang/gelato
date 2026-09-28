@@ -164,8 +164,8 @@ $simJs=file_get_contents(__DIR__.'/../assets/js/glasses-web-simulator.js');
 $api=file_get_contents(__DIR__.'/../api/glasses-vision-media.php');
 v5_assert(str_contains($page,'Vision Lab V5')&&str_contains($page,'Training Media'),'Vision Lab V5 workspace must expose governed media.');
 v5_assert(str_contains($sim,'datasetServerOptIn')&&str_contains($sim,'Explicit opt-in required'),'Simulator must require explicit media-retention opt-in.');
-v5_assert(str_contains($simJs,'datasetVisualFeatures')&&str_contains($simJs,'browser_dhash')===false&&str_contains($simJs,"action:'upload'"),'Simulator must compute visual features and upload only through the governed media API.');
-v5_assert(str_contains($api,'Cache-Control: private, no-store')&&str_contains($api,"action==='delete'"),'Media retrieval must be authenticated/private and deletion governed.');
+v5_assert(str_contains($simJs,'datasetVisualFeatures')&&str_contains($simJs,'perceptualHash')&&str_contains($simJs,"action:'upload'"),'Simulator must compute visual features and upload only through the governed media API.');
+v5_assert(str_contains($api,'Cache-Control: private, no-store')&&str_contains($api,"app_has_permission('glasses.manage'" )&&str_contains($api,"action==='delete'"),'Media retrieval must be authenticated/private and deletion governed.');
 v5_assert(!str_contains($api,'glasses_build_observe')&&!str_contains($api,'kds_transition'),'Training media API must not mutate production build or KDS truth.');
 
 echo "vision-lab-v5-training-media-ok\n";
