@@ -14,6 +14,8 @@ on:
       - 'tests/glasses-vision-model-rollout-contract.php'
       - 'glasses/inmo-air3-unity/**'
       - 'docs/GLASSES-VISION-MODEL-ROLLOUT.md'
+      - 'glasses/inmo-air3-unity/Runtime/Core/VisionModelActivation.cs'
+      - 'docs/GLASSES-VISION-MODEL-ACTIVATION.md'
       - '.github/workflows/glasses-vision-model-rollout.yml'
   push:
     branches: [main, 'feature/glasses-vision-model-rollout']
@@ -78,7 +80,9 @@ jobs:
           grep -q 'VisionModelRuntimes' glasses/inmo-air3-unity/Runtime/Core/Models.cs
           grep -q 'visionModelRuntimes' glasses/inmo-air3-unity/Runtime/Unity/UnityGelatoGateway.cs
           grep -q 'RefreshVisionModelAssignmentAsync' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
-          grep -q 'Activation is deferred until a verified model-loader implementation is installed' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
+          grep -q '_modelActivationService.ApplyAsync' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
+          grep -q 'no runtime host is configured' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
+          grep -q 'VisionModelAssignmentPolicy.CanApply' glasses/inmo-air3-unity/Runtime/Core/VisionModelActivation.cs
           ! grep -q 'ReportType = "activated"' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
           ! grep -q 'UPDATE glasses_vision_model_packages SET artifact_url' includes/glasses-vision-models.php
           ! grep -q 'kds_transition' includes/glasses-vision-models.php
