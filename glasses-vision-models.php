@@ -37,7 +37,7 @@ $boot=[
 <meta name="robots" content="noindex,nofollow">
 <title>AR Vision Model Rollouts | Restaurant Admin</title>
 <link rel="stylesheet" href="assets/css/admin-control.css?v=20260914-1">
-<link rel="stylesheet" href="assets/css/glasses-vision-models.css?v=20260928-browserpreflight1">
+<link rel="stylesheet" href="assets/css/glasses-vision-models.css?v=20260928-canary1">
 </head>
 <body class="admin-control gvm-page">
 <header class="admin-top">
@@ -54,11 +54,11 @@ $boot=[
     <div>
         <div class="admin-eyebrow">AR Glasses · Section 19</div>
         <h1>Vision Model Packages &amp; Rollouts</h1>
-        <p>Register immutable detector packages, stage deterministic canaries, advance them explicitly, and roll back to a declared baseline. Gelato never treats an unverified model artifact as active.</p>
+        <p>Register immutable detector packages, stage deterministic canaries, evaluate live production health, and roll back automatically or manually to a declared baseline. Gelato never treats an unverified model artifact as active.</p>
     </div>
     <div class="gvm-rule">
         <strong>Deployment rule</strong>
-        <span>HTTPS artifact + SHA-256 + compatible runtime are mandatory. Rollout changes are manual and audited.</span>
+        <span>HTTPS artifact + SHA-256 + compatible runtime are mandatory. Comparison-aware canaries advance only through governed stages; severe live regressions auto-roll back with immutable evidence.</span>
     </div>
 </section>
 
@@ -157,7 +157,7 @@ $boot=[
 <script>
 window.GELATO_VISION_MODELS=<?=json_encode($boot,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE|JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT)?>;
 </script>
-<script src="assets/js/glasses-vision-models.js?v=20260928-browserpreflight1"></script>
+<script src="assets/js/glasses-vision-models.js?v=20260928-canary1"></script>
 <script src="js/universal-admin-page-shell.js?v=20260915-2"></script>
 </body>
 </html>
