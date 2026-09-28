@@ -63,6 +63,7 @@ jobs:
       - name: Architecture and governance contract
         run: |
           grep -q 'blockedLabels' includes/glasses-vision-profiles.php
+          grep -q 'automated vision evidence is held fail-closed' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
           grep -q 'BlockedLabels' glasses/inmo-air3-unity/Runtime/Core/Models.cs
           grep -q 'visionProfile?.BlockedLabels' glasses/inmo-air3-unity/Runtime/Core/VisionPipeline.cs
           grep -q 'CREATE TABLE glasses_vision_model_packages' database/20261020_glasses_vision_model_rollout.sql
