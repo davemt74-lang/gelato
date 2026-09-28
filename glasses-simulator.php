@@ -204,6 +204,11 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
         <label class="vision-confidence"><span>Auto confidence threshold</span><input id="visionConfidenceThreshold" type="range" min="40" max="99" value="75"><output id="visionConfidenceValue">75%</output></label>
         <div id="visionMetrics" class="vision-metrics">FPS 0.0 · 0ms · 0 det</div>
         <p class="calibration-note">Assisted draws tracked detections only. Automatic also submits governed build observations. The fixture adapter is deterministic until the production browser model adapter is connected.</p>
+        <div class="temporal-validation-panel">
+          <div class="console-heading"><div><small>TEMPORAL PRODUCT VALIDATION</small><strong>Multi-ingredient state</strong></div><span id="temporalValidationState">IDLE</span></div>
+          <div id="temporalValidationDetail" class="vision-metrics">0 missing · 0 verify · 0 unexpected · 0 sequence · 0 pending</div>
+          <div id="temporalEventList" class="temporal-event-list"><span class="sim-muted">No temporal events yet.</span></div>
+        </div>
       </div>
     </section>
 
@@ -253,6 +258,6 @@ window.GELATO_GLASSES_SIMULATOR={
   api:'api/glasses-simulator.php'
 };
 </script>
-<script src="assets/js/glasses-web-simulator.js?v=20260928-camera1"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20260928-temporal1"></script>
 </body>
 </html>
