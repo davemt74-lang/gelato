@@ -121,13 +121,24 @@ def deterministic_split(images:list[Path],seed:int,ratios:tuple[float,float,floa
         groups.setdefault(key,[]).append(p)
     if grouped and len(groups)<3: raise PipelineError("Group-aware splitting requires at least 3 independent lineage groups.")
     ordered=sorted(groups.items(),key=lambda kv: hashlib.sha256(f"{seed}|{kv[0]}".encode()).hexdigest())
-    total=len(images); targets={"train":total*ratios[0],"val":total*ratios[1],"test":total*ratios[2]}; counts={"train":0,"val":0,"test":0}; splits={"train":[],"val":[],"test":[]}
+    total=len(images)
+    if not grouped:
+        flat=[members[0] for _,members in ordered]
+        n_val=max(1,round(total*ratios[1])); n_test=max(1,round(total*ratios[2])); n_train=total-n_val-n_test
+        if n_train<1:
+            n_train=1
+            if n_val>n_test:n_val-=1
+            else:n_test-=1
+        splits={"train":flat[:n_train],"val":flat[n_train:n_train+n_val],"test":flat[n_train+n_val:]}
+        counts={k:len(v) for k,v in splits.items()}
+        return splits,{"mode":"sample_fallback","groupCount":len(groups),"protectedBy":[],"counts":counts}
+    targets={"train":total*ratios[0],"val":total*ratios[1],"test":total*ratios[2]}; counts={"train":0,"val":0,"test":0}; splits={"train":[],"val":[],"test":[]}
     for i,(key,members) in enumerate(ordered):
         if i<3: split=("train","val","test")[i]
         else: split=max(counts,key=lambda name: targets[name]-counts[name])
         splits[split].extend(members);counts[split]+=len(members)
     if not all(splits.values()): raise PipelineError("Split engine could not produce non-empty train/val/test sets.")
-    provenance={"mode":"group_aware" if grouped else "sample_fallback","groupCount":len(groups),"protectedBy":["captureGroup","buildPublicId"] if grouped else [],"counts":counts}
+    provenance={"mode":"group_aware","groupCount":len(groups),"protectedBy":["captureGroup","buildPublicId"],"counts":counts}
     return splits,provenance
 
 def prepare_workspace(dataset: Path,out: Path,seed:int=74,train_ratio:float=.70,val_ratio:float=.15,test_ratio:float=.15)->dict[str,Any]:
