@@ -173,10 +173,14 @@ function glasses_vision_model_package_retire(PDO $pdo,int $org,string $publicId,
         if((string)$row['status']==='retired')return glasses_vision_model_package_public($row);
 
         $q=$pdo->prepare("SELECT COUNT(*) FROM glasses_vision_model_rollouts
-            WHERE organization_id=? AND status IN ('active','paused')
-              AND (target_package_id=? OR baseline_package_id=?)");
-        $q->execute([$org,(int)$row['id'],(int)$row['id']]);
-        if((int)$q->fetchColumn()>0)throw new InvalidArgumentException('Model package is referenced by an active or paused rollout.');
+            WHERE organization_id=?
+              AND (
+                (status IN ('active','paused') AND (target_package_id=? OR baseline_package_id=?))
+                OR (status='rolled_back' AND baseline_package_id=?)
+              )");
+        $q->execute([$org,(int)$row['id'],(int)$row['id'],(int)$row['id']]);
+        if((int)$q->fetchColumn()>0)
+            throw new InvalidArgumentException('Model package is still required by an active, paused, or rollback assignment.');
 
         $pdo->prepare("UPDATE glasses_vision_model_packages
             SET status='retired',retired_by=?,retired_at=NOW(6)
