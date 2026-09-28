@@ -18,8 +18,14 @@ namespace Gelato.Ar.Unity
         [SerializeField, Range(1, 10)] private int stableFramesRequired = 2;
         [SerializeField, Range(1, 30)] private int maxMissingFrames = 3;
         [SerializeField, Range(0f, 1f)] private float associationIouThreshold = 0.25f;
+        [SerializeField, Range(100, 5000)] private int inferenceTimeoutMs = 750;
+        [SerializeField, Range(1, 10)] private int failuresBeforeRestart = 3;
+        [SerializeField, Range(2, 20)] private int failuresBeforeFailed = 6;
 
         private VisionPipeline _pipeline;
+        private VisionDetectorRuntimeHarness _detectorRuntime;
+        private bool _detectorWarmupReady;
+        private float _nextDetectorRecoveryRetryAt;
         private CancellationTokenSource _lifetime;
         private float _nextInferenceAt;
         private bool _processing;
@@ -35,6 +41,7 @@ namespace Gelato.Ar.Unity
 
         public string DetectorName => _pipeline == null ? string.Empty : _pipeline.DetectorName;
         public int ActiveTrackCount => _pipeline == null ? 0 : _pipeline.ActiveTrackCount;
+        public VisionDetectorRuntimeHealth DetectorHealth => _detectorRuntime?.Health;
 
         private void Awake()
         {
@@ -45,7 +52,14 @@ namespace Gelato.Ar.Unity
                 return;
             }
 
-            _pipeline = new VisionPipeline(detector, new VisionPipelineOptions
+            _detectorRuntime = new VisionDetectorRuntimeHarness(detector, new VisionDetectorRuntimeOptions
+            {
+                InferenceTimeout = TimeSpan.FromMilliseconds(Math.Max(100, inferenceTimeoutMs)),
+                ConsecutiveFailuresBeforeRestart = Math.Max(1, failuresBeforeRestart),
+                ConsecutiveFailuresBeforeFailed = Math.Max(failuresBeforeRestart, failuresBeforeFailed)
+            });
+
+            _pipeline = new VisionPipeline(_detectorRuntime, new VisionPipelineOptions
             {
                 MinimumConfidence = minimumConfidence,
                 StableFramesRequired = stableFramesRequired,
@@ -81,6 +95,28 @@ namespace Gelato.Ar.Unity
             var coordinator = bootstrap.Coordinator;
             var build = coordinator.BuildSession;
             if (build == null || !string.Equals(build.Status, "active", StringComparison.Ordinal)) return;
+
+            if (_detectorRuntime != null && (!_detectorWarmupReady || _detectorRuntime.Health.State == VisionDetectorRuntimeState.Failed))
+            {
+                if (Time.unscaledTime < _nextDetectorRecoveryRetryAt) return;
+                try
+                {
+                    await _detectorRuntime.WarmupAsync(_lifetime.Token);
+                    _detectorWarmupReady = true;
+                    _nextDetectorRecoveryRetryAt = 0f;
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    _detectorWarmupReady = false;
+                    _nextDetectorRecoveryRetryAt = Time.unscaledTime + 5f;
+                    Debug.LogWarning("Gelato AR detector runtime warmup/recovery failed; automated vision is held fail-closed: " + ex.Message);
+                    return;
+                }
+            }
 
             if (_modelRecoveryService != null && !_modelRecoveryReady)
             {
@@ -208,6 +244,13 @@ namespace Gelato.Ar.Unity
                 };
 
                 var observations = await _pipeline.ProcessAsync(frame, context, _lifetime.Token);
+                if (_detectorRuntime != null && _detectorRuntime.Health.State == VisionDetectorRuntimeState.Failed)
+                {
+                    _detectorWarmupReady = false;
+                    _nextDetectorRecoveryRetryAt = Time.unscaledTime + 1f;
+                    Debug.LogWarning("Gelato AR detector runtime entered failed state; automated evidence is held until recovery.");
+                    return;
+                }
                 foreach (var observation in observations)
                 {
                     if (_lifetime.IsCancellationRequested) break;
