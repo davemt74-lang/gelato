@@ -49,5 +49,19 @@ gws_assert(str_contains($js,"FRAME_MODE_KEY='gelato.webGlassesSimulator.frameMod
 gws_assert(str_contains($js,'function applyFrameMode()'),'Simulator must apply optical frame mode without touching kitchen state.');
 gws_assert(str_contains($js,"frameMode='image'"),'Loading custom glasses artwork must switch to image mode.');
 gws_assert(str_contains($css,'.svg-glasses-layer'),'SVG optical layer must be independently styled above the HUD.');
+gws_assert(str_contains($page,'hudOrders')&&str_contains($page,'hudOrdersCount'),'HUD must expose Active Orders rail.');
+gws_assert(str_contains($page,'hudNextCenter')&&str_contains($page,'hudLeaderLine'),'HUD must expose central NEXT instruction and leader line.');
+gws_assert(str_contains($page,'hudBuildSteps')&&str_contains($page,'hudValidationMissing'),'HUD must expose build sequence and validation detail.');
+gws_assert(str_contains($page,'autoPlayBuild')&&str_contains($page,'lowConfidenceDetection'),'Simulator must expose deterministic demo controls.');
+gws_assert(str_contains($js,'function renderOrdersQueue'),'HUD must render station KDS queue.');
+gws_assert(str_contains($js,'function renderNextInstruction'),'HUD must render next required component.');
+gws_assert(str_contains($js,'function renderBuildRail'),'HUD must render active build sequence.');
+gws_assert(str_contains($js,'function renderValidationPanel'),'HUD must render missing/unexpected validation.');
+gws_assert(str_contains($js,"presets['Pizza Line Reference']"),'Reference HUD layout preset must be seeded.');
+gws_assert(str_contains($js,'function toggleAutoPlay'),'Mock demo must support scripted playback.');
+gws_assert(str_contains($css,'.hud-orders-left')&&str_contains($css,'.hud-next-center'),'Reference HUD styling must preserve left rail and open center.');
+gws_assert(str_contains($css,'.detection-box.low-confidence')&&str_contains($css,'.detection-box.unexpected'),'Detection overlays must communicate verification and unexpected states.');
+gws_assert(str_contains($css,'.glasses-stage.calibrating .hud-orders-left')&&str_contains($css,'.glasses-stage.calibrating .hud-next-center'),'New HUD rails must honor calibration geometry.');
+gws_assert(str_contains($css,'.glasses-stage.calibrating .hud-right-build')&&str_contains($css,'.glasses-stage.calibrating .hud-topbar'),'Build and status HUD regions must honor calibration geometry.');
 
 echo "glasses-web-simulator-ok\n";
