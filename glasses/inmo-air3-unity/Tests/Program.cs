@@ -635,6 +635,31 @@ internal static class Program
         Assert(transferPipeline.Diagnostics.SequenceSupports == 2, "current recipe step must receive sequence support");
         Assert(transferPipeline.Diagnostics.ObservationsEmitted == 1, "one physical transfer must emit only one durable observation");
 
+        var duplicateTransferDetector = new ScriptedVisionDetector(
+            D("ingredient:42", "Turkey", "turkey-repeat", 0.92f, 1f, 0.09f, 0.19f, 0.08f, 0.08f),
+            D("ingredient:42", "Turkey", "turkey-repeat", 0.93f, 1f, 0.10f, 0.20f, 0.08f, 0.08f),
+            D("ingredient:42", "Turkey", "turkey-repeat", 0.82f, 1f, 0.50f, 0.56f, 0.08f, 0.08f),
+            D("ingredient:42", "Turkey", "turkey-repeat", 0.83f, 1f, 0.51f, 0.56f, 0.08f, 0.08f),
+            Array.Empty<VisionDetection>(),
+            Array.Empty<VisionDetection>(),
+            Array.Empty<VisionDetection>(),
+            D("ingredient:42", "Turkey", "turkey-repeat", 0.96f, 1f, 0.52f, 0.57f, 0.08f, 0.08f),
+            D("ingredient:42", "Turkey", "turkey-repeat", 0.97f, 1f, 0.53f, 0.57f, 0.08f, 0.08f)
+        );
+        var duplicateTransfer = new VisionPipeline(duplicateTransferDetector);
+        await duplicateTransfer.ProcessAsync(NextFrame(frame), context);
+        await duplicateTransfer.ProcessAsync(NextFrame(frame), context);
+        await duplicateTransfer.ProcessAsync(NextFrame(frame), context);
+        var firstTransfer = await duplicateTransfer.ProcessAsync(NextFrame(frame), context);
+        Assert(firstTransfer.Count == 1 && firstTransfer[0].Action == "added", "first proven physical transfer must be additive");
+        await duplicateTransfer.ProcessAsync(NextFrame(frame), context);
+        await duplicateTransfer.ProcessAsync(NextFrame(frame), context);
+        await duplicateTransfer.ProcessAsync(NextFrame(frame), context);
+        Assert((await duplicateTransfer.ProcessAsync(NextFrame(frame), context)).Count == 0, "same physical instance must restabilize after occlusion");
+        var repeatVisibility = await duplicateTransfer.ProcessAsync(NextFrame(frame), context);
+        Assert(repeatVisibility.Count == 1 && repeatVisibility[0].Action == "seen", "same consumed transfer must never double-count as another add after occlusion");
+        Assert(Math.Abs(repeatVisibility[0].Confidence - 0.74f) < 0.0001f, "repeat visibility of consumed transfer must remain review-only evidence");
+
         var sourceOnlyDetector = new ScriptedVisionDetector(
             D("ingredient:42", "Turkey", "turkey-bin-only", 0.97f, 1f, 0.10f, 0.20f, 0.08f, 0.08f),
             D("ingredient:42", "Turkey", "turkey-bin-only", 0.98f, 1f, 0.11f, 0.20f, 0.08f, 0.08f)
