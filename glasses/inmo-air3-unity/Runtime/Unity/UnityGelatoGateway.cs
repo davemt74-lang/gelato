@@ -165,7 +165,14 @@ namespace Gelato.Ar.Unity
                 quantity = observation.Quantity,
                 confidence = observation.Confidence,
                 trackingId = observation.TrackingId,
-                bbox = observation.BoundingBox ?? Array.Empty<float>()
+                bbox = observation.BoundingBox ?? Array.Empty<float>(),
+                metadata = new ObservationMetadataRequest
+                {
+                    evidenceKind = observation.EvidenceKind ?? string.Empty,
+                    sourceZoneKey = observation.EvidenceSourceZoneKey ?? string.Empty,
+                    destinationRegionKey = observation.EvidenceDestinationRegionKey ?? string.Empty,
+                    sequenceSupported = observation.EvidenceSequenceSupported
+                }
             }, true, cancellationToken);
 
             return MapBuild(response.buildSession);
@@ -401,6 +408,14 @@ namespace Gelato.Ar.Unity
             public float confidence;
             public string trackingId;
             public float[] bbox;
+            public ObservationMetadataRequest metadata;
+        }
+        [Serializable] private sealed class ObservationMetadataRequest
+        {
+            public string evidenceKind;
+            public string sourceZoneKey;
+            public string destinationRegionKey;
+            public bool sequenceSupported;
         }
 
         [Serializable] private sealed class ErrorResponse { public bool ok; public string message; }
