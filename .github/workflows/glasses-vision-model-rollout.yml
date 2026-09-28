@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'database/20261020_glasses_vision_model_rollout.sql'
+      - 'database/20261021_glasses_vision_model_assignment_ledger.sql'
       - 'includes/glasses-vision-models.php'
       - 'api/glasses-vision-models.php'
       - 'api/glasses-device.php'
@@ -63,11 +64,15 @@ jobs:
           grep -q 'CREATE TABLE glasses_vision_model_rollouts' database/20261020_glasses_vision_model_rollout.sql
           grep -q 'CREATE TABLE glasses_vision_model_rollout_events' database/20261020_glasses_vision_model_rollout.sql
           grep -q 'CREATE TABLE glasses_vision_model_device_reports' database/20261020_glasses_vision_model_rollout.sql
+          grep -q 'CREATE TABLE glasses_vision_model_assignments' database/20261021_glasses_vision_model_assignment_ledger.sql
+          grep -q 'ADD COLUMN assignment_id' database/20261021_glasses_vision_model_assignment_ledger.sql
           grep -q 'function glasses_vision_model_package_create' includes/glasses-vision-models.php
           grep -Fq '/^\d+(?:\.\d+){0,3}(?:[-+][0-9A-Za-z.-]+)?$/' includes/glasses-vision-models.php
           grep -q 'function glasses_vision_model_rollout_advance' includes/glasses-vision-models.php
           grep -q 'function glasses_vision_model_rollout_rollback' includes/glasses-vision-models.php
           grep -q 'function glasses_vision_model_canary_bucket' includes/glasses-vision-models.php
+          grep -q 'function glasses_vision_model_assignment_record' includes/glasses-vision-models.php
+          grep -q 'report references an assignment that was not issued to this device' includes/glasses-vision-models.php
           grep -q 'vision_runtime_capability_unreported' includes/glasses-vision-models.php
           grep -q "action==='vision.model_assignment'" api/glasses-device.php
           grep -q "action==='vision.model_report'" api/glasses-device.php
@@ -79,6 +84,7 @@ jobs:
           grep -q 'artifact_sha256_invalid' glasses/inmo-air3-unity/Runtime/Core/VisionModelRolloutPolicy.cs
           grep -q 'VisionModelRuntimes' glasses/inmo-air3-unity/Runtime/Core/Models.cs
           grep -q 'visionModelRuntimes' glasses/inmo-air3-unity/Runtime/Unity/UnityGelatoGateway.cs
+          grep -q 'assignmentKey = report.AssignmentKey' glasses/inmo-air3-unity/Runtime/Unity/UnityGelatoGateway.cs
           grep -q 'RefreshVisionModelAssignmentAsync' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
           grep -q '_modelActivationService.ApplyAsync' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
           grep -q 'no runtime host is configured' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
