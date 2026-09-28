@@ -1,0 +1,57 @@
+name: AR Glasses Hands-Free Review
+
+on:
+  pull_request:
+    paths:
+      - 'glasses/inmo-air3-unity/Runtime/Core/HandsFreeReview.cs'
+      - 'glasses/inmo-air3-unity/Runtime/Core/ArWorkflowCoordinator.cs'
+      - 'glasses/inmo-air3-unity/Runtime/Core/HudViewModel.cs'
+      - 'glasses/inmo-air3-unity/Runtime/Unity/HandsFreeCommandInput.cs'
+      - 'glasses/inmo-air3-unity/Runtime/Unity/ArHudController.cs'
+      - 'glasses/inmo-air3-unity/Runtime/Unity/ArHudRuntimeBinder.cs'
+      - 'glasses/inmo-air3-unity/Runtime/Unity/DesktopSimulatorController.cs'
+      - 'glasses/inmo-air3-unity/Tests/Program.cs'
+      - 'docs/GLASSES-HANDS-FREE-REVIEW.md'
+      - '.github/workflows/glasses-hands-free-review.yml'
+  push:
+    branches: [main, 'feature/glasses-hands-free-review']
+
+jobs:
+  hands-free-review:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Architecture and safety contract
+        run: |
+          grep -q 'class HandsFreeCommandRouter' glasses/inmo-air3-unity/Runtime/Core/HandsFreeReview.cs
+          grep -q 'SemaphoreSlim' glasses/inmo-air3-unity/Runtime/Core/HandsFreeReview.cs
+          grep -q 'SAY THE INGREDIENT' glasses/inmo-air3-unity/Runtime/Core/HandsFreeReview.cs
+          grep -q 'EXPO BLOCKED' glasses/inmo-air3-unity/Runtime/Core/HandsFreeReview.cs
+          grep -q 'ALREADY SENT TO EXPO' glasses/inmo-air3-unity/Runtime/Core/HandsFreeReview.cs
+          grep -q 'RejectLastObservationAsync' glasses/inmo-air3-unity/Runtime/Core/HandsFreeReview.cs
+          grep -q 'class HandsFreeCommandInput' glasses/inmo-air3-unity/Runtime/Unity/HandsFreeCommandInput.cs
+          grep -q 'SubmitCommand(string command)' glasses/inmo-air3-unity/Runtime/Unity/HandsFreeCommandInput.cs
+          grep -q 'HANDS-FREE' glasses/inmo-air3-unity/Runtime/Unity/ArHudController.cs
+          grep -q 'coordinator.ReviewFeedback' glasses/inmo-air3-unity/Runtime/Unity/ArHudRuntimeBinder.cs
+          grep -q 'ExecuteHandsFreeCommandAsync("confirm")' glasses/inmo-air3-unity/Runtime/Unity/DesktopSimulatorController.cs
+          grep -q 'ExecuteHandsFreeCommandAsync("undo last")' glasses/inmo-air3-unity/Runtime/Unity/DesktopSimulatorController.cs
+          grep -q 'ExecuteHandsFreeCommandAsync("send to expo")' glasses/inmo-air3-unity/Runtime/Unity/DesktopSimulatorController.cs
+          ! grep -R 'ArPoseManager' glasses/inmo-air3-unity/Runtime/Core
+          ! grep -q '"finish", "finish item"' glasses/inmo-air3-unity/Runtime/Core/HandsFreeReview.cs
+
+      - name: Compile hardware-neutral AR core
+        run: dotnet build glasses/inmo-air3-unity/Runtime/Core/Gelato.Ar.Core.csproj -c Release --nologo
+
+      - name: Run full AIR3 core behavior contracts
+        run: dotnet run --project glasses/inmo-air3-unity/Tests/Gelato.Ar.Core.Tests.csproj -c Release
+
+      - name: Verify center-safe HUD policy
+        run: |
+          grep -q 'PersistentUiClearsCenter' glasses/inmo-air3-unity/Runtime/Core/HudViewModel.cs
+          grep -q 'RightRail' glasses/inmo-air3-unity/Runtime/Core/HudViewModel.cs
+          grep -q 'ReviewFeedback' glasses/inmo-air3-unity/Runtime/Core/HudViewModel.cs
