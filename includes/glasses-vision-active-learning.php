@@ -152,3 +152,9 @@ function glasses_vision_active_learning_summary(PDO $pdo,int $org): array {
     $q=$pdo->prepare("SELECT candidate_type,COUNT(*) n,ROUND(AVG(priority_score),2) avg_priority FROM glasses_vision_active_learning_candidates WHERE organization_id=? AND status='open' GROUP BY candidate_type ORDER BY n DESC");$q->execute([$org]);
     return ['states'=>$states,'byType'=>array_map(static fn($r)=>['type'=>$r['candidate_type'],'count'=>(int)$r['n'],'averagePriority'=>(float)$r['avg_priority']],$q->fetchAll())];
 }
+
+function glasses_vision_active_learning_catalog(PDO $pdo,int $org): array {
+    if(!glasses_vision_active_learning_ready($pdo))return ['ready'=>false,'summary'=>['states'=>['open'=>0,'assigned'=>0,'dismissed'=>0,'resolved'=>0],'byType'=>[]],'candidates'=>[],'lastScan'=>null];
+    $q=$pdo->prepare("SELECT public_id,trigger_source,created_candidates,queued_samples,source_counts_json,created_at FROM glasses_vision_active_learning_scans WHERE organization_id=? ORDER BY id DESC LIMIT 1");$q->execute([$org]);$scan=$q->fetch();
+    return ['ready'=>true,'summary'=>glasses_vision_active_learning_summary($pdo,$org),'candidates'=>glasses_vision_active_learning_candidates($pdo,$org,'open',200),'lastScan'=>$scan?['publicId'=>$scan['public_id'],'triggerSource'=>$scan['trigger_source'],'createdCandidates'=>(int)$scan['created_candidates'],'queuedSamples'=>(int)$scan['queued_samples'],'sourceCounts'=>json_decode((string)$scan['source_counts_json'],true)?:[],'createdAt'=>$scan['created_at']]:null];
+}
