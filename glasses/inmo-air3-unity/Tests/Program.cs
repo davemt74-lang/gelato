@@ -20,7 +20,8 @@ internal static class Program
         await VisionModelRolloutContract();
         await VisionModelActivationContract.RunAsync();
         await VisionModelRuntimePersistenceContract.RunAsync();
-        await VisionDetectorRuntimeHarnessContract.RunAsync();\n        DeviceRuntimeSupervisorContract.Run();
+        await VisionDetectorRuntimeHarnessContract.RunAsync();
+        DeviceRuntimeSupervisorContract.Run();
         await SpatialEvidenceFusionContract();
         await TransferSequenceEvidenceContract();
         await VisionPipelineContract();
