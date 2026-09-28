@@ -52,6 +52,7 @@ The runtime health surface records:
 - restart attempts/successes;
 - last inference latency;
 - average inference latency;
+- last successful inference FPS;
 - last error code/message;
 - current runtime state.
 
@@ -106,5 +107,6 @@ The hardware-neutral contract proves:
 - one-inference backpressure;
 - timed-out detector calls that ignore cancellation cannot overlap subsequent inference;
 - restart failure enters explicit failed state;
-- health/latency counters are updated;
+- health/latency/FPS counters are updated;
+- detector restart does not duplicate an already-emitted ingredient observation;
 - prior AIR3 behavior remains green.
