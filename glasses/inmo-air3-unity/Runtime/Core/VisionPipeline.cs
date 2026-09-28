@@ -122,6 +122,26 @@ namespace Gelato.Ar.Core
                 detection.BoundingBox = box.ToArray();
                 detection.Confidence = Math.Max(0f, Math.Min(1f, detection.Confidence));
                 detection.Quantity = Math.Max(0.001f, detection.Quantity);
+
+                var spatial = VisionEvidenceFusion.Evaluate(
+                    detection,
+                    context.StationCalibration,
+                    frame,
+                    _options.SpatialSupportBoost,
+                    _options.SpatialConflictPenalty
+                );
+                detection.Confidence = spatial.EffectiveConfidence;
+                if (spatial.Kind == SpatialEvidenceKind.Support) Diagnostics.SpatialSupports++;
+                else if (spatial.Kind == SpatialEvidenceKind.Conflict) Diagnostics.SpatialConflicts++;
+
+                // Location may lower confidence enough to fail the normal vision floor,
+                // but calibrated location alone never rescues a candidate that failed the raw detector floor above.
+                if (detection.Confidence < _options.MinimumConfidence)
+                {
+                    Diagnostics.DetectionsRejected++;
+                    continue;
+                }
+
                 accepted.Add(detection);
                 Diagnostics.DetectionsAccepted++;
             }

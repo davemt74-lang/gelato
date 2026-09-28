@@ -1,0 +1,45 @@
+name: AR Glasses Spatial Evidence Fusion
+
+on:
+  pull_request:
+    paths:
+      - 'glasses/inmo-air3-unity/**'
+      - 'docs/GLASSES-SPATIAL-EVIDENCE-FUSION.md'
+      - '.github/workflows/glasses-spatial-evidence-fusion.yml'
+  push:
+    branches: [main, 'feature/glasses-spatial-evidence-fusion']
+
+jobs:
+  spatial-evidence-fusion:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Spatial fusion architecture contract
+        run: |
+          grep -q 'class VisionEvidenceFusion' glasses/inmo-air3-unity/Runtime/Core/VisionEvidenceFusion.cs
+          grep -q 'SpatialEvidenceKind.Support' glasses/inmo-air3-unity/Runtime/Core/VisionEvidenceFusion.cs
+          grep -q 'SpatialEvidenceKind.Conflict' glasses/inmo-air3-unity/Runtime/Core/VisionEvidenceFusion.cs
+          grep -q 'StationCalibrationPolicy.CanUse' glasses/inmo-air3-unity/Runtime/Core/VisionEvidenceFusion.cs
+          grep -q 'SpatialSupportBoost' glasses/inmo-air3-unity/Runtime/Core/VisionModels.cs
+          grep -q 'SpatialConflictPenalty' glasses/inmo-air3-unity/Runtime/Core/VisionModels.cs
+          grep -q 'VisionEvidenceFusion.Evaluate' glasses/inmo-air3-unity/Runtime/Core/VisionPipeline.cs
+          grep -q 'SpatialSupports' glasses/inmo-air3-unity/Runtime/Core/VisionPipeline.cs
+          grep -q 'SpatialConflicts' glasses/inmo-air3-unity/Runtime/Core/VisionPipeline.cs
+          ! grep -q 'StationCalibrationPolicy.HighestPriorityZoneAt.*SubmitObservation' glasses/inmo-air3-unity/Runtime/Core/VisionPipeline.cs
+          ! grep -R 'ArPoseManager' glasses/inmo-air3-unity/Runtime/Core/VisionEvidenceFusion.cs glasses/inmo-air3-unity/Runtime/Core/VisionPipeline.cs
+
+      - name: Compile hardware-neutral AR core
+        run: dotnet build glasses/inmo-air3-unity/Runtime/Core/Gelato.Ar.Core.csproj -c Release --nologo
+
+      - name: Run workflow, simulator, vision, calibration and fusion contracts
+        run: dotnet run --project glasses/inmo-air3-unity/Tests/Gelato.Ar.Core.Tests.csproj -c Release
+
+      - name: Conservative evidence contract
+        run: |
+          grep -q 'raw visual evidence must be rejected before spatial support' glasses/inmo-air3-unity/Tests/Program.cs
+          grep -q 'station location alone must never create a recipe observation' glasses/inmo-air3-unity/Tests/Program.cs
+          grep -q 'unexpected evidence must not be legitimized' glasses/inmo-air3-unity/Tests/Program.cs

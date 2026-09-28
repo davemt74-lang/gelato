@@ -89,6 +89,8 @@ namespace Gelato.Ar.Core
         public int MaxDetectionsPerFrame { get; set; } = 64;
         public int MaxActiveTracks { get; set; } = 128;
         public bool RequireMonotonicTimestamps { get; set; } = true;
+        public float SpatialSupportBoost { get; set; } = 0.06f;
+        public float SpatialConflictPenalty { get; set; } = 0.20f;
 
         public void Validate()
         {
@@ -104,6 +106,10 @@ namespace Gelato.Ar.Core
                 throw new InvalidOperationException("Vision per-frame detection limit is invalid.");
             if (MaxActiveTracks < 1 || MaxActiveTracks > 2048)
                 throw new InvalidOperationException("Vision active-track limit is invalid.");
+            if (SpatialSupportBoost < 0f || SpatialSupportBoost > 0.25f)
+                throw new InvalidOperationException("Vision spatial support boost is invalid.");
+            if (SpatialConflictPenalty < 0f || SpatialConflictPenalty > 0.50f)
+                throw new InvalidOperationException("Vision spatial conflict penalty is invalid.");
         }
     }
 
@@ -115,6 +121,8 @@ namespace Gelato.Ar.Core
         public long DetectionsAccepted { get; internal set; }
         public long DetectionsRejected { get; internal set; }
         public long ObservationsEmitted { get; internal set; }
+        public long SpatialSupports { get; internal set; }
+        public long SpatialConflicts { get; internal set; }
 
         internal void Reset()
         {
@@ -124,6 +132,8 @@ namespace Gelato.Ar.Core
             DetectionsAccepted = 0;
             DetectionsRejected = 0;
             ObservationsEmitted = 0;
+            SpatialSupports = 0;
+            SpatialConflicts = 0;
         }
     }
 }
