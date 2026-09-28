@@ -345,6 +345,15 @@ namespace Gelato.Ar.Core
             var normalized = NormalizeLabel(label);
             if (normalized.Length == 0) return false;
 
+            if (visionProfile?.BlockedLabels != null)
+            {
+                foreach (var blocked in visionProfile.BlockedLabels)
+                {
+                    if (string.Equals(NormalizeLabel(blocked), normalized, StringComparison.Ordinal))
+                        return false;
+                }
+            }
+
             if (visionProfile?.Mappings != null && visionProfile.Mappings.Count > 0)
             {
                 VisionLabelMapping? profileMatch = null;
