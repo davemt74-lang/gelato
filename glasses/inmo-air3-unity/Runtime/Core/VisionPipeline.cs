@@ -12,9 +12,11 @@ namespace Gelato.Ar.Core
         private readonly IVisionDetector _detector;
         private readonly VisionPipelineOptions _options;
         private readonly List<TrackState> _tracks = new List<TrackState>();
+        private readonly TransferEvidenceTracker _transferEvidence = new TransferEvidenceTracker();
         private string _sessionPublicId = string.Empty;
         private int _nextTrackId = 1;
         private long _lastFrameTimestampNanoseconds = long.MinValue;
+        private long _frameOrdinal;
 
         public VisionPipeline(IVisionDetector detector, VisionPipelineOptions? options = null)
         {
@@ -32,6 +34,8 @@ namespace Gelato.Ar.Core
             _tracks.Clear();
             _nextTrackId = 1;
             _lastFrameTimestampNanoseconds = long.MinValue;
+            _frameOrdinal = 0;
+            _transferEvidence.Reset();
             _sessionPublicId = buildSessionPublicId?.Trim() ?? string.Empty;
             Diagnostics.Reset();
         }
@@ -64,6 +68,7 @@ namespace Gelato.Ar.Core
 
             cancellationToken.ThrowIfCancellationRequested();
             Diagnostics.FramesProcessed++;
+            _frameOrdinal++;
 
             var detections = await _detector.DetectAsync(frame, context, cancellationToken).ConfigureAwait(false)
                 ?? Array.Empty<VisionDetection>();
@@ -141,6 +146,32 @@ namespace Gelato.Ar.Core
                     Diagnostics.DetectionsRejected++;
                     continue;
                 }
+
+                var transfer = _transferEvidence.Evaluate(
+                    detection,
+                    context,
+                    _frameOrdinal,
+                    _options
+                );
+
+                if (transfer.Kind == TransferEvidenceKind.SourcePrimed)
+                    Diagnostics.TransferSourcesPrimed++;
+                else if (transfer.Kind == TransferEvidenceKind.TransferConfirmed)
+                {
+                    Diagnostics.TransfersConfirmed++;
+                    if (transfer.SequenceSupported) Diagnostics.SequenceSupports++;
+                }
+                else if (transfer.Kind == TransferEvidenceKind.WorkSurfaceUnprimed)
+                    Diagnostics.UnprimedWorkSurfaceDetections++;
+
+                if (transfer.Hold)
+                {
+                    Diagnostics.TransferHeldDetections++;
+                    continue;
+                }
+
+                detection.Confidence = transfer.EffectiveConfidence;
+                detection.Action = transfer.Action;
 
                 accepted.Add(detection);
                 Diagnostics.DetectionsAccepted++;
