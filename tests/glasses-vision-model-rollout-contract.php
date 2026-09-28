@@ -532,7 +532,7 @@ for($i=1;$i<=10;$i++)glasses_vision_drift_sample($pdo,$device,[
 $resolved=glasses_vision_drift_incident_public(glasses_vision_drift_incident_row($pdo,$org,$incidentPublic,false));
 gvm_assert($resolved['recoveryStatus']==='resolved'&&$resolved['validationStableSamples']>=10&&$resolved['resolvedAt']!==null,'Ten stable post-remediation samples must automatically resolve the incident.');
 
-glasses_vision_drift_incident($pdo,$org,['package_id'=>$driftTargetRow['id'],'rollout_id'=>$driftRow['id']],['location_id'=>$location,'station_id'=>$station['id']],['state'=>'drifted','score'=>0.5,'reasons'=>['lighting_shift'],'categories'=>['lighting']]);
+glasses_vision_drift_incident($pdo,$org,['package_id'=>$driftTargetRow['id'],'rollout_id'=>$driftRow['id']],['location_id'=>$location,'station_id'=>$station['id']],['state'=>'drifted','score'=>0.5,'reasons'=>['lighting_shift_critical'],'categories'=>['lighting']]);
 $reopened=glasses_vision_drift_incident_public(glasses_vision_drift_incident_row($pdo,$org,$incidentPublic,false));
 gvm_assert($reopened['recoveryStatus']==='reopened'&&$reopened['reopenedCount']>=1,'A resolved incident must reopen when the same drift returns.');
 
