@@ -133,6 +133,18 @@ namespace Gelato.Ar.Core
         public int Priority { get; set; }
     }
 
+    public sealed class StationWorkArea
+    {
+        public string AreaKey { get; set; } = string.Empty;
+        public string Role { get; set; } = "assembly";
+        public string DisplayName { get; set; } = string.Empty;
+        public float X { get; set; }
+        public float Y { get; set; }
+        public float Width { get; set; }
+        public float Height { get; set; }
+        public int Priority { get; set; }
+    }
+
     public sealed class CalibrationCompatibility
     {
         public bool Compatible { get; set; }
@@ -151,6 +163,7 @@ namespace Gelato.Ar.Core
         public string PixelFormat { get; set; } = string.Empty;
         public string SourceHash { get; set; } = string.Empty;
         public IReadOnlyList<IngredientZone> Zones { get; set; } = Array.Empty<IngredientZone>();
+        public IReadOnlyList<StationWorkArea> WorkAreas { get; set; } = Array.Empty<StationWorkArea>();
         public CalibrationCompatibility Compatibility { get; set; } = new CalibrationCompatibility();
     }
 
@@ -192,6 +205,31 @@ namespace Gelato.Ar.Core
             return best;
         }
 
+        public static IReadOnlyList<StationWorkArea> WorkAreasForRole(StationCalibration? calibration,string role="assembly")
+        {
+            if (calibration == null || calibration.WorkAreas == null) return Array.Empty<StationWorkArea>();
+            var wanted = string.IsNullOrWhiteSpace(role) ? "assembly" : role.Trim();
+            var areas = new List<StationWorkArea>();
+            foreach (var area in calibration.WorkAreas)
+            {
+                if (area == null || !string.Equals(area.Role,wanted,StringComparison.OrdinalIgnoreCase)) continue;
+                areas.Add(area);
+            }
+            areas.Sort((a,b) => b.Priority.CompareTo(a.Priority));
+            return areas;
+        }
+
+        public static StationWorkArea? HighestPriorityWorkAreaAt(StationCalibration? calibration,float x,float y,string role="assembly")
+        {
+            StationWorkArea? best = null;
+            foreach (var area in WorkAreasForRole(calibration,role))
+            {
+                if (x < area.X || y < area.Y || x > area.X + area.Width || y > area.Y + area.Height) continue;
+                if (best == null || area.Priority > best.Priority) best = area;
+            }
+            return best;
+        }
+
         public static int IngredientIdForComponent(string componentKey)
         {
             if (string.IsNullOrWhiteSpace(componentKey)) return 0;
@@ -211,6 +249,10 @@ namespace Gelato.Ar.Core
         public float Confidence { get; set; }
         public string TrackingId { get; set; } = string.Empty;
         public float[] BoundingBox { get; set; } = Array.Empty<float>();
+        public string EvidenceType { get; set; } = "visual";
+        public string SourceZoneKey { get; set; } = string.Empty;
+        public string WorkAreaKey { get; set; } = string.Empty;
+        public float? RawConfidence { get; set; }
     }
 
     public sealed class ValidationNext
