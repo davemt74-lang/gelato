@@ -21,7 +21,7 @@ jobs:
       - name: Python syntax
         run: python -m py_compile tools/vision_training/pipeline.py tests/vision-training-pipeline.test.py
       - name: Pipeline contracts
-        run: python -m unittest tests/vision-training-pipeline.test.py -v
+        run: python tests/vision-training-pipeline.test.py -v
       - name: CLI smoke
         run: python tools/vision_training/pipeline.py --help
       - name: Governance contract
