@@ -15,6 +15,7 @@ internal static class Program
         SimulatorSupportContract();
         await StationCalibrationContract();
         await SpatialEvidenceFusionContract();
+        await TransferEvidenceContract();
         await VisionPipelineContract();
         Console.WriteLine("air3-unity-shell-ok");
     }
@@ -487,6 +488,194 @@ internal static class Program
         Assert((await lowPipeline.ProcessAsync(NextFrame(frame), context)).Count == 0, "below-floor raw visual evidence must be rejected before spatial support");
         Assert((await lowPipeline.ProcessAsync(NextFrame(frame), context)).Count == 0, "station location alone must never create a recipe observation");
         Assert(lowPipeline.Diagnostics.SpatialSupports == 0, "rejected raw visual candidates must not be counted as spatially supported observations");
+    }
+
+    private static async Task TransferEvidenceContract()
+    {
+        var frame = new CameraFrame
+        {
+            Data = new byte[640 * 480],
+            Width = 640,
+            Height = 480,
+            TimestampNanoseconds = 500,
+            PixelFormat = "grayscale8"
+        };
+
+        var calibration = new StationCalibration
+        {
+            PublicId = "station-cal-transfer",
+            FrameWidth = 640,
+            FrameHeight = 480,
+            PixelFormat = "grayscale8",
+            Compatibility = new CalibrationCompatibility { Compatible = true },
+            Zones = new[]
+            {
+                new IngredientZone
+                {
+                    ZoneKey = "turkey-pan",
+                    IngredientId = 42,
+                    DisplayName = "Turkey Pan",
+                    X = 0.06f,
+                    Y = 0.16f,
+                    Width = 0.20f,
+                    Height = 0.22f,
+                    Priority = 20
+                },
+                new IngredientZone
+                {
+                    ZoneKey = "bacon-pan",
+                    IngredientId = 43,
+                    DisplayName = "Bacon Pan",
+                    X = 0.28f,
+                    Y = 0.16f,
+                    Width = 0.18f,
+                    Height = 0.22f,
+                    Priority = 20
+                }
+            },
+            WorkAreas = new[]
+            {
+                new StationWorkArea
+                {
+                    AreaKey = "sandwich-board",
+                    Role = "assembly",
+                    DisplayName = "Sandwich Assembly Board",
+                    X = 0.50f,
+                    Y = 0.42f,
+                    Width = 0.28f,
+                    Height = 0.34f,
+                    Priority = 20
+                },
+                new StationWorkArea
+                {
+                    AreaKey = "plating",
+                    Role = "plating",
+                    DisplayName = "Plating Area",
+                    X = 0.80f,
+                    Y = 0.42f,
+                    Width = 0.16f,
+                    Height = 0.34f,
+                    Priority = 10
+                }
+            }
+        };
+
+        var turkey = new BuildComponent
+        {
+            ComponentKey = "ingredient:42",
+            DisplayName = "Turkey",
+            ExpectedQuantity = 3f,
+            Unit = "slices",
+            Status = "waiting"
+        };
+        var context = new VisionFrameContext
+        {
+            BuildSessionPublicId = "build-transfer-1",
+            ExpectedComponents = new[] { turkey },
+            StationCalibration = calibration
+        };
+
+        var detector = new ScriptedVisionDetector(
+            D("ingredient:42", "Turkey", "turkey-transfer-1", 0.78f, 1f, 0.10f, 0.20f, 0.08f, 0.08f),
+            D("ingredient:42", "Turkey", "turkey-transfer-1", 0.78f, 1f, 0.34f, 0.32f, 0.08f, 0.08f),
+            D("ingredient:42", "Turkey", "turkey-transfer-1", 0.78f, 1f, 0.56f, 0.50f, 0.08f, 0.08f)
+        );
+        var pipeline = new VisionPipeline(detector, new VisionPipelineOptions
+        {
+            MinimumConfidence = 0.50f,
+            StableFramesRequired = 2,
+            MaxMissingFrames = 3,
+            TransferMinimumFrames = 3,
+            TransferMinimumDistance = 0.20f,
+            TransferSupportBoost = 0.08f
+        });
+
+        var first = await pipeline.ProcessAsync(NextFrame(frame), context);
+        Assert(first.Count == 0, "source-bin sighting must not create transfer evidence before normal visual stability");
+        Assert(pipeline.Diagnostics.TransferStarts == 1, "matching source-bin sighting must start one tracked transfer trajectory");
+
+        var second = await pipeline.ProcessAsync(NextFrame(frame), context);
+        Assert(second.Count == 1 && second[0].Action == "added", "stable visual ingredient must emit its normal additive observation before transfer evidence");
+        Assert(second[0].EvidenceType == "visual", "base ingredient observation must remain visual evidence");
+
+        var third = await pipeline.ProcessAsync(NextFrame(frame), context);
+        Assert(third.Count == 1, "continuous same-instance arrival at assembly area must emit one transfer evidence event");
+        var transfer = third[0];
+        Assert(transfer.Action == "seen", "transfer evidence must be non-additive");
+        Assert(transfer.EvidenceType == "visual_transfer", "transfer evidence provenance must be explicit");
+        Assert(transfer.SourceZoneKey == "turkey-pan", "transfer evidence must retain source ingredient-bin identity");
+        Assert(transfer.WorkAreaKey == "sandwich-board", "transfer evidence must retain assembly-area identity");
+        Assert(Math.Abs(transfer.Quantity - 1f) < 0.0001f, "transfer evidence must not invent additional ingredient quantity");
+        Assert(Math.Abs(transfer.RawConfidence.GetValueOrDefault() - 0.78f) < 0.0001f, "transfer provenance must preserve pre-transfer confidence");
+        Assert(Math.Abs(transfer.Confidence - 0.86f) < 0.0001f, "completed transfer may apply only the configured bounded confidence boost");
+        Assert(pipeline.Diagnostics.TransferCompletions == 1, "transfer completion diagnostics must increment once");
+
+        var noInstanceDetector = new ScriptedVisionDetector(
+            D("ingredient:42", "Turkey", "", 0.90f, 1f, 0.10f, 0.20f, 0.08f, 0.08f),
+            D("ingredient:42", "Turkey", "", 0.90f, 1f, 0.34f, 0.32f, 0.08f, 0.08f),
+            D("ingredient:42", "Turkey", "", 0.90f, 1f, 0.56f, 0.50f, 0.08f, 0.08f)
+        );
+        var noInstance = new VisionPipeline(noInstanceDetector);
+        await noInstance.ProcessAsync(NextFrame(frame), new VisionFrameContext
+        {
+            BuildSessionPublicId = "build-transfer-no-instance",
+            ExpectedComponents = new[] { turkey },
+            StationCalibration = calibration
+        });
+        await noInstance.ProcessAsync(NextFrame(frame), new VisionFrameContext
+        {
+            BuildSessionPublicId = "build-transfer-no-instance",
+            ExpectedComponents = new[] { turkey },
+            StationCalibration = calibration
+        });
+        await noInstance.ProcessAsync(NextFrame(frame), new VisionFrameContext
+        {
+            BuildSessionPublicId = "build-transfer-no-instance",
+            ExpectedComponents = new[] { turkey },
+            StationCalibration = calibration
+        });
+        Assert(noInstance.Diagnostics.TransferStarts == 0 && noInstance.Diagnostics.TransferCompletions == 0, "long-distance transfer evidence must require a stable detector instance identity");
+
+        var gapDetector = new ScriptedVisionDetector(
+            D("ingredient:42", "Turkey", "turkey-gap", 0.90f, 1f, 0.10f, 0.20f, 0.08f, 0.08f),
+            Array.Empty<VisionDetection>(),
+            D("ingredient:42", "Turkey", "turkey-gap", 0.90f, 1f, 0.56f, 0.50f, 0.08f, 0.08f),
+            D("ingredient:42", "Turkey", "turkey-gap", 0.90f, 1f, 0.57f, 0.51f, 0.08f, 0.08f)
+        );
+        var gapPipeline = new VisionPipeline(gapDetector);
+        var gapContext = new VisionFrameContext
+        {
+            BuildSessionPublicId = "build-transfer-gap",
+            ExpectedComponents = new[] { turkey },
+            StationCalibration = calibration
+        };
+        await gapPipeline.ProcessAsync(NextFrame(frame), gapContext);
+        await gapPipeline.ProcessAsync(NextFrame(frame), gapContext);
+        await gapPipeline.ProcessAsync(NextFrame(frame), gapContext);
+        await gapPipeline.ProcessAsync(NextFrame(frame), gapContext);
+        Assert(gapPipeline.Diagnostics.TransferCompletions == 0, "a missed frame must invalidate the continuous transfer trajectory");
+
+        var wrongSourceDetector = new ScriptedVisionDetector(
+            D("ingredient:42", "Turkey", "turkey-wrong-source", 0.90f, 1f, 0.31f, 0.20f, 0.08f, 0.08f),
+            D("ingredient:42", "Turkey", "turkey-wrong-source", 0.90f, 1f, 0.40f, 0.32f, 0.08f, 0.08f),
+            D("ingredient:42", "Turkey", "turkey-wrong-source", 0.90f, 1f, 0.56f, 0.50f, 0.08f, 0.08f)
+        );
+        var wrongSource = new VisionPipeline(wrongSourceDetector);
+        var wrongContext = new VisionFrameContext
+        {
+            BuildSessionPublicId = "build-transfer-wrong-source",
+            ExpectedComponents = new[] { turkey },
+            StationCalibration = calibration
+        };
+        await wrongSource.ProcessAsync(NextFrame(frame), wrongContext);
+        await wrongSource.ProcessAsync(NextFrame(frame), wrongContext);
+        await wrongSource.ProcessAsync(NextFrame(frame), wrongContext);
+        Assert(wrongSource.Diagnostics.TransferStarts == 0 && wrongSource.Diagnostics.TransferCompletions == 0, "ingredient seen in another ingredient's bin must not start a transfer trajectory");
+
+        var assembly = StationCalibrationPolicy.HighestPriorityWorkAreaAt(calibration, 0.60f, 0.55f, "assembly");
+        Assert(assembly != null && assembly.AreaKey == "sandwich-board", "assembly work-area lookup must be role scoped");
+        var plating = StationCalibrationPolicy.HighestPriorityWorkAreaAt(calibration, 0.85f, 0.55f, "plating");
+        Assert(plating != null && plating.AreaKey == "plating", "non-assembly calibrated work areas must remain independently addressable");
     }
 
     private static async Task VisionPipelineContract()
