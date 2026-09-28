@@ -137,3 +137,24 @@ The browser camera preview now includes a hardware-neutral detector loop that ca
 - Automatic live observations are explicitly labelled `web_glasses_simulator_auto_vision`.
 
 The automatic browser detector remains a development runtime. It does not claim production model accuracy and does not bypass governed label profiles, build-session authority, product validation, KDS lifecycle or Expo handoff.
+
+
+## Multi-ingredient temporal tracking and full product validation
+
+Automatic browser vision now reasons across time instead of treating every detector frame as an isolated ingredient event.
+
+- Multiple expected ingredients can remain tracked simultaneously.
+- New detections must remain present for three detector frames before they become stable build evidence.
+- Stable tracks receive persistent tracking IDs and remain distinct from pre-stable candidates.
+- An ingredient is not considered removed because of one missed frame. Stable disappearance must exceed a 2.2-second grace period.
+- Stable disappearance submits the canonical `removed` build observation, allowing Gelato to recalculate detected quantity and component status.
+- A new stable track spatially overlapping a disappearing stable ingredient can be classified as a replacement rather than two unrelated events.
+- Replacement inference is descriptive only; the canonical ledger still receives explicit removal/addition observations.
+- Required component sort order is checked when a stable ingredient is added. Out-of-order detections become explicit temporal sequence violations.
+- The temporal readiness gate combines missing, verification-required, unexpected, sequence-violation and still-pending track state.
+- A complete build must remain temporally ready for a short dwell period before the simulator automatically calls the existing canonical product-validation endpoint.
+- Expo / Finishing handoff remains disabled in Automatic mode unless both canonical product validation and the temporal readiness gate are ready.
+- Temporal state resets at build, mode and device boundaries, so evidence cannot leak between tickets.
+- The simulator shows current temporal status plus recent added, removed, replaced and sequence-violation events.
+
+This layer does not replace the Gelato build ledger or product validator. It filters noisy detector timing into canonical `added` / `removed` observations and adds a stricter simulator-side readiness gate before the existing validation and handoff authority.

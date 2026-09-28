@@ -99,3 +99,15 @@
 .vision-auto-box.verify{border-color:var(--warn);box-shadow:0 0 16px rgba(255,190,92,.4),inset 0 0 14px rgba(255,190,92,.05)}
 .vision-auto-box span{position:absolute;left:0;bottom:100%;margin-bottom:4px;background:rgba(4,18,24,.9);border:1px solid currentColor;padding:3px 5px;border-radius:4px;font-size:8px;white-space:nowrap;color:var(--good)}
 .vision-auto-box.verify span{color:var(--warn)}
+
+
+/* Temporal multi-ingredient tracking & product validation */
+.temporal-validation-panel{border-top:1px solid #1d333c;padding-top:9px;display:grid;gap:7px}
+.temporal-validation-panel #temporalValidationState{font-size:8px;font-weight:900;letter-spacing:.08em;color:var(--muted)}
+.temporal-event-list{display:grid;gap:5px;max-height:132px;overflow:auto}
+.temporal-event{display:flex;justify-content:space-between;gap:8px;border:1px solid #25332c;border-radius:7px;padding:6px 7px;font-size:8px;color:var(--muted)}
+.temporal-event b{font-size:7px;letter-spacing:.08em;color:var(--blue)}
+.temporal-event.added b{color:var(--good)}
+.temporal-event.removed b,.temporal-event.sequence_violation b{color:var(--warn)}
+.temporal-event.replaced b{color:var(--blue)}
+.vision-auto-box.pending{border-style:dashed;opacity:.78}
