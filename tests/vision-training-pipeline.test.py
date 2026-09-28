@@ -1,5 +1,6 @@
-import json,tempfile,unittest,zipfile
+import json,tempfile,unittest,zipfile,sys
 from pathlib import Path
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from tools.vision_training.pipeline import PipelineError,Thresholds,inspect_dataset,prepare_workspace,quality_gate,release_package,safe_extract_zip
 
 class VisionTrainingPipelineTests(unittest.TestCase):
