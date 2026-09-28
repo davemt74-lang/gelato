@@ -29,10 +29,13 @@ jobs:
           grep -q 'class VisionModelRecoveryService' glasses/inmo-air3-unity/Runtime/Core/VisionModelRuntimePersistence.cs
           grep -q 'IVisionModelRecoverableRuntimeHost' glasses/inmo-air3-unity/Runtime/Core/VisionModelRuntimePersistence.cs
           grep -q 'runtime_recovery_adapter_required' glasses/inmo-air3-unity/Runtime/Core/VisionModelRuntimePersistence.cs
+          grep -q 'interrupted_without_known_good' glasses/inmo-air3-unity/Runtime/Core/VisionModelRuntimePersistence.cs
           grep -q 'known_good_artifact_corrupt' glasses/inmo-air3-unity/Runtime/Core/VisionModelRuntimePersistence.cs
           grep -q 'BeginActivationAsync' glasses/inmo-air3-unity/Runtime/Core/VisionModelActivation.cs
           grep -q 'StageVerifiedAsync' glasses/inmo-air3-unity/Runtime/Core/VisionModelActivation.cs
           grep -q 'CommitActiveAsync' glasses/inmo-air3-unity/Runtime/Core/VisionModelActivation.cs
+          grep -q 'SemaphoreSlim' glasses/inmo-air3-unity/Runtime/Core/VisionModelActivation.cs
+          grep -q 'runtime_persistence_commit_failed' glasses/inmo-air3-unity/Runtime/Core/VisionModelActivation.cs
           grep -q 'UnityVisionModelRuntimePersistence' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
           grep -q 'model runtime recovery is holding automated vision fail-closed' glasses/inmo-air3-unity/Runtime/Unity/VisionRuntimeController.cs
           grep -q 'AtomicWriteBytes' glasses/inmo-air3-unity/Runtime/Unity/UnityVisionModelRuntimePersistence.cs
