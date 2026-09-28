@@ -12,7 +12,7 @@ on:
       - 'docs/GLASSES-WEB-SIMULATOR.md'
       - '.github/workflows/glasses-web-simulator.yml'
   push:
-    branches: ['feature/web-glasses-simulator']
+    branches: ['feature/web-glasses-simulator', 'feature/web-glasses-calibration']
 
 jobs:
   web-glasses-simulator:
