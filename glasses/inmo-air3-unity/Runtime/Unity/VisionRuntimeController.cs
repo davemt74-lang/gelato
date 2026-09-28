@@ -26,6 +26,7 @@ namespace Gelato.Ar.Unity
         private string _activeSession = string.Empty;
         private bool _stationCalibrationLoaded;
         private bool _visionProfileLoaded;
+        private float _nextVisionProfileRetryAt;
         private bool _visionModelAssignmentLoaded;
         private VisionModelActivationService _modelActivationService;
 
@@ -78,6 +79,7 @@ namespace Gelato.Ar.Unity
                 _pipeline.Reset(_activeSession);
                 _stationCalibrationLoaded = false;
                 _visionProfileLoaded = false;
+                _nextVisionProfileRetryAt = 0f;
                 _visionModelAssignmentLoaded = false;
             }
 
@@ -149,10 +151,19 @@ namespace Gelato.Ar.Unity
 
                 if (!_visionProfileLoaded)
                 {
-                    await coordinator.RefreshVisionLabelProfileAsync(_pipeline.DetectorName, _lifetime.Token);
+                    if (Time.unscaledTime < _nextVisionProfileRetryAt) return;
+
+                    var profile = await coordinator.RefreshVisionLabelProfileAsync(_pipeline.DetectorName, _lifetime.Token);
+                    if (profile == null || !string.IsNullOrWhiteSpace(coordinator.LastVisionProfileError))
+                    {
+                        _nextVisionProfileRetryAt = Time.unscaledTime + 5f;
+                        Debug.LogWarning("Gelato AR vision label profile unavailable; automated vision evidence is held fail-closed while the kitchen workflow remains available: "
+                            + (coordinator.LastVisionProfileError ?? "profile_missing"));
+                        return;
+                    }
+
                     _visionProfileLoaded = true;
-                    if (!string.IsNullOrWhiteSpace(coordinator.LastVisionProfileError))
-                        Debug.LogWarning("Gelato AR vision label profile unavailable; using recipe-name fallback: " + coordinator.LastVisionProfileError);
+                    _nextVisionProfileRetryAt = 0f;
                 }
 
                 var stationCalibration = StationCalibrationPolicy.CanUse(coordinator.StationCalibration, frame)
