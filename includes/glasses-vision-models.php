@@ -788,6 +788,8 @@ function glasses_vision_drift_establish_baseline(PDO $pdo,int $org,array $assign
     $packageId=(int)$assignment['package_id'];$locationId=(int)$session['location_id'];$stationId=$session['station_id']!==null?(int)$session['station_id']:null;
     if($existing=glasses_vision_drift_baseline_row($pdo,$org,$packageId,$locationId,$stationId))return $existing;
     $whereStation=$stationId===null?'station_id IS NULL':'station_id=?';
+    $cutoffQ=$pdo->prepare("SELECT MAX(updated_at) FROM glasses_vision_drift_baselines WHERE organization_id=? AND package_id=? AND location_id=? AND ".($stationId===null?'station_id IS NULL':'station_id=?')." AND status='superseded'");
+    $cutoffArgs=[$org,$packageId,$locationId];if($stationId!==null)$cutoffArgs[]=$stationId;$cutoffQ->execute($cutoffArgs);$cutoff=$cutoffQ->fetchColumn()?:null;
     $sql="SELECT COUNT(*) samples,
         AVG(brightness_mean) brightness_mean,AVG(contrast_mean) contrast_mean,
         AVG(camera_pitch) camera_pitch_mean,AVG(camera_yaw) camera_yaw_mean,AVG(camera_roll) camera_roll_mean,
@@ -800,9 +802,10 @@ function glasses_vision_drift_establish_baseline(PDO $pdo,int $org,array $assign
             AND drift_state='calibrating'
             AND ((calibration_source_hash IS NULL AND ? IS NULL) OR calibration_source_hash=?)
             AND menu_signature=? AND ingredient_signature=?
+            AND (? IS NULL OR created_at>?)
           ORDER BY id DESC LIMIT 20) x";
     $args=[$org,$packageId,$locationId];if($stationId!==null)$args[]=$stationId;
-    $args[]=$ctx['calibrationSourceHash'];$args[]=$ctx['calibrationSourceHash'];$args[]=$ctx['menuSignature'];$args[]=$ctx['ingredientSignature'];
+    $args[]=$ctx['calibrationSourceHash'];$args[]=$ctx['calibrationSourceHash'];$args[]=$ctx['menuSignature'];$args[]=$ctx['ingredientSignature'];$args[]=$cutoff;$args[]=$cutoff;
     $q=$pdo->prepare($sql);$q->execute($args);$agg=$q->fetch();
     if(!$agg||(int)$agg['samples']<20)return null;
     $observations=(int)$agg['observations'];
