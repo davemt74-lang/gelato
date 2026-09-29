@@ -122,9 +122,10 @@ function glasses_vision_failure_analysis_build(PDO $pdo,int $org,array $filters)
       'errorType'=>[],'outcome'=>[],'model'=>[],'predictedClass'=>[],'expectedClass'=>[],'location'=>[],'station'=>[],
       'device'=>[],'menuItem'=>[],'confidence'=>[],'lighting'=>[],'pose'=>[],'buildStep'=>[],'captureEnvironment'=>[]
     ];
-    $modelCounts=[];$timeline=[];
+    $modelCounts=[];$timeline=[];$sourceEvents=[];
     foreach($events as $e){
         $snapshot=json_decode((string)$e['context_json'],true)?:[];
+        $sourceEvents[]=['publicId'=>(string)$e['public_id'],'eventHash'=>(string)$e['event_hash'],'modelPackagePublicId'=>$e['model_package_public_id']?:null];
         glasses_vision_failure_analysis_add($groups,'errorType',(string)$e['error_type']);
         glasses_vision_failure_analysis_add($groups,'outcome',(string)$e['outcome']);
         $modelLabel=$e['model_package_public_id']?((string)$e['model_name'].' '.(string)$e['model_version'].' · '.(string)$e['model_package_public_id']):'unattributed';
@@ -143,12 +144,13 @@ function glasses_vision_failure_analysis_build(PDO $pdo,int $org,array $filters)
         if(!empty($e['model_package_public_id']))$modelCounts[(string)$e['model_package_public_id']]=($modelCounts[(string)$e['model_package_public_id']]??0)+1;
         $day=substr((string)$e['occurred_at'],0,10);$timeline[$day]=($timeline[$day]??0)+1;
     }
-    ksort($timeline,SORT_STRING);
+    ksort($timeline,SORT_STRING);usort($sourceEvents,static fn($a,$b)=>strcmp($a['publicId'],$b['publicId']));
     $ranked=[];foreach($groups as $name=>$values)$ranked[$name]=glasses_vision_failure_analysis_rank($values,$total);
     $ancestry=[];foreach($modelCounts as $modelPublic=>$count){$a=glasses_vision_failure_analysis_ancestry($pdo,$org,$modelPublic);$ancestry[]=['modelPackagePublicId'=>$modelPublic,'failureCount'=>$count,'share'=>$total?round($count/$total,6):0.0,'lineage'=>$a];}
     usort($ancestry,static fn($a,$b)=>$b['failureCount']<=>$a['failureCount']);
     return [
       'schema'=>GLASSES_VISION_FAILURE_ANALYSIS_SCHEMA,'filters'=>$filters,'eventCount'=>$total,
+      'sourceEvents'=>$sourceEvents,'sourceFingerprint'=>hash('sha256',glasses_vision_training_release_json($sourceEvents)),
       'dimensions'=>$ranked,'timeline'=>array_map(static fn($day,$count)=>['day'=>$day,'count'=>$count],array_keys($timeline),array_values($timeline)),
       'modelAncestry'=>$ancestry,
       'notes'=>['metric'=>'failure_count_and_share','denominatorAvailable'=>false,'rateClaimed'=>false],
