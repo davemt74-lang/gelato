@@ -164,6 +164,10 @@ function glasses_vision_model_health_snapshot(PDO $pdo,int $org,array $input,int
         $m['sampleCount'],$m['observationCount'],$m['productionErrorCount'],$m['correctionCount'],$m['lowConfidenceCount'],$m['criticalDriftCount'],$m['warningDriftCount'],
         $m['meanConfidence'],$m['meanLatencyMs'],$m['errorRate'],$m['correctionRate'],$m['lowConfidenceRate'],$collected['healthState'],
         glasses_vision_training_release_json(['source'=>$collected['source'],'metrics'=>$m]),$hash,$actor]);
+    glasses_vision_lineage_edge($pdo,$org,'model_package',$scope['packagePublicId'],$scope['packageSha256'],'health_snapshot','model_health_snapshot',$public,$hash,[
+      'sourceFingerprint'=>$collected['sourceFingerprint'],'healthState'=>$collected['healthState'],'windowStartedAt'=>$from,'windowEndedAt'=>$to,
+      'locationId'=>$scope['locationId'],'stationPublicId'=>$scope['stationPublicId'],'devicePublicId'=>$scope['devicePublicId']
+    ],$actor);
     return glasses_vision_model_health_row($pdo,$org,$public);
 }
 
