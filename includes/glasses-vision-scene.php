@@ -6,6 +6,7 @@ require_once __DIR__.'/glasses-calibration.php';
 require_once __DIR__.'/glasses-vision-models.php';
 require_once __DIR__.'/glasses-vision-profiles.php';
 require_once __DIR__.'/glasses-vision-training-release.php';
+require_once __DIR__.'/glasses-vision-lineage.php';
 
 const GLASSES_VISION_SCENE_SCHEMA='gelato.vision_scene.v1';
 
@@ -16,7 +17,7 @@ function glasses_vision_scene_ready(PDO $pdo): bool
         $q->execute([$table]);
         if((int)$q->fetchColumn()!==1)return false;
     }
-    return glasses_build_ready($pdo)&&glasses_station_calibration_ready($pdo)&&glasses_vision_models_ready($pdo)&&glasses_vision_profiles_ready($pdo);
+    return glasses_build_ready($pdo)&&glasses_station_calibration_ready($pdo)&&glasses_vision_models_ready($pdo)&&glasses_vision_profiles_ready($pdo)&&glasses_vision_lineage_ready($pdo);
 }
 
 function glasses_vision_scene_time(string $value): string
