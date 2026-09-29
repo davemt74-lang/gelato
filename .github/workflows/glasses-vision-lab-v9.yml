@@ -82,6 +82,7 @@ jobs:
           grep -q "'recognizedMin'=>0.65" includes/glasses-vision-step-recognition.php
           grep -q "'recognizedMarginMin'=>0.12" includes/glasses-vision-step-recognition.php
           grep -q "'advancesRecipeStep'=>false" includes/glasses-vision-step-recognition.php
+          grep -q 'current canonical build state' includes/glasses-vision-step-recognition.php
           grep -q 'vision.step.recognize' api/glasses-device.php
           ! grep -q 'glasses_build_confirm' includes/glasses-vision-step-recognition.php
           ! grep -q 'glasses_build_observe' includes/glasses-vision-step-recognition.php
