@@ -267,6 +267,7 @@ function glasses_vision_calibration_profile_select(PDO $pdo,int $org,array $inpu
     foreach($q->fetchAll(PDO::FETCH_COLUMN) as $public){
         $p=glasses_vision_calibration_profile_row($pdo,$org,(string)$public);
         if(!in_array((string)$p['calibrationStatus'],['active','superseded'],true))continue;
+        if(!glasses_vision_calibration_profile_verify($pdo,$org,(string)$p['publicId'])['passed'])continue;
         if($package!==null&&$p['modelPackagePublicId']!==null&&!hash_equals((string)$p['modelPackagePublicId'],(string)$package['public_id']))continue;
         if(!hash_equals((string)$p['platform'],$runtime['platform']))continue;
         if($runtime['frameWidth']!==(int)$p['frame']['width']||$runtime['frameHeight']!==(int)$p['frame']['height'])continue;
@@ -361,6 +362,18 @@ function glasses_vision_calibration_selection_verify(PDO $pdo,int $org,string $p
     if($s['fallbackCalibrationPublicId']!==null){
         $cal=glasses_vision_calibration_profile_calibration($pdo,$org,(string)$s['fallbackCalibrationPublicId']);
         $passed=$passed&&hash_equals((string)($s['evidence']['fallbackCalibrationSourceHash']??''),(string)$cal['source_hash']);
+    }
+    if($s['contextDriftAnalysisPublicId']!==null){
+        $analysis=glasses_vision_context_drift_row($pdo,$org,(string)$s['contextDriftAnalysisPublicId']);
+        $passed=$passed&&glasses_vision_context_drift_verify($pdo,$org,(string)$analysis['publicId'])['passed'];
+        $cc=(array)($analysis['evidence']['currentContext']??[]);
+        $context=[
+          'brightnessMean'=>$cc['brightnessMean']??null,'contrastMean'=>$cc['contrastMean']??null,'cameraPitchMean'=>$cc['cameraPitchMean']??null,
+          'cameraYawMean'=>$cc['cameraYawMean']??null,'cameraRollMean'=>$cc['cameraRollMean']??null,
+          'menuSignature'=>count((array)($cc['menuSignatures']??[]))===1?$cc['menuSignatures'][0]:null,
+          'ingredientSignature'=>count((array)($cc['ingredientSignatures']??[]))===1?$cc['ingredientSignatures'][0]:null,
+        ];
+        $passed=$passed&&hash_equals((string)$s['contextFingerprint'],hash('sha256',glasses_vision_training_release_json($context)));
     }
     return ['passed'=>$passed,'selectionHash'=>$s['selectionHash'],'recomputedSelectionHash'=>$hash];
 }
