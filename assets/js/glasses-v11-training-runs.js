@@ -1,0 +1,15 @@
+(function(){'use strict';
+const boot=window.GELATO_VISION_LAB||{},root=document.getElementById('vlV11TrainingRuns'),create=document.getElementById('vlV11TrainingRunCreate');if(!root)return;let catalog=boot.catalog||{};
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+async function api(payload){payload.csrf_token=boot.csrfToken;const r=await fetch(boot.apiUrl,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}),j=await r.json();if(!r.ok||!j.ok)throw new Error(j.message||'Training run request failed.');await refresh();return j;}
+async function refresh(){const r=await fetch(boot.apiUrl,{credentials:'same-origin',cache:'no-store'}),j=await r.json();if(!r.ok||!j.ok)throw new Error(j.message||'Training run refresh failed.');catalog=j.catalog||{};render();}
+function render(){const rows=catalog.trainingRunsV11?.runs||[];if(!rows.length){root.innerHTML='<div class="vl-empty">No V11 training runs yet.</div>';return;}root.innerHTML=rows.map(r=>'<article class="vl-pilot-card"><div class="vl-head"><div><strong>'+esc(r.runKey)+'</strong><small>'+esc(r.publicId)+' · attempt '+esc(r.attemptNo)+' · '+esc(r.trainer)+' '+esc(r.trainerVersion||'')+'</small></div><span class="vl-state '+esc(r.status)+'">'+esc(r.status)+'</span></div><small>experiment '+esc(r.experiment?.publicId||'')+' · config '+esc((r.configHash||'').slice(0,12))+' · assembly '+esc((r.dataset?.assemblyHash||'').slice(0,12))+'</small><div class="inline-actions">'+(r.status==='planned'?'<button data-start="'+esc(r.publicId)+'">Start</button>':'')+(r.status==='running'?'<button data-complete="'+esc(r.publicId)+'">Complete</button><button data-fail="'+esc(r.publicId)+'">Fail</button>':'')+(r.status==='failed'||r.status==='cancelled'?'<button data-rerun="'+esc(r.publicId)+'">Retry</button>':'')+'</div></article>').join('');}
+create?.addEventListener('click',async()=>{try{const experimentPublicId=prompt('Experiment public ID');if(!experimentPublicId)return;const runKey=prompt('Run key (optional)','');await api({action:'training_run.create',experimentPublicId,runKey:runKey||undefined});}catch(e){alert(e.message);}});
+root.addEventListener('click',async e=>{const b=e.target.closest('button');if(!b)return;try{
+ if(b.dataset.start)await api({action:'training_run.start',publicId:b.dataset.start});
+ if(b.dataset.fail){const message=prompt('Failure message');if(message)await api({action:'training_run.fail',publicId:b.dataset.fail,failure:{code:'operator_reported',message,retryable:true}});}
+ if(b.dataset.rerun)await api({action:'training_run.rerun',publicId:b.dataset.rerun});
+ if(b.dataset.complete){const outputSha256=prompt('Output artifact SHA-256');if(!outputSha256)return;const map50=prompt('mAP50 (optional)','');await api({action:'training_run.complete',publicId:b.dataset.complete,outputSha256,metrics:map50===''?{}:{map50:Number(map50)}});}
+ }catch(err){alert(err.message);}});
+render();
+})();
