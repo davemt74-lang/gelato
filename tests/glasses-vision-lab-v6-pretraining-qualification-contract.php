@@ -19,7 +19,7 @@ $pipeline=file_get_contents(__DIR__.'/../tools/vision_training/pipeline.py');
 $api=file_get_contents(__DIR__.'/../api/glasses-vision-lab.php');
 $page=file_get_contents(__DIR__.'/../glasses-vision-lab.php');
 
-foreach(['samples_per_class','negative_examples','hard_examples','operator_diversity','location_diversity','station_diversity','device_diversity','pose_diversity','lighting_diversity','split_leakage','annotation_disagreements','exact_duplicates','poor_media','capture_group_leakage'] as $key)
+foreach(['samples_per_class','negative_examples','hard_examples','operator_diversity','location_diversity','station_diversity','device_diversity','pose_diversity','lighting_diversity','split_leakage','annotation_disagreements','annotation_completeness','exact_duplicates','poor_media','capture_group_leakage'] as $key)
     v66_assert(str_contains($source,"'".$key."'"),'Qualification gate missing '.$key.'.');
 
 v66_assert(str_contains($source,"status='qualified'")&&str_contains($source,"status='blocked'")&&str_contains($source,'qualification.json'),'Qualification outcomes must persist and only passing attestations unlock artifacts.');
