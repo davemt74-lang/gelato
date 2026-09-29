@@ -10,6 +10,7 @@ on:
       - 'includes/glasses-runtime-soak.php'
       - 'includes/glasses-cook-ux.php'
       - 'includes/glasses-production-pilot.php'
+      - 'includes/glasses-v10-release.php'
       - 'database/20261126_v10_production_pilot_governance.sql'
       - 'includes/glasses-simulator.php'
       - 'api/glasses-simulator.php'
@@ -28,6 +29,7 @@ on:
       - 'tests/glasses-v10-cook-ux-contract.php'
       - 'tests/glasses-v10-cook-ux-harness.js'
       - 'tests/glasses-v10-production-pilot-governance-contract.php'
+      - 'tests/glasses-v10-rc1-acceptance-contract.php'
       - 'docs/GLASSES-V10-HARDWARE-RUNTIME.md'
       - 'docs/GLASSES-V10-FRAME-PIPELINE.md'
       - 'docs/GLASSES-V10-DEVICE-HEALTH.md'
@@ -35,6 +37,7 @@ on:
       - 'docs/GLASSES-V10-STATION-SOAK.md'
       - 'docs/GLASSES-V10-COOK-UX.md'
       - 'docs/GLASSES-V10-PRODUCTION-PILOT.md'
+      - 'docs/GLASSES-V10-RC1.md'
       - 'assets/js/glasses-v10-cook-ux-harness.js'
       - 'assets/js/glasses-v10-soak-harness.js'
       - '.github/workflows/glasses-v10.yml'
@@ -42,7 +45,7 @@ on:
     branches: [main]
 
 jobs:
-  v10-hardware-runtime:
+  v10-production-runtime-rc:
     runs-on: ubuntu-latest
     services:
       mariadb:
@@ -73,6 +76,7 @@ jobs:
           php -l includes/glasses-runtime-soak.php
           php -l includes/glasses-cook-ux.php
           php -l includes/glasses-production-pilot.php
+          php -l includes/glasses-v10-release.php
           php -l includes/glasses-simulator.php
           php -l api/glasses-simulator.php
           php -l api/glasses-device.php
@@ -90,6 +94,7 @@ jobs:
           node --check tests/glasses-v10-cook-ux-harness.js
           node --check assets/js/glasses-production-pilot.js
           php -l tests/glasses-v10-production-pilot-governance-contract.php
+          php -l tests/glasses-v10-rc1-acceptance-contract.php
           node --check assets/js/glasses-web-simulator.js
 
       - name: Architecture guardrails
@@ -150,6 +155,9 @@ jobs:
           grep -q 'pilot.rollback_rollout' api/glasses-vision-lab.php
           ! grep -q 'kds_transition(' includes/glasses-production-pilot.php
           ! grep -q 'glasses_handoff_to_expo(' includes/glasses-production-pilot.php
+          grep -q "GLASSES_V10_RELEASE='v10.0-rc1'" includes/glasses-v10-release.php
+          grep -q "'futureVendorAdapter'=>'air3.vendor.v1'" includes/glasses-v10-release.php
+          grep -q "'vendorSdkInstalled'=>false" includes/glasses-v10-release.php
 
       - name: Install schema
         run: |
@@ -201,6 +209,9 @@ jobs:
 
       - name: V10 production pilot governance contract
         run: php tests/glasses-v10-production-pilot-governance-contract.php
+
+      - name: V10 RC1 SDK integration readiness acceptance
+        run: php tests/glasses-v10-rc1-acceptance-contract.php
 
       - name: Existing simulator regression
         run: php tests/glasses-web-simulator-contract.php
