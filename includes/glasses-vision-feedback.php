@@ -58,10 +58,10 @@ function glasses_vision_feedback_context(PDO $pdo,int $org,string $sessionPublic
       FROM glasses_vision_model_assignments a
       LEFT JOIN glasses_vision_model_packages p ON p.id=a.package_id AND p.organization_id=a.organization_id
       LEFT JOIN glasses_vision_model_rollouts r ON r.id=a.rollout_id AND r.organization_id=a.organization_id
-      WHERE a.organization_id=? AND a.device_id=? AND a.issued_at<=?
+      WHERE a.organization_id=? AND a.device_id=? AND a.build_session_id=? AND a.issued_at<=?
       ORDER BY a.issued_at DESC,a.id DESC LIMIT 1");
     $occurred=$observation['created_at']??$session['updated_at']??$session['started_at'];
-    $assignment->execute([$org,(int)$session['device_id'],$occurred]);$model=$assignment->fetch()?:null;
+    $assignment->execute([$org,(int)$session['device_id'],(int)$session['id'],$occurred]);$model=$assignment->fetch()?:null;
 
     return ['session'=>$session,'observation'=>$observation,'assignment'=>$model,'occurredAt'=>$occurred];
 }
@@ -121,6 +121,16 @@ function glasses_vision_feedback_record(PDO $pdo,int $org,array $input,int $acto
     $expected=mb_substr(trim((string)($input['expectedComponentKey']??'')),0,160,'UTF-8')?:null;
     $confidence=array_key_exists('confidence',$input)?max(0,min(1,(float)$input['confidence'])):($o&&$o['confidence']!==null?(float)$o['confidence']:null);
     $correctionId=isset($input['correctionId'])?(int)$input['correctionId']:null;
+    if($correctionId!==null){
+        $cq=$pdo->prepare("SELECT id FROM glasses_observation_corrections WHERE organization_id=? AND build_session_id=? AND id=? LIMIT 1");
+        $cq->execute([$org,(int)$s['id'],$correctionId]);
+        if(!$cq->fetchColumn())throw new InvalidArgumentException('Production correction does not belong to this organization/build session.');
+    }
+    if($expected!==null){
+        $eq=$pdo->prepare("SELECT COUNT(*) FROM glasses_build_components WHERE organization_id=? AND build_session_id=? AND component_key=? AND expected_quantity>0");
+        $eq->execute([$org,(int)$s['id'],$expected]);
+        if((int)$eq->fetchColumn()!==1)throw new InvalidArgumentException('Expected production component must belong to the governed build recipe.');
+    }
     $extra=is_array($input['context']??null)?$input['context']:[];
 
     $snapshot=[
