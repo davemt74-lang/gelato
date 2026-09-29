@@ -89,12 +89,24 @@ function glasses_training_session_end(PDO $pdo,int $org,string $public,string $s
     return glasses_training_session($pdo,$org,$public);
   });
 }
+function glasses_training_employee_catalog(PDO $pdo,int $org): array {
+  $q=$pdo->prepare("SELECT u.id,u.display_name,u.email,om.employee_number,om.job_title,om.primary_location_id,l.name location_name
+    FROM organization_memberships om JOIN users u ON u.id=om.user_id LEFT JOIN locations l ON l.id=om.primary_location_id
+    WHERE om.organization_id=? AND om.status='active' AND u.status='active' AND u.archived_at IS NULL ORDER BY u.display_name,u.id");
+  $q->execute([$org]);return array_map(static fn(array $r):array=>[
+    'id'=>(int)$r['id'],'displayName'=>(string)$r['display_name'],'email'=>(string)$r['email'],
+    'employeeNumber'=>$r['employee_number'],'jobTitle'=>$r['job_title'],'primaryLocationId'=>$r['primary_location_id']!==null?(int)$r['primary_location_id']:null,
+    'locationName'=>$r['location_name'],
+  ],$q->fetchAll());
+}
+
 function glasses_training_catalog(PDO $pdo,int $org): array {
   if(!glasses_training_ready($pdo))return ['programs'=>[],'assignments'=>[],'sessions'=>[]];
   $programs=$pdo->prepare("SELECT public_id FROM glasses_training_programs WHERE organization_id=? AND status<>'archived' ORDER BY updated_at DESC");$programs->execute([$org]);
   $assign=$pdo->prepare("SELECT public_id FROM glasses_training_assignments WHERE organization_id=? AND status<>'cancelled' ORDER BY updated_at DESC");$assign->execute([$org]);
   $sessions=$pdo->prepare("SELECT public_id FROM glasses_training_sessions WHERE organization_id=? ORDER BY id DESC LIMIT 100");$sessions->execute([$org]);
   return [
+    'employees'=>glasses_training_employee_catalog($pdo,$org),
     'programs'=>array_map(fn($id)=>glasses_training_program($pdo,$org,(string)$id),$programs->fetchAll(PDO::FETCH_COLUMN)),
     'assignments'=>array_map(fn($id)=>glasses_training_assignment($pdo,$org,(string)$id),$assign->fetchAll(PDO::FETCH_COLUMN)),
     'sessions'=>array_map(fn($id)=>glasses_training_session($pdo,$org,(string)$id),$sessions->fetchAll(PDO::FETCH_COLUMN)),
