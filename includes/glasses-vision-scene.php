@@ -69,7 +69,7 @@ function glasses_vision_scene_entities_normalize(array $input,array $build,?arra
     if(count($input)>120)throw new InvalidArgumentException('Scene contains too many entities.');
     $allowed=['ingredient','tool','container','hand','product','equipment','surface','unknown'];
     $validComponents=[];foreach((array)$build['components'] as $c)$validComponents[(string)$c['componentKey']]=true;
-    $seen=[];$entities=[];
+    $seen=[];$trackingSeen=[];$entities=[];
     foreach(array_values($input) as $i=>$raw){
         if(!is_array($raw))throw new InvalidArgumentException('Scene entity payload is invalid.');
         $key=mb_substr(trim((string)($raw['entityKey']??'')),0,190,'UTF-8');
@@ -84,16 +84,21 @@ function glasses_vision_scene_entities_normalize(array $input,array $build,?arra
         if($componentKey!==null&&!isset($validComponents[$componentKey]))
             throw new InvalidArgumentException('Scene entity component must belong to the active canonical build.');
         $tracking=mb_substr(trim((string)($raw['trackingId']??'')),0,190,'UTF-8')?:null;
+        if($tracking!==null&&isset($trackingSeen[$tracking]))throw new InvalidArgumentException('Scene tracking IDs must be unique within a frame.');
+        if($tracking!==null)$trackingSeen[$tracking]=true;
         $confidence=array_key_exists('confidence',$raw)?(float)$raw['confidence']:null;
         if($confidence!==null&&(!is_finite($confidence)||$confidence<0||$confidence>1))
             throw new InvalidArgumentException('Scene entity confidence must be between 0 and 1.');
         $bbox=glasses_vision_scene_bbox($raw['bbox']??null);
+        $source=mb_strtolower(trim((string)($raw['source']??'vision_model')),'UTF-8');
+        if(!in_array($source,['vision_model','device_runtime','sensor_fusion','operator'],true))
+            throw new InvalidArgumentException('Scene entity source is invalid.');
         $attributes=is_array($raw['attributes']??null)?$raw['attributes']:[];
         $attributesJson=glasses_vision_training_release_json($attributes);
         if(strlen($attributesJson)>12000)throw new InvalidArgumentException('Scene entity attributes are too large.');
         $spatial=glasses_vision_scene_spatial($bbox,$calibration);
         $entity=[
-          'entityKey'=>$key,'kind'=>$kind,'label'=>$label,'componentKey'=>$componentKey,'trackingId'=>$tracking,
+          'entityKey'=>$key,'kind'=>$kind,'label'=>$label,'componentKey'=>$componentKey,'trackingId'=>$tracking,'source'=>$source,
           'confidence'=>$confidence!==null?round($confidence,6):null,'bbox'=>$bbox,'spatial'=>$spatial,'attributes'=>$attributes
         ];
         $entity['entityHash']=hash('sha256',glasses_vision_training_release_json($entity));
@@ -131,6 +136,7 @@ function glasses_vision_scene_capture(PDO $pdo,array $device,array $input): arra
     $sessionPublic=trim((string)($input['buildSessionPublicId']??''));
     if($sessionPublic==='')throw new InvalidArgumentException('Scene capture requires a build session.');
     $session=glasses_build_session_row($pdo,$org,$sessionPublic,false);glasses_build_assert_device_session($device,$session);
+    if((string)$session['status']!=='active')throw new InvalidArgumentException('Live scene capture requires an active build session.');
     $build=glasses_build_payload($pdo,$org,$sessionPublic);
 
     $frameKey=mb_substr(trim((string)($input['frameKey']??'')),0,190,'UTF-8');
@@ -140,6 +146,9 @@ function glasses_vision_scene_capture(PDO $pdo,array $device,array $input): arra
     $pixel=mb_substr(strtolower(trim((string)($input['pixelFormat']??'grayscale8'))),0,40,'UTF-8');
     if($pixel==='')throw new InvalidArgumentException('Scene pixel format is required.');
     $capturedAt=glasses_vision_scene_time((string)($input['capturedAt']??''));
+    $capturedDt=new DateTimeImmutable($capturedAt,new DateTimeZone('UTC'));$now=new DateTimeImmutable('now',new DateTimeZone('UTC'));
+    if($capturedDt>$now->modify('+5 seconds'))throw new InvalidArgumentException('Scene capture time cannot be in the future.');
+    if($capturedDt<$now->modify('-2 minutes'))throw new InvalidArgumentException('Live scene frame is stale.');
 
     $detector=trim((string)($input['detectorName']??'ingredient_detector'));
     $assignment=glasses_vision_model_assignment($pdo,$device,$sessionPublic,$detector);
@@ -170,7 +179,15 @@ function glasses_vision_scene_capture(PDO $pdo,array $device,array $input): arra
       'buildAccounted'=>(bool)($build['summary']['accounted']??false),
     ];
 
+    $canonicalBuildContext=[
+      'publicId'=>$build['publicId'],'status'=>$build['status'],'kdsItemPublicId'=>$build['kdsItemPublicId'],'kdsStatus'=>$build['kdsStatus'],
+      'locationId'=>$build['locationId'],'stationPublicId'=>$build['stationPublicId'],'menuItemId'=>$build['menuItemId'],
+      'posCheckItemId'=>$build['posCheckItemId'],'buildDefinition'=>$build['buildDefinition'],'summary'=>$build['summary'],'components'=>$build['components'],
+      'orderContext'=>$build['context']
+    ];
+    $buildContextHash=hash('sha256',glasses_vision_training_release_json($canonicalBuildContext));
     $context=[
+      'buildContextHash'=>$buildContextHash,
       'buildSession'=>[
         'publicId'=>$build['publicId'],'status'=>$build['status'],'kdsItemPublicId'=>$build['kdsItemPublicId'],'kdsStatus'=>$build['kdsStatus'],
         'locationId'=>$build['locationId'],'stationPublicId'=>$build['stationPublicId'],'menuItemId'=>$build['menuItemId'],
@@ -202,7 +219,7 @@ function glasses_vision_scene_capture(PDO $pdo,array $device,array $input): arra
       'schema'=>GLASSES_VISION_SCENE_SCHEMA,'devicePublicId'=>$device['public_id'],'buildSessionPublicId'=>$sessionPublic,
       'frame'=>['frameKey'=>$frameKey,'width'=>$width,'height'=>$height,'pixelFormat'=>$pixel,'capturedAt'=>$capturedAt],
       'assignmentKey'=>$assignment['assignmentKey'],'modelArtifactSha256'=>$package['artifact_sha256'],
-      'calibrationSourceHash'=>$calibration['sourceHash']??null,
+      'buildContextHash'=>$buildContextHash,'calibrationSourceHash'=>$calibration['sourceHash']??null,
       'entityHashes'=>array_map(static fn($e)=>[$e['entityKey'],$e['entityHash']],$entities),
       'relationships'=>$relationships,
     ];
@@ -229,10 +246,10 @@ function glasses_vision_scene_capture(PDO $pdo,array $device,array $input): arra
             glasses_vision_training_release_json($relationships),glasses_vision_training_release_json($summary),$sceneHash]);
         $sceneId=(int)$pdo->lastInsertId();
         $insert=$pdo->prepare("INSERT INTO glasses_vision_scene_entities
-          (organization_id,scene_snapshot_id,public_id,entity_key,entity_kind,label,component_key,tracking_id,confidence,bbox_json,spatial_json,attributes_json,entity_hash)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)");
+          (organization_id,scene_snapshot_id,public_id,entity_key,entity_kind,label,component_key,tracking_id,source_type,confidence,bbox_json,spatial_json,attributes_json,entity_hash)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
         foreach($entities as $e)$insert->execute([
-          $org,$sceneId,glasses_public_id('vision-entity'),$e['entityKey'],$e['kind'],$e['label'],$e['componentKey'],$e['trackingId'],$e['confidence'],
+          $org,$sceneId,glasses_public_id('vision-entity'),$e['entityKey'],$e['kind'],$e['label'],$e['componentKey'],$e['trackingId'],$e['source'],$e['confidence'],
           $e['bbox']!==null?glasses_vision_training_release_json($e['bbox']):null,glasses_vision_training_release_json($e['spatial']),
           glasses_vision_training_release_json($e['attributes']),$e['entityHash']
         ]);
@@ -257,7 +274,7 @@ function glasses_vision_scene_row(PDO $pdo,int $org,string $publicId): array
     $eq->execute([$org,(int)$r['id']]);$entities=[];
     foreach($eq->fetchAll() as $e)$entities[]=[
       'publicId'=>$e['public_id'],'entityKey'=>$e['entity_key'],'kind'=>$e['entity_kind'],'label'=>$e['label'],'componentKey'=>$e['component_key'],
-      'trackingId'=>$e['tracking_id'],'confidence'=>$e['confidence']!==null?(float)$e['confidence']:null,
+      'trackingId'=>$e['tracking_id'],'source'=>$e['source_type'],'confidence'=>$e['confidence']!==null?(float)$e['confidence']:null,
       'bbox'=>$e['bbox_json']!==null?json_decode((string)$e['bbox_json'],true):null,'spatial'=>json_decode((string)$e['spatial_json'],true)?:[],
       'attributes'=>json_decode((string)$e['attributes_json'],true)?:[],'entityHash'=>$e['entity_hash']
     ];
@@ -287,7 +304,7 @@ function glasses_vision_scene_verify(PDO $pdo,int $org,string $publicId): array
     $entitiesValid=true;
     foreach($s['entities'] as $e){
         $material=[
-          'entityKey'=>$e['entityKey'],'kind'=>$e['kind'],'label'=>$e['label'],'componentKey'=>$e['componentKey'],'trackingId'=>$e['trackingId'],
+          'entityKey'=>$e['entityKey'],'kind'=>$e['kind'],'label'=>$e['label'],'componentKey'=>$e['componentKey'],'trackingId'=>$e['trackingId'],'source'=>$e['source'],
           'confidence'=>$e['confidence'],'bbox'=>$e['bbox'],'spatial'=>$e['spatial'],'attributes'=>$e['attributes']
         ];
         if(!hash_equals($e['entityHash'],hash('sha256',glasses_vision_training_release_json($material)))){$entitiesValid=false;break;}
