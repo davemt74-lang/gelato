@@ -26,8 +26,13 @@ function glasses_vision_failure_analysis_filters(array $input): array
     if($filters['errorType']!==null)glasses_vision_feedback_error_type($filters['errorType']);
     foreach(['from','to'] as $key){
         if($filters[$key]!==null){
-            $dt=DateTimeImmutable::createFromFormat('Y-m-d H:i:s',$filters[$key])?:DateTimeImmutable::createFromFormat('Y-m-d',$filters[$key]);
-            if(!$dt)throw new InvalidArgumentException('Failure-analysis date filter is invalid.');
+            $raw=$filters[$key];
+            if(preg_match('/^\\d{4}-\\d{2}-\\d{2}$/',$raw)){
+                $filters[$key]=$raw.($key==='to'?' 23:59:59':' 00:00:00');
+                continue;
+            }
+            $dt=DateTimeImmutable::createFromFormat('!Y-m-d H:i:s',$raw);
+            if(!$dt||$dt->format('Y-m-d H:i:s')!==$raw)throw new InvalidArgumentException('Failure-analysis date filter is invalid.');
             $filters[$key]=$dt->format('Y-m-d H:i:s');
         }
     }
@@ -42,13 +47,13 @@ function glasses_vision_failure_analysis_events(PDO $pdo,int $org,array $filters
       p.public_id model_package_public_id,p.model_name,p.model_version,p.artifact_sha256 model_artifact_sha256,
       r.public_id rollout_public_id
       FROM glasses_vision_production_errors e
-      LEFT JOIN glasses_build_sessions s ON s.id=e.build_session_id
-      LEFT JOIN glasses_devices d ON d.id=e.device_id
-      LEFT JOIN locations l ON l.id=e.location_id
-      LEFT JOIN kds_stations ks ON ks.id=e.station_id
-      LEFT JOIN menu_items mi ON mi.id=e.menu_item_id
-      LEFT JOIN glasses_vision_model_packages p ON p.id=e.model_package_id
-      LEFT JOIN glasses_vision_model_rollouts r ON r.id=e.rollout_id
+      LEFT JOIN glasses_build_sessions s ON s.id=e.build_session_id AND s.organization_id=e.organization_id
+      LEFT JOIN glasses_devices d ON d.id=e.device_id AND d.organization_id=e.organization_id
+      LEFT JOIN locations l ON l.id=e.location_id AND l.organization_id=e.organization_id
+      LEFT JOIN kds_stations ks ON ks.id=e.station_id AND ks.organization_id=e.organization_id
+      LEFT JOIN menu_items mi ON mi.id=e.menu_item_id AND mi.organization_id=e.organization_id
+      LEFT JOIN glasses_vision_model_packages p ON p.id=e.model_package_id AND p.organization_id=e.organization_id
+      LEFT JOIN glasses_vision_model_rollouts r ON r.id=e.rollout_id AND r.organization_id=e.organization_id
       WHERE e.organization_id=?";
     $args=[$org];
     if($filters['modelPackagePublicId']!==null){$sql.=" AND p.public_id=?";$args[]=$filters['modelPackagePublicId'];}
