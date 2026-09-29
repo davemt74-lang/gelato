@@ -5,17 +5,22 @@ on:
     paths:
       - 'database/20261110_vision_lab_v8_production_model_health.sql'
       - 'database/20261111_vision_lab_v8_context_aware_drift.sql'
+      - 'database/20261112_vision_lab_v8_calibration_profiles.sql'
       - 'includes/glasses-vision-model-health.php'
       - 'includes/glasses-vision-context-drift.php'
+      - 'includes/glasses-vision-calibration-profiles.php'
       - 'api/glasses-vision-lab.php'
       - 'glasses-vision-lab.php'
       - 'assets/js/glasses-vision-model-health.js'
       - 'assets/js/glasses-vision-context-drift.js'
+      - 'assets/js/glasses-vision-calibration-profiles.js'
       - 'assets/css/glasses-vision-lab.css'
       - 'tests/glasses-vision-lab-v8-production-model-health-contract.php'
       - 'tests/glasses-vision-lab-v8-context-aware-drift-contract.php'
+      - 'tests/glasses-vision-lab-v8-calibration-profile-runtime-contract.php'
       - 'docs/GLASSES-VISION-LAB-V8-MODEL-HEALTH.md'
       - 'docs/GLASSES-VISION-LAB-V8-CONTEXT-DRIFT.md'
+      - 'docs/GLASSES-VISION-LAB-V8-CALIBRATION-PROFILES.md'
       - '.github/workflows/glasses-vision-lab-v8.yml'
   push:
     branches: [main]
@@ -47,12 +52,15 @@ jobs:
         run: |
           php -l includes/glasses-vision-model-health.php
           php -l includes/glasses-vision-context-drift.php
+          php -l includes/glasses-vision-calibration-profiles.php
           php -l api/glasses-vision-lab.php
           php -l glasses-vision-lab.php
           php -l tests/glasses-vision-lab-v8-production-model-health-contract.php
           php -l tests/glasses-vision-lab-v8-context-aware-drift-contract.php
+          php -l tests/glasses-vision-lab-v8-calibration-profile-runtime-contract.php
           node --check assets/js/glasses-vision-model-health.js
           node --check assets/js/glasses-vision-context-drift.js
+          node --check assets/js/glasses-vision-calibration-profiles.js
 
       - name: Architecture guardrails
         run: |
@@ -70,6 +78,12 @@ jobs:
           grep -q "'causalClaim'=>false" includes/glasses-vision-context-drift.php
           ! grep -q 'rollout.activate' includes/glasses-vision-context-drift.php
           ! grep -q 'kds_transition' includes/glasses-vision-context-drift.php
+          grep -q 'CREATE TABLE glasses_vision_calibration_profiles' database/20261112_vision_lab_v8_calibration_profiles.sql
+          grep -q 'CREATE TABLE glasses_vision_calibration_selections' database/20261112_vision_lab_v8_calibration_profiles.sql
+          grep -q 'function glasses_vision_calibration_profile_select' includes/glasses-vision-calibration-profiles.php
+          grep -q "'automaticThresholdChange'=>false" includes/glasses-vision-calibration-profiles.php
+          ! grep -q 'rollout.activate' includes/glasses-vision-calibration-profiles.php
+          ! grep -q 'kds_transition' includes/glasses-vision-calibration-profiles.php
 
       - name: Install and upgrade schema
         run: |
@@ -100,6 +114,9 @@ jobs:
 
       - name: V8 context-aware drift contract
         run: php tests/glasses-vision-lab-v8-context-aware-drift-contract.php
+
+      - name: V8 calibration profile runtime contract
+        run: php tests/glasses-vision-lab-v8-calibration-profile-runtime-contract.php
 
       - name: V7 continuous-learning regressions
         run: |
