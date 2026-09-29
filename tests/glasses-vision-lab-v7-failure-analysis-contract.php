@@ -85,6 +85,9 @@ v72_assert($again['publicId']===$analysis['publicId'],'Identical source evidence
 $filtered=glasses_vision_failure_analysis_run($pdo,$org,['modelPackagePublicId'=>$modelPublic],$actor);
 v72_assert($filtered['eventCount']===2,'Model filter must isolate failures for one exact model package.');
 v72_assert($filtered['analysisHash']!==$analysis['analysisHash'],'Different filters/source set must create a different immutable analysis snapshot.');
+$day=glasses_vision_failure_analysis_run($pdo,$org,['from'=>'2026-09-28','to'=>'2026-09-28'],$actor);
+v72_assert($day['eventCount']===3,'Date-only filters must cover the complete requested calendar day.');
+
 
 $badRange=false;try{glasses_vision_failure_analysis_run($pdo,$org,['from'=>'2026-09-29','to'=>'2026-09-28'],$actor);}catch(InvalidArgumentException){$badRange=true;}
 v72_assert($badRange,'Invalid analysis date ranges must fail closed.');
