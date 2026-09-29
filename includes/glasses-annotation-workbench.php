@@ -91,13 +91,17 @@ function glasses_v11_annotation_review(PDO $pdo,int $org,string $public,string $
       ->execute([$org,(int)$c['sample_id'],$actor,$decision,$c['proposed_label'],mb_substr(trim($notes),0,1000,'UTF-8')?:null]);
     $q=$pdo->prepare("SELECT decision,COUNT(*) c FROM glasses_vision_sample_reviews WHERE organization_id=? AND sample_id=? GROUP BY decision");$q->execute([$org,(int)$c['sample_id']]);
     $counts=[];foreach($q->fetchAll() as $r)$counts[$r['decision']]=(int)$r['c'];
-    $approve=$counts['approve']??0;$reject=$counts['reject']??0;
-    $next=($approve>0&&$reject>0)?'needs_adjudication':($decision==='approve'?'approved':'rejected');
+    $approve=$counts['approve']??0;$reject=$counts['reject']??0;$reviewCount=$approve+$reject;
+    if($approve>0&&$reject>0)$next='needs_adjudication';
+    elseif($reviewCount>=2&&$approve===$reviewCount)$next='approved';
+    elseif($reviewCount>=2&&$reject===$reviewCount)$next='rejected';
+    else $next='submitted';
     $pdo->prepare("UPDATE glasses_vision_annotation_corrections SET status=?,reviewed_by=?,reviewed_at=NOW(6) WHERE organization_id=? AND id=?")
       ->execute([$next,$actor,$org,(int)$c['id']]);
     if($next==='approved')glasses_v11_annotation_apply($pdo,$org,(int)$c['id'],$actor,false);
     elseif($next==='rejected')$pdo->prepare("UPDATE glasses_vision_training_samples SET reviewer_user_id=?,review_status='rejected',review_outcome='rejected',reviewed_at=NOW(6),updated_at=NOW(6) WHERE organization_id=? AND id=?")->execute([$actor,$org,(int)$c['sample_id']]);
-    else $pdo->prepare("UPDATE glasses_vision_training_samples SET review_status='needs_adjudication',updated_at=NOW(6) WHERE organization_id=? AND id=?")->execute([$org,(int)$c['sample_id']]);
+    elseif($next==='needs_adjudication')$pdo->prepare("UPDATE glasses_vision_training_samples SET review_status='needs_adjudication',updated_at=NOW(6) WHERE organization_id=? AND id=?")->execute([$org,(int)$c['sample_id']]);
+    else $pdo->prepare("UPDATE glasses_vision_training_samples SET reviewer_user_id=?,review_status='pending',updated_at=NOW(6) WHERE organization_id=? AND id=?")->execute([$actor,$org,(int)$c['sample_id']]);
     glasses_v11_annotation_event($pdo,$org,(int)$c['id'],'reviewed',$actor,['decision'=>$decision,'status'=>$next,'notes'=>$notes]);
     return glasses_v11_annotation_public(glasses_v11_annotation_row($pdo,$org,$public));
   });
