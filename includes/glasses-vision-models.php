@@ -1094,6 +1094,14 @@ function glasses_vision_model_rollout_activate(PDO $pdo,int $org,string $publicI
             $shadowGate=glasses_vision_shadow_rollout_gate($pdo,$org,(int)$row['id']);
             if(!$shadowGate['eligible'])
                 throw new InvalidArgumentException('Target model package requires a passing live shadow evaluation before canary activation.');
+            $rcq=$pdo->prepare("SELECT id FROM glasses_vision_model_release_candidates WHERE organization_id=? AND model_package_id=? AND status='approved' ORDER BY id DESC LIMIT 1");
+            try{$rcq->execute([$org,(int)$row['target_package_id']]);$rcId=(int)$rcq->fetchColumn();}catch(Throwable){$rcId=0;}
+            if($rcId>0){
+                $vq=$pdo->prepare("SELECT COUNT(*) FROM glasses_vision_shadow_validations WHERE organization_id=? AND rollout_id=? AND release_candidate_id=? AND status='passed'");
+                $vq->execute([$org,(int)$row['id'],$rcId]);
+                if((int)$vq->fetchColumn()<1)
+                    throw new InvalidArgumentException('V11 rollout requires a passing Section 9 shadow validation before canary activation.');
+            }
         }
         if(is_array($targetMetadata)&&isset($targetMetadata['modelComparison'])&&glasses_vision_canary_ready($pdo)){
             if(abs((float)$row['canary_percent']-5.0)>0.0001)

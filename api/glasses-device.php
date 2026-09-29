@@ -23,6 +23,7 @@ require_once __DIR__.'/../includes/glasses-vision-rework.php';
 require_once __DIR__.'/../includes/glasses-production-pilot.php';
 require_once __DIR__.'/../includes/glasses-training-identity.php';
 require_once __DIR__.'/../includes/glasses-production-evidence.php';
+require_once __DIR__.'/../includes/glasses-v11-shadow-validation.php';
 
 $pdo=app_pdo();
 if(!glasses_ready($pdo))app_json_response(['ok'=>false,'message'=>'Glasses plugin migration is not installed.'],503);
@@ -93,6 +94,21 @@ try{
             'assignmentRequired'=>$device['station_id']===null,
             'calibration'=>$calibration,
         ]);
+    }
+
+    if($action==='vision.shadow_assignment'){
+        $assignment=glasses_v11_shadow_assign($pdo,$device,(string)($in['buildSessionPublicId']??''),(string)($in['detectorName']??''),is_array($in['policy']??null)?$in['policy']:[]);
+        app_json_response(['ok'=>true,'shadowAssignment'=>$assignment]);
+    }
+
+    if($action==='vision.shadow_report'){
+        $report=glasses_v11_shadow_report($pdo,$device,(string)($in['buildSessionPublicId']??''),$in);
+        app_json_response(['ok'=>true,'shadowReport'=>$report]);
+    }
+
+    if($action==='vision.shadow_complete'){
+        $summary=glasses_vision_shadow_complete($pdo,$device,(string)($in['buildSessionPublicId']??''),(string)($in['shadowRunPublicId']??''));
+        app_json_response(['ok'=>true,'shadowSummary'=>$summary]);
     }
 
     if($action==='training.evidence_capture'){
