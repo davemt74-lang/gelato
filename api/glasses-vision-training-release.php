@@ -13,9 +13,6 @@ try{
     $path=$root.'/'.(string)$row['package_relative_path'];
     $realRoot=realpath($root);$real=realpath($path);
     if($realRoot===false||$real===false||!str_starts_with($real,$realRoot.DIRECTORY_SEPARATOR)||!is_file($real)){http_response_code(404);exit('Training release package is unavailable.');}
-    if(!hash_equals((string)$row['package_hash'],substr((string)$row['public_id'],15,32).str_repeat('',0))){
-        // Public IDs are hash-derived but the full immutable hash remains authoritative in the manifest/table.
-    }
     header('Content-Type: application/zip');
     header('Content-Disposition: attachment; filename="'.preg_replace('/[^A-Za-z0-9._-]/','-',(string)$row['public_id']).'.zip"');
     header('Content-Length: '.filesize($real));
