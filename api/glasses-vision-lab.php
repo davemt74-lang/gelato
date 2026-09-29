@@ -81,5 +81,7 @@ try{
  if($action==='calibration_profile.activate')app_json_response(['ok'=>true,'profile'=>glasses_vision_calibration_profile_set_status($pdo,$org,(string)($in['publicId']??''),'active',$actor)]);
  if($action==='calibration_profile.retire')app_json_response(['ok'=>true,'profile'=>glasses_vision_calibration_profile_set_status($pdo,$org,(string)($in['publicId']??''),'retired',$actor)]);
  if($action==='calibration_profile.select')app_json_response(['ok'=>true,'selection'=>glasses_vision_calibration_profile_select($pdo,$org,$in,$actor)],201);
+ if($action==='calibration_profile.verify')app_json_response(['ok'=>true,'verification'=>glasses_vision_calibration_profile_verify($pdo,$org,(string)($in['publicId']??''))]);
+ if($action==='calibration_selection.verify')app_json_response(['ok'=>true,'verification'=>glasses_vision_calibration_selection_verify($pdo,$org,(string)($in['publicId']??''))]);
  app_json_response(['ok'=>false,'message'=>'Unsupported Vision Lab action.'],422);
 }catch(InvalidArgumentException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);}catch(Throwable $e){error_log('[gelato-vision-lab] '.$e->getMessage());app_json_response(['ok'=>false,'message'=>'Vision Lab request could not be completed.'],500);}
