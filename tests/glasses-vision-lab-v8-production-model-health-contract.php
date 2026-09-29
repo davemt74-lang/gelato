@@ -55,7 +55,7 @@ $insertDrift=$pdo->prepare("INSERT INTO glasses_vision_drift_samples
   confidence_mean,latency_mean_ms,observation_count,correction_count,low_confidence_count,drift_state,drift_score,reasons_json,metadata_json,created_at)
  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NOW(6))");
 $insertDrift->execute([$org,$assignmentId,$modelId,(int)$device['id'],$sessionId,$location,(int)$station['id'],'health-a-'.$slug,.90,50,10,1,2,'stable',.10,'[]','{}']);
-$insertDrift->execute([$org,$assignmentId,$modelId,(int)$device['id'],$sessionId,$location,(int)$station['id'],'health-b-'.$slug,.80,70,10,2,4,'warning',.35,'[\"confidence\"]','{}']);
+$insertDrift->execute([$org,$assignmentId,$modelId,(int)$device['id'],$sessionId,$location,(int)$station['id'],'health-b-'.$slug,.80,70,10,2,4,'warning',.35,'["confidence"]','{}']);
 
 $insertError=$pdo->prepare("INSERT INTO glasses_vision_production_errors
  (organization_id,public_id,event_key,event_hash,source_type,error_type,outcome,build_session_id,device_id,location_id,station_id,menu_item_id,model_package_id,
