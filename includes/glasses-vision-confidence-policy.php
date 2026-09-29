@@ -49,8 +49,9 @@ function glasses_vision_confidence_context_rules(array $input): array
         if(!isset($input[$state]))continue;
         if(!is_array($input[$state]))throw new InvalidArgumentException('Confidence context rule is invalid.');
         $delta=(float)($input[$state]['delta']??$base['delta']);
-        if(!is_finite($delta)||$delta<0||$delta>0.30)throw new InvalidArgumentException('Confidence context adjustment must be between 0 and 0.30.');
-        $defaults[$state]=['delta'=>round($delta,4),'requireHumanReview'=>!empty($input[$state]['requireHumanReview'])];
+        if(!is_finite($delta)||$delta<(float)$base['delta']||$delta>0.30)
+            throw new InvalidArgumentException('Confidence context adjustment may only preserve or tighten the built-in safety delta.');
+        $defaults[$state]=['delta'=>round($delta,4),'requireHumanReview'=>$base['requireHumanReview']||!empty($input[$state]['requireHumanReview'])];
     }
     return $defaults;
 }
