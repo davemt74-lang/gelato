@@ -83,6 +83,12 @@ v85_assert($plan['status']==='acknowledged','Non-human recovery must become ackn
 $plan=glasses_vision_active_perception_complete($pdo,$org,$plan['publicId'],$device,'success',['frameKey'=>'retry-'.$slug,'confidence'=>.96]);
 v85_assert($plan['status']==='completed'&&$plan['completionHash']!==null,'Device recovery completion must be durable and hash-bound.');
 v85_assert(glasses_vision_active_perception_verify($pdo,$org,$plan['publicId'])['passed'],'Completed device recovery must verify end to end.');
+$eventId=(int)v85_one($pdo,"SELECT e.id FROM glasses_vision_active_perception_events e JOIN glasses_vision_active_perception_actions a ON a.id=e.action_id WHERE e.organization_id=? AND a.public_id=? ORDER BY e.id DESC LIMIT 1",[$org,$plan['publicId']]);
+$eventJson=(string)v85_one($pdo,"SELECT evidence_json FROM glasses_vision_active_perception_events WHERE organization_id=? AND id=?",[$org,$eventId]);
+$pdo->prepare("UPDATE glasses_vision_active_perception_events SET evidence_json='{}' WHERE organization_id=? AND id=?")->execute([$org,$eventId]);
+v85_assert(!glasses_vision_active_perception_verify($pdo,$org,$plan['publicId'])['passed'],'Recovery lifecycle-event tampering must be detected.');
+$pdo->prepare("UPDATE glasses_vision_active_perception_events SET evidence_json=? WHERE organization_id=? AND id=?")->execute([$eventJson,$org,$eventId]);
+v85_assert(glasses_vision_active_perception_verify($pdo,$org,$plan['publicId'])['passed'],'Restored recovery event evidence must verify again.');
 
 $originalExpiry=$plan['expiresAt'];
 $pdo->prepare("UPDATE glasses_vision_active_perception_actions SET expires_at=DATE_ADD(expires_at,INTERVAL 1 SECOND) WHERE organization_id=? AND public_id=?")->execute([$org,$plan['publicId']]);
