@@ -80,15 +80,11 @@ function glasses_v11_dataset_assembly_select(array $rows,array $policy): array {
     if($policy['dedupePerceptualHash']&&$ph!==''&&isset($seenPhash[$ph])){$suppressed[]=['samplePublicId'=>$r['sample_public_id'],'reason'=>'perceptual_duplicate'];continue;}
     if($policy['dedupeCaptureGroup']&&$capture!==''&&isset($seenCapture[$capture])){$suppressed[]=['samplePublicId'=>$r['sample_public_id'],'reason'=>'capture_group_duplicate'];continue;}
     $label=(string)($r['canonical_label']??'(negative)');$op=(string)((int)($r['operator_user_id']??0));$dev=(string)((int)($r['device_id']??0));$loc=(string)((int)($r['location_id']??0));$st=(string)((int)($r['station_id']??0));
-    foreach([
-      ['key'=>$label,'counts'=>&$class,'max'=>$policy['maxPerClass'],'reason'=>'class_cap'],
-      ['key'=>$op,'counts'=>&$operator,'max'=>$policy['maxPerOperator'],'reason'=>'operator_cap'],
-      ['key'=>$dev,'counts'=>&$device,'max'=>$policy['maxPerDevice'],'reason'=>'device_cap'],
-      ['key'=>$loc,'counts'=>&$location,'max'=>$policy['maxPerLocation'],'reason'=>'location_cap'],
-      ['key'=>$st,'counts'=>&$station,'max'=>$policy['maxPerStation'],'reason'=>'station_cap']
-    ] as &$cap){
-      if(($cap['counts'][$cap['key']]??0)>=$cap['max']){$suppressed[]=['samplePublicId'=>$r['sample_public_id'],'reason'=>$cap['reason']];continue 2;}
-    } unset($cap);
+    if(($class[$label]??0)>=(int)$policy['maxPerClass']){$suppressed[]=['samplePublicId'=>$r['sample_public_id'],'reason'=>'class_cap'];continue;}
+    if(($operator[$op]??0)>=(int)$policy['maxPerOperator']){$suppressed[]=['samplePublicId'=>$r['sample_public_id'],'reason'=>'operator_cap'];continue;}
+    if(($device[$dev]??0)>=(int)$policy['maxPerDevice']){$suppressed[]=['samplePublicId'=>$r['sample_public_id'],'reason'=>'device_cap'];continue;}
+    if(($location[$loc]??0)>=(int)$policy['maxPerLocation']){$suppressed[]=['samplePublicId'=>$r['sample_public_id'],'reason'=>'location_cap'];continue;}
+    if(($station[$st]??0)>=(int)$policy['maxPerStation']){$suppressed[]=['samplePublicId'=>$r['sample_public_id'],'reason'=>'station_cap'];continue;}
     $selected[]=$r;$seenSample[$sid]=true;$seenSha[$sha]=true;if($ph!=='')$seenPhash[$ph]=true;if($capture!=='')$seenCapture[$capture]=true;
     $class[$label]=($class[$label]??0)+1;$operator[$op]=($operator[$op]??0)+1;$device[$dev]=($device[$dev]??0)+1;$location[$loc]=($location[$loc]??0)+1;$station[$st]=($station[$st]??0)+1;
     if(count($selected)>=(int)$policy['maxSamples'])break;
