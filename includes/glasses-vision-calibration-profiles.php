@@ -134,7 +134,8 @@ function glasses_vision_calibration_profile_set_status(PDO $pdo,int $org,string 
         if((string)$r['status']==='retired'&&$status==='active')throw new InvalidArgumentException('Retired calibration profiles cannot be reactivated.');
         if($status==='active'){
             $calStatus=(string)glasses_vision_calibration_profile_scalar($pdo,"SELECT status FROM glasses_station_calibrations WHERE organization_id=? AND id=?",[$org,(int)$r['calibration_id']]);
-            if($calStatus!=='active')throw new InvalidArgumentException('Calibration profile cannot activate after its station calibration is superseded.');
+            if(!in_array($calStatus,['active','superseded'],true))throw new InvalidArgumentException('Calibration profile references an unavailable station calibration version.');
+            if(!glasses_vision_calibration_profile_verify($pdo,$org,$publicId)['passed'])throw new InvalidArgumentException('Calibration profile failed integrity verification.');
             if($r['package_id']!==null){
                 $packageStatus=(string)glasses_vision_calibration_profile_scalar($pdo,"SELECT status FROM glasses_vision_model_packages WHERE organization_id=? AND id=?",[$org,(int)$r['package_id']]);
                 if($packageStatus!=='ready')throw new InvalidArgumentException('Calibration profile model package must be ready before activation.');
@@ -265,7 +266,7 @@ function glasses_vision_calibration_profile_select(PDO $pdo,int $org,array $inpu
     $candidates=[];$fallbackRuntime=$runtime;
     foreach($q->fetchAll(PDO::FETCH_COLUMN) as $public){
         $p=glasses_vision_calibration_profile_row($pdo,$org,(string)$public);
-        if($p['calibrationStatus']!=='active')continue;
+        if(!in_array((string)$p['calibrationStatus'],['active','superseded'],true))continue;
         if($package!==null&&$p['modelPackagePublicId']!==null&&!hash_equals((string)$p['modelPackagePublicId'],(string)$package['public_id']))continue;
         if(!hash_equals((string)$p['platform'],$runtime['platform']))continue;
         if($runtime['frameWidth']!==(int)$p['frame']['width']||$runtime['frameHeight']!==(int)$p['frame']['height'])continue;
@@ -282,13 +283,13 @@ function glasses_vision_calibration_profile_select(PDO $pdo,int $org,array $inpu
 
     $selected=$candidates[0]??null;
     $fallback=glasses_station_calibration_active($pdo,$org,(int)$device['location_id'],(int)$device['station_id'],$fallbackRuntime);
+    if($fallback!==null&&empty($fallback['compatibility']['compatible']))$fallback=null;
     $decision=$selected?'profile':'station_fallback';
     if(!$selected&&!$fallback)$decision='none';
     $selectionMaterial=[
       'schema'=>GLASSES_VISION_CALIBRATION_PROFILE_SCHEMA,'devicePublicId'=>$device['public_id'],'runtime'=>$runtime,
       'modelPackagePublicId'=>$package['public_id']??null,'modelArtifactSha256'=>$package['artifact_sha256']??null,
       'contextDriftAnalysisPublicId'=>$analysis['publicId']??null,'contextFingerprint'=>$contextFingerprint,
-      'runtime'=>['platform'=>$runtimePlatform,'frameWidth'=>$runtimeWidth>0?$runtimeWidth:null,'frameHeight'=>$runtimeHeight>0?$runtimeHeight:null,'pixelFormat'=>$runtimePixel!==''?$runtimePixel:null],
       'selectedProfilePublicId'=>$selected['profile']['publicId']??null,'selectedProfileHash'=>$selected['profile']['profileHash']??null,
       'fallbackCalibrationPublicId'=>$fallback['publicId']??null,'fallbackCalibrationSourceHash'=>$fallback['sourceHash']??null,
       'decision'=>$decision,'matchScore'=>$selected?(float)$selected['match']['score']:0.0,
