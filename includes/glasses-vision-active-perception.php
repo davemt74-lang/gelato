@@ -133,7 +133,7 @@ function glasses_vision_active_perception_plan(PDO $pdo,int $org,string $decisio
         $pdo->prepare("INSERT INTO glasses_vision_active_perception_actions
           (organization_id,public_id,confidence_decision_id,device_id,build_session_id,package_id,context_drift_analysis_id,calibration_selection_id,
            action_key,primary_action,status,requires_human,instruction_json,evidence_json,action_hash,expires_at,created_by)
-          VALUES (?,?,?,?,?,?,?,?,?,?,'issued',?,?,?,?,?,?,?)")
+          VALUES (?,?,?,?,?,?,?,?,?,?,'issued',?,?,?,?,?,?)")
           ->execute([$org,$public,(int)$r['id'],(int)$r['device_id'],(int)$r['build_session_id'],(int)$r['package_id'],
             $r['context_drift_analysis_id']!==null?(int)$r['context_drift_analysis_id']:null,$r['calibration_selection_id']!==null?(int)$r['calibration_selection_id']:null,
             $key,$instruction['primaryAction'],$instruction['requiresHuman']?1:0,glasses_vision_training_release_json($instruction),
@@ -264,14 +264,28 @@ function glasses_vision_active_perception_verify(PDO $pdo,int $org,string $publi
     if($a['calibrationSelectionPublicId']!==null)$passed=$passed&&glasses_vision_calibration_selection_verify($pdo,$org,$a['calibrationSelectionPublicId'])['passed'];
     $completionHash=null;
     if($a['completion']!==null){
-        $q=$pdo->prepare("SELECT requires_human,resolved_by FROM glasses_vision_active_perception_actions WHERE organization_id=? AND public_id=? LIMIT 1");
+        $q=$pdo->prepare("SELECT requires_human,resolved_by,id FROM glasses_vision_active_perception_actions WHERE organization_id=? AND public_id=? LIMIT 1");
         $q->execute([$org,$publicId]);$meta=$q->fetch()?:[];
         $material=['actionHash'=>$a['actionHash'],'completion'=>$a['completion']];
         if((int)($meta['requires_human']??0)===1)$material['resolvedByUserId']=$meta['resolved_by']!==null?(int)$meta['resolved_by']:0;
         $completionHash=hash('sha256',glasses_vision_training_release_json($material));
         $passed=$passed&&hash_equals((string)$a['completionHash'],$completionHash);
+        $actionId=(int)($meta['id']??0);
+    }else{
+        $q=$pdo->prepare("SELECT id FROM glasses_vision_active_perception_actions WHERE organization_id=? AND public_id=? LIMIT 1");
+        $q->execute([$org,$publicId]);$actionId=(int)$q->fetchColumn();
     }
-    return ['passed'=>$passed,'actionHash'=>$a['actionHash'],'recomputedActionHash'=>$hash,'completionHash'=>$a['completionHash'],'recomputedCompletionHash'=>$completionHash];
+    $eventsValid=true;
+    if($actionId>0){
+        $eq=$pdo->prepare("SELECT event_hash,evidence_json FROM glasses_vision_active_perception_events WHERE organization_id=? AND action_id=? ORDER BY id");
+        $eq->execute([$org,$actionId]);
+        foreach($eq->fetchAll() as $event){
+            $material=json_decode((string)$event['evidence_json'],true);
+            if(!is_array($material)||!hash_equals((string)$event['event_hash'],hash('sha256',glasses_vision_training_release_json($material)))){$eventsValid=false;break;}
+        }
+    }
+    $passed=$passed&&$eventsValid;
+    return ['passed'=>$passed,'actionHash'=>$a['actionHash'],'recomputedActionHash'=>$hash,'completionHash'=>$a['completionHash'],'recomputedCompletionHash'=>$completionHash,'eventsValid'=>$eventsValid];
 }
 
 function glasses_vision_active_perception_catalog(PDO $pdo,int $org): array
