@@ -18,6 +18,17 @@ function glasses_vision_step_ready(PDO $pdo): bool
     return (int)$q->fetchColumn()===1 && glasses_vision_scene_ready($pdo);
 }
 
+function glasses_vision_step_build_context_hash(array $build): string
+{
+    $material=[
+      'publicId'=>$build['publicId'],'status'=>$build['status'],'kdsItemPublicId'=>$build['kdsItemPublicId'],'kdsStatus'=>$build['kdsStatus'],
+      'locationId'=>$build['locationId'],'stationPublicId'=>$build['stationPublicId'],'menuItemId'=>$build['menuItemId'],
+      'posCheckItemId'=>$build['posCheckItemId'],'buildDefinition'=>$build['buildDefinition'],'summary'=>$build['summary'],'components'=>$build['components'],
+      'orderContext'=>$build['context']
+    ];
+    return hash('sha256',glasses_vision_training_release_json($material));
+}
+
 function glasses_vision_step_normalize(string $value): string
 {
     $value=mb_strtolower(trim($value),'UTF-8');
@@ -249,6 +260,10 @@ function glasses_vision_step_recognize(PDO $pdo,int $org,string $scenePublicId):
     $liveDefinition=(string)($build['buildDefinition']['publicId']??'');
     if($sceneDefinition===''||$liveDefinition===''||!hash_equals($sceneDefinition,$liveDefinition))
         throw new InvalidArgumentException('Recipe-step recognition requires the same canonical build definition captured by the scene.');
+    $sceneBuildContextHash=(string)($scene['context']['buildContextHash']??'');
+    $liveBuildContextHash=glasses_vision_step_build_context_hash($build);
+    if($sceneBuildContextHash===''||!hash_equals($sceneBuildContextHash,$liveBuildContextHash))
+        throw new InvalidArgumentException('Recipe-step recognition requires a scene captured from the current canonical build state.');
 
     $policy=glasses_vision_step_policy();
     $scored=glasses_vision_step_score_candidates($scene);
@@ -267,7 +282,7 @@ function glasses_vision_step_recognize(PDO $pdo,int $org,string $scenePublicId):
       'schema'=>GLASSES_VISION_STEP_SCHEMA,'policy'=>$policy,
       'scene'=>['publicId'=>$scene['publicId'],'sceneHash'=>$scene['sceneHash'],'sourceFingerprint'=>$scene['sourceFingerprint']],
       'buildSessionPublicId'=>$scene['buildSessionPublicId'],
-      'buildContextHash'=>$scene['context']['buildContextHash']??null,
+      'buildContextHash'=>$sceneBuildContextHash,'liveBuildContextHash'=>$liveBuildContextHash,
       'buildDefinition'=>$scene['context']['buildSession']['buildDefinition']??null,
       'currentExpectedComponentKey'=>$scored['currentExpectedComponentKey'],
       'visibleComponentKeys'=>$scored['visibleComponentKeys'],'componentStatuses'=>$scored['componentStatuses'],
