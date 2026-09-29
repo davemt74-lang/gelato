@@ -204,6 +204,20 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
       <div class="camera-meta" id="cameraMeta"><span>No active camera stream.</span></div>
       <div class="vision-runtime-panel">
         <div class="console-heading"><div><small>BROWSER VISION</small><strong>Detection runtime</strong></div><span id="visionHealth">VISION IDLE</span></div>
+        <div class="frame-pipeline-panel">
+          <div class="console-heading"><div><small>V10 FRAME PIPELINE</small><strong>Backpressure & fault simulation</strong></div><span id="framePipelineState">IDLE</span></div>
+          <div class="camera-grid">
+            <label><span>Queue depth</span><select id="frameQueueMax"><option value="1">1</option><option value="2">2</option><option value="3" selected>3</option><option value="4">4</option><option value="6">6</option></select></label>
+            <label><span>Max frame age</span><select id="frameMaxAge"><option value="250">250 ms</option><option value="500">500 ms</option><option value="750" selected>750 ms</option><option value="1000">1000 ms</option><option value="1500">1500 ms</option></select></label>
+            <label><span>Inference timeout</span><select id="frameInferenceTimeout"><option value="500">500 ms</option><option value="800">800 ms</option><option value="1200" selected>1200 ms</option><option value="2000">2000 ms</option><option value="3000">3000 ms</option></select></label>
+            <label><span>Drop policy</span><select id="frameDropPolicy"><option value="drop_oldest" selected>Drop oldest</option><option value="drop_newest">Drop newest</option></select></label>
+            <label><span>Detector delay</span><select id="frameDetectorDelay"><option value="0" selected>0 ms</option><option value="100">100 ms</option><option value="250">250 ms</option><option value="500">500 ms</option><option value="1000">1000 ms</option></select></label>
+            <label><span>Burst frames</span><select id="frameBurstCount"><option value="1">1</option><option value="3">3</option><option value="5" selected>5</option><option value="10">10</option></select></label>
+          </div>
+          <div class="camera-toggle-row"><label><input id="frameForceTimeout" type="checkbox"> Force timeout</label><span class="sim-muted">Simulator-only fault injection</span></div>
+          <div class="inline-actions"><button id="frameBurst" type="button">Inject Frame Burst</button><button id="frameResetMetrics" type="button">Reset Metrics</button></div>
+          <div id="framePipelineMetrics" class="vision-metrics">queue 0 · processed 0 · dropped 0 · stale 0 · timeout 0</div>
+        </div>
         <div class="camera-grid">
           <label><span>Mode</span><select id="visionMode"><option value="manual">Manual</option><option value="assisted">Assisted</option><option value="automatic">Automatic</option></select></label>
           <label><span>FPS limit</span><select id="visionFpsLimit"><option value="2">2 FPS</option><option value="4" selected>4 FPS</option><option value="6">6 FPS</option><option value="8">8 FPS</option></select></label>
@@ -328,6 +342,6 @@ window.GELATO_GLASSES_SIMULATOR={
   canManageMedia:<?=app_has_permission('glasses.manage',$user)?'true':'false'?>
 };
 </script>
-<script src="assets/js/glasses-web-simulator.js?v=20260929-v10-1"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20260929-v10-2"></script>
 </body>
 </html>

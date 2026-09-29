@@ -94,7 +94,7 @@ gws_assert(str_contains($page,'visionConfidenceThreshold')&&str_contains($page,'
 gws_assert(str_contains($page,'visionDetectionLayer'),'Simulator must expose a dedicated automatic vision overlay layer.');
 gws_assert(str_contains($js,'const VISION_ADAPTERS'),'Browser vision must use a detector adapter contract rather than hard-coding vendor APIs.');
 gws_assert(str_contains($js,"id:'fixture'"),'Browser vision must provide a deterministic detector fixture while the production model adapter is pending.');
-gws_assert(str_contains($js,'function runVisionFrame'),'Browser vision must run a bounded continuous inference loop.');
+gws_assert(str_contains($js,'function enqueueVisionFrame')&&str_contains($js,'function processFrameQueue')&&str_contains($js,'function scheduleVisionCapture'),'Browser vision must run through the bounded continuous frame pipeline.');
 gws_assert(str_contains($js,'function trackDetections'),'Browser vision must assign persistent tracking IDs across frames.');
 gws_assert(str_contains($js,'VISION_TRACK_TTL_MS'),'Browser vision tracks must expire rather than persist stale detections.');
 gws_assert(str_contains($js,'visionIntervalMs'),'Browser vision must apply an explicit FPS budget.');

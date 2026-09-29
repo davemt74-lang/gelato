@@ -1,15 +1,18 @@
-name: AR Glasses V10 Hardware Runtime
+name: AR Glasses V10 Production Runtime
 
 on:
   pull_request:
     paths:
       - 'includes/glasses-hardware-runtime.php'
+      - 'includes/glasses-frame-pipeline.php'
       - 'includes/glasses-simulator.php'
       - 'api/glasses-simulator.php'
       - 'glasses-simulator.php'
       - 'assets/js/glasses-web-simulator.js'
       - 'tests/glasses-v10-hardware-runtime-adapter-contract.php'
+      - 'tests/glasses-v10-frame-pipeline-contract.php'
       - 'docs/GLASSES-V10-HARDWARE-RUNTIME.md'
+      - 'docs/GLASSES-V10-FRAME-PIPELINE.md'
       - '.github/workflows/glasses-v10.yml'
   push:
     branches: [main]
@@ -40,10 +43,12 @@ jobs:
       - name: Syntax
         run: |
           php -l includes/glasses-hardware-runtime.php
+          php -l includes/glasses-frame-pipeline.php
           php -l includes/glasses-simulator.php
           php -l api/glasses-simulator.php
           php -l glasses-simulator.php
           php -l tests/glasses-v10-hardware-runtime-adapter-contract.php
+          php -l tests/glasses-v10-frame-pipeline-contract.php
           node --check assets/js/glasses-web-simulator.js
 
       - name: Architecture guardrails
@@ -58,6 +63,14 @@ jobs:
           ! grep -q 'kds_transition(' includes/glasses-hardware-runtime.php
           ! grep -q 'glasses_build_confirm(' includes/glasses-hardware-runtime.php
           ! grep -q 'glasses_handoff_to_expo(' includes/glasses-hardware-runtime.php
+          grep -q 'GLASSES_FRAME_PIPELINE_SCHEMA' includes/glasses-frame-pipeline.php
+          grep -q "'drop_oldest'" includes/glasses-frame-pipeline.php
+          grep -q 'function enqueueVisionFrame' assets/js/glasses-web-simulator.js
+          grep -q 'function processFrameQueue' assets/js/glasses-web-simulator.js
+          grep -q 'FRAME_INFERENCE_TIMEOUT' assets/js/glasses-web-simulator.js
+          ! grep -q 'async function runVisionFrame()' assets/js/glasses-web-simulator.js
+          ! grep -q 'kds_transition(' includes/glasses-frame-pipeline.php
+          ! grep -q 'glasses_build_confirm(' includes/glasses-frame-pipeline.php
 
       - name: Install schema
         run: |
@@ -85,6 +98,9 @@ jobs:
 
       - name: V10 hardware runtime adapter contract
         run: php tests/glasses-v10-hardware-runtime-adapter-contract.php
+
+      - name: V10 frame pipeline and backpressure contract
+        run: php tests/glasses-v10-frame-pipeline-contract.php
 
       - name: Existing simulator regression
         run: php tests/glasses-web-simulator-contract.php
