@@ -34,6 +34,7 @@ try{
                 'view'=>true,
                 'liveWrite'=>glasses_simulator_can_write($user),
             ],
+            'hardwareRuntime'=>glasses_hardware_runtime_contract('simulator.v1'),
         ]);
     }
 
