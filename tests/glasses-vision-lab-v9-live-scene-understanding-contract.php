@@ -41,6 +41,8 @@ $device=glasses_authenticate_token($pdo,(string)$paired['deviceToken']);
 $session=glasses_build_start($pdo,$device,$kdsPublic,null);$sessionPublic=(string)$session['publicId'];
 $sessionId=(int)v91_one($pdo,"SELECT id FROM glasses_build_sessions WHERE organization_id=? AND public_id=?",[$org,$sessionPublic]);
 $pepKey='ingredient:'.$pep;$cheeseKey='ingredient:'.$cheese;
+glasses_vision_profile_save($pdo,$org,['ingredientId'=>$pep,'detectorName'=>'ingredient_detector','modelLabel'=>'pepperoni','minimumConfidence'=>.80],$actor);
+glasses_vision_profile_save($pdo,$org,['ingredientId'=>$cheese,'detectorName'=>'ingredient_detector','modelLabel'=>'cheese','minimumConfidence'=>.80],$actor);
 
 $cal=glasses_station_calibration_save($pdo,$org,$location,(string)$station['public_id'],[
   'platform'=>'inmo_air3','frameWidth'=>640,'frameHeight'=>480,'pixelFormat'=>'grayscale8','notes'=>'V9 live-scene fixture',
@@ -76,8 +78,8 @@ $input=[
  'buildSessionPublicId'=>$sessionPublic,'detectorName'=>'ingredient_detector','frameKey'=>'scene-frame-'.$slug,
  'frameWidth'=>640,'frameHeight'=>480,'pixelFormat'=>'grayscale8','capturedAt'=>$captured,
  'entities'=>[
-   ['entityKey'=>'ingredient-pep','kind'=>'ingredient','label'=>'pepperoni','componentKey'=>$pepKey,'trackingId'=>'track-pep','source'=>'vision_model','confidence'=>.96,'bbox'=>[.08,.14,.12,.15],'attributes'=>['detectorClass'=>'pepperoni']],
-   ['entityKey'=>'ingredient-cheese','kind'=>'ingredient','label'=>'cheese','componentKey'=>$cheeseKey,'trackingId'=>'track-cheese','confidence'=>.94,'bbox'=>[.40,.14,.12,.15]],
+   ['entityKey'=>'ingredient-pep','kind'=>'ingredient','label'=>'pepperoni','trackingId'=>'track-pep','source'=>'vision_model','confidence'=>.96,'bbox'=>[.08,.14,.12,.15],'attributes'=>['detectorClass'=>'pepperoni']],
+   ['entityKey'=>'ingredient-cheese','kind'=>'ingredient','label'=>'cheese','trackingId'=>'track-cheese','confidence'=>.94,'bbox'=>[.40,.14,.12,.15]],
    ['entityKey'=>'hand-left','kind'=>'hand','label'=>'left hand','trackingId'=>'hand-1','source'=>'device_runtime','confidence'=>.99,'bbox'=>[.30,.50,.12,.20]],
    ['entityKey'=>'tool-spoodle','kind'=>'tool','label'=>'spoodle','trackingId'=>'tool-1','confidence'=>.91,'bbox'=>[.36,.52,.08,.18]],
    ['entityKey'=>'container-pep','kind'=>'container','label'=>'pepperoni pan','trackingId'=>'container-1','confidence'=>.93,'bbox'=>[.05,.10,.25,.30]],
@@ -101,6 +103,8 @@ v91_assert(($scene['context']['recipePlan']['recognizedStep']??'sentinel')===nul
 v91_assert(($scene['context']['recipePlan']['currentExpectedComponentKey']??'')===$cheeseKey,'Scene must expose the current canonical build component.');
 
 $byKey=[];foreach($scene['entities'] as $e)$byKey[$e['entityKey']]=$e;
+v91_assert(($byKey['ingredient-pep']['componentKey']??'')===$pepKey&&($byKey['ingredient-cheese']['componentKey']??'')===$cheeseKey,'Ingredient component mappings must come from the governed Vision Label Profile.');
+v91_assert(($byKey['ingredient-pep']['normalizedLabel']??'')==='pepperoni','Scene must retain the canonical normalized detector label.');
 v91_assert(($byKey['ingredient-pep']['spatial']['ingredientZones'][0]['zoneKey']??'')==='pepperoni-pan','Pepperoni entity must resolve into the calibrated pepperoni zone.');
 v91_assert(($byKey['product-pizza']['spatial']['regions'][0]['regionKey']??'')==='build-surface','Product entity must resolve into the calibrated build surface.');
 v91_assert(($byKey['ingredient-pep']['source']??'')==='vision_model'&&($byKey['hand-left']['source']??'')==='device_runtime','Scene entities must preserve explicit observation provenance.');
