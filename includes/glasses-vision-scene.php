@@ -156,6 +156,7 @@ function glasses_vision_scene_capture(PDO $pdo,array $device,array $input): arra
         throw new InvalidArgumentException('Live scene capture requires an applicable model assignment.');
     $packagePublic=(string)$assignment['package']['publicId'];
     $package=glasses_vision_model_package_row($pdo,$org,$packagePublic,false);
+    if((string)($package['status']??'')!=='ready')throw new InvalidArgumentException('Live scene capture requires a ready model package.');
 
     $calibration=glasses_station_calibration_active($pdo,$org,(int)$session['location_id'],(int)$session['station_id'],[
       'platform'=>(string)$device['platform'],'frameWidth'=>$width,'frameHeight'=>$height,'pixelFormat'=>$pixel
@@ -295,7 +296,8 @@ function glasses_vision_scene_verify(PDO $pdo,int $org,string $publicId): array
     $source=[
       'schema'=>GLASSES_VISION_SCENE_SCHEMA,'devicePublicId'=>$s['devicePublicId'],'buildSessionPublicId'=>$s['buildSessionPublicId'],
       'frame'=>['frameKey'=>$s['frameKey'],'width'=>$s['frameWidth'],'height'=>$s['frameHeight'],'pixelFormat'=>$s['pixelFormat'],'capturedAt'=>$s['capturedAt']],
-      'assignmentKey'=>$s['assignmentKey'],'modelArtifactSha256'=>$s['modelArtifactSha256'],'calibrationSourceHash'=>$s['calibrationSourceHash'],
+      'assignmentKey'=>$s['assignmentKey'],'modelArtifactSha256'=>$s['modelArtifactSha256'],
+      'buildContextHash'=>$s['context']['buildContextHash']??null,'calibrationSourceHash'=>$s['calibrationSourceHash'],
       'entityHashes'=>$entityHashes,'relationships'=>$s['relationships']
     ];
     $sourceFingerprint=hash('sha256',glasses_vision_training_release_json($source));
