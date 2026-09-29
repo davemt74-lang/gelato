@@ -254,32 +254,41 @@ function glasses_vision_fleet_health_action_row(PDO $pdo,int $org,string $public
 function glasses_vision_fleet_health_execute_rollback(PDO $pdo,int $org,string $analysisPublic,string $reason,int $actor): array
 {
     $reason=mb_substr(trim($reason),0,1000,'UTF-8');if($reason==='')throw new InvalidArgumentException('Governed rollback requires a documented reason.');
-    $analysis=glasses_vision_fleet_health_row($pdo,$org,$analysisPublic);
-    if(!glasses_vision_fleet_health_verify($pdo,$org,$analysisPublic)['passed'])throw new InvalidArgumentException('Fleet health analysis failed integrity verification.');
-    if($analysis['recommendation']!=='rollback_review')throw new InvalidArgumentException('Fleet evidence does not currently support rollback review.');
-    if($analysis['rolloutPublicId']===null)throw new InvalidArgumentException('Fleet health analysis is not bound to a rollout.');
+    return glasses_transaction($pdo,function()use($pdo,$org,$analysisPublic,$reason,$actor):array{
+        $analysis=glasses_vision_fleet_health_row($pdo,$org,$analysisPublic);
+        if(!glasses_vision_fleet_health_verify($pdo,$org,$analysisPublic)['passed'])throw new InvalidArgumentException('Fleet health analysis failed integrity verification.');
+        if($analysis['recommendation']!=='rollback_review')throw new InvalidArgumentException('Fleet evidence does not currently support rollback review.');
+        if($analysis['rolloutPublicId']===null)throw new InvalidArgumentException('Fleet health analysis is not bound to a rollout.');
 
-    $rollout=glasses_vision_model_rollout_row($pdo,$org,(string)$analysis['rolloutPublicId'],false);
-    if(!hash_equals((string)$rollout['target_public_id'],(string)$analysis['modelPackagePublicId']))
-        throw new InvalidArgumentException('Fleet analysis target model no longer matches the rollout.');
+        $q=$pdo->prepare("SELECT public_id FROM glasses_vision_fleet_health_actions
+          WHERE organization_id=? AND analysis_id=(SELECT id FROM glasses_vision_fleet_health_analyses WHERE organization_id=? AND public_id=?)
+            AND action_type='rollback' LIMIT 1 FOR UPDATE");
+        $q->execute([$org,$org,$analysisPublic]);$existing=$q->fetchColumn();
+        if($existing){
+            $rollout=glasses_vision_model_rollout_row($pdo,$org,(string)$analysis['rolloutPublicId'],false);
+            return ['action'=>glasses_vision_fleet_health_action_row($pdo,$org,(string)$existing),'rollout'=>glasses_vision_model_rollout_public($rollout)];
+        }
 
-    $q=$pdo->prepare("SELECT public_id FROM glasses_vision_fleet_health_actions
-      WHERE organization_id=? AND analysis_id=(SELECT id FROM glasses_vision_fleet_health_analyses WHERE organization_id=? AND public_id=?)
-        AND action_type='rollback' LIMIT 1");
-    $q->execute([$org,$org,$analysisPublic]);$existing=$q->fetchColumn();
-    if($existing)return ['action'=>glasses_vision_fleet_health_action_row($pdo,$org,(string)$existing),'rollout'=>glasses_vision_model_rollout_public($rollout)];
-    if(!in_array((string)$rollout['status'],['active','paused'],true))throw new InvalidArgumentException('Only an active or paused rollout can be rolled back.');
+        $rollout=glasses_vision_model_rollout_row($pdo,$org,(string)$analysis['rolloutPublicId'],true);
+        if(!hash_equals((string)$rollout['target_public_id'],(string)$analysis['modelPackagePublicId']))
+            throw new InvalidArgumentException('Fleet analysis target model no longer matches the rollout.');
+        if(!in_array((string)$rollout['status'],['active','paused'],true))
+            throw new InvalidArgumentException('Only an active or paused rollout can be rolled back.');
 
-    $rollback=glasses_vision_model_rollout_rollback($pdo,$org,(string)$analysis['rolloutPublicId'],$actor,'Fleet health '.$analysisPublic.': '.$reason);
-    $evidence=[
-      'schema'=>GLASSES_VISION_FLEET_HEALTH_SCHEMA,'analysisPublicId'=>$analysisPublic,'analysisHash'=>$analysis['analysisHash'],
-      'rolloutPublicId'=>$analysis['rolloutPublicId'],'targetModelPackagePublicId'=>$analysis['modelPackagePublicId'],
-      'baselinePackagePublicId'=>$analysis['baselinePackagePublicId'],'reason'=>$reason,'rolloutResult'=>[
-        'status'=>$rollback['status']??null,'canaryPercent'=>$rollback['canaryPercent']??null
-      ]
-    ];
-    $hash=hash('sha256',glasses_vision_training_release_json(['evidence'=>$evidence,'actorUserId'=>$actor]));
-    $action=glasses_transaction($pdo,function()use($pdo,$org,$actor,$analysisPublic,$analysis,$evidence,$hash,$reason):array{
+        $scope=glasses_vision_fleet_health_scope($pdo,$org,['rolloutPublicId'=>$analysis['rolloutPublicId'],'modelPackagePublicId'=>$analysis['modelPackagePublicId']]);
+        $live=glasses_vision_fleet_health_collect($pdo,$org,$scope,$analysis['windowStartedAt'],$analysis['windowEndedAt']);
+        $liveFingerprint=hash('sha256',glasses_vision_training_release_json(['snapshots'=>$live['snapshots'],'contextAnalyses'=>$live['contextAnalyses']]));
+        if(!hash_equals((string)$analysis['sourceFingerprint'],$liveFingerprint))
+            throw new InvalidArgumentException('Fleet evidence changed after analysis; run a fresh fleet analysis before rollback.');
+
+        $rollback=glasses_vision_model_rollout_rollback($pdo,$org,(string)$analysis['rolloutPublicId'],$actor,'Fleet health '.$analysisPublic.': '.$reason);
+        $evidence=[
+          'schema'=>GLASSES_VISION_FLEET_HEALTH_SCHEMA,'analysisPublicId'=>$analysisPublic,'analysisHash'=>$analysis['analysisHash'],
+          'sourceFingerprint'=>$analysis['sourceFingerprint'],'rolloutPublicId'=>$analysis['rolloutPublicId'],
+          'targetModelPackagePublicId'=>$analysis['modelPackagePublicId'],'baselinePackagePublicId'=>$analysis['baselinePackagePublicId'],
+          'reason'=>$reason,'actorUserId'=>$actor,'rolloutResult'=>['status'=>$rollback['status']??null,'canaryPercent'=>$rollback['canaryPercent']??null]
+        ];
+        $hash=hash('sha256',glasses_vision_training_release_json($evidence));
         $aq=$pdo->prepare("SELECT id FROM glasses_vision_fleet_health_analyses WHERE organization_id=? AND public_id=?");$aq->execute([$org,$analysisPublic]);$analysisId=(int)$aq->fetchColumn();
         $rq=$pdo->prepare("SELECT id FROM glasses_vision_model_rollouts WHERE organization_id=? AND public_id=?");$rq->execute([$org,$analysis['rolloutPublicId']]);$rolloutId=(int)$rq->fetchColumn();
         $public=glasses_public_id('vision-fleet-action');
@@ -288,10 +297,9 @@ function glasses_vision_fleet_health_execute_rollback(PDO $pdo,int $org,string $
           VALUES (?,?,?,?,'rollback','completed',?,?,?,?)")
           ->execute([$org,$public,$analysisId,$rolloutId,$reason,glasses_vision_training_release_json($evidence),$hash,$actor]);
         glasses_vision_lineage_edge($pdo,$org,'fleet_health_analysis',$analysisPublic,$analysis['analysisHash'],'governed_rollback_as','fleet_health_action',$public,$hash,
-          ['rolloutPublicId'=>$analysis['rolloutPublicId'],'reason'=>$reason],$actor);
-        return glasses_vision_fleet_health_action_row($pdo,$org,$public);
+          ['rolloutPublicId'=>$analysis['rolloutPublicId'],'reason'=>$reason,'sourceFingerprint'=>$analysis['sourceFingerprint']],$actor);
+        return ['action'=>glasses_vision_fleet_health_action_row($pdo,$org,$public),'rollout'=>$rollback];
     });
-    return ['action'=>$action,'rollout'=>$rollback];
 }
 
 function glasses_vision_fleet_health_action_verify(PDO $pdo,int $org,string $publicId): array
@@ -299,7 +307,7 @@ function glasses_vision_fleet_health_action_verify(PDO $pdo,int $org,string $pub
     $a=glasses_vision_fleet_health_action_row($pdo,$org,$publicId);
     $q=$pdo->prepare("SELECT actor_user_id,reason FROM glasses_vision_fleet_health_actions WHERE organization_id=? AND public_id=? LIMIT 1");
     $q->execute([$org,$publicId]);$meta=$q->fetch()?:[];
-    $hash=hash('sha256',glasses_vision_training_release_json(['evidence'=>$a['evidence'],'actorUserId'=>(int)($meta['actor_user_id']??0)]));
+    $hash=hash('sha256',glasses_vision_training_release_json($a['evidence']));
     $rollout=glasses_vision_model_rollout_row($pdo,$org,$a['rolloutPublicId'],false);
     $passed=hash_equals($a['actionHash'],$hash)
       &&hash_equals((string)($a['evidence']['reason']??''),(string)($meta['reason']??''))
