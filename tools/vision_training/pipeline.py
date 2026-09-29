@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA_DATASET="gelato.vision_training_dataset.v1"
+SCHEMA_TRAINING_RELEASE="gelato.vision_training_release.v1"
 SCHEMA_RELEASE="gelato.vision_model_release.v1"
 SCHEMA_BROWSER="gelato.browser_onnx_detector.v1"
 SCHEMA_COMPARISON="gelato.vision_model_comparison.v1"
@@ -141,9 +142,64 @@ def deterministic_split(images:list[Path],seed:int,ratios:tuple[float,float,floa
     provenance={"mode":"group_aware","groupCount":len(groups),"protectedBy":["captureGroup","buildPublicId"],"counts":counts}
     return splits,provenance
 
+def training_release_core_hash(members:dict[str,str])->str:
+    canonical="".join(f"{path}\\0{members[path]}\\n" for path in sorted(members))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+def verify_training_release(root:Path)->dict[str,Any]:
+    manifest_path=root/"release-manifest.json"
+    if not manifest_path.is_file(): raise PipelineError("release-manifest.json is missing.")
+    manifest=json.loads(manifest_path.read_text("utf-8"))
+    if manifest.get("schema")!=SCHEMA_TRAINING_RELEASE: raise PipelineError("Training release schema is unsupported.")
+    members=manifest.get("members")
+    if not isinstance(members,dict) or not members: raise PipelineError("Training release member hashes are missing.")
+    clean:dict[str,str]={}
+    for rel,expected in members.items():
+        rel=str(rel)
+        if rel.startswith("/") or ".." in Path(rel).parts: raise PipelineError(f"Unsafe training release member path: {rel}")
+        target=root/rel
+        if not target.is_file(): raise PipelineError(f"Training release member is missing: {rel}")
+        actual=sha256_file(target)
+        if actual!=str(expected): raise PipelineError(f"Training release checksum mismatch: {rel}")
+        clean[rel]=actual
+    calculated=training_release_core_hash(clean)
+    if calculated!=str(manifest.get("packageHash","")): raise PipelineError("Training release package hash does not match its governed members.")
+    for split in ("train","val","test"):
+        images=[p for p in (root/"images"/split).glob("*") if p.is_file() and p.suffix.lower() in IMAGE_EXTS]
+        if not images: raise PipelineError(f"Governed {split} split is empty.")
+        for image in images:
+            label=root/"labels"/split/f"{image.stem}.txt"
+            if not label.is_file(): raise PipelineError(f"Governed label file is missing for {image.name}.")
+    if not (root/"data.yaml").is_file() or not (root/"provenance.json").is_file():
+        raise PipelineError("Governed training release metadata is incomplete.")
+    return manifest
+
+def prepare_governed_release(root:Path,out:Path)->dict[str,Any]:
+    manifest=verify_training_release(root)
+    if out.exists(): shutil.rmtree(out)
+    out.mkdir(parents=True,exist_ok=True)
+    for folder in ("images","labels"):
+        shutil.copytree(root/folder,out/folder)
+    for name in ("data.yaml","provenance.json","release-manifest.json","checksums.sha256"):
+        source=root/name
+        if source.is_file(): shutil.copy2(source,out/name)
+    split_manifest={
+        "schema":"gelato.vision_training_split.v2",
+        "seed":None,
+        "ratios":None,
+        "counts":manifest.get("splitMediaCounts") or {},
+        "classes":manifest.get("classes") or [],
+        "grouping":{"mode":"governed_release","resplit":False,"splitPlanPublicId":manifest.get("splitPlanPublicId"),"splitPlanHash":manifest.get("splitPlanHash")},
+        "sourceManifest":manifest,
+    }
+    (out/"split-manifest.json").write_text(json.dumps(split_manifest,indent=2)+"\n",encoding="utf-8")
+    return split_manifest
+
 def prepare_workspace(dataset: Path,out: Path,seed:int=74,train_ratio:float=.70,val_ratio:float=.15,test_ratio:float=.15)->dict[str,Any]:
     root,tmp=materialize_dataset(dataset)
     try:
+        if (root/"release-manifest.json").is_file():
+            return prepare_governed_release(root,out)
         info=inspect_dataset(root); splits,split_provenance=deterministic_split(info["images"],seed,(train_ratio,val_ratio,test_ratio),info["manifest"])
         if out.exists(): shutil.rmtree(out)
         for split,images in splits.items():
