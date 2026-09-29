@@ -71,5 +71,7 @@ try{
  if($action==='evidence_review.run')app_json_response(['ok'=>true,'review'=>glasses_vision_evidence_review_run($pdo,$org,(string)($in['experimentPublicId']??''),$in,$actor)],201);
  if($action==='promotion.authorize')app_json_response(['ok'=>true,'promotion'=>glasses_vision_promotion_authorize($pdo,$org,(string)($in['evidenceReviewPublicId']??''),$in,$actor)],201);
  if($action==='promotion.create_rollout')app_json_response(['ok'=>true,'promotion'=>glasses_vision_promotion_create_rollout($pdo,$org,(string)($in['publicId']??''),$actor)],201);
+ if($action==='model_health.snapshot')app_json_response(['ok'=>true,'snapshot'=>glasses_vision_model_health_snapshot($pdo,$org,$in,$actor)],201);
+ if($action==='model_health.verify')app_json_response(['ok'=>true,'verification'=>glasses_vision_model_health_verify($pdo,$org,(string)($in['publicId']??''))]);
  app_json_response(['ok'=>false,'message'=>'Unsupported Vision Lab action.'],422);
 }catch(InvalidArgumentException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);}catch(Throwable $e){error_log('[gelato-vision-lab] '.$e->getMessage());app_json_response(['ok'=>false,'message'=>'Vision Lab request could not be completed.'],500);}
