@@ -56,7 +56,7 @@ function glasses_vision_dataset_intelligence_record_review(PDO $pdo,int $org,str
       ON DUPLICATE KEY UPDATE decision=VALUES(decision),canonical_label=VALUES(canonical_label),notes=VALUES(notes),created_at=NOW(6)")
       ->execute([$org,(int)$sample['id'],$reviewerId,$decision,$label!==''?$label:null,mb_substr(trim($notes),0,1000)]);
 
-    $rq=$pdo->prepare("SELECT decision,COALESCE(canonical_label,'') label FROM glasses_vision_sample_reviews WHERE organization_id=? AND sample_id=? ORDER BY id");
+    $rq=$pdo->prepare("SELECT decision,COALESCE(canonical_label,'') label FROM glasses_vision_sample_reviews WHERE organization_id=? AND sample_id=? AND correction_id IS NULL ORDER BY id");
     $rq->execute([$org,(int)$sample['id']]);
     $reviews=$rq->fetchAll();
     $signatures=[];

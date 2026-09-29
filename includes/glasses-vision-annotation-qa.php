@@ -116,7 +116,7 @@ function glasses_vision_annotation_qa_analyze(PDO $pdo,int $org,?string $dataset
       FROM glasses_vision_sample_reviews r
       JOIN glasses_vision_training_samples s ON s.id=r.sample_id AND s.organization_id=r.organization_id
       {$reviewScope}
-      WHERE r.organization_id=? ORDER BY r.sample_id,r.id");
+      WHERE r.organization_id=? AND r.correction_id IS NULL ORDER BY r.sample_id,r.id");
     $rq->execute($args);$reviews=$rq->fetchAll();
     $agreement=glasses_vision_annotation_qa_agreement($reviews);
 

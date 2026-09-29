@@ -1,0 +1,61 @@
+CREATE TABLE IF NOT EXISTS glasses_vision_annotation_corrections (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  organization_id BIGINT UNSIGNED NOT NULL,
+  public_id VARCHAR(80) NOT NULL,
+  media_id BIGINT UNSIGNED NOT NULL,
+  sample_id BIGINT UNSIGNED NOT NULL,
+  correction_key VARCHAR(190) NOT NULL,
+  correction_type ENUM('label','bbox','false_positive','false_negative','step','ingredient','combined') NOT NULL,
+  previous_label VARCHAR(190) NULL,
+  proposed_label VARCHAR(190) NULL,
+  previous_annotation_json JSON NULL,
+  proposed_annotation_json JSON NULL,
+  previous_recipe_step_key VARCHAR(160) NULL,
+  proposed_recipe_step_key VARCHAR(160) NULL,
+  reason VARCHAR(1000) NOT NULL,
+  status ENUM('draft','submitted','approved','rejected','needs_adjudication','superseded') NOT NULL DEFAULT 'submitted',
+  submitted_by BIGINT UNSIGNED NOT NULL,
+  submitted_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  reviewed_by BIGINT UNSIGNED NULL,
+  reviewed_at DATETIME(6) NULL,
+  adjudicated_by BIGINT UNSIGNED NULL,
+  adjudicated_at DATETIME(6) NULL,
+  supersedes_id BIGINT UNSIGNED NULL,
+  immutable_hash CHAR(64) NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_glasses_annotation_correction_public (organization_id,public_id),
+  UNIQUE KEY uq_glasses_annotation_correction_key (organization_id,correction_key),
+  KEY idx_glasses_annotation_correction_queue (organization_id,status,submitted_at),
+  KEY idx_glasses_annotation_correction_sample (organization_id,sample_id,submitted_at),
+  CONSTRAINT fk_glasses_annotation_correction_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  CONSTRAINT fk_glasses_annotation_correction_media FOREIGN KEY (media_id) REFERENCES glasses_vision_training_media(id) ON DELETE CASCADE,
+  CONSTRAINT fk_glasses_annotation_correction_sample FOREIGN KEY (sample_id) REFERENCES glasses_vision_training_samples(id) ON DELETE CASCADE,
+  CONSTRAINT fk_glasses_annotation_correction_submitter FOREIGN KEY (submitted_by) REFERENCES users(id),
+  CONSTRAINT fk_glasses_annotation_correction_reviewer FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_glasses_annotation_correction_adjudicator FOREIGN KEY (adjudicated_by) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_glasses_annotation_correction_supersedes FOREIGN KEY (supersedes_id) REFERENCES glasses_vision_annotation_corrections(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS glasses_vision_annotation_correction_events (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  organization_id BIGINT UNSIGNED NOT NULL,
+  correction_id BIGINT UNSIGNED NOT NULL,
+  event_type VARCHAR(64) NOT NULL,
+  actor_user_id BIGINT UNSIGNED NULL,
+  evidence_json JSON NULL,
+  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (id),
+  KEY idx_glasses_annotation_correction_events (organization_id,correction_id,created_at),
+  CONSTRAINT fk_glasses_annotation_correction_event_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  CONSTRAINT fk_glasses_annotation_correction_event_correction FOREIGN KEY (correction_id) REFERENCES glasses_vision_annotation_corrections(id) ON DELETE CASCADE,
+  CONSTRAINT fk_glasses_annotation_correction_event_actor FOREIGN KEY (actor_user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+ALTER TABLE glasses_vision_sample_reviews
+  DROP INDEX uq_glasses_vision_sample_review_user,
+  ADD COLUMN correction_id BIGINT UNSIGNED NULL AFTER sample_id,
+  ADD COLUMN correction_scope_id BIGINT UNSIGNED GENERATED ALWAYS AS (COALESCE(correction_id,0)) STORED AFTER correction_id,
+  ADD UNIQUE KEY uq_glasses_vision_sample_review_scope_user (sample_id,correction_scope_id,reviewer_user_id),
+  ADD KEY idx_glasses_vision_sample_review_correction (organization_id,correction_id,created_at),
+  ADD CONSTRAINT fk_glasses_vision_sample_review_correction FOREIGN KEY (correction_id) REFERENCES glasses_vision_annotation_corrections(id) ON DELETE CASCADE;
