@@ -5,17 +5,22 @@ on:
     paths:
       - 'database/20261127_v11_training_assignment_operator_identity.sql'
       - 'database/20261128_v11_production_evidence_capture.sql'
+      - 'database/20261129_v11_annotation_corrections.sql'
       - 'includes/glasses-training-identity.php'
       - 'includes/glasses-production-evidence.php'
+      - 'includes/glasses-annotation-workbench.php'
       - 'api/glasses-device.php'
       - 'api/glasses-vision-lab.php'
       - 'glasses-vision-lab.php'
       - 'assets/js/glasses-training-identity.js'
       - 'assets/js/glasses-production-evidence.js'
+      - 'assets/js/glasses-annotation-workbench.js'
       - 'tests/glasses-v11-training-identity-contract.php'
       - 'tests/glasses-v11-production-evidence-contract.php'
+      - 'tests/glasses-v11-annotation-workbench-contract.php'
       - 'docs/GLASSES-V11-TRAINING-IDENTITY.md'
       - 'docs/GLASSES-V11-PRODUCTION-EVIDENCE.md'
+      - 'docs/GLASSES-V11-ANNOTATION-WORKBENCH.md'
       - '.github/workflows/glasses-v11.yml'
   push:
     branches: [main]
@@ -46,13 +51,16 @@ jobs:
         run: |
           php -l includes/glasses-training-identity.php
           php -l includes/glasses-production-evidence.php
+          php -l includes/glasses-annotation-workbench.php
           php -l api/glasses-device.php
           php -l api/glasses-vision-lab.php
           php -l glasses-vision-lab.php
           php -l tests/glasses-v11-training-identity-contract.php
           php -l tests/glasses-v11-production-evidence-contract.php
+          php -l tests/glasses-v11-annotation-workbench-contract.php
           node --check assets/js/glasses-training-identity.js
           node --check assets/js/glasses-production-evidence.js
+          node --check assets/js/glasses-annotation-workbench.js
       - name: Architecture guardrails
         run: |
           grep -q 'GLASSES_TRAINING_ASSIGNMENT_SCHEMA' includes/glasses-training-identity.php
@@ -71,6 +79,12 @@ jobs:
           grep -q 'training.evidence_eligibility' api/glasses-vision-lab.php
           ! grep -q 'kds_transition(' includes/glasses-production-evidence.php
           ! grep -q 'glasses_handoff_to_expo(' includes/glasses-production-evidence.php
+          grep -q 'GLASSES_V11_ANNOTATION_CORRECTION_SCHEMA' includes/glasses-annotation-workbench.php
+          grep -q 'correction_id BIGINT UNSIGNED NULL' database/20261129_v11_annotation_corrections.sql
+          grep -q 'annotation.adjudicate' api/glasses-vision-lab.php
+          ! grep -q 'kds_transition(' includes/glasses-annotation-workbench.php
+          ! grep -q 'glasses_handoff_to_expo(' includes/glasses-annotation-workbench.php
+          ! grep -q 'glasses_vision_model_rollout_activate(' includes/glasses-annotation-workbench.php
       - name: Install schema
         run: |
           sudo apt-get update -qq
@@ -98,6 +112,9 @@ jobs:
         run: php tests/glasses-v11-training-identity-contract.php
       - name: V11 production evidence capture contract
         run: php tests/glasses-v11-production-evidence-contract.php
+
+      - name: V11 human corrections and annotation workbench contract
+        run: php tests/glasses-v11-annotation-workbench-contract.php
 
       - name: V10 RC1 regression
         run: php tests/glasses-v10-rc1-acceptance-contract.php
