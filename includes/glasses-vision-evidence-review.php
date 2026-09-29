@@ -32,6 +32,7 @@ function glasses_vision_evidence_review_policy(): array
       'maximumClassRegressions'=>0,
       'maximumLatencyRegressionRatio'=>0.20,
       'maximumTimeoutRegression'=>0,
+      'minimumRuntimeSamples'=>20,
     ];
 }
 
@@ -104,7 +105,7 @@ function glasses_vision_evidence_review_run(PDO $pdo,int $org,string $experiment
       glasses_vision_evidence_review_check('failure_accuracy','Production failure accuracy delta',$failureDelta>=$policy['minimumFailureAccuracyDelta'],round($failureDelta,6),'>= '.$policy['minimumFailureAccuracyDelta']),
       glasses_vision_evidence_review_check('critical_regressions','Safety-critical regressions',$failure['criticalRegressions']<=$policy['maximumCriticalRegressions'],$failure['criticalRegressions'],$policy['maximumCriticalRegressions']),
       glasses_vision_evidence_review_check('class_regressions','Class-level regressions',count($failure['classRegressions'])<=$policy['maximumClassRegressions'],count($failure['classRegressions']),$policy['maximumClassRegressions']),
-      glasses_vision_evidence_review_check('runtime_samples','Runtime comparison sample count',$runtime['sampleCount']>=20,$runtime['sampleCount'],'>= 20'),
+      glasses_vision_evidence_review_check('runtime_samples','Runtime comparison sample count',$runtime['sampleCount']>=$policy['minimumRuntimeSamples'],$runtime['sampleCount'],'>= '.$policy['minimumRuntimeSamples']),
       glasses_vision_evidence_review_check('latency_regression','Latency regression ratio',$latencyRatio<=$policy['maximumLatencyRegressionRatio'],round($latencyRatio,6),'<= '.$policy['maximumLatencyRegressionRatio']),
       glasses_vision_evidence_review_check('timeout_regression','Timeout regression',$timeoutDelta<=$policy['maximumTimeoutRegression'],$timeoutDelta,'<= '.$policy['maximumTimeoutRegression']),
     ];
