@@ -28,4 +28,4 @@ v66_assert(str_contains($pipeline,'qualificationHash')&&str_contains($pipeline,'
 v66_assert(str_contains($api,'training_qualification.run')&&!str_contains($api,'kds_transition'),'Qualification API must not mutate production KDS truth.');
 v66_assert(str_contains($page,'Pre-Training Qualification Gate'),'Vision Lab must expose the readiness scorecard workspace.');
 
-echo "vision-lab-v6-pretraining-qualification-ok\n";
+// Anchor exact-head CI after documentation and final gate hardening.\necho "vision-lab-v6-pretraining-qualification-ok\n";
