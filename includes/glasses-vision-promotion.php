@@ -172,6 +172,8 @@ function glasses_vision_promotion_create_rollout(PDO $pdo,int $org,string $publi
 function glasses_vision_promotion_db_row(PDO $pdo,int $org,string $publicId,bool $forUpdate=false): array
 {
     $q=$pdo->prepare("SELECT p.*,rv.public_id review_public_id,rv.review_hash,x.public_id experiment_public_id,x.experiment_hash,
+      d.public_id dataset_public_id,d.dataset_hash,tr.public_id release_public_id,tr.release_hash,
+      tq.public_id qualification_public_id,tq.qualification_hash,
       b.public_id batch_public_id,b.batch_hash,m.public_id mining_run_public_id,m.run_hash,m.source_fingerprint,
       cp.public_id champion_public_id,cp.artifact_sha256 champion_sha,
       xp.public_id challenger_public_id,xp.artifact_sha256 challenger_sha,
@@ -180,6 +182,9 @@ function glasses_vision_promotion_db_row(PDO $pdo,int $org,string $publicId,bool
       FROM glasses_vision_model_promotions p
       JOIN glasses_vision_model_evidence_reviews rv ON rv.id=p.evidence_review_id AND rv.organization_id=p.organization_id
       JOIN glasses_vision_model_experiments x ON x.id=p.experiment_id AND x.organization_id=p.organization_id
+      JOIN glasses_vision_dataset_versions d ON d.id=x.candidate_dataset_id AND d.organization_id=p.organization_id
+      JOIN glasses_vision_training_releases tr ON tr.id=x.training_release_id AND tr.organization_id=p.organization_id
+      JOIN glasses_vision_training_qualifications tq ON tq.id=x.qualification_id AND tq.organization_id=p.organization_id
       JOIN glasses_vision_retraining_batches b ON b.id=p.retraining_batch_id AND b.organization_id=p.organization_id
       JOIN glasses_vision_mining_runs m ON m.id=p.mining_run_id AND m.organization_id=p.organization_id
       JOIN glasses_vision_model_packages cp ON cp.id=p.champion_package_id AND cp.organization_id=p.organization_id
@@ -201,6 +206,9 @@ function glasses_vision_promotion_verify(PDO $pdo,int $org,array $p): array
     $add('experiment_hash',($audit['experiment']['experimentHash']??null)===$p['experiment_hash'],$audit['experiment']['experimentHash']??null,$p['experiment_hash']);
     $add('batch_hash',($audit['retrainingBatch']['batchHash']??null)===$p['batch_hash'],$audit['retrainingBatch']['batchHash']??null,$p['batch_hash']);
     $add('mining_run_hash',($audit['miningRun']['runHash']??null)===$p['run_hash'],$audit['miningRun']['runHash']??null,$p['run_hash']);
+    $add('dataset_hash',($audit['dataset']['datasetHash']??null)===$p['dataset_hash'],$audit['dataset']['datasetHash']??null,$p['dataset_hash']);
+    $add('release_hash',($audit['trainingRelease']['releaseHash']??null)===$p['release_hash'],$audit['trainingRelease']['releaseHash']??null,$p['release_hash']);
+    $add('qualification_hash',($audit['qualification']['qualificationHash']??null)===$p['qualification_hash'],$audit['qualification']['qualificationHash']??null,$p['qualification_hash']);
     $add('champion_hash',($audit['champion']['artifactSha256']??null)===$p['champion_sha'],$audit['champion']['artifactSha256']??null,$p['champion_sha']);
     $add('challenger_hash',($audit['challenger']['artifactSha256']??null)===$p['challenger_sha'],$audit['challenger']['artifactSha256']??null,$p['challenger_sha']);
     foreach((array)($audit['productionErrors']??[]) as $i=>$e){
