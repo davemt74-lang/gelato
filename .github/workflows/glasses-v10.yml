@@ -6,6 +6,7 @@ on:
       - 'includes/glasses-hardware-runtime.php'
       - 'includes/glasses-frame-pipeline.php'
       - 'includes/glasses-device-health.php'
+      - 'includes/glasses-runtime-recovery.php'
       - 'includes/glasses-simulator.php'
       - 'api/glasses-simulator.php'
       - 'glasses-simulator.php'
@@ -13,9 +14,11 @@ on:
       - 'tests/glasses-v10-hardware-runtime-adapter-contract.php'
       - 'tests/glasses-v10-frame-pipeline-contract.php'
       - 'tests/glasses-v10-device-health-contract.php'
+      - 'tests/glasses-v10-runtime-recovery-contract.php'
       - 'docs/GLASSES-V10-HARDWARE-RUNTIME.md'
       - 'docs/GLASSES-V10-FRAME-PIPELINE.md'
       - 'docs/GLASSES-V10-DEVICE-HEALTH.md'
+      - 'docs/GLASSES-V10-RUNTIME-RECOVERY.md'
       - '.github/workflows/glasses-v10.yml'
   push:
     branches: [main]
@@ -48,12 +51,14 @@ jobs:
           php -l includes/glasses-hardware-runtime.php
           php -l includes/glasses-frame-pipeline.php
           php -l includes/glasses-device-health.php
+          php -l includes/glasses-runtime-recovery.php
           php -l includes/glasses-simulator.php
           php -l api/glasses-simulator.php
           php -l glasses-simulator.php
           php -l tests/glasses-v10-hardware-runtime-adapter-contract.php
           php -l tests/glasses-v10-frame-pipeline-contract.php
           php -l tests/glasses-v10-device-health-contract.php
+          php -l tests/glasses-v10-runtime-recovery-contract.php
           node --check assets/js/glasses-web-simulator.js
 
       - name: Architecture guardrails
@@ -83,6 +88,14 @@ jobs:
           grep -q 'downloadDeviceDiagnostics' assets/js/glasses-web-simulator.js
           ! grep -q 'kds_transition(' includes/glasses-device-health.php
           ! grep -q 'glasses_build_confirm(' includes/glasses-device-health.php
+          grep -q 'GLASSES_RUNTIME_RECOVERY_SCHEMA' includes/glasses-runtime-recovery.php
+          grep -q 'function glasses_runtime_recovery_decide' includes/glasses-runtime-recovery.php
+          grep -q 'hardware.recovery.contract' includes/glasses-simulator.php
+          grep -q 'hardware.recovery.decide' includes/glasses-simulator.php
+          grep -q 'rehydrateCanonicalBuild' assets/js/glasses-web-simulator.js
+          grep -q 'RUNTIME_FRESH_BARRIER_MS' assets/js/glasses-web-simulator.js
+          ! grep -q 'kds_transition(' includes/glasses-runtime-recovery.php
+          ! grep -q 'glasses_handoff_to_expo(' includes/glasses-runtime-recovery.php
 
       - name: Install schema
         run: |
@@ -116,6 +129,9 @@ jobs:
 
       - name: V10 device health telemetry and diagnostics contract
         run: php tests/glasses-v10-device-health-contract.php
+
+      - name: V10 disconnect reconnect recovery contract
+        run: php tests/glasses-v10-runtime-recovery-contract.php
 
       - name: Existing simulator regression
         run: php tests/glasses-web-simulator-contract.php
