@@ -107,6 +107,9 @@ v92_assert((int)v92_one($pdo,"SELECT COUNT(*) FROM glasses_build_observations WH
 v92_assert((string)v92_one($pdo,"SELECT status FROM glasses_build_components WHERE organization_id=? AND build_session_id=? AND component_key=?",[$org,$sessionId,$cheeseKey])==='waiting','Recognition must not confirm the current component.');
 
 glasses_build_confirm($pdo,$device,$sessionPublic,$cheeseKey);
+$staleSceneBlocked=false;try{glasses_vision_step_recognize($pdo,$org,$scene1['publicId']);}catch(InvalidArgumentException){$staleSceneBlocked=true;}
+v92_assert($staleSceneBlocked,'A previously valid scene must not generate new step guidance after canonical build state advances.');
+v92_assert(glasses_vision_step_verify($pdo,$org,$rec1['publicId'])['passed'],'Previously captured recognition must remain historically verifiable after build state advances.');
 $scene2=v92_scene($pdo,$device,$sessionPublic,$slug,'pepperoni',[
  ['entityKey'=>'pepperoni','kind'=>'ingredient','label'=>'pepperoni','trackingId'=>'pep-1','source'=>'vision_model','confidence'=>.97,'bbox'=>[.25,.25,.15,.15]],
  ['entityKey'=>'pizza','kind'=>'product','label'=>'Step Pizza','trackingId'=>'pizza-2','source'=>'device_runtime','confidence'=>.99,'bbox'=>[.30,.45,.40,.35]],
