@@ -301,6 +301,16 @@ function glasses_vision_scene_verify(PDO $pdo,int $org,string $publicId): array
     $sourceFingerprint=hash('sha256',glasses_vision_training_release_json($source));
     $material=['sourceFingerprint'=>$sourceFingerprint,'sceneState'=>$s['sceneState'],'context'=>$s['context'],'relationships'=>$s['relationships'],'summary'=>$s['summary']];
     $sceneHash=hash('sha256',glasses_vision_training_release_json($material));
+    $aq=$pdo->prepare("SELECT a.package_id,p.public_id,p.artifact_sha256
+      FROM glasses_vision_model_assignments a
+      JOIN glasses_vision_model_packages p ON p.id=a.package_id AND p.organization_id=a.organization_id
+      JOIN glasses_build_sessions b ON b.id=a.build_session_id AND b.organization_id=a.organization_id
+      JOIN glasses_devices d ON d.id=a.device_id AND d.organization_id=a.organization_id
+      WHERE a.organization_id=? AND a.assignment_key=? AND b.public_id=? AND d.public_id=? LIMIT 1");
+    $aq->execute([$org,$s['assignmentKey'],$s['buildSessionPublicId'],$s['devicePublicId']]);$assignment=$aq->fetch();
+    $assignmentValid=$assignment
+      &&hash_equals((string)$assignment['public_id'],(string)$s['modelPackagePublicId'])
+      &&hash_equals((string)$assignment['artifact_sha256'],(string)$s['modelArtifactSha256']);
     $entitiesValid=true;
     foreach($s['entities'] as $e){
         $material=[
@@ -310,8 +320,8 @@ function glasses_vision_scene_verify(PDO $pdo,int $org,string $publicId): array
         if(!hash_equals($e['entityHash'],hash('sha256',glasses_vision_training_release_json($material)))){$entitiesValid=false;break;}
     }
     return [
-      'passed'=>$entitiesValid&&hash_equals($s['sourceFingerprint'],$sourceFingerprint)&&hash_equals($s['sceneHash'],$sceneHash),
-      'entitiesValid'=>$entitiesValid,'sourceFingerprint'=>$s['sourceFingerprint'],'recomputedSourceFingerprint'=>$sourceFingerprint,
+      'passed'=>$assignmentValid&&$entitiesValid&&hash_equals($s['sourceFingerprint'],$sourceFingerprint)&&hash_equals($s['sceneHash'],$sceneHash),
+      'assignmentValid'=>(bool)$assignmentValid,'entitiesValid'=>$entitiesValid,'sourceFingerprint'=>$s['sourceFingerprint'],'recomputedSourceFingerprint'=>$sourceFingerprint,
       'sceneHash'=>$s['sceneHash'],'recomputedSceneHash'=>$sceneHash
     ];
 }
