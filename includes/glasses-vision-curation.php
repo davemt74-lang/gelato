@@ -33,6 +33,7 @@ function glasses_vision_curation_rows(PDO $pdo,int $org,string $datasetPublic): 
       di.split_name,di.created_at dataset_added_at,
       bs.public_id build_public_id,k.location_id,l.name location_name,k.station_id,ks.name station_name,pci.menu_item_id,mi.name menu_item_name,
       (SELECT GROUP_CONCAT(DISTINCT m.capture_group ORDER BY m.capture_group SEPARATOR '||') FROM glasses_vision_training_media m WHERE m.organization_id=s.organization_id AND m.sample_id=s.id AND m.status='active' AND m.capture_group IS NOT NULL) capture_groups,
+      (SELECT GROUP_CONCAT(DISTINCT m.device_id ORDER BY m.device_id SEPARATOR '||') FROM glasses_vision_training_media m WHERE m.organization_id=s.organization_id AND m.sample_id=s.id AND m.status='active' AND m.device_id IS NOT NULL) device_ids,
       ce.decision curation_decision,ce.reason curation_reason,ce.created_at curation_at
       FROM glasses_vision_dataset_items di
       JOIN glasses_vision_training_samples s ON s.id=di.sample_id AND s.organization_id=di.organization_id
@@ -54,7 +55,7 @@ function glasses_vision_curation_rows(PDO $pdo,int $org,string $datasetPublic): 
             'buildPublicId'=>$r['build_public_id'],'locationId'=>$r['location_id']!==null?(int)$r['location_id']:null,'locationName'=>$r['location_name'],
             'stationId'=>$r['station_id']!==null?(int)$r['station_id']:null,'stationName'=>$r['station_name'],
             'menuItemId'=>$r['menu_item_id']!==null?(int)$r['menu_item_id']:null,'menuItemName'=>$r['menu_item_name'],
-            'captureGroups'=>$r['capture_groups']?explode('||',(string)$r['capture_groups']):[],
+            'captureGroups'=>$r['capture_groups']?explode('||',(string)$r['capture_groups']):[],'deviceIds'=>$r['device_ids']?array_map('intval',explode('||',(string)$r['device_ids'])):[],
             'curationDecision'=>$r['curation_decision']?:'include','curationReason'=>$r['curation_reason'],'curationAt'=>$r['curation_at'],
         ];
     },$q->fetchAll());
@@ -69,6 +70,7 @@ function glasses_vision_curation_union_find(array $rows,array $policy): array {
         $tokens=[];
         if(($policy['captureGroup']??true)===true)foreach($row['captureGroups'] as $v)$tokens[]='capture:'.$v;
         if(($policy['buildSession']??true)===true && $row['buildPublicId'])$tokens[]='build:'.$row['buildPublicId'];
+        if(($policy['device']??false)===true)foreach(($row['deviceIds']??[]) as $v)$tokens[]='device:'.$v;
         if(($policy['operator']??false)===true && $row['operatorUserId'])$tokens[]='operator:'.$row['operatorUserId'];
         if(($policy['location']??false)===true && $row['locationId'])$tokens[]='location:'.$row['locationId'];
         if(($policy['station']??false)===true && $row['stationId'])$tokens[]='station:'.$row['stationId'];
@@ -107,12 +109,12 @@ function glasses_vision_curation_create_split_plan(PDO $pdo,int $org,string $dat
     if(count($rows)<3)throw new InvalidArgumentException('At least three included approved samples are required.');
     $policy=[
         'captureGroup'=>($input['captureGroup']??true)!==false,'buildSession'=>($input['buildSession']??true)!==false,
-        'operator'=>($input['operator']??false)===true,'location'=>($input['location']??false)===true,
+        'device'=>($input['device']??false)===true,'operator'=>($input['operator']??false)===true,'location'=>($input['location']??false)===true,
         'station'=>($input['station']??false)===true,'menuItem'=>($input['menuItem']??false)===true,
     ];
     $seed=max(0,(int)($input['seed']??74));$train=(float)($input['trainRatio']??.70);$val=(float)($input['valRatio']??.15);$test=(float)($input['testRatio']??.15);
     $split=glasses_vision_curation_split_groups(glasses_vision_curation_union_find($rows,$policy),$seed,$train,$val,$test);
-    $assignments=[];foreach($split['groups'] as $group)foreach($group['rows'] as $row)$assignments[]=['samplePublicId'=>$row['samplePublicId'],'groupKey'=>$group['key'],'groupLabel'=>$group['label'],'split'=>$group['split'],'grouping'=>['captureGroups'=>$row['captureGroups'],'buildPublicId'=>$row['buildPublicId'],'operatorUserId'=>$row['operatorUserId'],'locationId'=>$row['locationId'],'stationId'=>$row['stationId'],'menuItemId'=>$row['menuItemId']]];
+    $assignments=[];foreach($split['groups'] as $group)foreach($group['rows'] as $row)$assignments[]=['samplePublicId'=>$row['samplePublicId'],'groupKey'=>$group['key'],'groupLabel'=>$group['label'],'split'=>$group['split'],'grouping'=>['captureGroups'=>$row['captureGroups'],'deviceIds'=>$row['deviceIds']??[],'buildPublicId'=>$row['buildPublicId'],'operatorUserId'=>$row['operatorUserId'],'locationId'=>$row['locationId'],'stationId'=>$row['stationId'],'menuItemId'=>$row['menuItemId']]];
     usort($assignments,static fn($a,$b)=>strcmp($a['samplePublicId'],$b['samplePublicId']));
     $manifest=['schema'=>'gelato.vision_group_split.v1','datasetPublicId'=>$datasetPublic,'seed'=>$seed,'ratios'=>['train'=>$train,'val'=>$val,'test'=>$test],'policy'=>$policy,'counts'=>$split['counts'],'groupCount'=>count($split['groups']),'assignments'=>$assignments];
     $hash=hash('sha256',json_encode($manifest,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR));$public=glasses_public_id('vision-split');
