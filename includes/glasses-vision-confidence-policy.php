@@ -141,6 +141,9 @@ function glasses_vision_confidence_policy_status(PDO $pdo,int $org,string $publi
             if(!glasses_vision_confidence_policy_verify($pdo,$org,$publicId)['passed'])throw new InvalidArgumentException('Confidence policy failed integrity verification.');
             if((float)$r['hard_floor']<GLASSES_VISION_CONFIDENCE_HARD_FLOOR||(float)$r['default_threshold']<(float)$r['hard_floor'])
                 throw new InvalidArgumentException('Confidence policy violates the hard safety floor.');
+            $dup=$pdo->prepare("SELECT COUNT(*) FROM glasses_vision_confidence_policies WHERE organization_id=? AND detector_name=? AND status='active' AND id<>? AND ((package_id IS NULL AND ? IS NULL) OR package_id=?)");
+            $pkg=$r['package_id']!==null?(int)$r['package_id']:null;$dup->execute([$org,$r['detector_name'],(int)$r['id'],$pkg,$pkg]);
+            if((int)$dup->fetchColumn()>0)throw new InvalidArgumentException('Retire the existing active confidence policy for this detector/model scope before activating another.');
             if($r['package_id']!==null){
                 $q2=$pdo->prepare("SELECT status FROM glasses_vision_model_packages WHERE organization_id=? AND id=?");$q2->execute([$org,(int)$r['package_id']]);
                 if((string)$q2->fetchColumn()!=='ready')throw new InvalidArgumentException('Confidence policy model package is no longer ready.');
