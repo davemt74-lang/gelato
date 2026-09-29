@@ -47,6 +47,8 @@ $run=glasses_vision_mining_run($pdo,$org,['maxOpenPerCluster'=>2,'maxOpenPerMode
 $r=$run['result'];$cands=$r['candidates'];
 v73_assert(($r['summary']['sourceEvents']??0)===8&&($r['summary']['eligibleCandidates']??0)===8,'Mining must consider each immutable production error exactly once.');
 v73_assert(preg_match('/^[a-f0-9]{64}$/',$run['sourceFingerprint'])===1&&preg_match('/^[a-f0-9]{64}$/',$run['runHash'])===1,'Mining source set and result must be SHA-256 bound.');
+foreach($cands as $candidate)v73_assert(preg_match('/^[a-f0-9]{64}$/',(string)$candidate['candidateHash'])===1,'Every mined candidate must carry an immutable SHA-256 evidence hash.');
+
 
 $counter=v73_rows($cands,'counterexample');$missed=v73_rows($cands,'missed_positive');$mis=v73_rows($cands,'misclassification');$hard=v73_rows($cands,'hard_positive');
 v73_assert(count($counter)===5&&count($missed)===1&&count($mis)===1&&count($hard)===1,'Error types must map to the correct mining candidate classes.');
