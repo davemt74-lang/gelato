@@ -10,6 +10,7 @@ on:
       - 'database/20261201_v11_dataset_assembly_versioning.sql'
       - 'database/20261202_v11_training_run_orchestration.sql'
       - 'database/20261203_v11_model_evaluation_benchmarks.sql'
+      - 'database/20261204_v11_model_release_candidate_governance.sql'
       - 'includes/glasses-training-identity.php'
       - 'includes/glasses-production-evidence.php'
       - 'includes/glasses-annotation-workbench.php'
@@ -17,6 +18,8 @@ on:
       - 'includes/glasses-v11-dataset-assembly.php'
       - 'includes/glasses-v11-training-runs.php'
       - 'includes/glasses-v11-model-evaluation.php'
+      - 'includes/glasses-v11-model-release-candidates.php'
+      - 'includes/glasses-vision-promotion.php'
       - 'includes/glasses-vision-evidence-review.php'
       - 'includes/glasses-vision-curation.php'
       - 'includes/glasses-vision-lab.php'
@@ -30,6 +33,7 @@ on:
       - 'assets/js/glasses-v11-dataset-assembly.js'
       - 'assets/js/glasses-v11-training-runs.js'
       - 'assets/js/glasses-v11-model-evaluation.js'
+      - 'assets/js/glasses-v11-model-release-candidates.js'
       - 'tests/glasses-v11-training-identity-contract.php'
       - 'tests/glasses-v11-production-evidence-contract.php'
       - 'tests/glasses-v11-annotation-workbench-contract.php'
@@ -37,6 +41,7 @@ on:
       - 'tests/glasses-v11-dataset-assembly-contract.php'
       - 'tests/glasses-v11-training-run-orchestration-contract.php'
       - 'tests/glasses-v11-model-evaluation-contract.php'
+      - 'tests/glasses-v11-model-release-candidate-contract.php'
       - 'docs/GLASSES-V11-TRAINING-IDENTITY.md'
       - 'docs/GLASSES-V11-PRODUCTION-EVIDENCE.md'
       - 'docs/GLASSES-V11-ANNOTATION-WORKBENCH.md'
@@ -44,6 +49,7 @@ on:
       - 'docs/GLASSES-V11-DATASET-ASSEMBLY.md'
       - 'docs/GLASSES-V11-TRAINING-RUNS.md'
       - 'docs/GLASSES-V11-MODEL-EVALUATION.md'
+      - 'docs/GLASSES-V11-MODEL-RELEASE-CANDIDATES.md'
       - '.github/workflows/glasses-v11.yml'
   push:
     branches: [main]
@@ -79,6 +85,8 @@ jobs:
           php -l includes/glasses-v11-dataset-assembly.php
           php -l includes/glasses-v11-training-runs.php
           php -l includes/glasses-v11-model-evaluation.php
+          php -l includes/glasses-v11-model-release-candidates.php
+          php -l includes/glasses-vision-promotion.php
           php -l includes/glasses-vision-evidence-review.php
           php -l includes/glasses-vision-curation.php
           php -l includes/glasses-vision-lab.php
@@ -92,6 +100,7 @@ jobs:
           php -l tests/glasses-v11-dataset-assembly-contract.php
           php -l tests/glasses-v11-training-run-orchestration-contract.php
           php -l tests/glasses-v11-model-evaluation-contract.php
+          php -l tests/glasses-v11-model-release-candidate-contract.php
           node --check assets/js/glasses-training-identity.js
           node --check assets/js/glasses-production-evidence.js
           node --check assets/js/glasses-annotation-workbench.js
@@ -99,6 +108,7 @@ jobs:
           node --check assets/js/glasses-v11-dataset-assembly.js
           node --check assets/js/glasses-v11-training-runs.js
           node --check assets/js/glasses-v11-model-evaluation.js
+          node --check assets/js/glasses-v11-model-release-candidates.js
       - name: Architecture guardrails
         run: |
           grep -q 'GLASSES_TRAINING_ASSIGNMENT_SCHEMA' includes/glasses-training-identity.php
@@ -149,6 +159,13 @@ jobs:
           grep -q 'passing model benchmark' includes/glasses-vision-evidence-review.php
           ! grep -q 'glasses_vision_model_rollout_activate(' includes/glasses-v11-model-evaluation.php
           ! grep -q 'glasses_vision_promotion_' includes/glasses-v11-model-evaluation.php
+          grep -q 'GLASSES_V11_MODEL_RC_SCHEMA' includes/glasses-v11-model-release-candidates.php
+          grep -q 'CREATE TABLE glasses_vision_model_release_candidates' database/20261204_v11_model_release_candidate_governance.sql
+          ! grep -q 'CREATE TABLE glasses_vision_model_packages' database/20261204_v11_model_release_candidate_governance.sql
+          grep -q 'model_rc.create' api/glasses-vision-lab.php
+          grep -q 'approved model release candidate' includes/glasses-vision-promotion.php
+          ! grep -q 'glasses_vision_model_rollout_activate(' includes/glasses-v11-model-release-candidates.php
+          ! grep -q 'rollout.advance' includes/glasses-v11-model-release-candidates.php
       - name: Install schema
         run: |
           sudo apt-get update -qq
@@ -191,6 +208,9 @@ jobs:
 
       - name: V11 model evaluation validation and benchmark contract
         run: php tests/glasses-v11-model-evaluation-contract.php
+
+      - name: V11 model release candidate governance contract
+        run: php tests/glasses-v11-model-release-candidate-contract.php
 
       - name: V10 RC1 regression
         run: php tests/glasses-v10-rc1-acceptance-contract.php
