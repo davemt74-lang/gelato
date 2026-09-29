@@ -150,7 +150,7 @@ function glasses_vision_mining_build(PDO $pdo,int $org,array $policy): array
           'clusterKey'=>$cluster['key'],'reasons'=>$reasons,
           'lineage'=>glasses_vision_mining_lineage($pdo,$org,$e['model_package_public_id']?:null),
         ];
-        $hashBody=$candidate;unset($hashBody['status']);$candidate['candidateHash']=hash('sha256',glasses_vision_training_release_json($hashBody));
+        $candidate['candidateHash']='';
         $candidates[]=$candidate;
     }
     usort($candidates,static fn($a,$b)=>$b['score']<=>$a['score']?:strcmp($a['candidateKey'],$b['candidateKey']));
@@ -169,6 +169,7 @@ function glasses_vision_mining_build(PDO $pdo,int $org,array $policy): array
         $selected++;$open++;
     }
     unset($c);
+    foreach($candidates as &$c){$hashBody=$c;unset($hashBody['candidateHash']);$c['candidateHash']=hash('sha256',glasses_vision_training_release_json($hashBody));}unset($c);
     return [
       'schema'=>GLASSES_VISION_MINING_SCHEMA,'policy'=>$policy,'sourceFingerprint'=>$fingerprint,'sourceEvents'=>$sourceEvents,
       'summary'=>['sourceEvents'=>count($events),'eligibleCandidates'=>count($candidates),'open'=>$open,'suppressed'=>$suppressed],
@@ -196,8 +197,6 @@ function glasses_vision_mining_run(PDO $pdo,int $org,array $requested,int $actor
           (organization_id,public_id,mining_run_id,production_error_id,candidate_key,candidate_hash,candidate_type,score,status,cluster_key,model_package_id,predicted_component_key,expected_component_key,reasons_json,lineage_json)
           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
         foreach($result['candidates'] as $c){
-            $q=$pdo->prepare("SELECT id FROM glasses_vision_mined_candidates WHERE organization_id=? AND candidate_key=? LIMIT 1");
-            $q->execute([$org,$c['candidateKey']]);if($q->fetchColumn())continue;
             $insert->execute([$org,glasses_public_id('vision-mined'),$runId,$c['productionErrorId'],$c['candidateKey'],$c['candidateHash'],$c['candidateType'],$c['score'],$c['status'],$c['clusterKey'],$c['modelPackageId'],$c['predictedComponentKey'],$c['expectedComponentKey'],json_encode($c['reasons'],JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),$c['lineage']?json_encode($c['lineage'],JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE):null]);
         }
         return glasses_vision_mining_run_row($pdo,$org,$public);
