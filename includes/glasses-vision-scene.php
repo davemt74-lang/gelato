@@ -232,15 +232,15 @@ function glasses_vision_scene_capture(PDO $pdo,array $device,array $input): arra
     $material=['sourceFingerprint'=>$sourceFingerprint,'sceneState'=>$sceneState,'context'=>$context,'relationships'=>$relationships,'summary'=>$summary];
     $sceneHash=hash('sha256',glasses_vision_training_release_json($material));
 
-    $q=$pdo->prepare("SELECT public_id,source_fingerprint,scene_hash FROM glasses_vision_scene_snapshots WHERE organization_id=? AND device_id=? AND build_session_id=? AND frame_key=? LIMIT 1");
-    $q->execute([$org,(int)$device['id'],(int)$session['id'],$frameKey]);$existing=$q->fetch();
-    if($existing){
-        if(!hash_equals((string)$existing['source_fingerprint'],$sourceFingerprint)||!hash_equals((string)$existing['scene_hash'],$sceneHash))
-            throw new InvalidArgumentException('Scene frame key was already used with different immutable evidence.');
-        return glasses_vision_scene_row($pdo,$org,(string)$existing['public_id']);
-    }
-
     return glasses_transaction($pdo,function()use($pdo,$org,$device,$session,$package,$calibrationId,$frameKey,$width,$height,$pixel,$capturedAt,$assignment,$sourceFingerprint,$sceneState,$context,$relationships,$summary,$sceneHash,$entities):array{
+        $q=$pdo->prepare("SELECT public_id,source_fingerprint,scene_hash FROM glasses_vision_scene_snapshots
+          WHERE organization_id=? AND device_id=? AND build_session_id=? AND frame_key=? LIMIT 1 FOR UPDATE");
+        $q->execute([$org,(int)$device['id'],(int)$session['id'],$frameKey]);$existing=$q->fetch();
+        if($existing){
+            if(!hash_equals((string)$existing['source_fingerprint'],$sourceFingerprint)||!hash_equals((string)$existing['scene_hash'],$sceneHash))
+                throw new InvalidArgumentException('Scene frame key was already used with different immutable evidence.');
+            return glasses_vision_scene_row($pdo,$org,(string)$existing['public_id']);
+        }
         $public=glasses_public_id('vision-scene');
         $pdo->prepare("INSERT INTO glasses_vision_scene_snapshots
           (organization_id,public_id,device_id,build_session_id,package_id,calibration_id,frame_key,frame_width,frame_height,pixel_format,captured_at,
