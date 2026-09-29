@@ -6,21 +6,28 @@ on:
       - 'database/20261110_vision_lab_v8_production_model_health.sql'
       - 'database/20261111_vision_lab_v8_context_aware_drift.sql'
       - 'database/20261112_vision_lab_v8_calibration_profiles.sql'
+      - 'database/20261113_vision_lab_v8_adaptive_confidence_policy.sql'
       - 'includes/glasses-vision-model-health.php'
       - 'includes/glasses-vision-context-drift.php'
       - 'includes/glasses-vision-calibration-profiles.php'
+      - 'includes/glasses-vision-confidence-policy.php'
+      - 'includes/glasses-vision-lineage.php'
       - 'api/glasses-vision-lab.php'
+      - 'api/glasses-device.php'
       - 'glasses-vision-lab.php'
       - 'assets/js/glasses-vision-model-health.js'
       - 'assets/js/glasses-vision-context-drift.js'
       - 'assets/js/glasses-vision-calibration-profiles.js'
+      - 'assets/js/glasses-vision-confidence-policy.js'
       - 'assets/css/glasses-vision-lab.css'
       - 'tests/glasses-vision-lab-v8-production-model-health-contract.php'
       - 'tests/glasses-vision-lab-v8-context-aware-drift-contract.php'
       - 'tests/glasses-vision-lab-v8-calibration-profile-runtime-contract.php'
+      - 'tests/glasses-vision-lab-v8-adaptive-confidence-policy-contract.php'
       - 'docs/GLASSES-VISION-LAB-V8-MODEL-HEALTH.md'
       - 'docs/GLASSES-VISION-LAB-V8-CONTEXT-DRIFT.md'
       - 'docs/GLASSES-VISION-LAB-V8-CALIBRATION-PROFILES.md'
+      - 'docs/GLASSES-VISION-LAB-V8-ADAPTIVE-CONFIDENCE.md'
       - '.github/workflows/glasses-vision-lab-v8.yml'
   push:
     branches: [main]
@@ -53,14 +60,19 @@ jobs:
           php -l includes/glasses-vision-model-health.php
           php -l includes/glasses-vision-context-drift.php
           php -l includes/glasses-vision-calibration-profiles.php
+          php -l includes/glasses-vision-confidence-policy.php
+          php -l includes/glasses-vision-lineage.php
           php -l api/glasses-vision-lab.php
+          php -l api/glasses-device.php
           php -l glasses-vision-lab.php
           php -l tests/glasses-vision-lab-v8-production-model-health-contract.php
           php -l tests/glasses-vision-lab-v8-context-aware-drift-contract.php
           php -l tests/glasses-vision-lab-v8-calibration-profile-runtime-contract.php
+          php -l tests/glasses-vision-lab-v8-adaptive-confidence-policy-contract.php
           node --check assets/js/glasses-vision-model-health.js
           node --check assets/js/glasses-vision-context-drift.js
           node --check assets/js/glasses-vision-calibration-profiles.js
+          node --check assets/js/glasses-vision-confidence-policy.js
 
       - name: Architecture guardrails
         run: |
@@ -87,6 +99,12 @@ jobs:
           grep -q "'automaticThresholdChange'=>false" includes/glasses-vision-calibration-profiles.php
           ! grep -q 'rollout.activate' includes/glasses-vision-calibration-profiles.php
           ! grep -q 'kds_transition' includes/glasses-vision-calibration-profiles.php
+          grep -q 'CREATE TABLE glasses_vision_confidence_policies' database/20261113_vision_lab_v8_adaptive_confidence_policy.sql
+          grep -q 'CREATE TABLE glasses_vision_confidence_decisions' database/20261113_vision_lab_v8_adaptive_confidence_policy.sql
+          grep -q 'GLASSES_VISION_CONFIDENCE_HARD_FLOOR=0.50' includes/glasses-vision-confidence-policy.php
+          grep -q 'vision.confidence_decision' api/glasses-device.php
+          ! grep -q 'rollout.activate' includes/glasses-vision-confidence-policy.php
+          ! grep -q 'kds_transition' includes/glasses-vision-confidence-policy.php
 
       - name: Install and upgrade schema
         run: |
@@ -120,6 +138,9 @@ jobs:
 
       - name: V8 calibration profile runtime contract
         run: php tests/glasses-vision-lab-v8-calibration-profile-runtime-contract.php
+
+      - name: V8 adaptive confidence policy contract
+        run: php tests/glasses-vision-lab-v8-adaptive-confidence-policy-contract.php
 
       - name: V7 continuous-learning regressions
         run: |

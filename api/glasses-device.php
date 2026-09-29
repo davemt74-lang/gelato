@@ -10,6 +10,7 @@ require_once __DIR__.'/../includes/glasses-handoff.php';
 require_once __DIR__.'/../includes/glasses-calibration.php';
 require_once __DIR__.'/../includes/glasses-vision-profiles.php';
 require_once __DIR__.'/../includes/glasses-vision-models.php';
+require_once __DIR__.'/../includes/glasses-vision-confidence-policy.php';
 
 $pdo=app_pdo();
 if(!glasses_ready($pdo))app_json_response(['ok'=>false,'message'=>'Glasses plugin migration is not installed.'],503);
@@ -104,6 +105,12 @@ try{
     if($action==='vision.drift_sample'){
         $sample=glasses_vision_drift_sample($pdo,$device,$in);
         app_json_response(['ok'=>true,'driftSample'=>$sample]);
+    }
+
+    if($action==='vision.confidence_decision'){
+        $in['devicePublicId']=(string)$device['public_id'];
+        $decision=glasses_vision_confidence_decide($pdo,(int)$device['organization_id'],$in,null);
+        app_json_response(['ok'=>true,'confidenceDecision'=>$decision],201);
     }
 
     if($action==='vision.profile'){
