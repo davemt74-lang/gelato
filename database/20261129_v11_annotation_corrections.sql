@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS glasses_vision_annotation_correction_events (
 ALTER TABLE glasses_vision_sample_reviews
   DROP INDEX uq_glasses_vision_sample_review_user,
   ADD COLUMN correction_id BIGINT UNSIGNED NULL AFTER sample_id,
-  ADD UNIQUE KEY uq_glasses_vision_sample_review_correction_user (sample_id,correction_id,reviewer_user_id),
+  ADD COLUMN correction_scope_id BIGINT UNSIGNED GENERATED ALWAYS AS (COALESCE(correction_id,0)) STORED AFTER correction_id,
+  ADD UNIQUE KEY uq_glasses_vision_sample_review_scope_user (sample_id,correction_scope_id,reviewer_user_id),
   ADD KEY idx_glasses_vision_sample_review_correction (organization_id,correction_id,created_at),
   ADD CONSTRAINT fk_glasses_vision_sample_review_correction FOREIGN KEY (correction_id) REFERENCES glasses_vision_annotation_corrections(id) ON DELETE CASCADE;
