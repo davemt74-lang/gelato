@@ -6,22 +6,27 @@ on:
       - 'database/20261117_vision_lab_v9_live_scene_understanding.sql'
       - 'database/20261118_vision_lab_v9_recipe_step_recognition.sql'
       - 'database/20261119_vision_lab_v9_ingredient_prevention.sql'
+      - 'database/20261120_vision_lab_v9_quantity_verification.sql'
       - 'includes/glasses-vision-scene.php'
       - 'includes/glasses-vision-step-recognition.php'
       - 'includes/glasses-vision-ingredient-prevention.php'
+      - 'includes/glasses-vision-quantity-verification.php'
       - 'api/glasses-device.php'
       - 'api/glasses-vision-lab.php'
       - 'glasses-vision-lab.php'
       - 'assets/js/glasses-vision-scene.js'
       - 'assets/js/glasses-vision-step-recognition.js'
       - 'assets/js/glasses-vision-ingredient-prevention.js'
+      - 'assets/js/glasses-vision-quantity-verification.js'
       - 'assets/css/glasses-vision-lab.css'
       - 'tests/glasses-vision-lab-v9-live-scene-understanding-contract.php'
       - 'tests/glasses-vision-lab-v9-recipe-step-recognition-contract.php'
       - 'tests/glasses-vision-lab-v9-ingredient-prevention-contract.php'
+      - 'tests/glasses-vision-lab-v9-quantity-verification-contract.php'
       - 'docs/GLASSES-VISION-LAB-V9-LIVE-SCENE.md'
       - 'docs/GLASSES-VISION-LAB-V9-RECIPE-STEP-RECOGNITION.md'
       - 'docs/GLASSES-VISION-LAB-V9-INGREDIENT-PREVENTION.md'
+      - 'docs/GLASSES-VISION-LAB-V9-QUANTITY-VERIFICATION.md'
       - '.github/workflows/glasses-vision-lab-v9.yml'
   push:
     branches: [main]
@@ -54,15 +59,18 @@ jobs:
           php -l includes/glasses-vision-scene.php
           php -l includes/glasses-vision-step-recognition.php
           php -l includes/glasses-vision-ingredient-prevention.php
+          php -l includes/glasses-vision-quantity-verification.php
           php -l api/glasses-device.php
           php -l api/glasses-vision-lab.php
           php -l glasses-vision-lab.php
           php -l tests/glasses-vision-lab-v9-live-scene-understanding-contract.php
           php -l tests/glasses-vision-lab-v9-recipe-step-recognition-contract.php
           php -l tests/glasses-vision-lab-v9-ingredient-prevention-contract.php
+          php -l tests/glasses-vision-lab-v9-quantity-verification-contract.php
           node --check assets/js/glasses-vision-scene.js
           node --check assets/js/glasses-vision-step-recognition.js
           node --check assets/js/glasses-vision-ingredient-prevention.js
+          node --check assets/js/glasses-vision-quantity-verification.js
 
       - name: Architecture guardrails
         run: |
@@ -107,6 +115,17 @@ jobs:
           ! grep -q 'glasses_build_observe' includes/glasses-vision-ingredient-prevention.php
           ! grep -q 'kds_transition' includes/glasses-vision-ingredient-prevention.php
           ! grep -q 'glasses_build_complete' includes/glasses-vision-ingredient-prevention.php
+          grep -q 'CREATE TABLE glasses_vision_quantity_verifications' database/20261120_vision_lab_v9_quantity_verification.sql
+          grep -q 'function glasses_vision_quantity_verify_scene' includes/glasses-vision-quantity-verification.php
+          grep -q "'minimumConfidence'=>0.75" includes/glasses-vision-quantity-verification.php
+          grep -q "'changesDetectedQuantity'=>false" includes/glasses-vision-quantity-verification.php
+          grep -q 'current canonical build state' includes/glasses-vision-quantity-verification.php
+          grep -q 'vision.quantity.verify_scene' api/glasses-device.php
+          grep -q 'quantity.verify_scene' api/glasses-vision-lab.php
+          ! grep -q 'glasses_build_confirm' includes/glasses-vision-quantity-verification.php
+          ! grep -q 'glasses_build_observe' includes/glasses-vision-quantity-verification.php
+          ! grep -q 'kds_transition' includes/glasses-vision-quantity-verification.php
+          ! grep -q 'glasses_build_complete' includes/glasses-vision-quantity-verification.php
 
       - name: Install and upgrade schema
         run: |
@@ -140,6 +159,9 @@ jobs:
 
       - name: V9 missing / wrong ingredient prevention contract
         run: php tests/glasses-vision-lab-v9-ingredient-prevention-contract.php
+
+      - name: V9 portion / quantity verification contract
+        run: php tests/glasses-vision-lab-v9-quantity-verification-contract.php
 
       - name: V8 governance regressions
         run: |

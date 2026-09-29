@@ -230,7 +230,7 @@ function glasses_vision_scene_capture(PDO $pdo,array $device,array $input): arra
         'currentExpectedComponentKey'=>$build['summary']['currentComponentKey']??null,
         'components'=>array_map(static fn($c)=>[
           'componentKey'=>$c['componentKey'],'displayName'=>$c['displayName'],'status'=>$c['status'],'sortOrder'=>$c['sortOrder'],
-          'expectedQuantity'=>$c['expectedQuantity'],'detectedQuantity'=>$c['detectedQuantity'],'optional'=>$c['optional']
+          'expectedQuantity'=>$c['expectedQuantity'],'detectedQuantity'=>$c['detectedQuantity'],'unit'=>$c['unit'],'optional'=>$c['optional']
         ],$build['components']),
         'declaredSteps'=>$build['context']['buildDefinition']['steps']??[],
         'recognizedStep'=>null,
