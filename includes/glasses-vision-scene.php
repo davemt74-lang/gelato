@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__.'/glasses-build.php';
 require_once __DIR__.'/glasses-calibration.php';
 require_once __DIR__.'/glasses-vision-models.php';
+require_once __DIR__.'/glasses-vision-profiles.php';
 require_once __DIR__.'/glasses-vision-training-release.php';
 
 const GLASSES_VISION_SCENE_SCHEMA='gelato.vision_scene.v1';
@@ -64,7 +65,7 @@ function glasses_vision_scene_spatial(?array $box,?array $calibration): array
     return $spatial;
 }
 
-function glasses_vision_scene_entities_normalize(array $input,array $build,?array $calibration): array
+function glasses_vision_scene_entities_normalize(array $input,array $build,?array $calibration,array $profile): array
 {
     if(count($input)>120)throw new InvalidArgumentException('Scene contains too many entities.');
     $allowed=['ingredient','tool','container','hand','product','equipment','surface','unknown'];
@@ -80,11 +81,25 @@ function glasses_vision_scene_entities_normalize(array $input,array $build,?arra
         if(!in_array($kind,$allowed,true))throw new InvalidArgumentException('Scene entity kind is invalid.');
         $label=mb_substr(trim((string)($raw['label']??'')),0,180,'UTF-8');
         if($label==='')$label=$kind;
-        $componentKey=mb_substr(trim((string)($raw['componentKey']??'')),0,160,'UTF-8')?:null;
+        $normalizedLabel=$kind==='ingredient'?glasses_vision_normalize_label($label):null;
+        $requestedComponent=mb_substr(trim((string)($raw['componentKey']??'')),0,160,'UTF-8')?:null;
+        if($requestedComponent!==null&&$kind!=='ingredient')
+            throw new InvalidArgumentException('Only ingredient scene entities may bind to recipe components.');
+        $mappingByLabel=[];
+        foreach((array)($profile['mappings']??[]) as $mapping)$mappingByLabel[(string)$mapping['normalizedLabel']]=$mapping;
+        $componentKey=null;
+        if($kind==='ingredient'&&$normalizedLabel!==''){
+            $mapping=$mappingByLabel[$normalizedLabel]??null;
+            if($mapping!==null){
+                $componentKey=(string)$mapping['componentKey'];
+                if($requestedComponent!==null&&!hash_equals($requestedComponent,$componentKey))
+                    throw new InvalidArgumentException('Scene ingredient mapping conflicts with the governed Vision Label Profile.');
+            }elseif($requestedComponent!==null){
+                throw new InvalidArgumentException('Scene ingredient mapping is not authorized by the governed Vision Label Profile.');
+            }
+        }
         if($componentKey!==null&&!isset($validComponents[$componentKey]))
             throw new InvalidArgumentException('Scene entity component must belong to the active canonical build.');
-        if($componentKey!==null&&$kind!=='ingredient')
-            throw new InvalidArgumentException('Only ingredient scene entities may bind to recipe components.');
         $tracking=mb_substr(trim((string)($raw['trackingId']??'')),0,190,'UTF-8')?:null;
         if($tracking!==null&&isset($trackingSeen[$tracking]))throw new InvalidArgumentException('Scene tracking IDs must be unique within a frame.');
         if($tracking!==null)$trackingSeen[$tracking]=true;
@@ -100,7 +115,7 @@ function glasses_vision_scene_entities_normalize(array $input,array $build,?arra
         if(strlen($attributesJson)>12000)throw new InvalidArgumentException('Scene entity attributes are too large.');
         $spatial=glasses_vision_scene_spatial($bbox,$calibration);
         $entity=[
-          'entityKey'=>$key,'kind'=>$kind,'label'=>$label,'componentKey'=>$componentKey,'trackingId'=>$tracking,'source'=>$source,
+          'entityKey'=>$key,'kind'=>$kind,'label'=>$label,'normalizedLabel'=>$normalizedLabel,'componentKey'=>$componentKey,'trackingId'=>$tracking,'source'=>$source,
           'confidence'=>$confidence!==null?round($confidence,6):null,'bbox'=>$bbox,'spatial'=>$spatial,'attributes'=>$attributes
         ];
         $entity['entityHash']=hash('sha256',glasses_vision_training_release_json($entity));
@@ -172,7 +187,8 @@ function glasses_vision_scene_capture(PDO $pdo,array $device,array $input): arra
         $q->execute([$org,$calibration['publicId']]);$calibrationId=(int)$q->fetchColumn();
     }
 
-    $entities=glasses_vision_scene_entities_normalize(is_array($input['entities']??null)?$input['entities']:[],$build,$calibration);
+    $profile=glasses_vision_profile_for_build($pdo,$device,$sessionPublic,$detector);
+    $entities=glasses_vision_scene_entities_normalize(is_array($input['entities']??null)?$input['entities']:[],$build,$calibration,$profile);
     $relationships=glasses_vision_scene_relationships($entities,is_array($input['relationships']??null)?$input['relationships']:[]);
 
     $counts=[];foreach($entities as $e)$counts[$e['kind']]=($counts[$e['kind']]??0)+1;ksort($counts);
@@ -202,7 +218,8 @@ function glasses_vision_scene_capture(PDO $pdo,array $device,array $input): arra
       'orderContext'=>$build['context'],
       'modelAssignment'=>[
         'assignmentKey'=>$assignment['assignmentKey'],'detectorName'=>$assignment['detectorName'],'selection'=>$assignment['selection'],
-        'rollout'=>$assignment['rollout'],'packagePublicId'=>$package['public_id'],'artifactSha256'=>$package['artifact_sha256']
+        'rollout'=>$assignment['rollout'],'packagePublicId'=>$package['public_id'],'artifactSha256'=>$package['artifact_sha256'],
+        'profileHash'=>$profile['profileHash']
       ],
       'calibration'=>$calibration?[
         'publicId'=>$calibration['publicId'],'sourceHash'=>$calibration['sourceHash'],'version'=>$calibration['version'],
@@ -224,7 +241,7 @@ function glasses_vision_scene_capture(PDO $pdo,array $device,array $input): arra
       'schema'=>GLASSES_VISION_SCENE_SCHEMA,'devicePublicId'=>$device['public_id'],'buildSessionPublicId'=>$sessionPublic,
       'frame'=>['frameKey'=>$frameKey,'width'=>$width,'height'=>$height,'pixelFormat'=>$pixel,'capturedAt'=>$capturedAt],
       'assignmentKey'=>$assignment['assignmentKey'],'modelArtifactSha256'=>$package['artifact_sha256'],
-      'buildContextHash'=>$buildContextHash,'calibrationSourceHash'=>$calibration['sourceHash']??null,
+      'buildContextHash'=>$buildContextHash,'visionProfileHash'=>$profile['profileHash'],'calibrationSourceHash'=>$calibration['sourceHash']??null,
       'entityHashes'=>array_map(static fn($e)=>[$e['entityKey'],$e['entityHash']],$entities),
       'relationships'=>$relationships,
     ];
@@ -251,10 +268,10 @@ function glasses_vision_scene_capture(PDO $pdo,array $device,array $input): arra
             glasses_vision_training_release_json($relationships),glasses_vision_training_release_json($summary),$sceneHash]);
         $sceneId=(int)$pdo->lastInsertId();
         $insert=$pdo->prepare("INSERT INTO glasses_vision_scene_entities
-          (organization_id,scene_snapshot_id,public_id,entity_key,entity_kind,label,component_key,tracking_id,source_type,confidence,bbox_json,spatial_json,attributes_json,entity_hash)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+          (organization_id,scene_snapshot_id,public_id,entity_key,entity_kind,label,normalized_label,component_key,tracking_id,source_type,confidence,bbox_json,spatial_json,attributes_json,entity_hash)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
         foreach($entities as $e)$insert->execute([
-          $org,$sceneId,glasses_public_id('vision-entity'),$e['entityKey'],$e['kind'],$e['label'],$e['componentKey'],$e['trackingId'],$e['source'],$e['confidence'],
+          $org,$sceneId,glasses_public_id('vision-entity'),$e['entityKey'],$e['kind'],$e['label'],$e['normalizedLabel'],$e['componentKey'],$e['trackingId'],$e['source'],$e['confidence'],
           $e['bbox']!==null?glasses_vision_training_release_json($e['bbox']):null,glasses_vision_training_release_json($e['spatial']),
           glasses_vision_training_release_json($e['attributes']),$e['entityHash']
         ]);
@@ -278,7 +295,7 @@ function glasses_vision_scene_row(PDO $pdo,int $org,string $publicId): array
     $eq=$pdo->prepare("SELECT * FROM glasses_vision_scene_entities WHERE organization_id=? AND scene_snapshot_id=? ORDER BY entity_key");
     $eq->execute([$org,(int)$r['id']]);$entities=[];
     foreach($eq->fetchAll() as $e)$entities[]=[
-      'publicId'=>$e['public_id'],'entityKey'=>$e['entity_key'],'kind'=>$e['entity_kind'],'label'=>$e['label'],'componentKey'=>$e['component_key'],
+      'publicId'=>$e['public_id'],'entityKey'=>$e['entity_key'],'kind'=>$e['entity_kind'],'label'=>$e['label'],'normalizedLabel'=>$e['normalized_label'],'componentKey'=>$e['component_key'],
       'trackingId'=>$e['tracking_id'],'source'=>$e['source_type'],'confidence'=>$e['confidence']!==null?(float)$e['confidence']:null,
       'bbox'=>$e['bbox_json']!==null?json_decode((string)$e['bbox_json'],true):null,'spatial'=>json_decode((string)$e['spatial_json'],true)?:[],
       'attributes'=>json_decode((string)$e['attributes_json'],true)?:[],'entityHash'=>$e['entity_hash']
@@ -301,7 +318,7 @@ function glasses_vision_scene_verify(PDO $pdo,int $org,string $publicId): array
       'schema'=>GLASSES_VISION_SCENE_SCHEMA,'devicePublicId'=>$s['devicePublicId'],'buildSessionPublicId'=>$s['buildSessionPublicId'],
       'frame'=>['frameKey'=>$s['frameKey'],'width'=>$s['frameWidth'],'height'=>$s['frameHeight'],'pixelFormat'=>$s['pixelFormat'],'capturedAt'=>$s['capturedAt']],
       'assignmentKey'=>$s['assignmentKey'],'modelArtifactSha256'=>$s['modelArtifactSha256'],
-      'buildContextHash'=>$s['context']['buildContextHash']??null,'calibrationSourceHash'=>$s['calibrationSourceHash'],
+      'buildContextHash'=>$s['context']['buildContextHash']??null,'visionProfileHash'=>$s['context']['modelAssignment']['profileHash']??null,'calibrationSourceHash'=>$s['calibrationSourceHash'],
       'entityHashes'=>$entityHashes,'relationships'=>$s['relationships']
     ];
     $sourceFingerprint=hash('sha256',glasses_vision_training_release_json($source));
@@ -320,7 +337,7 @@ function glasses_vision_scene_verify(PDO $pdo,int $org,string $publicId): array
     $entitiesValid=true;
     foreach($s['entities'] as $e){
         $material=[
-          'entityKey'=>$e['entityKey'],'kind'=>$e['kind'],'label'=>$e['label'],'componentKey'=>$e['componentKey'],'trackingId'=>$e['trackingId'],'source'=>$e['source'],
+          'entityKey'=>$e['entityKey'],'kind'=>$e['kind'],'label'=>$e['label'],'normalizedLabel'=>$e['normalizedLabel'],'componentKey'=>$e['componentKey'],'trackingId'=>$e['trackingId'],'source'=>$e['source'],
           'confidence'=>$e['confidence'],'bbox'=>$e['bbox'],'spatial'=>$e['spatial'],'attributes'=>$e['attributes']
         ];
         if(!hash_equals($e['entityHash'],hash('sha256',glasses_vision_training_release_json($material)))){$entitiesValid=false;break;}
