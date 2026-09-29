@@ -36,7 +36,7 @@ function glasses_v11_dataset_assembly_policy(array $in=[]): array {
     'dedupePerceptualHash'=>true,
     'dedupeCaptureGroup'=>true,
     'splitPolicy'=>[
-      'captureGroup'=>true,'buildSession'=>true,'operator'=>true,'location'=>true,'station'=>true,'menuItem'=>false,
+      'captureGroup'=>true,'buildSession'=>true,'device'=>true,'operator'=>true,'location'=>false,'station'=>false,'menuItem'=>false,
       'seed'=>max(0,(int)($in['seed']??74)),
       'trainRatio'=>(float)($in['trainRatio']??0.70),'valRatio'=>(float)($in['valRatio']??0.15),'testRatio'=>(float)($in['testRatio']??0.15)
     ]
@@ -132,7 +132,7 @@ function glasses_v11_dataset_assemble(PDO $pdo,int $org,array $in,int $actor): a
 
     $sp=$policy['splitPolicy'];
     $plan=glasses_vision_curation_create_split_plan($pdo,$org,$dataset['publicId'],[
-      'captureGroup'=>$sp['captureGroup'],'buildSession'=>$sp['buildSession'],'operator'=>$sp['operator'],'location'=>$sp['location'],'station'=>$sp['station'],'menuItem'=>$sp['menuItem'],
+      'captureGroup'=>$sp['captureGroup'],'buildSession'=>$sp['buildSession'],'device'=>$sp['device'],'operator'=>$sp['operator'],'location'=>$sp['location'],'station'=>$sp['station'],'menuItem'=>$sp['menuItem'],
       'seed'=>$sp['seed'],'trainRatio'=>$sp['trainRatio'],'valRatio'=>$sp['valRatio'],'testRatio'=>$sp['testRatio']
     ],$actor);
     glasses_vision_curation_apply_split_plan($pdo,$org,$plan['publicId'],$actor);
