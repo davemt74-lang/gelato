@@ -22,7 +22,7 @@ $pdo->prepare("INSERT INTO menu_items (organization_id,section_id,name,slug,is_a
 
 $grant=glasses_create_pairing_grant($pdo,$org,$location,(string)$station['public_id'],$actor,10);
 $paired=glasses_pair_device($pdo,(string)$grant['pairingCode'],['hardwareIdentifier'=>'AIR3-V72-'.$slug,'displayName'=>'Failure AIR3']);
-$deviceId=(int)$paired['device']['id'];$devicePublic=(string)$paired['device']['publicId'];
+$device=glasses_authenticate_token($pdo,(string)$paired['deviceToken']);$deviceId=(int)$device['id'];$devicePublic=(string)$device['public_id'];
 
 $modelPublic='vision-model-'.$slug;$modelHash=hash('sha256','model-'.$slug);
 $pdo->prepare("INSERT INTO glasses_vision_model_packages (organization_id,public_id,detector_name,model_name,model_version,runtime_type,platform,artifact_url,artifact_sha256,artifact_bytes,status,created_by) VALUES (?,?,'ingredient_detector','Kitchen Detector','v72','onnx','air3','https://example.test/v72.onnx',?,123,'ready',?)")
