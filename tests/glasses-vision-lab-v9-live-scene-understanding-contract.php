@@ -36,7 +36,10 @@ kds_send_check($pdo,$org,(string)$check['publicId'],$actor,false);
 $q=$pdo->prepare("SELECT public_id FROM kds_order_items WHERE organization_id=? AND pos_check_item_id=?");$q->execute([$org,$line]);$kdsPublic=(string)$q->fetchColumn();
 
 $grant=glasses_create_pairing_grant($pdo,$org,$location,(string)$station['public_id'],$actor,10);
-$paired=glasses_pair_device($pdo,(string)$grant['pairingCode'],['hardwareIdentifier'=>'AIR3-V91-'.$slug,'displayName'=>'V9 Scene AIR3','platform'=>'inmo_air3']);
+$paired=glasses_pair_device($pdo,(string)$grant['pairingCode'],[
+  'hardwareIdentifier'=>'AIR3-V91-'.$slug,'displayName'=>'V9 Scene AIR3','platform'=>'inmo_air3',
+  'sdkVersion'=>'1.5.0','appVersion'=>'2.0.0','capabilities'=>['visionModelRuntimes'=>['onnx']]
+]);
 $device=glasses_authenticate_token($pdo,(string)$paired['deviceToken']);
 $session=glasses_build_start($pdo,$device,$kdsPublic,null);$sessionPublic=(string)$session['publicId'];
 $sessionId=(int)v91_one($pdo,"SELECT id FROM glasses_build_sessions WHERE organization_id=? AND public_id=?",[$org,$sessionPublic]);
