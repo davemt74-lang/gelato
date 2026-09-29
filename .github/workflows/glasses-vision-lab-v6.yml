@@ -5,14 +5,17 @@ on:
     paths:
       - 'database/20261030_vision_lab_v6_curation_group_splits.sql'
       - 'includes/glasses-vision-curation.php'
+      - 'includes/glasses-vision-balance.php'
       - 'includes/glasses-vision-lab.php'
       - 'api/glasses-vision-lab.php'
       - 'glasses-vision-lab.php'
       - 'assets/js/glasses-vision-lab.js'
+      - 'assets/js/glasses-vision-balance.js'
       - 'assets/css/glasses-vision-lab.css'
       - 'assets/js/glasses-web-simulator.js'
       - 'tools/vision_training/pipeline.py'
       - 'tests/glasses-vision-lab-v6-curation-splits-contract.php'
+      - 'tests/glasses-vision-lab-v6-balance-diversity-contract.php'
       - 'tests/vision-training-group-split-contract.py'
       - 'docs/GLASSES-VISION-LAB-CURATION-SPLITS.md'
       - '.github/workflows/glasses-vision-lab-v6.yml'
@@ -48,12 +51,15 @@ jobs:
       - name: Syntax
         run: |
           php -l includes/glasses-vision-curation.php
+          php -l includes/glasses-vision-balance.php
           php -l includes/glasses-vision-lab.php
           php -l api/glasses-vision-lab.php
           php -l glasses-vision-lab.php
           php -l tests/glasses-vision-lab-v6-curation-splits-contract.php
+          php -l tests/glasses-vision-lab-v6-balance-diversity-contract.php
           python -m py_compile tools/vision_training/pipeline.py tests/vision-training-group-split-contract.py
           node --check assets/js/glasses-vision-lab.js
+          node --check assets/js/glasses-vision-balance.js
           node --check assets/js/glasses-web-simulator.js
 
       - name: Curation and split architecture
@@ -102,6 +108,9 @@ jobs:
 
       - name: Vision Lab V6 curation/split contract
         run: php tests/glasses-vision-lab-v6-curation-splits-contract.php
+
+      - name: Vision Lab V6 balance/diversity contract
+        run: php tests/glasses-vision-lab-v6-balance-diversity-contract.php
 
       - name: Prior Vision Lab regressions
         run: |
