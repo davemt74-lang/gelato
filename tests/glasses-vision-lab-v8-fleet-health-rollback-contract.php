@@ -93,7 +93,7 @@ $empty=false;try{glasses_vision_fleet_health_execute_rollback($pdo,$org,$analysi
 v86_assert($empty,'Governed rollback must require a documented human reason.');
 
 $s3=v86_snapshot($pdo,$org,$actor,$target,$locations[3],$stations[3],$devices[3],$from,$to,'critical');
-v86_assert(glasses_vision_fleet_health_verify($pdo,$org,$s3['publicId'])['passed'],'Late health snapshot must verify.');
+v86_assert(glasses_vision_model_health_verify($pdo,$org,$s3['publicId'])['passed'],'Late health snapshot must verify.');
 v86_assert(glasses_vision_fleet_health_verify($pdo,$org,$analysis['publicId'])['passed'],'Late fleet evidence must not invalidate an earlier immutable analysis.');
 $staleRollback=false;try{glasses_vision_fleet_health_execute_rollback($pdo,$org,$analysis['publicId'],'This analysis is now stale.',$actor);}catch(InvalidArgumentException){$staleRollback=true;}
 v86_assert($staleRollback,'Rollback execution must reject a stale fleet analysis after late evidence arrives.');
