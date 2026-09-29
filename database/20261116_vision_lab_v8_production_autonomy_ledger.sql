@@ -1,0 +1,35 @@
+-- Gelato Vision Lab V8 Section 7 — Production Autonomy Decision Ledger & Explainability
+SET NAMES utf8mb4;
+
+CREATE TABLE glasses_vision_autonomy_audits (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  organization_id BIGINT UNSIGNED NOT NULL,
+  public_id VARCHAR(80) NOT NULL,
+  subject_kind VARCHAR(32) NOT NULL,
+  subject_public_id VARCHAR(80) NOT NULL,
+  package_id BIGINT UNSIGNED NOT NULL,
+  confidence_decision_id BIGINT UNSIGNED NULL,
+  active_perception_action_id BIGINT UNSIGNED NULL,
+  fleet_health_analysis_id BIGINT UNSIGNED NULL,
+  fleet_health_action_id BIGINT UNSIGNED NULL,
+  audit_key CHAR(64) NOT NULL,
+  authority_state VARCHAR(40) NOT NULL,
+  outcome VARCHAR(48) NOT NULL,
+  evidence_json JSON NOT NULL,
+  explanation_json JSON NOT NULL,
+  audit_hash CHAR(64) NOT NULL,
+  created_by BIGINT UNSIGNED NULL,
+  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_glasses_vision_autonomy_public (organization_id,public_id),
+  UNIQUE KEY uq_glasses_vision_autonomy_identity (organization_id,audit_key),
+  KEY idx_glasses_vision_autonomy_subject (organization_id,subject_kind,subject_public_id,created_at),
+  KEY idx_glasses_vision_autonomy_package (organization_id,package_id,created_at),
+  CONSTRAINT fk_glasses_vision_autonomy_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  CONSTRAINT fk_glasses_vision_autonomy_package FOREIGN KEY (package_id) REFERENCES glasses_vision_model_packages(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_vision_autonomy_decision FOREIGN KEY (confidence_decision_id) REFERENCES glasses_vision_confidence_decisions(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_vision_autonomy_perception FOREIGN KEY (active_perception_action_id) REFERENCES glasses_vision_active_perception_actions(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_vision_autonomy_fleet_analysis FOREIGN KEY (fleet_health_analysis_id) REFERENCES glasses_vision_fleet_health_analyses(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_vision_autonomy_fleet_action FOREIGN KEY (fleet_health_action_id) REFERENCES glasses_vision_fleet_health_actions(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_vision_autonomy_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
