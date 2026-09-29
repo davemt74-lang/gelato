@@ -7,7 +7,7 @@ require_once __DIR__.'/../includes/glasses-core.php';
 require_once __DIR__.'/../includes/glasses-work.php';
 require_once __DIR__.'/../includes/glasses-definition.php';
 require_once __DIR__.'/../includes/glasses-build.php';
-require_once __DIR__.'/../includes/glasses-vision-guard-recognition.php';
+require_once __DIR__.'/../includes/glasses-vision-ingredient-prevention.php';
 
 function v93_assert(bool $c,string $m):void{if(!$c)throw new RuntimeException($m);}
 function v93_one(PDO $pdo,string $sql,array $a=[]):mixed{$q=$pdo->prepare($sql);$q->execute($a);return $q->fetchColumn();}
