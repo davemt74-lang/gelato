@@ -194,7 +194,11 @@ function glasses_vision_confidence_decide(PDO $pdo,int $org,array $input,?int $a
     if(!$device)throw new InvalidArgumentException('Vision decision device was not found.');
     $session=glasses_build_session_row($pdo,$org,$sessionPublic,false);glasses_build_assert_device_session($device,$session);
     $assignment=glasses_vision_confidence_assignment($pdo,$org,$device,$session,$detector);
-    $packageId=$assignment&&$assignment['package_id']!==null?(int)$assignment['package_id']:null;
+    if(!$assignment||$assignment['package_id']===null||empty($assignment['package_public_id'])||empty($assignment['package_sha256']))
+        throw new InvalidArgumentException('Adaptive confidence decisions require an exact assigned model package.');
+    if((string)($assignment['package_status']??'')!=='ready')
+        throw new InvalidArgumentException('Assigned model package is not ready for governed confidence decisions.');
+    $packageId=(int)$assignment['package_id'];
     $policy=glasses_vision_confidence_active_policy($pdo,$org,$detector,$packageId);
 
     $runtimeProfile=glasses_vision_profile_for_build($pdo,$device,$sessionPublic,$detector);
