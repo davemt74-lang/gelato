@@ -1,7 +1,7 @@
 (()=>{'use strict';
 const cfg=window.GELATO_GLASSES_SIMULATOR||{};
 const $=id=>document.getElementById(id);
-const state={mode:'mock',devices:[],device:null,work:null,selectedKdsItemPublicId:'',build:null,validation:null,seq:1,logs:[],autoPlayTimer:null,syncTimer:null,syncBusy:false,syncErrors:0,reconnectCount:0,syncFingerprint:'',syncAbort:null,syncEpoch:0,lastSyncAt:null,cameraStream:null,cameraTrack:null,cameraTarget:null,cameraDevices:[],cameraSource:'image',visionMode:'manual',visionTimer:null,visionBusy:false,visionFrameSeq:0,visionLastAt:0,visionLatencyMs:0,visionFps:0,visionDetections:[],visionTracks:new Map(),visionSubmitted:new Set(),visionAdapter:null,temporalTracks:new Map(),temporalEvents:[],temporalSequence:[],temporalViolations:[],temporalValidationBusy:false,temporalValidationFingerprint:'',temporalReadySince:0,temporalGate:null,browserModel:{status:'idle',session:null,assignment:null,profile:null,config:null,package:null,verifiedSha256:null,loadEpoch:0},dataset:{annotations:[],samples:[],drag:null,frozen:false,captureGroup:null,burstSeq:0,uploading:false},activeLearning:{enabled:true,candidates:[],capturing:false,lastCaptureByKey:new Map(),maxQueue:30,cooldownMs:10000},shadowModel:{status:'idle',session:null,assignment:null,config:null,package:null,verifiedSha256:null,runPublicId:null,summary:null,frameSeq:0,busy:false},hardwareRuntime:null,framePipeline:{queue:[],worker:false,epoch:0,nextSeq:0,currentAbort:null,metrics:{acceptedFrames:0,processedFrames:0,droppedFrames:0,staleFrames:0,timedOutFrames:0,cancelledFrames:0,failedFrames:0,queueDepth:0,maxObservedQueueDepth:0,lastProcessedSequence:0}}};
+const state={mode:'mock',devices:[],device:null,work:null,selectedKdsItemPublicId:'',build:null,validation:null,seq:1,logs:[],autoPlayTimer:null,syncTimer:null,syncBusy:false,syncErrors:0,reconnectCount:0,syncFingerprint:'',syncAbort:null,syncEpoch:0,lastSyncAt:null,cameraStream:null,cameraTrack:null,cameraTarget:null,cameraDevices:[],cameraSource:'image',visionMode:'manual',visionTimer:null,visionBusy:false,visionFrameSeq:0,visionLastAt:0,visionLatencyMs:0,visionFps:0,visionDetections:[],visionTracks:new Map(),visionSubmitted:new Set(),visionAdapter:null,temporalTracks:new Map(),temporalEvents:[],temporalSequence:[],temporalViolations:[],temporalValidationBusy:false,temporalValidationFingerprint:'',temporalReadySince:0,temporalGate:null,browserModel:{status:'idle',session:null,assignment:null,profile:null,config:null,package:null,verifiedSha256:null,loadEpoch:0},dataset:{annotations:[],samples:[],drag:null,frozen:false,captureGroup:null,burstSeq:0,uploading:false},activeLearning:{enabled:true,candidates:[],capturing:false,lastCaptureByKey:new Map(),maxQueue:30,cooldownMs:10000},shadowModel:{status:'idle',session:null,assignment:null,config:null,package:null,verifiedSha256:null,runPublicId:null,summary:null,frameSeq:0,busy:false},hardwareRuntime:null,recovery:{state:'ready',attempt:0,epoch:0,networkFault:false,suppressAutomatic:false,freshBarrierUntil:0,lastReason:'runtime_ready',timer:null},framePipeline:{queue:[],worker:false,epoch:0,nextSeq:0,currentAbort:null,metrics:{acceptedFrames:0,processedFrames:0,droppedFrames:0,staleFrames:0,timedOutFrames:0,cancelledFrames:0,failedFrames:0,queueDepth:0,maxObservedQueueDepth:0,lastProcessedSequence:0}}};
 const mock={
   work:{assignmentRequired:false,station:{publicId:'station-mock',name:'Sandwich / Pizza Line'},revision:'mock-revision',focusItem:{kdsItemPublicId:'kds-mock-1',status:'queued',ticket:{checkNumber:'1042',serviceMode:'dine_in',tableName:'Table 12',guestCount:2},posLine:{id:1,menuItemId:1,name:'Club Sandwich + Fries',optionName:'Regular',quantity:1,specialInstructions:'NO TOMATO · EXTRA BACON',modifiers:[{name:'Extra Bacon'}]},menu:{preparationNotes:'Build, slice and plate with fries.'},recipeSource:{status:'exact_name',recipe:{instructions:['Toast bread','Add mayo','Add turkey','Add bacon','Add lettuce','Add tomato','Top and slice','Plate with fries']}}},items:[],metrics:{queued:1,inProgress:0,ready:0,held:0}},
   components:['Toasted Bread','Mayo','Turkey','Bacon','Lettuce','Tomato','Fries'].map((name,i)=>({componentKey:'mock:'+i,displayName:name,expectedQuantity:i===0?3:1,detectedQuantity:0,unit:i===0?'slices':'portion',optional:false,status:'waiting',sortOrder:i+1})),
@@ -9,9 +9,92 @@ const mock={
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function log(type,msg){const line={at:new Date(),type,msg};state.logs.unshift(line);state.logs=state.logs.slice(0,80);renderLog();}
 function renderLog(){$('eventLog').innerHTML=state.logs.map(x=>'<div class="event-line"><b>'+escapeHtml(x.type)+'</b> '+escapeHtml(x.at.toLocaleTimeString())+' · '+escapeHtml(x.msg)+'</div>').join('')||'<span class="sim-muted">No events yet.</span>';}
-async function api(action,payload={}){const r=await fetch(cfg.api,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({csrf:cfg.csrf,action,devicePublicId:state.device?.publicId||'',...payload})});const d=await r.json().catch(()=>({ok:false,message:'Invalid server response.'}));if(!r.ok||!d.ok)throw new Error(d.message||'Simulator request failed.');return d;}
+async function api(action,payload={}){if(state.recovery?.networkFault)throw new Error('SIMULATED_NETWORK_OFFLINE');const r=await fetch(cfg.api,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({csrf:cfg.csrf,action,devicePublicId:state.device?.publicId||'',...payload})});const d=await r.json().catch(()=>({ok:false,message:'Invalid server response.'}));if(!r.ok||!d.ok)throw new Error(d.message||'Simulator request failed.');return d;}
 const LIVE_SYNC_BASE_MS=1500;
 const LIVE_SYNC_MAX_BACKOFF_MS=10000;
+const RUNTIME_RECOVERY_KEY='gelato.webGlassesSimulator.runtimeRecovery.v1';
+const RUNTIME_FRESH_BARRIER_MS=750;
+function recoveryStored(){
+  try{return JSON.parse(localStorage.getItem(RUNTIME_RECOVERY_KEY)||'null');}catch{return null;}
+}
+function saveRecoveryResume(){
+  if(state.mode!=='live'||!state.device)return;
+  const item=selectedItem(),payload={
+    devicePublicId:state.device.publicId,
+    kdsItemPublicId:state.build?.kdsItemPublicId||item?.kdsItemPublicId||null,
+    buildSessionPublicId:state.build?.publicId||null,
+    savedAt:new Date().toISOString()
+  };
+  if(payload.kdsItemPublicId||payload.buildSessionPublicId)localStorage.setItem(RUNTIME_RECOVERY_KEY,JSON.stringify(payload));
+}
+function clearRecoveryResume(){
+  localStorage.removeItem(RUNTIME_RECOVERY_KEY);
+  state.recovery.attempt=0;renderRuntimeRecovery();
+}
+function automaticObservationsAllowed(){
+  return !state.recovery.suppressAutomatic&&state.recovery.state==='ready'&&Date.now()>=state.recovery.freshBarrierUntil;
+}
+function renderRuntimeRecovery(){
+  const r=state.recovery,badge=$('runtimeRecoveryState'),detail=$('runtimeRecoveryDetail'),metrics=$('runtimeRecoveryMetrics');if(!badge||!detail||!metrics)return;
+  badge.textContent=String(r.state||'unknown').toUpperCase();
+  detail.innerHTML='<strong>'+escapeHtml(String(r.state||'unknown').toUpperCase())+'</strong><span>'+escapeHtml(r.lastReason||'runtime_ready')+'</span>';
+  metrics.textContent='attempt '+Number(r.attempt||0)+' · '+(r.suppressAutomatic?'observations blocked':'observations allowed')+' · '+(Date.now()<r.freshBarrierUntil?'fresh-frame barrier':'fresh frames accepted');
+}
+function invalidateTransientVision(reason){
+  state.recovery.suppressAutomatic=true;state.recovery.freshBarrierUntil=0;
+  stopVisionRuntime('paused');clearTemporalRuntime();state.visionSubmitted.clear();
+  log('RECOVERY','Invalidated transient vision state: '+reason+'.');renderRuntimeRecovery();
+}
+function enterRecovery(stateName,reason,{stopSync=false}={}){
+  state.recovery.epoch+=1;if(state.recovery.timer){clearTimeout(state.recovery.timer);state.recovery.timer=null;}
+  state.recovery.state=stateName;state.recovery.lastReason=reason;invalidateTransientVision(reason);
+  if(stopSync)stopLiveStationSync('idle');renderRuntimeRecovery();
+}
+async function rehydrateCanonicalBuild(){
+  const saved=recoveryStored(),candidateSession=saved?.devicePublicId===state.device?.publicId?saved?.buildSessionPublicId:null;
+  if(candidateSession){
+    try{
+      const d=await api('build.get',{buildSessionPublicId:candidateSession});
+      if(d.buildSession?.status==='active'&&['queued','in_progress'].includes(d.buildSession?.kdsStatus)){state.build=d.buildSession;state.validation=null;saveRecoveryResume();return true;}
+    }catch(e){log('RECOVERY','Saved build could not be rehydrated: '+e.message);}
+  }
+  const item=selectedItem(),candidateKds=(saved?.devicePublicId===state.device?.publicId?saved?.kdsItemPublicId:null)||item?.kdsItemPublicId||null;
+  if(!candidateKds)return false;
+  const current=(state.work?.items||[]).find(x=>x.kdsItemPublicId===candidateKds)||state.work?.focusItem;
+  if(current&&!['queued','in_progress'].includes(current.status||''))throw new Error('Canonical kitchen work is no longer resumable.');
+  const d=await api('build.start',{kdsItemPublicId:candidateKds,sourceRevision:state.work?.revision||''});
+  state.build=d.buildSession;state.validation=null;saveRecoveryResume();return true;
+}
+async function resumeRuntimeRecovery(reason='manual_resume'){
+  if(state.mode!=='live'){state.recovery.state='ready';state.recovery.suppressAutomatic=false;state.recovery.lastReason='mock_runtime_ready';renderRuntimeRecovery();return true;}
+  if(state.recovery.networkFault||!navigator.onLine){enterRecovery('disconnected','network_unavailable',{stopSync:true});return false;}
+  const epoch=++state.recovery.epoch;state.recovery.attempt+=1;state.recovery.state='recovering';state.recovery.lastReason=reason;state.recovery.suppressAutomatic=true;renderRuntimeRecovery();
+  try{
+    if(!state.device)throw new Error('No glasses device is selected for recovery.');
+    await syncLiveStationWork(false);
+    if(epoch!==state.recovery.epoch)return false;
+    await rehydrateCanonicalBuild();
+    if(epoch!==state.recovery.epoch)return false;
+    clearTemporalRuntime();state.framePipeline.queue=[];state.framePipeline.epoch++;state.framePipeline.nextSeq=0;renderFramePipelineMetrics();
+    state.recovery.freshBarrierUntil=Date.now()+RUNTIME_FRESH_BARRIER_MS;
+    state.recovery.lastReason='canonical_state_rehydrated_waiting_for_fresh_frames';renderRuntimeRecovery();
+    if(state.cameraStream)startVisionRuntime();
+    state.recovery.timer=setTimeout(()=>{
+      if(epoch!==state.recovery.epoch)return;
+      state.recovery.timer=null;state.recovery.state='ready';state.recovery.suppressAutomatic=false;state.recovery.lastReason='runtime_recovered';state.reconnectCount+=1;renderRuntimeRecovery();refreshDeviceHealth();log('RECOVERY','Canonical work/build rehydrated; automatic vision resumed on fresh frames.');
+    },RUNTIME_FRESH_BARRIER_MS);
+    return true;
+  }catch(e){
+    state.recovery.state=/no longer resumable/i.test(e.message)?'blocked':'disconnected';
+    state.recovery.lastReason=e.message||'recovery_failed';state.recovery.suppressAutomatic=true;renderRuntimeRecovery();log('RECOVERY',state.recovery.lastReason);return false;
+  }
+}
+function simulateNetworkLoss(){
+  state.recovery.networkFault=true;enterRecovery('disconnected','simulated_network_loss',{stopSync:true});setSyncBadge('error','OFFLINE');log('RECOVERY','Simulated network loss enabled.');
+}
+function clearSimulatedNetworkLoss(){
+  state.recovery.networkFault=false;resumeRuntimeRecovery('network_restored');
+}
 function setSyncBadge(status,label){
   const badge=$('syncBadge');if(!badge)return;
   badge.className='sim-sync-badge '+status;badge.textContent=label;
@@ -195,7 +278,7 @@ async function startCamera(){
     const settings=state.cameraTrack?.getSettings?.()||{};
     $('cameraMeta').innerHTML='<span>'+escapeHtml(state.cameraTrack?.label||'Camera')+'</span><span>'+escapeHtml(String(settings.width||w))+'×'+escapeHtml(String(settings.height||h))+' · '+escapeHtml(String(Math.round(settings.frameRate||30)))+' fps</span>';
     setCameraHealth('ready','READY');log('CAMERA','Browser camera preview started.');startVisionRuntime();
-    state.cameraTrack?.addEventListener('ended',()=>{stopCamera('error');log('CAMERA','Camera stream ended.');},{once:true});
+    state.cameraTrack?.addEventListener('ended',()=>{stopCamera('error');enterRecovery('recovering','camera_lost');log('CAMERA','Camera stream ended.');},{once:true});
   }catch(e){
     stopCamera('error');
     const name=e?.name||'CameraError',message=name==='NotAllowedError'?'Camera permission was denied.':name==='NotFoundError'?'No camera device was found.':(e?.message||'Camera could not start.');
@@ -746,6 +829,7 @@ function pushTemporalEvent(type,track,extra={}){
   state.temporalEvents.unshift(event);state.temporalEvents=state.temporalEvents.slice(0,40);return event;
 }
 async function submitTemporalObservation(track,action,quantity,metadata={}){
+  if(!automaticObservationsAllowed())return false;
   if(!state.build||!track.componentKey)return false;
   const component=state.build.components?.find(c=>c.componentKey===track.componentKey);
   const displayName=component?.displayName||track.label||track.componentKey;
@@ -1026,7 +1110,7 @@ async function refreshWork(){
     log('LIVE','Refreshed current KDS station work.');
   }catch(e){log('ERROR',e.message);}
 }
-async function startBuild(){try{await stopShadowModel('build_reset');await unloadGovernedVisionModel('build_reset');clearTemporalRuntime();if(state.mode==='mock'){state.build=mockBuild();state.validation=null;log('MOCK','Started mock build session.');render();return;}const item=selectedItem();if(!item)throw new Error('No selected KDS item.');const d=await api('build.start',{kdsItemPublicId:item.kdsItemPublicId,sourceRevision:state.work.revision});state.build=d.buildSession;state.validation=null;log('LIVE','Started build '+state.build.publicId+' against real KDS item.');render();}catch(e){log('ERROR',e.message);}}
+async function startBuild(){try{await stopShadowModel('build_reset');await unloadGovernedVisionModel('build_reset');clearTemporalRuntime();if(state.mode==='mock'){state.build=mockBuild();state.validation=null;log('MOCK','Started mock build session.');render();return;}const item=selectedItem();if(!item)throw new Error('No selected KDS item.');const d=await api('build.start',{kdsItemPublicId:item.kdsItemPublicId,sourceRevision:state.work.revision});state.build=d.buildSession;state.validation=null;saveRecoveryResume();state.recovery.state='ready';state.recovery.suppressAutomatic=false;state.recovery.lastReason='build_session_active';renderRuntimeRecovery();log('LIVE','Started build '+state.build.publicId+' against real KDS item.');render();}catch(e){log('ERROR',e.message);}}
 async function detect(key){try{if(!state.build)throw new Error('Start a build first.');const c=state.build.components.find(x=>x.componentKey===key);if(!c)return;const qty=Math.max(.001,Number(c.expectedQuantity||1)-Number(c.detectedQuantity||0));flashDetection(c,{confidence:.96,state:'confirmed'});if(state.mode==='mock'){c.detectedQuantity=Number(c.detectedQuantity||0)+qty;c.confidence=.96;c.status=c.detectedQuantity+.0001>=Number(c.expectedQuantity||1)?'confirmed':'detected';state.build.summary.currentComponentKey=currentComponent()?.componentKey||null;state.validation=null;log('VISION','Detected '+c.displayName+' in mock mode.');render();return;}const obs='websim-'+state.build.publicId+'-'+Date.now()+'-'+state.seq;const d=await api('build.observe',{buildSessionPublicId:state.build.publicId,observationKey:obs,componentKey:c.componentKey,displayName:c.displayName,observationAction:'added',quantity:qty,confidence:.96,trackingId:'websim-'+state.seq,bbox:{x:.18,y:.46,width:.18,height:.16},metadata:{source:'web_glasses_simulator'}});state.build=d.buildSession;state.validation=null;log('LIVE','Submitted simulated detection for '+c.displayName+'.');render();}catch(e){log('ERROR',e.message);}}
 function ensureMockBuild(){if(state.mode!=='mock')throw new Error('Demo controls are available only in Mock mode.');if(!state.build)state.build=mockBuild();}
 async function playNextMockDetection(){
@@ -1098,11 +1182,14 @@ $('frameBurst')?.addEventListener('click',injectFrameBurst);
 $('frameResetMetrics')?.addEventListener('click',resetFramePipelineMetrics);
 $('refreshDeviceHealth')?.addEventListener('click',()=>refreshDeviceHealth());
 $('downloadDiagnostics')?.addEventListener('click',()=>downloadDeviceDiagnostics());
+$('simulateNetworkLoss')?.addEventListener('click',simulateNetworkLoss);
+$('resumeRuntime')?.addEventListener('click',()=>{state.recovery.networkFault=false;resumeRuntimeRecovery('manual_resume');});
+$('clearRecoveryState')?.addEventListener('click',clearRecoveryResume);
 for(const id of ['frameQueueMax','frameMaxAge','frameInferenceTimeout','frameDropPolicy'])$(id)?.addEventListener('change',renderFramePipelineMetrics);
-document.addEventListener('visibilitychange',()=>{if(state.cameraTrack){state.cameraTrack.enabled=!document.hidden;setCameraHealth(document.hidden?'paused':'ready',document.hidden?'PAUSED':'READY');}if(document.hidden){stopVisionRuntime('paused');stopLiveStationSync('hidden');}else{if(state.cameraStream)startVisionRuntime();if(state.mode==='live'&&state.device)startLiveStationSync({immediate:true});}});
-window.addEventListener('offline',()=>{stopLiveStationSync('idle');setSyncBadge('error','OFFLINE');});
-window.addEventListener('online',()=>{if(state.mode==='live'&&state.device)startLiveStationSync({immediate:true});});
-window.addEventListener('beforeunload',()=>{stopVisionRuntime('idle');stopLiveStationSync('idle');if(state.browserModel.session&&typeof state.browserModel.session.release==='function')state.browserModel.session.release();if(state.shadowModel.session&&typeof state.shadowModel.session.release==='function')state.shadowModel.session.release();});
+document.addEventListener('visibilitychange',()=>{if(state.cameraTrack){state.cameraTrack.enabled=!document.hidden;setCameraHealth(document.hidden?'paused':'ready',document.hidden?'PAUSED':'READY');}if(document.hidden){saveRecoveryResume();enterRecovery('recovering','app_backgrounded',{stopSync:true});}else if(state.mode==='live'&&state.device){resumeRuntimeRecovery('app_resumed');}else if(state.cameraStream){startVisionRuntime();}});
+window.addEventListener('offline',()=>{enterRecovery('disconnected','network_lost',{stopSync:true});setSyncBadge('error','OFFLINE');});
+window.addEventListener('online',()=>{if(state.mode==='live'&&state.device)resumeRuntimeRecovery('network_restored');});
+window.addEventListener('beforeunload',()=>{saveRecoveryResume();stopVisionRuntime('idle');stopLiveStationSync('idle');if(state.browserModel.session&&typeof state.browserModel.session.release==='function')state.browserModel.session.release();if(state.shadowModel.session&&typeof state.shadowModel.session.release==='function')state.shadowModel.session.release();});
 const FRAME_MODE_KEY='gelato.webGlassesSimulator.frameMode.v1';
 const OPTICAL_MASK_KEY='gelato.webGlassesSimulator.opticalMask.v1';
 let frameMode=['svg','image','none'].includes(localStorage.getItem(FRAME_MODE_KEY))?localStorage.getItem(FRAME_MODE_KEY):'svg';
@@ -1222,5 +1309,5 @@ function bindRegionEditor(regionName){
 bindRegionEditor('hudRight');bindRegionEditor('hudStatus');bindRegionEditor('hudOrdersRegion');bindRegionEditor('hudNextRegion');
 refreshPresets();applyCalibration();applyFrameMode();
 $('exceptions').addEventListener('click',e=>{const b=e.target.closest('[data-resolve]');if(b)resolveUnexpected(b.dataset.resolve);});
-(async()=>{await loadDevices();const cp=cameraPrefs();if(cp.resolution)$('cameraResolution').value=cp.resolution;if(cp.fit)$('cameraFit').value=cp.fit;$('cameraMirror').checked=!!cp.mirror;applyCameraPresentation();await enumerateCameras();if(!cameraSupported())setCameraHealth('error','UNSUPPORTED');state.work=structuredClone(mock.work);state.selectedKdsItemPublicId=state.work.focusItem?.kdsItemPublicId||'';refreshPresets();applyCalibration();setSyncBadge('paused','SYNC OFF');render();setInterval(renderTopStatus,30000);refreshDeviceHealth();setInterval(refreshDeviceHealth,5000);log('SYSTEM','Simulator ready. Pizza Line Reference HUD loaded.');})();
+(async()=>{await loadDevices();const cp=cameraPrefs();if(cp.resolution)$('cameraResolution').value=cp.resolution;if(cp.fit)$('cameraFit').value=cp.fit;$('cameraMirror').checked=!!cp.mirror;applyCameraPresentation();await enumerateCameras();if(!cameraSupported())setCameraHealth('error','UNSUPPORTED');state.work=structuredClone(mock.work);state.selectedKdsItemPublicId=state.work.focusItem?.kdsItemPublicId||'';refreshPresets();applyCalibration();setSyncBadge('paused','SYNC OFF');render();setInterval(renderTopStatus,30000);renderRuntimeRecovery();refreshDeviceHealth();setInterval(refreshDeviceHealth,5000);const savedResume=recoveryStored();if(savedResume?.devicePublicId&&state.devices.some(d=>d.publicId===savedResume.devicePublicId)){state.device=state.devices.find(d=>d.publicId===savedResume.devicePublicId);$('deviceSelect').value=state.device.publicId;if(state.mode==='live')resumeRuntimeRecovery('app_restart_resume');}log('SYSTEM','Simulator ready. Pizza Line Reference HUD loaded.');})();
 })();
