@@ -29,14 +29,21 @@ function glasses_vision_lineage_edge(PDO $pdo,int $org,string $fromKind,string $
     $fromPublic=trim($fromPublic);$toPublic=trim($toPublic);
     if($fromPublic===''||$toPublic==='')throw new InvalidArgumentException('Lineage edge endpoints are required.');
     $fromHash=glasses_vision_lineage_sha($fromHash);$toHash=glasses_vision_lineage_sha($toHash);
-    $public=glasses_public_id('vision-lineage');
-    $pdo->prepare("INSERT INTO glasses_vision_lineage_edges
-      (organization_id,public_id,from_kind,from_public_id,from_hash,relation,to_kind,to_public_id,to_hash,evidence_json,actor_user_id)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?)
-      ON DUPLICATE KEY UPDATE evidence_json=VALUES(evidence_json),from_hash=COALESCE(VALUES(from_hash),from_hash),to_hash=COALESCE(VALUES(to_hash),to_hash)")
-      ->execute([$org,$public,$fromKind,$fromPublic,$fromHash,$relation,$toKind,$toPublic,$toHash,$evidence?json_encode($evidence,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE):null,$actor]);
+    $evidenceJson=$evidence?glasses_vision_training_release_json($evidence):null;
     $q=$pdo->prepare("SELECT * FROM glasses_vision_lineage_edges WHERE organization_id=? AND from_kind=? AND from_public_id=? AND relation=? AND to_kind=? AND to_public_id=? LIMIT 1");
     $q->execute([$org,$fromKind,$fromPublic,$relation,$toKind,$toPublic]);$row=$q->fetch();
+    if($row){
+        $storedEvidence=$row['evidence_json']!==null?glasses_vision_training_release_json(json_decode((string)$row['evidence_json'],true)?:[]):null;
+        if(($row['from_hash']??null)!==$fromHash||($row['to_hash']??null)!==$toHash||$storedEvidence!==$evidenceJson)
+            throw new InvalidArgumentException('Lineage edge identity already exists with different immutable evidence.');
+    }else{
+        $public=glasses_public_id('vision-lineage');
+        $pdo->prepare("INSERT INTO glasses_vision_lineage_edges
+          (organization_id,public_id,from_kind,from_public_id,from_hash,relation,to_kind,to_public_id,to_hash,evidence_json,actor_user_id)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?)")
+          ->execute([$org,$public,$fromKind,$fromPublic,$fromHash,$relation,$toKind,$toPublic,$toHash,$evidenceJson,$actor]);
+        $q->execute([$org,$fromKind,$fromPublic,$relation,$toKind,$toPublic]);$row=$q->fetch();
+    }
     return [
       'publicId'=>$row['public_id'],'from'=>['kind'=>$row['from_kind'],'publicId'=>$row['from_public_id'],'hash'=>$row['from_hash']],
       'relation'=>$row['relation'],'to'=>['kind'=>$row['to_kind'],'publicId'=>$row['to_public_id'],'hash'=>$row['to_hash']],
@@ -90,9 +97,9 @@ function glasses_vision_lineage_register_training_run(PDO $pdo,int $org,array $i
     $trainerVersion=mb_substr(trim((string)($input['trainerVersion']??'')),0,80,'UTF-8')?:null;
     if($runKey==='')throw new InvalidArgumentException('Training run key is required.');
     $status=strtolower(trim((string)($input['status']??'completed')));
-    if(!in_array($status,['queued','running','completed','failed'],true))throw new InvalidArgumentException('Training run status is invalid.');
+    if($status!=='completed')throw new InvalidArgumentException('Lineage registration accepts completed training runs only.');
     $output=glasses_vision_lineage_sha((string)($input['outputSha256']??''));
-    if($status==='completed'&&$output===null)throw new InvalidArgumentException('Completed training run requires output SHA-256.');
+    if($output===null)throw new InvalidArgumentException('Completed training run requires output SHA-256.');
     $config=is_array($input['config']??null)?$input['config']:[];
     $metrics=is_array($input['metrics']??null)?$input['metrics']:null;
     $started=!empty($input['startedAt'])?(string)$input['startedAt']:null;$completed=!empty($input['completedAt'])?(string)$input['completedAt']:null;
@@ -102,7 +109,15 @@ function glasses_vision_lineage_register_training_run(PDO $pdo,int $org,array $i
         $q->execute([$org,$runKey]);$existing=$q->fetchColumn();
         if($existing){
             $row=glasses_vision_lineage_training_run_row($pdo,$org,(string)$existing);
-            if((int)$row['training_release_id']!==(int)$release['id'])throw new InvalidArgumentException('Training run key already belongs to a different release.');
+            $storedConfig=glasses_vision_training_release_json(json_decode((string)$row['config_json'],true)?:[]);
+            $incomingConfig=glasses_vision_training_release_json($config);
+            $storedMetrics=$row['metrics_json']!==null?glasses_vision_training_release_json(json_decode((string)$row['metrics_json'],true)?:[]):null;
+            $incomingMetrics=$metrics!==null?glasses_vision_training_release_json($metrics):null;
+            if((int)$row['training_release_id']!==(int)$release['id']||(int)$row['qualification_id']!==(int)$qualification['id']||
+               (string)$row['trainer']!==$trainer||(string)($row['trainer_version']??'')!==(string)($trainerVersion??'')||
+               (string)$row['status']!==$status||(string)$row['output_sha256']!==(string)$output||
+               $storedConfig!==$incomingConfig||$storedMetrics!==$incomingMetrics)
+                throw new InvalidArgumentException('Training run key already exists with different immutable lineage evidence.');
             return glasses_vision_lineage_training_run_public($row);
         }
         $public=glasses_public_id('vision-train-run');
