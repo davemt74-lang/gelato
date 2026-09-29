@@ -8,7 +8,7 @@ const GLASSES_VISION_CALIBRATION_PROFILE_SCHEMA='gelato.vision_calibration_profi
 
 function glasses_vision_calibration_profile_ready(PDO $pdo): bool
 {
-    foreach(['glasses_vision_calibration_profiles','glasses_vision_calibration_selections'] as $table){
+    foreach(['glasses_vision_calibration_profiles','glasses_vision_calibration_selections','glasses_vision_calibration_profile_events'] as $table){
         $q=$pdo->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?");
         $q->execute([$table]);
         if((int)$q->fetchColumn()!==1)return false;
@@ -31,7 +31,9 @@ function glasses_vision_calibration_profile_context(array $in): array
     $set=function(string $key)use($in):array{
         $v=$in[$key]??[];
         if(!is_array($v))throw new InvalidArgumentException('Calibration profile '.$key.' must be a list.');
-        $out=array_values(array_unique(array_filter(array_map(static fn($x)=>mb_substr(trim((string)$x),0,190,'UTF-8'),$v),static fn($x)=>$x!=='')));
+        $out=array_values(array_unique(array_filter(array_map(static fn($x)=>mb_substr(strtolower(trim((string)$x)),0,190,'UTF-8'),$v),static fn($x)=>$x!=='')));
+        if(in_array($key,['menuSignatures','ingredientSignatures'],true))
+            foreach($out as $signature)if(!preg_match('/^[a-f0-9]{64}$/',$signature))throw new InvalidArgumentException('Calibration profile '.$key.' values must be SHA-256 hashes.');
         sort($out,SORT_STRING);return $out;
     };
     return [
@@ -73,6 +75,15 @@ function glasses_vision_calibration_profile_row(PDO $pdo,int $org,string $public
     ];
 }
 
+function glasses_vision_calibration_profile_event(PDO $pdo,int $org,int $profileId,string $profilePublic,string $profileHash,string $type,array $evidence,int $actor): void
+{
+    $material=['schema'=>GLASSES_VISION_CALIBRATION_PROFILE_SCHEMA,'profilePublicId'=>$profilePublic,'profileHash'=>$profileHash,'eventType'=>$type,'evidence'=>$evidence];
+    $hash=hash('sha256',glasses_vision_training_release_json($material));
+    $pdo->prepare("INSERT INTO glasses_vision_calibration_profile_events
+      (organization_id,profile_id,event_type,event_hash,evidence_json,actor_user_id) VALUES (?,?,?,?,?,?)")
+      ->execute([$org,$profileId,$type,$hash,glasses_vision_training_release_json($material),$actor]);
+}
+
 function glasses_vision_calibration_profile_create(PDO $pdo,int $org,array $input,int $actor): array
 {
     if(!glasses_vision_calibration_profile_ready($pdo))throw new RuntimeException('Vision Lab V8 calibration-profile migration is not installed.');
@@ -97,13 +108,19 @@ function glasses_vision_calibration_profile_create(PDO $pdo,int $org,array $inpu
     $q=$pdo->prepare("SELECT public_id,profile_hash FROM glasses_vision_calibration_profiles WHERE organization_id=? AND profile_key=? AND profile_hash=? LIMIT 1");
     $q->execute([$org,$key,$hash]);$existing=$q->fetch();
     if($existing)return glasses_vision_calibration_profile_row($pdo,$org,(string)$existing['public_id']);
-    $public=glasses_public_id('vision-cal-profile');
-    $pdo->prepare("INSERT INTO glasses_vision_calibration_profiles
-      (organization_id,public_id,profile_key,calibration_id,package_id,location_id,station_id,status,priority,context_json,guardrails_json,profile_hash,created_by)
-      VALUES (?,?,?,?,?,?,?,'draft',?,?,?,?,?)")
-      ->execute([$org,$public,$key,(int)$cal['id'],$package?(int)$package['id']:null,(int)$cal['location_id'],(int)$cal['station_id'],$priority,
-        glasses_vision_training_release_json($context),glasses_vision_training_release_json($guardrails),$hash,$actor]);
-    return glasses_vision_calibration_profile_row($pdo,$org,$public);
+    return glasses_transaction($pdo,function()use($pdo,$org,$actor,$key,$cal,$package,$priority,$context,$guardrails,$hash):array{
+        $public=glasses_public_id('vision-cal-profile');
+        $pdo->prepare("INSERT INTO glasses_vision_calibration_profiles
+          (organization_id,public_id,profile_key,calibration_id,package_id,location_id,station_id,status,priority,context_json,guardrails_json,profile_hash,created_by)
+          VALUES (?,?,?,?,?,?,?,'draft',?,?,?,?,?)")
+          ->execute([$org,$public,$key,(int)$cal['id'],$package?(int)$package['id']:null,(int)$cal['location_id'],(int)$cal['station_id'],$priority,
+            glasses_vision_training_release_json($context),glasses_vision_training_release_json($guardrails),$hash,$actor]);
+        $id=(int)$pdo->lastInsertId();
+        glasses_vision_calibration_profile_event($pdo,$org,$id,$public,$hash,'created',['status'=>'draft'],$actor);
+        glasses_vision_lineage_edge($pdo,$org,'station_calibration',(string)$cal['public_id'],(string)$cal['source_hash'],'profiled_as','calibration_profile',$public,$hash,
+          ['modelPackagePublicId'=>$package['public_id']??null,'profileKey'=>$key],$actor);
+        return glasses_vision_calibration_profile_row($pdo,$org,$public);
+    });
 }
 
 function glasses_vision_calibration_profile_set_status(PDO $pdo,int $org,string $publicId,string $status,int $actor): array
@@ -113,6 +130,7 @@ function glasses_vision_calibration_profile_set_status(PDO $pdo,int $org,string 
     return glasses_transaction($pdo,function()use($pdo,$org,$publicId,$status,$actor):array{
         $q=$pdo->prepare("SELECT * FROM glasses_vision_calibration_profiles WHERE organization_id=? AND public_id=? LIMIT 1 FOR UPDATE");
         $q->execute([$org,$publicId]);$r=$q->fetch();if(!$r)throw new InvalidArgumentException('Calibration profile was not found.');
+        if((string)$r['status']===$status)return glasses_vision_calibration_profile_row($pdo,$org,$publicId);
         if((string)$r['status']==='retired'&&$status==='active')throw new InvalidArgumentException('Retired calibration profiles cannot be reactivated.');
         if($status==='active'){
             $calStatus=(string)glasses_vision_calibration_profile_scalar($pdo,"SELECT status FROM glasses_station_calibrations WHERE organization_id=? AND id=?",[$org,(int)$r['calibration_id']]);
@@ -127,6 +145,7 @@ function glasses_vision_calibration_profile_set_status(PDO $pdo,int $org,string 
             $pdo->prepare("UPDATE glasses_vision_calibration_profiles SET status='retired',retired_at=NOW(6) WHERE organization_id=? AND id=?")
               ->execute([$org,(int)$r['id']]);
         }
+        glasses_vision_calibration_profile_event($pdo,$org,(int)$r['id'],(string)$r['public_id'],(string)$r['profile_hash'],$status==='active'?'activated':'retired',['previousStatus'=>$r['status'],'status'=>$status],$actor);
         return glasses_vision_calibration_profile_row($pdo,$org,$publicId);
     });
 }
@@ -169,7 +188,7 @@ function glasses_vision_calibration_profile_runtime(array $device,array $input,?
     return ['platform'=>(string)$device['platform'],'frameWidth'=>$width,'frameHeight'=>$height,'pixelFormat'=>$pixel];
 }
 
-function glasses_vision_calibration_profile_analysis_scope(PDO $pdo,int $org,array $analysis,array $device,?array $package): void
+function glasses_vision_calibration_profile_analysis_scope(PDO $pdo,int $org,array $analysis,array $device,?array $package): array
 {
     $snapshotPublic=(string)($analysis['healthSnapshotPublicId']??'');
     $snapshot=glasses_vision_context_drift_snapshot_db($pdo,$org,$snapshotPublic);
@@ -179,6 +198,7 @@ function glasses_vision_calibration_profile_analysis_scope(PDO $pdo,int $org,arr
         throw new InvalidArgumentException('Context-drift analysis does not belong to the selected station.');
     if($package!==null&&!hash_equals((string)$snapshot['packagePublicId'],(string)$package['public_id']))
         throw new InvalidArgumentException('Context-drift analysis does not belong to the selected model package.');
+    return $snapshot;
 }
 
 function glasses_vision_calibration_profile_rule_matches(array $profile,array $context): array
@@ -204,18 +224,26 @@ function glasses_vision_calibration_profile_select(PDO $pdo,int $org,array $inpu
     if(!glasses_vision_calibration_profile_ready($pdo))throw new RuntimeException('Vision Lab V8 calibration-profile migration is not installed.');
     $device=glasses_vision_calibration_profile_device($pdo,$org,(string)($input['devicePublicId']??''));
     $package=null;
-    if(trim((string)($input['modelPackagePublicId']??''))!=='')$package=glasses_vision_model_package_row($pdo,$org,(string)$input['modelPackagePublicId'],false);
+    if(trim((string)($input['modelPackagePublicId']??''))!==''){
+        $package=glasses_vision_model_package_row($pdo,$org,(string)$input['modelPackagePublicId'],false);
+        if((string)$package['status']!=='ready')throw new InvalidArgumentException('Calibration profile selection requires a ready model package.');
+    }
 
-    $runtime=is_array($input['runtime']??null)?$input['runtime']:[];
-    $runtimePlatform=trim((string)($runtime['platform']??$device['platform']));
-    $runtimeWidth=(int)($runtime['frameWidth']??0);$runtimeHeight=(int)($runtime['frameHeight']??0);
-    $runtimePixel=mb_strtolower(trim((string)($runtime['pixelFormat']??'')),'UTF-8');
+    $runtimeInput=is_array($input['runtime']??null)?$input['runtime']:[];
+    $runtimePlatform=trim((string)($runtimeInput['platform']??$device['platform']));
+    if($runtimePlatform!==''&&!hash_equals((string)$device['platform'],$runtimePlatform))throw new InvalidArgumentException('Calibration runtime platform does not match paired device.');
+    $runtimeWidth=(int)($runtimeInput['frameWidth']??0);$runtimeHeight=(int)($runtimeInput['frameHeight']??0);
+    $runtimePixel=mb_strtolower(trim((string)($runtimeInput['pixelFormat']??'')),'UTF-8');
 
     $analysis=null;$context=[];
     if(trim((string)($input['contextDriftAnalysisPublicId']??''))!==''){
         $analysis=glasses_vision_context_drift_row($pdo,$org,(string)$input['contextDriftAnalysisPublicId']);
         if(!glasses_vision_context_drift_verify($pdo,$org,$analysis['publicId'])['passed'])throw new InvalidArgumentException('Calibration selection requires an intact context-drift analysis.');
-        glasses_vision_calibration_profile_analysis_scope($pdo,$org,$analysis,$device,$package);
+        $analysisSnapshot=glasses_vision_calibration_profile_analysis_scope($pdo,$org,$analysis,$device,$package);
+        if($package===null){
+            $package=glasses_vision_model_package_row($pdo,$org,(string)$analysisSnapshot['packagePublicId'],false);
+            if((string)$package['status']!=='ready')throw new InvalidArgumentException('Context-drift analysis model package is no longer ready.');
+        }
         $cc=(array)($analysis['evidence']['currentContext']??[]);
         $context=[
           'brightnessMean'=>$cc['brightnessMean']??null,'contrastMean'=>$cc['contrastMean']??null,'cameraPitchMean'=>$cc['cameraPitchMean']??null,
@@ -234,17 +262,14 @@ function glasses_vision_calibration_profile_select(PDO $pdo,int $org,array $inpu
         AND (package_id IS NULL OR package_id=?)
       ORDER BY priority DESC,id ASC");
     $q->execute([$org,(int)$device['location_id'],(int)$device['station_id'],$package?(int)$package['id']:0]);
-    $candidates=[];$fallbackRuntime=['platform'=>$runtimePlatform];
-    if($runtimeWidth>0)$fallbackRuntime['frameWidth']=$runtimeWidth;
-    if($runtimeHeight>0)$fallbackRuntime['frameHeight']=$runtimeHeight;
-    if($runtimePixel!=='')$fallbackRuntime['pixelFormat']=$runtimePixel;
+    $candidates=[];$fallbackRuntime=$runtime;
     foreach($q->fetchAll(PDO::FETCH_COLUMN) as $public){
         $p=glasses_vision_calibration_profile_row($pdo,$org,(string)$public);
+        if($p['calibrationStatus']!=='active')continue;
         if($package!==null&&$p['modelPackagePublicId']!==null&&!hash_equals((string)$p['modelPackagePublicId'],(string)$package['public_id']))continue;
-        if(!hash_equals((string)$p['platform'],$runtimePlatform))continue;
-        if($runtimeWidth>0&&$runtimeWidth!==(int)$p['frame']['width'])continue;
-        if($runtimeHeight>0&&$runtimeHeight!==(int)$p['frame']['height'])continue;
-        if($runtimePixel!==''&&!hash_equals(mb_strtolower((string)$p['frame']['pixelFormat'],'UTF-8'),$runtimePixel))continue;
+        if(!hash_equals((string)$p['platform'],$runtime['platform']))continue;
+        if($runtime['frameWidth']!==(int)$p['frame']['width']||$runtime['frameHeight']!==(int)$p['frame']['height'])continue;
+        if(!hash_equals(mb_strtolower((string)$p['frame']['pixelFormat'],'UTF-8'),$runtime['pixelFormat']))continue;
         $match=glasses_vision_calibration_profile_rule_matches($p,$context);
         if(!$match['compatible'])continue;
         $candidates[]=['profile'=>$p,'match'=>$match];
@@ -287,6 +312,10 @@ function glasses_vision_calibration_profile_select(PDO $pdo,int $org,array $inpu
           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
           ->execute([$org,$public,(int)$device['id'],$package?(int)$package['id']:null,$analysisId,$profileId,$fallbackId,$key,$selected?(float)$selected['match']['score']:0.0,$decision,
             glasses_vision_training_release_json($selectionMaterial),$contextFingerprint,$selectionHash,$actor]);
+        if($selected)glasses_vision_lineage_edge($pdo,$org,'calibration_profile',(string)$selected['profile']['publicId'],(string)$selected['profile']['profileHash'],'selected_as','calibration_selection',$public,$selectionHash,
+          ['devicePublicId'=>$device['public_id'],'contextFingerprint'=>$contextFingerprint,'decision'=>$decision],$actor);
+        elseif($analysis)glasses_vision_lineage_edge($pdo,$org,'context_drift_analysis',(string)$analysis['publicId'],(string)$analysis['analysisHash'],'calibration_fallback_as','calibration_selection',$public,$selectionHash,
+          ['devicePublicId'=>$device['public_id'],'contextFingerprint'=>$contextFingerprint,'decision'=>$decision],$actor);
         return glasses_vision_calibration_selection_row($pdo,$org,$public);
     });
 }
