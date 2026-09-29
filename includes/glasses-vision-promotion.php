@@ -41,8 +41,13 @@ function glasses_vision_promotion_source(PDO $pdo,int $org,string $reviewPublic)
     if(!$row)throw new InvalidArgumentException('Passing evidence review was not found.');
     $result=json_decode((string)$row['result_json'],true)?:[];
     $reviewEvidence=json_decode((string)$row['evidence_json'],true)?:[];
-    $expectedReviewHash=hash('sha256',glasses_vision_training_release_json(['evidence'=>$reviewEvidence,'result'=>$result]));
-    if(!hash_equals((string)$row['review_hash'],$expectedReviewHash))throw new InvalidArgumentException('Evidence review hash verification failed.');
+    $lq=$pdo->prepare("SELECT from_hash,to_hash FROM glasses_vision_lineage_edges
+      WHERE organization_id=? AND from_kind='model_experiment' AND from_public_id=? AND relation='evidence_reviewed_as'
+        AND to_kind='evidence_review' AND to_public_id=? LIMIT 1");
+    $lq->execute([$org,(string)$row['experiment_public_id'],(string)$row['public_id']]);$lineage=$lq->fetch();
+    if(!$lineage||!hash_equals((string)$row['experiment_hash'],(string)$lineage['from_hash'])||
+       !hash_equals((string)$row['review_hash'],(string)$lineage['to_hash']))
+        throw new InvalidArgumentException('Evidence review lineage/hash verification failed.');
     if((string)$row['status']!=='passed'||empty($result['promotionEligible']))throw new InvalidArgumentException('Promotion requires a passing promotion-eligible evidence review.');
     if((string)$row['experiment_status']!=='completed')throw new InvalidArgumentException('Promotion requires a completed model experiment.');
     if(empty($row['qualification_passed']))throw new InvalidArgumentException('Promotion qualification is no longer a passing attestation.');
