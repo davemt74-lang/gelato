@@ -7,6 +7,7 @@ from typing import Any
 
 SCHEMA_DATASET="gelato.vision_training_dataset.v1"
 SCHEMA_TRAINING_RELEASE="gelato.vision_training_release.v1"
+SCHEMA_TRAINING_QUALIFICATION="gelato.vision_training_qualification.v1"
 SCHEMA_RELEASE="gelato.vision_model_release.v1"
 SCHEMA_BROWSER="gelato.browser_onnx_detector.v1"
 SCHEMA_COMPARISON="gelato.vision_model_comparison.v1"
@@ -106,6 +107,28 @@ def inspect_training_release(root: Path)->dict[str,Any]:
         if int(declared.get(split,-1))!=count:
             raise PipelineError(f"Training release splitCounts.{split} does not match packaged images.")
     return {"root":str(root),"manifest":manifest,"classes":classes,"splitCounts":counts}
+
+def canonical_json_sha256(value:dict[str,Any])->str:
+    body=json.dumps(value,sort_keys=True,separators=(",",":"),ensure_ascii=False)
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()
+
+def verify_training_qualification(root:Path,release_manifest:dict[str,Any])->dict[str,Any]:
+    path=root/"qualification.json"
+    if not path.is_file(): raise PipelineError("V6 training release is not qualified for model training.")
+    data=json.loads(path.read_text("utf-8"))
+    if data.get("schema")!=SCHEMA_TRAINING_QUALIFICATION: raise PipelineError("Training qualification schema is unsupported.")
+    expected=str(data.get("qualificationHash",""))
+    unsigned=dict(data);unsigned.pop("qualificationHash",None)
+    if len(expected)!=64 or canonical_json_sha256(unsigned)!=expected:
+        raise PipelineError("Training qualification hash verification failed.")
+    if str(data.get("releaseHash",""))!=str(release_manifest.get("releaseHash","")):
+        raise PipelineError("Training qualification does not match the release hash.")
+    if data.get("passed") is not True:
+        raise PipelineError("Training qualification gate did not pass.")
+    checks=data.get("checks")
+    if not isinstance(checks,list) or not checks or any(not isinstance(item,dict) or item.get("passed") is not True for item in checks):
+        raise PipelineError("Training qualification contains an unresolved failed check.")
+    return data
 
 def prepare_training_release(root: Path,out: Path)->dict[str,Any]:
     info=inspect_training_release(root)
@@ -211,10 +234,13 @@ def deterministic_split(images:list[Path],seed:int,ratios:tuple[float,float,floa
     provenance={"mode":"group_aware","groupCount":len(groups),"protectedBy":["captureGroup","buildPublicId"],"counts":counts}
     return splits,provenance
 
-def prepare_workspace(dataset: Path,out: Path,seed:int=74,train_ratio:float=.70,val_ratio:float=.15,test_ratio:float=.15)->dict[str,Any]:
+def prepare_workspace(dataset: Path,out: Path,seed:int=74,train_ratio:float=.70,val_ratio:float=.15,test_ratio:float=.15,require_qualification:bool=False)->dict[str,Any]:
     root,tmp=materialize_dataset(dataset)
     try:
         if (root/"provenance-manifest.json").is_file():
+            release_manifest=load_training_release_manifest(root)
+            if require_qualification:
+                verify_training_qualification(root,release_manifest)
             return prepare_training_release(root,out)
         info=inspect_dataset(root); splits,split_provenance=deterministic_split(info["images"],seed,(train_ratio,val_ratio,test_ratio),info["manifest"])
         if out.exists(): shutil.rmtree(out)
@@ -356,7 +382,7 @@ def release_package(onnx_path:Path,labels:list[str],metrics:dict[str,Any],out:Pa
     return package
 
 def train_release(args:argparse.Namespace)->dict[str,Any]:
-    workspace=Path(args.output).resolve()/"workspace";prepare_workspace(Path(args.dataset),workspace,args.seed,args.train_ratio,args.val_ratio,args.test_ratio)
+    workspace=Path(args.output).resolve()/"workspace";prepare_workspace(Path(args.dataset),workspace,args.seed,args.train_ratio,args.val_ratio,args.test_ratio,require_qualification=True)
     try:
         from ultralytics import YOLO
     except ImportError as e: raise PipelineError("Install tools/vision_training/requirements-train.txt before training.") from e
