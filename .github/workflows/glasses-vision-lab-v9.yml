@@ -59,6 +59,10 @@ jobs:
           grep -q 'Scene tracking IDs must be unique' includes/glasses-vision-scene.php
           grep -q 'function glasses_vision_scene_verify' includes/glasses-vision-scene.php
           grep -q 'reserved_for_v9_section_2' includes/glasses-vision-scene.php
+          grep -q 'glasses_vision_profile_for_build' includes/glasses-vision-scene.php
+          grep -q 'Vision Label Profile' includes/glasses-vision-scene.php
+          grep -q 'normalized_label VARCHAR(180)' database/20261117_vision_lab_v9_live_scene_understanding.sql
+          ! grep -q "'operator'" includes/glasses-vision-scene.php
           grep -q 'vision.scene.capture' api/glasses-device.php
           ! grep -q 'glasses_build_confirm' includes/glasses-vision-scene.php
           ! grep -q 'kds_transition' includes/glasses-vision-scene.php
