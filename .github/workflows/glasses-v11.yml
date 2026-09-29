@@ -13,6 +13,7 @@ on:
       - 'database/20261204_v11_model_release_candidate_governance.sql'
       - 'database/20261205_v11_shadow_production_validation.sql'
       - 'database/20261206_v11_governed_canary_release.sql'
+      - 'database/20261207_v11_continuous_production_learning.sql'
       - 'includes/glasses-training-identity.php'
       - 'includes/glasses-production-evidence.php'
       - 'includes/glasses-annotation-workbench.php'
@@ -23,6 +24,8 @@ on:
       - 'includes/glasses-v11-model-release-candidates.php'
       - 'includes/glasses-v11-shadow-validation.php'
       - 'includes/glasses-v11-canary-release.php'
+      - 'includes/glasses-v11-production-learning.php'
+      - 'includes/glasses-vision-retraining.php'
       - 'includes/glasses-vision-models.php'
       - 'includes/glasses-vision-promotion.php'
       - 'includes/glasses-vision-evidence-review.php'
@@ -41,6 +44,7 @@ on:
       - 'assets/js/glasses-v11-model-release-candidates.js'
       - 'assets/js/glasses-v11-shadow-validation.js'
       - 'assets/js/glasses-v11-canary-release.js'
+      - 'assets/js/glasses-v11-production-learning.js'
       - 'tests/glasses-v11-training-identity-contract.php'
       - 'tests/glasses-v11-production-evidence-contract.php'
       - 'tests/glasses-v11-annotation-workbench-contract.php'
@@ -51,6 +55,7 @@ on:
       - 'tests/glasses-v11-model-release-candidate-contract.php'
       - 'tests/glasses-v11-shadow-production-validation-contract.php'
       - 'tests/glasses-v11-governed-canary-release-contract.php'
+      - 'tests/glasses-v11-continuous-production-learning-contract.php'
       - 'docs/GLASSES-V11-TRAINING-IDENTITY.md'
       - 'docs/GLASSES-V11-PRODUCTION-EVIDENCE.md'
       - 'docs/GLASSES-V11-ANNOTATION-WORKBENCH.md'
@@ -61,6 +66,7 @@ on:
       - 'docs/GLASSES-V11-MODEL-RELEASE-CANDIDATES.md'
       - 'docs/GLASSES-V11-SHADOW-VALIDATION.md'
       - 'docs/GLASSES-V11-GOVERNED-CANARY-RELEASE.md'
+      - 'docs/GLASSES-V11-PRODUCTION-LEARNING.md'
       - '.github/workflows/glasses-v11.yml'
   push:
     branches: [main]
@@ -99,6 +105,8 @@ jobs:
           php -l includes/glasses-v11-model-release-candidates.php
           php -l includes/glasses-v11-shadow-validation.php
           php -l includes/glasses-v11-canary-release.php
+          php -l includes/glasses-v11-production-learning.php
+          php -l includes/glasses-vision-retraining.php
           php -l includes/glasses-vision-models.php
           php -l includes/glasses-vision-promotion.php
           php -l includes/glasses-vision-evidence-review.php
@@ -117,6 +125,7 @@ jobs:
           php -l tests/glasses-v11-model-release-candidate-contract.php
           php -l tests/glasses-v11-shadow-production-validation-contract.php
           php -l tests/glasses-v11-governed-canary-release-contract.php
+          php -l tests/glasses-v11-continuous-production-learning-contract.php
           node --check assets/js/glasses-training-identity.js
           node --check assets/js/glasses-production-evidence.js
           node --check assets/js/glasses-annotation-workbench.js
@@ -127,6 +136,7 @@ jobs:
           node --check assets/js/glasses-v11-model-release-candidates.js
           node --check assets/js/glasses-v11-shadow-validation.js
           node --check assets/js/glasses-v11-canary-release.js
+          node --check assets/js/glasses-v11-production-learning.js
       - name: Architecture guardrails
         run: |
           grep -q 'GLASSES_TRAINING_ASSIGNMENT_SCHEMA' includes/glasses-training-identity.php
@@ -200,6 +210,15 @@ jobs:
           grep -q 'V11 canary advancement requires a passing validation for the current stage.' includes/glasses-vision-models.php
           ! grep -q 'glasses_vision_model_rollout_activate(' includes/glasses-v11-canary-release.php
           ! grep -q 'glasses_vision_model_rollout_advance(' includes/glasses-v11-canary-release.php
+          grep -q 'GLASSES_V11_PRODUCTION_LEARNING_SCHEMA' includes/glasses-v11-production-learning.php
+          grep -q 'CREATE TABLE glasses_vision_learning_cycles' database/20261207_v11_continuous_production_learning.sql
+          grep -q 'learning_cycle.start' api/glasses-vision-lab.php
+          grep -q 'learning_cycle.attach_mining' api/glasses-vision-lab.php
+          grep -q 'learning_cycle.attach_batch' api/glasses-vision-lab.php
+          grep -q 'learning_cycle.attach_dataset' api/glasses-vision-lab.php
+          ! grep -q 'glasses_v11_training_run_create(' includes/glasses-v11-production-learning.php
+          ! grep -q 'glasses_vision_experiment_create(' includes/glasses-v11-production-learning.php
+          ! grep -q 'glasses_vision_model_rollout_activate(' includes/glasses-v11-production-learning.php
       - name: Install schema
         run: |
           sudo apt-get update -qq
@@ -251,6 +270,9 @@ jobs:
 
       - name: V11 governed canary release and safety rollback contract
         run: php tests/glasses-v11-governed-canary-release-contract.php
+
+      - name: V11 continuous production learning contract
+        run: php tests/glasses-v11-continuous-production-learning-contract.php
 
       - name: V10 RC1 regression
         run: php tests/glasses-v10-rc1-acceptance-contract.php

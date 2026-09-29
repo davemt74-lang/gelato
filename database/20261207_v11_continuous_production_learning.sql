@@ -1,0 +1,37 @@
+-- Gelato Vision Lab V11 Section 11 — Continuous Production Learning & Closed-Loop Retraining
+SET NAMES utf8mb4;
+
+CREATE TABLE glasses_vision_learning_cycles (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  organization_id BIGINT UNSIGNED NOT NULL,
+  public_id VARCHAR(80) NOT NULL,
+  production_acceptance_id BIGINT UNSIGNED NOT NULL,
+  model_package_id BIGINT UNSIGNED NOT NULL,
+  mining_run_id BIGINT UNSIGNED NULL,
+  retraining_batch_id BIGINT UNSIGNED NULL,
+  dataset_id BIGINT UNSIGNED NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'collecting',
+  source_window_start DATETIME(6) NOT NULL,
+  source_window_end DATETIME(6) NOT NULL,
+  policy_json JSON NOT NULL,
+  manifest_json JSON NOT NULL,
+  cycle_hash CHAR(64) NOT NULL,
+  created_by BIGINT UNSIGNED NULL,
+  ready_by BIGINT UNSIGNED NULL,
+  ready_at DATETIME(6) NULL,
+  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_glasses_v11_learning_cycle_public (organization_id,public_id),
+  UNIQUE KEY uq_glasses_v11_learning_cycle_hash (organization_id,cycle_hash),
+  KEY idx_glasses_v11_learning_cycle_state (organization_id,status,created_at),
+  KEY idx_glasses_v11_learning_cycle_acceptance (organization_id,production_acceptance_id,created_at),
+  CONSTRAINT fk_glasses_v11_learning_cycle_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  CONSTRAINT fk_glasses_v11_learning_cycle_acceptance FOREIGN KEY (production_acceptance_id) REFERENCES glasses_vision_production_acceptances(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_v11_learning_cycle_model FOREIGN KEY (model_package_id) REFERENCES glasses_vision_model_packages(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_v11_learning_cycle_mining FOREIGN KEY (mining_run_id) REFERENCES glasses_vision_mining_runs(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_v11_learning_cycle_batch FOREIGN KEY (retraining_batch_id) REFERENCES glasses_vision_retraining_batches(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_v11_learning_cycle_dataset FOREIGN KEY (dataset_id) REFERENCES glasses_vision_dataset_versions(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_v11_learning_cycle_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_glasses_v11_learning_cycle_ready_by FOREIGN KEY (ready_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
