@@ -133,7 +133,7 @@ def prepare_training_release(root: Path,out: Path)->dict[str,Any]:
         "trainingProfile":manifest.get("trainingProfile"),
         "counts":info["splitCounts"],
         "classes":names,
-        "grouping":{"mode":"governed_release","protectedBy":list((manifest.get("splitPlan",{}).get("policy") or {}).keys())},
+        "grouping":{"mode":"governed_release","protectedBy":[k for k,v in (manifest.get("splitPlan",{}).get("policy") or {}).items() if v]},
     }
     (out/"split-manifest.json").write_text(json.dumps(split_manifest,indent=2)+"\n",encoding="utf-8")
     return split_manifest
