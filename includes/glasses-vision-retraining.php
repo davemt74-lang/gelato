@@ -177,9 +177,9 @@ function glasses_vision_retraining_prepare(PDO $pdo,int $org,string $miningRunPu
           ->execute([$org,$public,(int)$run['id'],json_encode($policy,JSON_UNESCAPED_SLASHES),json_encode($manifest,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),$batchHash,$actor]);
         $batchId=(int)$pdo->lastInsertId();
         $insert=$pdo->prepare("INSERT INTO glasses_vision_retraining_batch_items
-          (organization_id,batch_id,mined_candidate_id,production_error_id,training_sample_id,training_media_id,eligibility_status,eligibility_reason,decision,decision_reason,evidence_hash)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?)");
-        foreach($items as $i)$insert->execute([$org,$batchId,$i['candidateId'],$i['productionErrorId'],$i['sampleId'],$i['mediaId'],$i['eligibility'],$i['eligibilityReason'],$i['decision'],$i['decisionReason'],$i['evidenceHash']]);
+          (organization_id,public_id,batch_id,mined_candidate_id,production_error_id,training_sample_id,training_media_id,eligibility_status,eligibility_reason,decision,decision_reason,evidence_hash)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
+        foreach($items as $i)$insert->execute([$org,glasses_public_id('vision-retraining-item'),$batchId,$i['candidateId'],$i['productionErrorId'],$i['sampleId'],$i['mediaId'],$i['eligibility'],$i['eligibilityReason'],$i['decision'],$i['decisionReason'],$i['evidenceHash']]);
         return glasses_vision_retraining_batch($pdo,$org,$public);
     });
 }
@@ -199,7 +199,7 @@ function glasses_vision_retraining_item_public(array $r): array
 
 function glasses_vision_retraining_items(PDO $pdo,int $org,int $batchId): array
 {
-    $q=$pdo->prepare("SELECT i.*,CONCAT('vision-retraining-item-',i.id) public_id,
+    $q=$pdo->prepare("SELECT i.*,
       c.public_id candidate_public_id,c.candidate_hash,e.public_id production_error_public_id,e.event_hash,
       s.public_id sample_public_id,s.review_status sample_review_status,m.public_id media_public_id,m.sha256 media_sha256,m.capture_group,m.quality_state
       FROM glasses_vision_retraining_batch_items i
