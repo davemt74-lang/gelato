@@ -9,10 +9,15 @@ on:
       - 'includes/glasses-runtime-recovery.php'
       - 'includes/glasses-runtime-soak.php'
       - 'includes/glasses-cook-ux.php'
+      - 'includes/glasses-production-pilot.php'
+      - 'database/20261126_v10_production_pilot_governance.sql'
       - 'includes/glasses-simulator.php'
       - 'api/glasses-simulator.php'
+      - 'api/glasses-device.php'
+      - 'api/glasses-vision-lab.php'
       - 'glasses-simulator.php'
       - 'assets/js/glasses-web-simulator.js'
+      - 'assets/js/glasses-production-pilot.js'
       - 'assets/css/glasses-web-simulator.css'
       - 'tests/glasses-v10-hardware-runtime-adapter-contract.php'
       - 'tests/glasses-v10-frame-pipeline-contract.php'
@@ -22,12 +27,14 @@ on:
       - 'tests/glasses-v10-soak-harness.js'
       - 'tests/glasses-v10-cook-ux-contract.php'
       - 'tests/glasses-v10-cook-ux-harness.js'
+      - 'tests/glasses-v10-production-pilot-governance-contract.php'
       - 'docs/GLASSES-V10-HARDWARE-RUNTIME.md'
       - 'docs/GLASSES-V10-FRAME-PIPELINE.md'
       - 'docs/GLASSES-V10-DEVICE-HEALTH.md'
       - 'docs/GLASSES-V10-RUNTIME-RECOVERY.md'
       - 'docs/GLASSES-V10-STATION-SOAK.md'
       - 'docs/GLASSES-V10-COOK-UX.md'
+      - 'docs/GLASSES-V10-PRODUCTION-PILOT.md'
       - 'assets/js/glasses-v10-cook-ux-harness.js'
       - 'assets/js/glasses-v10-soak-harness.js'
       - '.github/workflows/glasses-v10.yml'
@@ -65,8 +72,11 @@ jobs:
           php -l includes/glasses-runtime-recovery.php
           php -l includes/glasses-runtime-soak.php
           php -l includes/glasses-cook-ux.php
+          php -l includes/glasses-production-pilot.php
           php -l includes/glasses-simulator.php
           php -l api/glasses-simulator.php
+          php -l api/glasses-device.php
+          php -l api/glasses-vision-lab.php
           php -l glasses-simulator.php
           php -l tests/glasses-v10-hardware-runtime-adapter-contract.php
           php -l tests/glasses-v10-frame-pipeline-contract.php
@@ -78,6 +88,8 @@ jobs:
           php -l tests/glasses-v10-cook-ux-contract.php
           node --check assets/js/glasses-v10-cook-ux-harness.js
           node --check tests/glasses-v10-cook-ux-harness.js
+          node --check assets/js/glasses-production-pilot.js
+          php -l tests/glasses-v10-production-pilot-governance-contract.php
           node --check assets/js/glasses-web-simulator.js
 
       - name: Architecture guardrails
@@ -129,6 +141,15 @@ jobs:
           grep -q "Confirm Send to Expo" assets/js/glasses-web-simulator.js
           ! grep -q 'hud-leader-line' glasses-simulator.php
           ! grep -q 'kds_transition(' includes/glasses-cook-ux.php
+          grep -q 'GLASSES_PRODUCTION_PILOT_SCHEMA' includes/glasses-production-pilot.php
+          grep -q 'required_hardware_adapter_unavailable' includes/glasses-production-pilot.php
+          grep -q 'glasses_vision_model_rollout_rollback' includes/glasses-production-pilot.php
+          grep -q 'pilot.production_status' api/glasses-device.php
+          grep -q 'productionMode' api/glasses-device.php
+          grep -q 'pilot.kill_switch' api/glasses-vision-lab.php
+          grep -q 'pilot.rollback_rollout' api/glasses-vision-lab.php
+          ! grep -q 'kds_transition(' includes/glasses-production-pilot.php
+          ! grep -q 'glasses_handoff_to_expo(' includes/glasses-production-pilot.php
 
       - name: Install schema
         run: |
@@ -177,6 +198,9 @@ jobs:
 
       - name: V10 cook UX deterministic harness
         run: node tests/glasses-v10-cook-ux-harness.js
+
+      - name: V10 production pilot governance contract
+        run: php tests/glasses-v10-production-pilot-governance-contract.php
 
       - name: Existing simulator regression
         run: php tests/glasses-web-simulator-contract.php
