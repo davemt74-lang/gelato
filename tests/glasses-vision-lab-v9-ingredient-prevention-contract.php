@@ -108,6 +108,12 @@ v93_assert(glasses_vision_ingredient_guard_verify($pdo,$org,$clear['publicId'])[
 $same=glasses_vision_ingredient_guard_assess($pdo,$org,$clearScene['publicId']);
 v93_assert($same['publicId']===$clear['publicId'],'Same immutable scene and policy must deduplicate ingredient assessment.');
 
+$occludedScene=v93_scene($pdo,$device,$sessionPublic,$slug,'occluded-frame',[
+ ['entityKey'=>'knife','kind'=>'tool','label'=>'knife','trackingId'=>'knife-occluded','source'=>'vision_model','confidence'=>.91,'bbox'=>[.10,.10,.10,.20]],
+]);
+$occluded=glasses_vision_ingredient_guard_assess($pdo,$org,$occludedScene['publicId']);
+v93_assert($occluded['state']==='insufficient'&&!in_array('missing_expected',v93_types($occluded),true),'Frame without the product/container must be insufficient rather than a false missing-ingredient warning.');
+
 $missingScene=v93_scene($pdo,$device,$sessionPublic,$slug,'missing-cheese',[
  ['entityKey'=>'pizza','kind'=>'product','label'=>'Guard Pizza','trackingId'=>'pizza-missing','source'=>'device_runtime','confidence'=>.99,'bbox'=>[.30,.45,.40,.35]],
 ]);
@@ -163,7 +169,7 @@ v93_assert(!glasses_vision_ingredient_guard_verify($pdo,$org,$duplicate['publicI
 $pdo->prepare("UPDATE glasses_vision_ingredient_preventions SET result_json=? WHERE organization_id=? AND public_id=?")->execute([$originalResult,$org,$duplicate['publicId']]);
 v93_assert(glasses_vision_ingredient_guard_verify($pdo,$org,$duplicate['publicId'])['passed'],'Restored ingredient assessment must verify.');
 
-v93_assert((int)v93_one($pdo,"SELECT COUNT(*) FROM glasses_vision_lineage_edges WHERE organization_id=? AND from_kind='vision_scene' AND relation='assessed_ingredient_risk_as' AND to_kind='ingredient_prevention'",[$org])===5,'Each persisted ingredient assessment must retain scene lineage.');
+v93_assert((int)v93_one($pdo,"SELECT COUNT(*) FROM glasses_vision_lineage_edges WHERE organization_id=? AND from_kind='vision_scene' AND relation='assessed_ingredient_risk_as' AND to_kind='ingredient_prevention'",[$org])===6,'Each persisted ingredient assessment must retain scene lineage.');
 
 $devApi=file_get_contents(__DIR__.'/../api/glasses-device.php');
 $labApi=file_get_contents(__DIR__.'/../api/glasses-vision-lab.php');
