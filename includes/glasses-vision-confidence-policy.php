@@ -214,6 +214,16 @@ function glasses_vision_confidence_decide(PDO $pdo,int $org,array $input,?int $a
             throw new InvalidArgumentException('Context-drift analysis model does not match assigned model.');
         $state=(string)$analysis['classification'];
     }
+    $calibration=null;
+    if($analysis){
+        $cq=$pdo->prepare("SELECT s.public_id,s.selection_hash FROM glasses_vision_calibration_selections s
+          WHERE s.organization_id=? AND s.device_id=? AND s.context_drift_analysis_id=(SELECT id FROM glasses_vision_context_drift_analyses WHERE organization_id=? AND public_id=?)
+          ORDER BY s.id DESC LIMIT 1");
+        $cq->execute([$org,(int)$device['id'],$org,$analysis['publicId']]);$calibration=$cq->fetch()?:null;
+        if($calibration&&!glasses_vision_calibration_selection_verify($pdo,$org,(string)$calibration['public_id'])['passed'])
+            throw new InvalidArgumentException('Confidence decision requires an intact calibration selection.');
+    }
+
     $rule=$policy['contextRules'][$state]??$policy['contextRules']['insufficient_context'];
     $classRule=$policy['classRules'][$label]??['minimumConfidence'=>GLASSES_VISION_CONFIDENCE_HARD_FLOOR,'requireHumanReview'=>false];
     $base=max(GLASSES_VISION_CONFIDENCE_HARD_FLOOR,$policy['hardFloor'],$policy['defaultThreshold'],$labelFloor,(float)$classRule['minimumConfidence']);
@@ -230,19 +240,20 @@ function glasses_vision_confidence_decide(PDO $pdo,int $org,array $input,?int $a
       'labelProfileHash'=>$runtimeProfile['profileHash'],'modelLabel'=>(string)($input['modelLabel']??''),'normalizedLabel'=>$label,'componentKey'=>$componentKey,
       'modelConfidence'=>round($confidence,5),'labelFloor'=>round($labelFloor,4),'policyDefault'=>$policy['defaultThreshold'],'classFloor'=>(float)$classRule['minimumConfidence'],
       'context'=>['analysisPublicId'=>$analysis['publicId']??null,'analysisHash'=>$analysis['analysisHash']??null,'classification'=>$state,'delta'=>(float)$rule['delta']],
+      'calibrationSelection'=> $calibration?['publicId'=>$calibration['public_id'],'selectionHash'=>$calibration['selection_hash']]:null,
       'effectiveThreshold'=>$effective,'requireHumanReview'=>$requiresHuman,'decision'=>$decision,
     ];
     $hash=hash('sha256',glasses_vision_training_release_json($evidence));$key=$hash;
     $q=$pdo->prepare("SELECT public_id FROM glasses_vision_confidence_decisions WHERE organization_id=? AND decision_key=? LIMIT 1");$q->execute([$org,$key]);$existing=$q->fetchColumn();
     if($existing)return glasses_vision_confidence_decision_row($pdo,$org,(string)$existing);
 
-    return glasses_transaction($pdo,function()use($pdo,$org,$actor,$policy,$device,$session,$assignment,$analysis,$key,$detector,$label,$componentKey,$confidence,$labelFloor,$effective,$decision,$evidence,$hash):array{
+    return glasses_transaction($pdo,function()use($pdo,$org,$actor,$policy,$device,$session,$assignment,$analysis,$calibration,$key,$detector,$label,$componentKey,$confidence,$labelFloor,$effective,$decision,$evidence,$hash):array{
         $pq=$pdo->prepare("SELECT id FROM glasses_vision_confidence_policies WHERE organization_id=? AND public_id=?");$pq->execute([$org,$policy['publicId']]);$policyId=(int)$pq->fetchColumn();
         $analysisId=null;if($analysis){$q=$pdo->prepare("SELECT id FROM glasses_vision_context_drift_analyses WHERE organization_id=? AND public_id=?");$q->execute([$org,$analysis['publicId']]);$analysisId=(int)$q->fetchColumn();}
         $calId=null;
-        if(trim((string)($evidence['context']['analysisPublicId']??''))!==''){
-            $q=$pdo->prepare("SELECT id FROM glasses_vision_calibration_selections WHERE organization_id=? AND device_id=? AND context_drift_analysis_id=? ORDER BY id DESC LIMIT 1");
-            $q->execute([$org,(int)$device['id'],$analysisId]);$v=$q->fetchColumn();if($v!==false)$calId=(int)$v;
+        if($calibration){
+            $q=$pdo->prepare("SELECT id FROM glasses_vision_calibration_selections WHERE organization_id=? AND public_id=? LIMIT 1");
+            $q->execute([$org,$calibration['public_id']]);$v=$q->fetchColumn();if($v!==false)$calId=(int)$v;
         }
         $public=glasses_public_id('vision-confidence-decision');
         $pdo->prepare("INSERT INTO glasses_vision_confidence_decisions
