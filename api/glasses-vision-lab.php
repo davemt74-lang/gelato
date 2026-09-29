@@ -11,10 +11,11 @@ require_once __DIR__.'/../includes/glasses-vision-annotation-qa.php';
 require_once __DIR__.'/../includes/glasses-vision-training-release.php';
 require_once __DIR__.'/../includes/glasses-vision-training-qualification.php';
 require_once __DIR__.'/../includes/glasses-vision-lineage.php';
+require_once __DIR__.'/../includes/glasses-vision-feedback.php';
 $user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];
 if(!app_has_permission('glasses.view',$user))app_json_response(['ok'=>false,'message'=>'AR glasses permission required.'],403);
 try{
- if($_SERVER['REQUEST_METHOD']==='GET'){$catalog=glasses_vision_lab_catalog($pdo,$user);$catalog['activeLearning']=glasses_vision_active_learning_catalog($pdo,$org);$catalog['datasetIntelligence']=glasses_vision_dataset_intelligence_catalog($pdo,$org);$catalog['trainingMedia']=glasses_vision_training_media_catalog($pdo,$org);$catalog['curation']=glasses_vision_curation_catalog($pdo,$org);$catalog['balance']=glasses_vision_balance_catalog($pdo,$org);$catalog['annotationQa']=glasses_vision_annotation_qa_catalog($pdo,$org);$catalog['trainingReleases']=glasses_vision_training_release_catalog($pdo,$org);$catalog['trainingQualification']=glasses_vision_training_qualification_catalog($pdo,$org);$catalog['lineage']=glasses_vision_lineage_catalog($pdo,$org);app_json_response(['ok'=>true,'catalog'=>$catalog]);}
+ if($_SERVER['REQUEST_METHOD']==='GET'){$catalog=glasses_vision_lab_catalog($pdo,$user);$catalog['activeLearning']=glasses_vision_active_learning_catalog($pdo,$org);$catalog['datasetIntelligence']=glasses_vision_dataset_intelligence_catalog($pdo,$org);$catalog['trainingMedia']=glasses_vision_training_media_catalog($pdo,$org);$catalog['curation']=glasses_vision_curation_catalog($pdo,$org);$catalog['balance']=glasses_vision_balance_catalog($pdo,$org);$catalog['annotationQa']=glasses_vision_annotation_qa_catalog($pdo,$org);$catalog['trainingReleases']=glasses_vision_training_release_catalog($pdo,$org);$catalog['trainingQualification']=glasses_vision_training_qualification_catalog($pdo,$org);$catalog['lineage']=glasses_vision_lineage_catalog($pdo,$org);$catalog['productionFeedback']=glasses_vision_feedback_catalog($pdo,$org);app_json_response(['ok'=>true,'catalog'=>$catalog]);}
  if($_SERVER['REQUEST_METHOD']!=='POST'){header('Allow: GET, POST');app_json_response(['ok'=>false,'message'=>'Method not allowed.'],405);}
  if(!app_has_permission('glasses.manage',$user))app_json_response(['ok'=>false,'message'=>'AR glasses management permission required.'],403);
  $in=app_json_input();app_verify_request_csrf($in);$action=(string)($in['action']??'');$actor=(int)$user['id'];
@@ -48,5 +49,7 @@ try{
  if($action==='lineage.model.trace')app_json_response(['ok'=>true,'trace'=>glasses_vision_lineage_model_trace($pdo,$org,(string)($in['modelPackagePublicId']??''))]);
  if($action==='lineage.sample.trace')app_json_response(['ok'=>true,'trace'=>glasses_vision_lineage_sample_trace($pdo,$org,(string)($in['samplePublicId']??''))]);
  if($action==='lineage.dataset.diff')app_json_response(['ok'=>true,'diff'=>glasses_vision_lineage_dataset_diff($pdo,$org,(string)($in['fromDatasetPublicId']??''),(string)($in['toDatasetPublicId']??''))]);
+ if($action==='production_error.record')app_json_response(['ok'=>true,'event'=>glasses_vision_feedback_record($pdo,$org,$in,$actor)],201);
+ if($action==='production_error.sync_corrections')app_json_response(['ok'=>true,'result'=>glasses_vision_feedback_sync_corrections($pdo,$org,$actor,(int)($in['limit']??500))]);
  app_json_response(['ok'=>false,'message'=>'Unsupported Vision Lab action.'],422);
 }catch(InvalidArgumentException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);}catch(Throwable $e){error_log('[gelato-vision-lab] '.$e->getMessage());app_json_response(['ok'=>false,'message'=>'Vision Lab request could not be completed.'],500);}
