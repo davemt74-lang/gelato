@@ -93,6 +93,7 @@ function glasses_v11_production_evidence_capture(PDO $pdo,array $device,array $i
   }
 
   $mediaInput=$input;
+  $mediaInput['trainingEligibility']='review';
   $mediaInput['devicePublicId']=$device['public_id'];
   $mediaInput['capturedAt']=$capturedSql;
   $mediaInput['consentBasis']='training_media_opt_in';
