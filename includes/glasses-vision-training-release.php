@@ -111,7 +111,7 @@ function glasses_vision_training_release_rows(PDO $pdo,int $org,int $datasetId,i
       m.id media_id,m.public_id media_public_id,m.storage_relative_path,m.mime_type,m.sha256,m.annotation_json media_annotation_json,m.quality_state
       FROM glasses_vision_dataset_items di
       JOIN glasses_vision_training_samples s ON s.id=di.sample_id AND s.organization_id=di.organization_id
-      JOIN glasses_vision_dataset_split_assignments a ON a.organization_id=di.organization_id AND a.sample_id=s.id AND a.split_plan_id=?
+      LEFT JOIN glasses_vision_dataset_split_assignments a ON a.organization_id=di.organization_id AND a.sample_id=s.id AND a.split_plan_id=?
       LEFT JOIN glasses_vision_training_media m ON m.organization_id=s.organization_id AND m.sample_id=s.id AND m.status='active'
       WHERE di.organization_id=? AND di.dataset_id=?
       ORDER BY s.public_id,m.public_id");
