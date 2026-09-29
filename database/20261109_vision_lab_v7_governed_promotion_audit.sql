@@ -1,0 +1,58 @@
+-- Gelato Vision Lab V7 Section 7 — Governed Promotion & Continuous-Learning Audit
+SET NAMES utf8mb4;
+
+CREATE TABLE glasses_vision_model_promotions (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  organization_id BIGINT UNSIGNED NOT NULL,
+  public_id VARCHAR(80) NOT NULL,
+  experiment_id BIGINT UNSIGNED NOT NULL,
+  evidence_review_id BIGINT UNSIGNED NOT NULL,
+  retraining_batch_id BIGINT UNSIGNED NOT NULL,
+  mining_run_id BIGINT UNSIGNED NOT NULL,
+  champion_package_id BIGINT UNSIGNED NOT NULL,
+  challenger_package_id BIGINT UNSIGNED NOT NULL,
+  rollout_id BIGINT UNSIGNED NULL,
+  location_id BIGINT UNSIGNED NULL,
+  station_id BIGINT UNSIGNED NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'authorized',
+  initial_canary_percent DECIMAL(5,2) NOT NULL DEFAULT 5.00,
+  rationale VARCHAR(2000) NOT NULL,
+  audit_json JSON NOT NULL,
+  promotion_hash CHAR(64) NOT NULL,
+  authorized_by BIGINT UNSIGNED NULL,
+  rollout_created_by BIGINT UNSIGNED NULL,
+  authorized_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  rollout_created_at DATETIME(6) NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_glasses_vision_promotion_public (organization_id,public_id),
+  UNIQUE KEY uq_glasses_vision_promotion_hash (organization_id,promotion_hash),
+  UNIQUE KEY uq_glasses_vision_promotion_review (organization_id,evidence_review_id),
+  KEY idx_glasses_vision_promotion_status (organization_id,status,authorized_at),
+  CONSTRAINT fk_glasses_vision_promotion_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  CONSTRAINT fk_glasses_vision_promotion_experiment FOREIGN KEY (experiment_id) REFERENCES glasses_vision_model_experiments(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_vision_promotion_review FOREIGN KEY (evidence_review_id) REFERENCES glasses_vision_model_evidence_reviews(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_vision_promotion_batch FOREIGN KEY (retraining_batch_id) REFERENCES glasses_vision_retraining_batches(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_vision_promotion_mining FOREIGN KEY (mining_run_id) REFERENCES glasses_vision_mining_runs(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_vision_promotion_champion FOREIGN KEY (champion_package_id) REFERENCES glasses_vision_model_packages(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_vision_promotion_challenger FOREIGN KEY (challenger_package_id) REFERENCES glasses_vision_model_packages(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_vision_promotion_rollout FOREIGN KEY (rollout_id) REFERENCES glasses_vision_model_rollouts(id) ON DELETE SET NULL,
+  CONSTRAINT fk_glasses_vision_promotion_location FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_vision_promotion_station FOREIGN KEY (station_id) REFERENCES kds_stations(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_vision_promotion_authorizer FOREIGN KEY (authorized_by) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_glasses_vision_promotion_rollout_actor FOREIGN KEY (rollout_created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE glasses_vision_model_promotion_events (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  organization_id BIGINT UNSIGNED NOT NULL,
+  promotion_id BIGINT UNSIGNED NOT NULL,
+  event_type VARCHAR(48) NOT NULL,
+  evidence_json JSON NOT NULL,
+  actor_user_id BIGINT UNSIGNED NULL,
+  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (id),
+  KEY idx_glasses_vision_promotion_events (organization_id,promotion_id,id),
+  CONSTRAINT fk_glasses_vision_promotion_event_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  CONSTRAINT fk_glasses_vision_promotion_event_promotion FOREIGN KEY (promotion_id) REFERENCES glasses_vision_model_promotions(id) ON DELETE CASCADE,
+  CONSTRAINT fk_glasses_vision_promotion_event_actor FOREIGN KEY (actor_user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

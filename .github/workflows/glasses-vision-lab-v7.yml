@@ -9,12 +9,14 @@ on:
       - 'database/20261106_vision_lab_v7_retraining_candidate_builder.sql'
       - 'database/20261107_vision_lab_v7_model_improvement_experiments.sql'
       - 'database/20261108_vision_lab_v7_champion_challenger_review.sql'
+      - 'database/20261109_vision_lab_v7_governed_promotion_audit.sql'
       - 'includes/glasses-vision-feedback.php'
       - 'includes/glasses-vision-failure-analysis.php'
       - 'includes/glasses-vision-mining.php'
       - 'includes/glasses-vision-retraining.php'
       - 'includes/glasses-vision-experiments.php'
       - 'includes/glasses-vision-evidence-review.php'
+      - 'includes/glasses-vision-promotion.php'
       - 'api/glasses-vision-lab.php'
       - 'glasses-vision-lab.php'
       - 'assets/js/glasses-vision-feedback.js'
@@ -23,6 +25,7 @@ on:
       - 'assets/js/glasses-vision-retraining.js'
       - 'assets/js/glasses-vision-experiments.js'
       - 'assets/js/glasses-vision-evidence-review.js'
+      - 'assets/js/glasses-vision-promotion.js'
       - 'assets/css/glasses-vision-lab.css'
       - 'tests/glasses-vision-lab-v7-production-error-ledger-contract.php'
       - 'tests/glasses-vision-lab-v7-failure-analysis-contract.php'
@@ -30,12 +33,14 @@ on:
       - 'tests/glasses-vision-lab-v7-retraining-candidate-builder-contract.php'
       - 'tests/glasses-vision-lab-v7-model-improvement-experiment-contract.php'
       - 'tests/glasses-vision-lab-v7-champion-challenger-review-contract.php'
+      - 'tests/glasses-vision-lab-v7-governed-promotion-audit-contract.php'
       - 'docs/GLASSES-VISION-LAB-V7-PRODUCTION-FEEDBACK.md'
       - 'docs/GLASSES-VISION-LAB-V7-FAILURE-ANALYSIS.md'
       - 'docs/GLASSES-VISION-LAB-V7-HARD-EXAMPLE-MINING.md'
       - 'docs/GLASSES-VISION-LAB-V7-RETRAINING-CANDIDATES.md'
       - 'docs/GLASSES-VISION-LAB-V7-MODEL-EXPERIMENTS.md'
       - 'docs/GLASSES-VISION-LAB-V7-EVIDENCE-REVIEW.md'
+      - 'docs/GLASSES-VISION-LAB-V7-GOVERNED-PROMOTION.md'
       - '.github/workflows/glasses-vision-lab-v7.yml'
   push:
     branches: [main]
@@ -71,6 +76,7 @@ jobs:
           php -l includes/glasses-vision-retraining.php
           php -l includes/glasses-vision-experiments.php
           php -l includes/glasses-vision-evidence-review.php
+          php -l includes/glasses-vision-promotion.php
           php -l api/glasses-vision-lab.php
           php -l glasses-vision-lab.php
           php -l tests/glasses-vision-lab-v7-production-error-ledger-contract.php
@@ -79,12 +85,14 @@ jobs:
           php -l tests/glasses-vision-lab-v7-retraining-candidate-builder-contract.php
           php -l tests/glasses-vision-lab-v7-model-improvement-experiment-contract.php
           php -l tests/glasses-vision-lab-v7-champion-challenger-review-contract.php
+          php -l tests/glasses-vision-lab-v7-governed-promotion-audit-contract.php
           node --check assets/js/glasses-vision-feedback.js
           node --check assets/js/glasses-vision-failure-analysis.js
           node --check assets/js/glasses-vision-mining.js
           node --check assets/js/glasses-vision-retraining.js
           node --check assets/js/glasses-vision-experiments.js
           node --check assets/js/glasses-vision-evidence-review.js
+          node --check assets/js/glasses-vision-promotion.js
 
       - name: Architecture guardrails
         run: |
@@ -118,6 +126,12 @@ jobs:
           grep -q 'function glasses_vision_evidence_review_run' includes/glasses-vision-evidence-review.php
           grep -q 'maximumCriticalRegressions' includes/glasses-vision-evidence-review.php
           ! grep -q 'rollout.activate' includes/glasses-vision-evidence-review.php
+          grep -q 'CREATE TABLE glasses_vision_model_promotions' database/20261109_vision_lab_v7_governed_promotion_audit.sql
+          grep -q 'CREATE TABLE glasses_vision_model_promotion_events' database/20261109_vision_lab_v7_governed_promotion_audit.sql
+          grep -q 'function glasses_vision_promotion_authorize' includes/glasses-vision-promotion.php
+          grep -q 'function glasses_vision_promotion_create_rollout' includes/glasses-vision-promotion.php
+          ! grep -q 'rollout.activate' includes/glasses-vision-promotion.php
+          ! grep -q 'rollout.advance' includes/glasses-vision-promotion.php
 
       - name: Install and upgrade schema
         run: |
@@ -160,6 +174,9 @@ jobs:
 
       - name: V7 champion challenger evidence review contract
         run: php tests/glasses-vision-lab-v7-champion-challenger-review-contract.php
+
+      - name: V7 governed promotion and continuous-learning audit contract
+        run: php tests/glasses-vision-lab-v7-governed-promotion-audit-contract.php
 
       - name: V6 lineage and correction regressions
         run: |
