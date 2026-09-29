@@ -9,12 +9,14 @@ on:
       - 'database/20261120_vision_lab_v9_quantity_verification.sql'
       - 'database/20261121_vision_lab_v9_quality_verification.sql'
       - 'database/20261122_vision_lab_v9_final_product_validation.sql'
+      - 'database/20261123_vision_lab_v9_human_handoff_confirmation.sql'
       - 'includes/glasses-vision-scene.php'
       - 'includes/glasses-vision-step-recognition.php'
       - 'includes/glasses-vision-ingredient-prevention.php'
       - 'includes/glasses-vision-quantity-verification.php'
       - 'includes/glasses-vision-quality-verification.php'
       - 'includes/glasses-vision-final-validation.php'
+      - 'includes/glasses-vision-handoff-confirmation.php'
       - 'api/glasses-device.php'
       - 'api/glasses-vision-lab.php'
       - 'glasses-vision-lab.php'
@@ -24,6 +26,7 @@ on:
       - 'assets/js/glasses-vision-quantity-verification.js'
       - 'assets/js/glasses-vision-quality-verification.js'
       - 'assets/js/glasses-vision-final-validation.js'
+      - 'assets/js/glasses-vision-handoff-confirmation.js'
       - 'assets/css/glasses-vision-lab.css'
       - 'tests/glasses-vision-lab-v9-live-scene-understanding-contract.php'
       - 'tests/glasses-vision-lab-v9-recipe-step-recognition-contract.php'
@@ -31,12 +34,14 @@ on:
       - 'tests/glasses-vision-lab-v9-quantity-verification-contract.php'
       - 'tests/glasses-vision-lab-v9-quality-verification-contract.php'
       - 'tests/glasses-vision-lab-v9-final-product-validation-contract.php'
+      - 'tests/glasses-vision-lab-v9-human-handoff-confirmation-contract.php'
       - 'docs/GLASSES-VISION-LAB-V9-LIVE-SCENE.md'
       - 'docs/GLASSES-VISION-LAB-V9-RECIPE-STEP-RECOGNITION.md'
       - 'docs/GLASSES-VISION-LAB-V9-INGREDIENT-PREVENTION.md'
       - 'docs/GLASSES-VISION-LAB-V9-QUANTITY-VERIFICATION.md'
       - 'docs/GLASSES-VISION-LAB-V9-QUALITY-VERIFICATION.md'
       - 'docs/GLASSES-VISION-LAB-V9-FINAL-PRODUCT-VALIDATION.md'
+      - 'docs/GLASSES-VISION-LAB-V9-HUMAN-HANDOFF-CONFIRMATION.md'
       - '.github/workflows/glasses-vision-lab-v9.yml'
   push:
     branches: [main]
@@ -72,6 +77,7 @@ jobs:
           php -l includes/glasses-vision-quantity-verification.php
           php -l includes/glasses-vision-quality-verification.php
           php -l includes/glasses-vision-final-validation.php
+          php -l includes/glasses-vision-handoff-confirmation.php
           php -l api/glasses-device.php
           php -l api/glasses-vision-lab.php
           php -l glasses-vision-lab.php
@@ -81,12 +87,14 @@ jobs:
           php -l tests/glasses-vision-lab-v9-quantity-verification-contract.php
           php -l tests/glasses-vision-lab-v9-quality-verification-contract.php
           php -l tests/glasses-vision-lab-v9-final-product-validation-contract.php
+          php -l tests/glasses-vision-lab-v9-human-handoff-confirmation-contract.php
           node --check assets/js/glasses-vision-scene.js
           node --check assets/js/glasses-vision-step-recognition.js
           node --check assets/js/glasses-vision-ingredient-prevention.js
           node --check assets/js/glasses-vision-quantity-verification.js
           node --check assets/js/glasses-vision-quality-verification.js
           node --check assets/js/glasses-vision-final-validation.js
+          node --check assets/js/glasses-vision-handoff-confirmation.js
 
       - name: Architecture guardrails
         run: |
@@ -160,6 +168,12 @@ jobs:
           ! grep -q 'glasses_build_observe' includes/glasses-vision-final-validation.php
           ! grep -q 'glasses_build_complete' includes/glasses-vision-final-validation.php
           ! grep -q 'kds_transition' includes/glasses-vision-final-validation.php
+          grep -q 'CREATE TABLE glasses_vision_handoff_confirmations' database/20261123_vision_lab_v9_human_handoff_confirmation.sql
+          grep -q 'function glasses_vision_handoff_confirm' includes/glasses-vision-handoff-confirmation.php
+          grep -q 'glasses_handoff_to_expo' includes/glasses-vision-handoff-confirmation.php
+          grep -q 'vision.handoff.confirm' api/glasses-device.php
+          grep -q 'explicitHumanConfirmation' includes/glasses-vision-handoff-confirmation.php
+          ! grep -q 'kds_transition(' includes/glasses-vision-handoff-confirmation.php
 
       - name: Install and upgrade schema
         run: |
@@ -202,6 +216,9 @@ jobs:
 
       - name: V9 final product validation contract
         run: php tests/glasses-vision-lab-v9-final-product-validation-contract.php
+
+      - name: V9 governed human handoff confirmation contract
+        run: php tests/glasses-vision-lab-v9-human-handoff-confirmation-contract.php
 
       - name: V8 governance regressions
         run: |
