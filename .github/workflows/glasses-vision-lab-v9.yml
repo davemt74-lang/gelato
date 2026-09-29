@@ -11,6 +11,7 @@ on:
       - 'database/20261122_vision_lab_v9_final_product_validation.sql'
       - 'database/20261123_vision_lab_v9_human_handoff_confirmation.sql'
       - 'database/20261124_vision_lab_v9_rework_revalidation.sql'
+      - 'database/20261125_vision_lab_v9_kitchen_outcomes.sql'
       - 'includes/glasses-vision-scene.php'
       - 'includes/glasses-vision-step-recognition.php'
       - 'includes/glasses-vision-ingredient-prevention.php'
@@ -19,6 +20,7 @@ on:
       - 'includes/glasses-vision-final-validation.php'
       - 'includes/glasses-vision-handoff-confirmation.php'
       - 'includes/glasses-vision-rework.php'
+      - 'includes/glasses-vision-kitchen-outcomes.php'
       - 'api/glasses-device.php'
       - 'api/glasses-vision-lab.php'
       - 'glasses-vision-lab.php'
@@ -30,6 +32,7 @@ on:
       - 'assets/js/glasses-vision-final-validation.js'
       - 'assets/js/glasses-vision-handoff-confirmation.js'
       - 'assets/js/glasses-vision-rework.js'
+      - 'assets/js/glasses-vision-kitchen-outcomes.js'
       - 'assets/css/glasses-vision-lab.css'
       - 'tests/glasses-vision-lab-v9-live-scene-understanding-contract.php'
       - 'tests/glasses-vision-lab-v9-recipe-step-recognition-contract.php'
@@ -39,6 +42,7 @@ on:
       - 'tests/glasses-vision-lab-v9-final-product-validation-contract.php'
       - 'tests/glasses-vision-lab-v9-human-handoff-confirmation-contract.php'
       - 'tests/glasses-vision-lab-v9-rework-revalidation-contract.php'
+      - 'tests/glasses-vision-lab-v9-kitchen-outcomes-contract.php'
       - 'docs/GLASSES-VISION-LAB-V9-LIVE-SCENE.md'
       - 'docs/GLASSES-VISION-LAB-V9-RECIPE-STEP-RECOGNITION.md'
       - 'docs/GLASSES-VISION-LAB-V9-INGREDIENT-PREVENTION.md'
@@ -47,6 +51,7 @@ on:
       - 'docs/GLASSES-VISION-LAB-V9-FINAL-PRODUCT-VALIDATION.md'
       - 'docs/GLASSES-VISION-LAB-V9-HUMAN-HANDOFF-CONFIRMATION.md'
       - 'docs/GLASSES-VISION-LAB-V9-REWORK-REVALIDATION.md'
+      - 'docs/GLASSES-VISION-LAB-V9-KITCHEN-OUTCOMES.md'
       - '.github/workflows/glasses-vision-lab-v9.yml'
   push:
     branches: [main]
@@ -84,6 +89,7 @@ jobs:
           php -l includes/glasses-vision-final-validation.php
           php -l includes/glasses-vision-handoff-confirmation.php
           php -l includes/glasses-vision-rework.php
+          php -l includes/glasses-vision-kitchen-outcomes.php
           php -l api/glasses-device.php
           php -l api/glasses-vision-lab.php
           php -l glasses-vision-lab.php
@@ -95,6 +101,7 @@ jobs:
           php -l tests/glasses-vision-lab-v9-final-product-validation-contract.php
           php -l tests/glasses-vision-lab-v9-human-handoff-confirmation-contract.php
           php -l tests/glasses-vision-lab-v9-rework-revalidation-contract.php
+          php -l tests/glasses-vision-lab-v9-kitchen-outcomes-contract.php
           node --check assets/js/glasses-vision-scene.js
           node --check assets/js/glasses-vision-step-recognition.js
           node --check assets/js/glasses-vision-ingredient-prevention.js
@@ -103,6 +110,7 @@ jobs:
           node --check assets/js/glasses-vision-final-validation.js
           node --check assets/js/glasses-vision-handoff-confirmation.js
           node --check assets/js/glasses-vision-rework.js
+          node --check assets/js/glasses-vision-kitchen-outcomes.js
 
       - name: Architecture guardrails
         run: |
@@ -190,6 +198,14 @@ jobs:
           grep -q 'vision.rework.revalidate' api/glasses-device.php
           ! grep -q 'kds_transition(' includes/glasses-vision-rework.php
           ! grep -q 'glasses_build_confirm(' includes/glasses-vision-rework.php
+          grep -q 'CREATE TABLE glasses_vision_kitchen_outcomes' database/20261125_vision_lab_v9_kitchen_outcomes.sql
+          grep -q 'function glasses_vision_kitchen_outcome_sync' includes/glasses-vision-kitchen-outcomes.php
+          grep -q 'observed_as_kitchen_outcome' includes/glasses-vision-kitchen-outcomes.php
+          grep -q 'outcomes.sync' api/glasses-vision-lab.php
+          ! grep -q 'glasses_vision_retraining_' includes/glasses-vision-kitchen-outcomes.php
+          ! grep -q 'glasses_vision_promotion_' includes/glasses-vision-kitchen-outcomes.php
+          ! grep -q 'glasses_vision_feedback_record(' includes/glasses-vision-kitchen-outcomes.php
+          ! grep -q 'kds_transition(' includes/glasses-vision-kitchen-outcomes.php
 
       - name: Install and upgrade schema
         run: |
@@ -238,6 +254,9 @@ jobs:
 
       - name: V9 exception recovery / rework / revalidation contract
         run: php tests/glasses-vision-lab-v9-rework-revalidation-contract.php
+
+      - name: V9 production learning from kitchen outcomes contract
+        run: php tests/glasses-vision-lab-v9-kitchen-outcomes-contract.php
 
       - name: V8 governance regressions
         run: |
