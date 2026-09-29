@@ -14,6 +14,7 @@ require_once __DIR__.'/glasses-frame-pipeline.php';
 require_once __DIR__.'/glasses-device-health.php';
 require_once __DIR__.'/glasses-runtime-recovery.php';
 require_once __DIR__.'/glasses-runtime-soak.php';
+require_once __DIR__.'/glasses-cook-ux.php';
 
 function glasses_simulator_can_write(array $user): bool
 {
@@ -74,6 +75,10 @@ function glasses_simulator_dispatch(PDO $pdo,array $user,array $in): array
         'validation.evaluate','handoff.expo','vision.shadow_report','vision.shadow_complete'
     ],true);
     $device=glasses_simulator_device($pdo,$user,(string)($in['devicePublicId']??''),$write);
+
+    if($action==='hardware.cook_ux.evaluate'){
+        return ['cookUx'=>glasses_cook_ux_evaluate((array)($in['report']??[]))];
+    }
 
     if($action==='hardware.soak.evaluate'){
         return ['soak'=>glasses_runtime_soak_evaluate((array)($in['report']??[]),(array)($in['policy']??[]))];
