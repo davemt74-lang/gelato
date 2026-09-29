@@ -8,11 +8,13 @@ on:
       - 'database/20261119_vision_lab_v9_ingredient_prevention.sql'
       - 'database/20261120_vision_lab_v9_quantity_verification.sql'
       - 'database/20261121_vision_lab_v9_quality_verification.sql'
+      - 'database/20261122_vision_lab_v9_final_product_validation.sql'
       - 'includes/glasses-vision-scene.php'
       - 'includes/glasses-vision-step-recognition.php'
       - 'includes/glasses-vision-ingredient-prevention.php'
       - 'includes/glasses-vision-quantity-verification.php'
       - 'includes/glasses-vision-quality-verification.php'
+      - 'includes/glasses-vision-final-validation.php'
       - 'api/glasses-device.php'
       - 'api/glasses-vision-lab.php'
       - 'glasses-vision-lab.php'
@@ -21,17 +23,20 @@ on:
       - 'assets/js/glasses-vision-ingredient-prevention.js'
       - 'assets/js/glasses-vision-quantity-verification.js'
       - 'assets/js/glasses-vision-quality-verification.js'
+      - 'assets/js/glasses-vision-final-validation.js'
       - 'assets/css/glasses-vision-lab.css'
       - 'tests/glasses-vision-lab-v9-live-scene-understanding-contract.php'
       - 'tests/glasses-vision-lab-v9-recipe-step-recognition-contract.php'
       - 'tests/glasses-vision-lab-v9-ingredient-prevention-contract.php'
       - 'tests/glasses-vision-lab-v9-quantity-verification-contract.php'
       - 'tests/glasses-vision-lab-v9-quality-verification-contract.php'
+      - 'tests/glasses-vision-lab-v9-final-product-validation-contract.php'
       - 'docs/GLASSES-VISION-LAB-V9-LIVE-SCENE.md'
       - 'docs/GLASSES-VISION-LAB-V9-RECIPE-STEP-RECOGNITION.md'
       - 'docs/GLASSES-VISION-LAB-V9-INGREDIENT-PREVENTION.md'
       - 'docs/GLASSES-VISION-LAB-V9-QUANTITY-VERIFICATION.md'
       - 'docs/GLASSES-VISION-LAB-V9-QUALITY-VERIFICATION.md'
+      - 'docs/GLASSES-VISION-LAB-V9-FINAL-PRODUCT-VALIDATION.md'
       - '.github/workflows/glasses-vision-lab-v9.yml'
   push:
     branches: [main]
@@ -66,6 +71,7 @@ jobs:
           php -l includes/glasses-vision-ingredient-prevention.php
           php -l includes/glasses-vision-quantity-verification.php
           php -l includes/glasses-vision-quality-verification.php
+          php -l includes/glasses-vision-final-validation.php
           php -l api/glasses-device.php
           php -l api/glasses-vision-lab.php
           php -l glasses-vision-lab.php
@@ -74,11 +80,13 @@ jobs:
           php -l tests/glasses-vision-lab-v9-ingredient-prevention-contract.php
           php -l tests/glasses-vision-lab-v9-quantity-verification-contract.php
           php -l tests/glasses-vision-lab-v9-quality-verification-contract.php
+          php -l tests/glasses-vision-lab-v9-final-product-validation-contract.php
           node --check assets/js/glasses-vision-scene.js
           node --check assets/js/glasses-vision-step-recognition.js
           node --check assets/js/glasses-vision-ingredient-prevention.js
           node --check assets/js/glasses-vision-quantity-verification.js
           node --check assets/js/glasses-vision-quality-verification.js
+          node --check assets/js/glasses-vision-final-validation.js
 
       - name: Architecture guardrails
         run: |
@@ -143,6 +151,15 @@ jobs:
           ! grep -q 'glasses_build_observe' includes/glasses-vision-quality-verification.php
           ! grep -q 'kds_transition' includes/glasses-vision-quality-verification.php
           ! grep -q 'glasses_build_complete' includes/glasses-vision-quality-verification.php
+          grep -q 'CREATE TABLE glasses_vision_final_validations' database/20261122_vision_lab_v9_final_product_validation.sql
+          grep -q 'function glasses_vision_final_validate_scene' includes/glasses-vision-final-validation.php
+          grep -q 'validated_final_product_as' includes/glasses-vision-final-validation.php
+          grep -q 'vision.final.validate_scene' api/glasses-device.php
+          grep -q 'final.validate_scene' api/glasses-vision-lab.php
+          ! grep -q 'glasses_build_confirm' includes/glasses-vision-final-validation.php
+          ! grep -q 'glasses_build_observe' includes/glasses-vision-final-validation.php
+          ! grep -q 'glasses_build_complete' includes/glasses-vision-final-validation.php
+          ! grep -q 'kds_transition' includes/glasses-vision-final-validation.php
 
       - name: Install and upgrade schema
         run: |
@@ -182,6 +199,9 @@ jobs:
 
       - name: V9 build quality / placement verification contract
         run: php tests/glasses-vision-lab-v9-quality-verification-contract.php
+
+      - name: V9 final product validation contract
+        run: php tests/glasses-vision-lab-v9-final-product-validation-contract.php
 
       - name: V8 governance regressions
         run: |
