@@ -672,16 +672,21 @@ function glasses_vision_canary_auto_rollback(PDO $pdo,int $org,string $rolloutPu
         if((string)$row['status']!=='active')return glasses_vision_model_rollout_public($row);
         if($row['baseline_package_id']===null)throw new RuntimeException('Automatic canary rollback requires a baseline package.');
         $reason='Automatic rollback: '.implode(', ',$health['rollbackReasons']??[]);
-        $percent=(float)$row['canary_percent'];
+        $percent=(float)$row['canary_percent'];$holdHours=24;
+        try{
+            $rcq=$pdo->prepare("SELECT COUNT(*) FROM glasses_vision_model_release_candidates WHERE organization_id=? AND model_package_id=? AND status='approved'");
+            $rcq->execute([$org,(int)$row['target_package_id']]);if((int)$rcq->fetchColumn()>0)$holdHours=72;
+        }catch(Throwable){}
+        $holdUntil=(new DateTimeImmutable('now',new DateTimeZone('UTC')))->modify('+'.$holdHours.' hours')->format('Y-m-d H:i:s.u');
         $pdo->prepare("UPDATE glasses_vision_model_rollouts SET status='rolled_back',rolled_back_by=NULL,rolled_back_at=NOW(6),updated_at=NOW(6) WHERE organization_id=? AND id=?")
             ->execute([$org,(int)$row['id']]);
         $pdo->prepare("INSERT INTO glasses_vision_canary_package_holds
             (organization_id,package_id,source_rollout_id,reason,hold_until)
-            VALUES (?,?,?,?,DATE_ADD(NOW(6),INTERVAL 24 HOUR))
+            VALUES (?,?,?,?,?)
             ON DUPLICATE KEY UPDATE source_rollout_id=VALUES(source_rollout_id),reason=VALUES(reason),hold_until=VALUES(hold_until),updated_at=NOW(6)")
-            ->execute([$org,(int)$row['target_package_id'],(int)$row['id'],mb_substr($reason,0,1000,'UTF-8')]);
+            ->execute([$org,(int)$row['target_package_id'],(int)$row['id'],mb_substr($reason,0,1000,'UTF-8'),$holdUntil]);
         glasses_vision_model_rollout_event($pdo,$org,(int)$row['id'],'auto_rolled_back','active','rolled_back',$percent,0.0,null,[
-            'automatic'=>true,'reason'=>$reason,'health'=>$health,'packageHoldHours'=>24
+            'automatic'=>true,'reason'=>$reason,'health'=>$health,'packageHoldHours'=>$holdHours
         ]);
         return glasses_vision_model_rollout_public(glasses_vision_model_rollout_row($pdo,$org,$rolloutPublicId,false));
     });
@@ -1147,6 +1152,15 @@ function glasses_vision_model_rollout_advance(PDO $pdo,int $org,string $publicId
                     $drift=glasses_vision_drift_rollout_summary($pdo,$org,$publicId);
                     if($drift['promotionBlocked'])throw new InvalidArgumentException('Production drift blocks canary advancement until the environment/model issue is resolved.');
                 }
+                try{
+                    $rcq=$pdo->prepare("SELECT id FROM glasses_vision_model_release_candidates WHERE organization_id=? AND model_package_id=? AND status='approved' ORDER BY id DESC LIMIT 1");
+                    $rcq->execute([$org,(int)$row['target_package_id']]);$rcId=(int)$rcq->fetchColumn();
+                    if($rcId>0){
+                        $gq=$pdo->prepare("SELECT COUNT(*) FROM glasses_vision_canary_stage_validations WHERE organization_id=? AND rollout_id=? AND release_candidate_id=? AND stage_percent=? AND status='passed'");
+                        $gq->execute([$org,(int)$row['id'],$rcId,$previous]);
+                        if((int)$gq->fetchColumn()<1)throw new InvalidArgumentException('V11 canary advancement requires a passing validation for the current stage.');
+                    }
+                }catch(PDOException $e){throw $e;}
             }
         }
 
