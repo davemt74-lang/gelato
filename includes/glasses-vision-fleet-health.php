@@ -33,7 +33,11 @@ function glasses_vision_fleet_health_scope(PDO $pdo,int $org,array $input): arra
     }elseif($packagePublic!==''){
         $package=glasses_vision_model_package_row($pdo,$org,$packagePublic,false);
     }else throw new InvalidArgumentException('Fleet analysis requires a rollout or model package.');
-    $scopeMaterial=['modelPackagePublicId'=>$package['public_id'],'modelArtifactSha256'=>$package['artifact_sha256'],'rolloutPublicId'=>$rollout['public_id']??null];
+    $scopeMaterial=[
+      'modelPackagePublicId'=>$package['public_id'],'modelArtifactSha256'=>$package['artifact_sha256'],
+      'rolloutPublicId'=>$rollout['public_id']??null,
+      'rolloutLocationId'=>$rollout['location_id']??null,'rolloutStationId'=>$rollout['station_id']??null
+    ];
     return [
       'package'=>$package,'rollout'=>$rollout,'scopeKey'=>hash('sha256',glasses_vision_training_release_json($scopeMaterial)),
       'scopeMaterial'=>$scopeMaterial
@@ -43,10 +47,15 @@ function glasses_vision_fleet_health_scope(PDO $pdo,int $org,array $input): arra
 function glasses_vision_fleet_health_collect(PDO $pdo,int $org,array $scope,string $from,string $to): array
 {
     $package=$scope['package'];
-    $q=$pdo->prepare("SELECT h.public_id FROM glasses_vision_model_health_snapshots h
-      WHERE h.organization_id=? AND h.package_id=? AND h.window_started_at=? AND h.window_ended_at=?
-      ORDER BY h.location_id,h.station_id,h.device_id,h.id LIMIT 1000");
-    $q->execute([$org,(int)$package['id'],$from,$to]);$snapshotPublics=$q->fetchAll(PDO::FETCH_COLUMN);
+    $sql="SELECT h.public_id FROM glasses_vision_model_health_snapshots h
+      WHERE h.organization_id=? AND h.package_id=? AND h.window_started_at=? AND h.window_ended_at=? AND h.device_id IS NOT NULL";
+    $args=[$org,(int)$package['id'],$from,$to];
+    if($scope['rollout']){
+        if($scope['rollout']['location_id']!==null){$sql.=" AND h.location_id=?";$args[]=(int)$scope['rollout']['location_id'];}
+        if($scope['rollout']['station_id']!==null){$sql.=" AND h.station_id=?";$args[]=(int)$scope['rollout']['station_id'];}
+    }
+    $sql.=" ORDER BY h.location_id,h.station_id,h.device_id,h.id LIMIT 1000";
+    $q=$pdo->prepare($sql);$q->execute($args);$snapshotPublics=$q->fetchAll(PDO::FETCH_COLUMN);
 
     $snapshots=[];$snapshotIds=[];$devices=[];$locations=[];$stations=[];$healthCounts=[];$affectedDevices=[];$affectedLocations=[];
     foreach($snapshotPublics as $public){
