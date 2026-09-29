@@ -9,6 +9,7 @@ require_once __DIR__.'/glasses-validation.php';
 require_once __DIR__.'/glasses-handoff.php';
 require_once __DIR__.'/glasses-vision-models.php';
 require_once __DIR__.'/glasses-vision-profiles.php';
+require_once __DIR__.'/glasses-hardware-runtime.php';
 
 function glasses_simulator_can_write(array $user): bool
 {
@@ -69,6 +70,22 @@ function glasses_simulator_dispatch(PDO $pdo,array $user,array $in): array
         'validation.evaluate','handoff.expo','vision.shadow_report','vision.shadow_complete'
     ],true);
     $device=glasses_simulator_device($pdo,$user,(string)($in['devicePublicId']??''),$write);
+
+    if($action==='hardware.runtime'){
+        return ['hardwareRuntime'=>glasses_hardware_runtime_contract('simulator.v1')];
+    }
+    if($action==='hardware.frame.prepare'){
+        return ['frame'=>glasses_hardware_runtime_adapter('simulator.v1')->normalizeFrame((array)($in['frame']??[]))];
+    }
+    if($action==='hardware.display.prepare'){
+        return ['display'=>glasses_hardware_runtime_adapter('simulator.v1')->normalizeDisplay((array)($in['display']??[]))];
+    }
+    if($action==='hardware.input.prepare'){
+        return ['input'=>glasses_hardware_runtime_adapter('simulator.v1')->normalizeInput((array)($in['input']??[]))];
+    }
+    if($action==='hardware.model.prepare'){
+        return ['model'=>glasses_hardware_runtime_adapter('simulator.v1')->normalizeModelLoad((array)($in['model']??[]))];
+    }
 
     if($action==='work'){
         return ['work'=>glasses_current_work($pdo,$device)];

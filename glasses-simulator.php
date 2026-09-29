@@ -154,6 +154,12 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
   </section>
 
   <aside class="sim-console">
+    <section class="console-card hardware-runtime-card">
+      <div class="console-heading"><div><small>V10 HARDWARE RUNTIME</small><strong>AIR3 adapter boundary</strong></div><span id="hardwareRuntimeState">LOADING</span></div>
+      <div id="hardwareRuntimeDetail" class="vision-model-status"><strong>SIMULATOR</strong><span>Loading hardware runtime contract…</span></div>
+      <div id="hardwareRuntimeCapabilities" class="vision-metrics">Camera · display · input · inference</div>
+      <p class="calibration-note">The simulator implements the production hardware contract now. The proprietary AIR3 SDK will plug into the same adapter boundary when its files arrive.</p>
+    </section>
     <section class="console-card calibration-card" id="calibrationPanel">
       <div class="console-heading"><div><small>PROJECTION CALIBRATION</small><strong>Lens layout & display tuning</strong></div><span id="calibrationState">LOCKED</span></div>
       <div class="calibration-grid">
@@ -322,6 +328,6 @@ window.GELATO_GLASSES_SIMULATOR={
   canManageMedia:<?=app_has_permission('glasses.manage',$user)?'true':'false'?>
 };
 </script>
-<script src="assets/js/glasses-web-simulator.js?v=20260928-media1"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20260929-v10-1"></script>
 </body>
 </html>
