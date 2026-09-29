@@ -131,12 +131,13 @@ function glasses_vision_training_release_applied_plan(PDO $pdo,int $org,int $dat
 function glasses_vision_training_release_rows(PDO $pdo,int $org,int $datasetId): array
 {
     $q=$pdo->prepare("SELECT
-      di.split_name,s.id sample_id,s.public_id sample_public_id,s.canonical_label,s.source_type,s.source_reference,s.annotation_json sample_annotation_json,
-      m.id media_id,m.public_id media_public_id,m.storage_relative_path,m.mime_type,m.sha256,m.annotation_json media_annotation_json,m.capture_group,m.build_session_id,
+      di.split_name,di.source_hash dataset_source_hash,s.id sample_id,s.public_id sample_public_id,s.canonical_label,s.source_type,s.annotation_json sample_annotation_json,
+      m.id media_id,m.public_id media_public_id,m.storage_relative_path,m.mime_type,m.sha256,m.annotation_json media_annotation_json,m.capture_group,m.build_session_id,b.public_id build_public_id,
       ce.decision curation_decision,ce.reason curation_reason
       FROM glasses_vision_dataset_items di
       JOIN glasses_vision_training_samples s ON s.id=di.sample_id AND s.organization_id=di.organization_id
       JOIN glasses_vision_training_media m ON m.sample_id=s.id AND m.organization_id=s.organization_id AND m.status='active'
+      LEFT JOIN glasses_build_sessions b ON b.id=m.build_session_id AND b.organization_id=m.organization_id
       LEFT JOIN glasses_vision_dataset_curation_events ce ON ce.id=(
         SELECT MAX(c2.id) FROM glasses_vision_dataset_curation_events c2
         WHERE c2.organization_id=di.organization_id AND c2.dataset_id=di.dataset_id AND c2.sample_id=di.sample_id
@@ -220,8 +221,8 @@ function glasses_vision_training_release_build(PDO $pdo,int $org,string $dataset
             $items[]=[
                 'samplePublicId'=>$row['sample_public_id'],'mediaPublicId'=>$row['media_public_id'],'split'=>$split,
                 'imagePath'=>$imageRel,'imageSha256'=>$imageHash,'labelPath'=>$labelRel,'labelSha256'=>$labelHash,
-                'canonicalLabel'=>$row['canonical_label'],'sourceType'=>$row['source_type'],'sourceReference'=>$row['source_reference'],
-                'captureGroup'=>$row['capture_group'],'curationDecision'=>$row['curation_decision']?:'include','curationReason'=>$row['curation_reason'],
+                'canonicalLabel'=>$row['canonical_label'],'sourceType'=>$row['source_type'],'datasetSourceHash'=>$row['dataset_source_hash'],
+                'captureGroup'=>$row['capture_group'],'buildSessionPublicId'=>$row['build_public_id'],'curationDecision'=>$row['curation_decision']?:'include','curationReason'=>$row['curation_reason'],
             ];
         }
 
