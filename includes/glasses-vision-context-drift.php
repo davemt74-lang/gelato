@@ -223,7 +223,7 @@ function glasses_vision_context_drift_analyze(PDO $pdo,int $org,string $snapshot
     });
 }
 
-function v82_scalar(PDO $pdo,string $sql,array $args=[]): mixed
+function glasses_vision_context_drift_scalar(PDO $pdo,string $sql,array $args=[]): mixed
 {
     $q=$pdo->prepare($sql);$q->execute($args);return $q->fetchColumn();
 }
