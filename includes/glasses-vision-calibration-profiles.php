@@ -169,6 +169,11 @@ function glasses_vision_calibration_profile_select(PDO $pdo,int $org,array $inpu
     $package=null;
     if(trim((string)($input['modelPackagePublicId']??''))!=='')$package=glasses_vision_model_package_row($pdo,$org,(string)$input['modelPackagePublicId'],false);
 
+    $runtime=is_array($input['runtime']??null)?$input['runtime']:[];
+    $runtimePlatform=trim((string)($runtime['platform']??$device['platform']));
+    $runtimeWidth=(int)($runtime['frameWidth']??0);$runtimeHeight=(int)($runtime['frameHeight']??0);
+    $runtimePixel=mb_strtolower(trim((string)($runtime['pixelFormat']??'')),'UTF-8');
+
     $analysis=null;$context=[];
     if(trim((string)($input['contextDriftAnalysisPublicId']??''))!==''){
         $analysis=glasses_vision_context_drift_row($pdo,$org,(string)$input['contextDriftAnalysisPublicId']);
@@ -190,11 +195,17 @@ function glasses_vision_calibration_profile_select(PDO $pdo,int $org,array $inpu
         AND (package_id IS NULL OR package_id=?)
       ORDER BY priority DESC,id ASC");
     $q->execute([$org,(int)$device['location_id'],(int)$device['station_id'],$package?(int)$package['id']:0]);
-    $candidates=[];$runtime=['platform'=>(string)$device['platform']];
+    $candidates=[];$fallbackRuntime=['platform'=>$runtimePlatform];
+    if($runtimeWidth>0)$fallbackRuntime['frameWidth']=$runtimeWidth;
+    if($runtimeHeight>0)$fallbackRuntime['frameHeight']=$runtimeHeight;
+    if($runtimePixel!=='')$fallbackRuntime['pixelFormat']=$runtimePixel;
     foreach($q->fetchAll(PDO::FETCH_COLUMN) as $public){
         $p=glasses_vision_calibration_profile_row($pdo,$org,(string)$public);
         if($package!==null&&$p['modelPackagePublicId']!==null&&!hash_equals((string)$p['modelPackagePublicId'],(string)$package['public_id']))continue;
-        if(!hash_equals((string)$p['platform'],(string)$device['platform']))continue;
+        if(!hash_equals((string)$p['platform'],$runtimePlatform))continue;
+        if($runtimeWidth>0&&$runtimeWidth!==(int)$p['frame']['width'])continue;
+        if($runtimeHeight>0&&$runtimeHeight!==(int)$p['frame']['height'])continue;
+        if($runtimePixel!==''&&!hash_equals(mb_strtolower((string)$p['frame']['pixelFormat'],'UTF-8'),$runtimePixel))continue;
         $match=glasses_vision_calibration_profile_rule_matches($p,$context);
         if(!$match['compatible'])continue;
         $candidates[]=['profile'=>$p,'match'=>$match];
@@ -206,7 +217,7 @@ function glasses_vision_calibration_profile_select(PDO $pdo,int $org,array $inpu
     });
 
     $selected=$candidates[0]??null;
-    $fallback=glasses_station_calibration_active($pdo,$org,(int)$device['location_id'],(int)$device['station_id'],$runtime);
+    $fallback=glasses_station_calibration_active($pdo,$org,(int)$device['location_id'],(int)$device['station_id'],$fallbackRuntime);
     $decision=$selected?'profile':'station_fallback';
     if(!$selected&&!$fallback)$decision='none';
     $selectionMaterial=[
@@ -255,6 +266,33 @@ function glasses_vision_calibration_selection_row(PDO $pdo,int $org,string $publ
       'contextDriftAnalysisPublicId'=>$r['analysis_public_id'],'selectedProfilePublicId'=>$r['profile_public_id'],'fallbackCalibrationPublicId'=>$r['fallback_public_id'],
       'matchScore'=>(float)$r['match_score'],'decision'=>$r['decision'],'contextFingerprint'=>$r['context_fingerprint'],'selectionHash'=>$r['selection_hash'],
       'evidence'=>json_decode((string)$r['reasons_json'],true)?:[],'createdAt'=>$r['created_at']];
+}
+
+
+function glasses_vision_calibration_profile_verify(PDO $pdo,int $org,string $publicId): array
+{
+    $p=glasses_vision_calibration_profile_row($pdo,$org,$publicId);
+    $material=[
+      'schema'=>GLASSES_VISION_CALIBRATION_PROFILE_SCHEMA,'profileKey'=>$p['profileKey'],
+      'calibration'=>['publicId'=>$p['calibrationPublicId'],'sourceHash'=>$p['calibrationSourceHash'],'platform'=>$p['platform'],'frameWidth'=>$p['frame']['width'],'frameHeight'=>$p['frame']['height'],'pixelFormat'=>$p['frame']['pixelFormat']],
+      'model'=>$p['modelPackagePublicId']!==null?['publicId'=>$p['modelPackagePublicId'],'artifactSha256'=>$p['modelPackageSha256']]:null,
+      'locationId'=>$p['locationId'],'stationPublicId'=>$p['stationPublicId'],'priority'=>$p['priority'],'context'=>$p['context'],'guardrails'=>$p['guardrails'],
+    ];
+    $hash=hash('sha256',glasses_vision_training_release_json($material));
+    return ['passed'=>hash_equals((string)$p['profileHash'],$hash),'profileHash'=>$p['profileHash'],'recomputedProfileHash'=>$hash];
+}
+
+function glasses_vision_calibration_selection_verify(PDO $pdo,int $org,string $publicId): array
+{
+    $s=glasses_vision_calibration_selection_row($pdo,$org,$publicId);
+    $hash=hash('sha256',glasses_vision_training_release_json($s['evidence']));
+    $passed=hash_equals((string)$s['selectionHash'],$hash);
+    if($s['selectedProfilePublicId']!==null)$passed=$passed&&glasses_vision_calibration_profile_verify($pdo,$org,(string)$s['selectedProfilePublicId'])['passed'];
+    if($s['fallbackCalibrationPublicId']!==null){
+        $cal=glasses_vision_calibration_profile_calibration($pdo,$org,(string)$s['fallbackCalibrationPublicId']);
+        $passed=$passed&&hash_equals((string)($s['evidence']['fallbackCalibrationSourceHash']??''),(string)$cal['source_hash']);
+    }
+    return ['passed'=>$passed,'selectionHash'=>$s['selectionHash'],'recomputedSelectionHash'=>$hash];
 }
 
 function glasses_vision_calibration_profile_catalog(PDO $pdo,int $org): array
