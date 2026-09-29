@@ -52,9 +52,23 @@ function glasses_v11_annotation_submit(PDO $pdo,int $org,array $in,int $actor): 
   $reason=mb_substr(trim((string)($in['reason']??'')),0,1000,'UTF-8');if($reason==='')throw new InvalidArgumentException('Correction reason is required.');
   $label=mb_substr(trim((string)($in['proposedLabel']??'')),0,190,'UTF-8')?:null;
   $annotations=glasses_v11_annotation_validate_annotations(is_array($in['proposedAnnotations']??null)?$in['proposedAnnotations']:[]);
+  $requestedKey=mb_substr(trim((string)($in['correctionKey']??'')),0,190,'UTF-8')?:null;
   if($type==='false_positive'){$label='__negative__';$annotations=[];}
   if($type==='false_negative'&&$label===null)throw new InvalidArgumentException('False-negative correction requires the missed label.');
   $step=mb_substr(trim((string)($in['proposedRecipeStepKey']??'')),0,160,'UTF-8')?:null;
+  if($requestedKey!==null){
+    $eq=$pdo->prepare("SELECT public_id,correction_type,proposed_label,proposed_annotation_json,proposed_recipe_step_key,reason FROM glasses_vision_annotation_corrections WHERE organization_id=? AND correction_key=? LIMIT 1");
+    $eq->execute([$org,$requestedKey]);$existing=$eq->fetch();
+    if($existing){
+      $same=(string)$existing['correction_type']===$type
+        && (string)($existing['proposed_label']??'')===(string)($label??'')
+        && (json_decode((string)($existing['proposed_annotation_json']??'[]'),true)?:[])===$annotations
+        && (string)($existing['proposed_recipe_step_key']??'')===(string)($step??'')
+        && (string)$existing['reason']===$reason;
+      if(!$same)throw new InvalidArgumentException('Correction key already exists with different immutable evidence.');
+      return glasses_v11_annotation_public(glasses_v11_annotation_row($pdo,$org,(string)$existing['public_id']));
+    }
+  }
   $snapshot=[
     'schema'=>GLASSES_V11_ANNOTATION_CORRECTION_SCHEMA,'mediaPublicId'=>$evidence['publicId'],'samplePublicId'=>$evidence['samplePublicId'],
     'type'=>$type,'previousLabel'=>$base['canonical_label'],'proposedLabel'=>$label,
@@ -62,7 +76,7 @@ function glasses_v11_annotation_submit(PDO $pdo,int $org,array $in,int $actor): 
     'previousRecipeStepKey'=>$base['recipe_step_key'],'proposedRecipeStepKey'=>$step,'reason'=>$reason,'submittedBy'=>$actor
   ];
   $hash=hash('sha256',glasses_vision_training_release_json($snapshot));
-  $key=mb_substr(trim((string)($in['correctionKey']??'')),0,190,'UTF-8')?:('v11-correction-'.$hash);
+  $key=$requestedKey?:('v11-correction-'.$hash);
   return glasses_transaction($pdo,function()use($pdo,$org,$actor,$base,$snapshot,$hash,$key,$type,$label,$annotations,$step,$reason):array{
     $q=$pdo->prepare("SELECT public_id,immutable_hash FROM glasses_vision_annotation_corrections WHERE organization_id=? AND correction_key=? LIMIT 1 FOR UPDATE");
     $q->execute([$org,$key]);$existing=$q->fetch();
