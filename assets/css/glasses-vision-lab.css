@@ -12,3 +12,6 @@
 
 
 .vl-annotation-qa{display:grid;gap:12px}.vl-qa-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}.vl-qa-card{border:1px solid #e3e1da;border-radius:10px;padding:10px}.vl-qa-card span{display:block;font-size:9px;text-transform:uppercase;color:#747b76}.vl-qa-card strong{font-size:22px}.vl-qa-columns{display:grid;grid-template-columns:1fr 1fr;gap:14px}.vl-qa-row{border:1px solid #e8e5dd;border-radius:9px;padding:8px;margin:6px 0}.vl-qa-row strong,.vl-qa-row small{display:block}@media(max-width:900px){.vl-qa-grid{grid-template-columns:repeat(3,1fr)}.vl-qa-columns{grid-template-columns:1fr}}@media(max-width:540px){.vl-qa-grid{grid-template-columns:repeat(2,1fr)}}
+
+
+.vl-training-releases{display:grid;gap:8px}.vl-training-releases article{grid-template-columns:minmax(0,1.25fr) minmax(150px,.45fr) minmax(230px,.7fr) auto;border:1px solid #e5e2da;border-radius:12px;padding:10px;margin:0}.vl-training-releases .admin-button{text-decoration:none;text-align:center}@media(max-width:900px){.vl-training-releases article{grid-template-columns:1fr 1fr}.vl-training-releases .admin-button{justify-self:start}}

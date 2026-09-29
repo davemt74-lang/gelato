@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA_DATASET="gelato.vision_training_dataset.v1"
+SCHEMA_TRAINING_RELEASE="gelato.vision_training_release.v1"
 SCHEMA_RELEASE="gelato.vision_model_release.v1"
 SCHEMA_BROWSER="gelato.browser_onnx_detector.v1"
 SCHEMA_COMPARISON="gelato.vision_model_comparison.v1"
@@ -67,6 +68,75 @@ def load_manifest(root: Path)->dict[str,Any]:
         if not isinstance(item,dict) or item.get("index")!=i or not str(item.get("name","")).strip():
             raise PipelineError("Dataset class indexes must be contiguous and named.")
     return data
+
+def load_training_release_manifest(root: Path)->dict[str,Any]:
+    path=root/"provenance-manifest.json"
+    if not path.is_file(): raise PipelineError("provenance-manifest.json is missing.")
+    data=json.loads(path.read_text("utf-8"))
+    if data.get("schema")!=SCHEMA_TRAINING_RELEASE: raise PipelineError("Training release schema is unsupported.")
+    if data.get("format")!="yolo_detection": raise PipelineError("Training release format must be yolo_detection.")
+    classes=data.get("classes")
+    if not isinstance(classes,list) or not classes or not all(isinstance(x,str) and x.strip() for x in classes):
+        raise PipelineError("Training release classes are missing or invalid.")
+    if data.get("privacy",{}).get("privateStoragePathsIncluded") is not False:
+        raise PipelineError("Training release privacy declaration is invalid.")
+    for item in data.get("files") or []:
+        rel=str(item.get("path",""))
+        if not rel or rel.startswith("/") or ".." in Path(rel).parts:
+            raise PipelineError("Training release contains an unsafe relative path.")
+        path=root/rel
+        if not path.is_file(): raise PipelineError(f"Training release file is missing: {rel}")
+        expected=str(item.get("sha256",""))
+        if len(expected)!=64 or sha256_file(path)!=expected:
+            raise PipelineError(f"Training release file hash mismatch: {rel}")
+    return data
+
+def inspect_training_release(root: Path)->dict[str,Any]:
+    manifest=load_training_release_manifest(root)
+    classes=[str(x) for x in manifest["classes"]]
+    counts={}
+    for split in ("train","val","test"):
+        images=sorted([p for p in (root/"images"/split).glob("*") if p.suffix.lower() in IMAGE_EXTS])
+        if not images: raise PipelineError(f"Training release {split} split is empty.")
+        counts[split]=len(images)
+        for image in images:
+            parse_label_file(root/"labels"/split/f"{image.stem}.txt",len(classes))
+    declared=manifest.get("splitCounts") or {}
+    for split,count in counts.items():
+        if int(declared.get(split,-1))!=count:
+            raise PipelineError(f"Training release splitCounts.{split} does not match packaged images.")
+    return {"root":str(root),"manifest":manifest,"classes":classes,"splitCounts":counts}
+
+def prepare_training_release(root: Path,out: Path)->dict[str,Any]:
+    info=inspect_training_release(root)
+    if out.exists(): shutil.rmtree(out)
+    for split in ("train","val","test"):
+        (out/"images"/split).mkdir(parents=True,exist_ok=True)
+        (out/"labels"/split).mkdir(parents=True,exist_ok=True)
+        for image in sorted((root/"images"/split).iterdir()):
+            if image.is_file() and image.suffix.lower() in IMAGE_EXTS:
+                shutil.copy2(image,out/"images"/split/image.name)
+                label=root/"labels"/split/f"{image.stem}.txt"
+                if not label.is_file(): raise PipelineError(f"Training release label is missing: {split}/{image.stem}.txt")
+                shutil.copy2(label,out/"labels"/split/label.name)
+    names=info["classes"]
+    yaml_lines=["path: "+out.as_posix(),"train: images/train","val: images/val","test: images/test","names:"]
+    yaml_lines += [f"  {i}: {json.dumps(name)}" for i,name in enumerate(names)]
+    (out/"data.yaml").write_text("\n".join(yaml_lines)+"\n",encoding="utf-8")
+    manifest=info["manifest"]
+    split_manifest={
+        "schema":"gelato.vision_training_split.v3",
+        "mode":"governed_release",
+        "releaseHash":manifest.get("releaseHash"),
+        "dataset":manifest.get("dataset"),
+        "splitPlan":manifest.get("splitPlan"),
+        "trainingProfile":manifest.get("trainingProfile"),
+        "counts":info["splitCounts"],
+        "classes":names,
+        "grouping":{"mode":"governed_release","protectedBy":[k for k,v in (manifest.get("splitPlan",{}).get("policy") or {}).items() if v]},
+    }
+    (out/"split-manifest.json").write_text(json.dumps(split_manifest,indent=2)+"\n",encoding="utf-8")
+    return split_manifest
 
 def parse_label_file(path: Path,class_count: int)->list[tuple[int,float,float,float,float]]:
     out=[]
@@ -144,6 +214,8 @@ def deterministic_split(images:list[Path],seed:int,ratios:tuple[float,float,floa
 def prepare_workspace(dataset: Path,out: Path,seed:int=74,train_ratio:float=.70,val_ratio:float=.15,test_ratio:float=.15)->dict[str,Any]:
     root,tmp=materialize_dataset(dataset)
     try:
+        if (root/"provenance-manifest.json").is_file():
+            return prepare_training_release(root,out)
         info=inspect_dataset(root); splits,split_provenance=deterministic_split(info["images"],seed,(train_ratio,val_ratio,test_ratio),info["manifest"])
         if out.exists(): shutil.rmtree(out)
         for split,images in splits.items():
@@ -342,7 +414,11 @@ def main(argv:list[str]|None=None)->int:
         if args.command=="validate":
             root,tmp=materialize_dataset(Path(args.dataset))
             try:
-                info=inspect_dataset(root);print(json.dumps({k:v for k,v in info.items() if k not in {"images","root"}},indent=2))
+                if (root/"provenance-manifest.json").is_file():
+                    info=inspect_training_release(root)
+                else:
+                    info=inspect_dataset(root)
+                print(json.dumps({k:v for k,v in info.items() if k not in {"images","root"}},indent=2))
             finally:
                 if tmp: tmp.cleanup()
         elif args.command=="prepare": print(json.dumps(prepare_workspace(Path(args.dataset),Path(args.output),args.seed,args.train_ratio,args.val_ratio,args.test_ratio),indent=2))
