@@ -109,7 +109,7 @@ function glasses_vision_ingredient_guard_assess_scene(array $scene): array
         $risks[]=['type'=>$type,'severity'=>$severity,'message'=>$message,'detail'=>$detail];
     };
 
-    if($current!==null&&!$expectedVisible&&!$current['optional']&&!in_array($current['status'],['confirmed','ignored'],true)){
+    if($targets&&$current!==null&&!$expectedVisible&&!$current['optional']&&!in_array($current['status'],['confirmed','ignored'],true)){
         $addRisk($risks,'missing_expected','warning','Expected ingredient is not visible.',[
           'componentKey'=>$currentKey,'displayName'=>$current['displayName'],'sortOrder'=>$current['sortOrder']
         ]);
@@ -158,6 +158,7 @@ function glasses_vision_ingredient_guard_assess_scene(array $scene): array
     }
     if($stopCount>0)$state='stop';
     elseif($warningCount>0)$state='warning';
+    elseif(!$targets)$state='insufficient';
     elseif($current===null&&!$ingredientEntities)$state='insufficient';
     else $state='clear';
 
@@ -278,7 +279,13 @@ function glasses_vision_ingredient_guard_verify(PDO $pdo,int $org,string $public
     $row=glasses_vision_ingredient_guard_row($pdo,$org,$publicId);
     $material=['evidence'=>$row['evidence'],'result'=>$row['result'],'risks'=>$row['risks']];
     $calculated=hash('sha256',glasses_vision_training_release_json($material));
-    return ['passed'=>hash_equals($row['assessmentHash'],$calculated),'publicId'=>$row['publicId'],'assessmentHash'=>$row['assessmentHash'],'calculatedHash'=>$calculated];
+    $scene=glasses_vision_scene_row($pdo,$org,$row['scenePublicId']);
+    $passed=hash_equals($row['assessmentHash'],$calculated)
+      &&hash_equals(glasses_vision_training_release_json($row['evidence']['policy']??[]),glasses_vision_training_release_json(glasses_vision_ingredient_guard_policy()))
+      &&glasses_vision_scene_verify($pdo,$org,$row['scenePublicId'])['passed']
+      &&hash_equals((string)($row['evidence']['scene']['sceneHash']??''),(string)$scene['sceneHash'])
+      &&hash_equals((string)($row['evidence']['scene']['sourceFingerprint']??''),(string)$scene['sourceFingerprint']);
+    return ['passed'=>$passed,'publicId'=>$row['publicId'],'assessmentHash'=>$row['assessmentHash'],'calculatedHash'=>$calculated];
 }
 
 function glasses_vision_ingredient_guard_recent(PDO $pdo,int $org,int $limit=50): array
