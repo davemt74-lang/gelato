@@ -90,7 +90,7 @@ function glasses_vision_retraining_source(PDO $pdo,int $org,array $candidate): a
     if(!$media&&$sample){
         $mq=$pdo->prepare("SELECT * FROM glasses_vision_training_media
           WHERE organization_id=? AND sample_id=? AND status='active'
-          ORDER BY FIELD(quality_state,'good','warning','review','poor'),created_at,id LIMIT 1");
+          ORDER BY CASE quality_state WHEN 'good' THEN 0 WHEN 'warning' THEN 1 WHEN 'review' THEN 2 WHEN 'poor' THEN 3 ELSE 4 END,created_at,id LIMIT 1");
         $mq->execute([$org,(int)$sample['id']]);$media=$mq->fetch()?:null;
     }
 
@@ -125,6 +125,7 @@ function glasses_vision_retraining_prepare(PDO $pdo,int $org,string $miningRunPu
       WHERE c.organization_id=? AND c.mining_run_id=? AND c.status='open'
       ORDER BY c.score DESC,c.id LIMIT ".$policy['maxCandidates']);
     $q->execute([$org,(int)$run['id']]);$rows=$q->fetchAll();
+    if(!$rows)throw new InvalidArgumentException('Mining run has no open candidates to prepare.');
 
     $seenSha=[];$seenCapture=[];$items=[];
     foreach($rows as $candidate){
@@ -247,12 +248,11 @@ function glasses_vision_retraining_review(PDO $pdo,int $org,string $batchPublic,
         $iq->execute([$org,(int)$batch['id'],(int)$m[1]]);$item=$iq->fetch();if(!$item)throw new InvalidArgumentException('Retraining candidate item was not found.');
         if($decision==='include'){
             if((string)$item['eligibility_status']!=='eligible')throw new InvalidArgumentException('Only eligible retraining candidates may be included.');
-            if((string)$item['review_status']!=='approved')throw new InvalidArgumentException('Included retraining sample is no longer approved.');
-            if((string)$item['media_status']!=='active'||(string)$item['consent_basis']!=='training_media_opt_in'||(string)$item['quality_state']==='poor')
-                throw new InvalidArgumentException('Included retraining media is no longer eligible.');
-            $mq=$pdo->prepare("SELECT * FROM glasses_vision_training_media WHERE organization_id=? AND id=? LIMIT 1");
-            $mq->execute([$org,(int)$item['training_media_id']]);$media=$mq->fetch();
-            if(!$media||!glasses_vision_retraining_media_integrity($media)['ok'])throw new InvalidArgumentException('Included retraining media no longer matches its governed file hash.');
+            if((string)$item['candidate_status']!=='open')throw new InvalidArgumentException('Dismissed or suppressed mining candidates cannot be included.');
+            $current=glasses_vision_retraining_source($pdo,$org,['production_error_id'=>(int)$item['candidate_production_error_id']]);
+            if($current['eligibility']!=='eligible'||!$current['sample']||!$current['media']||
+               (int)$current['sample']['id']!==(int)$item['training_sample_id']||(int)$current['media']['id']!==(int)$item['training_media_id'])
+                throw new InvalidArgumentException('Included retraining evidence has changed since batch preparation.');
         }
         $pdo->prepare("UPDATE glasses_vision_retraining_batch_items SET decision=?,decision_reason=?,reviewed_by=?,reviewed_at=NOW(6) WHERE organization_id=? AND id=?")
           ->execute([$decision,$reason!==''?$reason:null,$actor,$org,(int)$item['id']]);
@@ -271,8 +271,10 @@ function glasses_vision_retraining_build_dataset(PDO $pdo,int $org,string $batch
             $dq=$pdo->prepare("SELECT public_id FROM glasses_vision_dataset_versions WHERE organization_id=? AND id=? LIMIT 1");$dq->execute([$org,(int)$batch['dataset_id']]);
             return ['batch'=>glasses_vision_retraining_batch($pdo,$org,$batchPublic),'dataset'=>glasses_vision_lab_dataset($pdo,$org,(string)$dq->fetchColumn())];
         }
-        $iq=$pdo->prepare("SELECT i.*,s.public_id sample_public_id,s.review_status,m.status media_status,m.consent_basis,m.quality_state
+        $iq=$pdo->prepare("SELECT i.*,c.status candidate_status,c.production_error_id candidate_production_error_id,
+          s.public_id sample_public_id,s.review_status,m.status media_status,m.consent_basis,m.quality_state
           FROM glasses_vision_retraining_batch_items i
+          JOIN glasses_vision_mined_candidates c ON c.id=i.mined_candidate_id AND c.organization_id=i.organization_id
           LEFT JOIN glasses_vision_training_samples s ON s.id=i.training_sample_id AND s.organization_id=i.organization_id
           LEFT JOIN glasses_vision_training_media m ON m.id=i.training_media_id AND m.organization_id=i.organization_id
           WHERE i.organization_id=? AND i.batch_id=? ORDER BY i.id FOR UPDATE");
@@ -281,12 +283,12 @@ function glasses_vision_retraining_build_dataset(PDO $pdo,int $org,string $batch
         foreach($items as $i){
             if((string)$i['eligibility_status']==='eligible'&&(string)$i['decision']==='pending')$pending++;
             if((string)$i['decision']!=='include')continue;
-            if((string)$i['eligibility_status']!=='eligible'||(string)$i['review_status']!=='approved'||(string)$i['media_status']!=='active'||
-               (string)$i['consent_basis']!=='training_media_opt_in'||(string)$i['quality_state']==='poor')
+            if((string)$i['eligibility_status']!=='eligible'||(string)$i['candidate_status']!=='open')
                 throw new InvalidArgumentException('An included retraining candidate is no longer eligible.');
-            $mq=$pdo->prepare("SELECT * FROM glasses_vision_training_media WHERE organization_id=? AND id=? LIMIT 1");
-            $mq->execute([$org,(int)$i['training_media_id']]);$media=$mq->fetch();
-            if(!$media||!glasses_vision_retraining_media_integrity($media)['ok'])throw new InvalidArgumentException('Included retraining media no longer matches its governed file hash.');
+            $current=glasses_vision_retraining_source($pdo,$org,['production_error_id'=>(int)$i['candidate_production_error_id']]);
+            if($current['eligibility']!=='eligible'||!$current['sample']||!$current['media']||
+               (int)$current['sample']['id']!==(int)$i['training_sample_id']||(int)$current['media']['id']!==(int)$i['training_media_id'])
+                throw new InvalidArgumentException('Included retraining evidence has changed since batch preparation.');
             $included[]=$i;
         }
         if($pending>0)throw new InvalidArgumentException('Every eligible retraining candidate must be explicitly reviewed before building a dataset.');
