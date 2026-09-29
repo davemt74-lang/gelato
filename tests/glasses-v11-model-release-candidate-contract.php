@@ -44,7 +44,7 @@ $config=['epochs'=>100,'batchSize'=>16,'imageSize'=>640,'seed'=>74];$configHash=
 $runPublic='vision-train-run-'.$slug;
 $pdo->prepare("INSERT INTO glasses_vision_training_runs
  (organization_id,public_id,training_release_id,qualification_id,attempt_no,dataset_hash_snapshot,assembly_hash_snapshot,release_hash_snapshot,qualification_hash_snapshot,config_hash,run_hash,run_key,trainer,trainer_version,status,config_json,metrics_json,artifacts_json,metrics_hash,output_sha256,created_by,requested_by,started_by,completed_by,started_at,completed_at)
- VALUES (?,?,?,?,1,?,?,?,?,?,?,?,'gelato-yolo','11.0','completed',?,?,?,?,?,?,?,?,NOW(6),NOW(6))")
+ VALUES (?,?,?,?,1,?,?,?,?,?,?,?,'gelato-yolo','11.0','completed',?,?,?,?,?,?,?,?,?,NOW(6),NOW(6))")
  ->execute([$org,$runPublic,$releaseId,$qualificationId,$datasetHash,$assemblyHash,$releaseHash,$qHash,$configHash,$runHash,'rc-run-'.$slug,json_encode($config,JSON_UNESCAPED_SLASHES),json_encode(['map50'=>.93]),json_encode([['name'=>'best.onnx','kind'=>'model','sha256'=>$challengerHash,'bytes'=>123456]]),hash('sha256',glasses_vision_training_release_json(['map50'=>.93])),$challengerHash,$actor,$actor,$actor,$actor]);$runId=(int)$pdo->lastInsertId();
 
 $experimentPublic='vision-experiment-'.$slug;$experimentHash=hash('sha256','experiment-'.$slug);
