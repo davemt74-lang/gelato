@@ -1,7 +1,7 @@
 (()=>{'use strict';
 const cfg=window.GELATO_GLASSES_SIMULATOR||{};
 const $=id=>document.getElementById(id);
-const state={mode:'mock',devices:[],device:null,work:null,selectedKdsItemPublicId:'',build:null,validation:null,seq:1,logs:[],autoPlayTimer:null,syncTimer:null,syncBusy:false,syncErrors:0,syncFingerprint:'',syncAbort:null,syncEpoch:0,lastSyncAt:null,cameraStream:null,cameraTrack:null,cameraTarget:null,cameraDevices:[],cameraSource:'image',visionMode:'manual',visionTimer:null,visionBusy:false,visionFrameSeq:0,visionLastAt:0,visionLatencyMs:0,visionFps:0,visionDetections:[],visionTracks:new Map(),visionSubmitted:new Set(),visionAdapter:null,temporalTracks:new Map(),temporalEvents:[],temporalSequence:[],temporalViolations:[],temporalValidationBusy:false,temporalValidationFingerprint:'',temporalReadySince:0,temporalGate:null,browserModel:{status:'idle',session:null,assignment:null,profile:null,config:null,package:null,verifiedSha256:null,loadEpoch:0},dataset:{annotations:[],samples:[],drag:null,frozen:false,captureGroup:null,burstSeq:0,uploading:false},activeLearning:{enabled:true,candidates:[],capturing:false,lastCaptureByKey:new Map(),maxQueue:30,cooldownMs:10000},shadowModel:{status:'idle',session:null,assignment:null,config:null,package:null,verifiedSha256:null,runPublicId:null,summary:null,frameSeq:0,busy:false},hardwareRuntime:null,framePipeline:{queue:[],worker:false,epoch:0,nextSeq:0,currentAbort:null,metrics:{acceptedFrames:0,processedFrames:0,droppedFrames:0,staleFrames:0,timedOutFrames:0,cancelledFrames:0,failedFrames:0,queueDepth:0,maxObservedQueueDepth:0,lastProcessedSequence:0}}};
+const state={mode:'mock',devices:[],device:null,work:null,selectedKdsItemPublicId:'',build:null,validation:null,seq:1,logs:[],autoPlayTimer:null,syncTimer:null,syncBusy:false,syncErrors:0,reconnectCount:0,syncFingerprint:'',syncAbort:null,syncEpoch:0,lastSyncAt:null,cameraStream:null,cameraTrack:null,cameraTarget:null,cameraDevices:[],cameraSource:'image',visionMode:'manual',visionTimer:null,visionBusy:false,visionFrameSeq:0,visionLastAt:0,visionLatencyMs:0,visionFps:0,visionDetections:[],visionTracks:new Map(),visionSubmitted:new Set(),visionAdapter:null,temporalTracks:new Map(),temporalEvents:[],temporalSequence:[],temporalViolations:[],temporalValidationBusy:false,temporalValidationFingerprint:'',temporalReadySince:0,temporalGate:null,browserModel:{status:'idle',session:null,assignment:null,profile:null,config:null,package:null,verifiedSha256:null,loadEpoch:0},dataset:{annotations:[],samples:[],drag:null,frozen:false,captureGroup:null,burstSeq:0,uploading:false},activeLearning:{enabled:true,candidates:[],capturing:false,lastCaptureByKey:new Map(),maxQueue:30,cooldownMs:10000},shadowModel:{status:'idle',session:null,assignment:null,config:null,package:null,verifiedSha256:null,runPublicId:null,summary:null,frameSeq:0,busy:false},hardwareRuntime:null,framePipeline:{queue:[],worker:false,epoch:0,nextSeq:0,currentAbort:null,metrics:{acceptedFrames:0,processedFrames:0,droppedFrames:0,staleFrames:0,timedOutFrames:0,cancelledFrames:0,failedFrames:0,queueDepth:0,maxObservedQueueDepth:0,lastProcessedSequence:0}}};
 const mock={
   work:{assignmentRequired:false,station:{publicId:'station-mock',name:'Sandwich / Pizza Line'},revision:'mock-revision',focusItem:{kdsItemPublicId:'kds-mock-1',status:'queued',ticket:{checkNumber:'1042',serviceMode:'dine_in',tableName:'Table 12',guestCount:2},posLine:{id:1,menuItemId:1,name:'Club Sandwich + Fries',optionName:'Regular',quantity:1,specialInstructions:'NO TOMATO · EXTRA BACON',modifiers:[{name:'Extra Bacon'}]},menu:{preparationNotes:'Build, slice and plate with fries.'},recipeSource:{status:'exact_name',recipe:{instructions:['Toast bread','Add mayo','Add turkey','Add bacon','Add lettuce','Add tomato','Top and slice','Plate with fries']}}},items:[],metrics:{queued:1,inProgress:0,ready:0,held:0}},
   components:['Toasted Bread','Mayo','Turkey','Bacon','Lettuce','Tomato','Fries'].map((name,i)=>({componentKey:'mock:'+i,displayName:name,expectedQuantity:i===0?3:1,detectedQuantity:0,unit:i===0?'slices':'portion',optional:false,status:'waiting',sortOrder:i+1})),
@@ -81,7 +81,7 @@ async function syncLiveStationWork(announce=true){
     const changed=applyLiveWork(d.work,{announce});
     const recovered=state.syncErrors>0;state.syncErrors=0;
     setSyncBadge('live','LIVE SYNC');
-    if(recovered)log('SYNC','Live station synchronization recovered.');
+    if(recovered){state.reconnectCount+=1;log('SYNC','Live station synchronization recovered.');}
     return changed;
   }catch(e){
     if(epoch!==state.syncEpoch||state.mode!=='live'||state.device?.publicId!==devicePublicId)return false;
@@ -112,6 +112,37 @@ function renderHardwareRuntime(){
   stateEl.textContent=String(runtime.adapterId||'adapter').toUpperCase();
   detail.innerHTML='<strong>'+escapeHtml(runtime.platform||'unknown')+'</strong><span>'+escapeHtml(sdk.vendorAdapterInstalled?'AIR3 vendor adapter installed':'AIR3 SDK pending · simulator adapter active')+'</span>';
   caps.textContent=['camera','display','input','inference'].map(k=>k+' '+(cap[k]?.available?'✓':'—')).join(' · ');
+}
+function rawDeviceHealthSnapshot(){
+  const fm=state.framePipeline.metrics||{},track=state.cameraTrack?.getSettings?.()||{},cameraState=$('cameraHealth')?.dataset?.state||'off';
+  const modelPackage=state.browserModel.package||{},adapterId=state.visionAdapter?.id||$('visionAdapterSelect')?.value||'fixture';
+  return {
+    camera:{state:cameraState==='ready'?'ready':cameraState,source:state.cameraSource||null,width:track.width||null,height:track.height||null},
+    framePipeline:{...fm,fps:state.visionFps||0,latencyMs:state.visionLatencyMs||0},
+    inference:{state:state.framePipeline.worker?'running':(visionMode()==='manual'?'idle':'ready'),adapterId,runtime:adapterId==='onnx'?'onnx':'fixture',lastError:state.logs.find(x=>x.type==='VISION')?.msg||null},
+    model:{detectorName:state.browserModel.assignment?.detectorName||modelPackage.detectorName||null,packagePublicId:modelPackage.publicId||state.browserModel.assignment?.packagePublicId||null,artifactSha256:state.browserModel.verifiedSha256||null,status:state.browserModel.status||'idle'},
+    runtime:{state:document.hidden?'paused':(state.mode==='live'?(state.syncErrors?'degraded':'ready'):'ready'),adapterId:state.hardwareRuntime?.adapterId||'simulator.v1',reconnectCount:state.reconnectCount||0,syncErrorCount:state.syncErrors||0},
+    hardware:{batteryPercent:null,temperatureC:null,batterySource:'vendor_sdk_pending',thermalSource:'vendor_sdk_pending'},
+    errors:state.logs.filter(x=>['ERROR','VISION','SYNC','CAMERA'].includes(x.type)).slice(0,20).map(x=>({type:x.type,message:x.msg,at:x.at?.toISOString?.()||null}))
+  };
+}
+function renderNormalizedDeviceHealth(health){
+  const badge=$('deviceHealthState'),summary=$('deviceHealthSummary'),metrics=$('deviceHealthMetrics'),hardware=$('deviceHealthHardware');if(!badge||!summary||!metrics||!hardware)return;
+  badge.textContent=String(health?.health||'unknown').toUpperCase();
+  summary.innerHTML='<strong>'+escapeHtml((health?.camera?.state||'unknown').toUpperCase())+' CAMERA</strong><span>'+escapeHtml((health?.inference?.state||'unknown')+' inference · '+(health?.model?.status||'no model'))+'</span>';
+  const f=health?.framePipeline||{};metrics.textContent='FPS '+Number(f.fps||0).toFixed(1)+' · latency '+Math.round(Number(f.latencyMs||0))+'ms · dropped '+Number(f.droppedFrames||0)+' · stale '+Number(f.staleFrames||0)+' · timeout '+Number(f.timedOutFrames||0)+' · reconnect '+Number(health?.runtime?.reconnectCount||0);
+  const h=health?.hardware||{};hardware.textContent=(h.batteryPercent==null?'Battery SDK pending':'Battery '+Math.round(h.batteryPercent)+'%')+' · '+(h.temperatureC==null?'thermal SDK pending':'thermal '+Number(h.temperatureC).toFixed(1)+'°C');
+}
+async function refreshDeviceHealth(){
+  try{const d=await api('hardware.health.normalize',{snapshot:rawDeviceHealthSnapshot()});renderNormalizedDeviceHealth(d.health);return d.health;}
+  catch(e){const badge=$('deviceHealthState');if(badge)badge.textContent='ERROR';log('HEALTH',e.message);return null;}
+}
+async function downloadDeviceDiagnostics(){
+  try{
+    const snapshot=rawDeviceHealthSnapshot(),context={devicePublicId:state.device?.publicId||null,stationPublicId:state.work?.station?.publicId||state.device?.stationPublicId||null,buildSessionPublicId:state.build?.publicId||null,kdsItemPublicId:state.build?.kdsItemPublicId||state.selectedKdsItemPublicId||null,simulator:true};
+    const d=await api('hardware.diagnostics.bundle',{snapshot,context}),blob=new Blob([JSON.stringify(d.diagnosticBundle,null,2)+'\n'],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download='gelato-glasses-diagnostics-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);log('HEALTH','Diagnostic bundle exported.');
+  }catch(e){log('ERROR',e.message);}
 }
 async function loadDevices(){try{const r=await fetch(cfg.api,{credentials:'same-origin'}),d=await r.json();if(!r.ok||!d.ok)throw new Error(d.message||'Device list failed.');state.hardwareRuntime=d.hardwareRuntime||null;renderHardwareRuntime();state.devices=d.devices||[];$('deviceSelect').innerHTML='<option value="">Choose device…</option>'+state.devices.map(x=>'<option value="'+escapeHtml(x.publicId)+'">'+escapeHtml(x.displayName)+' · '+escapeHtml(x.stationName||'Unassigned')+'</option>').join('');if(state.devices[0]){$('deviceSelect').value=state.devices[0].publicId;state.device=state.devices[0];}log('SYSTEM','Loaded '+state.devices.length+' accessible glasses device(s).');}catch(e){$('deviceSelect').innerHTML='<option value="">No devices</option>';log('ERROR',e.message);}}
 const CAMERA_PREF_KEY='gelato.webGlassesSimulator.cameraPrefs.v1';
@@ -1065,6 +1096,8 @@ $('datasetUpload').addEventListener('click',()=>{uploadDatasetSamples().catch(e=
 $('cameraTargetConfidence').addEventListener('input',e=>{$('cameraTargetConfidenceValue').textContent=e.target.value+'%';});
 $('frameBurst')?.addEventListener('click',injectFrameBurst);
 $('frameResetMetrics')?.addEventListener('click',resetFramePipelineMetrics);
+$('refreshDeviceHealth')?.addEventListener('click',()=>refreshDeviceHealth());
+$('downloadDiagnostics')?.addEventListener('click',()=>downloadDeviceDiagnostics());
 for(const id of ['frameQueueMax','frameMaxAge','frameInferenceTimeout','frameDropPolicy'])$(id)?.addEventListener('change',renderFramePipelineMetrics);
 document.addEventListener('visibilitychange',()=>{if(state.cameraTrack){state.cameraTrack.enabled=!document.hidden;setCameraHealth(document.hidden?'paused':'ready',document.hidden?'PAUSED':'READY');}if(document.hidden){stopVisionRuntime('paused');stopLiveStationSync('hidden');}else{if(state.cameraStream)startVisionRuntime();if(state.mode==='live'&&state.device)startLiveStationSync({immediate:true});}});
 window.addEventListener('offline',()=>{stopLiveStationSync('idle');setSyncBadge('error','OFFLINE');});
@@ -1189,5 +1222,5 @@ function bindRegionEditor(regionName){
 bindRegionEditor('hudRight');bindRegionEditor('hudStatus');bindRegionEditor('hudOrdersRegion');bindRegionEditor('hudNextRegion');
 refreshPresets();applyCalibration();applyFrameMode();
 $('exceptions').addEventListener('click',e=>{const b=e.target.closest('[data-resolve]');if(b)resolveUnexpected(b.dataset.resolve);});
-(async()=>{await loadDevices();const cp=cameraPrefs();if(cp.resolution)$('cameraResolution').value=cp.resolution;if(cp.fit)$('cameraFit').value=cp.fit;$('cameraMirror').checked=!!cp.mirror;applyCameraPresentation();await enumerateCameras();if(!cameraSupported())setCameraHealth('error','UNSUPPORTED');state.work=structuredClone(mock.work);state.selectedKdsItemPublicId=state.work.focusItem?.kdsItemPublicId||'';refreshPresets();applyCalibration();setSyncBadge('paused','SYNC OFF');render();setInterval(renderTopStatus,30000);log('SYSTEM','Simulator ready. Pizza Line Reference HUD loaded.');})();
+(async()=>{await loadDevices();const cp=cameraPrefs();if(cp.resolution)$('cameraResolution').value=cp.resolution;if(cp.fit)$('cameraFit').value=cp.fit;$('cameraMirror').checked=!!cp.mirror;applyCameraPresentation();await enumerateCameras();if(!cameraSupported())setCameraHealth('error','UNSUPPORTED');state.work=structuredClone(mock.work);state.selectedKdsItemPublicId=state.work.focusItem?.kdsItemPublicId||'';refreshPresets();applyCalibration();setSyncBadge('paused','SYNC OFF');render();setInterval(renderTopStatus,30000);refreshDeviceHealth();setInterval(refreshDeviceHealth,5000);log('SYSTEM','Simulator ready. Pizza Line Reference HUD loaded.');})();
 })();
