@@ -1,0 +1,117 @@
+name: AR Glasses Vision Lab V8 Model Health
+
+on:
+  pull_request:
+    paths:
+      - 'database/20261110_vision_lab_v8_production_model_health.sql'
+      - 'includes/glasses-vision-model-health.php'
+      - 'api/glasses-vision-lab.php'
+      - 'glasses-vision-lab.php'
+      - 'assets/js/glasses-vision-model-health.js'
+      - 'assets/css/glasses-vision-lab.css'
+      - 'tests/glasses-vision-lab-v8-production-model-health-contract.php'
+      - 'docs/GLASSES-VISION-LAB-V8-MODEL-HEALTH.md'
+      - '.github/workflows/glasses-vision-lab-v8.yml'
+  push:
+    branches: [main]
+
+jobs:
+  vision-lab-v8:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium, zip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Syntax
+        run: |
+          php -l includes/glasses-vision-model-health.php
+          php -l api/glasses-vision-lab.php
+          php -l glasses-vision-lab.php
+          php -l tests/glasses-vision-lab-v8-production-model-health-contract.php
+          node --check assets/js/glasses-vision-model-health.js
+
+      - name: Architecture guardrails
+        run: |
+          grep -q 'CREATE TABLE glasses_vision_model_health_snapshots' database/20261110_vision_lab_v8_production_model_health.sql
+          grep -q 'source_fingerprint CHAR(64)' database/20261110_vision_lab_v8_production_model_health.sql
+          grep -q 'snapshot_hash CHAR(64)' database/20261110_vision_lab_v8_production_model_health.sql
+          grep -q 'function glasses_vision_model_health_snapshot' includes/glasses-vision-model-health.php
+          grep -q 'function glasses_vision_model_health_verify' includes/glasses-vision-model-health.php
+          grep -q "'health_snapshot'" includes/glasses-vision-model-health.php
+          ! grep -q 'rollout.activate' includes/glasses-vision-model-health.php
+          ! grep -q 'rollout.advance' includes/glasses-vision-model-health.php
+          ! grep -q 'kds_transition' includes/glasses-vision-model-health.php
+
+      - name: Install and upgrade schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_restaurant_ai_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->ensureTrackingTables();
+          $s->bootstrapLegacyHistory(null);
+          $s->applyPending(null);
+          if($s->pendingMigrations()) exit(1);
+          PHP
+
+      - name: V8 production model health contract
+        run: php tests/glasses-vision-lab-v8-production-model-health-contract.php
+
+      - name: V7 continuous-learning regressions
+        run: |
+          php tests/glasses-vision-lab-v7-production-error-ledger-contract.php
+          php tests/glasses-vision-lab-v7-failure-analysis-contract.php
+          php tests/glasses-vision-lab-v7-hard-example-mining-contract.php
+          php tests/glasses-vision-lab-v7-retraining-candidate-builder-contract.php
+          php tests/glasses-vision-lab-v7-model-improvement-experiment-contract.php
+          php tests/glasses-vision-lab-v7-champion-challenger-review-contract.php
+          php tests/glasses-vision-lab-v7-governed-promotion-audit-contract.php
+
+      - name: Drift, lineage and kitchen regressions
+        run: |
+          php tests/glasses-vision-model-rollout-contract.php
+          php tests/glasses-vision-lab-v6-lineage-traceability-contract.php
+          php tests/glasses-observation-corrections-contract.php
+          php tests/glasses-build-session-contract.php
+          php tests/kds-contract.php
+
+      - name: Upgrade idempotence
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->assertAppliedChecksumsUnchanged();
+          if($s->pendingMigrations()) exit(2);
+          if($s->applyPending(null)) exit(3);
+          echo "idempotent\n";
+          PHP
