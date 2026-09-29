@@ -223,7 +223,7 @@ function glasses_vision_ingredient_guard_assess(PDO $pdo,int $org,string $sceneP
       'sceneHash'=>$scene['sceneHash']
     ]));
 
-    return glasses_transaction($pdo,function()use($pdo,$org,$scene,$assessment,$assessmentKey,$assessmentHash,$evidence):array{
+    return glasses_transaction($pdo,function()use($pdo,$org,$scene,$assessment,$assessmentKey,$assessmentHash,$evidence,$result):array{
         $q=$pdo->prepare("SELECT public_id,assessment_hash FROM glasses_vision_ingredient_preventions WHERE organization_id=? AND assessment_key=? LIMIT 1 FOR UPDATE");
         $q->execute([$org,$assessmentKey]);$existing=$q->fetch();
         if($existing){
@@ -237,11 +237,12 @@ function glasses_vision_ingredient_guard_assess(PDO $pdo,int $org,string $sceneP
         $bq->execute([$org,$scene['buildSessionPublicId']]);$buildId=(int)$bq->fetchColumn();
         $public=glasses_public_id('vision-ingredient-guard');
         $pdo->prepare("INSERT INTO glasses_vision_ingredient_preventions
-          (organization_id,public_id,scene_snapshot_id,build_session_id,assessment_key,state,current_component_key,expected_visible,stop_count,warning_count,evidence_json,risks_json,assessment_hash)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
+          (organization_id,public_id,scene_snapshot_id,build_session_id,assessment_key,state,current_component_key,expected_visible,stop_count,warning_count,evidence_json,result_json,risks_json,assessment_hash)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
           ->execute([$org,$public,$sceneId,$buildId,$assessmentKey,$assessment['state'],$assessment['currentComponentKey'],
             $assessment['expectedVisible']?1:0,$assessment['stopCount'],$assessment['warningCount'],
-            glasses_vision_training_release_json($evidence),glasses_vision_training_release_json($assessment['risks']),$assessmentHash]);
+            glasses_vision_training_release_json($evidence),glasses_vision_training_release_json($result),
+            glasses_vision_training_release_json($assessment['risks']),$assessmentHash]);
         glasses_vision_lineage_edge($pdo,$org,'vision_scene',$scene['publicId'],$scene['sceneHash'],'assessed_ingredient_risk_as',
           'ingredient_prevention',$public,$assessmentHash,
           ['state'=>$assessment['state'],'currentComponentKey'=>$assessment['currentComponentKey'],'stopCount'=>$assessment['stopCount'],'warningCount'=>$assessment['warningCount']],null);
@@ -259,13 +260,14 @@ function glasses_vision_ingredient_guard_row(PDO $pdo,int $org,string $publicId)
     $q->execute([$org,trim($publicId)]);$r=$q->fetch();
     if(!$r)throw new InvalidArgumentException('Ingredient-prevention assessment was not found.');
     $evidence=json_decode((string)$r['evidence_json'],true)?:[];
+    $result=json_decode((string)$r['result_json'],true)?:[];
     $risks=json_decode((string)$r['risks_json'],true)?:[];
     return [
       'publicId'=>(string)$r['public_id'],'scenePublicId'=>(string)$r['scene_public_id'],'sceneHash'=>(string)$r['scene_hash'],
       'buildSessionPublicId'=>(string)$r['build_public_id'],'state'=>(string)$r['state'],
       'currentComponentKey'=>$r['current_component_key']!==null?(string)$r['current_component_key']:null,
       'expectedVisible'=>(bool)$r['expected_visible'],'stopCount'=>(int)$r['stop_count'],'warningCount'=>(int)$r['warning_count'],
-      'evidence'=>$evidence,'risks'=>$risks,'assessmentHash'=>(string)$r['assessment_hash'],
+      'evidence'=>$evidence,'result'=>$result,'risks'=>$risks,'assessmentHash'=>(string)$r['assessment_hash'],
       'advisoryOnly'=>true,'blocksBuildState'=>false,'changesBuildState'=>false,'changesKdsState'=>false,'confirmsComponents'=>false,
       'createdAt'=>(string)$r['created_at'],
     ];
@@ -274,19 +276,7 @@ function glasses_vision_ingredient_guard_row(PDO $pdo,int $org,string $publicId)
 function glasses_vision_ingredient_guard_verify(PDO $pdo,int $org,string $publicId): array
 {
     $row=glasses_vision_ingredient_guard_row($pdo,$org,$publicId);
-    $recipe=(array)($row['evidence']['recipePlan']??[]);
-    $current=null;
-    foreach((array)($recipe['components']??[]) as $component){
-        if((string)($component['componentKey']??'')===(string)$row['currentComponentKey']){$current=$component;break;}
-    }
-    $visible=array_values(array_unique(array_map('strval',(array)($row['evidence']['visibleComponentKeys']??[]))));
-    $result=[
-      'state'=>$row['state'],'currentComponent'=>$current,'currentComponentKey'=>$row['currentComponentKey'],
-      'expectedVisible'=>$row['expectedVisible'],'visibleComponentKeys'=>array_values(array_unique($visible)),
-      'risks'=>$row['risks'],'stopCount'=>$row['stopCount'],'warningCount'=>$row['warningCount'],
-      'advisoryOnly'=>true,'blocksBuildState'=>false,'changesBuildState'=>false,'changesKdsState'=>false,'confirmsComponents'=>false,
-    ];
-    $material=['evidence'=>$row['evidence'],'result'=>$result,'risks'=>$row['risks']];
+    $material=['evidence'=>$row['evidence'],'result'=>$row['result'],'risks'=>$row['risks']];
     $calculated=hash('sha256',glasses_vision_training_release_json($material));
     return ['passed'=>hash_equals($row['assessmentHash'],$calculated),'publicId'=>$row['publicId'],'assessmentHash'=>$row['assessmentHash'],'calculatedHash'=>$calculated];
 }
