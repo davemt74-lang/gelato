@@ -6,6 +6,11 @@ require_once __DIR__.'/glasses-vision-scene.php';
 const GLASSES_VISION_STEP_SCHEMA='gelato.vision_recipe_step.v1';
 const GLASSES_VISION_STEP_POLICY='gelato.recipe_step_policy.v1';
 
+function glasses_vision_step_policy(): array
+{
+    return ['schema'=>GLASSES_VISION_STEP_POLICY,'recognizedMin'=>0.65,'recognizedMarginMin'=>0.12,'ambiguousMin'=>0.50,'sequencePenalty'=>0.18,'sequenceBoost'=>0.10];
+}
+
 function glasses_vision_step_ready(PDO $pdo): bool
 {
     $q=$pdo->prepare("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='glasses_vision_step_recognitions'");
@@ -238,21 +243,28 @@ function glasses_vision_step_recognize(PDO $pdo,int $org,string $scenePublicId):
     $scene=glasses_vision_scene_row($pdo,$org,trim($scenePublicId));
     if(!glasses_vision_scene_verify($pdo,$org,$scene['publicId'])['passed'])
         throw new InvalidArgumentException('Recipe-step recognition requires an intact V9 scene.');
+    $build=glasses_build_payload($pdo,$org,(string)$scene['buildSessionPublicId']);
+    if((string)$build['status']!=='active')throw new InvalidArgumentException('Recipe-step recognition requires an active build session.');
+    $sceneDefinition=(string)($scene['context']['buildSession']['buildDefinition']['publicId']??'');
+    $liveDefinition=(string)($build['buildDefinition']['publicId']??'');
+    if($sceneDefinition===''||$liveDefinition===''||!hash_equals($sceneDefinition,$liveDefinition))
+        throw new InvalidArgumentException('Recipe-step recognition requires the same canonical build definition captured by the scene.');
 
+    $policy=glasses_vision_step_policy();
     $scored=glasses_vision_step_score_candidates($scene);
     $steps=$scored['steps'];$candidates=$scored['candidates'];
     $state='insufficient';$recognized=null;$next=null;$confidence=0.0;$margin=0.0;
     if($steps&&$candidates){
         $best=$candidates[0];$second=$candidates[1]??null;
         $confidence=(float)$best['score'];$margin=round($confidence-(float)($second['score']??0),6);
-        if($confidence>=.65&&$margin>=.12){
+        if($confidence>=(float)$policy['recognizedMin']&&$margin>=(float)$policy['recognizedMarginMin']){
             $state='recognized';$recognized=$best;
             foreach($steps as $step)if((int)$step['order']>(int)$best['order']){$next=$step;break;}
-        }elseif($confidence>=.50)$state='ambiguous';
+        }elseif($confidence>=(float)$policy['ambiguousMin'])$state='ambiguous';
     }
 
     $evidence=[
-      'schema'=>GLASSES_VISION_STEP_SCHEMA,'policy'=>GLASSES_VISION_STEP_POLICY,
+      'schema'=>GLASSES_VISION_STEP_SCHEMA,'policy'=>$policy,
       'scene'=>['publicId'=>$scene['publicId'],'sceneHash'=>$scene['sceneHash'],'sourceFingerprint'=>$scene['sourceFingerprint']],
       'buildSessionPublicId'=>$scene['buildSessionPublicId'],
       'buildContextHash'=>$scene['context']['buildContextHash']??null,
@@ -267,21 +279,20 @@ function glasses_vision_step_recognize(PDO $pdo,int $org,string $scenePublicId):
       'recognizedStep'=>$recognized?['stepKey'=>$recognized['stepKey'],'order'=>$recognized['order'],'text'=>$recognized['text']]:null,
       'nextStep'=>$next?['stepKey'=>(string)$next['stepKey'],'order'=>(int)$next['order'],'text'=>(string)$next['text']]:null,
       'confidence'=>round($confidence,6),'margin'=>round($margin,6),
-      'advisoryOnly'=>true,'changesBuildState'=>false,'changesKdsState'=>false,
+      'advisoryOnly'=>true,'changesBuildState'=>false,'changesKdsState'=>false,'confirmsComponents'=>false,'advancesRecipeStep'=>false,
     ];
     $material=['evidence'=>$evidence,'candidates'=>$candidates,'result'=>$result];
     $recognitionHash=hash('sha256',glasses_vision_training_release_json($material));
-    $recognitionKey=hash('sha256',GLASSES_VISION_STEP_POLICY.'|'.$scene['sceneHash']);
-
-    $q=$pdo->prepare("SELECT public_id,recognition_hash FROM glasses_vision_step_recognitions WHERE organization_id=? AND recognition_key=? LIMIT 1");
-    $q->execute([$org,$recognitionKey]);$existing=$q->fetch();
-    if($existing){
-        if(!hash_equals((string)$existing['recognition_hash'],$recognitionHash))
-            throw new InvalidArgumentException('Recipe-step recognition identity conflicts with different immutable evidence.');
-        return glasses_vision_step_row($pdo,$org,(string)$existing['public_id']);
-    }
+    $recognitionKey=hash('sha256',glasses_vision_training_release_json(['policy'=>$policy,'sceneHash'=>$scene['sceneHash']]));
 
     return glasses_transaction($pdo,function()use($pdo,$org,$scene,$recognitionKey,$state,$recognized,$next,$confidence,$margin,$evidence,$candidates,$recognitionHash):array{
+        $iq=$pdo->prepare("SELECT public_id,recognition_hash FROM glasses_vision_step_recognitions WHERE organization_id=? AND recognition_key=? LIMIT 1 FOR UPDATE");
+        $iq->execute([$org,$recognitionKey]);$existing=$iq->fetch();
+        if($existing){
+            if(!hash_equals((string)$existing['recognition_hash'],$recognitionHash))
+                throw new InvalidArgumentException('Recipe-step recognition identity conflicts with different immutable evidence.');
+            return glasses_vision_step_row($pdo,$org,(string)$existing['public_id']);
+        }
         $sq=$pdo->prepare("SELECT id FROM glasses_vision_scene_snapshots WHERE organization_id=? AND public_id=? LIMIT 1");
         $sq->execute([$org,$scene['publicId']]);$sceneId=(int)$sq->fetchColumn();
         $bq=$pdo->prepare("SELECT id FROM glasses_build_sessions WHERE organization_id=? AND public_id=? LIMIT 1");
@@ -326,11 +337,12 @@ function glasses_vision_step_verify(PDO $pdo,int $org,string $publicId): array
     $r=glasses_vision_step_row($pdo,$org,$publicId);
     $result=[
       'state'=>$r['state'],'recognizedStep'=>$r['recognizedStep'],'nextStep'=>$r['nextStep'],
-      'confidence'=>$r['confidence'],'margin'=>$r['margin'],'advisoryOnly'=>true,'changesBuildState'=>false,'changesKdsState'=>false,
+      'confidence'=>$r['confidence'],'margin'=>$r['margin'],'advisoryOnly'=>true,'changesBuildState'=>false,'changesKdsState'=>false,'confirmsComponents'=>false,'advancesRecipeStep'=>false,
     ];
     $hash=hash('sha256',glasses_vision_training_release_json(['evidence'=>$r['evidence'],'candidates'=>$r['candidates'],'result'=>$result]));
     $scene=glasses_vision_scene_row($pdo,$org,$r['scenePublicId']);
     $passed=hash_equals($r['recognitionHash'],$hash)
+      &&hash_equals(glasses_vision_training_release_json($r['evidence']['policy']??[]),glasses_vision_training_release_json(glasses_vision_step_policy()))
       &&glasses_vision_scene_verify($pdo,$org,$r['scenePublicId'])['passed']
       &&hash_equals((string)($r['evidence']['scene']['sceneHash']??''),(string)$scene['sceneHash'])
       &&hash_equals((string)($r['evidence']['scene']['sourceFingerprint']??''),(string)$scene['sourceFingerprint']);
