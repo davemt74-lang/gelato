@@ -79,6 +79,25 @@ try{
  ],$actor);
 }catch(InvalidArgumentException){$conflict=true;}
 v71_assert($conflict,'Conflicting reuse of a production error event key must fail closed.');
+$badCorrection=false;
+try{
+ glasses_vision_feedback_record($pdo,$org,[
+  'eventKey'=>'bad-correction-'.$slug,'sourceType'=>'manual','errorType'=>'correction','outcome'=>'corrected',
+  'buildSessionPublicId'=>$sessionPublic,'observationKey'=>'obs-wrong-'.$slug,'expectedComponentKey'=>$keys['Pepperoni'],
+  'correctionId'=>PHP_INT_MAX
+ ],$actor);
+}catch(InvalidArgumentException){$badCorrection=true;}
+v71_assert($badCorrection,'Correction linkage must reject IDs outside the governed organization/build session.');
+
+$badExpected=false;
+try{
+ glasses_vision_feedback_record($pdo,$org,[
+  'eventKey'=>'bad-expected-'.$slug,'sourceType'=>'validation','errorType'=>'false_negative','outcome'=>'missed',
+  'buildSessionPublicId'=>$sessionPublic,'expectedComponentKey'=>'ingredient:999999999'
+ ],$actor);
+}catch(InvalidArgumentException){$badExpected=true;}
+v71_assert($badExpected,'Expected production component must belong to the governed build recipe.');
+
 
 $miss=glasses_vision_feedback_record($pdo,$org,[
  'eventKey'=>'manual-miss-'.$slug,'sourceType'=>'validation','errorType'=>'false_negative','outcome'=>'missed',
