@@ -9,7 +9,9 @@ on:
       - 'database/20261023_glasses_vision_canary_production.sql'
       - 'database/20261024_glasses_vision_production_drift.sql'
       - 'database/20261025_glasses_vision_drift_recovery.sql'
+      - 'database/20261205_v11_shadow_production_validation.sql'
       - 'includes/glasses-vision-models.php'
+      - 'includes/glasses-v11-shadow-validation.php'
       - 'api/glasses-vision-models.php'
       - 'api/glasses-device.php'
       - 'glasses-vision-models.php'
@@ -17,6 +19,7 @@ on:
       - 'assets/css/glasses-vision-models.css'
       - 'includes/admin-control-core.php'
       - 'tests/glasses-vision-model-rollout-contract.php'
+      - 'tests/glasses-v11-shadow-production-validation-contract.php'
       - 'glasses/inmo-air3-unity/**'
       - 'docs/GLASSES-VISION-MODEL-ROLLOUT.md'
       - 'glasses/inmo-air3-unity/Runtime/Core/VisionModelActivation.cs'
@@ -55,11 +58,13 @@ jobs:
       - name: Syntax checks
         run: |
           php -l includes/glasses-vision-models.php
+          php -l includes/glasses-v11-shadow-validation.php
           php -l api/glasses-vision-models.php
           php -l api/glasses-device.php
           php -l glasses-vision-models.php
           php -l includes/admin-control-core.php
           php -l tests/glasses-vision-model-rollout-contract.php
+          php -l tests/glasses-v11-shadow-production-validation-contract.php
           node --check assets/js/glasses-vision-models.js
 
       - name: Architecture and governance contract
@@ -74,6 +79,8 @@ jobs:
           grep -q 'CREATE TABLE glasses_vision_shadow_events' database/20261022_glasses_vision_shadow_evaluation.sql
           grep -q 'function glasses_vision_shadow_assignment' includes/glasses-vision-models.php
           grep -q 'function glasses_vision_shadow_report' includes/glasses-vision-models.php
+          grep -q 'GLASSES_V11_SHADOW_VALIDATION_SCHEMA' includes/glasses-v11-shadow-validation.php
+          grep -q 'passing Section 9 shadow validation' includes/glasses-vision-models.php
           grep -q 'eligibleForCanary' includes/glasses-vision-models.php
           grep -q 'CREATE TABLE glasses_vision_canary_samples' database/20261023_glasses_vision_canary_production.sql
           grep -q 'CREATE TABLE glasses_vision_canary_health_snapshots' database/20261023_glasses_vision_canary_production.sql
@@ -156,6 +163,9 @@ jobs:
 
       - name: Vision model rollout backend contract
         run: php tests/glasses-vision-model-rollout-contract.php
+
+      - name: V11 shadow production validation contract
+        run: php tests/glasses-v11-shadow-production-validation-contract.php
 
       - name: Compile hardware-neutral AR core
         run: dotnet build glasses/inmo-air3-unity/Runtime/Core/Gelato.Ar.Core.csproj -c Release --nologo
