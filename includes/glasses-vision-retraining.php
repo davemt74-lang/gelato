@@ -239,13 +239,14 @@ function glasses_vision_retraining_review(PDO $pdo,int $org,string $batchPublic,
         $bq=$pdo->prepare("SELECT * FROM glasses_vision_retraining_batches WHERE organization_id=? AND public_id=? LIMIT 1 FOR UPDATE");
         $bq->execute([$org,$batchPublic]);$batch=$bq->fetch();if(!$batch)throw new InvalidArgumentException('Retraining candidate batch was not found.');
         if((string)$batch['status']!=='draft')throw new InvalidArgumentException('Built retraining batches are immutable.');
-        if(!preg_match('/^vision-retraining-item-(\d+)$/',$itemPublic,$m))throw new InvalidArgumentException('Retraining candidate item is invalid.');
-        $iq=$pdo->prepare("SELECT i.*,s.review_status,m.status media_status,m.consent_basis,m.quality_state
+        $iq=$pdo->prepare("SELECT i.*,c.status candidate_status,c.production_error_id candidate_production_error_id,
+          s.review_status,m.status media_status,m.consent_basis,m.quality_state
           FROM glasses_vision_retraining_batch_items i
+          JOIN glasses_vision_mined_candidates c ON c.id=i.mined_candidate_id AND c.organization_id=i.organization_id
           LEFT JOIN glasses_vision_training_samples s ON s.id=i.training_sample_id AND s.organization_id=i.organization_id
           LEFT JOIN glasses_vision_training_media m ON m.id=i.training_media_id AND m.organization_id=i.organization_id
-          WHERE i.organization_id=? AND i.batch_id=? AND i.id=? LIMIT 1 FOR UPDATE");
-        $iq->execute([$org,(int)$batch['id'],(int)$m[1]]);$item=$iq->fetch();if(!$item)throw new InvalidArgumentException('Retraining candidate item was not found.');
+          WHERE i.organization_id=? AND i.batch_id=? AND i.public_id=? LIMIT 1 FOR UPDATE");
+        $iq->execute([$org,(int)$batch['id'],trim($itemPublic)]);$item=$iq->fetch();if(!$item)throw new InvalidArgumentException('Retraining candidate item was not found.');
         if($decision==='include'){
             if((string)$item['eligibility_status']!=='eligible')throw new InvalidArgumentException('Only eligible retraining candidates may be included.');
             if((string)$item['candidate_status']!=='open')throw new InvalidArgumentException('Dismissed or suppressed mining candidates cannot be included.');
