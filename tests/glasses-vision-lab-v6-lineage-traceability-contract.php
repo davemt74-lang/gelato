@@ -44,6 +44,21 @@ $run=glasses_vision_lineage_register_training_run($pdo,$org,[
  'status'=>'completed','config'=>['epochs'=>100],'metrics'=>['map50'=>.91],'outputSha256'=>$outputHash
 ],$actor);
 v67_assert($run['releaseHash']===$releaseHash&&$run['outputSha256']===$outputHash,'Training run must bind qualified release to exact output hash.');
+$repeat=glasses_vision_lineage_register_training_run($pdo,$org,[
+ 'releaseHash'=>$releaseHash,'qualificationHash'=>$qualificationHash,'runKey'=>'run-'.$slug,'trainer'=>'gelato-yolo','trainerVersion'=>'v1',
+ 'status'=>'completed','config'=>['epochs'=>100],'metrics'=>['map50'=>.91],'outputSha256'=>$outputHash
+],$actor);
+v67_assert($repeat['publicId']===$run['publicId'],'Identical training-run registration must be idempotent.');
+$conflict=false;try{glasses_vision_lineage_register_training_run($pdo,$org,[
+ 'releaseHash'=>$releaseHash,'qualificationHash'=>$qualificationHash,'runKey'=>'run-'.$slug,'trainer'=>'gelato-yolo','trainerVersion'=>'v1',
+ 'status'=>'completed','config'=>['epochs'=>101],'metrics'=>['map50'=>.91],'outputSha256'=>$outputHash
+],$actor);}catch(InvalidArgumentException){$conflict=true;}
+v67_assert($conflict,'Training run key reuse with changed immutable evidence must fail closed.');
+$unfinished=false;try{glasses_vision_lineage_register_training_run($pdo,$org,[
+ 'releaseHash'=>$releaseHash,'qualificationHash'=>$qualificationHash,'runKey'=>'unfinished-'.$slug,'trainer'=>'gelato-yolo','status'=>'running'
+],$actor);}catch(InvalidArgumentException){$unfinished=true;}
+v67_assert($unfinished,'Lineage registration must accept completed training runs only.');
+
 
 $modelPublic='vision-model-'.$slug;
 $comparison=['schema'=>'gelato.vision_model_comparison.v1','eligible'=>true,'override'=>false,'overrideReason'=>null,'goldenTestHash'=>hash('sha256','golden'),'regressions'=>[],'summary'=>['map50Delta'=>.03,'recallDelta'=>.02,'demonstratedGain'=>true]];
@@ -52,6 +67,13 @@ $pdo->prepare("INSERT INTO glasses_vision_model_packages (organization_id,public
 
 $edge=glasses_vision_lineage_bind_model($pdo,$org,$run['publicId'],$modelPublic,$actor);
 v67_assert($edge['relation']==='produced'&&$edge['to']['publicId']===$modelPublic,'Training run must bind to model package by artifact SHA-256.');
+$edgeAgain=glasses_vision_lineage_bind_model($pdo,$org,$run['publicId'],$modelPublic,$actor);
+v67_assert($edgeAgain['publicId']===$edge['publicId'],'Identical model lineage binding must be idempotent.');
+$edgeConflict=false;try{
+    glasses_vision_lineage_edge($pdo,$org,'training_run',$run['publicId'],$outputHash,'produced','model_package',$modelPublic,$outputHash,['modelName'=>'tampered'], $actor);
+}catch(InvalidArgumentException){$edgeConflict=true;}
+v67_assert($edgeConflict,'Existing lineage edge cannot be rewritten with different immutable evidence.');
+
 
 $trace=glasses_vision_lineage_model_trace($pdo,$org,$modelPublic);
 v67_assert(($trace['release']['releaseHash']??null)===$releaseHash,'Model trace must resolve exact training release.');
