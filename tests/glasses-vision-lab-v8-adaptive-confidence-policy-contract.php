@@ -45,6 +45,8 @@ $weak=false;try{glasses_vision_confidence_policy_create($pdo,$org,['policyKey'=>
 v84_assert($weak,'Policy default must never fall below the global 0.50 hard floor.');
 $negative=false;try{glasses_vision_confidence_policy_create($pdo,$org,['policyKey'=>'negative','detectorName'=>'ingredient_detector','defaultThreshold'=>.70,'contextRules'=>['context_shift'=>['delta'=>-.01]]],$actor);}catch(InvalidArgumentException){$negative=true;}
 v84_assert($negative,'Context adaptation must never use a negative threshold delta.');
+$weaken=false;try{glasses_vision_confidence_policy_create($pdo,$org,['policyKey'=>'weaken','detectorName'=>'ingredient_detector','defaultThreshold'=>.70,'contextRules'=>['model_degradation'=>['delta'=>.05,'requireHumanReview'=>false]]],$actor);}catch(InvalidArgumentException){$weaken=true;}
+v84_assert($weaken,'Context policy customization may tighten built-in safety behavior but must never weaken it.');
 
 $policy=glasses_vision_confidence_policy_create($pdo,$org,[
  'policyKey'=>'production-safe','detectorName'=>'ingredient_detector','defaultThreshold'=>.70,
