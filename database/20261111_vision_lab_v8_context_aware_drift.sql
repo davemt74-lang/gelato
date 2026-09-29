@@ -11,7 +11,7 @@ CREATE TABLE glasses_vision_context_drift_analyses (
   context_score DECIMAL(9,6) NOT NULL DEFAULT 0,
   performance_score DECIMAL(9,6) NOT NULL DEFAULT 0,
   confidence_score DECIMAL(9,6) NOT NULL DEFAULT 0,
-  baseline_fingerprint CHAR(64) NULL,
+  baseline_fingerprint CHAR(64) NOT NULL,
   context_fingerprint CHAR(64) NOT NULL,
   evidence_json JSON NOT NULL,
   result_json JSON NOT NULL,
