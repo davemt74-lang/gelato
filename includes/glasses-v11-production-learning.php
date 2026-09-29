@@ -103,7 +103,7 @@ function glasses_v11_production_learning_attach_batch(PDO $pdo,int $org,string $
 }
 
 function glasses_v11_production_learning_attach_dataset(PDO $pdo,int $org,string $cyclePublic,string $datasetPublic,int $actor): array {
-  $cycle=glasses_v11_production_learning_row($pdo,$org,$cyclePublic);if($cycle['status']!=='reviewed'||!$cycle['retrainingBatch'])throw new InvalidArgumentException('Learning cycle requires an explicitly reviewed retraining batch before dataset attachment.');
+  $cycle=glasses_v11_production_learning_row($pdo,$org,$cyclePublic);if(!in_array($cycle['status'],['reviewed','dataset_ready'],true)||!$cycle['retrainingBatch'])throw new InvalidArgumentException('Learning cycle requires an explicitly reviewed retraining batch before dataset attachment.');
   $bq=$pdo->prepare("SELECT dataset_id FROM glasses_vision_retraining_batches WHERE organization_id=? AND public_id=? LIMIT 1");$bq->execute([$org,$cycle['retrainingBatch']['publicId']]);$batchDataset=(int)$bq->fetchColumn();
   $dq=$pdo->prepare("SELECT * FROM glasses_vision_dataset_versions WHERE organization_id=? AND public_id=? LIMIT 1");$dq->execute([$org,$datasetPublic]);$d=$dq->fetch();if(!$d)throw new InvalidArgumentException('Learning-cycle dataset was not found.');
   if($batchDataset<1||(int)$d['id']!==$batchDataset)throw new InvalidArgumentException('Dataset must be the canonical dataset built from the attached retraining batch.');
