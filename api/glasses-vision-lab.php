@@ -47,6 +47,7 @@ try{
  if($action==='pilot.pause')app_json_response(['ok'=>true,'pilot'=>glasses_production_pilot_set_status($pdo,$org,(string)($in['pilotPublicId']??''),'paused',(string)($in['reason']??''),$actor)]);
  if($action==='pilot.stop')app_json_response(['ok'=>true,'pilot'=>glasses_production_pilot_set_status($pdo,$org,(string)($in['pilotPublicId']??''),'stopped',(string)($in['reason']??''),$actor)]);
  if($action==='pilot.kill_switch')app_json_response(['ok'=>true,'pilot'=>glasses_production_pilot_kill_switch($pdo,$org,(string)($in['pilotPublicId']??''),!empty($in['enabled']),(string)($in['reason']??''),$actor)]);
+ if($action==='pilot.rollback_rollout')app_json_response(['ok'=>true,'result'=>glasses_production_pilot_rollback_rollout($pdo,$org,(string)($in['pilotPublicId']??''),(string)($in['reason']??''),$actor)]);
  if($action==='pilot.device_enroll')app_json_response(['ok'=>true,'readiness'=>glasses_production_pilot_enroll($pdo,$org,(string)($in['pilotPublicId']??''),(string)($in['devicePublicId']??''),$actor)],201);
  if($action==='pilot.device_evaluate')app_json_response(['ok'=>true,'readiness'=>glasses_production_pilot_evaluate($pdo,$org,(string)($in['pilotPublicId']??''),(string)($in['devicePublicId']??''),is_array($in['runtime']??null)?$in['runtime']:[],$actor)]);
  if($action==='pilot.device_enable')app_json_response(['ok'=>true,'result'=>glasses_production_pilot_set_device_status($pdo,$org,(string)($in['pilotPublicId']??''),(string)($in['devicePublicId']??''),'enabled','',$actor,is_array($in['runtime']??null)?$in['runtime']:[])]);
