@@ -1,0 +1,97 @@
+name: Full Deploy Package
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-full-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out exact revision
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Build full deploy ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          deploy_root="${RUNNER_TEMP}/gelato-full-deploy"
+          rm -rf "$deploy_root"
+          mkdir -p "$deploy_root"
+
+          rsync -a ./ "$deploy_root/" \
+            --exclude '.git/' \
+            --exclude 'config.php' \
+            --exclude '.env' \
+            --exclude 'uploads/' \
+            --exclude 'storage/'
+
+          printf '%s\n' "${GITHUB_SHA}" > "$deploy_root/DEPLOY_SHA.txt"
+          cat > "$deploy_root/DEPLOY_INSTRUCTIONS.txt" <<'EOF'
+          Gelato full deploy package
+
+          1. Extract this ZIP into the application root and overwrite included files.
+          2. Preserve the live config.php and any environment-specific .env file.
+          3. Preserve existing uploads/ and storage/ content.
+          4. Sign in as an owner/admin and run upgrade.php once.
+          5. Hard-refresh the browser after upgrade.
+          6. Verify POS, KDS, Vision Lab, AIR3/AR glasses runtime, workspace/agent surfaces, and admin pages.
+          7. DEPLOY_SHA.txt identifies the exact Git commit packaged by CI.
+
+          This FULL package intentionally includes repository tests, docs, workflow definitions,
+          preview/reference assets, and all other tracked project files except live config/state.
+          EOF
+
+          test ! -e "$deploy_root/.git"
+          test ! -e "$deploy_root/config.php"
+          test ! -e "$deploy_root/.env"
+          test ! -e "$deploy_root/uploads"
+          test ! -e "$deploy_root/storage"
+
+          required=(
+            index.php
+            pos.php
+            kds.php
+            glasses-vision-lab.php
+            upgrade.php
+            database/install.sql
+            includes/bootstrap.php
+            .github/workflows/glasses-vision-lab-v8.yml
+            tests/glasses-vision-lab-v8-production-autonomy-audit-contract.php
+            docs/GLASSES-VISION-LAB-V8-AUTONOMY-AUDIT.md
+            DEPLOY_SHA.txt
+            DEPLOY_INSTRUCTIONS.txt
+          )
+          for path in "${required[@]}"; do
+            test -e "$deploy_root/$path" || { echo "Full deploy missing: $path"; exit 1; }
+          done
+
+          while IFS= read -r -d '' file; do
+            php -l "$file" >/dev/null
+          done < <(find "$deploy_root" -type f -name '*.php' -print0)
+
+          (cd "$deploy_root" && zip -q -r "$GITHUB_WORKSPACE/gelato-full-deploy.zip" .)
+          unzip -t "$GITHUB_WORKSPACE/gelato-full-deploy.zip"
+
+          if zipinfo -1 "$GITHUB_WORKSPACE/gelato-full-deploy.zip" | grep -Eq '^(config\.php$|\.env$|uploads/|storage/)'; then
+            echo 'Forbidden live path found in full deploy ZIP.'
+            exit 1
+          fi
+
+          sha256sum "$GITHUB_WORKSPACE/gelato-full-deploy.zip" | tee "$GITHUB_WORKSPACE/gelato-full-deploy.sha256"
+
+      - name: Upload full deploy ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: gelato-full-deploy
+          path: |
+            gelato-full-deploy.zip
+            gelato-full-deploy.sha256
+          if-no-files-found: error
+          retention-days: 14
