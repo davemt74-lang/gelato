@@ -186,7 +186,7 @@ function glasses_vision_context_drift_analyze(PDO $pdo,int $org,string $snapshot
     $snapshot=glasses_vision_context_drift_snapshot_db($pdo,$org,$snapshotPublic);
     $baselineRow=glasses_vision_context_drift_baseline($pdo,$org,$snapshot);$baseline=glasses_vision_context_drift_baseline_evidence($baselineRow);
     $currentBundle=glasses_vision_context_drift_current($pdo,$org,$snapshot);$current=$currentBundle['context'];
-    $baselineFingerprint=$baseline?hash('sha256',glasses_vision_training_release_json($baseline)):null;
+    $baselineFingerprint=hash('sha256',glasses_vision_training_release_json($baseline?:null));
     $scored=glasses_vision_context_drift_score($snapshot,$current,$baseline?:null);
     $evidence=[
       'schema'=>GLASSES_VISION_CONTEXT_DRIFT_SCHEMA,
@@ -201,8 +201,8 @@ function glasses_vision_context_drift_analyze(PDO $pdo,int $org,string $snapshot
     $hash=hash('sha256',glasses_vision_training_release_json(['evidence'=>$evidence,'result'=>$result]));
     $q=$pdo->prepare("SELECT public_id,analysis_hash FROM glasses_vision_context_drift_analyses
       WHERE organization_id=? AND health_snapshot_id=(SELECT id FROM glasses_vision_model_health_snapshots WHERE organization_id=? AND public_id=?)
-        AND ".($baselineFingerprint===null?'baseline_fingerprint IS NULL':'baseline_fingerprint=?')." AND context_fingerprint=? LIMIT 1");
-    $args=[$org,$org,$snapshot['publicId']];if($baselineFingerprint!==null)$args[]=$baselineFingerprint;$args[]=$currentBundle['fingerprint'];$q->execute($args);$existing=$q->fetch();
+        AND baseline_fingerprint=? AND context_fingerprint=? LIMIT 1");
+    $q->execute([$org,$org,$snapshot['publicId'],$baselineFingerprint,$currentBundle['fingerprint']]);$existing=$q->fetch();
     if($existing){
         if(!hash_equals((string)$existing['analysis_hash'],$hash))throw new InvalidArgumentException('Context-drift analysis identity conflicts with different immutable evidence.');
         return glasses_vision_context_drift_row($pdo,$org,(string)$existing['public_id']);
@@ -249,7 +249,22 @@ function glasses_vision_context_drift_verify(PDO $pdo,int $org,string $publicId)
 {
     $r=glasses_vision_context_drift_row($pdo,$org,$publicId);
     $hash=hash('sha256',glasses_vision_training_release_json(['evidence'=>$r['evidence'],'result'=>$r['result']]));
-    return ['passed'=>hash_equals($r['analysisHash'],$hash),'analysisHash'=>$r['analysisHash'],'recomputedAnalysisHash'=>$hash];
+    $baselineFingerprint=hash('sha256',glasses_vision_training_release_json($r['evidence']['baseline']??null));
+    $currentFingerprint=hash('sha256',glasses_vision_training_release_json($r['evidence']['currentContext']??[]));
+    $snapshot=glasses_vision_context_drift_snapshot_db($pdo,$org,(string)$r['healthSnapshotPublicId']);
+    $current=glasses_vision_context_drift_current($pdo,$org,$snapshot);
+    $healthEvidence=is_array($r['evidence']['healthSnapshot']??null)?$r['evidence']['healthSnapshot']:[];
+    $passed=hash_equals($r['analysisHash'],$hash)
+      &&hash_equals((string)$r['baselineFingerprint'],$baselineFingerprint)
+      &&hash_equals((string)$r['contextFingerprint'],$currentFingerprint)
+      &&hash_equals((string)$r['contextFingerprint'],$current['fingerprint'])
+      &&hash_equals((string)($healthEvidence['snapshotHash']??''),(string)$snapshot['snapshotHash'])
+      &&hash_equals((string)($healthEvidence['sourceFingerprint']??''),(string)$snapshot['sourceFingerprint']);
+    return [
+      'passed'=>$passed,'analysisHash'=>$r['analysisHash'],'recomputedAnalysisHash'=>$hash,
+      'baselineFingerprint'=>$r['baselineFingerprint'],'recomputedBaselineFingerprint'=>$baselineFingerprint,
+      'contextFingerprint'=>$r['contextFingerprint'],'recomputedContextFingerprint'=>$currentFingerprint,'liveContextFingerprint'=>$current['fingerprint'],
+    ];
 }
 
 function glasses_vision_context_drift_catalog(PDO $pdo,int $org): array
