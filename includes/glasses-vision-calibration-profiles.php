@@ -263,6 +263,7 @@ function glasses_vision_calibration_profile_select(PDO $pdo,int $org,array $inpu
       'schema'=>GLASSES_VISION_CALIBRATION_PROFILE_SCHEMA,'devicePublicId'=>$device['public_id'],'runtime'=>$runtime,
       'modelPackagePublicId'=>$package['public_id']??null,'modelArtifactSha256'=>$package['artifact_sha256']??null,
       'contextDriftAnalysisPublicId'=>$analysis['publicId']??null,'contextFingerprint'=>$contextFingerprint,
+      'runtime'=>['platform'=>$runtimePlatform,'frameWidth'=>$runtimeWidth>0?$runtimeWidth:null,'frameHeight'=>$runtimeHeight>0?$runtimeHeight:null,'pixelFormat'=>$runtimePixel!==''?$runtimePixel:null],
       'selectedProfilePublicId'=>$selected['profile']['publicId']??null,'selectedProfileHash'=>$selected['profile']['profileHash']??null,
       'fallbackCalibrationPublicId'=>$fallback['publicId']??null,'fallbackCalibrationSourceHash'=>$fallback['sourceHash']??null,
       'decision'=>$decision,'matchScore'=>$selected?(float)$selected['match']['score']:0.0,
