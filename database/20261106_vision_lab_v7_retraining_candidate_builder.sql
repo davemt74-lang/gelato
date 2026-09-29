@@ -29,6 +29,7 @@ CREATE TABLE glasses_vision_retraining_batches (
 CREATE TABLE glasses_vision_retraining_batch_items (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   organization_id BIGINT UNSIGNED NOT NULL,
+  public_id VARCHAR(80) NOT NULL,
   batch_id BIGINT UNSIGNED NOT NULL,
   mined_candidate_id BIGINT UNSIGNED NOT NULL,
   production_error_id BIGINT UNSIGNED NOT NULL,
@@ -43,6 +44,7 @@ CREATE TABLE glasses_vision_retraining_batch_items (
   reviewed_at DATETIME(6) NULL,
   created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   PRIMARY KEY (id),
+  UNIQUE KEY uq_glasses_vision_retraining_item_public (organization_id,public_id),
   UNIQUE KEY uq_glasses_vision_retraining_item (organization_id,batch_id,mined_candidate_id),
   KEY idx_glasses_vision_retraining_item_state (organization_id,batch_id,eligibility_status,decision),
   KEY idx_glasses_vision_retraining_item_sample (organization_id,training_sample_id),
