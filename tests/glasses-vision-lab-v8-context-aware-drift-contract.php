@@ -79,6 +79,10 @@ v82_assert($ctx['classification']==='context_shift','Material calibration/menu/l
 v82_assert($ctx['contextScore']>=.30&&$ctx['performanceScore']<.30,'Context-shift analysis must separate context score from model-performance score.');
 v82_assert(($ctx['result']['governance']['causalClaim']??true)===false,'Context-aware drift must not claim causal certainty.');
 v82_assert(glasses_vision_context_drift_verify($pdo,$org,$ctx['publicId'])['passed']===true,'Fresh context-drift analysis must verify.');
+$pdo->prepare("UPDATE glasses_vision_drift_samples SET brightness_mean=.10 WHERE organization_id=? AND sample_key=?")->execute([$org,'context-shift-'.$slug.'-1']);
+v82_assert(glasses_vision_context_drift_verify($pdo,$org,$ctx['publicId'])['passed']===false,'Context analysis verification must detect mutation of underlying production context evidence.');
+$pdo->prepare("UPDATE glasses_vision_drift_samples SET brightness_mean=.80 WHERE organization_id=? AND sample_key=?")->execute([$org,'context-shift-'.$slug.'-1']);
+v82_assert(glasses_vision_context_drift_verify($pdo,$org,$ctx['publicId'])['passed']===true,'Restored context evidence must verify against the immutable analysis again.');
 
 $perfAt=(new DateTimeImmutable('-30 minutes',new DateTimeZone('UTC')))->format('Y-m-d H:i:s.u');
 for($i=1;$i<=3;$i++)$insert->execute([
