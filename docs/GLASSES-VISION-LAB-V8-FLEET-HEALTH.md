@@ -8,10 +8,11 @@ A fleet analysis is bound to:
 - the exact target model package + artifact SHA-256;
 - an optional existing rollout;
 - a UTC health window no longer than 31 days;
-- verified Section 1 health snapshots whose windows exactly match the requested fleet window;
+- verified **device-level** Section 1 health snapshots whose windows exactly match the requested fleet window;
+- the rollout's location/station deployment scope when an existing rollout is supplied;
 - verified Section 2 context analyses tied to those snapshots.
 
-Exact-window matching avoids double-counting overlapping health windows.
+Exact-window matching plus device-only evidence avoids double-counting overlapping aggregate health windows. Rollout-scoped analysis never borrows evidence from devices outside the rollout's location/station scope.
 
 ## Fleet states
 
@@ -57,7 +58,8 @@ A rollback can only execute when:
 - the analysis is bound to a rollout;
 - the rollout still targets the analyzed model;
 - rollout status is active or paused;
-- an authenticated human supplies a non-empty reason.
+- an authenticated human supplies a non-empty reason;
+- the exact-window source fingerprint still matches current evidence, so late-arriving fleet health forces a fresh analysis before rollback.
 
 Execution uses the existing canonical `glasses_vision_model_rollout_rollback` path. The fleet layer does not create a second rollout engine.
 
