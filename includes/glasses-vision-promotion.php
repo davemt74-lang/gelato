@@ -22,11 +22,11 @@ function glasses_vision_promotion_event(PDO $pdo,int $org,int $promotionId,strin
 
 function glasses_vision_promotion_source(PDO $pdo,int $org,string $reviewPublic): array
 {
-    $q=$pdo->prepare("SELECT rv.*,x.public_id experiment_public_id,x.experiment_hash,x.candidate_dataset_id,x.training_release_id,x.qualification_id,
+    $q=$pdo->prepare("SELECT rv.*,x.public_id experiment_public_id,x.experiment_hash,x.status experiment_status,x.candidate_dataset_id,x.training_release_id,x.qualification_id,
       x.champion_package_id,x.challenger_package_id,
       d.public_id dataset_public_id,d.dataset_hash,d.status dataset_status,
       tr.public_id release_public_id,tr.release_hash,tr.status release_status,
-      tq.public_id qualification_public_id,tq.qualification_hash,
+      tq.public_id qualification_public_id,tq.qualification_hash,tq.passed qualification_passed,
       cp.public_id champion_public_id,cp.artifact_sha256 champion_sha,cp.status champion_status,
       xp.public_id challenger_public_id,xp.artifact_sha256 challenger_sha,xp.status challenger_status
       FROM glasses_vision_model_evidence_reviews rv
@@ -40,7 +40,13 @@ function glasses_vision_promotion_source(PDO $pdo,int $org,string $reviewPublic)
     $q->execute([$org,trim($reviewPublic)]);$row=$q->fetch();
     if(!$row)throw new InvalidArgumentException('Passing evidence review was not found.');
     $result=json_decode((string)$row['result_json'],true)?:[];
+    $reviewEvidence=json_decode((string)$row['evidence_json'],true)?:[];
+    $expectedReviewHash=hash('sha256',glasses_vision_training_release_json(['evidence'=>$reviewEvidence,'result'=>$result]));
+    if(!hash_equals((string)$row['review_hash'],$expectedReviewHash))throw new InvalidArgumentException('Evidence review hash verification failed.');
     if((string)$row['status']!=='passed'||empty($result['promotionEligible']))throw new InvalidArgumentException('Promotion requires a passing promotion-eligible evidence review.');
+    if((string)$row['experiment_status']!=='completed')throw new InvalidArgumentException('Promotion requires a completed model experiment.');
+    if(empty($row['qualification_passed']))throw new InvalidArgumentException('Promotion qualification is no longer a passing attestation.');
+    if(($reviewEvidence['experimentHash']??null)!==(string)$row['experiment_hash'])throw new InvalidArgumentException('Evidence review is not bound to the current experiment hash.');
     if((string)$row['dataset_status']!=='frozen'||empty($row['dataset_hash']))throw new InvalidArgumentException('Promotion candidate dataset must remain frozen and hash-addressed.');
     if((string)$row['release_status']!=='qualified')throw new InvalidArgumentException('Promotion training release must remain qualified.');
     if((string)$row['champion_status']!=='ready'||(string)$row['challenger_status']!=='ready')throw new InvalidArgumentException('Champion and challenger packages must remain ready.');
@@ -51,6 +57,13 @@ function glasses_vision_promotion_source(PDO $pdo,int $org,string $reviewPublic)
       WHERE b.organization_id=? AND b.dataset_id=? AND b.status='built' ORDER BY b.id DESC LIMIT 1");
     $bq->execute([$org,(int)$row['candidate_dataset_id']]);$batch=$bq->fetch();
     if(!$batch)throw new InvalidArgumentException('Continuous-learning promotion requires a built V7 retraining batch for the experiment dataset.');
+    $batchManifest=json_decode((string)$batch['manifest_json'],true)?:[];
+    if(!hash_equals((string)$batch['batch_hash'],hash('sha256',glasses_vision_training_release_json($batchManifest))))
+        throw new InvalidArgumentException('Retraining batch hash verification failed.');
+    $mq=$pdo->prepare("SELECT result_json FROM glasses_vision_mining_runs WHERE organization_id=? AND id=? LIMIT 1");
+    $mq->execute([$org,(int)$batch['mining_run_id']]);$miningResult=json_decode((string)$mq->fetchColumn(),true)?:[];
+    if(!hash_equals((string)$batch['run_hash'],hash('sha256',glasses_vision_training_release_json($miningResult))))
+        throw new InvalidArgumentException('Mining run hash verification failed.');
 
     $eq=$pdo->prepare("SELECT e.public_id,e.event_hash,c.public_id candidate_public_id,c.candidate_hash,i.evidence_hash
       FROM glasses_vision_retraining_batch_items i
