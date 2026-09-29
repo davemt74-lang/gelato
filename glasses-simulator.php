@@ -328,6 +328,6 @@ window.GELATO_GLASSES_SIMULATOR={
   canManageMedia:<?=app_has_permission('glasses.manage',$user)?'true':'false'?>
 };
 </script>
-<script src="assets/js/glasses-web-simulator.js?v=20260928-media1"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20260929-v10-1"></script>
 </body>
 </html>
