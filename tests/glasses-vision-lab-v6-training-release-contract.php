@@ -12,6 +12,7 @@ $checks=[
     'frozen dataset gate'=>str_contains($release,"status']!=='frozen'")&&str_contains($release,'freeze the governed dataset first'),
     'applied split required'=>str_contains($release,"status='applied'")&&str_contains($release,'no applied governed split plan'),
     'no resplit contract'=>str_contains($release,'stored dataset split does not match the applied governed split')&&!str_contains($release,'random_shuffle'),
+    'missing assignment fails closed'=>str_contains($release,'LEFT JOIN glasses_vision_dataset_split_assignments')&&str_contains($release,'stored dataset split does not match'),
     'sha verified source bytes'=>str_contains($release,"hash_file('sha256'")&&str_contains($release,'media SHA-256 verification failed'),
     'deterministic package identity'=>str_contains($release,'glasses_vision_training_release_core_hash')&&str_contains($release,'sorted package-relative path + NUL'),
     'yolo package layout'=>str_contains($release,"'images/'.$split")&&str_contains($release,"'labels/'.$split")&&str_contains($release,"data.yaml"),
