@@ -10,6 +10,7 @@ require_once __DIR__.'/glasses-handoff.php';
 require_once __DIR__.'/glasses-vision-models.php';
 require_once __DIR__.'/glasses-vision-profiles.php';
 require_once __DIR__.'/glasses-hardware-runtime.php';
+require_once __DIR__.'/glasses-frame-pipeline.php';
 
 function glasses_simulator_can_write(array $user): bool
 {
@@ -70,6 +71,10 @@ function glasses_simulator_dispatch(PDO $pdo,array $user,array $in): array
         'validation.evaluate','handoff.expo','vision.shadow_report','vision.shadow_complete'
     ],true);
     $device=glasses_simulator_device($pdo,$user,(string)($in['devicePublicId']??''),$write);
+
+    if($action==='hardware.frame_pipeline'){
+        return ['framePipeline'=>glasses_frame_pipeline_runtime_contract((array)($in['policy']??[]))];
+    }
 
     if($action==='hardware.runtime'){
         return ['hardwareRuntime'=>glasses_hardware_runtime_contract('simulator.v1')];
