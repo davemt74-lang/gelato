@@ -177,6 +177,7 @@ function glasses_vision_lineage_model_trace(PDO $pdo,int $org,string $modelPubli
 
     return [
       'schema'=>GLASSES_VISION_LINEAGE_SCHEMA,'model'=>glasses_vision_model_package_public($model),
+      'comparison'=>glasses_vision_model_comparison_metadata(json_decode((string)($model['metadata_json']??'null'),true)?:[]),
       'trainingRuns'=>$runs,
       'release'=>$release?[
         'publicId'=>$release['public_id'],'releaseHash'=>$release['release_hash'],'datasetPublicId'=>$release['dataset_public_id'],
@@ -259,5 +260,5 @@ function glasses_vision_lineage_catalog(PDO $pdo,int $org): array
     if(!glasses_vision_lineage_ready($pdo))return ['ready'=>false,'schema'=>GLASSES_VISION_LINEAGE_SCHEMA,'trainingRuns'=>[]];
     $q=$pdo->prepare("SELECT public_id FROM glasses_vision_training_runs WHERE organization_id=? ORDER BY id DESC LIMIT 50");$q->execute([$org]);
     $runs=[];foreach($q->fetchAll(PDO::FETCH_COLUMN) as $p)$runs[]=glasses_vision_lineage_training_run_public(glasses_vision_lineage_training_run_row($pdo,$org,(string)$p));
-    return ['ready'=>true,'schema'=>GLASSES_VISION_LINEAGE_SCHEMA,'trainingRuns'=>$runs];
+    return ['ready'=>true,'schema'=>GLASSES_VISION_LINEAGE_SCHEMA,'trainingRuns'=>$runs,'modelPackages'=>glasses_vision_model_packages($pdo,$org)];
 }
