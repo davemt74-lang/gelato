@@ -176,7 +176,7 @@ function glasses_vision_confidence_active_policy(PDO $pdo,int $org,string $detec
     return $p;
 }
 
-function glasses_vision_confidence_decide(PDO $pdo,int $org,array $input,int $actor): array
+function glasses_vision_confidence_decide(PDO $pdo,int $org,array $input,?int $actor): array
 {
     if(!glasses_vision_confidence_policy_ready($pdo))throw new RuntimeException('Vision Lab V8 confidence-policy migration is not installed.');
     $devicePublic=trim((string)($input['devicePublicId']??''));$sessionPublic=trim((string)($input['buildSessionPublicId']??''));
