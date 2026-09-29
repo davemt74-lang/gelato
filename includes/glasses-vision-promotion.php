@@ -212,9 +212,15 @@ function glasses_vision_promotion_verify(PDO $pdo,int $org,array $p): array
     $add('champion_hash',($audit['champion']['artifactSha256']??null)===$p['champion_sha'],$audit['champion']['artifactSha256']??null,$p['champion_sha']);
     $add('challenger_hash',($audit['challenger']['artifactSha256']??null)===$p['challenger_sha'],$audit['challenger']['artifactSha256']??null,$p['challenger_sha']);
     foreach((array)($audit['productionErrors']??[]) as $i=>$e){
-        $q=$pdo->prepare("SELECT event_hash FROM glasses_vision_production_errors WHERE organization_id=? AND public_id=? LIMIT 1");
-        $q->execute([$org,(string)($e['productionErrorPublicId']??'')]);$actual=$q->fetchColumn();
-        $add('production_error_'.$i,$actual!==false&&hash_equals((string)$e['productionErrorHash'],(string)$actual),$e['productionErrorHash']??null,$actual!==false?$actual:null);
+        $q=$pdo->prepare("SELECT pe.event_hash,c.candidate_hash,bi.evidence_hash
+          FROM glasses_vision_production_errors pe
+          LEFT JOIN glasses_vision_mined_candidates c ON c.organization_id=pe.organization_id AND c.public_id=?
+          LEFT JOIN glasses_vision_retraining_batch_items bi ON bi.organization_id=pe.organization_id AND bi.batch_id=? AND bi.mined_candidate_id=c.id AND bi.production_error_id=pe.id AND bi.decision='include'
+          WHERE pe.organization_id=? AND pe.public_id=? LIMIT 1");
+        $q->execute([(string)($e['candidatePublicId']??''),(int)$p['retraining_batch_id'],$org,(string)($e['productionErrorPublicId']??'')]);$actual=$q->fetch();
+        $add('production_error_'.$i,$actual&&hash_equals((string)$e['productionErrorHash'],(string)$actual['event_hash']),$e['productionErrorHash']??null,$actual['event_hash']??null);
+        $add('mined_candidate_'.$i,$actual&&hash_equals((string)$e['candidateHash'],(string)$actual['candidate_hash']),$e['candidateHash']??null,$actual['candidate_hash']??null);
+        $add('batch_evidence_'.$i,$actual&&hash_equals((string)$e['batchEvidenceHash'],(string)$actual['evidence_hash']),$e['batchEvidenceHash']??null,$actual['evidence_hash']??null);
     }
     return ['passed'=>count(array_filter($checks,static fn($c)=>!$c['passed']))===0,'checks'=>$checks];
 }
