@@ -21,6 +21,7 @@ require_once __DIR__.'/../includes/glasses-vision-final-validation.php';
 require_once __DIR__.'/../includes/glasses-vision-handoff-confirmation.php';
 require_once __DIR__.'/../includes/glasses-vision-rework.php';
 require_once __DIR__.'/../includes/glasses-production-pilot.php';
+require_once __DIR__.'/../includes/glasses-training-identity.php';
 
 $pdo=app_pdo();
 if(!glasses_ready($pdo))app_json_response(['ok'=>false,'message'=>'Glasses plugin migration is not installed.'],503);
@@ -91,6 +92,15 @@ try{
             'assignmentRequired'=>$device['station_id']===null,
             'calibration'=>$calibration,
         ]);
+    }
+
+    if($action==='training.session_start'){
+        $session=glasses_training_session_start($pdo,(int)$device['organization_id'],(string)($in['assignmentPublicId']??''),$device,(int)$device['paired_by'],is_array($in['context']??null)?$in['context']:[]);
+        app_json_response(['ok'=>true,'session'=>$session],201);
+    }
+    if($action==='training.session_end'){
+        $session=glasses_training_session_end($pdo,(int)$device['organization_id'],(string)($in['sessionPublicId']??''),(string)($in['status']??'completed'),(string)($in['reason']??''),(int)$device['paired_by']);
+        app_json_response(['ok'=>true,'session'=>$session]);
     }
 
     if($action==='pilot.production_status'){
