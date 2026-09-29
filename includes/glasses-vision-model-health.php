@@ -18,7 +18,7 @@ function glasses_vision_model_health_time(string $value,string $label): string
     $value=trim($value);
     if($value==='')throw new InvalidArgumentException($label.' is required.');
     try{$dt=new DateTimeImmutable($value);}catch(Throwable){throw new InvalidArgumentException($label.' is invalid.');}
-    return $dt->format('Y-m-d H:i:s.u');
+    return $dt->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s.u');
 }
 
 function glasses_vision_model_health_scope(PDO $pdo,int $org,array $input): array
