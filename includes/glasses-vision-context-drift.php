@@ -128,7 +128,7 @@ function glasses_vision_context_drift_score(array $snapshot,array $current,?arra
         if($changed)$context+=$weight;
         $signals[]=['key'=>$key,'kind'=>'context','changed'=>$changed,'weight'=>$weight,'baseline'=>$baselineValue,'current'=>$currentValue];
     };
-    $differentSet=static function(?string $base,array $values): bool=>$base!==null&&$values&&(!in_array($base,$values,true)||count($values)>1);
+    $differentSet=static fn(?string $base,array $values): bool=>$base!==null&&$values&&(!in_array($base,$values,true)||count($values)>1);
 
     $possible++;if($baseline['calibrationSourceHash']!==null&&$current['calibrationSourceHashes'])$complete++;
     $addContext('calibration_change',$differentSet($baseline['calibrationSourceHash'],$current['calibrationSourceHashes']),.20,$baseline['calibrationSourceHash'],$current['calibrationSourceHashes']);
