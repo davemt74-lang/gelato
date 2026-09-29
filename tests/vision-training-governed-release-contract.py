@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import hashlib, importlib.util, json, tempfile
+import hashlib, importlib.util, json, sys, tempfile
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location("pipeline",ROOT/"tools/vision_training/pipeline.py")
-pipeline=importlib.util.module_from_spec(spec);assert spec and spec.loader;spec.loader.exec_module(pipeline)
+pipeline=importlib.util.module_from_spec(spec);assert spec and spec.loader;sys.modules[spec.name]=pipeline;spec.loader.exec_module(pipeline)
 
 def sha(data:bytes)->str:return hashlib.sha256(data).hexdigest()
 
