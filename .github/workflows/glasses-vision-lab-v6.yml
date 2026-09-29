@@ -5,10 +5,12 @@ on:
     paths:
       - 'database/20261030_vision_lab_v6_curation_group_splits.sql'
       - 'database/20261031_vision_lab_v6_training_releases.sql'
+      - 'database/20261101_vision_lab_v6_pretraining_qualification.sql'
       - 'includes/glasses-vision-curation.php'
       - 'includes/glasses-vision-balance.php'
       - 'includes/glasses-vision-annotation-qa.php'
       - 'includes/glasses-vision-training-release.php'
+      - 'includes/glasses-vision-training-qualification.php'
       - 'includes/glasses-vision-lab.php'
       - 'api/glasses-vision-lab.php'
       - 'api/glasses-vision-training-release.php'
@@ -17,6 +19,7 @@ on:
       - 'assets/js/glasses-vision-balance.js'
       - 'assets/js/glasses-vision-annotation-qa.js'
       - 'assets/js/glasses-vision-training-release.js'
+      - 'assets/js/glasses-vision-training-qualification.js'
       - 'assets/css/glasses-vision-lab.css'
       - 'assets/js/glasses-web-simulator.js'
       - 'tools/vision_training/pipeline.py'
@@ -24,8 +27,10 @@ on:
       - 'tests/glasses-vision-lab-v6-balance-diversity-contract.php'
       - 'tests/glasses-vision-lab-v6-annotation-qa-contract.php'
       - 'tests/glasses-vision-lab-v6-training-release-contract.php'
+      - 'tests/glasses-vision-lab-v6-pretraining-qualification-contract.php'
       - 'tests/vision-training-group-split-contract.py'
       - 'tests/vision-training-release-pipeline-contract.py'
+      - 'tests/vision-training-qualification-gate-contract.py'
       - 'docs/GLASSES-VISION-LAB-CURATION-SPLITS.md'
       - '.github/workflows/glasses-vision-lab-v6.yml'
   push:
@@ -63,6 +68,7 @@ jobs:
           php -l includes/glasses-vision-balance.php
           php -l includes/glasses-vision-annotation-qa.php
           php -l includes/glasses-vision-training-release.php
+          php -l includes/glasses-vision-training-qualification.php
           php -l includes/glasses-vision-lab.php
           php -l api/glasses-vision-lab.php
           php -l api/glasses-vision-training-release.php
@@ -71,11 +77,13 @@ jobs:
           php -l tests/glasses-vision-lab-v6-balance-diversity-contract.php
           php -l tests/glasses-vision-lab-v6-annotation-qa-contract.php
           php -l tests/glasses-vision-lab-v6-training-release-contract.php
-          python -m py_compile tools/vision_training/pipeline.py tests/vision-training-group-split-contract.py tests/vision-training-release-pipeline-contract.py
+          php -l tests/glasses-vision-lab-v6-pretraining-qualification-contract.php
+          python -m py_compile tools/vision_training/pipeline.py tests/vision-training-group-split-contract.py tests/vision-training-release-pipeline-contract.py tests/vision-training-qualification-gate-contract.py
           node --check assets/js/glasses-vision-lab.js
           node --check assets/js/glasses-vision-balance.js
           node --check assets/js/glasses-vision-annotation-qa.js
           node --check assets/js/glasses-vision-training-release.js
+          node --check assets/js/glasses-vision-training-qualification.js
           node --check assets/js/glasses-web-simulator.js
 
       - name: Curation and split architecture
@@ -100,6 +108,9 @@ jobs:
 
       - name: Governed training release pipeline contract
         run: python tests/vision-training-release-pipeline-contract.py
+
+      - name: Pre-training qualification enforcement contract
+        run: python tests/vision-training-qualification-gate-contract.py
 
       - name: Install and upgrade schema
         run: |
@@ -136,6 +147,9 @@ jobs:
 
       - name: Vision Lab V6 training release contract
         run: php tests/glasses-vision-lab-v6-training-release-contract.php
+
+      - name: Vision Lab V6 pre-training qualification contract
+        run: php tests/glasses-vision-lab-v6-pretraining-qualification-contract.php
 
       - name: Prior Vision Lab regressions
         run: |
