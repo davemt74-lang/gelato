@@ -247,20 +247,53 @@ function glasses_vision_autonomy_verify(PDO $pdo,int $org,string $publicId): arr
       &&hash_equals((string)($a['evidence']['model']['artifactSha256']??''),(string)$a['modelArtifactSha256']);
     if($a['subjectKind']==='confidence_decision'){
         $passed=$passed&&$a['confidenceDecisionPublicId']!==null
-          &&hash_equals((string)$a['subjectPublicId'],(string)$a['confidenceDecisionPublicId'])
-          &&glasses_vision_confidence_decision_verify($pdo,$org,(string)$a['confidenceDecisionPublicId'])['passed'];
-        if($a['activePerceptionActionPublicId']!==null)$passed=$passed&&glasses_vision_active_perception_verify($pdo,$org,(string)$a['activePerceptionActionPublicId'])['passed'];
+          &&hash_equals((string)$a['subjectPublicId'],(string)$a['confidenceDecisionPublicId']);
+        if($passed){
+            $decision=glasses_vision_confidence_decision_row($pdo,$org,(string)$a['confidenceDecisionPublicId']);
+            $passed=$passed
+              &&glasses_vision_confidence_decision_verify($pdo,$org,(string)$a['confidenceDecisionPublicId'])['passed']
+              &&hash_equals((string)($a['evidence']['confidenceDecision']['decisionHash']??''),(string)$decision['decisionHash']);
+        }
+        if($passed&&$a['activePerceptionActionPublicId']!==null){
+            $action=glasses_vision_active_perception_row($pdo,$org,(string)$a['activePerceptionActionPublicId']);
+            $passed=$passed
+              &&glasses_vision_active_perception_verify($pdo,$org,(string)$a['activePerceptionActionPublicId'])['passed']
+              &&hash_equals((string)($a['evidence']['activePerceptionAction']['actionHash']??''),(string)$action['actionHash']);
+        }
         $ctx=$a['evidence']['contextDriftAnalysis']??null;
-        if(is_array($ctx)&&!empty($ctx['publicId']))$passed=$passed&&glasses_vision_context_drift_verify($pdo,$org,(string)$ctx['publicId'])['passed'];
+        if($passed&&is_array($ctx)&&!empty($ctx['publicId'])){
+            $live=glasses_vision_context_drift_row($pdo,$org,(string)$ctx['publicId']);
+            $passed=$passed&&glasses_vision_context_drift_verify($pdo,$org,(string)$ctx['publicId'])['passed']
+              &&hash_equals((string)($ctx['analysisHash']??''),(string)$live['analysisHash']);
+        }
         $health=$a['evidence']['healthSnapshot']??null;
-        if(is_array($health)&&!empty($health['publicId']))$passed=$passed&&glasses_vision_model_health_verify($pdo,$org,(string)$health['publicId'])['passed'];
+        if($passed&&is_array($health)&&!empty($health['publicId'])){
+            $live=glasses_vision_model_health_row($pdo,$org,(string)$health['publicId']);
+            $passed=$passed&&glasses_vision_model_health_verify($pdo,$org,(string)$health['publicId'])['passed']
+              &&hash_equals((string)($health['snapshotHash']??''),(string)$live['snapshotHash'])
+              &&hash_equals((string)($health['sourceFingerprint']??''),(string)$live['sourceFingerprint']);
+        }
         $cal=$a['evidence']['calibrationSelection']??null;
-        if(is_array($cal)&&!empty($cal['publicId']))$passed=$passed&&glasses_vision_calibration_selection_verify($pdo,$org,(string)$cal['publicId'])['passed'];
+        if($passed&&is_array($cal)&&!empty($cal['publicId'])){
+            $live=glasses_vision_calibration_selection_row($pdo,$org,(string)$cal['publicId']);
+            $passed=$passed&&glasses_vision_calibration_selection_verify($pdo,$org,(string)$cal['publicId'])['passed']
+              &&hash_equals((string)($cal['selectionHash']??''),(string)$live['selectionHash']);
+        }
     }elseif($a['subjectKind']==='fleet_health_analysis'){
         $passed=$passed&&$a['fleetHealthAnalysisPublicId']!==null
-          &&hash_equals((string)$a['subjectPublicId'],(string)$a['fleetHealthAnalysisPublicId'])
-          &&glasses_vision_fleet_health_verify($pdo,$org,(string)$a['fleetHealthAnalysisPublicId'])['passed'];
-        if($a['fleetHealthActionPublicId']!==null)$passed=$passed&&glasses_vision_fleet_health_action_verify($pdo,$org,(string)$a['fleetHealthActionPublicId'])['passed'];
+          &&hash_equals((string)$a['subjectPublicId'],(string)$a['fleetHealthAnalysisPublicId']);
+        if($passed){
+            $fleet=glasses_vision_fleet_health_row($pdo,$org,(string)$a['fleetHealthAnalysisPublicId']);
+            $passed=$passed
+              &&glasses_vision_fleet_health_verify($pdo,$org,(string)$a['fleetHealthAnalysisPublicId'])['passed']
+              &&hash_equals((string)($a['evidence']['fleetHealthAnalysis']['analysisHash']??''),(string)$fleet['analysisHash'])
+              &&hash_equals((string)($a['evidence']['fleetHealthAnalysis']['sourceFingerprint']??''),(string)$fleet['sourceFingerprint']);
+        }
+        if($passed&&$a['fleetHealthActionPublicId']!==null){
+            $action=glasses_vision_fleet_health_action_row($pdo,$org,(string)$a['fleetHealthActionPublicId']);
+            $passed=$passed&&glasses_vision_fleet_health_action_verify($pdo,$org,(string)$a['fleetHealthActionPublicId'])['passed']
+              &&hash_equals((string)($a['evidence']['fleetAction']['actionHash']??''),(string)$action['actionHash']);
+        }
     }else $passed=false;
     return ['passed'=>$passed,'auditHash'=>$a['auditHash'],'recomputedAuditHash'=>$hash];
 }
