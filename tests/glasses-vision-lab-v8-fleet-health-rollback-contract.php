@@ -43,6 +43,7 @@ v86_assert(glasses_vision_fleet_health_ready($pdo),'V8 fleet-health migration mu
 $slug='vl86-'.bin2hex(random_bytes(4));
 $pdo->prepare("INSERT INTO organizations (name,status,timezone) VALUES (?,'active','America/Phoenix')")->execute(['Fleet Health '.$slug]);$org=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO users (email,password_hash,first_name,last_name,display_name,status) VALUES (?,?,?,?,?,'active')")->execute([$slug.'@example.test','fixture-hash','Fleet','Reviewer','Fleet Reviewer']);$actor=(int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO users (email,password_hash,first_name,last_name,display_name,status) VALUES (?,?,?,?,?,'active')")->execute(['other-'.$slug.'@example.test','fixture-hash','Other','Reviewer','Other Reviewer']);$otherActor=(int)$pdo->lastInsertId();
 
 $locations=[];$stations=[];$devices=[];
 for($i=1;$i<=3;$i++){
@@ -102,10 +103,8 @@ $reason=(string)v86_one($pdo,"SELECT reason FROM glasses_vision_fleet_health_act
 $pdo->prepare("UPDATE glasses_vision_fleet_health_actions SET reason='tampered' WHERE organization_id=? AND public_id=?")->execute([$org,$action['publicId']]);
 v86_assert(!glasses_vision_fleet_health_action_verify($pdo,$org,$action['publicId'])['passed'],'Rollback reason tampering must be detected.');
 $pdo->prepare("UPDATE glasses_vision_fleet_health_actions SET reason=? WHERE organization_id=? AND public_id=?")->execute([$reason,$org,$action['publicId']]);
-$pdo->prepare("UPDATE glasses_vision_fleet_health_actions SET actor_user_id=NULL WHERE organization_id=? AND public_id=?")->execute([$org,$action['publicId']]);
-$actorTamper=false;
-try{$actorTamper=!glasses_vision_fleet_health_action_verify($pdo,$org,$action['publicId'])['passed'];}catch(Throwable){$actorTamper=true;}
-v86_assert($actorTamper,'Rollback actor attribution tampering must be detected.');
+$pdo->prepare("UPDATE glasses_vision_fleet_health_actions SET actor_user_id=? WHERE organization_id=? AND public_id=?")->execute([$otherActor,$org,$action['publicId']]);
+v86_assert(!glasses_vision_fleet_health_action_verify($pdo,$org,$action['publicId'])['passed'],'Rollback actor attribution tampering must be detected.');
 $pdo->prepare("UPDATE glasses_vision_fleet_health_actions SET actor_user_id=? WHERE organization_id=? AND public_id=?")->execute([$actor,$org,$action['publicId']]);
 v86_assert(glasses_vision_fleet_health_action_verify($pdo,$org,$action['publicId'])['passed'],'Restored rollback audit must verify.');
 
