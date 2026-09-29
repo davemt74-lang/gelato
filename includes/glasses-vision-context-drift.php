@@ -210,7 +210,7 @@ function glasses_vision_context_drift_analyze(PDO $pdo,int $org,string $snapshot
 
     return glasses_transaction($pdo,function()use($pdo,$org,$actor,$snapshot,$baselineRow,$baselineFingerprint,$currentBundle,$scored,$evidence,$result,$hash):array{
         $public=glasses_public_id('vision-context-drift');
-        $snapshotId=(int)v82_scalar($pdo,"SELECT id FROM glasses_vision_model_health_snapshots WHERE organization_id=? AND public_id=?",[$org,$snapshot['publicId']]);
+        $snapshotId=(int)glasses_vision_context_drift_scalar($pdo,"SELECT id FROM glasses_vision_model_health_snapshots WHERE organization_id=? AND public_id=?",[$org,$snapshot['publicId']]);
         $pdo->prepare("INSERT INTO glasses_vision_context_drift_analyses
           (organization_id,public_id,health_snapshot_id,baseline_id,classification,context_score,performance_score,confidence_score,baseline_fingerprint,context_fingerprint,evidence_json,result_json,analysis_hash,created_by)
           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
