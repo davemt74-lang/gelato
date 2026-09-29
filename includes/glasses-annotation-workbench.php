@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__.'/glasses-production-evidence.php';
 require_once __DIR__.'/glasses-vision-annotation-qa.php';
+require_once __DIR__.'/glasses-vision-training-release.php';
 
 const GLASSES_V11_ANNOTATION_CORRECTION_SCHEMA='gelato.glasses_annotation_correction.v1';
 
