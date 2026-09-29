@@ -14,6 +14,7 @@ CREATE TABLE glasses_vision_ingredient_preventions (
   stop_count INT NOT NULL DEFAULT 0,
   warning_count INT NOT NULL DEFAULT 0,
   evidence_json JSON NOT NULL,
+  result_json JSON NOT NULL,
   risks_json JSON NOT NULL,
   assessment_hash CHAR(64) NOT NULL,
   created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
