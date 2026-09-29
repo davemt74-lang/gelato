@@ -81,7 +81,7 @@ v77_assert(($promotion['audit']['productionErrors'][0]['productionErrorHash']??n
 v77_assert(($promotion['audit']['productionErrors'][0]['candidateHash']??null)===$candidateHash,'Audit must preserve exact mined-candidate hash.');
 v77_assert(($promotion['audit']['productionErrors'][0]['batchEvidenceHash']??null)===$batchEvidenceHash,'Audit must preserve exact retraining evidence hash.');
 v77_assert(($promotion['audit']['evidenceReview']['reviewHash']??null)===$passed['reviewHash'],'Promotion audit must bind the exact passing evidence review.');
-v77_assert(!empty($promotion['integrity']['passed']),'Fresh promotion authorization must verify end to end.');
+v77_assert(!empty($promotion['integrity']['passed']),'Fresh promotion authorization must verify end to end: '.json_encode($promotion['integrity']['checks'],JSON_UNESCAPED_SLASHES));
 v77_assert(v77_count($pdo,"SELECT COUNT(*) FROM glasses_vision_model_rollouts WHERE organization_id=?",[$org])===0,'Authorization alone must not create or activate a rollout.');
 
 $same=glasses_vision_promotion_authorize($pdo,$org,(string)$passed['publicId'],[
