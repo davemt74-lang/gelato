@@ -18,6 +18,7 @@ require_once __DIR__.'/../includes/glasses-vision-ingredient-prevention.php';
 require_once __DIR__.'/../includes/glasses-vision-quantity-verification.php';
 require_once __DIR__.'/../includes/glasses-vision-quality-verification.php';
 require_once __DIR__.'/../includes/glasses-vision-final-validation.php';
+require_once __DIR__.'/../includes/glasses-vision-handoff-confirmation.php';
 
 $pdo=app_pdo();
 if(!glasses_ready($pdo))app_json_response(['ok'=>false,'message'=>'Glasses plugin migration is not installed.'],503);
@@ -223,6 +224,14 @@ try{
         $scene=glasses_vision_scene_row($pdo,(int)$device['organization_id'],(string)$row['scenePublicId']);
         if(!hash_equals((string)$scene['devicePublicId'],(string)$device['public_id']))throw new InvalidArgumentException('Final validation does not belong to this device.');
         app_json_response(['ok'=>true,'verification'=>glasses_vision_final_verify($pdo,(int)$device['organization_id'],$publicId)]);
+    }
+
+    if($action==='vision.handoff.confirm'){
+        $finalValidationPublicId=trim((string)($in['finalValidationPublicId']??''));
+        $confirmationKey=trim((string)($in['confirmationKey']??''));
+        if(empty($in['confirmed']))throw new InvalidArgumentException('Explicit human confirmation is required.');
+        $confirmation=glasses_vision_handoff_confirm($pdo,$device,$finalValidationPublicId,$confirmationKey,null);
+        app_json_response(['ok'=>true,'handoffConfirmation'=>$confirmation],201);
     }
 
     if($action==='vision.profile'){
