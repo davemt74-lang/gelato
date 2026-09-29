@@ -209,6 +209,7 @@ function glasses_vision_ingredient_guard_assess(PDO $pdo,int $org,string $sceneP
       'liveBuildContextHash'=>$liveBuildContextHash,
       'buildDefinition'=>$scene['context']['buildSession']['buildDefinition']??null,
       'recipePlan'=>$scene['context']['recipePlan']??null,
+      'visibleComponentKeys'=>$assessment['visibleComponentKeys'],
       'entityHashes'=>array_map(static fn($e)=>[$e['entityKey'],$e['entityHash']],(array)$scene['entities']),
       'relationships'=>$scene['relationships'],
     ];
@@ -278,12 +279,7 @@ function glasses_vision_ingredient_guard_verify(PDO $pdo,int $org,string $public
     foreach((array)($recipe['components']??[]) as $component){
         if((string)($component['componentKey']??'')===(string)$row['currentComponentKey']){$current=$component;break;}
     }
-    $visible=[];
-    foreach((array)$row['risks'] as $risk){
-        $detail=(array)($risk['detail']??[]);
-        if(isset($detail['visibleComponentKey']))$visible[]=(string)$detail['visibleComponentKey'];
-    }
-    if($row['expectedVisible']&&$row['currentComponentKey']!==null)$visible[]=$row['currentComponentKey'];
+    $visible=array_values(array_unique(array_map('strval',(array)($row['evidence']['visibleComponentKeys']??[]))));
     $result=[
       'state'=>$row['state'],'currentComponent'=>$current,'currentComponentKey'=>$row['currentComponentKey'],
       'expectedVisible'=>$row['expectedVisible'],'visibleComponentKeys'=>array_values(array_unique($visible)),
