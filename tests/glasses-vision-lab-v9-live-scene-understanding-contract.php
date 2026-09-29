@@ -102,7 +102,7 @@ v91_assert($scene['summary']['entityKinds']['ingredient']===2&&$scene['summary']
 v91_assert($scene['modelPackagePublicId']===$modelPublic&&$scene['modelArtifactSha256']===$modelHash,'Scene must bind to the exact active model assignment.');
 v91_assert($scene['calibrationPublicId']===$cal['publicId']&&$scene['calibrationSourceHash']===$cal['sourceHash'],'Scene must bind the exact compatible station calibration.');
 v91_assert(($scene['context']['orderContext']['specialInstructions']??'')==='No olives','Scene must preserve canonical POS/order context.');
-v91_assert(array_key_exists('recognizedStep',$scene['context']['recipePlan'])&&$scene['context']['recipePlan']['recognizedStep']===null&&($scene['context']['recipePlan']['recognizedStepReason']??'')==='reserved_for_v9_section_2','Section 1 must expose the recipe plan without claiming step recognition.');
+v91_assert(array_key_exists('recognizedStep',$scene['context']['recipePlan'])&&$scene['context']['recipePlan']['recognizedStep']===null&&($scene['context']['recipePlan']['recognizedStepReason']??'')==='step_recognition_not_run_for_scene_capture','Section 1 must expose the recipe plan without claiming step recognition.');
 v91_assert(($scene['context']['recipePlan']['currentExpectedComponentKey']??'')===$cheeseKey,'Scene must expose the current canonical build component.');
 
 $byKey=[];foreach($scene['entities'] as $e)$byKey[$e['entityKey']]=$e;
