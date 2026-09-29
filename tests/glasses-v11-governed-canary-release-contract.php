@@ -128,7 +128,7 @@ v1110_assert(str_contains($migration,'CREATE TABLE glasses_vision_canary_stage_v
 v1110_assert(str_contains($api,'canary_stage.evaluate')&&str_contains($api,'production_acceptance.create'),'Vision Lab API must expose Section 10 governance.');
 v1110_assert(str_contains($page,'V11 Governed Canary Release &amp; Automatic Safety Rollback'),'Vision Lab must expose Section 10.');
 v1110_assert(str_contains($models,'V11 canary advancement requires a passing validation for the current stage.'),'Canonical rollout advancement must enforce V11 stage attestation.');
-v1110_assert(str_contains($models,"$holdHours=72"),'V11 automatic rollback must extend the package hold.');
+v1110_assert(str_contains($models,'$holdHours=72'),'V11 automatic rollback must extend the package hold.');
 foreach(['glasses_vision_model_rollout_activate(','glasses_vision_model_rollout_advance('] as $forbidden)v1110_assert(!str_contains($source,$forbidden),'Section 10 evaluator must not itself activate or advance rollouts: '.$forbidden);
 
 echo "glasses-v11-governed-canary-release-ok\n";
