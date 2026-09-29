@@ -35,4 +35,5 @@ v64_assert(str_contains($source,'class_box_area_outlier')&&str_contains($source,
 v64_assert(str_contains($source,"'adjudicationQueue'")&&str_contains($source,"'agreementRate'"),'QA must expose reviewer agreement and adjudication queue.');
 v64_assert(str_contains($api,'annotation_qa.analyze')&&!str_contains($api,'kds_transition'),'Annotation QA API must not mutate production state.');
 v64_assert(str_contains($page,'Annotation QA &amp; Agreement')&&str_contains($js,'Adjudication queue'),'Vision Lab must expose annotation QA and adjudication UI.');
+// Anchor exact-head CI after documentation updates.
 echo "vision-lab-v6-annotation-qa-ok\n";
