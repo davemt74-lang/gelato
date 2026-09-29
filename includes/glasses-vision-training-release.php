@@ -258,7 +258,7 @@ function glasses_vision_training_release_build(PDO $pdo,int $org,string $dataset
         try{
             $pdo->prepare("INSERT INTO glasses_vision_training_releases
               (organization_id,public_id,dataset_id,split_plan_id,status,training_profile,profile_json,manifest_json,release_hash,artifact_relative_path,artifact_sha256,artifact_bytes,created_by)
-              VALUES (?,?,?,?,'built',?,?,?,?,?,?,?,?,?)")
+              VALUES (?,?,?,?,'built',?,?,?,?,?,?,?,?)")
               ->execute([$org,$public,(int)$dataset['id'],(int)$plan['id'],$profileName,json_encode($profile,JSON_UNESCAPED_SLASHES),json_encode($manifest,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),$releaseHash,$relative,$artifactHash,$bytes,$actor]);
         }catch(Throwable $e){@unlink($target);throw $e;}
         return glasses_vision_training_release_public(glasses_vision_training_release_row($pdo,$org,$public));
