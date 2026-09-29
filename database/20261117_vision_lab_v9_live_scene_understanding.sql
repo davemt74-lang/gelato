@@ -42,6 +42,7 @@ CREATE TABLE glasses_vision_scene_entities (
   entity_key VARCHAR(190) NOT NULL,
   entity_kind VARCHAR(32) NOT NULL,
   label VARCHAR(180) NOT NULL,
+  normalized_label VARCHAR(180) NULL,
   component_key VARCHAR(160) NULL,
   tracking_id VARCHAR(190) NULL,
   source_type VARCHAR(32) NOT NULL DEFAULT 'vision_model',
