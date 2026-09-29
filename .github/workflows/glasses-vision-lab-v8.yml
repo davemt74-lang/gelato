@@ -9,12 +9,14 @@ on:
       - 'database/20261113_vision_lab_v8_adaptive_confidence_policy.sql'
       - 'database/20261114_vision_lab_v8_active_perception_recovery.sql'
       - 'database/20261115_vision_lab_v8_fleet_health_rollback.sql'
+      - 'database/20261116_vision_lab_v8_production_autonomy_ledger.sql'
       - 'includes/glasses-vision-model-health.php'
       - 'includes/glasses-vision-context-drift.php'
       - 'includes/glasses-vision-calibration-profiles.php'
       - 'includes/glasses-vision-confidence-policy.php'
       - 'includes/glasses-vision-active-perception.php'
       - 'includes/glasses-vision-fleet-health.php'
+      - 'includes/glasses-vision-autonomy-audit.php'
       - 'includes/glasses-vision-lineage.php'
       - 'api/glasses-vision-lab.php'
       - 'api/glasses-device.php'
@@ -25,6 +27,7 @@ on:
       - 'assets/js/glasses-vision-confidence-policy.js'
       - 'assets/js/glasses-vision-active-perception.js'
       - 'assets/js/glasses-vision-fleet-health.js'
+      - 'assets/js/glasses-vision-autonomy-audit.js'
       - 'assets/css/glasses-vision-lab.css'
       - 'tests/glasses-vision-lab-v8-production-model-health-contract.php'
       - 'tests/glasses-vision-lab-v8-context-aware-drift-contract.php'
@@ -32,12 +35,14 @@ on:
       - 'tests/glasses-vision-lab-v8-adaptive-confidence-policy-contract.php'
       - 'tests/glasses-vision-lab-v8-active-perception-recovery-contract.php'
       - 'tests/glasses-vision-lab-v8-fleet-health-rollback-contract.php'
+      - 'tests/glasses-vision-lab-v8-production-autonomy-audit-contract.php'
       - 'docs/GLASSES-VISION-LAB-V8-MODEL-HEALTH.md'
       - 'docs/GLASSES-VISION-LAB-V8-CONTEXT-DRIFT.md'
       - 'docs/GLASSES-VISION-LAB-V8-CALIBRATION-PROFILES.md'
       - 'docs/GLASSES-VISION-LAB-V8-ADAPTIVE-CONFIDENCE.md'
       - 'docs/GLASSES-VISION-LAB-V8-ACTIVE-PERCEPTION.md'
       - 'docs/GLASSES-VISION-LAB-V8-FLEET-HEALTH.md'
+      - 'docs/GLASSES-VISION-LAB-V8-AUTONOMY-AUDIT.md'
       - '.github/workflows/glasses-vision-lab-v8.yml'
   push:
     branches: [main]
@@ -73,6 +78,7 @@ jobs:
           php -l includes/glasses-vision-confidence-policy.php
           php -l includes/glasses-vision-active-perception.php
           php -l includes/glasses-vision-fleet-health.php
+          php -l includes/glasses-vision-autonomy-audit.php
           php -l includes/glasses-vision-lineage.php
           php -l api/glasses-vision-lab.php
           php -l api/glasses-device.php
@@ -83,12 +89,14 @@ jobs:
           php -l tests/glasses-vision-lab-v8-adaptive-confidence-policy-contract.php
           php -l tests/glasses-vision-lab-v8-active-perception-recovery-contract.php
           php -l tests/glasses-vision-lab-v8-fleet-health-rollback-contract.php
+          php -l tests/glasses-vision-lab-v8-production-autonomy-audit-contract.php
           node --check assets/js/glasses-vision-model-health.js
           node --check assets/js/glasses-vision-context-drift.js
           node --check assets/js/glasses-vision-calibration-profiles.js
           node --check assets/js/glasses-vision-confidence-policy.js
           node --check assets/js/glasses-vision-active-perception.js
           node --check assets/js/glasses-vision-fleet-health.js
+          node --check assets/js/glasses-vision-autonomy-audit.js
 
       - name: Architecture guardrails
         run: |
@@ -135,6 +143,13 @@ jobs:
           grep -q "'automaticRollback'=>false" includes/glasses-vision-fleet-health.php
           grep -q 'glasses_vision_model_rollout_rollback' includes/glasses-vision-fleet-health.php
           ! grep -q 'kds_transition' includes/glasses-vision-fleet-health.php
+          grep -q 'CREATE TABLE glasses_vision_autonomy_audits' database/20261116_vision_lab_v8_production_autonomy_ledger.sql
+          grep -q 'function glasses_vision_autonomy_capture' includes/glasses-vision-autonomy-audit.php
+          grep -q 'function glasses_vision_autonomy_replay' includes/glasses-vision-autonomy-audit.php
+          grep -q "'replayOnly'=>true" includes/glasses-vision-autonomy-audit.php
+          grep -q "'changesProductionState'=>false" includes/glasses-vision-autonomy-audit.php
+          ! grep -q 'glasses_vision_model_rollout_rollback' includes/glasses-vision-autonomy-audit.php
+          ! grep -q 'kds_transition' includes/glasses-vision-autonomy-audit.php
 
       - name: Install and upgrade schema
         run: |
@@ -177,6 +192,9 @@ jobs:
 
       - name: V8 fleet model health and rollback intelligence contract
         run: php tests/glasses-vision-lab-v8-fleet-health-rollback-contract.php
+
+      - name: V8 production autonomy audit contract
+        run: php tests/glasses-vision-lab-v8-production-autonomy-audit-contract.php
 
       - name: V7 continuous-learning regressions
         run: |
