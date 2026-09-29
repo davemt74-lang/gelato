@@ -16,7 +16,8 @@ $pdo->prepare("INSERT INTO organizations (name,status,timezone) VALUES (?,'activ
 $pdo->prepare("INSERT INTO locations (organization_id,name,city,state,status) VALUES (?,'Vision Training Kitchen','Phoenix','AZ','active')")->execute([$org]);$location=(int)$pdo->lastInsertId();
 
 function v111_user(PDO $pdo,int $org,int $location,string $email,string $name):int{
-  $pdo->prepare("INSERT INTO users (email,password_hash,display_name,status) VALUES (?,'fixture-hash',?,'active')")->execute([$email,$name]);$id=(int)$pdo->lastInsertId();
+  $parts=preg_split('/\s+/',trim($name),2);$first=$parts[0]?:'Vision';$last=$parts[1]??'User';
+  $pdo->prepare("INSERT INTO users (email,password_hash,first_name,last_name,display_name,status) VALUES (?,'fixture-hash',?,?,?,'active')")->execute([$email,$first,$last,$name]);$id=(int)$pdo->lastInsertId();
   $pdo->prepare("INSERT INTO organization_memberships (organization_id,user_id,primary_location_id,status) VALUES (?,?,?,'active')")->execute([$org,$id,$location]);return $id;
 }
 $actor=v111_user($pdo,$org,$location,$slug.'-admin@example.test','Vision Admin');
