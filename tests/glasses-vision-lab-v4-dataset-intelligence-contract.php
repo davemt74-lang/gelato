@@ -132,7 +132,7 @@ v4_assert($moveBlocked,'Frozen datasets must reject split remediation.');
 $page=file_get_contents(__DIR__.'/../glasses-vision-lab.php');
 $api=file_get_contents(__DIR__.'/../api/glasses-vision-lab.php');
 $js=file_get_contents(__DIR__.'/../assets/js/glasses-vision-lab.js');
-v4_assert((str_contains($page,'Vision Lab V4')||str_contains($page,'Vision Lab V5')||str_contains($page,'Vision Lab V6')||str_contains($page,'Vision Lab V7')||str_contains($page,'Vision Lab V8'))&&str_contains($page,'Dataset Intelligence'),'V4 workspace must expose dataset intelligence.');
+v4_assert((str_contains($page,'Vision Lab V4')||str_contains($page,'Vision Lab V5')||str_contains($page,'Vision Lab V6')||str_contains($page,'Vision Lab V7')||str_contains($page,'Vision Lab V8')||str_contains($page,'Vision Lab V9'))&&str_contains($page,'Dataset Intelligence'),'V4 workspace must expose dataset intelligence.');
 v4_assert(str_contains($api,'dataset_intelligence.analyze')&&str_contains($api,'dataset_intelligence.accept_plan'),'V4 API must expose analysis and collection plan actions.');
 v4_assert(str_contains($js,'data-fix-leak')&&str_contains($js,'data-plan-accept')&&str_contains($js,'data-peer-review'),'V4 UI must expose leakage remediation, plan acceptance and peer review.');
 v4_assert(!str_contains($api,'glasses_build_observe')&&!str_contains($api,'kds_transition'),'Dataset intelligence API must not mutate production build or KDS truth.');
