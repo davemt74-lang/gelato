@@ -66,7 +66,7 @@ $zip=new ZipArchive();v65_assert($zip->open($artifact['path'])===true,'Generated
 foreach(['dataset.yaml','provenance-manifest.json','images/train/image-000001.png','images/val/image-000002.png','images/test/image-000003.png','labels/train/image-000001.txt','labels/val/image-000002.txt','labels/test/image-000003.txt'] as $entry)v65_assert($zip->locateName($entry)!==false,'Training ZIP missing '.$entry);
 $yaml=(string)$zip->getFromName('dataset.yaml');$manifestBody=(string)$zip->getFromName('provenance-manifest.json');
 v65_assert(str_contains($yaml,'path: .')&&!str_contains($yaml,'storage/vision-training-media'),'Dataset YAML must be relative and path-safe.');
-v65_assert(!str_contains($manifestBody,'storage_relative_path')&&!str_contains($manifestBody,glasses_vision_training_media_storage_root()),'Provenance manifest must not leak private storage paths.');
+v65_assert(!str_contains($manifestBody,'storage_relative_path')&&!str_contains($manifestBody,'sourceReference')&&!str_contains($manifestBody,glasses_vision_training_media_storage_root()),'Provenance manifest must not leak private storage paths or ungoverned source references.');
 $inside=json_decode($manifestBody,true,512,JSON_THROW_ON_ERROR);
 v65_assert(glasses_vision_training_release_hash($inside)===$release['releaseHash'],'Canonical manifest must reproduce the release hash.');
 foreach($inside['files'] as $file){
@@ -101,4 +101,4 @@ v65_assert(str_contains($page,'Training Release Builder'),'Vision Lab must expos
 foreach($sourcePaths as $path)@unlink($path);
 @rmdir($mediaDir);
 
-echo "vision-lab-v6-training-release-ok\n";
+// Anchor exact-head CI after documentation and pipeline integration updates.\necho "vision-lab-v6-training-release-ok\n";
