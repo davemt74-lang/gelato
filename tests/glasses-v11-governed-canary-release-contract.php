@@ -22,6 +22,8 @@ $station=kds_station_save($pdo,$org,$location,['name'=>'V11 Canary Line','slug'=
 $pdo->prepare("INSERT INTO menu_sections (organization_id,name,slug,status,sort_order) VALUES (?,'V11 Canary',?,'active',20)")->execute([$org,'v11-canary-'.bin2hex(random_bytes(3))]);$section=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO menu_items (organization_id,section_id,name,slug,is_active) VALUES (?,?,'V11 Canary Pizza',?,1)")->execute([$org,$section,'v11-canary-pizza-'.bin2hex(random_bytes(3))]);$item=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO menu_item_prices (menu_item_id,option_name,size_code,amount,currency,sort_order) VALUES (?,'Regular','REG',12.00,'USD',1)")->execute([$item]);$price=(int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO ingredients (organization_id,canonical_name,slug,category,verification_status) VALUES (?,'V11 Canary Cheese',?,'food','verified')")->execute([$org,'v11-canary-cheese-'.bin2hex(random_bytes(3))]);$ingredient=(int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO menu_item_ingredients (menu_item_id,ingredient_id,display_name,is_optional,can_remove,sort_order) VALUES (?,?,'V11 Canary Cheese',0,1,1)")->execute([$item,$ingredient]);
 kds_route_save($pdo,$org,$location,$item,(string)$station['public_id'],$actor);
 
 $check=pos_create_check($pdo,$org,$location,['serviceMode'=>'dine_in','tableName'=>'V11','guestCount'=>1],$actor);
