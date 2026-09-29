@@ -172,6 +172,17 @@ function glasses_v11_mining_candidates(PDO $pdo,int $org,string $status='all',in
   ],$q->fetchAll());
 }
 
+function glasses_v11_mining_dismiss(PDO $pdo,int $org,string $public,string $reason,int $actor): array {
+  $reason=mb_substr(trim($reason),0,1000,'UTF-8');if($reason==='')throw new InvalidArgumentException('Dismissal reason is required.');
+  return glasses_transaction($pdo,function()use($pdo,$org,$public,$reason,$actor):array{
+    $q=$pdo->prepare("SELECT status,source_kind FROM glasses_vision_mined_candidates WHERE organization_id=? AND public_id=? LIMIT 1 FOR UPDATE");
+    $q->execute([$org,$public]);$r=$q->fetch();if(!$r||$r['source_kind']==='production_error')throw new InvalidArgumentException('V11 mined candidate was not found.');
+    if($r['status']!=='dismissed')$pdo->prepare("UPDATE glasses_vision_mined_candidates SET status='dismissed',dismissed_by=?,dismissed_reason=?,dismissed_at=NOW(6) WHERE organization_id=? AND public_id=?")->execute([$actor,$reason,$org,$public]);
+    foreach(glasses_v11_mining_candidates($pdo,$org,'dismissed',1000) as $row)if($row['publicId']===$public)return $row;
+    throw new RuntimeException('Dismissed V11 candidate could not be reloaded.');
+  });
+}
+
 function glasses_v11_mining_catalog(PDO $pdo,int $org): array {
   return ['schema'=>GLASSES_V11_HARD_EXAMPLE_SCHEMA,'ready'=>glasses_v11_mining_ready($pdo),'candidates'=>glasses_v11_mining_candidates($pdo,$org,'all',200)];
 }
