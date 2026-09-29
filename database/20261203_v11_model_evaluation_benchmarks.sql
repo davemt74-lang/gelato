@@ -1,0 +1,35 @@
+-- Gelato Vision Lab V11 Section 7 — Model Evaluation, Validation & Benchmark Suite
+SET NAMES utf8mb4;
+
+CREATE TABLE glasses_vision_model_benchmarks (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  organization_id BIGINT UNSIGNED NOT NULL,
+  public_id VARCHAR(80) NOT NULL,
+  experiment_id BIGINT UNSIGNED NOT NULL,
+  training_run_id BIGINT UNSIGNED NOT NULL,
+  champion_package_id BIGINT UNSIGNED NOT NULL,
+  challenger_package_id BIGINT UNSIGNED NOT NULL,
+  status VARCHAR(24) NOT NULL,
+  score SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+  policy_json JSON NOT NULL,
+  dataset_snapshot_json JSON NOT NULL,
+  global_metrics_json JSON NOT NULL,
+  slice_metrics_json JSON NOT NULL,
+  confusion_json JSON NOT NULL,
+  regressions_json JSON NOT NULL,
+  result_json JSON NOT NULL,
+  benchmark_hash CHAR(64) NOT NULL,
+  evaluated_by BIGINT UNSIGNED NULL,
+  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_glasses_vision_benchmark_public (organization_id,public_id),
+  UNIQUE KEY uq_glasses_vision_benchmark_hash (organization_id,benchmark_hash),
+  KEY idx_glasses_vision_benchmark_experiment (organization_id,experiment_id,status,created_at),
+  KEY idx_glasses_vision_benchmark_run (organization_id,training_run_id,created_at),
+  CONSTRAINT fk_glasses_vision_benchmark_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  CONSTRAINT fk_glasses_vision_benchmark_experiment FOREIGN KEY (experiment_id) REFERENCES glasses_vision_model_experiments(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_vision_benchmark_run FOREIGN KEY (training_run_id) REFERENCES glasses_vision_training_runs(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_vision_benchmark_champion FOREIGN KEY (champion_package_id) REFERENCES glasses_vision_model_packages(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_vision_benchmark_challenger FOREIGN KEY (challenger_package_id) REFERENCES glasses_vision_model_packages(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_vision_benchmark_actor FOREIGN KEY (evaluated_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
