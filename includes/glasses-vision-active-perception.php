@@ -33,6 +33,14 @@ function glasses_vision_active_perception_context(PDO $pdo,int $org,string $deci
         throw new InvalidArgumentException('Active perception requires an intact confidence decision.');
     if((string)$r['build_status']!=='active')throw new InvalidArgumentException('Active perception requires an active build session.');
     if((string)$r['package_status']!=='ready')throw new InvalidArgumentException('Active perception model package is no longer ready.');
+    $decision=glasses_vision_confidence_decision_row($pdo,$org,(string)$r['public_id']);
+    $aq=$pdo->prepare("SELECT assignment_key,package_id FROM glasses_vision_model_assignments
+      WHERE organization_id=? AND device_id=? AND build_session_id=? AND detector_name=? AND action='apply'
+      ORDER BY issued_at DESC,id DESC LIMIT 1");
+    $aq->execute([$org,(int)$r['device_id'],(int)$r['build_session_id'],(string)$r['detector_name']]);$assignment=$aq->fetch();
+    if(!$assignment||(int)($assignment['package_id']??0)!==(int)$r['package_id']||
+       !hash_equals((string)($decision['evidence']['assignment']['assignmentKey']??''),(string)($assignment['assignment_key']??'')))
+        throw new InvalidArgumentException('Confidence decision is stale because the active model assignment changed.');
     $created=new DateTimeImmutable((string)$r['created_at'],new DateTimeZone('UTC'));
     $expires=$created->modify('+10 minutes');
     if($expires<=new DateTimeImmutable('now',new DateTimeZone('UTC')))
@@ -205,6 +213,8 @@ function glasses_vision_active_perception_complete(PDO $pdo,int $org,string $pub
         if(new DateTimeImmutable((string)$r['expires_at'],new DateTimeZone('UTC'))<=new DateTimeImmutable('now',new DateTimeZone('UTC')))
             throw new InvalidArgumentException('Active perception action has expired.');
         $result=array_slice($result,0,40,true);
+        $resultJson=glasses_vision_training_release_json($result);
+        if(strlen($resultJson)>12000)throw new InvalidArgumentException('Active perception completion evidence is too large.');
         $completion=['outcome'=>$outcome,'result'=>$result,'devicePublicId'=>$action['devicePublicId']];
         $completionHash=hash('sha256',glasses_vision_training_release_json(['actionHash'=>$action['actionHash'],'completion'=>$completion]));
         $status=$outcome==='success'?'completed':'failed';
@@ -228,7 +238,7 @@ function glasses_vision_active_perception_resolve_human(PDO $pdo,int $org,string
         if(new DateTimeImmutable((string)$r['expires_at'],new DateTimeZone('UTC'))<=new DateTimeImmutable('now',new DateTimeZone('UTC')))
             throw new InvalidArgumentException('Active perception action has expired.');
         $completion=['resolution'=>$resolution,'notes'=>$notes];
-        $hash=hash('sha256',glasses_vision_training_release_json(['actionHash'=>$r['action_hash'],'completion'=>$completion]));
+        $hash=hash('sha256',glasses_vision_training_release_json(['actionHash'=>$r['action_hash'],'completion'=>$completion,'resolvedByUserId'=>$actor]));
         $status=$resolution==='confirmed'?'completed':'failed';
         $pdo->prepare("UPDATE glasses_vision_active_perception_actions SET status=?,completed_at=NOW(6),completion_json=?,completion_hash=?,resolved_by=? WHERE organization_id=? AND id=?")
           ->execute([$status,glasses_vision_training_release_json($completion),$hash,$actor,$org,(int)$r['id']]);
@@ -241,12 +251,24 @@ function glasses_vision_active_perception_verify(PDO $pdo,int $org,string $publi
 {
     $a=glasses_vision_active_perception_row($pdo,$org,$publicId);
     $hash=hash('sha256',glasses_vision_training_release_json(['evidence'=>$a['evidence'],'instruction'=>$a['instruction']]));
-    $passed=hash_equals($a['actionHash'],$hash)&&glasses_vision_confidence_decision_verify($pdo,$org,$a['confidenceDecisionPublicId'])['passed'];
+    $decision=glasses_vision_confidence_decision_row($pdo,$org,$a['confidenceDecisionPublicId']);
+    $passed=hash_equals($a['actionHash'],$hash)
+      &&glasses_vision_confidence_decision_verify($pdo,$org,$a['confidenceDecisionPublicId'])['passed']
+      &&hash_equals((string)($a['evidence']['confidenceDecision']['decisionHash']??''),(string)$decision['decisionHash'])
+      &&hash_equals((string)($a['evidence']['devicePublicId']??''),(string)$a['devicePublicId'])
+      &&hash_equals((string)($a['evidence']['buildSessionPublicId']??''),(string)$a['buildSessionPublicId'])
+      &&hash_equals((string)($a['evidence']['model']['publicId']??''),(string)$a['modelPackagePublicId'])
+      &&hash_equals((string)($a['evidence']['expiresAt']??''),(string)$a['expiresAt'])
+      &&hash_equals((string)($a['instruction']['primaryAction']??''),(string)$a['primaryAction']);
     if($a['contextDriftAnalysisPublicId']!==null)$passed=$passed&&glasses_vision_context_drift_verify($pdo,$org,$a['contextDriftAnalysisPublicId'])['passed'];
     if($a['calibrationSelectionPublicId']!==null)$passed=$passed&&glasses_vision_calibration_selection_verify($pdo,$org,$a['calibrationSelectionPublicId'])['passed'];
     $completionHash=null;
     if($a['completion']!==null){
-        $completionHash=hash('sha256',glasses_vision_training_release_json(['actionHash'=>$a['actionHash'],'completion'=>$a['completion']]));
+        $q=$pdo->prepare("SELECT requires_human,resolved_by FROM glasses_vision_active_perception_actions WHERE organization_id=? AND public_id=? LIMIT 1");
+        $q->execute([$org,$publicId]);$meta=$q->fetch()?:[];
+        $material=['actionHash'=>$a['actionHash'],'completion'=>$a['completion']];
+        if((int)($meta['requires_human']??0)===1)$material['resolvedByUserId']=$meta['resolved_by']!==null?(int)$meta['resolved_by']:0;
+        $completionHash=hash('sha256',glasses_vision_training_release_json($material));
         $passed=$passed&&hash_equals((string)$a['completionHash'],$completionHash);
     }
     return ['passed'=>$passed,'actionHash'=>$a['actionHash'],'recomputedActionHash'=>$hash,'completionHash'=>$a['completionHash'],'recomputedCompletionHash'=>$completionHash];
