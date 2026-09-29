@@ -1,7 +1,7 @@
 (()=>{'use strict';
 const cfg=window.GELATO_GLASSES_SIMULATOR||{};
 const $=id=>document.getElementById(id);
-const state={mode:'mock',devices:[],device:null,work:null,selectedKdsItemPublicId:'',build:null,validation:null,seq:1,logs:[],autoPlayTimer:null,syncTimer:null,syncBusy:false,syncErrors:0,reconnectCount:0,syncFingerprint:'',syncAbort:null,syncEpoch:0,lastSyncAt:null,cameraStream:null,cameraTrack:null,cameraTarget:null,cameraDevices:[],cameraSource:'image',visionMode:'manual',visionTimer:null,visionBusy:false,visionFrameSeq:0,visionLastAt:0,visionLatencyMs:0,visionFps:0,visionDetections:[],visionTracks:new Map(),visionSubmitted:new Set(),visionAdapter:null,temporalTracks:new Map(),temporalEvents:[],temporalSequence:[],temporalViolations:[],temporalValidationBusy:false,temporalValidationFingerprint:'',temporalReadySince:0,temporalGate:null,browserModel:{status:'idle',session:null,assignment:null,profile:null,config:null,package:null,verifiedSha256:null,loadEpoch:0},dataset:{annotations:[],samples:[],drag:null,frozen:false,captureGroup:null,burstSeq:0,uploading:false},activeLearning:{enabled:true,candidates:[],capturing:false,lastCaptureByKey:new Map(),maxQueue:30,cooldownMs:10000},shadowModel:{status:'idle',session:null,assignment:null,config:null,package:null,verifiedSha256:null,runPublicId:null,summary:null,frameSeq:0,busy:false},hardwareRuntime:null,recovery:{state:'ready',attempt:0,epoch:0,networkFault:false,suppressAutomatic:false,freshBarrierUntil:0,lastReason:'runtime_ready',timer:null},framePipeline:{queue:[],worker:false,epoch:0,nextSeq:0,currentAbort:null,metrics:{acceptedFrames:0,processedFrames:0,droppedFrames:0,staleFrames:0,timedOutFrames:0,cancelledFrames:0,failedFrames:0,queueDepth:0,maxObservedQueueDepth:0,lastProcessedSequence:0}}};
+const state={mode:'mock',devices:[],device:null,work:null,selectedKdsItemPublicId:'',build:null,validation:null,seq:1,logs:[],autoPlayTimer:null,syncTimer:null,syncBusy:false,syncErrors:0,reconnectCount:0,syncFingerprint:'',syncAbort:null,syncEpoch:0,lastSyncAt:null,cameraStream:null,cameraTrack:null,cameraTarget:null,cameraDevices:[],cameraSource:'image',visionMode:'manual',visionTimer:null,visionBusy:false,visionFrameSeq:0,visionLastAt:0,visionLatencyMs:0,visionFps:0,visionDetections:[],visionTracks:new Map(),visionSubmitted:new Set(),visionAdapter:null,temporalTracks:new Map(),temporalEvents:[],temporalSequence:[],temporalViolations:[],temporalValidationBusy:false,temporalValidationFingerprint:'',temporalReadySince:0,temporalGate:null,browserModel:{status:'idle',session:null,assignment:null,profile:null,config:null,package:null,verifiedSha256:null,loadEpoch:0},dataset:{annotations:[],samples:[],drag:null,frozen:false,captureGroup:null,burstSeq:0,uploading:false},activeLearning:{enabled:true,candidates:[],capturing:false,lastCaptureByKey:new Map(),maxQueue:30,cooldownMs:10000},shadowModel:{status:'idle',session:null,assignment:null,config:null,package:null,verifiedSha256:null,runPublicId:null,summary:null,frameSeq:0,busy:false},hardwareRuntime:null,stationSoakReport:null,recovery:{state:'ready',attempt:0,epoch:0,networkFault:false,suppressAutomatic:false,freshBarrierUntil:0,lastReason:'runtime_ready',timer:null},framePipeline:{queue:[],worker:false,epoch:0,nextSeq:0,currentAbort:null,metrics:{acceptedFrames:0,processedFrames:0,droppedFrames:0,staleFrames:0,timedOutFrames:0,cancelledFrames:0,failedFrames:0,queueDepth:0,maxObservedQueueDepth:0,lastProcessedSequence:0}}};
 const mock={
   work:{assignmentRequired:false,station:{publicId:'station-mock',name:'Sandwich / Pizza Line'},revision:'mock-revision',focusItem:{kdsItemPublicId:'kds-mock-1',status:'queued',ticket:{checkNumber:'1042',serviceMode:'dine_in',tableName:'Table 12',guestCount:2},posLine:{id:1,menuItemId:1,name:'Club Sandwich + Fries',optionName:'Regular',quantity:1,specialInstructions:'NO TOMATO · EXTRA BACON',modifiers:[{name:'Extra Bacon'}]},menu:{preparationNotes:'Build, slice and plate with fries.'},recipeSource:{status:'exact_name',recipe:{instructions:['Toast bread','Add mayo','Add turkey','Add bacon','Add lettuce','Add tomato','Top and slice','Plate with fries']}}},items:[],metrics:{queued:1,inProgress:0,ready:0,held:0}},
   components:['Toasted Bread','Mayo','Turkey','Bacon','Lettuce','Tomato','Fries'].map((name,i)=>({componentKey:'mock:'+i,displayName:name,expectedQuantity:i===0?3:1,detectedQuantity:0,unit:i===0?'slices':'portion',optional:false,status:'waiting',sortOrder:i+1})),
@@ -81,7 +81,7 @@ async function resumeRuntimeRecovery(reason='manual_resume'){
     if(state.cameraStream)startVisionRuntime();
     state.recovery.timer=setTimeout(()=>{
       if(epoch!==state.recovery.epoch)return;
-      state.recovery.timer=null;state.recovery.state='ready';state.recovery.suppressAutomatic=false;state.recovery.lastReason='runtime_recovered';state.reconnectCount+=1;renderRuntimeRecovery();refreshDeviceHealth();log('RECOVERY','Canonical work/build rehydrated; automatic vision resumed on fresh frames.');
+      state.recovery.timer=null;state.recovery.state='ready';state.recovery.suppressAutomatic=false;state.recovery.lastReason='runtime_recovered';state.reconnectCount+=1;renderRuntimeRecovery();renderStationSoak(null);refreshDeviceHealth();log('RECOVERY','Canonical work/build rehydrated; automatic vision resumed on fresh frames.');
     },RUNTIME_FRESH_BARRIER_MS);
     return true;
   }catch(e){
@@ -94,6 +94,30 @@ function simulateNetworkLoss(){
 }
 function clearSimulatedNetworkLoss(){
   state.recovery.networkFault=false;resumeRuntimeRecovery('network_restored');
+}
+function renderStationSoak(result){
+  const badge=$('stationSoakState'),summary=$('stationSoakSummary'),metrics=$('stationSoakMetrics'),download=$('downloadSoakReport');
+  if(!badge||!summary||!metrics)return;
+  if(!result){badge.textContent='IDLE';summary.innerHTML='<strong>NOT RUN</strong><span>Run a deterministic non-consequential soak test.</span>';metrics.textContent='processed 0 · dropped 0 · timeouts 0 · recoveries 0';if(download)download.disabled=true;return;}
+  badge.textContent=result.passed?'PASS':'FAIL';
+  summary.innerHTML='<strong>'+escapeHtml(String(result.score||0))+'/10</strong><span>'+escapeHtml(result.passed?'All soak acceptance gates passed.':'One or more soak acceptance gates failed.')+'</span>';
+  const r=result.report||{};
+  metrics.textContent='processed '+Number(r.framesProcessed||0)+' · dropped '+Number(r.framesDropped||0)+' · timeouts '+Number(r.framesTimedOut||0)+' · recoveries '+Number(r.recoverySuccesses||0)+'/'+Number(r.recoveryAttempts||0)+' · max queue '+Number(r.maxObservedQueueDepth||0);
+  if(download)download.disabled=false;
+}
+async function runStationSoak(){
+  const harness=globalThis.GelatoGlassesSoakHarness;if(!harness)throw new Error('V10 soak harness is unavailable.');
+  const cycles=Math.max(10,Math.min(10000,Number($('stationSoakCycles')?.value||500))),seed=Math.max(1,Number($('stationSoakSeed')?.value||1337));
+  $('stationSoakState').textContent='RUNNING';
+  const report=harness.run({cycles,seed,maxQueue:Number($('frameQueueMax')?.value||3)});
+  const d=await api('hardware.soak.evaluate',{report,policy:{cycles,maxQueue:Number($('frameQueueMax')?.value||3),maxQueueLeak:0,maxWorkerOverlap:0,maxUnhandledErrors:0,maxRecoveryFailures:0,maxStalledCycles:0,minRecoverySuccessRate:1}});
+  state.stationSoakReport=d.soak;renderStationSoak(d.soak);log('SOAK','Station soak '+(d.soak.passed?'passed':'failed')+' at '+d.soak.score+'/10.');
+  return d.soak;
+}
+function downloadStationSoakReport(){
+  if(!state.stationSoakReport)return;
+  const blob=new Blob([JSON.stringify(state.stationSoakReport,null,2)+'\n'],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download='gelato-v10-station-soak-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);
 }
 function setSyncBadge(status,label){
   const badge=$('syncBadge');if(!badge)return;
@@ -1185,6 +1209,8 @@ $('downloadDiagnostics')?.addEventListener('click',()=>downloadDeviceDiagnostics
 $('simulateNetworkLoss')?.addEventListener('click',simulateNetworkLoss);
 $('resumeRuntime')?.addEventListener('click',()=>{state.recovery.networkFault=false;resumeRuntimeRecovery('manual_resume');});
 $('clearRecoveryState')?.addEventListener('click',clearRecoveryResume);
+$('runStationSoak')?.addEventListener('click',()=>runStationSoak().catch(e=>{log('ERROR',e.message);$('stationSoakState').textContent='ERROR';}));
+$('downloadSoakReport')?.addEventListener('click',downloadStationSoakReport);
 for(const id of ['frameQueueMax','frameMaxAge','frameInferenceTimeout','frameDropPolicy'])$(id)?.addEventListener('change',renderFramePipelineMetrics);
 document.addEventListener('visibilitychange',()=>{if(state.cameraTrack){state.cameraTrack.enabled=!document.hidden;setCameraHealth(document.hidden?'paused':'ready',document.hidden?'PAUSED':'READY');}if(document.hidden){saveRecoveryResume();enterRecovery('recovering','app_backgrounded',{stopSync:true});}else if(state.mode==='live'&&state.device){resumeRuntimeRecovery('app_resumed');}else if(state.cameraStream){startVisionRuntime();}});
 window.addEventListener('offline',()=>{enterRecovery('disconnected','network_lost',{stopSync:true});setSyncBadge('error','OFFLINE');});

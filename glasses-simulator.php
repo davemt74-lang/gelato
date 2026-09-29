@@ -175,6 +175,17 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
       <div class="inline-actions"><button id="simulateNetworkLoss" type="button">Simulate Network Loss</button><button id="resumeRuntime" type="button">Resume Runtime</button><button id="clearRecoveryState" type="button">Clear Saved Resume</button></div>
       <p class="calibration-note">Recovery clears queued frames and temporal tracking, reloads canonical station work, rehydrates the existing build, then waits for fresh camera evidence before automatic observations resume.</p>
     </section>
+    <section class="console-card station-soak-card">
+      <div class="console-heading"><div><small>V10 STATION SOAK</small><strong>Long-running fault acceptance</strong></div><span id="stationSoakState">IDLE</span></div>
+      <div id="stationSoakSummary" class="vision-model-status"><strong>NOT RUN</strong><span>Run a deterministic non-consequential soak test.</span></div>
+      <div class="camera-grid">
+        <label><span>Cycles</span><select id="stationSoakCycles"><option value="100">100</option><option value="500" selected>500</option><option value="1000">1000</option><option value="2500">2500</option></select></label>
+        <label><span>Seed</span><input id="stationSoakSeed" type="number" min="1" max="9999999" value="1337"></label>
+      </div>
+      <div class="inline-actions"><button id="runStationSoak" type="button">Run Soak Acceptance</button><button id="downloadSoakReport" type="button" disabled>Download Report</button></div>
+      <div id="stationSoakMetrics" class="vision-metrics">processed 0 · dropped 0 · timeouts 0 · recoveries 0</div>
+      <p class="calibration-note">This harness never submits build observations. It stress-tests bounded queues, jitter, timeout, network/camera/inference recovery, worker cleanup, and final-ready state.</p>
+    </section>
     <section class="console-card calibration-card" id="calibrationPanel">
       <div class="console-heading"><div><small>PROJECTION CALIBRATION</small><strong>Lens layout & display tuning</strong></div><span id="calibrationState">LOCKED</span></div>
       <div class="calibration-grid">
@@ -357,6 +368,7 @@ window.GELATO_GLASSES_SIMULATOR={
   canManageMedia:<?=app_has_permission('glasses.manage',$user)?'true':'false'?>
 };
 </script>
-<script src="assets/js/glasses-web-simulator.js?v=20260929-v10-4"></script>
+<script src="assets/js/glasses-v10-soak-harness.js?v=20260929-v10-5"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20260929-v10-5"></script>
 </body>
 </html>
