@@ -824,9 +824,9 @@ function enqueueVisionFrame(frame){
 function inferenceWithTimeout(frame,adapter,timeoutMs,signal){
   const detectorDelay=Math.max(0,Number($('frameDetectorDelay')?.value||0));
   const forceTimeout=!!$('frameForceTimeout')?.checked;
-  const work=(async()=>{if(detectorDelay)await new Promise(r=>setTimeout(r,detectorDelay));if(signal.aborted)throw new DOMException('Aborted','AbortError');if(forceTimeout)await new Promise(r=>setTimeout(r,timeoutMs+100));return adapter.detect(frame);})();
+  const work=(async()=>{if(detectorDelay)await new Promise(r=>setTimeout(r,detectorDelay));if(signal.aborted)throw new DOMException('Aborted','AbortError');if(forceTimeout)await new Promise(r=>setTimeout(r,timeoutMs+100));if(signal.aborted)throw new DOMException('Aborted','AbortError');return adapter.detect({...frame,signal});})();
   const timeout=new Promise((_,reject)=>setTimeout(()=>reject(new Error('FRAME_INFERENCE_TIMEOUT')),timeoutMs));
-  return Promise.race([work,timeout]);
+  return {result:Promise.race([work,timeout]),settle:work.then(()=>undefined,()=>undefined)};
 }
 async function deliverVisionInference(frame,raw,started){
   const nowWall=Date.now(),p=framePipelinePolicy(),m=state.framePipeline.metrics;
@@ -852,13 +852,18 @@ async function processFrameQueue(){
       const controller=new AbortController();fp.currentAbort=controller;const started=performance.now();
       try{
         const adapterName=$('visionAdapterSelect')?.value||'fixture';state.visionAdapter=VISION_ADAPTERS[adapterName]||VISION_ADAPTERS.fixture;
-        const raw=await inferenceWithTimeout(frame,state.visionAdapter,p.inferenceTimeoutMs,controller.signal);
-        if(epoch!==fp.epoch||controller.signal.aborted){m.cancelledFrames++;continue;}
-        await deliverVisionInference(frame,raw,started);
-      }catch(e){
-        if(e?.name==='AbortError'){m.cancelledFrames++;}
-        else if(e?.message==='FRAME_INFERENCE_TIMEOUT'){m.timedOutFrames++;renderVisionHealth('error');log('VISION','Frame '+frame.seq+' inference timed out.');}
-        else{m.failedFrames++;renderVisionHealth('error');log('VISION',e?.message||'Browser detector failed.');}
+        const inference=inferenceWithTimeout(frame,state.visionAdapter,p.inferenceTimeoutMs,controller.signal);
+        try{
+          const raw=await inference.result;
+          if(epoch!==fp.epoch||controller.signal.aborted){m.cancelledFrames++;continue;}
+          await deliverVisionInference(frame,raw,started);
+        }catch(e){
+          if(e?.name==='AbortError'){m.cancelledFrames++;}
+          else if(e?.message==='FRAME_INFERENCE_TIMEOUT'){m.timedOutFrames++;controller.abort();renderVisionHealth('error');log('VISION','Frame '+frame.seq+' inference timed out.');}
+          else{m.failedFrames++;renderVisionHealth('error');log('VISION',e?.message||'Browser detector failed.');}
+        }finally{
+          await inference.settle;
+        }
       }finally{if(fp.currentAbort===controller)fp.currentAbort=null;renderFramePipelineMetrics();}
     }
   }finally{fp.worker=false;renderFramePipelineMetrics();}
