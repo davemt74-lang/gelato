@@ -170,7 +170,11 @@ function glasses_v11_training_run_complete(PDO $pdo,int $org,string $publicId,ar
   $metricsHash=hash('sha256',glasses_vision_training_release_json($metrics));
   return glasses_transaction($pdo,function()use($pdo,$org,$publicId,$output,$metrics,$artifacts,$metricsHash,$actor):array{
     $r=glasses_v11_training_run_row($pdo,$org,$publicId,true);
-    if((string)$r['status']==='completed'&&hash_equals((string)$r['output_sha256'],$output))return glasses_v11_training_run_public($r);
+    if((string)$r['status']==='completed'){
+      $storedMetrics=json_decode((string)($r['metrics_json']??'{}'),true)?:[];$storedArtifacts=json_decode((string)($r['artifacts_json']??'[]'),true)?:[];
+      if(!hash_equals((string)$r['output_sha256'],$output)||glasses_vision_training_release_json($storedMetrics)!==glasses_vision_training_release_json($metrics)||glasses_vision_training_release_json($storedArtifacts)!==glasses_vision_training_release_json($artifacts))throw new InvalidArgumentException('Completed training run is immutable and cannot accept different results.');
+      return glasses_v11_training_run_public($r);
+    }
     if((string)$r['status']!=='running')throw new InvalidArgumentException('Only a running training run may complete.');
     $pdo->prepare("UPDATE glasses_vision_training_runs SET status='completed',metrics_json=?,artifacts_json=?,metrics_hash=?,output_sha256=?,failure_json=NULL,completed_by=?,completed_at=NOW(6) WHERE organization_id=? AND id=?")
       ->execute([json_encode($metrics,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),json_encode($artifacts,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),$metricsHash,$output,$actor,$org,(int)$r['id']]);
@@ -192,6 +196,8 @@ function glasses_v11_training_run_rerun(PDO $pdo,int $org,string $publicId,array
     'assemblyHash'=>$parent['assembly_hash_snapshot'],'releaseHash'=>$parent['release_hash_snapshot'],'qualificationHash'=>$parent['qualification_hash_snapshot'],
     'configHash'=>$parent['config_hash'],'trainer'=>$parent['trainer'],'trainerVersion'=>$parent['trainer_version'],'runKey'=>$runKey,'attemptNo'=>$attempt,'parentRunPublicId'=>$parent['public_id']];
   $runHash=hash('sha256',glasses_vision_training_release_json($identity));
+  $existing=$pdo->prepare("SELECT public_id FROM glasses_vision_training_runs WHERE organization_id=? AND run_hash=? LIMIT 1");$existing->execute([$org,$runHash]);$ep=$existing->fetchColumn();
+  if($ep!==false)return glasses_v11_training_run_public(glasses_v11_training_run_row($pdo,$org,(string)$ep));
   return glasses_transaction($pdo,function()use($pdo,$org,$parent,$actor,$runKey,$attempt,$runHash):array{
     $public=glasses_public_id('vision-train-run');
     $pdo->prepare("INSERT INTO glasses_vision_training_runs
