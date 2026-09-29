@@ -5,14 +5,17 @@ on:
     paths:
       - 'includes/glasses-hardware-runtime.php'
       - 'includes/glasses-frame-pipeline.php'
+      - 'includes/glasses-device-health.php'
       - 'includes/glasses-simulator.php'
       - 'api/glasses-simulator.php'
       - 'glasses-simulator.php'
       - 'assets/js/glasses-web-simulator.js'
       - 'tests/glasses-v10-hardware-runtime-adapter-contract.php'
       - 'tests/glasses-v10-frame-pipeline-contract.php'
+      - 'tests/glasses-v10-device-health-contract.php'
       - 'docs/GLASSES-V10-HARDWARE-RUNTIME.md'
       - 'docs/GLASSES-V10-FRAME-PIPELINE.md'
+      - 'docs/GLASSES-V10-DEVICE-HEALTH.md'
       - '.github/workflows/glasses-v10.yml'
   push:
     branches: [main]
@@ -44,11 +47,13 @@ jobs:
         run: |
           php -l includes/glasses-hardware-runtime.php
           php -l includes/glasses-frame-pipeline.php
+          php -l includes/glasses-device-health.php
           php -l includes/glasses-simulator.php
           php -l api/glasses-simulator.php
           php -l glasses-simulator.php
           php -l tests/glasses-v10-hardware-runtime-adapter-contract.php
           php -l tests/glasses-v10-frame-pipeline-contract.php
+          php -l tests/glasses-v10-device-health-contract.php
           node --check assets/js/glasses-web-simulator.js
 
       - name: Architecture guardrails
@@ -71,6 +76,13 @@ jobs:
           ! grep -q 'async function runVisionFrame()' assets/js/glasses-web-simulator.js
           ! grep -q 'kds_transition(' includes/glasses-frame-pipeline.php
           ! grep -q 'glasses_build_confirm(' includes/glasses-frame-pipeline.php
+          grep -q 'GLASSES_DEVICE_HEALTH_SCHEMA' includes/glasses-device-health.php
+          grep -q 'function glasses_device_health_bundle' includes/glasses-device-health.php
+          grep -q 'hardware.health.normalize' includes/glasses-simulator.php
+          grep -q 'hardware.diagnostics.bundle' includes/glasses-simulator.php
+          grep -q 'downloadDeviceDiagnostics' assets/js/glasses-web-simulator.js
+          ! grep -q 'kds_transition(' includes/glasses-device-health.php
+          ! grep -q 'glasses_build_confirm(' includes/glasses-device-health.php
 
       - name: Install schema
         run: |
@@ -101,6 +113,9 @@ jobs:
 
       - name: V10 frame pipeline and backpressure contract
         run: php tests/glasses-v10-frame-pipeline-contract.php
+
+      - name: V10 device health telemetry and diagnostics contract
+        run: php tests/glasses-v10-device-health-contract.php
 
       - name: Existing simulator regression
         run: php tests/glasses-web-simulator-contract.php
