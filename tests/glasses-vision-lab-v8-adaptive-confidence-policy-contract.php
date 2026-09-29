@@ -35,6 +35,17 @@ $grant=glasses_create_pairing_grant($pdo,$org,$location,(string)$station['public
 $paired=glasses_pair_device($pdo,(string)$grant['pairingCode'],['hardwareIdentifier'=>'AIR3-V84-'.$slug,'displayName'=>'V8 Policy AIR3']);
 $device=glasses_authenticate_token($pdo,(string)$paired['deviceToken']);
 $session=glasses_build_start($pdo,$device,$kdsPublic,null);$sessionPublic=(string)$session['publicId'];
+$sessionId=(int)v84_one($pdo,"SELECT id FROM glasses_build_sessions WHERE organization_id=? AND public_id=?",[$org,$sessionPublic]);
+$modelPublic='vision-confidence-model-'.$slug;$modelHash=hash('sha256','confidence-model-'.$slug);
+$pdo->prepare("INSERT INTO glasses_vision_model_packages
+ (organization_id,public_id,detector_name,model_name,model_version,runtime_type,platform,artifact_url,artifact_sha256,artifact_bytes,status,created_by)
+ VALUES (?,?,'ingredient_detector','Confidence Detector','v8.4','onnx','air3','https://example.test/v84.onnx',?,123,'ready',?)")
+ ->execute([$org,$modelPublic,$modelHash,$actor]);$modelId=(int)$pdo->lastInsertId();
+$assignmentKey=hash('sha256','confidence-assignment-'.$slug);
+$pdo->prepare("INSERT INTO glasses_vision_model_assignments
+ (organization_id,device_id,build_session_id,assignment_key,detector_name,package_id,action,selection,rollout_status,compatibility_json,issued_at)
+ VALUES (?,?,?,?,?,?,'apply','stable','active','{\"compatible\":true}',UTC_TIMESTAMP(6))")
+ ->execute([$org,(int)$device['id'],$sessionId,$assignmentKey,'ingredient_detector',$modelId]);
 
 $label=glasses_vision_profile_save($pdo,$org,[
  'ingredientId'=>$ingredient,'detectorName'=>'ingredient_detector','modelLabel'=>'pepperoni','minimumConfidence'=>.82
@@ -65,6 +76,8 @@ $review=glasses_vision_confidence_decide($pdo,$org,[
  'devicePublicId'=>$device['public_id'],'buildSessionPublicId'=>$sessionPublic,'detectorName'=>'ingredient_detector','modelLabel'=>'pepperoni','confidence'=>.95
 ],$actor);
 v84_assert($review['decision']==='human_review','High confidence under insufficient context must require governed human review.');
+v84_assert($review['modelPackagePublicId']===$modelPublic,'Every confidence decision must bind to the exact assigned model package.');
+v84_assert(($review['evidence']['assignment']['assignmentKey']??null)===$assignmentKey&&($review['evidence']['assignment']['modelArtifactSha256']??null)===$modelHash,'Decision evidence must preserve exact model assignment identity and artifact hash.');
 v84_assert(abs($review['labelFloor']-.82)<.0001&&abs($review['effectiveThreshold']-.92)<.0001,'Effective threshold must preserve the stricter label floor and add only a nonnegative context adjustment.');
 v84_assert(glasses_vision_confidence_decision_verify($pdo,$org,$review['publicId'])['passed'],'Fresh confidence decision must verify.');
 
