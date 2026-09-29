@@ -25,6 +25,7 @@ on:
       - 'tests/glasses-vision-lab-v6-annotation-qa-contract.php'
       - 'tests/glasses-vision-lab-v6-training-release-contract.php'
       - 'tests/vision-training-group-split-contract.py'
+      - 'tests/vision-training-release-pipeline-contract.py'
       - 'docs/GLASSES-VISION-LAB-CURATION-SPLITS.md'
       - '.github/workflows/glasses-vision-lab-v6.yml'
   push:
@@ -70,7 +71,7 @@ jobs:
           php -l tests/glasses-vision-lab-v6-balance-diversity-contract.php
           php -l tests/glasses-vision-lab-v6-annotation-qa-contract.php
           php -l tests/glasses-vision-lab-v6-training-release-contract.php
-          python -m py_compile tools/vision_training/pipeline.py tests/vision-training-group-split-contract.py
+          python -m py_compile tools/vision_training/pipeline.py tests/vision-training-group-split-contract.py tests/vision-training-release-pipeline-contract.py
           node --check assets/js/glasses-vision-lab.js
           node --check assets/js/glasses-vision-balance.js
           node --check assets/js/glasses-vision-annotation-qa.js
@@ -96,6 +97,9 @@ jobs:
 
       - name: Python group split contract
         run: python tests/vision-training-group-split-contract.py
+
+      - name: Governed training release pipeline contract
+        run: python tests/vision-training-release-pipeline-contract.py
 
       - name: Install and upgrade schema
         run: |
