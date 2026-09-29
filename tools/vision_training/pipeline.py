@@ -126,7 +126,7 @@ def verify_training_qualification(root:Path,release_manifest:dict[str,Any])->dic
     if data.get("passed") is not True:
         raise PipelineError("Training qualification gate did not pass.")
     checks=data.get("checks")
-    if not isinstance(checks,list) or not checks or any(item.get("passed") is not True for item in checks if isinstance(item,dict)):
+    if not isinstance(checks,list) or not checks or any(not isinstance(item,dict) or item.get("passed") is not True for item in checks):
         raise PipelineError("Training qualification contains an unresolved failed check.")
     return data
 
