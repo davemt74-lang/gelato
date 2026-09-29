@@ -21,6 +21,8 @@ function glasses_v11_evidence_session(PDO $pdo,int $org,array $device,?string $s
     $session=glasses_training_session($pdo,$org,trim($sessionPublic));
     if((int)$session['device_id']!==(int)$device['id'])throw new InvalidArgumentException('Training session belongs to a different glasses device.');
     if((string)$session['status']!=='active')throw new InvalidArgumentException('Production evidence requires an active glasses training session.');
+    $capture=new DateTimeImmutable($capturedAt,new DateTimeZone('UTC'));$started=new DateTimeImmutable((string)$session['started_at'],new DateTimeZone('UTC'));
+    if($capture<$started->modify('-2 seconds'))throw new InvalidArgumentException('Production evidence capture predates the active training session.');
     return $session;
   }
   $q=$pdo->prepare("SELECT public_id FROM glasses_training_sessions
