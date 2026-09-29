@@ -53,6 +53,7 @@ jobs:
           grep -q 'CREATE TABLE glasses_vision_scene_snapshots' database/20261117_vision_lab_v9_live_scene_understanding.sql
           grep -q 'CREATE TABLE glasses_vision_scene_entities' database/20261117_vision_lab_v9_live_scene_understanding.sql
           grep -q 'source_type VARCHAR(32)' database/20261117_vision_lab_v9_live_scene_understanding.sql
+          grep -q "glasses-vision-lineage.php" includes/glasses-vision-scene.php
           grep -q 'function glasses_vision_scene_capture' includes/glasses-vision-scene.php
           grep -q 'Live scene frame is stale' includes/glasses-vision-scene.php
           grep -q 'buildContextHash' includes/glasses-vision-scene.php
