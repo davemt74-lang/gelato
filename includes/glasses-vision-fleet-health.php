@@ -311,6 +311,7 @@ function glasses_vision_fleet_health_action_verify(PDO $pdo,int $org,string $pub
     $rollout=glasses_vision_model_rollout_row($pdo,$org,$a['rolloutPublicId'],false);
     $passed=hash_equals($a['actionHash'],$hash)
       &&hash_equals((string)($a['evidence']['reason']??''),(string)($meta['reason']??''))
+      &&(int)($a['evidence']['actorUserId']??0)===(int)($meta['actor_user_id']??0)
       &&glasses_vision_fleet_health_verify($pdo,$org,$a['analysisPublicId'])['passed']
       &&(string)$rollout['status']==='rolled_back';
     return ['passed'=>$passed,'actionHash'=>$a['actionHash'],'recomputedActionHash'=>$hash];
