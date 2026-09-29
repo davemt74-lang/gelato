@@ -44,6 +44,7 @@ CREATE TABLE glasses_vision_scene_entities (
   label VARCHAR(180) NOT NULL,
   component_key VARCHAR(160) NULL,
   tracking_id VARCHAR(190) NULL,
+  source_type VARCHAR(32) NOT NULL DEFAULT 'vision_model',
   confidence DECIMAL(9,6) NULL,
   bbox_json JSON NULL,
   spatial_json JSON NOT NULL,
