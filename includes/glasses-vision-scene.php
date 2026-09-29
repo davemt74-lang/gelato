@@ -7,6 +7,7 @@ require_once __DIR__.'/glasses-vision-models.php';
 require_once __DIR__.'/glasses-vision-profiles.php';
 require_once __DIR__.'/glasses-vision-training-release.php';
 require_once __DIR__.'/glasses-vision-lineage.php';
+require_once __DIR__.'/glasses-vision-lineage.php';
 
 const GLASSES_VISION_SCENE_SCHEMA='gelato.vision_scene.v1';
 
