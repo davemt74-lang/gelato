@@ -26,7 +26,7 @@ function render(){
      (p.status==='draft'||p.status==='paused'?'<button data-pilot-activate="'+esc(p.publicId)+'">Activate</button>':'')+
      (p.status==='active'?'<button data-pilot-pause="'+esc(p.publicId)+'">Pause</button>':'')+
      (p.status!=='stopped'?'<button data-pilot-stop="'+esc(p.publicId)+'">Stop</button>':'')+
-     '<button data-pilot-kill="'+esc(p.publicId)+'" data-enabled="'+(p.killSwitch?'0':'1')+'">'+(p.killSwitch?'Clear kill switch':'KILL SWITCH')+'</button>'+
+     '<button data-pilot-kill="'+esc(p.publicId)+'" data-enabled="'+(p.killSwitch?'0':'1')+'">'+(p.killSwitch?'Clear kill switch':'KILL SWITCH')+'</button>'+(p.rolloutPublicId?'<button data-pilot-rollback="'+esc(p.publicId)+'">Rollback rollout</button>':'')+
      '<button data-pilot-enroll="'+esc(p.publicId)+'">Enroll device</button></div><div class="vl-production-pilot-devices">'+deviceHtml+'</div></section>';
  }).join('');
 }
@@ -53,6 +53,7 @@ root.addEventListener('click',async e=>{
   else if(b.dataset.pilotPause){const reason=prompt('Pause reason');if(!reason)return;await api({action:'pilot.pause',pilotPublicId:b.dataset.pilotPause,reason});}
   else if(b.dataset.pilotStop){const reason=prompt('Stop reason');if(!reason)return;await api({action:'pilot.stop',pilotPublicId:b.dataset.pilotStop,reason});}
   else if(b.dataset.pilotKill){const enabled=b.dataset.enabled==='1',reason=enabled?prompt('Kill switch reason'):'';if(enabled&&!reason)return;await api({action:'pilot.kill_switch',pilotPublicId:b.dataset.pilotKill,enabled,reason});}
+  else if(b.dataset.pilotRollback){const reason=prompt('Rollback reason');if(!reason)return;await api({action:'pilot.rollback_rollout',pilotPublicId:b.dataset.pilotRollback,reason});}
   else if(b.dataset.pilotEval)await api({action:'pilot.device_evaluate',pilotPublicId:b.dataset.pilotEval,devicePublicId:b.dataset.device,runtime:{}});
   else if(b.dataset.pilotEnable)await api({action:'pilot.device_enable',pilotPublicId:b.dataset.pilotEnable,devicePublicId:b.dataset.device,runtime:{}});
   else if(b.dataset.pilotDisable){const reason=prompt('Disable reason');if(!reason)return;await api({action:'pilot.device_disable',pilotPublicId:b.dataset.pilotDisable,devicePublicId:b.dataset.device,reason});}
