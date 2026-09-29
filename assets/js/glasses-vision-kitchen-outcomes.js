@@ -1,0 +1,9 @@
+(()=>{'use strict';
+const boot=window.GELATO_VISION_LAB||{},root=document.getElementById('vlKitchenOutcomes'),button=document.getElementById('vlKitchenOutcomeSync');
+if(!root)return;let catalog=boot.catalog||{};
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+async function post(payload){const r=await fetch(boot.apiUrl,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({...payload,csrfToken:boot.csrfToken})});const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.message||'Vision Lab request failed.');return j;}
+async function refresh(){const r=await fetch(boot.apiUrl,{credentials:'same-origin'}),j=await r.json();if(!r.ok||!j.ok)throw new Error(j.message||'Refresh failed.');catalog=j.catalog||{};render();}
+function render(){const k=catalog.kitchenOutcomes||{},s=k.summary||{},rows=k.events||[];root.innerHTML='<div class="vl-step-row"><div><strong>'+Number(s.total||0)+' governed kitchen outcomes</strong><small>'+Number(s.pendingReview||0)+' pending review · '+esc(Object.entries(s.byCategory||{}).map(([a,b])=>a+' '+b).join(' · '))+'</small></div></div>'+ (rows.length?rows.map(r=>'<div class="vl-step-row"><div><strong><span class="vl-step-state">'+esc(r.category)+'</span> · '+esc(r.disposition)+'</strong><small>'+esc(r.sourceKind)+' '+esc(r.sourcePublicId)+' · '+esc(r.reviewStatus)+'</small><code>'+esc(r.eventHash)+'</code></div></div>').join(''):'<div class="vl-empty">No governed kitchen outcomes have been ingested yet.</div>');}
+button?.addEventListener('click',async()=>{try{const j=await post({action:'outcomes.sync',limit:500});alert('Synced '+Number(j.result?.created||0)+' new kitchen outcomes.');await refresh();}catch(e){alert(e.message);}});
+render();})();
