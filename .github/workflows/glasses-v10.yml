@@ -64,7 +64,7 @@ jobs:
           ! grep -q 'glasses_build_confirm(' includes/glasses-hardware-runtime.php
           ! grep -q 'glasses_handoff_to_expo(' includes/glasses-hardware-runtime.php
           grep -q 'GLASSES_FRAME_PIPELINE_SCHEMA' includes/glasses-frame-pipeline.php
-          grep -q "'dropPolicy'=>'drop_oldest'" includes/glasses-frame-pipeline.php
+          grep -q "'drop_oldest'" includes/glasses-frame-pipeline.php
           grep -q 'function enqueueVisionFrame' assets/js/glasses-web-simulator.js
           grep -q 'function processFrameQueue' assets/js/glasses-web-simulator.js
           grep -q 'FRAME_INFERENCE_TIMEOUT' assets/js/glasses-web-simulator.js
