@@ -221,7 +221,7 @@ function glasses_vision_training_release_build(PDO $pdo,int $org,string $dataset
             $items[]=[
                 'samplePublicId'=>$row['sample_public_id'],'mediaPublicId'=>$row['media_public_id'],'split'=>$split,
                 'imagePath'=>$imageRel,'imageSha256'=>$imageHash,'labelPath'=>$labelRel,'labelSha256'=>$labelHash,
-                'canonicalLabel'=>$row['canonical_label'],'sourceType'=>$row['source_type'],'datasetSourceHash'=>$row['dataset_source_hash'],
+                'canonicalLabel'=>$row['canonical_label'],'annotationLabels'=>array_values(array_map(static fn($a)=>trim((string)($a['label']??'')),$annotations)),'sourceType'=>$row['source_type'],'datasetSourceHash'=>$row['dataset_source_hash'],
                 'captureGroup'=>$row['capture_group'],'buildSessionPublicId'=>$row['build_public_id'],'curationDecision'=>$row['curation_decision']?:'include','curationReason'=>$row['curation_reason'],
             ];
         }
