@@ -86,10 +86,10 @@ function glasses_v11_annotation_review(PDO $pdo,int $org,string $public,string $
     $c=glasses_v11_annotation_row($pdo,$org,$public,true);
     if(!in_array($c['status'],['submitted','needs_adjudication'],true))throw new InvalidArgumentException('Correction is not reviewable.');
     if((int)$c['submitted_by']===$actor)throw new InvalidArgumentException('Submitter cannot review their own correction.');
-    $pdo->prepare("INSERT INTO glasses_vision_sample_reviews (organization_id,sample_id,reviewer_user_id,decision,canonical_label,notes)
-      VALUES (?,?,?,?,?,?) ON DUPLICATE KEY UPDATE decision=VALUES(decision),canonical_label=VALUES(canonical_label),notes=VALUES(notes),created_at=NOW(6)")
-      ->execute([$org,(int)$c['sample_id'],$actor,$decision,$c['proposed_label'],mb_substr(trim($notes),0,1000,'UTF-8')?:null]);
-    $q=$pdo->prepare("SELECT decision,COUNT(*) c FROM glasses_vision_sample_reviews WHERE organization_id=? AND sample_id=? GROUP BY decision");$q->execute([$org,(int)$c['sample_id']]);
+    $pdo->prepare("INSERT INTO glasses_vision_sample_reviews (organization_id,sample_id,correction_id,reviewer_user_id,decision,canonical_label,notes)
+      VALUES (?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE decision=VALUES(decision),canonical_label=VALUES(canonical_label),notes=VALUES(notes),created_at=NOW(6)")
+      ->execute([$org,(int)$c['sample_id'],(int)$c['id'],$actor,$decision,$c['proposed_label'],mb_substr(trim($notes),0,1000,'UTF-8')?:null]);
+    $q=$pdo->prepare("SELECT decision,COUNT(*) c FROM glasses_vision_sample_reviews WHERE organization_id=? AND sample_id=? AND correction_id=? GROUP BY decision");$q->execute([$org,(int)$c['sample_id'],(int)$c['id']]);
     $counts=[];foreach($q->fetchAll() as $r)$counts[$r['decision']]=(int)$r['c'];
     $approve=$counts['approve']??0;$reject=$counts['reject']??0;$reviewCount=$approve+$reject;
     if($approve>0&&$reject>0)$next='needs_adjudication';
