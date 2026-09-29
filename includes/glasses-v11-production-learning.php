@@ -86,7 +86,7 @@ function glasses_v11_production_learning_attach_mining(PDO $pdo,int $org,string 
   $policy=$cycle['policy'];if((int)$counts['mismatched']>0)throw new InvalidArgumentException('Learning cycle mining run contains candidates from a different model package.');
   if((int)$counts['matching']<(int)$policy['minimumMinedCandidates'])throw new InvalidArgumentException('Learning cycle mining run does not meet the minimum accepted-model candidate count.');
   $pdo->prepare("UPDATE glasses_vision_learning_cycles SET mining_run_id=?,status='mined' WHERE organization_id=? AND public_id=?")->execute([$runId,$org,$cyclePublic]);
-  glasses_vision_lineage_edge($pdo,$org,'production_learning_cycle',$cyclePublic,$cycle['cycleHash'],'mined_from_production','mining_run',$miningPublic,(string)$run['run_hash'],['matchingCandidates'=>(int)$counts['matching']],$actor);
+  glasses_vision_lineage_edge($pdo,$org,'production_learning_cycle',$cyclePublic,$cycle['cycleHash'],'mined_from_production','mining_run',$miningPublic,(string)$run['runHash'],['matchingCandidates'=>(int)$counts['matching']],$actor);
   return glasses_v11_production_learning_row($pdo,$org,$cyclePublic);
 }
 
@@ -112,7 +112,8 @@ function glasses_v11_production_learning_attach_dataset(PDO $pdo,int $org,string
   $pdo->prepare("UPDATE glasses_vision_learning_cycles SET dataset_id=?,status=?,ready_by=?,ready_at=? WHERE organization_id=? AND public_id=?")
     ->execute([(int)$d['id'],$status,$ready?$actor:null,$ready?gmdate('Y-m-d H:i:s.u'):null,$org,$cyclePublic]);
   $updated=glasses_v11_production_learning_row($pdo,$org,$cyclePublic);
-  glasses_vision_lineage_edge($pdo,$org,'retraining_batch',$cycle['retrainingBatch']['publicId'],$cycle['retrainingBatch']['batchHash'],'closed_loop_dataset','dataset',$datasetPublic,$d['dataset_hash'],['assemblyHash'=>$d['assembly_hash'],'readyForExperiment'=>$ready],$actor);
+  $relation=$ready?'closed_loop_dataset':'attached_candidate_dataset';
+  glasses_vision_lineage_edge($pdo,$org,'retraining_batch',$cycle['retrainingBatch']['publicId'],$cycle['retrainingBatch']['batchHash'],$relation,'dataset',$datasetPublic,$d['dataset_hash'],['assemblyHash'=>$d['assembly_hash'],'readyForExperiment'=>$ready],$actor);
   return $updated;
 }
 
