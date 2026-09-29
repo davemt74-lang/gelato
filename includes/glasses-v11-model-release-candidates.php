@@ -44,18 +44,21 @@ function glasses_v11_model_rc_public(array $r): array {
 function glasses_v11_model_rc_create(PDO $pdo,int $org,array $input,int $actor): array {
   if(!glasses_v11_model_rc_ready($pdo))throw new RuntimeException('V11 model release-candidate migration is not installed.');
   $benchmarkPublic=trim((string)($input['benchmarkPublicId']??''));if($benchmarkPublic==='')throw new InvalidArgumentException('Passing benchmark public ID is required.');
-  $bq=$pdo->prepare("SELECT b.*,x.public_id experiment_public_id,x.experiment_hash,x.training_run_id,x.challenger_package_id,
+  $bq=$pdo->prepare("SELECT b.id benchmark_id,b.status benchmark_status,b.benchmark_hash,
+    x.id experiment_id,x.public_id experiment_public_id,x.experiment_hash,x.training_run_id,x.challenger_package_id,
     tr.public_id training_run_public_id,tr.run_hash,tr.dataset_hash_snapshot,tr.assembly_hash_snapshot,tr.release_hash_snapshot,tr.qualification_hash_snapshot,tr.config_hash,tr.output_sha256,
-    mp.* FROM glasses_vision_model_benchmarks b
+    mp.id model_package_id,mp.public_id model_public_id,mp.detector_name,mp.model_name,mp.model_version,mp.runtime_type,mp.platform,mp.artifact_url,mp.artifact_sha256,mp.artifact_bytes,
+    mp.minimum_sdk_version,mp.minimum_app_version,mp.status model_status,mp.metadata_json
+    FROM glasses_vision_model_benchmarks b
     JOIN glasses_vision_model_experiments x ON x.id=b.experiment_id AND x.organization_id=b.organization_id
     JOIN glasses_vision_training_runs tr ON tr.id=b.training_run_id AND tr.organization_id=b.organization_id
     JOIN glasses_vision_model_packages mp ON mp.id=b.challenger_package_id AND mp.organization_id=b.organization_id
     WHERE b.organization_id=? AND b.public_id=? LIMIT 1");
   $bq->execute([$org,$benchmarkPublic]);$r=$bq->fetch();if(!$r)throw new InvalidArgumentException('Model benchmark was not found.');
-  if((string)$r['status']!=='passed')throw new InvalidArgumentException('Release candidate requires a passing benchmark.');
+  if((string)$r['benchmark_status']!=='passed')throw new InvalidArgumentException('Release candidate requires a passing benchmark.');
   if(empty($r['run_hash'])||empty($r['output_sha256']))throw new InvalidArgumentException('Release candidate requires a completed V11 training run.');
   if(!hash_equals((string)$r['output_sha256'],(string)$r['artifact_sha256']))throw new InvalidArgumentException('Release candidate model artifact does not match the training output.');
-  if((string)$r['model_status']!=='ready'&&(string)$r['status']!=='ready'){} // compatibility with joined aliases
+  if((string)$r['model_status']!=='ready')throw new InvalidArgumentException('Release candidate model package must be ready.');
   if((string)$r['artifact_sha256']===''||(string)$r['runtime_type']===''||(string)$r['platform']==='')throw new InvalidArgumentException('Release candidate model package is incomplete.');
   $notes=mb_substr(trim((string)($input['releaseNotes']??'')),0,4000,'UTF-8');if($notes==='')throw new InvalidArgumentException('Release notes are required.');
 
@@ -77,7 +80,7 @@ function glasses_v11_model_rc_create(PDO $pdo,int $org,array $input,int $actor):
     'dataset'=>['datasetHash'=>$r['dataset_hash_snapshot'],'assemblyHash'=>$r['assembly_hash_snapshot']],
     'trainingRelease'=>['releaseHash'=>$r['release_hash_snapshot'],'qualificationHash'=>$r['qualification_hash_snapshot']],
     'benchmark'=>['publicId'=>$benchmarkPublic,'benchmarkHash'=>$r['benchmark_hash']],
-    'modelPackage'=>['publicId'=>$r['public_id'],'detectorName'=>$r['detector_name'],'modelName'=>$r['model_name'],'modelVersion'=>$r['model_version'],
+    'modelPackage'=>['publicId'=>$r['model_public_id'],'detectorName'=>$r['detector_name'],'modelName'=>$r['model_name'],'modelVersion'=>$r['model_version'],
       'runtimeType'=>$r['runtime_type'],'platform'=>$r['platform'],'artifactUrl'=>$r['artifact_url'],'artifactSha256'=>$r['artifact_sha256'],'artifactBytes'=>$r['artifact_bytes']],
     'runtimeCompatibility'=>$runtimeCompat,'labels'=>$labels,'releaseNotes'=>$notes,
     'governance'=>['productionReady'=>false,'requiresApproval'=>true,'requiresPromotionReview'=>true,'automaticActivation'=>false],
@@ -90,9 +93,9 @@ function glasses_v11_model_rc_create(PDO $pdo,int $org,array $input,int $actor):
   $pdo->prepare("INSERT INTO glasses_vision_model_release_candidates
     (organization_id,public_id,experiment_id,training_run_id,benchmark_id,model_package_id,status,release_notes,runtime_compat_json,manifest_json,rc_hash,created_by)
     VALUES (?,?,?,?,?,?,'pending_approval',?,?,?,?,?)")
-    ->execute([$org,$public,(int)$r['experiment_id'],(int)$r['training_run_id'],(int)$r['id'],(int)$r['challenger_package_id'],$notes,
+    ->execute([$org,$public,(int)$r['experiment_id'],(int)$r['training_run_id'],(int)$r['benchmark_id'],(int)$r['model_package_id'],$notes,
       glasses_vision_training_release_json($runtimeCompat),glasses_vision_training_release_json($manifest),$hash,$actor]);
-  glasses_vision_lineage_edge($pdo,$org,'model_benchmark',$benchmarkPublic,(string)$r['benchmark_hash'],'packaged_as','model_release_candidate',$public,$hash,['modelPackagePublicId'=>$r['public_id']],$actor);
+  glasses_vision_lineage_edge($pdo,$org,'model_benchmark',$benchmarkPublic,(string)$r['benchmark_hash'],'packaged_as','model_release_candidate',$public,$hash,['modelPackagePublicId'=>$r['model_public_id']],$actor);
   return glasses_v11_model_rc_public(glasses_v11_model_rc_row($pdo,$org,$public));
 }
 
