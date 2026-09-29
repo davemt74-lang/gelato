@@ -23,7 +23,7 @@ function glasses_vision_lineage_sha(?string $value): ?string
     return $value;
 }
 
-function glasses_vision_lineage_edge(PDO $pdo,int $org,string $fromKind,string $fromPublic,?string $fromHash,string $relation,string $toKind,string $toPublic,?string $toHash,?array $evidence,int $actor): array
+function glasses_vision_lineage_edge(PDO $pdo,int $org,string $fromKind,string $fromPublic,?string $fromHash,string $relation,string $toKind,string $toPublic,?string $toHash,?array $evidence,?int $actor): array
 {
     foreach([$fromKind,$relation,$toKind] as $v)if(!preg_match('/^[a-z0-9_.-]{2,64}$/',$v))throw new InvalidArgumentException('Lineage edge type is invalid.');
     $fromPublic=trim($fromPublic);$toPublic=trim($toPublic);
