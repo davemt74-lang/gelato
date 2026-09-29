@@ -64,3 +64,21 @@ CREATE TABLE glasses_vision_calibration_selections (
   CONSTRAINT fk_glasses_vision_cal_selection_fallback FOREIGN KEY (fallback_calibration_id) REFERENCES glasses_station_calibrations(id) ON DELETE SET NULL,
   CONSTRAINT fk_glasses_vision_cal_selection_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+CREATE TABLE glasses_vision_calibration_profile_events (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  organization_id BIGINT UNSIGNED NOT NULL,
+  profile_id BIGINT UNSIGNED NOT NULL,
+  event_type VARCHAR(32) NOT NULL,
+  event_hash CHAR(64) NOT NULL,
+  evidence_json JSON NOT NULL,
+  actor_user_id BIGINT UNSIGNED NULL,
+  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_glasses_vision_cal_profile_event_hash (organization_id,event_hash),
+  KEY idx_glasses_vision_cal_profile_event_profile (organization_id,profile_id,id),
+  CONSTRAINT fk_glasses_vision_cal_profile_event_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  CONSTRAINT fk_glasses_vision_cal_profile_event_profile FOREIGN KEY (profile_id) REFERENCES glasses_vision_calibration_profiles(id) ON DELETE CASCADE,
+  CONSTRAINT fk_glasses_vision_cal_profile_event_actor FOREIGN KEY (actor_user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
