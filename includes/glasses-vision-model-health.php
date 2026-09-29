@@ -39,9 +39,11 @@ function glasses_vision_model_health_scope(PDO $pdo,int $org,array $input): arra
 
     $deviceId=null;$devicePublic=null;
     if(trim((string)($input['devicePublicId']??''))!==''){
-        $q=$pdo->prepare("SELECT id,public_id FROM glasses_devices WHERE organization_id=? AND public_id=? LIMIT 1");
+        $q=$pdo->prepare("SELECT id,public_id,location_id,station_id FROM glasses_devices WHERE organization_id=? AND public_id=? LIMIT 1");
         $q->execute([$org,trim((string)$input['devicePublicId'])]);$device=$q->fetch();
         if(!$device)throw new InvalidArgumentException('Vision health device was not found.');
+        if($locationId!==null&&(int)($device['location_id']??0)!==$locationId)throw new InvalidArgumentException('Vision health device does not belong to the requested location.');
+        if($stationId!==null&&(int)($device['station_id']??0)!==$stationId)throw new InvalidArgumentException('Vision health device does not belong to the requested station.');
         $deviceId=(int)$device['id'];$devicePublic=(string)$device['public_id'];
     }
 
@@ -65,10 +67,13 @@ function glasses_vision_model_health_collect(PDO $pdo,int $org,array $scope,stri
 {
     [$driftWhere,$driftArgs]=glasses_vision_model_health_where($scope,'s','package_id','location_id','station_id','device_id');
     $driftWhere[]='s.created_at>=?';$driftWhere[]='s.created_at<?';
-    $dq=$pdo->prepare("SELECT s.id,s.sample_key,s.assignment_id,s.rollout_id,s.build_session_id,s.created_at,
-      s.observation_count,s.correction_count,s.low_confidence_count,s.confidence_mean,s.latency_mean_ms,
-      s.drift_state,s.drift_score,s.reasons_json
-      FROM glasses_vision_drift_samples s WHERE ".implode(' AND ',$driftWhere)." ORDER BY s.id");
+    $dq=$pdo->prepare("SELECT s.sample_key,s.created_at,s.observation_count,s.correction_count,s.low_confidence_count,s.confidence_mean,s.latency_mean_ms,
+      s.drift_state,s.drift_score,s.reasons_json,a.assignment_key,b.public_id build_session_public_id,r.public_id rollout_public_id
+      FROM glasses_vision_drift_samples s
+      JOIN glasses_vision_model_assignments a ON a.id=s.assignment_id AND a.organization_id=s.organization_id
+      JOIN glasses_build_sessions b ON b.id=s.build_session_id AND b.organization_id=s.organization_id
+      LEFT JOIN glasses_vision_model_rollouts r ON r.id=s.rollout_id AND r.organization_id=s.organization_id
+      WHERE ".implode(' AND ',$driftWhere)." ORDER BY s.id");
     $dq->execute(array_merge([$org,$scope['packageId']],$driftArgs,[$from,$to]));$drift=$dq->fetchAll();
 
     [$errorWhere,$errorArgs]=glasses_vision_model_health_where($scope,'e','model_package_id','location_id','station_id','device_id');
@@ -85,14 +90,14 @@ function glasses_vision_model_health_collect(PDO $pdo,int $org,array $scope,stri
         elseif(in_array((string)$r['drift_state'],['warning','degraded','drifting'],true))$warning++;
         if($r['confidence_mean']!==null){$w=max(1,$obs);$weightedConfidence+=(float)$r['confidence_mean']*$w;$confidenceWeight+=$w;}
         if($r['latency_mean_ms']!==null){$w=max(1,$obs);$weightedLatency+=(float)$r['latency_mean_ms']*$w;$latencyWeight+=$w;}
-        $driftEvidence[]=[
-          'id'=>(int)$r['id'],'sampleKey'=>$r['sample_key'],'assignmentId'=>(int)$r['assignment_id'],
-          'rolloutId'=>$r['rollout_id']!==null?(int)$r['rollout_id']:null,'buildSessionId'=>(int)$r['build_session_id'],
-          'observationCount'=>$obs,'correctionCount'=>(int)$r['correction_count'],'lowConfidenceCount'=>(int)$r['low_confidence_count'],
-          'confidenceMean'=>$r['confidence_mean']!==null?(float)$r['confidence_mean']:null,'latencyMeanMs'=>$r['latency_mean_ms']!==null?(float)$r['latency_mean_ms']:null,
-          'driftState'=>$r['drift_state'],'driftScore'=>(float)$r['drift_score'],'reasons'=>json_decode((string)($r['reasons_json']??'null'),true),
-          'createdAt'=>$r['created_at'],
+        $e=[
+          'sampleKey'=>$r['sample_key'],'assignmentKey'=>$r['assignment_key'],'rolloutPublicId'=>$r['rollout_public_id'],
+          'buildSessionPublicId'=>$r['build_session_public_id'],'observationCount'=>$obs,'correctionCount'=>(int)$r['correction_count'],
+          'lowConfidenceCount'=>(int)$r['low_confidence_count'],'confidenceMean'=>$r['confidence_mean']!==null?(float)$r['confidence_mean']:null,
+          'latencyMeanMs'=>$r['latency_mean_ms']!==null?(float)$r['latency_mean_ms']:null,'driftState'=>$r['drift_state'],
+          'driftScore'=>(float)$r['drift_score'],'reasons'=>json_decode((string)($r['reasons_json']??'null'),true),'createdAt'=>$r['created_at'],
         ];
+        $driftEvidence[]=['sampleKey'=>$r['sample_key'],'evidenceHash'=>hash('sha256',glasses_vision_training_release_json($e)),'evidence'=>$e];
     }
 
     $errorEvidence=array_map(static fn($r)=>[
@@ -133,6 +138,8 @@ function glasses_vision_model_health_snapshot(PDO $pdo,int $org,array $input,int
     $from=glasses_vision_model_health_time((string)($input['windowStartedAt']??''),'Health window start');
     $to=glasses_vision_model_health_time((string)($input['windowEndedAt']??''),'Health window end');
     if($from>=$to)throw new InvalidArgumentException('Health window end must be after the start.');
+    $fromDt=new DateTimeImmutable($from,new DateTimeZone('UTC'));$toDt=new DateTimeImmutable($to,new DateTimeZone('UTC'));
+    if(($toDt->getTimestamp()-$fromDt->getTimestamp())>2678400)throw new InvalidArgumentException('Health windows may not exceed 31 days.');
 
     $collected=glasses_vision_model_health_collect($pdo,$org,$scope,$from,$to);$m=$collected['metrics'];
     $payload=[
@@ -154,21 +161,23 @@ function glasses_vision_model_health_snapshot(PDO $pdo,int $org,array $input,int
         return glasses_vision_model_health_row($pdo,$org,(string)$existing['public_id']);
     }
 
-    $public=glasses_public_id('vision-health');
-    $pdo->prepare("INSERT INTO glasses_vision_model_health_snapshots
-      (organization_id,public_id,package_id,location_id,station_id,device_id,window_started_at,window_ended_at,source_fingerprint,
-       sample_count,observation_count,production_error_count,correction_count,low_confidence_count,critical_drift_count,warning_drift_count,
-       mean_confidence,mean_latency_ms,error_rate,correction_rate,low_confidence_rate,health_state,metrics_json,snapshot_hash,created_by)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-      ->execute([$org,$public,$scope['packageId'],$scope['locationId'],$scope['stationId'],$scope['deviceId'],$from,$to,$collected['sourceFingerprint'],
-        $m['sampleCount'],$m['observationCount'],$m['productionErrorCount'],$m['correctionCount'],$m['lowConfidenceCount'],$m['criticalDriftCount'],$m['warningDriftCount'],
-        $m['meanConfidence'],$m['meanLatencyMs'],$m['errorRate'],$m['correctionRate'],$m['lowConfidenceRate'],$collected['healthState'],
-        glasses_vision_training_release_json(['source'=>$collected['source'],'metrics'=>$m]),$hash,$actor]);
-    glasses_vision_lineage_edge($pdo,$org,'model_package',$scope['packagePublicId'],$scope['packageSha256'],'health_snapshot','model_health_snapshot',$public,$hash,[
-      'sourceFingerprint'=>$collected['sourceFingerprint'],'healthState'=>$collected['healthState'],'windowStartedAt'=>$from,'windowEndedAt'=>$to,
-      'locationId'=>$scope['locationId'],'stationPublicId'=>$scope['stationPublicId'],'devicePublicId'=>$scope['devicePublicId']
-    ],$actor);
-    return glasses_vision_model_health_row($pdo,$org,$public);
+    return glasses_transaction($pdo,function()use($pdo,$org,$scope,$from,$to,$collected,$m,$hash,$actor):array{
+        $public=glasses_public_id('vision-health');
+        $pdo->prepare("INSERT INTO glasses_vision_model_health_snapshots
+          (organization_id,public_id,package_id,location_id,station_id,device_id,window_started_at,window_ended_at,source_fingerprint,
+           sample_count,observation_count,production_error_count,correction_count,low_confidence_count,critical_drift_count,warning_drift_count,
+           mean_confidence,mean_latency_ms,error_rate,correction_rate,low_confidence_rate,health_state,metrics_json,snapshot_hash,created_by)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+          ->execute([$org,$public,$scope['packageId'],$scope['locationId'],$scope['stationId'],$scope['deviceId'],$from,$to,$collected['sourceFingerprint'],
+            $m['sampleCount'],$m['observationCount'],$m['productionErrorCount'],$m['correctionCount'],$m['lowConfidenceCount'],$m['criticalDriftCount'],$m['warningDriftCount'],
+            $m['meanConfidence'],$m['meanLatencyMs'],$m['errorRate'],$m['correctionRate'],$m['lowConfidenceRate'],$collected['healthState'],
+            glasses_vision_training_release_json(['source'=>$collected['source'],'metrics'=>$m]),$hash,$actor]);
+        glasses_vision_lineage_edge($pdo,$org,'model_package',$scope['packagePublicId'],$scope['packageSha256'],'health_snapshot','model_health_snapshot',$public,$hash,[
+          'sourceFingerprint'=>$collected['sourceFingerprint'],'healthState'=>$collected['healthState'],'windowStartedAt'=>$from,'windowEndedAt'=>$to,
+          'locationId'=>$scope['locationId'],'stationPublicId'=>$scope['stationPublicId'],'devicePublicId'=>$scope['devicePublicId']
+        ],$actor);
+        return glasses_vision_model_health_row($pdo,$org,$public);
+    });
 }
 
 function glasses_vision_model_health_row(PDO $pdo,int $org,string $publicId): array
