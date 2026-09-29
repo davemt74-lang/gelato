@@ -83,6 +83,8 @@ function glasses_vision_scene_entities_normalize(array $input,array $build,?arra
         $componentKey=mb_substr(trim((string)($raw['componentKey']??'')),0,160,'UTF-8')?:null;
         if($componentKey!==null&&!isset($validComponents[$componentKey]))
             throw new InvalidArgumentException('Scene entity component must belong to the active canonical build.');
+        if($componentKey!==null&&$kind!=='ingredient')
+            throw new InvalidArgumentException('Only ingredient scene entities may bind to recipe components.');
         $tracking=mb_substr(trim((string)($raw['trackingId']??'')),0,190,'UTF-8')?:null;
         if($tracking!==null&&isset($trackingSeen[$tracking]))throw new InvalidArgumentException('Scene tracking IDs must be unique within a frame.');
         if($tracking!==null)$trackingSeen[$tracking]=true;
@@ -91,7 +93,7 @@ function glasses_vision_scene_entities_normalize(array $input,array $build,?arra
             throw new InvalidArgumentException('Scene entity confidence must be between 0 and 1.');
         $bbox=glasses_vision_scene_bbox($raw['bbox']??null);
         $source=mb_strtolower(trim((string)($raw['source']??'vision_model')),'UTF-8');
-        if(!in_array($source,['vision_model','device_runtime','sensor_fusion','operator'],true))
+        if(!in_array($source,['vision_model','device_runtime','sensor_fusion'],true))
             throw new InvalidArgumentException('Scene entity source is invalid.');
         $attributes=is_array($raw['attributes']??null)?$raw['attributes']:[];
         $attributesJson=glasses_vision_training_release_json($attributes);
