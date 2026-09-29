@@ -234,7 +234,7 @@ function glasses_vision_scene_capture(PDO $pdo,array $device,array $input): arra
         ],$build['components']),
         'declaredSteps'=>$build['context']['buildDefinition']['steps']??[],
         'recognizedStep'=>null,
-        'recognizedStepReason'=>'reserved_for_v9_section_2'
+        'recognizedStepReason'=>'step_recognition_not_run_for_scene_capture'
       ],
     ];
 
