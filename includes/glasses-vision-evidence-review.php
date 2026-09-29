@@ -129,7 +129,7 @@ function glasses_vision_evidence_review_run(PDO $pdo,int $org,string $experiment
     $pdo->prepare("INSERT INTO glasses_vision_model_evidence_reviews
       (organization_id,public_id,experiment_id,status,score,policy_json,evidence_json,result_json,review_hash,reviewed_by)
       VALUES (?,?,?,?,?,?,?,?,?,?)")
-      ->execute([$org,$public,(int)$x['id'],$passed?'passed':'failed',$score,json_encode($policy,JSON_UNESCAPED_SLASHES),json_encode($evidence,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),json_encode($result,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),$reviewHash,$actor]);
+      ->execute([$org,$public,(int)$x['id'],$passed?'passed':'failed',$score,glasses_vision_training_release_json($policy),glasses_vision_training_release_json($evidence),glasses_vision_training_release_json($result),$reviewHash,$actor]);
     glasses_vision_lineage_edge($pdo,$org,'model_experiment',(string)$x['public_id'],(string)$x['experiment_hash'],'evidence_reviewed_as','evidence_review',$public,$reviewHash,['passed'=>$passed,'score'=>$score],$actor);
     return glasses_vision_evidence_review_row($pdo,$org,$public);
 }
