@@ -36,6 +36,33 @@ function glasses_vision_retraining_run(PDO $pdo,int $org,string $publicId): arra
     return $row;
 }
 
+function glasses_vision_retraining_media_integrity(array $media): array
+{
+    $relative=str_replace('\\','/',trim((string)($media['storage_relative_path']??'')));
+    if($relative===''||str_starts_with($relative,'/')||preg_match('~(^|/)\.\.(/|$)~',$relative))
+        return ['ok'=>false,'reason'=>'invalid_media_storage_reference'];
+    $path=glasses_vision_training_media_storage_root().'/'.$relative;
+    if(!is_file($path))return ['ok'=>false,'reason'=>'training_media_file_missing'];
+    $sha=hash_file('sha256',$path);
+    if(!is_string($sha)||!hash_equals((string)$media['sha256'],$sha))return ['ok'=>false,'reason'=>'training_media_hash_mismatch'];
+    return ['ok'=>true,'reason'=>null];
+}
+
+function glasses_vision_retraining_ground_truth(array $sample,array $media,array $error): array
+{
+    $expected=trim((string)($error['expected_component_key']??''));
+    $canonical=trim((string)($sample['canonical_label']??''));
+    $annotations=json_decode((string)($media['annotation_json']??'[]'),true);
+    if(!is_array($annotations))$annotations=[];
+    $labels=[];foreach($annotations as $a)if(is_array($a)&&trim((string)($a['label']??''))!=='')$labels[]=trim((string)$a['label']);
+    if($expected===''){
+        if($canonical!==''||$labels)return ['ok'=>false,'reason'=>'counterexample_not_reviewed_as_negative'];
+        return ['ok'=>true,'reason'=>null];
+    }
+    if($canonical===$expected||in_array($expected,$labels,true))return ['ok'=>true,'reason'=>null];
+    return ['ok'=>false,'reason'=>'ground_truth_does_not_match_expected_component'];
+}
+
 function glasses_vision_retraining_source(PDO $pdo,int $org,array $candidate): array
 {
     $errorQ=$pdo->prepare("SELECT * FROM glasses_vision_production_errors WHERE organization_id=? AND id=? LIMIT 1");
@@ -74,6 +101,14 @@ function glasses_vision_retraining_source(PDO $pdo,int $org,array $candidate): a
     elseif((string)$media['status']!=='active'){$eligibility='ineligible';$reason='training_media_not_active';}
     elseif((string)$media['consent_basis']!=='training_media_opt_in'){$eligibility='ineligible';$reason='training_media_not_opted_in';}
     elseif((string)$media['quality_state']==='poor'){$eligibility='ineligible';$reason='poor_training_media';}
+    else{
+        $integrity=glasses_vision_retraining_media_integrity($media);
+        if(!$integrity['ok']){$eligibility='ineligible';$reason=$integrity['reason'];}
+        else{
+            $truth=glasses_vision_retraining_ground_truth($sample,$media,$error);
+            if(!$truth['ok']){$eligibility='ineligible';$reason=$truth['reason'];}
+        }
+    }
 
     return ['error'=>$error,'sample'=>$sample,'media'=>$media,'eligibility'=>$eligibility,'reason'=>$reason];
 }
@@ -215,6 +250,9 @@ function glasses_vision_retraining_review(PDO $pdo,int $org,string $batchPublic,
             if((string)$item['review_status']!=='approved')throw new InvalidArgumentException('Included retraining sample is no longer approved.');
             if((string)$item['media_status']!=='active'||(string)$item['consent_basis']!=='training_media_opt_in'||(string)$item['quality_state']==='poor')
                 throw new InvalidArgumentException('Included retraining media is no longer eligible.');
+            $mq=$pdo->prepare("SELECT * FROM glasses_vision_training_media WHERE organization_id=? AND id=? LIMIT 1");
+            $mq->execute([$org,(int)$item['training_media_id']]);$media=$mq->fetch();
+            if(!$media||!glasses_vision_retraining_media_integrity($media)['ok'])throw new InvalidArgumentException('Included retraining media no longer matches its governed file hash.');
         }
         $pdo->prepare("UPDATE glasses_vision_retraining_batch_items SET decision=?,decision_reason=?,reviewed_by=?,reviewed_at=NOW(6) WHERE organization_id=? AND id=?")
           ->execute([$decision,$reason!==''?$reason:null,$actor,$org,(int)$item['id']]);
@@ -246,6 +284,9 @@ function glasses_vision_retraining_build_dataset(PDO $pdo,int $org,string $batch
             if((string)$i['eligibility_status']!=='eligible'||(string)$i['review_status']!=='approved'||(string)$i['media_status']!=='active'||
                (string)$i['consent_basis']!=='training_media_opt_in'||(string)$i['quality_state']==='poor')
                 throw new InvalidArgumentException('An included retraining candidate is no longer eligible.');
+            $mq=$pdo->prepare("SELECT * FROM glasses_vision_training_media WHERE organization_id=? AND id=? LIMIT 1");
+            $mq->execute([$org,(int)$i['training_media_id']]);$media=$mq->fetch();
+            if(!$media||!glasses_vision_retraining_media_integrity($media)['ok'])throw new InvalidArgumentException('Included retraining media no longer matches its governed file hash.');
             $included[]=$i;
         }
         if($pending>0)throw new InvalidArgumentException('Every eligible retraining candidate must be explicitly reviewed before building a dataset.');
@@ -255,7 +296,9 @@ function glasses_vision_retraining_build_dataset(PDO $pdo,int $org,string $batch
         $dq=$pdo->prepare("SELECT id FROM glasses_vision_dataset_versions WHERE organization_id=? AND public_id=? LIMIT 1");$dq->execute([$org,$dataset['publicId']]);$datasetId=(int)$dq->fetchColumn();
         $pdo->prepare("UPDATE glasses_vision_retraining_batches SET status='built',dataset_id=?,built_by=?,built_at=NOW(6) WHERE organization_id=? AND id=?")
           ->execute([$datasetId,$actor,$org,(int)$batch['id']]);
-        glasses_vision_lineage_edge($pdo,$org,'mining_run',(string)glasses_vision_retraining_run($pdo,$org,(string)glasses_vision_retraining_batch($pdo,$org,$batchPublic)['miningRunPublicId'])['public_id'],(string)glasses_vision_retraining_batch($pdo,$org,$batchPublic)['miningRunHash'],'built_candidate_dataset','dataset',(string)$dataset['publicId'],null,['retrainingBatchPublicId'=>$batchPublic,'includedSamples'=>count($included)],$actor);
+        $rq=$pdo->prepare("SELECT public_id,run_hash FROM glasses_vision_mining_runs WHERE organization_id=? AND id=? LIMIT 1");
+        $rq->execute([$org,(int)$batch['mining_run_id']]);$run=$rq->fetch();
+        glasses_vision_lineage_edge($pdo,$org,'mining_run',(string)$run['public_id'],(string)$run['run_hash'],'built_candidate_dataset','dataset',(string)$dataset['publicId'],null,['retrainingBatchPublicId'=>$batchPublic,'includedSamples'=>count($included)],$actor);
         return ['batch'=>glasses_vision_retraining_batch($pdo,$org,$batchPublic),'dataset'=>$dataset];
     });
 }
