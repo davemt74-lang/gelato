@@ -20,6 +20,7 @@ require_once __DIR__.'/../includes/glasses-vision-quality-verification.php';
 require_once __DIR__.'/../includes/glasses-vision-final-validation.php';
 require_once __DIR__.'/../includes/glasses-vision-handoff-confirmation.php';
 require_once __DIR__.'/../includes/glasses-vision-rework.php';
+require_once __DIR__.'/../includes/glasses-production-pilot.php';
 
 $pdo=app_pdo();
 if(!glasses_ready($pdo))app_json_response(['ok'=>false,'message'=>'Glasses plugin migration is not installed.'],503);
@@ -92,8 +93,14 @@ try{
         ]);
     }
 
+    if($action==='pilot.production_status'){
+        $runtime=is_array($in['runtime']??null)?$in['runtime']:[];
+        app_json_response(['ok'=>true,'production'=>glasses_production_pilot_device_status($pdo,$device,$runtime)]);
+    }
+
     if($action==='vision.model_assignment'){
         $sessionPublicId=trim((string)($in['buildSessionPublicId']??''));
+        if(!empty($in['productionMode']))glasses_production_pilot_assert_device_ready($pdo,$device,is_array($in['runtime']??null)?$in['runtime']:[]);
         if($sessionPublicId==='')throw new InvalidArgumentException('Build session is required.');
         $assignment=glasses_vision_model_assignment(
             $pdo,$device,$sessionPublicId,(string)($in['detectorName']??'')
