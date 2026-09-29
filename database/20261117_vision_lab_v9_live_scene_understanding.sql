@@ -31,7 +31,7 @@ CREATE TABLE glasses_vision_scene_snapshots (
   CONSTRAINT fk_glasses_vision_scene_device FOREIGN KEY (device_id) REFERENCES glasses_devices(id) ON DELETE RESTRICT,
   CONSTRAINT fk_glasses_vision_scene_build FOREIGN KEY (build_session_id) REFERENCES glasses_build_sessions(id) ON DELETE RESTRICT,
   CONSTRAINT fk_glasses_vision_scene_package FOREIGN KEY (package_id) REFERENCES glasses_vision_model_packages(id) ON DELETE RESTRICT,
-  CONSTRAINT fk_glasses_vision_scene_calibration FOREIGN KEY (calibration_id) REFERENCES glasses_station_calibrations(id) ON DELETE SET NULL
+  CONSTRAINT fk_glasses_vision_scene_calibration FOREIGN KEY (calibration_id) REFERENCES glasses_station_calibrations(id) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE glasses_vision_scene_entities (
