@@ -13,6 +13,6 @@ Selection is deterministic and bounded. It deduplicates by sample, exact image S
 
 Selected samples are inserted through the existing glasses_vision_lab_add_dataset_sample() function. Dataset items retain the exact governed media and mined-candidate lineage, eligibility snapshot and training-value score.
 
-Assembly automatically creates and applies the existing V6 group-aware split plan with capture-group, build-session, operator, location and station barriers enabled. This protects train/validation/test from obvious lineage leakage.
+Assembly automatically creates and applies the existing V6 group-aware split plan with capture-group, build-session, operator and device barriers enabled. Location and station remain balancing dimensions by default, and can be promoted to grouping barriers when a multi-site dataset requires it. This protects train/validation/test from obvious lineage leakage without making a single-site dataset unsplittable.
 
 The dataset remains a normal V6 draft until the existing governed freeze path is invoked. V11 adds a freeze guard requiring eligible assembly provenance and all three splits. Once frozen, the existing immutable V6 manifest/hash/release behavior applies.
