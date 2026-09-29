@@ -4,16 +4,21 @@ on:
   pull_request:
     paths:
       - 'database/20261103_vision_lab_v7_production_error_ledger.sql'
+      - 'database/20261104_vision_lab_v7_failure_analysis.sql'
       - 'includes/glasses-vision-feedback.php'
+      - 'includes/glasses-vision-failure-analysis.php'
       - 'api/glasses-vision-lab.php'
       - 'glasses-vision-lab.php'
       - 'assets/js/glasses-vision-feedback.js'
+      - 'assets/js/glasses-vision-failure-analysis.js'
       - 'assets/css/glasses-vision-lab.css'
       - 'tests/glasses-vision-lab-v7-production-error-ledger-contract.php'
+      - 'tests/glasses-vision-lab-v7-failure-analysis-contract.php'
       - 'docs/GLASSES-VISION-LAB-V7-PRODUCTION-FEEDBACK.md'
+      - 'docs/GLASSES-VISION-LAB-V7-FAILURE-ANALYSIS.md'
       - '.github/workflows/glasses-vision-lab-v7.yml'
   push:
-    branches: [main, 'feature/vision-lab-v7-production-error-ledger']
+    branches: [main]
 
 jobs:
   vision-lab-v7:
@@ -41,10 +46,13 @@ jobs:
       - name: Syntax
         run: |
           php -l includes/glasses-vision-feedback.php
+          php -l includes/glasses-vision-failure-analysis.php
           php -l api/glasses-vision-lab.php
           php -l glasses-vision-lab.php
           php -l tests/glasses-vision-lab-v7-production-error-ledger-contract.php
+          php -l tests/glasses-vision-lab-v7-failure-analysis-contract.php
           node --check assets/js/glasses-vision-feedback.js
+          node --check assets/js/glasses-vision-failure-analysis.js
 
       - name: Architecture guardrails
         run: |
@@ -55,6 +63,11 @@ jobs:
           grep -q 'produced_error' includes/glasses-vision-feedback.php
           ! grep -q 'kds_transition' includes/glasses-vision-feedback.php
           ! grep -q 'UPDATE glasses_build_observations' includes/glasses-vision-feedback.php
+          grep -q 'CREATE TABLE glasses_vision_failure_analyses' database/20261104_vision_lab_v7_failure_analysis.sql
+          grep -q 'function glasses_vision_failure_analysis_run' includes/glasses-vision-failure-analysis.php
+          grep -q 'sourceFingerprint' includes/glasses-vision-failure-analysis.php
+          grep -q "'rateClaimed'=>false" includes/glasses-vision-failure-analysis.php
+          ! grep -q 'kds_transition' includes/glasses-vision-failure-analysis.php
 
       - name: Install and upgrade schema
         run: |
@@ -82,6 +95,9 @@ jobs:
 
       - name: V7 production error ledger contract
         run: php tests/glasses-vision-lab-v7-production-error-ledger-contract.php
+
+      - name: V7 lineage-aware failure analysis contract
+        run: php tests/glasses-vision-lab-v7-failure-analysis-contract.php
 
       - name: V6 lineage and correction regressions
         run: |
