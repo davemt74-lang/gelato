@@ -203,8 +203,10 @@ function glasses_vision_confidence_decide(PDO $pdo,int $org,array $input,int $ac
         $analysis=glasses_vision_context_drift_row($pdo,$org,(string)$input['contextDriftAnalysisPublicId']);
         if(!glasses_vision_context_drift_verify($pdo,$org,$analysis['publicId'])['passed'])throw new InvalidArgumentException('Confidence decision requires an intact context-drift analysis.');
         $snap=glasses_vision_context_drift_snapshot_db($pdo,$org,(string)$analysis['healthSnapshotPublicId']);
-        if($snap['_deviceId']===null||(int)$snap['_deviceId']!==(int)$device['id']||(int)$snap['_buildSessionId']!==(int)$session['id'])
-            throw new InvalidArgumentException('Context-drift analysis does not belong to this device/build session.');
+        if($snap['_deviceId']===null||(int)$snap['_deviceId']!==(int)$device['id'])
+            throw new InvalidArgumentException('Context-drift analysis does not belong to this device.');
+        if((int)($snap['locationId']??0)!==(int)$device['location_id']||(int)($snap['_stationId']??0)!==(int)$device['station_id'])
+            throw new InvalidArgumentException('Context-drift analysis does not belong to this device station.');
         if($assignment&&$assignment['package_public_id']!==null&&!hash_equals((string)$snap['packagePublicId'],(string)$assignment['package_public_id']))
             throw new InvalidArgumentException('Context-drift analysis model does not match assigned model.');
         $state=(string)$analysis['classification'];
