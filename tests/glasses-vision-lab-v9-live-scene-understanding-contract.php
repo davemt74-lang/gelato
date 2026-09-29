@@ -106,6 +106,12 @@ v91_assert(($byKey['product-pizza']['spatial']['regions'][0]['regionKey']??'')==
 v91_assert(($byKey['ingredient-pep']['source']??'')==='vision_model'&&($byKey['hand-left']['source']??'')==='device_runtime','Scene entities must preserve explicit observation provenance.');
 v91_assert(preg_match('/^[a-f0-9]{64}$/',(string)($scene['context']['buildContextHash']??''))===1,'Scene must bind a canonical build-context hash.');
 v91_assert(glasses_vision_scene_verify($pdo,$org,$scene['publicId'])['passed']===true,'Fresh scene must verify end to end.');
+$assignmentId=(int)v91_one($pdo,"SELECT id FROM glasses_vision_model_assignments WHERE organization_id=? AND assignment_key=?",[$org,$scene['assignmentKey']]);
+v91_assert($assignmentId>0,'Scene capture must persist/resolve an exact model assignment ledger row.');
+$pdo->prepare("UPDATE glasses_vision_model_assignments SET package_id=? WHERE organization_id=? AND id=?")->execute([$baselineId,$org,$assignmentId]);
+v91_assert(glasses_vision_scene_verify($pdo,$org,$scene['publicId'])['passed']===false,'Scene verification must detect assignment-ledger tampering.');
+$pdo->prepare("UPDATE glasses_vision_model_assignments SET package_id=? WHERE organization_id=? AND id=?")->execute([$modelId,$org,$assignmentId]);
+v91_assert(glasses_vision_scene_verify($pdo,$org,$scene['publicId'])['passed']===true,'Restored model assignment must restore scene verification.');
 
 $same=glasses_vision_scene_capture($pdo,$device,$input);
 v91_assert($same['publicId']===$scene['publicId'],'Identical frame evidence must be idempotent.');
