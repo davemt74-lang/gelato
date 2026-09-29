@@ -22,6 +22,7 @@ require_once __DIR__.'/../includes/glasses-vision-handoff-confirmation.php';
 require_once __DIR__.'/../includes/glasses-vision-rework.php';
 require_once __DIR__.'/../includes/glasses-production-pilot.php';
 require_once __DIR__.'/../includes/glasses-training-identity.php';
+require_once __DIR__.'/../includes/glasses-production-evidence.php';
 
 $pdo=app_pdo();
 if(!glasses_ready($pdo))app_json_response(['ok'=>false,'message'=>'Glasses plugin migration is not installed.'],503);
@@ -92,6 +93,11 @@ try{
             'assignmentRequired'=>$device['station_id']===null,
             'calibration'=>$calibration,
         ]);
+    }
+
+    if($action==='training.evidence_capture'){
+        $evidence=glasses_v11_production_evidence_capture($pdo,$device,$in,(int)$device['paired_by']);
+        app_json_response(['ok'=>true,'evidence'=>$evidence],201);
     }
 
     if($action==='training.session_start'){

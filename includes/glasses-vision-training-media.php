@@ -183,7 +183,7 @@ function glasses_vision_training_media_store(PDO $pdo,int $org,array $input,int 
             if(count($annotationCheck['annotations'])===1)$canonical=(string)$annotationCheck['annotations'][0]['label'];
             $pdo->prepare("INSERT INTO glasses_vision_training_samples
               (organization_id,public_id,mission_id,observation_id,source_type,source_reference,wearer_assignment_id,operator_user_id,review_status,canonical_label,annotation_json,provenance_json,created_by,created_at)
-              VALUES (?,?,?,NULL,'governed_training_media',?,NULL,?,'pending',?,?,?,?,?,?)")
+              VALUES (?,?,?,NULL,'governed_training_media',?,NULL,?,'pending',?,?,?,?,?)")
               ->execute([
                   $org,$samplePublic,$mission?(int)$mission['id']:null,$public,$operator,$canonical,
                   json_encode($annotationCheck['annotations'],JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),
