@@ -185,9 +185,10 @@ function glasses_vision_training_qualification_run(PDO $pdo,int $org,string $rel
         if($artifact&&is_file($artifact['path']))@unlink($artifact['path']);
         throw $e;
     }
-    if($artifact&&$sourcePath=(string)($release['artifact_relative_path']??'')){
+    if($artifact){
+        $sourcePath=(string)($release['artifact_relative_path']??'');
         $old=glasses_vision_training_release_storage_root().'/'.ltrim($sourcePath,'/\\');
-        if($old!==$artifact['path']&&is_file($old))@unlink($old);
+        if($sourcePath!==''&&$old!==$artifact['path']&&is_file($old))@unlink($old);
     }
     $result['publicId']=$public;
     $result['release']=glasses_vision_training_release_public(glasses_vision_training_release_row($pdo,$org,$releasePublic));
