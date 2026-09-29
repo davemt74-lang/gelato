@@ -1,0 +1,55 @@
+-- Gelato Vision Lab V7 Section 3 — Hard Example & Counterexample Mining
+SET NAMES utf8mb4;
+
+CREATE TABLE glasses_vision_mining_runs (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  organization_id BIGINT UNSIGNED NOT NULL,
+  public_id VARCHAR(80) NOT NULL,
+  source_fingerprint CHAR(64) NOT NULL,
+  policy_json JSON NOT NULL,
+  result_json JSON NOT NULL,
+  run_hash CHAR(64) NOT NULL,
+  created_by BIGINT UNSIGNED NULL,
+  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_glasses_vision_mining_run_public (organization_id,public_id),
+  UNIQUE KEY uq_glasses_vision_mining_run_hash (organization_id,run_hash),
+  KEY idx_glasses_vision_mining_run_created (organization_id,created_at),
+  CONSTRAINT fk_glasses_vision_mining_run_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  CONSTRAINT fk_glasses_vision_mining_run_actor FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE glasses_vision_mined_candidates (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  organization_id BIGINT UNSIGNED NOT NULL,
+  public_id VARCHAR(80) NOT NULL,
+  mining_run_id BIGINT UNSIGNED NOT NULL,
+  production_error_id BIGINT UNSIGNED NOT NULL,
+  candidate_key CHAR(64) NOT NULL,
+  candidate_hash CHAR(64) NOT NULL,
+  candidate_type VARCHAR(40) NOT NULL,
+  score SMALLINT UNSIGNED NOT NULL,
+  status VARCHAR(24) NOT NULL DEFAULT 'open',
+  cluster_key CHAR(64) NOT NULL,
+  model_package_id BIGINT UNSIGNED NULL,
+  predicted_component_key VARCHAR(160) NULL,
+  expected_component_key VARCHAR(160) NULL,
+  reasons_json JSON NOT NULL,
+  lineage_json JSON NULL,
+  dismissed_by BIGINT UNSIGNED NULL,
+  dismissed_reason VARCHAR(1000) NULL,
+  dismissed_at DATETIME(6) NULL,
+  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_glasses_vision_mined_public (organization_id,public_id),
+  UNIQUE KEY uq_glasses_vision_mined_candidate (organization_id,candidate_key),
+  KEY idx_glasses_vision_mined_status (organization_id,status,score,created_at),
+  KEY idx_glasses_vision_mined_error (organization_id,production_error_id),
+  KEY idx_glasses_vision_mined_model (organization_id,model_package_id,status,score),
+  KEY idx_glasses_vision_mined_cluster (organization_id,cluster_key,status,score),
+  CONSTRAINT fk_glasses_vision_mined_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  CONSTRAINT fk_glasses_vision_mined_run FOREIGN KEY (mining_run_id) REFERENCES glasses_vision_mining_runs(id) ON DELETE CASCADE,
+  CONSTRAINT fk_glasses_vision_mined_error FOREIGN KEY (production_error_id) REFERENCES glasses_vision_production_errors(id) ON DELETE CASCADE,
+  CONSTRAINT fk_glasses_vision_mined_model FOREIGN KEY (model_package_id) REFERENCES glasses_vision_model_packages(id) ON DELETE SET NULL,
+  CONSTRAINT fk_glasses_vision_mined_dismissed_by FOREIGN KEY (dismissed_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
