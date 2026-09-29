@@ -147,8 +147,10 @@ function glasses_vision_scene_capture(PDO $pdo,array $device,array $input): arra
     if($pixel==='')throw new InvalidArgumentException('Scene pixel format is required.');
     $capturedAt=glasses_vision_scene_time((string)($input['capturedAt']??''));
     $capturedDt=new DateTimeImmutable($capturedAt,new DateTimeZone('UTC'));$now=new DateTimeImmutable('now',new DateTimeZone('UTC'));
+    $startedDt=new DateTimeImmutable((string)$session['started_at'],new DateTimeZone('UTC'));
     if($capturedDt>$now->modify('+5 seconds'))throw new InvalidArgumentException('Scene capture time cannot be in the future.');
     if($capturedDt<$now->modify('-2 minutes'))throw new InvalidArgumentException('Live scene frame is stale.');
+    if($capturedDt<$startedDt->modify('-5 seconds'))throw new InvalidArgumentException('Scene capture predates the active build session.');
 
     $detector=trim((string)($input['detectorName']??'ingredient_detector'));
     $assignment=glasses_vision_model_assignment($pdo,$device,$sessionPublic,$detector);
