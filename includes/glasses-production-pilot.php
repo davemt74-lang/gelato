@@ -225,6 +225,22 @@ function glasses_production_pilot_kill_switch(PDO $pdo,int $org,string $pilotPub
     });
 }
 
+function glasses_production_pilot_rollback_rollout(PDO $pdo,int $org,string $pilotPublic,string $reason,int $actor): array
+{
+    $reason=mb_substr(trim($reason),0,1000,'UTF-8');if($reason==='')throw new InvalidArgumentException('Pilot rollout rollback requires a documented reason.');
+    return glasses_transaction($pdo,function()use($pdo,$org,$pilotPublic,$reason,$actor):array{
+        $pilot=glasses_production_pilot_row($pdo,$org,$pilotPublic,true);
+        if($pilot['rollout_public_id']===null)throw new InvalidArgumentException('Pilot is not bound to a model rollout.');
+        $pdo->prepare("UPDATE glasses_production_pilots SET kill_switch=1,updated_at=NOW(6) WHERE organization_id=? AND id=?")->execute([$org,(int)$pilot['id']]);
+        $pdo->prepare("UPDATE glasses_production_pilot_devices SET status=IF(status='enabled','disabled',status),disabled_by=IF(status='enabled',?,disabled_by),disabled_at=IF(status='enabled',NOW(6),disabled_at),updated_at=NOW(6) WHERE organization_id=? AND pilot_id=?")
+          ->execute([$actor,$org,(int)$pilot['id']]);
+        glasses_production_pilot_event($pdo,$org,(int)$pilot['id'],null,'kill_switch_on',null,null,'Rollback: '.$reason,$actor);
+        $rollout=glasses_vision_model_rollout_rollback($pdo,$org,(string)$pilot['rollout_public_id'],$actor,'Production pilot '.$pilotPublic.': '.$reason);
+        glasses_production_pilot_event($pdo,$org,(int)$pilot['id'],null,'rollout_rolled_back',(string)$pilot['rollout_status'],'rolled_back',$reason,$actor,['rolloutPublicId'=>$pilot['rollout_public_id']]);
+        return ['pilot'=>glasses_production_pilot_public(glasses_production_pilot_row($pdo,$org,$pilotPublic,false)),'rollout'=>$rollout];
+    });
+}
+
 function glasses_production_pilot_device_status(PDO $pdo,array $device,array $runtime=[]): array
 {
     $org=(int)$device['organization_id'];
