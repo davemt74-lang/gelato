@@ -123,6 +123,11 @@ function glasses_vision_calibration_profile_create(PDO $pdo,int $org,array $inpu
     });
 }
 
+function glasses_vision_calibration_profile_scalar(PDO $pdo,string $sql,array $args=[]): mixed
+{
+    $q=$pdo->prepare($sql);$q->execute($args);return $q->fetchColumn();
+}
+
 function glasses_vision_calibration_profile_set_status(PDO $pdo,int $org,string $publicId,string $status,int $actor): array
 {
     $status=strtolower(trim($status));
