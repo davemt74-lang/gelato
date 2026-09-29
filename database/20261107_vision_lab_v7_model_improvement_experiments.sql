@@ -1,0 +1,55 @@
+-- Gelato Vision Lab V7 Section 5 — Model Improvement Experiment Runtime
+SET NAMES utf8mb4;
+
+CREATE TABLE glasses_vision_model_experiments (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  organization_id BIGINT UNSIGNED NOT NULL,
+  public_id VARCHAR(80) NOT NULL,
+  hypothesis VARCHAR(2000) NOT NULL,
+  champion_package_id BIGINT UNSIGNED NOT NULL,
+  candidate_dataset_id BIGINT UNSIGNED NOT NULL,
+  training_release_id BIGINT UNSIGNED NOT NULL,
+  qualification_id BIGINT UNSIGNED NOT NULL,
+  status VARCHAR(24) NOT NULL DEFAULT 'ready',
+  training_config_json JSON NOT NULL,
+  experiment_hash CHAR(64) NOT NULL,
+  training_run_id BIGINT UNSIGNED NULL,
+  challenger_package_id BIGINT UNSIGNED NULL,
+  created_by BIGINT UNSIGNED NULL,
+  started_by BIGINT UNSIGNED NULL,
+  completed_by BIGINT UNSIGNED NULL,
+  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  started_at DATETIME(6) NULL,
+  completed_at DATETIME(6) NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_glasses_vision_experiment_public (organization_id,public_id),
+  UNIQUE KEY uq_glasses_vision_experiment_hash (organization_id,experiment_hash),
+  KEY idx_glasses_vision_experiment_status (organization_id,status,created_at),
+  KEY idx_glasses_vision_experiment_champion (organization_id,champion_package_id,status),
+  KEY idx_glasses_vision_experiment_dataset (organization_id,candidate_dataset_id,status),
+  CONSTRAINT fk_glasses_vision_experiment_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  CONSTRAINT fk_glasses_vision_experiment_champion FOREIGN KEY (champion_package_id) REFERENCES glasses_vision_model_packages(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_vision_experiment_dataset FOREIGN KEY (candidate_dataset_id) REFERENCES glasses_vision_dataset_versions(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_vision_experiment_release FOREIGN KEY (training_release_id) REFERENCES glasses_vision_training_releases(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_vision_experiment_qualification FOREIGN KEY (qualification_id) REFERENCES glasses_vision_training_qualifications(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_vision_experiment_run FOREIGN KEY (training_run_id) REFERENCES glasses_vision_training_runs(id) ON DELETE SET NULL,
+  CONSTRAINT fk_glasses_vision_experiment_challenger FOREIGN KEY (challenger_package_id) REFERENCES glasses_vision_model_packages(id) ON DELETE SET NULL,
+  CONSTRAINT fk_glasses_vision_experiment_creator FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_glasses_vision_experiment_starter FOREIGN KEY (started_by) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_glasses_vision_experiment_completer FOREIGN KEY (completed_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE glasses_vision_model_experiment_events (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  organization_id BIGINT UNSIGNED NOT NULL,
+  experiment_id BIGINT UNSIGNED NOT NULL,
+  event_type VARCHAR(48) NOT NULL,
+  evidence_json JSON NOT NULL,
+  actor_user_id BIGINT UNSIGNED NULL,
+  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (id),
+  KEY idx_glasses_vision_experiment_events (organization_id,experiment_id,id),
+  CONSTRAINT fk_glasses_vision_experiment_event_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  CONSTRAINT fk_glasses_vision_experiment_event_experiment FOREIGN KEY (experiment_id) REFERENCES glasses_vision_model_experiments(id) ON DELETE CASCADE,
+  CONSTRAINT fk_glasses_vision_experiment_event_actor FOREIGN KEY (actor_user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
