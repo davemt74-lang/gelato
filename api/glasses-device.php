@@ -13,6 +13,7 @@ require_once __DIR__.'/../includes/glasses-vision-models.php';
 require_once __DIR__.'/../includes/glasses-vision-confidence-policy.php';
 require_once __DIR__.'/../includes/glasses-vision-active-perception.php';
 require_once __DIR__.'/../includes/glasses-vision-scene.php';
+require_once __DIR__.'/../includes/glasses-vision-step-recognition.php';
 
 $pdo=app_pdo();
 if(!glasses_ready($pdo))app_json_response(['ok'=>false,'message'=>'Glasses plugin migration is not installed.'],503);
@@ -140,6 +141,22 @@ try{
         $scene=glasses_vision_scene_row($pdo,(int)$device['organization_id'],$scenePublicId);
         if(!hash_equals((string)$scene['devicePublicId'],(string)$device['public_id']))throw new InvalidArgumentException('Scene does not belong to this device.');
         app_json_response(['ok'=>true,'verification'=>glasses_vision_scene_verify($pdo,(int)$device['organization_id'],$scenePublicId)]);
+    }
+
+    if($action==='vision.step.recognize'){
+        $scenePublicId=trim((string)($in['scenePublicId']??''));
+        $scene=glasses_vision_scene_row($pdo,(int)$device['organization_id'],$scenePublicId);
+        if(!hash_equals((string)$scene['devicePublicId'],(string)$device['public_id']))throw new InvalidArgumentException('Scene does not belong to this device.');
+        $recognition=glasses_vision_step_recognize($pdo,(int)$device['organization_id'],$scenePublicId);
+        app_json_response(['ok'=>true,'stepRecognition'=>$recognition],201);
+    }
+
+    if($action==='vision.step.verify'){
+        $publicId=trim((string)($in['publicId']??''));
+        $recognition=glasses_vision_step_row($pdo,(int)$device['organization_id'],$publicId);
+        $scene=glasses_vision_scene_row($pdo,(int)$device['organization_id'],(string)$recognition['scenePublicId']);
+        if(!hash_equals((string)$scene['devicePublicId'],(string)$device['public_id']))throw new InvalidArgumentException('Step recognition does not belong to this device.');
+        app_json_response(['ok'=>true,'verification'=>glasses_vision_step_verify($pdo,(int)$device['organization_id'],$publicId)]);
     }
 
     if($action==='vision.profile'){
