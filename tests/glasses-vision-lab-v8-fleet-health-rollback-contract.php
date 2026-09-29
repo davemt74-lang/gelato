@@ -75,6 +75,14 @@ $s1=v86_snapshot($pdo,$org,$actor,$target,$locations[1],$stations[1],$devices[1]
 $s2=v86_snapshot($pdo,$org,$actor,$target,$locations[2],$stations[2],$devices[2],$from,$to,'critical');
 v86_assert(glasses_vision_model_health_verify($pdo,$org,$s1['publicId'])['passed']&&glasses_vision_model_health_verify($pdo,$org,$s2['publicId'])['passed'],'Fixture health snapshots must verify.');
 
+$scopedRolloutPublic='vision-fleet-rollout-scoped-'.$slug;
+$pdo->prepare("INSERT INTO glasses_vision_model_rollouts
+ (organization_id,public_id,detector_name,target_package_id,baseline_package_id,location_id,canary_percent,status,created_by,activated_by,activated_at)
+ VALUES (?,?,'ingredient_detector',?,?,?,25.00,'active',?,?,UTC_TIMESTAMP(6))")
+ ->execute([$org,$scopedRolloutPublic,$targetId,$baselineId,$locations[1],$actor,$actor]);
+$scoped=glasses_vision_fleet_health_analyze($pdo,$org,['rolloutPublicId'=>$scopedRolloutPublic,'windowStartedAt'=>$from,'windowEndedAt'=>$to],$actor);
+v86_assert(($scoped['evidence']['counts']['devices']??0)===1&&$scoped['fleetState']==='insufficient','Fleet analysis must stay inside the rollout location scope and must not borrow health from other locations.');
+
 $analysis=glasses_vision_fleet_health_analyze($pdo,$org,['rolloutPublicId'=>$rolloutPublic,'windowStartedAt'=>$from,'windowEndedAt'=>$to],$actor);
 v86_assert($analysis['fleetState']==='critical'&&$analysis['recommendation']==='rollback_review','Critical cross-location/device health must recommend governed rollback review.');
 v86_assert(($analysis['evidence']['counts']['devices']??0)===2&&($analysis['evidence']['counts']['locations']??0)===2,'Fleet analysis must prove cross-device and cross-location impact.');
@@ -110,7 +118,7 @@ v86_assert(!glasses_vision_fleet_health_action_verify($pdo,$org,$action['publicI
 $pdo->prepare("UPDATE glasses_vision_fleet_health_actions SET actor_user_id=? WHERE organization_id=? AND public_id=?")->execute([$actor,$org,$action['publicId']]);
 v86_assert(glasses_vision_fleet_health_action_verify($pdo,$org,$action['publicId'])['passed'],'Restored rollback audit must verify.');
 
-v86_assert((int)v86_one($pdo,"SELECT COUNT(*) FROM glasses_vision_lineage_edges WHERE organization_id=? AND from_kind='model_package' AND relation='fleet_health_analyzed_as' AND to_kind='fleet_health_analysis'",[$org])===2,'Every immutable fleet analysis must attach to model lineage.');
+v86_assert((int)v86_one($pdo,"SELECT COUNT(*) FROM glasses_vision_lineage_edges WHERE organization_id=? AND from_kind='model_package' AND relation='fleet_health_analyzed_as' AND to_kind='fleet_health_analysis'",[$org])===3,'Every immutable fleet analysis must attach to model lineage.');
 v86_assert((int)v86_one($pdo,"SELECT COUNT(*) FROM glasses_vision_lineage_edges WHERE organization_id=? AND from_kind='fleet_health_analysis' AND relation='governed_rollback_as' AND to_kind='fleet_health_action'",[$org])===1,'Explicit rollback must retain fleet-analysis lineage.');
 
 $api=file_get_contents(__DIR__.'/../api/glasses-vision-lab.php');$page=file_get_contents(__DIR__.'/../glasses-vision-lab.php');$source=file_get_contents(__DIR__.'/../includes/glasses-vision-fleet-health.php');
