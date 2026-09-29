@@ -80,7 +80,10 @@ jobs:
           ! grep -q 'kds_transition' includes/glasses-vision-context-drift.php
           grep -q 'CREATE TABLE glasses_vision_calibration_profiles' database/20261112_vision_lab_v8_calibration_profiles.sql
           grep -q 'CREATE TABLE glasses_vision_calibration_selections' database/20261112_vision_lab_v8_calibration_profiles.sql
+          grep -q 'CREATE TABLE glasses_vision_calibration_profile_events' database/20261112_vision_lab_v8_calibration_profiles.sql
           grep -q 'function glasses_vision_calibration_profile_select' includes/glasses-vision-calibration-profiles.php
+          grep -q 'function glasses_vision_calibration_profile_event' includes/glasses-vision-calibration-profiles.php
+          grep -q 'function glasses_vision_calibration_profile_analysis_scope' includes/glasses-vision-calibration-profiles.php
           grep -q "'automaticThresholdChange'=>false" includes/glasses-vision-calibration-profiles.php
           ! grep -q 'rollout.activate' includes/glasses-vision-calibration-profiles.php
           ! grep -q 'kds_transition' includes/glasses-vision-calibration-profiles.php
