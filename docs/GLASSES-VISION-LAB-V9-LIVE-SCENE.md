@@ -6,7 +6,9 @@ It does not replace POS, KDS, recipes, build sessions, station calibration, mode
 
 ## Scene inputs
 
-An authenticated glasses device or browser simulator submits:
+An authenticated glasses device or browser simulator submits a **fresh** frame. Frames older than two minutes or more than five seconds in the future fail closed.
+
+It submits:
 
 - active build-session public ID;
 - detector name;
@@ -32,9 +34,12 @@ Each entity can carry:
 - detector label;
 - optional canonical build component key;
 - tracking ID;
+- provenance source (`vision_model`, `device_runtime`, `sensor_fusion`, or `operator`);
 - confidence;
 - normalized bounding box;
 - bounded structured attributes.
+
+Tracking IDs are unique within a frame so relationships and later temporal reasoning cannot ambiguously reference two visible entities.
 
 A component key is accepted only when it belongs to the active canonical build. Scene understanding cannot invent recipe mappings.
 
@@ -52,7 +57,8 @@ The server binds every scene to:
 - expected recipe components and current canonical component;
 - exact vision model assignment key;
 - exact model package and artifact SHA-256;
-- exact compatible station calibration, ingredient zones and work regions.
+- exact compatible station calibration, ingredient zones and work regions;
+- a canonical SHA-256 of the complete build/order context used for that frame.
 
 If no compatible calibration exists, the scene remains valid but does not claim calibrated spatial matches.
 
@@ -116,8 +122,8 @@ Reusing the same frame key with different evidence fails closed.
 
 Verification rechecks:
 
-- exact model-assignment ledger binding;
-- every entity hash;
+- exact model-assignment ledger binding and assigned package/artifact;
+- every entity hash including its provenance source;
 - source fingerprint;
 - scene hash.
 
