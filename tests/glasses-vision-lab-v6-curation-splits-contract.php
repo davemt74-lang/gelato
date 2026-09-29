@@ -92,7 +92,7 @@ $frozen=glasses_vision_lab_freeze_dataset($pdo,$org,(string)$dataset['publicId']
 v6_assert($frozen['status']==='frozen'&&strlen((string)$frozen['datasetHash'])===64,'Curated group-split dataset must freeze successfully.');
 
 $page=file_get_contents(__DIR__.'/../glasses-vision-lab.php');$api=file_get_contents(__DIR__.'/../api/glasses-vision-lab.php');$js=file_get_contents(__DIR__.'/../assets/js/glasses-vision-lab.js');
-v6_assert(str_contains($page,'Vision Lab V6')&&str_contains($page,'Curated Dataset Builder'),'V6 workspace must expose curated dataset controls.');
+v6_assert((str_contains($page,'Vision Lab V6')||str_contains($page,'Vision Lab V7'))&&str_contains($page,'Curated Dataset Builder'),'V6 workspace must expose curated dataset controls.');
 v6_assert(str_contains($api,'curation.plan_split')&&str_contains($api,'curation.apply_split'),'V6 API must expose governed split planning and apply.');
 v6_assert(str_contains($js,'data-curate')&&str_contains($js,'data-split-apply'),'V6 UI must expose curation and explicit split apply.');
 v6_assert(!str_contains($api,'glasses_build_observe')&&!str_contains($api,'kds_transition'),'Curation API must not mutate production build or KDS truth.');
