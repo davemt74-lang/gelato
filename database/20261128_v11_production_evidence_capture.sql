@@ -1,0 +1,17 @@
+ALTER TABLE glasses_vision_training_media
+  ADD COLUMN training_session_id BIGINT UNSIGNED NULL AFTER build_session_id,
+  ADD COLUMN training_assignment_id BIGINT UNSIGNED NULL AFTER training_session_id,
+  ADD COLUMN training_program_id BIGINT UNSIGNED NULL AFTER training_assignment_id,
+  ADD COLUMN model_package_id BIGINT UNSIGNED NULL AFTER training_program_id,
+  ADD COLUMN recipe_step_key VARCHAR(160) NULL AFTER model_package_id,
+  ADD COLUMN validation_outcome VARCHAR(80) NULL AFTER recipe_step_key,
+  ADD COLUMN training_eligibility ENUM('review','eligible','excluded') NOT NULL DEFAULT 'review' AFTER validation_outcome,
+  ADD COLUMN training_exclusion_reason VARCHAR(500) NULL AFTER training_eligibility,
+  ADD COLUMN privacy_scope ENUM('training_opt_in','internal_review') NOT NULL DEFAULT 'training_opt_in' AFTER training_exclusion_reason,
+  ADD KEY idx_glasses_vision_media_training_session (organization_id,training_session_id,status),
+  ADD KEY idx_glasses_vision_media_training_eligibility (organization_id,training_eligibility,status),
+  ADD KEY idx_glasses_vision_media_model (organization_id,model_package_id,status),
+  ADD CONSTRAINT fk_glasses_vision_media_training_session FOREIGN KEY (training_session_id) REFERENCES glasses_training_sessions(id) ON DELETE SET NULL,
+  ADD CONSTRAINT fk_glasses_vision_media_training_assignment FOREIGN KEY (training_assignment_id) REFERENCES glasses_training_assignments(id) ON DELETE SET NULL,
+  ADD CONSTRAINT fk_glasses_vision_media_training_program FOREIGN KEY (training_program_id) REFERENCES glasses_training_programs(id) ON DELETE SET NULL,
+  ADD CONSTRAINT fk_glasses_vision_media_model_package FOREIGN KEY (model_package_id) REFERENCES glasses_vision_model_packages(id) ON DELETE SET NULL;
