@@ -10,6 +10,7 @@ on:
       - 'database/20261121_vision_lab_v9_quality_verification.sql'
       - 'database/20261122_vision_lab_v9_final_product_validation.sql'
       - 'database/20261123_vision_lab_v9_human_handoff_confirmation.sql'
+      - 'database/20261124_vision_lab_v9_rework_revalidation.sql'
       - 'includes/glasses-vision-scene.php'
       - 'includes/glasses-vision-step-recognition.php'
       - 'includes/glasses-vision-ingredient-prevention.php'
@@ -17,6 +18,7 @@ on:
       - 'includes/glasses-vision-quality-verification.php'
       - 'includes/glasses-vision-final-validation.php'
       - 'includes/glasses-vision-handoff-confirmation.php'
+      - 'includes/glasses-vision-rework.php'
       - 'api/glasses-device.php'
       - 'api/glasses-vision-lab.php'
       - 'glasses-vision-lab.php'
@@ -27,6 +29,7 @@ on:
       - 'assets/js/glasses-vision-quality-verification.js'
       - 'assets/js/glasses-vision-final-validation.js'
       - 'assets/js/glasses-vision-handoff-confirmation.js'
+      - 'assets/js/glasses-vision-rework.js'
       - 'assets/css/glasses-vision-lab.css'
       - 'tests/glasses-vision-lab-v9-live-scene-understanding-contract.php'
       - 'tests/glasses-vision-lab-v9-recipe-step-recognition-contract.php'
@@ -35,6 +38,7 @@ on:
       - 'tests/glasses-vision-lab-v9-quality-verification-contract.php'
       - 'tests/glasses-vision-lab-v9-final-product-validation-contract.php'
       - 'tests/glasses-vision-lab-v9-human-handoff-confirmation-contract.php'
+      - 'tests/glasses-vision-lab-v9-rework-revalidation-contract.php'
       - 'docs/GLASSES-VISION-LAB-V9-LIVE-SCENE.md'
       - 'docs/GLASSES-VISION-LAB-V9-RECIPE-STEP-RECOGNITION.md'
       - 'docs/GLASSES-VISION-LAB-V9-INGREDIENT-PREVENTION.md'
@@ -42,6 +46,7 @@ on:
       - 'docs/GLASSES-VISION-LAB-V9-QUALITY-VERIFICATION.md'
       - 'docs/GLASSES-VISION-LAB-V9-FINAL-PRODUCT-VALIDATION.md'
       - 'docs/GLASSES-VISION-LAB-V9-HUMAN-HANDOFF-CONFIRMATION.md'
+      - 'docs/GLASSES-VISION-LAB-V9-REWORK-REVALIDATION.md'
       - '.github/workflows/glasses-vision-lab-v9.yml'
   push:
     branches: [main]
@@ -78,6 +83,7 @@ jobs:
           php -l includes/glasses-vision-quality-verification.php
           php -l includes/glasses-vision-final-validation.php
           php -l includes/glasses-vision-handoff-confirmation.php
+          php -l includes/glasses-vision-rework.php
           php -l api/glasses-device.php
           php -l api/glasses-vision-lab.php
           php -l glasses-vision-lab.php
@@ -88,6 +94,7 @@ jobs:
           php -l tests/glasses-vision-lab-v9-quality-verification-contract.php
           php -l tests/glasses-vision-lab-v9-final-product-validation-contract.php
           php -l tests/glasses-vision-lab-v9-human-handoff-confirmation-contract.php
+          php -l tests/glasses-vision-lab-v9-rework-revalidation-contract.php
           node --check assets/js/glasses-vision-scene.js
           node --check assets/js/glasses-vision-step-recognition.js
           node --check assets/js/glasses-vision-ingredient-prevention.js
@@ -95,6 +102,7 @@ jobs:
           node --check assets/js/glasses-vision-quality-verification.js
           node --check assets/js/glasses-vision-final-validation.js
           node --check assets/js/glasses-vision-handoff-confirmation.js
+          node --check assets/js/glasses-vision-rework.js
 
       - name: Architecture guardrails
         run: |
@@ -174,6 +182,14 @@ jobs:
           grep -q 'vision.handoff.confirm' api/glasses-device.php
           grep -q 'explicitHumanConfirmation' includes/glasses-vision-handoff-confirmation.php
           ! grep -q 'kds_transition(' includes/glasses-vision-handoff-confirmation.php
+          grep -q 'CREATE TABLE glasses_vision_rework_cases' database/20261124_vision_lab_v9_rework_revalidation.sql
+          grep -q 'CREATE TABLE glasses_vision_rework_attempts' database/20261124_vision_lab_v9_rework_revalidation.sql
+          grep -q 'function glasses_vision_rework_revalidate' includes/glasses-vision-rework.php
+          grep -q 'revalidated_as' includes/glasses-vision-rework.php
+          grep -q 'vision.rework.open' api/glasses-device.php
+          grep -q 'vision.rework.revalidate' api/glasses-device.php
+          ! grep -q 'kds_transition(' includes/glasses-vision-rework.php
+          ! grep -q 'glasses_build_confirm(' includes/glasses-vision-rework.php
 
       - name: Install and upgrade schema
         run: |
@@ -219,6 +235,9 @@ jobs:
 
       - name: V9 governed human handoff confirmation contract
         run: php tests/glasses-vision-lab-v9-human-handoff-confirmation-contract.php
+
+      - name: V9 exception recovery / rework / revalidation contract
+        run: php tests/glasses-vision-lab-v9-rework-revalidation-contract.php
 
       - name: V8 governance regressions
         run: |

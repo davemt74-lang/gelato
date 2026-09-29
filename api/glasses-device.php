@@ -19,6 +19,7 @@ require_once __DIR__.'/../includes/glasses-vision-quantity-verification.php';
 require_once __DIR__.'/../includes/glasses-vision-quality-verification.php';
 require_once __DIR__.'/../includes/glasses-vision-final-validation.php';
 require_once __DIR__.'/../includes/glasses-vision-handoff-confirmation.php';
+require_once __DIR__.'/../includes/glasses-vision-rework.php';
 
 $pdo=app_pdo();
 if(!glasses_ready($pdo))app_json_response(['ok'=>false,'message'=>'Glasses plugin migration is not installed.'],503);
@@ -232,6 +233,21 @@ try{
         if(empty($in['confirmed']))throw new InvalidArgumentException('Explicit human confirmation is required.');
         $confirmation=glasses_vision_handoff_confirm($pdo,$device,$finalValidationPublicId,$confirmationKey,null);
         app_json_response(['ok'=>true,'handoffConfirmation'=>$confirmation],201);
+    }
+
+    if($action==='vision.rework.open'){
+        $finalValidationPublicId=trim((string)($in['finalValidationPublicId']??''));
+        $caseKey=trim((string)($in['caseKey']??''));
+        $case=glasses_vision_rework_open($pdo,$device,$finalValidationPublicId,$caseKey,null);
+        app_json_response(['ok'=>true,'reworkCase'=>$case],201);
+    }
+
+    if($action==='vision.rework.revalidate'){
+        $casePublicId=trim((string)($in['casePublicId']??''));
+        $scenePublicId=trim((string)($in['scenePublicId']??''));
+        $attemptKey=trim((string)($in['attemptKey']??''));
+        $result=glasses_vision_rework_revalidate($pdo,$device,$casePublicId,$scenePublicId,$attemptKey);
+        app_json_response(['ok'=>true]+$result,201);
     }
 
     if($action==='vision.profile'){
