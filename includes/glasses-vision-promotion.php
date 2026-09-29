@@ -206,7 +206,11 @@ function glasses_vision_promotion_verify(PDO $pdo,int $org,array $p): array
 {
     $audit=json_decode((string)$p['audit_json'],true)?:[];$checks=[];
     $add=static function(string $key,bool $ok,mixed $expected,mixed $actual)use(&$checks):void{$checks[]=['key'=>$key,'passed'=>$ok,'expected'=>$expected,'actual'=>$actual];};
-    $add('promotion_hash',hash_equals((string)$p['promotion_hash'],hash('sha256',glasses_vision_training_release_json($audit))),(string)$p['promotion_hash'],hash('sha256',glasses_vision_training_release_json($audit)));
+    $lq=$pdo->prepare("SELECT from_hash,to_hash FROM glasses_vision_lineage_edges
+      WHERE organization_id=? AND from_kind='evidence_review' AND from_public_id=? AND relation='authorized_promotion'
+        AND to_kind='model_promotion' AND to_public_id=? LIMIT 1");
+    $lq->execute([$org,(string)$p['review_public_id'],(string)$p['public_id']]);$promotionLineage=$lq->fetch();
+    $add('promotion_hash',$promotionLineage&&hash_equals((string)$p['review_hash'],(string)$promotionLineage['from_hash'])&&hash_equals((string)$p['promotion_hash'],(string)$promotionLineage['to_hash']),(string)$p['promotion_hash'],$promotionLineage['to_hash']??null);
     $add('review_hash',($audit['evidenceReview']['reviewHash']??null)===$p['review_hash'],$audit['evidenceReview']['reviewHash']??null,$p['review_hash']);
     $add('experiment_hash',($audit['experiment']['experimentHash']??null)===$p['experiment_hash'],$audit['experiment']['experimentHash']??null,$p['experiment_hash']);
     $add('batch_hash',($audit['retrainingBatch']['batchHash']??null)===$p['batch_hash'],$audit['retrainingBatch']['batchHash']??null,$p['batch_hash']);
