@@ -1,7 +1,7 @@
 (()=>{'use strict';
 const cfg=window.GELATO_GLASSES_SIMULATOR||{};
 const $=id=>document.getElementById(id);
-const state={mode:'mock',devices:[],device:null,work:null,selectedKdsItemPublicId:'',build:null,validation:null,seq:1,logs:[],autoPlayTimer:null,syncTimer:null,syncBusy:false,syncErrors:0,reconnectCount:0,syncFingerprint:'',syncAbort:null,syncEpoch:0,lastSyncAt:null,cameraStream:null,cameraTrack:null,cameraTarget:null,cameraDevices:[],cameraSource:'image',visionMode:'manual',visionTimer:null,visionBusy:false,visionFrameSeq:0,visionLastAt:0,visionLatencyMs:0,visionFps:0,visionDetections:[],visionTracks:new Map(),visionSubmitted:new Set(),visionAdapter:null,temporalTracks:new Map(),temporalEvents:[],temporalSequence:[],temporalViolations:[],temporalValidationBusy:false,temporalValidationFingerprint:'',temporalReadySince:0,temporalGate:null,browserModel:{status:'idle',session:null,assignment:null,profile:null,config:null,package:null,verifiedSha256:null,loadEpoch:0},dataset:{annotations:[],samples:[],drag:null,frozen:false,captureGroup:null,burstSeq:0,uploading:false},activeLearning:{enabled:true,candidates:[],capturing:false,lastCaptureByKey:new Map(),maxQueue:30,cooldownMs:10000},shadowModel:{status:'idle',session:null,assignment:null,config:null,package:null,verifiedSha256:null,runPublicId:null,summary:null,frameSeq:0,busy:false},hardwareRuntime:null,stationSoakReport:null,recovery:{state:'ready',attempt:0,epoch:0,networkFault:false,suppressAutomatic:false,freshBarrierUntil:0,lastReason:'runtime_ready',timer:null},framePipeline:{queue:[],worker:false,epoch:0,nextSeq:0,currentAbort:null,metrics:{acceptedFrames:0,processedFrames:0,droppedFrames:0,staleFrames:0,timedOutFrames:0,cancelledFrames:0,failedFrames:0,queueDepth:0,maxObservedQueueDepth:0,lastProcessedSequence:0}}};
+const state={mode:'mock',devices:[],device:null,work:null,selectedKdsItemPublicId:'',build:null,validation:null,seq:1,logs:[],autoPlayTimer:null,syncTimer:null,syncBusy:false,syncErrors:0,reconnectCount:0,syncFingerprint:'',syncAbort:null,syncEpoch:0,lastSyncAt:null,cameraStream:null,cameraTrack:null,cameraTarget:null,cameraDevices:[],cameraSource:'image',visionMode:'manual',visionTimer:null,visionBusy:false,visionFrameSeq:0,visionLastAt:0,visionLatencyMs:0,visionFps:0,visionDetections:[],visionTracks:new Map(),visionSubmitted:new Set(),visionAdapter:null,temporalTracks:new Map(),temporalEvents:[],temporalSequence:[],temporalViolations:[],temporalValidationBusy:false,temporalValidationFingerprint:'',temporalReadySince:0,temporalGate:null,browserModel:{status:'idle',session:null,assignment:null,profile:null,config:null,package:null,verifiedSha256:null,loadEpoch:0},dataset:{annotations:[],samples:[],drag:null,frozen:false,captureGroup:null,burstSeq:0,uploading:false},activeLearning:{enabled:true,candidates:[],capturing:false,lastCaptureByKey:new Map(),maxQueue:30,cooldownMs:10000},shadowModel:{status:'idle',session:null,assignment:null,config:null,package:null,verifiedSha256:null,runPublicId:null,summary:null,frameSeq:0,busy:false},hardwareRuntime:null,stationSoakReport:null,cookUx:{stopped:false,preview:null,acceptance:null,handoffArmed:false},recovery:{state:'ready',attempt:0,epoch:0,networkFault:false,suppressAutomatic:false,freshBarrierUntil:0,lastReason:'runtime_ready',timer:null},framePipeline:{queue:[],worker:false,epoch:0,nextSeq:0,currentAbort:null,metrics:{acceptedFrames:0,processedFrames:0,droppedFrames:0,staleFrames:0,timedOutFrames:0,cancelledFrames:0,failedFrames:0,queueDepth:0,maxObservedQueueDepth:0,lastProcessedSequence:0}}};
 const mock={
   work:{assignmentRequired:false,station:{publicId:'station-mock',name:'Sandwich / Pizza Line'},revision:'mock-revision',focusItem:{kdsItemPublicId:'kds-mock-1',status:'queued',ticket:{checkNumber:'1042',serviceMode:'dine_in',tableName:'Table 12',guestCount:2},posLine:{id:1,menuItemId:1,name:'Club Sandwich + Fries',optionName:'Regular',quantity:1,specialInstructions:'NO TOMATO · EXTRA BACON',modifiers:[{name:'Extra Bacon'}]},menu:{preparationNotes:'Build, slice and plate with fries.'},recipeSource:{status:'exact_name',recipe:{instructions:['Toast bread','Add mayo','Add turkey','Add bacon','Add lettuce','Add tomato','Top and slice','Plate with fries']}}},items:[],metrics:{queued:1,inProgress:0,ready:0,held:0}},
   components:['Toasted Bread','Mayo','Turkey','Bacon','Lettuce','Tomato','Fries'].map((name,i)=>({componentKey:'mock:'+i,displayName:name,expectedQuantity:i===0?3:1,detectedQuantity:0,unit:i===0?'slices':'portion',optional:false,status:'waiting',sortOrder:i+1})),
@@ -32,7 +32,7 @@ function clearRecoveryResume(){
   state.recovery.attempt=0;renderRuntimeRecovery();
 }
 function automaticObservationsAllowed(){
-  return !state.recovery.suppressAutomatic&&state.recovery.state==='ready'&&Date.now()>=state.recovery.freshBarrierUntil;
+  return !state.cookUx.stopped&&!state.recovery.suppressAutomatic&&state.recovery.state==='ready'&&Date.now()>=state.recovery.freshBarrierUntil;
 }
 function renderRuntimeRecovery(){
   const r=state.recovery,badge=$('runtimeRecoveryState'),detail=$('runtimeRecoveryDetail'),metrics=$('runtimeRecoveryMetrics');if(!badge||!detail||!metrics)return;
@@ -81,7 +81,7 @@ async function resumeRuntimeRecovery(reason='manual_resume'){
     if(state.cameraStream)startVisionRuntime();
     state.recovery.timer=setTimeout(()=>{
       if(epoch!==state.recovery.epoch)return;
-      state.recovery.timer=null;state.recovery.state='ready';state.recovery.suppressAutomatic=false;state.recovery.lastReason='runtime_recovered';state.reconnectCount+=1;renderRuntimeRecovery();renderStationSoak(null);refreshDeviceHealth();log('RECOVERY','Canonical work/build rehydrated; automatic vision resumed on fresh frames.');
+      state.recovery.timer=null;state.recovery.state='ready';state.recovery.suppressAutomatic=false;state.recovery.lastReason='runtime_recovered';state.reconnectCount+=1;renderRuntimeRecovery();renderStationSoak(null);$('cookUxState').textContent='IDLE';refreshDeviceHealth();log('RECOVERY','Canonical work/build rehydrated; automatic vision resumed on fresh frames.');
     },RUNTIME_FRESH_BARRIER_MS);
     return true;
   }catch(e){
@@ -1042,7 +1042,7 @@ function renderTopStatus(){
   const now=new Date(),live=state.mode==='live';
   $('hudClock').textContent=now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
   $('hudStatusTemp').textContent=(state.work?.station?.name||state.device?.stationName||'KITCHEN').toUpperCase()+' · 74°F';
-  $('hudRuntimeState').textContent=state.build?'BUILDING':'READY';
+  $('hudRuntimeState').textContent=state.cookUx.stopped?'STOPPED':(state.recovery.state!=='ready'?state.recovery.state.toUpperCase():(state.build?'BUILDING':'READY'));
   $('hudConnectivity').textContent=live?'BT · LIVE':'SIM · LOCAL';
   $('hudBattery').textContent='87%';
 }
@@ -1083,6 +1083,56 @@ function renderNextInstruction(comp,validation){
   $('hudNextCenter').textContent=next;
   $('hudNextTarget').textContent=comp?(Number(comp.detectedQuantity||0)+' / '+Number(comp.expectedQuantity||0)+' '+(comp.unit||'')):(validation?.status||'Product validation');
 }
+function cookUxScenarioDefinition(key){
+  return globalThis.GelatoCookUxHarness?.scenarios?.[key]||null;
+}
+function setCookUxAlert(definition){
+  const card=$('hudCookAlert'),title=$('hudCookAlertTitle'),tone=$('hudCookAlertTone'),message=$('hudCookAlertMessage');
+  if(!card||!title||!tone||!message)return;
+  if(!definition){card.hidden=true;card.className='hud-card hud-cook-alert';return;}
+  card.hidden=false;card.className='hud-card hud-cook-alert '+(definition.tone||'warning');
+  title.textContent=definition.title||'CHECK';tone.textContent=(definition.tone||'advisory').toUpperCase();message.textContent=definition.message||'Review before continuing.';
+}
+function renderCookUxState(comps,validation){
+  if(state.cookUx.preview){setCookUxAlert(cookUxScenarioDefinition(state.cookUx.preview));return;}
+  if(state.cookUx.stopped){setCookUxAlert(cookUxScenarioDefinition('stop_cancel'));return;}
+  if(state.recovery.state==='blocked'){setCookUxAlert(cookUxScenarioDefinition('recovery_blocked'));return;}
+  const unexpected=comps.find(c=>c.status==='unexpected');
+  if(unexpected){setCookUxAlert({tone:'warning',title:'CHECK INGREDIENT',message:'Unexpected '+unexpected.displayName+' detected. STOP and correct before continuing.'});return;}
+  const verify=comps.find(c=>c.status==='verify');
+  if(verify){setCookUxAlert({tone:'warning',title:'VERIFY INGREDIENT',message:'Confirm '+verify.displayName+' before continuing.'});return;}
+  if(validation?.status==='blocked'){setCookUxAlert(cookUxScenarioDefinition('rework_required'));return;}
+  if(validation?.status==='ready_for_finishing'){setCookUxAlert(cookUxScenarioDefinition('explicit_handoff'));return;}
+  setCookUxAlert(null);
+}
+function stopCookVision(reason='human_stop'){
+  state.cookUx.stopped=true;state.cookUx.handoffArmed=false;state.cookUx.preview='stop_cancel';
+  stopVisionRuntime('stopped');clearTemporalRuntime();state.visionSubmitted.clear();renderCookUxState(state.build?.components||[],state.validation);renderTopStatus();render();
+  log('UX','STOP cancelled automatic observations: '+reason+'.');
+}
+function resumeCookVision(){
+  state.cookUx.stopped=false;state.cookUx.preview=null;
+  if(state.cameraStream&&state.recovery.state==='ready')startVisionRuntime();
+  render();log('UX','Cook explicitly resumed automatic vision.');
+}
+function previewCookUxScenario(){
+  const key=$('cookUxScenario')?.value||'next_step';state.cookUx.preview=key;
+  if(key==='stop_cancel')state.cookUx.stopped=true;
+  renderCookUxState(state.build?.components||[],state.validation);
+  $('cookUxState').textContent='PREVIEW';
+  $('cookUxSummary').innerHTML='<strong>'+escapeHtml((cookUxScenarioDefinition(key)?.title||key).toUpperCase())+'</strong><span>'+escapeHtml(cookUxScenarioDefinition(key)?.message||'')+'</span>';
+}
+async function runCookUxAcceptance(){
+  const harness=globalThis.GelatoCookUxHarness;if(!harness)throw new Error('V10 cook UX harness is unavailable.');
+  const report=harness.report();
+  const d=await api('hardware.cook_ux.evaluate',{report});
+  state.cookUx.acceptance=d.cookUx;
+  $('cookUxState').textContent=d.cookUx.passed?'PASS':'FAIL';
+  $('cookUxSummary').innerHTML='<strong>'+escapeHtml(String(d.cookUx.score))+'/10</strong><span>'+escapeHtml(d.cookUx.passed?'All cook-facing UX gates passed.':'Cook UX acceptance requires correction.')+'</span>';
+  $('cookUxMetrics').textContent=Object.entries(d.cookUx.checks||{}).map(([k,v])=>k.replaceAll('_',' ')+' '+(v?'✓':'✕')).join(' · ');
+  log('UX','Cook on-lens acceptance '+(d.cookUx.passed?'passed':'failed')+' at '+d.cookUx.score+'/10.');
+  return d.cookUx;
+}
 function render(){
   const live=state.mode==='live',item=selectedItem(),build=state.build,validation=state.validation;
   $('connectionBadge').textContent=live?'LIVE GELATO':'MOCK';
@@ -1100,7 +1150,7 @@ function render(){
     ['Guests',item?.ticket?.guestCount||'—'],['Special',item?.posLine?.specialInstructions||'None']
   ].map(([a,b])=>'<div><small>'+escapeHtml(a)+'</small><strong>'+escapeHtml(b)+'</strong></div>').join('');
   const steps=deriveSteps(),comp=currentComponent(),comps=build?.components||[];
-  renderTopStatus();renderOrdersQueue(item);renderNextInstruction(comp,validation);renderBuildRail(item,steps,comps);renderValidationPanel(comps,validation);
+  renderTopStatus();renderOrdersQueue(item);renderNextInstruction(comp,validation);renderBuildRail(item,steps,comps);renderValidationPanel(comps,validation);renderCookUxState(comps,validation);
   $('componentCount').textContent=String(comps.length);renderCameraTargetComponents();renderDatasetClassOptions();renderDatasetAnnotations();renderActiveLearning();
   $('componentControls').innerHTML=comps.filter(c=>c.status!=='unexpected'&&c.status!=='ignored').map(c=>'<div class="component-row '+escapeHtml(c.status)+'"><div class="copy"><strong>'+escapeHtml(c.displayName)+'</strong><small>'+escapeHtml(c.status)+' · '+Number(c.detectedQuantity||0)+' / '+Number(c.expectedQuantity||0)+' '+escapeHtml(c.unit||'')+'</small></div><button type="button" data-detect="'+escapeHtml(c.componentKey)+'" '+(c.status==='confirmed'||(live&&!automaticObservationsAllowed())?'disabled':'')+'>Detect</button></div>').join('')||'<span class="sim-muted">Start a build to simulate detections.</span>';
   const unexpected=comps.filter(c=>c.status==='unexpected');
@@ -1160,7 +1210,16 @@ function toggleAutoPlay(){
 async function injectUnexpected(){try{if(!state.build)throw new Error('Start a build first.');const key='websim:unexpected-'+Date.now();if(state.mode==='mock'){state.build.components.push({componentKey:key,displayName:'Unexpected Ingredient',expectedQuantity:0,detectedQuantity:1,unit:'',optional:false,status:'unexpected',confidence:.94});flashDetection({displayName:'Unexpected Ingredient',status:'unexpected',confidence:.94},{confidence:.94,state:'unexpected'});state.validation=null;log('VISION','Injected unexpected ingredient.');render();return;}const d=await api('build.observe',{buildSessionPublicId:state.build.publicId,observationKey:'websim-unexpected-'+Date.now(),componentKey:key,displayName:'Unexpected Ingredient',observationAction:'added',quantity:1,confidence:.94,trackingId:key,bbox:{x:.28,y:.52,width:.16,height:.14},metadata:{source:'web_glasses_simulator',unexpected:true}});state.build=d.buildSession;state.validation=null;log('LIVE','Submitted unexpected ingredient evidence.');render();}catch(e){log('ERROR',e.message);}}
 async function resolveUnexpected(key){try{if(state.mode==='mock'){const c=state.build?.components.find(x=>x.componentKey===key);if(c)c.status='ignored';state.validation=null;log('MOCK','Resolved unexpected ingredient.');render();return;}const d=await api('build.resolve_unexpected',{buildSessionPublicId:state.build.publicId,componentKey:key});state.build=d.buildSession;state.validation=null;log('LIVE','Resolved unexpected ingredient.');render();}catch(e){log('ERROR',e.message);}}
 async function validate(){try{if(!state.build)throw new Error('Start a build first.');if(state.mode==='mock'){mockValidate();log('VALIDATION','Mock result: '+state.validation.status);render();return;}const d=await api('validation.evaluate',{buildSessionPublicId:state.build.publicId});state.validation=d.validation;log('LIVE','Validation result: '+state.validation.status);render();}catch(e){log('ERROR',e.message);}}
-async function handoff(){try{if(!state.validation||state.validation.status!=='ready_for_finishing')throw new Error('Validation is not ready for Expo.');if(state.mode==='mock'){log('MOCK','Simulated Expo handoff.');await unloadGovernedVisionModel('build_reset');state.build=null;state.validation=null;render();return;}const d=await api('handoff.expo',{buildSessionPublicId:state.build.publicId});log('LIVE','Expo handoff completed; KDS status '+(d.handoff.kdsStatus||'ready')+'.');await unloadGovernedVisionModel('build_reset');state.build=null;state.validation=null;clearRecoveryResume();await refreshWork();}catch(e){log('ERROR',e.message);}}
+async function handoff(){try{
+  if(!state.validation||state.validation.status!=='ready_for_finishing')throw new Error('Validation is not ready for Expo.');
+  if(!state.cookUx.handoffArmed){
+    state.cookUx.handoffArmed=true;state.cookUx.preview='explicit_handoff';renderCookUxState(state.build?.components||[],state.validation);
+    $('handoffExpo').textContent='Confirm Send to Expo';log('UX','Expo handoff armed; explicit second confirmation required.');return;
+  }
+  state.cookUx.handoffArmed=false;state.cookUx.preview=null;$('handoffExpo').textContent='Send to Expo / Finishing';
+  if(state.mode==='mock'){log('MOCK','Explicitly confirmed simulated Expo handoff.');await unloadGovernedVisionModel('build_reset');state.build=null;state.validation=null;render();return;}
+  const d=await api('handoff.expo',{buildSessionPublicId:state.build.publicId});log('LIVE','Explicit Expo handoff completed; KDS status '+(d.handoff.kdsStatus||'ready')+'.');await unloadGovernedVisionModel('build_reset');state.build=null;state.validation=null;clearRecoveryResume();await refreshWork();
+}catch(e){state.cookUx.handoffArmed=false;$('handoffExpo').textContent='Send to Expo / Finishing';log('ERROR',e.message);}}
 function resetSimulator(){stopShadowModel('build_reset');unloadGovernedVisionModel('build_reset');state.build=null;state.validation=null;state.selectedKdsItemPublicId='';clearTemporalRuntime();clearCameraTarget();$('detectionLayer').innerHTML='';log('SYSTEM','Simulator build state reset; POS/KDS records were not changed.');refreshWork();}
 $('modeSelect').addEventListener('change',async e=>{stopAutoPlay();stopLiveStationSync('idle');await unloadGovernedVisionModel('build_reset');state.mode=e.target.value;state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;clearTemporalRuntime();state.syncFingerprint='';log('MODE','Switched to '+state.mode+'.');if(state.mode==='live'){enterRecovery('recovering','live_mode_selected');await resumeRuntimeRecovery('live_mode_selected');}else{state.recovery.state='ready';state.recovery.suppressAutomatic=false;state.recovery.lastReason='mock_runtime_ready';renderRuntimeRecovery();await refreshWork();}});
 $('deviceSelect').addEventListener('change',async e=>{stopLiveStationSync('idle');await unloadGovernedVisionModel('build_reset');state.device=state.devices.find(x=>x.publicId===e.target.value)||null;state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;clearTemporalRuntime();state.syncFingerprint='';if(state.mode==='live'&&state.device){enterRecovery('recovering','device_changed');await resumeRuntimeRecovery('device_changed');}else render();});
@@ -1211,6 +1270,11 @@ $('resumeRuntime')?.addEventListener('click',()=>{state.recovery.networkFault=fa
 $('clearRecoveryState')?.addEventListener('click',clearRecoveryResume);
 $('runStationSoak')?.addEventListener('click',()=>runStationSoak().catch(e=>{log('ERROR',e.message);$('stationSoakState').textContent='ERROR';}));
 $('downloadSoakReport')?.addEventListener('click',downloadStationSoakReport);
+$('previewCookUx')?.addEventListener('click',previewCookUxScenario);
+$('runCookUxAcceptance')?.addEventListener('click',()=>runCookUxAcceptance().catch(e=>{log('ERROR',e.message);$('cookUxState').textContent='ERROR';}));
+$('stopCookVision')?.addEventListener('click',()=>stopCookVision('button'));
+$('resumeCookVision')?.addEventListener('click',resumeCookVision);
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.repeat){e.preventDefault();stopCookVision('escape_key');}});
 for(const id of ['frameQueueMax','frameMaxAge','frameInferenceTimeout','frameDropPolicy'])$(id)?.addEventListener('change',renderFramePipelineMetrics);
 document.addEventListener('visibilitychange',()=>{if(state.cameraTrack){state.cameraTrack.enabled=!document.hidden;setCameraHealth(document.hidden?'paused':'ready',document.hidden?'PAUSED':'READY');}if(document.hidden){saveRecoveryResume();enterRecovery('recovering','app_backgrounded',{stopSync:true});}else if(state.mode==='live'&&state.device){resumeRuntimeRecovery('app_resumed');}else if(state.cameraStream){startVisionRuntime();}});
 window.addEventListener('offline',()=>{enterRecovery('disconnected','network_lost',{stopSync:true});setSyncBadge('error','OFFLINE');});
@@ -1246,7 +1310,7 @@ const PRESET_KEY='gelato.webGlassesSimulator.presets.v1';
 const calibrationDefaults={
   opacity:100,brightness:100,scale:100,safeWidth:80,safeHeight:66,
   leftEyeX:0,leftEyeY:0,rightEyeX:0,rightEyeY:0,
-  regions:{hudRight:{x:71,y:16,w:27,h:67},hudStatus:{x:2,y:1,w:96,h:12},hudOrdersRegion:{x:1,y:17,w:23,h:61},hudNextRegion:{x:34,y:29,w:31,h:25}}
+  regions:{hudRight:{x:70,y:13,w:29,h:72},hudStatus:{x:2,y:1,w:96,h:12},hudOrdersRegion:{x:1,y:17,w:23,h:61}}
 };
 function deepClone(v){return JSON.parse(JSON.stringify(v));}
 function clamp(n,min,max){return Math.max(min,Math.min(max,Number(n)));}
@@ -1332,7 +1396,7 @@ function bindRegionEditor(regionName){
   move.addEventListener('pointerdown',e=>begin(e,'move'));move.addEventListener('touchstart',e=>begin(e,'move'),{passive:false});
   resize.addEventListener('pointerdown',e=>begin(e,'resize'));resize.addEventListener('touchstart',e=>begin(e,'resize'),{passive:false});
 }
-bindRegionEditor('hudRight');bindRegionEditor('hudStatus');bindRegionEditor('hudOrdersRegion');bindRegionEditor('hudNextRegion');
+bindRegionEditor('hudRight');bindRegionEditor('hudStatus');bindRegionEditor('hudOrdersRegion');
 refreshPresets();applyCalibration();applyFrameMode();
 $('exceptions').addEventListener('click',e=>{const b=e.target.closest('[data-resolve]');if(b)resolveUnexpected(b.dataset.resolve);});
 (async()=>{await loadDevices();const cp=cameraPrefs();if(cp.resolution)$('cameraResolution').value=cp.resolution;if(cp.fit)$('cameraFit').value=cp.fit;$('cameraMirror').checked=!!cp.mirror;applyCameraPresentation();await enumerateCameras();if(!cameraSupported())setCameraHealth('error','UNSUPPORTED');state.work=structuredClone(mock.work);state.selectedKdsItemPublicId=state.work.focusItem?.kdsItemPublicId||'';refreshPresets();applyCalibration();setSyncBadge('paused','SYNC OFF');render();setInterval(renderTopStatus,30000);renderRuntimeRecovery();refreshDeviceHealth();setInterval(refreshDeviceHealth,5000);const savedResume=recoveryStored();if(savedResume?.devicePublicId&&state.devices.some(d=>d.publicId===savedResume.devicePublicId)){state.device=state.devices.find(d=>d.publicId===savedResume.devicePublicId);$('deviceSelect').value=state.device.publicId;if(state.mode==='live')resumeRuntimeRecovery('app_restart_resume');}log('SYSTEM','Simulator ready. Pizza Line Reference HUD loaded.');})();
