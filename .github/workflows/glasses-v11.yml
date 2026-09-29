@@ -8,11 +8,13 @@ on:
       - 'database/20261129_v11_annotation_corrections.sql'
       - 'database/20261130_v11_hard_example_failure_mining.sql'
       - 'database/20261201_v11_dataset_assembly_versioning.sql'
+      - 'database/20261202_v11_training_run_orchestration.sql'
       - 'includes/glasses-training-identity.php'
       - 'includes/glasses-production-evidence.php'
       - 'includes/glasses-annotation-workbench.php'
       - 'includes/glasses-v11-mining.php'
       - 'includes/glasses-v11-dataset-assembly.php'
+      - 'includes/glasses-v11-training-runs.php'
       - 'includes/glasses-vision-curation.php'
       - 'includes/glasses-vision-lab.php'
       - 'api/glasses-device.php'
@@ -23,16 +25,19 @@ on:
       - 'assets/js/glasses-annotation-workbench.js'
       - 'assets/js/glasses-v11-mining.js'
       - 'assets/js/glasses-v11-dataset-assembly.js'
+      - 'assets/js/glasses-v11-training-runs.js'
       - 'tests/glasses-v11-training-identity-contract.php'
       - 'tests/glasses-v11-production-evidence-contract.php'
       - 'tests/glasses-v11-annotation-workbench-contract.php'
       - 'tests/glasses-v11-hard-example-mining-contract.php'
       - 'tests/glasses-v11-dataset-assembly-contract.php'
+      - 'tests/glasses-v11-training-run-orchestration-contract.php'
       - 'docs/GLASSES-V11-TRAINING-IDENTITY.md'
       - 'docs/GLASSES-V11-PRODUCTION-EVIDENCE.md'
       - 'docs/GLASSES-V11-ANNOTATION-WORKBENCH.md'
       - 'docs/GLASSES-V11-HARD-EXAMPLE-MINING.md'
       - 'docs/GLASSES-V11-DATASET-ASSEMBLY.md'
+      - 'docs/GLASSES-V11-TRAINING-RUNS.md'
       - '.github/workflows/glasses-v11.yml'
   push:
     branches: [main]
@@ -66,6 +71,7 @@ jobs:
           php -l includes/glasses-annotation-workbench.php
           php -l includes/glasses-v11-mining.php
           php -l includes/glasses-v11-dataset-assembly.php
+          php -l includes/glasses-v11-training-runs.php
           php -l includes/glasses-vision-curation.php
           php -l includes/glasses-vision-lab.php
           php -l api/glasses-device.php
@@ -76,11 +82,13 @@ jobs:
           php -l tests/glasses-v11-annotation-workbench-contract.php
           php -l tests/glasses-v11-hard-example-mining-contract.php
           php -l tests/glasses-v11-dataset-assembly-contract.php
+          php -l tests/glasses-v11-training-run-orchestration-contract.php
           node --check assets/js/glasses-training-identity.js
           node --check assets/js/glasses-production-evidence.js
           node --check assets/js/glasses-annotation-workbench.js
           node --check assets/js/glasses-v11-mining.js
           node --check assets/js/glasses-v11-dataset-assembly.js
+          node --check assets/js/glasses-v11-training-runs.js
       - name: Architecture guardrails
         run: |
           grep -q 'GLASSES_TRAINING_ASSIGNMENT_SCHEMA' includes/glasses-training-identity.php
@@ -119,6 +127,12 @@ jobs:
           grep -q 'dataset.assemble' api/glasses-vision-lab.php
           ! grep -q 'glasses_vision_retraining_' includes/glasses-v11-dataset-assembly.php
           ! grep -q 'glasses_vision_model_rollout_activate(' includes/glasses-v11-dataset-assembly.php
+          grep -q 'GLASSES_V11_TRAINING_RUN_SCHEMA' includes/glasses-v11-training-runs.php
+          grep -q 'ALTER TABLE glasses_vision_training_runs' database/20261202_v11_training_run_orchestration.sql
+          ! grep -q 'CREATE TABLE' database/20261202_v11_training_run_orchestration.sql
+          grep -q 'training_run.create' api/glasses-vision-lab.php
+          ! grep -q 'glasses_vision_model_rollout_activate(' includes/glasses-v11-training-runs.php
+          ! grep -q 'glasses_vision_promotion_' includes/glasses-v11-training-runs.php
       - name: Install schema
         run: |
           sudo apt-get update -qq
@@ -155,6 +169,9 @@ jobs:
 
       - name: V11 dataset assembly and versioning contract
         run: php tests/glasses-v11-dataset-assembly-contract.php
+
+      - name: V11 training run orchestration and experiment lineage contract
+        run: php tests/glasses-v11-training-run-orchestration-contract.php
 
       - name: V10 RC1 regression
         run: php tests/glasses-v10-rc1-acceptance-contract.php
