@@ -60,6 +60,8 @@ $fallback=glasses_station_calibration_save($pdo,$org,$location,(string)$station[
 v83_assert((string)v83_one($pdo,"SELECT status FROM glasses_station_calibrations WHERE organization_id=? AND public_id=?",[$org,$bright['publicId']])==='superseded','Second station calibration must supersede first.');
 $profileAfterSupersede=glasses_vision_calibration_profile_row($pdo,$org,$profile['publicId']);
 v83_assert($profileAfterSupersede['calibrationStatus']==='superseded','Profile must surface superseded source calibration state.');
+$variant=glasses_vision_calibration_profile_select($pdo,$org,$baseInput+['context'=>['brightnessMean'=>.91,'contrastMean'=>.40]],$actor);
+v83_assert($variant['decision']==='profile'&&$variant['selectedProfilePublicId']===$profile['publicId'],'Explicitly active V8 profile must keep a superseded calibration version selectable as an environment variant.');
 
 $dark=glasses_vision_calibration_profile_select($pdo,$org,$baseInput+['context'=>['brightnessMean'=>.40,'contrastMean'=>.40]],$actor);
 v83_assert($dark['decision']==='station_fallback'&&$dark['selectedProfilePublicId']===null&&$dark['fallbackCalibrationPublicId']===$fallback['publicId'],'Non-matching context must fall back to current station calibration.');
