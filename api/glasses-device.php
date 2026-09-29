@@ -11,6 +11,7 @@ require_once __DIR__.'/../includes/glasses-calibration.php';
 require_once __DIR__.'/../includes/glasses-vision-profiles.php';
 require_once __DIR__.'/../includes/glasses-vision-models.php';
 require_once __DIR__.'/../includes/glasses-vision-confidence-policy.php';
+require_once __DIR__.'/../includes/glasses-vision-active-perception.php';
 
 $pdo=app_pdo();
 if(!glasses_ready($pdo))app_json_response(['ok'=>false,'message'=>'Glasses plugin migration is not installed.'],503);
@@ -111,6 +112,21 @@ try{
         $in['devicePublicId']=(string)$device['public_id'];
         $decision=glasses_vision_confidence_decide($pdo,(int)$device['organization_id'],$in,null);
         app_json_response(['ok'=>true,'confidenceDecision'=>$decision],201);
+    }
+
+    if($action==='vision.active_perception.plan'){
+        $record=glasses_vision_active_perception_plan($pdo,(int)$device['organization_id'],(string)($in['confidenceDecisionPublicId']??''),$device,null);
+        app_json_response(['ok'=>true,'activePerception'=>$record],201);
+    }
+
+    if($action==='vision.active_perception.acknowledge'){
+        $record=glasses_vision_active_perception_acknowledge($pdo,(int)$device['organization_id'],(string)($in['publicId']??''),$device);
+        app_json_response(['ok'=>true,'activePerception'=>$record]);
+    }
+
+    if($action==='vision.active_perception.complete'){
+        $record=glasses_vision_active_perception_complete($pdo,(int)$device['organization_id'],(string)($in['publicId']??''),$device,(string)($in['outcome']??''),is_array($in['result']??null)?$in['result']:[]);
+        app_json_response(['ok'=>true,'activePerception'=>$record]);
     }
 
     if($action==='vision.profile'){
