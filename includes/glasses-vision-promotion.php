@@ -73,7 +73,7 @@ function glasses_vision_promotion_scope(PDO $pdo,int $org,array $input): array
     if(trim((string)($input['stationPublicId']??''))!==''){
         if($locationId===null)throw new InvalidArgumentException('Station-scoped promotion requires a location.');
         $station=glasses_station($pdo,$org,$locationId,(string)$input['stationPublicId']);
-        $stationId=(int)$station['id'];$stationPublic=(string)$station['public_id'];
+        $stationId=(int)$station['id'];$stationPublic=(string)$station['publicId'];
     }
     return ['locationId'=>$locationId,'stationId'=>$stationId,'stationPublicId'=>$stationPublic];
 }
