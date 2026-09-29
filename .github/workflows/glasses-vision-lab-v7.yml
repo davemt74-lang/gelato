@@ -5,17 +5,22 @@ on:
     paths:
       - 'database/20261103_vision_lab_v7_production_error_ledger.sql'
       - 'database/20261104_vision_lab_v7_failure_analysis.sql'
+      - 'database/20261105_vision_lab_v7_hard_example_mining.sql'
       - 'includes/glasses-vision-feedback.php'
       - 'includes/glasses-vision-failure-analysis.php'
+      - 'includes/glasses-vision-mining.php'
       - 'api/glasses-vision-lab.php'
       - 'glasses-vision-lab.php'
       - 'assets/js/glasses-vision-feedback.js'
       - 'assets/js/glasses-vision-failure-analysis.js'
+      - 'assets/js/glasses-vision-mining.js'
       - 'assets/css/glasses-vision-lab.css'
       - 'tests/glasses-vision-lab-v7-production-error-ledger-contract.php'
       - 'tests/glasses-vision-lab-v7-failure-analysis-contract.php'
+      - 'tests/glasses-vision-lab-v7-hard-example-mining-contract.php'
       - 'docs/GLASSES-VISION-LAB-V7-PRODUCTION-FEEDBACK.md'
       - 'docs/GLASSES-VISION-LAB-V7-FAILURE-ANALYSIS.md'
+      - 'docs/GLASSES-VISION-LAB-V7-HARD-EXAMPLE-MINING.md'
       - '.github/workflows/glasses-vision-lab-v7.yml'
   push:
     branches: [main]
@@ -47,12 +52,15 @@ jobs:
         run: |
           php -l includes/glasses-vision-feedback.php
           php -l includes/glasses-vision-failure-analysis.php
+          php -l includes/glasses-vision-mining.php
           php -l api/glasses-vision-lab.php
           php -l glasses-vision-lab.php
           php -l tests/glasses-vision-lab-v7-production-error-ledger-contract.php
           php -l tests/glasses-vision-lab-v7-failure-analysis-contract.php
+          php -l tests/glasses-vision-lab-v7-hard-example-mining-contract.php
           node --check assets/js/glasses-vision-feedback.js
           node --check assets/js/glasses-vision-failure-analysis.js
+          node --check assets/js/glasses-vision-mining.js
 
       - name: Architecture guardrails
         run: |
@@ -68,6 +76,11 @@ jobs:
           grep -q 'sourceFingerprint' includes/glasses-vision-failure-analysis.php
           grep -q "'rateClaimed'=>false" includes/glasses-vision-failure-analysis.php
           ! grep -q 'kds_transition' includes/glasses-vision-failure-analysis.php
+          grep -q 'CREATE TABLE glasses_vision_mining_runs' database/20261105_vision_lab_v7_hard_example_mining.sql
+          grep -q 'CREATE TABLE glasses_vision_mined_candidates' database/20261105_vision_lab_v7_hard_example_mining.sql
+          grep -q 'function glasses_vision_mining_run' includes/glasses-vision-mining.php
+          grep -q "'automaticDatasetInclusion'=>false" includes/glasses-vision-mining.php
+          ! grep -q 'kds_transition' includes/glasses-vision-mining.php
 
       - name: Install and upgrade schema
         run: |
@@ -98,6 +111,9 @@ jobs:
 
       - name: V7 lineage-aware failure analysis contract
         run: php tests/glasses-vision-lab-v7-failure-analysis-contract.php
+
+      - name: V7 hard example and counterexample mining contract
+        run: php tests/glasses-vision-lab-v7-hard-example-mining-contract.php
 
       - name: V6 lineage and correction regressions
         run: |
