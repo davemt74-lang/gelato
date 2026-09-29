@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__.'/glasses-vision-experiments.php';
+require_once __DIR__.'/glasses-v11-model-evaluation.php';
 
 const GLASSES_VISION_EVIDENCE_REVIEW_SCHEMA='gelato.vision_champion_challenger_review.v1';
 
@@ -76,6 +77,15 @@ function glasses_vision_evidence_review_run(PDO $pdo,int $org,string $experiment
     if(!glasses_vision_evidence_review_ready($pdo))throw new RuntimeException('Vision Lab V7 evidence-review migration is not installed.');
     $x=glasses_vision_experiment_row($pdo,$org,$experimentPublic,false);
     if((string)$x['status']!=='completed'||$x['challenger_package_id']===null)throw new InvalidArgumentException('Evidence review requires a completed model experiment.');
+    $v11Benchmark=null;
+    if($x['training_run_id']!==null){
+      $rq=$pdo->prepare("SELECT run_hash FROM glasses_vision_training_runs WHERE organization_id=? AND id=? LIMIT 1");$rq->execute([$org,(int)$x['training_run_id']]);$runHash=$rq->fetchColumn();
+      if(is_string($runHash)&&$runHash!==''){
+        if(!glasses_v11_model_evaluation_ready($pdo))throw new InvalidArgumentException('V11 evidence review requires the model benchmark migration.');
+        $v11Benchmark=glasses_v11_model_evaluation_latest_pass($pdo,$org,(int)$x['id']);
+        if($v11Benchmark===null)throw new InvalidArgumentException('V11 evidence review requires a passing model benchmark.');
+      }
+    }
 
     $champion=glasses_vision_model_package_row($pdo,$org,(string)$x['champion_public_id'],false);
     $challenger=glasses_vision_model_package_row($pdo,$org,(string)$x['challenger_public_id'],false);
@@ -117,7 +127,7 @@ function glasses_vision_evidence_review_run(PDO $pdo,int $org,string $experiment
       'experimentPublicId'=>$x['public_id'],'experimentHash'=>$x['experiment_hash'],
       'champion'=>['publicId'=>$champion['public_id'],'artifactSha256'=>$champion['artifact_sha256']],
       'challenger'=>['publicId'=>$challenger['public_id'],'artifactSha256'=>$challenger['artifact_sha256']],
-      'goldenComparison'=>$comparison,'failureEvaluation'=>$failure,'runtimeEvaluation'=>$runtime,
+      'goldenComparison'=>$comparison,'failureEvaluation'=>$failure,'runtimeEvaluation'=>$runtime,'v11Benchmark'=>$v11Benchmark,
     ];
     $result=['policy'=>$policy,'checks'=>$checks,'score'=>$score,'passed'=>$passed,'promotionEligible'=>$passed];
     $reviewHash=hash('sha256',glasses_vision_training_release_json(['evidence'=>$evidence,'result'=>$result]));
