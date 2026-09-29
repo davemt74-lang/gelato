@@ -12,6 +12,7 @@ require_once __DIR__.'/../includes/glasses-vision-profiles.php';
 require_once __DIR__.'/../includes/glasses-vision-models.php';
 require_once __DIR__.'/../includes/glasses-vision-confidence-policy.php';
 require_once __DIR__.'/../includes/glasses-vision-active-perception.php';
+require_once __DIR__.'/../includes/glasses-vision-scene.php';
 
 $pdo=app_pdo();
 if(!glasses_ready($pdo))app_json_response(['ok'=>false,'message'=>'Glasses plugin migration is not installed.'],503);
@@ -127,6 +128,18 @@ try{
     if($action==='vision.active_perception.complete'){
         $record=glasses_vision_active_perception_complete($pdo,(int)$device['organization_id'],(string)($in['publicId']??''),$device,(string)($in['outcome']??''),is_array($in['result']??null)?$in['result']:[]);
         app_json_response(['ok'=>true,'activePerception'=>$record]);
+    }
+
+    if($action==='vision.scene.capture'){
+        $scene=glasses_vision_scene_capture($pdo,$device,$in);
+        app_json_response(['ok'=>true,'scene'=>$scene],201);
+    }
+
+    if($action==='vision.scene.verify'){
+        $scenePublicId=trim((string)($in['publicId']??''));
+        $scene=glasses_vision_scene_row($pdo,(int)$device['organization_id'],$scenePublicId);
+        if(!hash_equals((string)$scene['devicePublicId'],(string)$device['public_id']))throw new InvalidArgumentException('Scene does not belong to this device.');
+        app_json_response(['ok'=>true,'verification'=>glasses_vision_scene_verify($pdo,(int)$device['organization_id'],$scenePublicId)]);
     }
 
     if($action==='vision.profile'){
