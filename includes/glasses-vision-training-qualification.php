@@ -26,6 +26,7 @@ function glasses_vision_training_qualification_floor(string $profile): array
         'minimumLightingBuckets'=>2,
         'maximumLeakageGroups'=>0,
         'maximumUnresolvedDisagreements'=>0,
+        'maximumIncompleteAnnotations'=>0,
         'maximumExactDuplicates'=>0,
         'maximumPoorMedia'=>0,
         'maximumCaptureGroupLeakage'=>0,
@@ -84,19 +85,27 @@ function glasses_vision_training_qualification_evaluate(PDO $pdo,int $org,string
     $totals=$balance['totals']??[];
     $div=$balance['diversity']??[];$media=$div['media']??[];
     $blockers=$visual['releaseBlockers']??[];
+    $curationRows=array_values(array_filter(glasses_vision_curation_rows($pdo,$org,$datasetPublic),static fn($r)=>($r['curationDecision']??'include')!=='exclude'&&($r['reviewStatus']??'')==='approved'));
+    $operators=[];$locations=[];$stations=[];
+    foreach($curationRows as $r){
+        if(($r['operatorUserId']??null)!==null)$operators[(int)$r['operatorUserId']]=true;
+        if(($r['locationId']??null)!==null)$locations[(int)$r['locationId']]=true;
+        if(($r['stationId']??null)!==null)$stations[(int)$r['stationId']]=true;
+    }
 
     $checks=[
         glasses_vision_training_qualification_check('samples_per_class','Minimum samples per class',(int)$minimumClassCount,(int)$policy['minimumSamplesPerClass']),
         glasses_vision_training_qualification_check('negative_examples','Minimum negative examples',(int)($totals['negative']??0),(int)$policy['minimumNegatives']),
         glasses_vision_training_qualification_check('hard_examples','Minimum hard examples',(int)($totals['hardExamples']??0),(int)$policy['minimumHardExamples']),
-        glasses_vision_training_qualification_check('operator_diversity','Operator diversity',(int)($div['operatorCount']??0),(int)$policy['minimumOperators']),
-        glasses_vision_training_qualification_check('location_diversity','Location diversity',(int)($div['locationCount']??0),(int)$policy['minimumLocations']),
-        glasses_vision_training_qualification_check('station_diversity','Station diversity',(int)($div['stationCount']??0),(int)$policy['minimumStations']),
+        glasses_vision_training_qualification_check('operator_diversity','Operator diversity',count($operators),(int)$policy['minimumOperators']),
+        glasses_vision_training_qualification_check('location_diversity','Location diversity',count($locations),(int)$policy['minimumLocations']),
+        glasses_vision_training_qualification_check('station_diversity','Station diversity',count($stations),(int)$policy['minimumStations']),
         glasses_vision_training_qualification_check('device_diversity','Device diversity',(int)($media['deviceDiversity']??0),(int)$policy['minimumDevices']),
         glasses_vision_training_qualification_check('pose_diversity','Pose bucket diversity',(int)($media['poseDiversity']??0),(int)$policy['minimumPoseBuckets']),
         glasses_vision_training_qualification_check('lighting_diversity','Lighting diversity',count($media['exposureCoverage']??[]),(int)$policy['minimumLightingBuckets']),
         glasses_vision_training_qualification_check('split_leakage','Protected-group leakage',$leakage,(int)$policy['maximumLeakageGroups'],'<='),
         glasses_vision_training_qualification_check('annotation_disagreements','Unresolved annotation disagreements',(int)($qa['summary']['unresolvedDisagreements']??0),(int)$policy['maximumUnresolvedDisagreements'],'<='),
+        glasses_vision_training_qualification_check('annotation_completeness','Incomplete annotations',(int)($qa['summary']['incompleteSamples']??0),(int)$policy['maximumIncompleteAnnotations'],'<='),
         glasses_vision_training_qualification_check('exact_duplicates','Exact duplicate blockers',(int)($blockers['exactDuplicates']??0),(int)$policy['maximumExactDuplicates'],'<='),
         glasses_vision_training_qualification_check('poor_media','Hard visual quality blockers',(int)($blockers['poorMedia']??0),(int)$policy['maximumPoorMedia'],'<='),
         glasses_vision_training_qualification_check('capture_group_leakage','Capture-group media leakage',(int)($blockers['captureGroupLeakage']??0),(int)$policy['maximumCaptureGroupLeakage'],'<='),
