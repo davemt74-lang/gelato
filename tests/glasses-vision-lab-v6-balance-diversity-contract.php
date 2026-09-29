@@ -32,4 +32,5 @@ v63_assert(str_contains($api,"balance.analyze")&&!str_contains($api,'glasses_bui
 v63_assert(str_contains($page,'Dataset Balance &amp; Diversity Optimizer')&&str_contains($page,'vlBalanceAnalyze'),'Vision Lab must expose the optimizer workspace.');
 v63_assert(str_contains($js,'No curation or split membership is changed automatically.')&&str_contains($js,"targetHardRatio:.25"),'UI must explain advisory behavior and deterministic default policy.');
 
+// Release contract also anchors exact-head CI after documentation changes.
 echo "vision-lab-v6-balance-diversity-ok\n";
