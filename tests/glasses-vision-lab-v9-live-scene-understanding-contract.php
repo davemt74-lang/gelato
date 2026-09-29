@@ -76,9 +76,9 @@ $input=[
  'buildSessionPublicId'=>$sessionPublic,'detectorName'=>'ingredient_detector','frameKey'=>'scene-frame-'.$slug,
  'frameWidth'=>640,'frameHeight'=>480,'pixelFormat'=>'grayscale8','capturedAt'=>$captured,
  'entities'=>[
-   ['entityKey'=>'ingredient-pep','kind'=>'ingredient','label'=>'pepperoni','componentKey'=>$pepKey,'trackingId'=>'track-pep','confidence'=>.96,'bbox'=>[.08,.14,.12,.15],'attributes'=>['source'=>'detector']],
+   ['entityKey'=>'ingredient-pep','kind'=>'ingredient','label'=>'pepperoni','componentKey'=>$pepKey,'trackingId'=>'track-pep','source'=>'vision_model','confidence'=>.96,'bbox'=>[.08,.14,.12,.15],'attributes'=>['detectorClass'=>'pepperoni']],
    ['entityKey'=>'ingredient-cheese','kind'=>'ingredient','label'=>'cheese','componentKey'=>$cheeseKey,'trackingId'=>'track-cheese','confidence'=>.94,'bbox'=>[.40,.14,.12,.15]],
-   ['entityKey'=>'hand-left','kind'=>'hand','label'=>'left hand','trackingId'=>'hand-1','confidence'=>.99,'bbox'=>[.30,.50,.12,.20]],
+   ['entityKey'=>'hand-left','kind'=>'hand','label'=>'left hand','trackingId'=>'hand-1','source'=>'device_runtime','confidence'=>.99,'bbox'=>[.30,.50,.12,.20]],
    ['entityKey'=>'tool-spoodle','kind'=>'tool','label'=>'spoodle','trackingId'=>'tool-1','confidence'=>.91,'bbox'=>[.36,.52,.08,.18]],
    ['entityKey'=>'container-pep','kind'=>'container','label'=>'pepperoni pan','trackingId'=>'container-1','confidence'=>.93,'bbox'=>[.05,.10,.25,.30]],
    ['entityKey'=>'product-pizza','kind'=>'product','label'=>'Scene Pizza','trackingId'=>'product-1','confidence'=>.98,'bbox'=>[.35,.55,.35,.25],'attributes'=>['menuItemId'=>$item]],
@@ -103,6 +103,8 @@ v91_assert(($scene['context']['recipePlan']['currentExpectedComponentKey']??'')=
 $byKey=[];foreach($scene['entities'] as $e)$byKey[$e['entityKey']]=$e;
 v91_assert(($byKey['ingredient-pep']['spatial']['ingredientZones'][0]['zoneKey']??'')==='pepperoni-pan','Pepperoni entity must resolve into the calibrated pepperoni zone.');
 v91_assert(($byKey['product-pizza']['spatial']['regions'][0]['regionKey']??'')==='build-surface','Product entity must resolve into the calibrated build surface.');
+v91_assert(($byKey['ingredient-pep']['source']??'')==='vision_model'&&($byKey['hand-left']['source']??'')==='device_runtime','Scene entities must preserve explicit observation provenance.');
+v91_assert(preg_match('/^[a-f0-9]{64}$/',(string)($scene['context']['buildContextHash']??''))===1,'Scene must bind a canonical build-context hash.');
 v91_assert(glasses_vision_scene_verify($pdo,$org,$scene['publicId'])['passed']===true,'Fresh scene must verify end to end.');
 
 $same=glasses_vision_scene_capture($pdo,$device,$input);
@@ -110,6 +112,18 @@ v91_assert($same['publicId']===$scene['publicId'],'Identical frame evidence must
 $conflict=$input;$conflict['entities'][0]['confidence']=.50;$conflicted=false;
 try{glasses_vision_scene_capture($pdo,$device,$conflict);}catch(InvalidArgumentException){$conflicted=true;}
 v91_assert($conflicted,'Reusing a frame key with different evidence must fail closed.');
+
+$stale=$input;$stale['frameKey']='stale-'.$slug;$stale['capturedAt']=(new DateTimeImmutable('-3 minutes',new DateTimeZone('UTC')))->format(DATE_ATOM);
+$staleBlocked=false;try{glasses_vision_scene_capture($pdo,$device,$stale);}catch(InvalidArgumentException){$staleBlocked=true;}
+v91_assert($staleBlocked,'Live scene capture must reject stale frames.');
+
+$future=$input;$future['frameKey']='future-'.$slug;$future['capturedAt']=(new DateTimeImmutable('+30 seconds',new DateTimeZone('UTC')))->format(DATE_ATOM);
+$futureBlocked=false;try{glasses_vision_scene_capture($pdo,$device,$future);}catch(InvalidArgumentException){$futureBlocked=true;}
+v91_assert($futureBlocked,'Live scene capture must reject future-dated frames.');
+
+$duplicateTrack=$input;$duplicateTrack['frameKey']='duplicate-track-'.$slug;$duplicateTrack['entities'][1]['trackingId']='track-pep';
+$trackingBlocked=false;try{glasses_vision_scene_capture($pdo,$device,$duplicateTrack);}catch(InvalidArgumentException){$trackingBlocked=true;}
+v91_assert($trackingBlocked,'Tracking IDs must be unique within a live scene frame.');
 
 $badComponent=$input;$badComponent['frameKey']='bad-component-'.$slug;$badComponent['entities'][0]['componentKey']='ingredient:999999';
 $blocked=false;try{glasses_vision_scene_capture($pdo,$device,$badComponent);}catch(InvalidArgumentException){$blocked=true;}
