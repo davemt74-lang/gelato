@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__.'/glasses-vision-evidence-review.php';
+require_once __DIR__.'/glasses-v11-model-release-candidates.php';
 
 const GLASSES_VISION_PROMOTION_SCHEMA='gelato.vision_governed_promotion.v1';
 
@@ -22,7 +23,7 @@ function glasses_vision_promotion_event(PDO $pdo,int $org,int $promotionId,strin
 
 function glasses_vision_promotion_source(PDO $pdo,int $org,string $reviewPublic): array
 {
-    $q=$pdo->prepare("SELECT rv.*,x.public_id experiment_public_id,x.experiment_hash,x.status experiment_status,x.candidate_dataset_id,x.training_release_id,x.qualification_id,
+    $q=$pdo->prepare("SELECT rv.*,x.public_id experiment_public_id,x.experiment_hash,x.status experiment_status,x.candidate_dataset_id,x.training_release_id,x.qualification_id,x.training_run_id,
       x.champion_package_id,x.challenger_package_id,
       d.public_id dataset_public_id,d.dataset_hash,d.status dataset_status,
       tr.public_id release_public_id,tr.release_hash,tr.status release_status,
@@ -56,6 +57,18 @@ function glasses_vision_promotion_source(PDO $pdo,int $org,string $reviewPublic)
     if((string)$row['release_status']!=='qualified')throw new InvalidArgumentException('Promotion training release must remain qualified.');
     if((string)$row['champion_status']!=='ready'||(string)$row['challenger_status']!=='ready')throw new InvalidArgumentException('Champion and challenger packages must remain ready.');
 
+    $releaseCandidate=null;
+    if($row['training_run_id']!==null){
+      $rq=$pdo->prepare("SELECT run_hash FROM glasses_vision_training_runs WHERE organization_id=? AND id=? LIMIT 1");$rq->execute([$org,(int)$row['training_run_id']]);$runHash=$rq->fetchColumn();
+      if(is_string($runHash)&&$runHash!==''){
+        $releaseCandidate=glasses_v11_model_rc_latest_approved($pdo,$org,(int)$row['experiment_id']);
+        if($releaseCandidate===null)throw new InvalidArgumentException('V11 promotion requires an approved model release candidate.');
+        if(($releaseCandidate['modelPackage']['publicId']??null)!==(string)$row['challenger_public_id'])throw new InvalidArgumentException('Approved release candidate does not match the experiment challenger.');
+        $verification=glasses_v11_model_rc_verify($pdo,$org,(string)$releaseCandidate['publicId']);
+        if(empty($verification['passed']))throw new InvalidArgumentException('Approved release candidate failed integrity verification.');
+      }
+    }
+
     $bq=$pdo->prepare("SELECT b.*,m.public_id mining_run_public_id,m.run_hash,m.source_fingerprint
       FROM glasses_vision_retraining_batches b
       JOIN glasses_vision_mining_runs m ON m.id=b.mining_run_id AND m.organization_id=b.organization_id
@@ -79,7 +92,7 @@ function glasses_vision_promotion_source(PDO $pdo,int $org,string $reviewPublic)
     $eq->execute([$org,(int)$batch['id']]);$errors=$eq->fetchAll();
     if(!$errors)throw new InvalidArgumentException('Continuous-learning promotion requires at least one included production-error source.');
 
-    return ['review'=>$row,'reviewResult'=>$result,'batch'=>$batch,'productionErrors'=>$errors];
+    return ['review'=>$row,'reviewResult'=>$result,'batch'=>$batch,'productionErrors'=>$errors,'releaseCandidate'=>$releaseCandidate];
 }
 
 function glasses_vision_promotion_scope(PDO $pdo,int $org,array $input): array
@@ -120,6 +133,7 @@ function glasses_vision_promotion_authorize(PDO $pdo,int $org,string $reviewPubl
       'evidenceReview'=>['publicId'=>$rv['public_id'],'reviewHash'=>$rv['review_hash']],
       'champion'=>['publicId'=>$rv['champion_public_id'],'artifactSha256'=>$rv['champion_sha']],
       'challenger'=>['publicId'=>$rv['challenger_public_id'],'artifactSha256'=>$rv['challenger_sha']],
+      'releaseCandidate'=>$source['releaseCandidate']!==null?['publicId'=>$source['releaseCandidate']['publicId'],'rcHash'=>$source['releaseCandidate']['rcHash']]:null,
       'scope'=>$scope,'initialCanaryPercent'=>5.0,'rationale'=>$rationale,
       'governance'=>['draftRolloutOnly'=>true,'requiresShadowGate'=>true,'requiresCanaryGate'=>true,'automaticActivation'=>false],
     ];

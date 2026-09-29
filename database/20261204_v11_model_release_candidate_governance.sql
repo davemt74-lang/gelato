@@ -1,0 +1,37 @@
+-- Gelato Vision Lab V11 Section 8 — Model Packaging, Registry & Release Candidate Governance
+SET NAMES utf8mb4;
+
+CREATE TABLE glasses_vision_model_release_candidates (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  organization_id BIGINT UNSIGNED NOT NULL,
+  public_id VARCHAR(80) NOT NULL,
+  experiment_id BIGINT UNSIGNED NOT NULL,
+  training_run_id BIGINT UNSIGNED NOT NULL,
+  benchmark_id BIGINT UNSIGNED NOT NULL,
+  model_package_id BIGINT UNSIGNED NOT NULL,
+  status VARCHAR(24) NOT NULL DEFAULT 'pending_approval',
+  release_notes TEXT NOT NULL,
+  runtime_compat_json JSON NOT NULL,
+  manifest_json JSON NOT NULL,
+  rc_hash CHAR(64) NOT NULL,
+  created_by BIGINT UNSIGNED NULL,
+  approved_by BIGINT UNSIGNED NULL,
+  approved_at DATETIME(6) NULL,
+  rejected_by BIGINT UNSIGNED NULL,
+  rejected_at DATETIME(6) NULL,
+  rejection_reason VARCHAR(1000) NULL,
+  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_glasses_vision_rc_public (organization_id,public_id),
+  UNIQUE KEY uq_glasses_vision_rc_hash (organization_id,rc_hash),
+  KEY idx_glasses_vision_rc_experiment (organization_id,experiment_id,status,created_at),
+  KEY idx_glasses_vision_rc_model (organization_id,model_package_id,status),
+  CONSTRAINT fk_glasses_vision_rc_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  CONSTRAINT fk_glasses_vision_rc_experiment FOREIGN KEY (experiment_id) REFERENCES glasses_vision_model_experiments(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_vision_rc_run FOREIGN KEY (training_run_id) REFERENCES glasses_vision_training_runs(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_vision_rc_benchmark FOREIGN KEY (benchmark_id) REFERENCES glasses_vision_model_benchmarks(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_vision_rc_model FOREIGN KEY (model_package_id) REFERENCES glasses_vision_model_packages(id) ON DELETE RESTRICT,
+  CONSTRAINT fk_glasses_vision_rc_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_glasses_vision_rc_approved_by FOREIGN KEY (approved_by) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT fk_glasses_vision_rc_rejected_by FOREIGN KEY (rejected_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
