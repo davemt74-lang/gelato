@@ -137,7 +137,7 @@ function glasses_vision_promotion_authorize(PDO $pdo,int $org,string $reviewPubl
         $pdo->prepare("INSERT INTO glasses_vision_model_promotions
           (organization_id,public_id,experiment_id,evidence_review_id,retraining_batch_id,mining_run_id,champion_package_id,challenger_package_id,location_id,station_id,status,initial_canary_percent,rationale,audit_json,promotion_hash,authorized_by)
           VALUES (?,?,?,?,?,?,?,?,?,?,'authorized',5.00,?,?,?,?)")
-          ->execute([$org,$public,(int)$rv['experiment_id'],(int)$rv['id'],(int)$batch['id'],(int)$batch['mining_run_id'],(int)$rv['champion_package_id'],(int)$rv['challenger_package_id'],$scope['locationId'],$scope['stationId'],$rationale,json_encode($audit,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),$hash,$actor]);
+          ->execute([$org,$public,(int)$rv['experiment_id'],(int)$rv['id'],(int)$batch['id'],(int)$batch['mining_run_id'],(int)$rv['champion_package_id'],(int)$rv['challenger_package_id'],$scope['locationId'],$scope['stationId'],$rationale,glasses_vision_training_release_json($audit),$hash,$actor]);
         $id=(int)$pdo->lastInsertId();
         glasses_vision_promotion_event($pdo,$org,$id,'authorized',['promotionHash'=>$hash,'evidenceReviewPublicId'=>$rv['public_id'],'initialCanaryPercent'=>5.0],$actor);
         glasses_vision_lineage_edge($pdo,$org,'evidence_review',(string)$rv['public_id'],(string)$rv['review_hash'],'authorized_promotion','model_promotion',$public,$hash,['challengerPublicId'=>$rv['challenger_public_id']],$actor);
