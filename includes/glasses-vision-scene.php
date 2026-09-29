@@ -16,7 +16,7 @@ function glasses_vision_scene_ready(PDO $pdo): bool
         $q->execute([$table]);
         if((int)$q->fetchColumn()!==1)return false;
     }
-    return glasses_build_ready($pdo)&&glasses_station_calibration_ready($pdo)&&glasses_vision_models_ready($pdo);
+    return glasses_build_ready($pdo)&&glasses_station_calibration_ready($pdo)&&glasses_vision_models_ready($pdo)&&glasses_vision_profiles_ready($pdo);
 }
 
 function glasses_vision_scene_time(string $value): string
