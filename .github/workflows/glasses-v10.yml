@@ -1,0 +1,93 @@
+name: AR Glasses V10 Hardware Runtime
+
+on:
+  pull_request:
+    paths:
+      - 'includes/glasses-hardware-runtime.php'
+      - 'includes/glasses-simulator.php'
+      - 'api/glasses-simulator.php'
+      - 'glasses-simulator.php'
+      - 'assets/js/glasses-web-simulator.js'
+      - 'tests/glasses-v10-hardware-runtime-adapter-contract.php'
+      - 'docs/GLASSES-V10-HARDWARE-RUNTIME.md'
+      - '.github/workflows/glasses-v10.yml'
+  push:
+    branches: [main]
+
+jobs:
+  v10-hardware-runtime:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium, zip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Syntax
+        run: |
+          php -l includes/glasses-hardware-runtime.php
+          php -l includes/glasses-simulator.php
+          php -l api/glasses-simulator.php
+          php -l glasses-simulator.php
+          php -l tests/glasses-v10-hardware-runtime-adapter-contract.php
+          node --check assets/js/glasses-web-simulator.js
+
+      - name: Architecture guardrails
+        run: |
+          grep -q 'interface GlassesHardwareRuntimeAdapter' includes/glasses-hardware-runtime.php
+          grep -q 'final class GlassesSimulatorHardwareAdapter' includes/glasses-hardware-runtime.php
+          grep -q "requiredAdapterId'=>'air3.vendor.v1'" includes/glasses-hardware-runtime.php
+          grep -q "'vendorRuntimeAvailable'=>false" includes/glasses-hardware-runtime.php
+          grep -q "'onnx'" includes/glasses-hardware-runtime.php
+          grep -q 'hardware.frame.prepare' includes/glasses-simulator.php
+          grep -q 'hardwareRuntime' api/glasses-simulator.php
+          ! grep -q 'kds_transition(' includes/glasses-hardware-runtime.php
+          ! grep -q 'glasses_build_confirm(' includes/glasses-hardware-runtime.php
+          ! grep -q 'glasses_handoff_to_expo(' includes/glasses-hardware-runtime.php
+
+      - name: Install schema
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_restaurant_ai_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $s=new UpgradeService(app_pdo(),__DIR__);
+          $s->ensureTrackingTables();
+          $s->bootstrapLegacyHistory(null);
+          $s->applyPending(null);
+          if($s->pendingMigrations()) exit(1);
+          PHP
+
+      - name: V10 hardware runtime adapter contract
+        run: php tests/glasses-v10-hardware-runtime-adapter-contract.php
+
+      - name: Existing simulator regression
+        run: php tests/glasses-web-simulator-contract.php
+
+      - name: V9 RC1 regression
+        run: php tests/glasses-vision-lab-v9-release-acceptance-contract.php
