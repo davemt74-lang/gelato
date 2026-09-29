@@ -95,6 +95,7 @@ function glasses_vision_evidence_review_run(PDO $pdo,int $org,string $experiment
 
     $checks=[
       glasses_vision_evidence_review_check('golden_eligible','Golden comparison eligibility',!empty($comparison['eligible']),$comparison['eligible'],true),
+      glasses_vision_evidence_review_check('golden_override','Golden comparison has no manual override',empty($comparison['override']),$comparison['override'],false),
       glasses_vision_evidence_review_check('golden_gain','Golden test demonstrated gain',!empty($comparison['summary']['demonstratedGain']),$comparison['summary']['demonstratedGain'],true),
       glasses_vision_evidence_review_check('map50_regression','mAP50 delta',(float)$comparison['summary']['map50Delta']>=$policy['minimumMap50Delta'],(float)$comparison['summary']['map50Delta'],'>= '.$policy['minimumMap50Delta']),
       glasses_vision_evidence_review_check('recall_regression','Recall delta',(float)$comparison['summary']['recallDelta']>=$policy['minimumRecallDelta'],(float)$comparison['summary']['recallDelta'],'>= '.$policy['minimumRecallDelta']),
