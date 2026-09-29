@@ -7,6 +7,7 @@ on:
       - 'includes/glasses-frame-pipeline.php'
       - 'includes/glasses-device-health.php'
       - 'includes/glasses-runtime-recovery.php'
+      - 'includes/glasses-runtime-soak.php'
       - 'includes/glasses-simulator.php'
       - 'api/glasses-simulator.php'
       - 'glasses-simulator.php'
@@ -15,10 +16,14 @@ on:
       - 'tests/glasses-v10-frame-pipeline-contract.php'
       - 'tests/glasses-v10-device-health-contract.php'
       - 'tests/glasses-v10-runtime-recovery-contract.php'
+      - 'tests/glasses-v10-station-soak-contract.php'
+      - 'tests/glasses-v10-soak-harness.js'
       - 'docs/GLASSES-V10-HARDWARE-RUNTIME.md'
       - 'docs/GLASSES-V10-FRAME-PIPELINE.md'
       - 'docs/GLASSES-V10-DEVICE-HEALTH.md'
       - 'docs/GLASSES-V10-RUNTIME-RECOVERY.md'
+      - 'docs/GLASSES-V10-STATION-SOAK.md'
+      - 'assets/js/glasses-v10-soak-harness.js'
       - '.github/workflows/glasses-v10.yml'
   push:
     branches: [main]
@@ -52,6 +57,7 @@ jobs:
           php -l includes/glasses-frame-pipeline.php
           php -l includes/glasses-device-health.php
           php -l includes/glasses-runtime-recovery.php
+          php -l includes/glasses-runtime-soak.php
           php -l includes/glasses-simulator.php
           php -l api/glasses-simulator.php
           php -l glasses-simulator.php
@@ -59,6 +65,9 @@ jobs:
           php -l tests/glasses-v10-frame-pipeline-contract.php
           php -l tests/glasses-v10-device-health-contract.php
           php -l tests/glasses-v10-runtime-recovery-contract.php
+          php -l tests/glasses-v10-station-soak-contract.php
+          node --check assets/js/glasses-v10-soak-harness.js
+          node --check tests/glasses-v10-soak-harness.js
           node --check assets/js/glasses-web-simulator.js
 
       - name: Architecture guardrails
@@ -96,6 +105,13 @@ jobs:
           grep -q 'RUNTIME_FRESH_BARRIER_MS' assets/js/glasses-web-simulator.js
           ! grep -q 'kds_transition(' includes/glasses-runtime-recovery.php
           ! grep -q 'glasses_handoff_to_expo(' includes/glasses-runtime-recovery.php
+          grep -q 'GLASSES_RUNTIME_SOAK_SCHEMA' includes/glasses-runtime-soak.php
+          grep -q 'function glasses_runtime_soak_evaluate' includes/glasses-runtime-soak.php
+          grep -q 'hardware.soak.evaluate' includes/glasses-simulator.php
+          grep -q 'maxConcurrentWorkers' assets/js/glasses-v10-soak-harness.js
+          ! grep -q 'build.observe' assets/js/glasses-v10-soak-harness.js
+          ! grep -q 'handoff.expo' assets/js/glasses-v10-soak-harness.js
+          ! grep -q 'kds_transition(' includes/glasses-runtime-soak.php
 
       - name: Install schema
         run: |
@@ -132,6 +148,12 @@ jobs:
 
       - name: V10 disconnect reconnect recovery contract
         run: php tests/glasses-v10-runtime-recovery-contract.php
+
+      - name: V10 station soak acceptance contract
+        run: php tests/glasses-v10-station-soak-contract.php
+
+      - name: V10 deterministic soak harness
+        run: node tests/glasses-v10-soak-harness.js
 
       - name: Existing simulator regression
         run: php tests/glasses-web-simulator-contract.php
