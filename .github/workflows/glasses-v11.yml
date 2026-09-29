@@ -4,13 +4,18 @@ on:
   pull_request:
     paths:
       - 'database/20261127_v11_training_assignment_operator_identity.sql'
+      - 'database/20261128_v11_production_evidence_capture.sql'
       - 'includes/glasses-training-identity.php'
+      - 'includes/glasses-production-evidence.php'
       - 'api/glasses-device.php'
       - 'api/glasses-vision-lab.php'
       - 'glasses-vision-lab.php'
       - 'assets/js/glasses-training-identity.js'
+      - 'assets/js/glasses-production-evidence.js'
       - 'tests/glasses-v11-training-identity-contract.php'
+      - 'tests/glasses-v11-production-evidence-contract.php'
       - 'docs/GLASSES-V11-TRAINING-IDENTITY.md'
+      - 'docs/GLASSES-V11-PRODUCTION-EVIDENCE.md'
       - '.github/workflows/glasses-v11.yml'
   push:
     branches: [main]
@@ -40,11 +45,14 @@ jobs:
       - name: Syntax
         run: |
           php -l includes/glasses-training-identity.php
+          php -l includes/glasses-production-evidence.php
           php -l api/glasses-device.php
           php -l api/glasses-vision-lab.php
           php -l glasses-vision-lab.php
           php -l tests/glasses-v11-training-identity-contract.php
+          php -l tests/glasses-v11-production-evidence-contract.php
           node --check assets/js/glasses-training-identity.js
+          node --check assets/js/glasses-production-evidence.js
       - name: Architecture guardrails
         run: |
           grep -q 'GLASSES_TRAINING_ASSIGNMENT_SCHEMA' includes/glasses-training-identity.php
@@ -56,6 +64,13 @@ jobs:
           ! grep -q 'kds_transition(' includes/glasses-training-identity.php
           ! grep -q 'glasses_handoff_to_expo(' includes/glasses-training-identity.php
           ! grep -q 'glasses_build_confirm(' includes/glasses-training-identity.php
+          grep -q 'GLASSES_V11_PRODUCTION_EVIDENCE_SCHEMA' includes/glasses-production-evidence.php
+          grep -q 'ALTER TABLE glasses_vision_training_media' database/20261128_v11_production_evidence_capture.sql
+          ! grep -q 'CREATE TABLE' database/20261128_v11_production_evidence_capture.sql
+          grep -q 'training.evidence_capture' api/glasses-device.php
+          grep -q 'training.evidence_eligibility' api/glasses-vision-lab.php
+          ! grep -q 'kds_transition(' includes/glasses-production-evidence.php
+          ! grep -q 'glasses_handoff_to_expo(' includes/glasses-production-evidence.php
       - name: Install schema
         run: |
           sudo apt-get update -qq
@@ -81,6 +96,9 @@ jobs:
           PHP
       - name: V11 training assignment and operator identity contract
         run: php tests/glasses-v11-training-identity-contract.php
+      - name: V11 production evidence capture contract
+        run: php tests/glasses-v11-production-evidence-contract.php
+
       - name: V10 RC1 regression
         run: php tests/glasses-v10-rc1-acceptance-contract.php
       - name: V9 RC1 regression
