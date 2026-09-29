@@ -15,6 +15,7 @@ require_once __DIR__.'/../includes/glasses-vision-active-perception.php';
 require_once __DIR__.'/../includes/glasses-vision-scene.php';
 require_once __DIR__.'/../includes/glasses-vision-step-recognition.php';
 require_once __DIR__.'/../includes/glasses-vision-ingredient-prevention.php';
+require_once __DIR__.'/../includes/glasses-vision-quantity-verification.php';
 
 $pdo=app_pdo();
 if(!glasses_ready($pdo))app_json_response(['ok'=>false,'message'=>'Glasses plugin migration is not installed.'],503);
@@ -174,6 +175,22 @@ try{
         $scene=glasses_vision_scene_row($pdo,(int)$device['organization_id'],(string)$assessment['scenePublicId']);
         if(!hash_equals((string)$scene['devicePublicId'],(string)$device['public_id']))throw new InvalidArgumentException('Ingredient-prevention assessment does not belong to this device.');
         app_json_response(['ok'=>true,'verification'=>glasses_vision_ingredient_guard_verify($pdo,(int)$device['organization_id'],$publicId)]);
+    }
+
+    if($action==='vision.quantity.verify_scene'){
+        $scenePublicId=trim((string)($in['scenePublicId']??''));
+        $scene=glasses_vision_scene_row($pdo,(int)$device['organization_id'],$scenePublicId);
+        if(!hash_equals((string)$scene['devicePublicId'],(string)$device['public_id']))throw new InvalidArgumentException('Scene does not belong to this device.');
+        $verification=glasses_vision_quantity_verify_scene($pdo,(int)$device['organization_id'],$scenePublicId);
+        app_json_response(['ok'=>true,'quantityVerification'=>$verification],201);
+    }
+
+    if($action==='vision.quantity.verify'){
+        $publicId=trim((string)($in['publicId']??''));
+        $verification=glasses_vision_quantity_row($pdo,(int)$device['organization_id'],$publicId);
+        $scene=glasses_vision_scene_row($pdo,(int)$device['organization_id'],(string)$verification['scenePublicId']);
+        if(!hash_equals((string)$scene['devicePublicId'],(string)$device['public_id']))throw new InvalidArgumentException('Quantity verification does not belong to this device.');
+        app_json_response(['ok'=>true,'verification'=>glasses_vision_quantity_verify($pdo,(int)$device['organization_id'],$publicId)]);
     }
 
     if($action==='vision.profile'){
