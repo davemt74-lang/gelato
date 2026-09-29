@@ -82,6 +82,13 @@ function glasses_vision_autonomy_runtime_bundle(PDO $pdo,int $org,string $decisi
       'confidenceDecision'=>['publicId'=>$decision['publicId'],'decisionHash'=>$decision['decisionHash']],
       'policy'=>['publicId'=>$decision['policyPublicId'],'policyHash'=>$decision['evidence']['policy']['policyHash']??null],
       'devicePublicId'=>$decision['evidence']['devicePublicId']??null,'buildSessionPublicId'=>$decision['evidence']['buildSessionPublicId']??null,
+      'assignment'=>[
+        'assignmentKey'=>$decision['evidence']['assignment']['assignmentKey']??null,
+        'modelPackagePublicId'=>$decision['evidence']['assignment']['modelPackagePublicId']??null,
+        'modelArtifactSha256'=>$decision['evidence']['assignment']['modelArtifactSha256']??null,
+      ],
+      'labelProfileHash'=>$decision['evidence']['labelProfileHash']??null,
+      'normalizedLabel'=>$decision['normalizedLabel'],'componentKey'=>$decision['componentKey'],
       'model'=>['publicId'=>$package['public_id'],'artifactSha256'=>$package['artifact_sha256']],
       'healthSnapshot'=>$health?['publicId'=>$health['publicId'],'snapshotHash'=>$health['snapshotHash'],'sourceFingerprint'=>$health['sourceFingerprint']]:null,
       'contextDriftAnalysis'=>$context?['publicId'=>$context['publicId'],'analysisHash'=>$context['analysisHash'],'classification'=>$context['classification']]:null,
@@ -245,6 +252,11 @@ function glasses_vision_autonomy_verify(PDO $pdo,int $org,string $publicId): arr
     $passed=hash_equals($a['auditHash'],$hash)
       &&hash_equals((string)($a['evidence']['model']['publicId']??''),(string)$a['modelPackagePublicId'])
       &&hash_equals((string)($a['evidence']['model']['artifactSha256']??''),(string)$a['modelArtifactSha256']);
+    if($a['subjectKind']==='confidence_decision'){
+        $assignedPublic=(string)($a['evidence']['assignment']['modelPackagePublicId']??'');
+        $assignedHash=(string)($a['evidence']['assignment']['modelArtifactSha256']??'');
+        $passed=$passed&&hash_equals($assignedPublic,(string)$a['modelPackagePublicId'])&&hash_equals($assignedHash,(string)$a['modelArtifactSha256']);
+    }
     if($a['subjectKind']==='confidence_decision'){
         $passed=$passed&&$a['confidenceDecisionPublicId']!==null
           &&hash_equals((string)$a['subjectPublicId'],(string)$a['confidenceDecisionPublicId']);
