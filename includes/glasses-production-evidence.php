@@ -84,6 +84,7 @@ function glasses_v11_production_evidence_capture(PDO $pdo,array $device,array $i
 
   $session=glasses_v11_evidence_session($pdo,$org,$device,!empty($input['trainingSessionPublicId'])?(string)$input['trainingSessionPublicId']:null,$capturedSql);
   $model=glasses_v11_evidence_model($pdo,$org,!empty($input['modelPackagePublicId'])?(string)$input['modelPackagePublicId']:null);
+  $input['trainingEligibility']='review';
   $context=glasses_v11_evidence_context($session,$model,$input);
 
   if(!empty($input['devicePublicId'])&&!hash_equals((string)$device['public_id'],(string)$input['devicePublicId']))throw new InvalidArgumentException('Evidence device identity cannot be overridden.');
@@ -93,6 +94,7 @@ function glasses_v11_production_evidence_capture(PDO $pdo,array $device,array $i
   }
 
   $mediaInput=$input;
+  $mediaInput['trainingEligibility']='review';
   $mediaInput['devicePublicId']=$device['public_id'];
   $mediaInput['capturedAt']=$capturedSql;
   $mediaInput['consentBasis']='training_media_opt_in';
