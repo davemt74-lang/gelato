@@ -20,18 +20,18 @@ function glasses_vision_mining_policy(array $requested=[]): array
       'minimumScore'=>60,
       'maxOpenPerCluster'=>3,
       'maxOpenPerModel'=>12,
-      'maxCandidatesPerRun'=>100,
+      'maxOpenPerRun'=>100,
       'recurrenceBonusPerExtra'=>2,
       'maximumRecurrenceBonus'=>10,
       'maximumConfidenceBonus'=>8,
     ];
-    foreach(['minimumScore','maxOpenPerCluster','maxOpenPerModel','maxCandidatesPerRun'] as $k){
+    foreach(['minimumScore','maxOpenPerCluster','maxOpenPerModel','maxOpenPerRun'] as $k){
         if(isset($requested[$k]))$defaults[$k]=max(1,(int)$requested[$k]);
     }
     $defaults['minimumScore']=min(100,$defaults['minimumScore']);
     $defaults['maxOpenPerCluster']=min(20,$defaults['maxOpenPerCluster']);
     $defaults['maxOpenPerModel']=min(100,$defaults['maxOpenPerModel']);
-    $defaults['maxCandidatesPerRun']=min(1000,$defaults['maxCandidatesPerRun']);
+    $defaults['maxOpenPerRun']=min(1000,$defaults['maxOpenPerRun']);
     return $defaults;
 }
 
@@ -157,7 +157,7 @@ function glasses_vision_mining_build(PDO $pdo,int $org,array $policy): array
 
     $clusterOpen=[];$modelOpen=[];$selected=0;$open=0;$suppressed=0;
     foreach($candidates as &$c){
-        if($selected>=(int)$policy['maxCandidatesPerRun']){$c['status']='suppressed';$c['reasons']['suppressionReason']='run_limit';$suppressed++;continue;}
+        if($selected>=(int)$policy['maxOpenPerRun']){$c['status']='suppressed';$c['reasons']['suppressionReason']='run_limit';$suppressed++;continue;}
         $cluster=$c['clusterKey'];$model=$c['modelPackagePublicId']??'unattributed';
         if(($clusterOpen[$cluster]??0)>=(int)$policy['maxOpenPerCluster']){
             $c['status']='suppressed';$c['reasons']['suppressionReason']='cluster_dominance_cap';$suppressed++;continue;
