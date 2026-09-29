@@ -2,7 +2,7 @@
 
 Section 3 adds governed, environment-specific calibration selection on top of the existing station calibration system.
 
-It does **not** replace station calibrations. Existing calibration versions remain the spatial truth. V8 profiles reference those immutable versions and define when each version is appropriate.
+It does **not** replace station calibrations. Existing calibration versions remain the spatial truth. V8 profiles reference those immutable versions and define when each version is appropriate. A station calibration marked `superseded` may remain selectable through an explicitly active V8 profile; `superseded` only means it is no longer the station's default fallback.
 
 ## Profile contract
 
