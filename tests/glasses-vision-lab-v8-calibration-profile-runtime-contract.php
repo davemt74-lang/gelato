@@ -24,12 +24,6 @@ $bright=glasses_station_calibration_save($pdo,$org,$location,(string)$station['p
  'platform'=>'inmo_air3','frameWidth'=>640,'frameHeight'=>480,'pixelFormat'=>'grayscale8',
  'zones'=>[['zoneKey'=>'pep','ingredientId'=>$ingredient,'x'=>.1,'y'=>.1,'width'=>.2,'height'=>.2]]
 ],$actor);
-$fallback=glasses_station_calibration_save($pdo,$org,$location,(string)$station['public_id'],[
- 'platform'=>'inmo_air3','frameWidth'=>640,'frameHeight'=>480,'pixelFormat'=>'grayscale8',
- 'zones'=>[['zoneKey'=>'pep','ingredientId'=>$ingredient,'x'=>.12,'y'=>.12,'width'=>.2,'height'=>.2]]
-],$actor);
-v83_assert((string)v83_one($pdo,"SELECT status FROM glasses_station_calibrations WHERE organization_id=? AND public_id=?",[$org,$bright['publicId']])==='superseded','Second station calibration must supersede first.');
-
 $modelPublic='vision-cal-model-'.$slug;$modelHash=hash('sha256','cal-model-'.$slug);
 $pdo->prepare("INSERT INTO glasses_vision_model_packages
  (organization_id,public_id,detector_name,model_name,model_version,runtime_type,platform,artifact_url,artifact_sha256,artifact_bytes,status,created_by)
@@ -59,6 +53,14 @@ v83_assert(glasses_vision_calibration_selection_verify($pdo,$org,$match['publicI
 $same=glasses_vision_calibration_profile_select($pdo,$org,$baseInput+['context'=>['brightnessMean'=>.90,'contrastMean'=>.40]],$actor);
 v83_assert($same['publicId']===$match['publicId'],'Same runtime/context selection must be idempotent.');
 
+$fallback=glasses_station_calibration_save($pdo,$org,$location,(string)$station['public_id'],[
+ 'platform'=>'inmo_air3','frameWidth'=>640,'frameHeight'=>480,'pixelFormat'=>'grayscale8',
+ 'zones'=>[['zoneKey'=>'pep','ingredientId'=>$ingredient,'x'=>.12,'y'=>.12,'width'=>.2,'height'=>.2]]
+],$actor);
+v83_assert((string)v83_one($pdo,"SELECT status FROM glasses_station_calibrations WHERE organization_id=? AND public_id=?",[$org,$bright['publicId']])==='superseded','Second station calibration must supersede first.');
+$profileAfterSupersede=glasses_vision_calibration_profile_row($pdo,$org,$profile['publicId']);
+v83_assert($profileAfterSupersede['calibrationStatus']==='superseded','Profile must surface superseded source calibration state.');
+
 $dark=glasses_vision_calibration_profile_select($pdo,$org,$baseInput+['context'=>['brightnessMean'=>.40,'contrastMean'=>.40]],$actor);
 v83_assert($dark['decision']==='station_fallback'&&$dark['selectedProfilePublicId']===null&&$dark['fallbackCalibrationPublicId']===$fallback['publicId'],'Non-matching context must fall back to current station calibration.');
 
@@ -69,11 +71,20 @@ $wrongFrame=glasses_vision_calibration_profile_select($pdo,$org,[
 ],$actor);
 v83_assert($wrongFrame['decision']==='none','Incompatible profile and incompatible fallback must return none rather than guess.');
 
+$missingRuntime=false;
+try{glasses_vision_calibration_profile_select($pdo,$org,['devicePublicId'=>$device['public_id'],'modelPackagePublicId'=>$modelPublic,'context'=>['brightnessMean'=>.90]],$actor);}
+catch(InvalidArgumentException){$missingRuntime=true;}
+v83_assert($missingRuntime,'Selection without a current camera signature or verified analysis must fail closed.');
+v83_assert((int)v83_one($pdo,"SELECT COUNT(*) FROM glasses_vision_calibration_profile_events WHERE organization_id=? AND profile_id=(SELECT id FROM glasses_vision_calibration_profiles WHERE organization_id=? AND public_id=?)",[$org,$org,$profile['publicId']])===2,'Profile creation and activation must both be append-only lifecycle events.');
+v83_assert((int)v83_one($pdo,"SELECT COUNT(*) FROM glasses_vision_lineage_edges WHERE organization_id=? AND from_kind='station_calibration' AND from_public_id=? AND relation='profiled_as' AND to_kind='calibration_profile'",[$org,$bright['publicId']])===1,'Calibration profile must retain source-calibration lineage.');
+v83_assert((int)v83_one($pdo,"SELECT COUNT(*) FROM glasses_vision_lineage_edges WHERE organization_id=? AND from_kind='calibration_profile' AND from_public_id=? AND relation='selected_as' AND to_kind='calibration_selection'",[$org,$profile['publicId']])===1,'Profile selection must retain immutable lineage.');
+
 $profile=glasses_vision_calibration_profile_set_status($pdo,$org,$profile['publicId'],'retired',$actor);
 $retired=glasses_vision_calibration_profile_select($pdo,$org,$baseInput+['context'=>['brightnessMean'=>.90,'contrastMean'=>.40]],$actor);
 v83_assert($retired['decision']==='station_fallback'&&$retired['selectedProfilePublicId']===null,'Retired profiles must never be selected.');
 $reactivate=false;try{glasses_vision_calibration_profile_set_status($pdo,$org,$profile['publicId'],'active',$actor);}catch(InvalidArgumentException){$reactivate=true;}
 v83_assert($reactivate,'Retired profiles must not be silently reactivated.');
+v83_assert((int)v83_one($pdo,"SELECT COUNT(*) FROM glasses_vision_calibration_profile_events WHERE organization_id=? AND profile_id=(SELECT id FROM glasses_vision_calibration_profiles WHERE organization_id=? AND public_id=?)",[$org,$org,$profile['publicId']])===3,'Retirement must append a durable lifecycle event.');
 
 $pdo->prepare("UPDATE glasses_vision_calibration_selections SET reasons_json='{}' WHERE organization_id=? AND public_id=?")->execute([$org,$match['publicId']]);
 v83_assert(glasses_vision_calibration_selection_verify($pdo,$org,$match['publicId'])['passed']===false,'Calibration selection tampering must be detectable.');
