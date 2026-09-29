@@ -1,0 +1,10 @@
+(function(){'use strict';
+const boot=window.GELATO_VISION_LAB||{},root=document.getElementById('vlV11Mining'),run=document.getElementById('vlV11MiningRun');if(!root)return;let catalog=boot.catalog||{};
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+async function api(payload){payload.csrf_token=boot.csrfToken;const r=await fetch(boot.apiUrl,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.message||'Mining request failed.');await refresh();return j;}
+async function refresh(){const r=await fetch(boot.apiUrl,{credentials:'same-origin',cache:'no-store'}),j=await r.json();if(!r.ok||!j.ok)throw new Error(j.message||'Mining refresh failed.');catalog=j.catalog||{};render();}
+function render(){const rows=catalog.v11Mining?.candidates||[];if(!rows.length){root.innerHTML='<div class="vl-empty">No V11 hard examples mined yet.</div>';return;}root.innerHTML=rows.map(x=>'<article class="vl-pilot-card"><div class="vl-head"><div><strong>'+esc(x.candidateType)+' · '+esc(x.sourceKind)+'</strong><small>'+esc(x.operatorName||'unknown operator')+' · '+esc(x.trainingValue?.recipeStepKey||'no step')+'</small></div><span class="vl-state '+esc(x.status)+'">'+esc(x.status)+' · '+esc(x.score)+'</span></div><small>'+esc(x.trainingValue?.validationOutcome||x.trainingValue?.sourcePublicId||'')+'</small>'+(x.status!=='dismissed'?'<div class="inline-actions"><button data-dismiss="'+esc(x.publicId)+'">Dismiss</button></div>':'')+'</article>').join('');}
+run?.addEventListener('click',()=>api({action:'mining.run',policy:{minimumScore:60}}).catch(e=>alert(e.message)));
+root.addEventListener('click',e=>{const b=e.target.closest('button[data-dismiss]');if(!b)return;const reason=prompt('Dismissal reason');if(!reason)return;api({action:'mining.dismiss',candidatePublicId:b.dataset.dismiss,reason}).catch(err=>alert(err.message));});
+render();
+})();
