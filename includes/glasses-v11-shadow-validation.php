@@ -60,7 +60,7 @@ function glasses_v11_shadow_report(PDO $pdo,array $device,string $sessionPublicI
   $org=(int)$device['organization_id'];$runPublic=trim((string)($input['shadowRunPublicId']??''));$frameKey=trim((string)($input['frameKey']??''));
   $q=$pdo->prepare("SELECT e.id FROM glasses_vision_shadow_events e JOIN glasses_vision_shadow_runs r ON r.id=e.shadow_run_id AND r.organization_id=e.organization_id WHERE e.organization_id=? AND r.public_id=? AND e.frame_key=? LIMIT 1");
   $q->execute([$org,$runPublic,$frameKey]);$eventId=(int)$q->fetchColumn();
-  if($eventId>0){
+  if($eventId>0&&empty($result['idempotent'])){
     $cl=array_key_exists('championLatencyMs',$input)?max(0,(float)$input['championLatencyMs']):null;
     $xl=array_key_exists('challengerLatencyMs',$input)?max(0,(float)$input['challengerLatencyMs']):null;
     $pdo->prepare("UPDATE glasses_vision_shadow_events SET champion_latency_ms=?,challenger_latency_ms=?,champion_timeout=?,challenger_timeout=?,champion_runtime_error=?,challenger_runtime_error=? WHERE organization_id=? AND id=?")
