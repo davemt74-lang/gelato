@@ -117,18 +117,19 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
           <div id="hudOrders" class="hud-orders-list"></div>
         </aside>
 
-        <div class="hud-next-center editable-region" id="hudNextRegion" data-region="hudNextRegion">
-          <button class="region-handle region-move" type="button" tabindex="-1" aria-hidden="true">MOVE</button>
-          <button class="region-handle region-resize" type="button" tabindex="-1" aria-hidden="true">↘</button>
-          <small>NEXT</small>
-          <strong id="hudNextCenter">Add Toasted Bread</strong>
-          <span id="hudNextTarget">Target ingredient</span>
-          <div class="hud-leader-line" id="hudLeaderLine"><span></span></div>
-        </div>
+        <div id="hudCenterClear" class="hud-center-clear" aria-hidden="true"></div>
 
         <aside class="hud-right-build editable-region" id="hudRight" data-region="hudRight">
           <button class="region-handle region-move" type="button" tabindex="-1" aria-hidden="true">MOVE</button>
           <button class="region-handle region-resize" type="button" tabindex="-1" aria-hidden="true">↘</button>
+          <div class="hud-card hud-next-card" id="hudNextRegion" data-region="hudNextRegion">
+            <div class="hud-panel-title"><small>NEXT</small><span id="hudNextTarget">Target ingredient</span></div>
+            <strong id="hudNextCenter">Add Toasted Bread</strong>
+          </div>
+          <div class="hud-card hud-cook-alert" id="hudCookAlert" hidden>
+            <div class="hud-panel-title"><small id="hudCookAlertTitle">CHECK</small><span id="hudCookAlertTone">ADVISORY</span></div>
+            <strong id="hudCookAlertMessage">Correct the issue before continuing.</strong>
+          </div>
           <div class="hud-card hud-build-card">
             <div class="hud-panel-title"><small>ACTIVE BUILD</small><span id="hudBuildTicket">#1042</span></div>
             <strong id="hudBuildItem">Club Sandwich + Fries</strong>
@@ -185,6 +186,26 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
       <div class="inline-actions"><button id="runStationSoak" type="button">Run Soak Acceptance</button><button id="downloadSoakReport" type="button" disabled>Download Report</button></div>
       <div id="stationSoakMetrics" class="vision-metrics">processed 0 · dropped 0 · timeouts 0 · recoveries 0</div>
       <p class="calibration-note">This harness never submits build observations. It stress-tests bounded queues, jitter, timeout, network/camera/inference recovery, worker cleanup, and final-ready state.</p>
+    </section>
+    <section class="console-card cook-ux-card">
+      <div class="console-heading"><div><small>V10 COOK UX</small><strong>On-lens interaction acceptance</strong></div><span id="cookUxState">IDLE</span></div>
+      <div id="cookUxSummary" class="vision-model-status"><strong>CENTER CLEAR</strong><span>Persistent guidance is confined to the side rails.</span></div>
+      <label class="work-picker"><span>Preview state</span><select id="cookUxScenario">
+        <option value="current_item">Current item</option>
+        <option value="next_step">Next step</option>
+        <option value="ingredient_warning">Ingredient warning</option>
+        <option value="portion_correction">Portion correction</option>
+        <option value="placement_correction">Placement correction</option>
+        <option value="rework_required">Rework required</option>
+        <option value="final_validation">Final validation</option>
+        <option value="explicit_handoff">Explicit handoff</option>
+        <option value="stop_cancel">STOP / cancel</option>
+        <option value="recovery_blocked">Recovery blocked</option>
+      </select></label>
+      <div class="inline-actions"><button id="previewCookUx" type="button">Preview State</button><button id="runCookUxAcceptance" type="button">Run UX Acceptance</button></div>
+      <div class="inline-actions"><button id="stopCookVision" type="button">STOP Vision</button><button id="resumeCookVision" type="button">Resume Vision</button></div>
+      <div id="cookUxMetrics" class="vision-metrics">center clear · current item · next step · warnings · rework · handoff</div>
+      <p class="calibration-note">STOP cancels automatic observations and clears transient vision state. Resume is explicit. Handoff remains a separate human-confirmed action.</p>
     </section>
     <section class="console-card calibration-card" id="calibrationPanel">
       <div class="console-heading"><div><small>PROJECTION CALIBRATION</small><strong>Lens layout & display tuning</strong></div><span id="calibrationState">LOCKED</span></div>
@@ -369,6 +390,7 @@ window.GELATO_GLASSES_SIMULATOR={
 };
 </script>
 <script src="assets/js/glasses-v10-soak-harness.js?v=20260929-v10-5"></script>
-<script src="assets/js/glasses-web-simulator.js?v=20260929-v10-5"></script>
+<script src="assets/js/glasses-v10-cook-ux-harness.js?v=20260929-v10-6"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20260929-v10-6"></script>
 </body>
 </html>
