@@ -21,6 +21,7 @@ on:
       - 'includes/glasses-vision-handoff-confirmation.php'
       - 'includes/glasses-vision-rework.php'
       - 'includes/glasses-vision-kitchen-outcomes.php'
+      - 'includes/glasses-vision-v9-release.php'
       - 'api/glasses-device.php'
       - 'api/glasses-vision-lab.php'
       - 'glasses-vision-lab.php'
@@ -43,6 +44,7 @@ on:
       - 'tests/glasses-vision-lab-v9-human-handoff-confirmation-contract.php'
       - 'tests/glasses-vision-lab-v9-rework-revalidation-contract.php'
       - 'tests/glasses-vision-lab-v9-kitchen-outcomes-contract.php'
+      - 'tests/glasses-vision-lab-v9-release-acceptance-contract.php'
       - 'docs/GLASSES-VISION-LAB-V9-LIVE-SCENE.md'
       - 'docs/GLASSES-VISION-LAB-V9-RECIPE-STEP-RECOGNITION.md'
       - 'docs/GLASSES-VISION-LAB-V9-INGREDIENT-PREVENTION.md'
@@ -52,6 +54,7 @@ on:
       - 'docs/GLASSES-VISION-LAB-V9-HUMAN-HANDOFF-CONFIRMATION.md'
       - 'docs/GLASSES-VISION-LAB-V9-REWORK-REVALIDATION.md'
       - 'docs/GLASSES-VISION-LAB-V9-KITCHEN-OUTCOMES.md'
+      - 'docs/GLASSES-VISION-LAB-V9-RC1.md'
       - '.github/workflows/glasses-vision-lab-v9.yml'
   push:
     branches: [main]
@@ -90,6 +93,7 @@ jobs:
           php -l includes/glasses-vision-handoff-confirmation.php
           php -l includes/glasses-vision-rework.php
           php -l includes/glasses-vision-kitchen-outcomes.php
+          php -l includes/glasses-vision-v9-release.php
           php -l api/glasses-device.php
           php -l api/glasses-vision-lab.php
           php -l glasses-vision-lab.php
@@ -102,6 +106,7 @@ jobs:
           php -l tests/glasses-vision-lab-v9-human-handoff-confirmation-contract.php
           php -l tests/glasses-vision-lab-v9-rework-revalidation-contract.php
           php -l tests/glasses-vision-lab-v9-kitchen-outcomes-contract.php
+          php -l tests/glasses-vision-lab-v9-release-acceptance-contract.php
           node --check assets/js/glasses-vision-scene.js
           node --check assets/js/glasses-vision-step-recognition.js
           node --check assets/js/glasses-vision-ingredient-prevention.js
@@ -123,7 +128,8 @@ jobs:
           grep -q 'buildContextHash' includes/glasses-vision-scene.php
           grep -q 'Scene tracking IDs must be unique' includes/glasses-vision-scene.php
           grep -q 'function glasses_vision_scene_verify' includes/glasses-vision-scene.php
-          grep -q 'reserved_for_v9_section_2' includes/glasses-vision-scene.php
+          grep -q 'step_recognition_not_run_for_scene_capture' includes/glasses-vision-scene.php
+          ! grep -q 'reserved_for_v9_section_2' includes/glasses-vision-scene.php
           grep -q 'glasses_vision_profile_for_build' includes/glasses-vision-scene.php
           grep -q 'Vision Label Profile' includes/glasses-vision-scene.php
           grep -q 'normalized_label VARCHAR(180)' database/20261117_vision_lab_v9_live_scene_understanding.sql
@@ -206,6 +212,8 @@ jobs:
           ! grep -q 'glasses_vision_promotion_' includes/glasses-vision-kitchen-outcomes.php
           ! grep -q 'glasses_vision_feedback_record(' includes/glasses-vision-kitchen-outcomes.php
           ! grep -q 'kds_transition(' includes/glasses-vision-kitchen-outcomes.php
+          grep -q "GLASSES_VISION_V9_RELEASE='v9.0-rc1'" includes/glasses-vision-v9-release.php
+          grep -q 'function glasses_vision_v9_release_readiness' includes/glasses-vision-v9-release.php
 
       - name: Install and upgrade schema
         run: |
@@ -257,6 +265,9 @@ jobs:
 
       - name: V9 production learning from kitchen outcomes contract
         run: php tests/glasses-vision-lab-v9-kitchen-outcomes-contract.php
+
+      - name: V9 RC1 release acceptance
+        run: php tests/glasses-vision-lab-v9-release-acceptance-contract.php
 
       - name: V8 governance regressions
         run: |
