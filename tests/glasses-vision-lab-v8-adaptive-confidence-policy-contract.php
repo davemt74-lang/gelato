@@ -53,6 +53,11 @@ $policy=glasses_vision_confidence_policy_create($pdo,$org,[
 ],$actor);
 v84_assert($policy['status']==='draft'&&glasses_vision_confidence_policy_verify($pdo,$org,$policy['publicId'])['passed'],'New policy must be draft and hash-verifiable.');
 $policy=glasses_vision_confidence_policy_status($pdo,$org,$policy['publicId'],'active',$actor);
+$duplicate=glasses_vision_confidence_policy_create($pdo,$org,[
+ 'policyKey'=>'production-safe-duplicate','detectorName'=>'ingredient_detector','defaultThreshold'=>.75
+],$actor);
+$duplicateBlocked=false;try{glasses_vision_confidence_policy_status($pdo,$org,$duplicate['publicId'],'active',$actor);}catch(InvalidArgumentException){$duplicateBlocked=true;}
+v84_assert($duplicateBlocked,'A detector/model scope must not have multiple active confidence policies.');
 
 $review=glasses_vision_confidence_decide($pdo,$org,[
  'devicePublicId'=>$device['public_id'],'buildSessionPublicId'=>$sessionPublic,'detectorName'=>'ingredient_detector','modelLabel'=>'pepperoni','confidence'=>.95
@@ -87,9 +92,10 @@ $policy=glasses_vision_confidence_policy_status($pdo,$org,$policy['publicId'],'r
 $reactivate=false;try{glasses_vision_confidence_policy_status($pdo,$org,$policy['publicId'],'active',$actor);}catch(InvalidArgumentException){$reactivate=true;}
 v84_assert($reactivate,'Retired confidence policies must not silently reactivate.');
 
-$api=file_get_contents(__DIR__.'/../api/glasses-vision-lab.php');$page=file_get_contents(__DIR__.'/../glasses-vision-lab.php');$source=file_get_contents(__DIR__.'/../includes/glasses-vision-confidence-policy.php');
+$api=file_get_contents(__DIR__.'/../api/glasses-vision-lab.php');$deviceApi=file_get_contents(__DIR__.'/../api/glasses-device.php');$page=file_get_contents(__DIR__.'/../glasses-vision-lab.php');$source=file_get_contents(__DIR__.'/../includes/glasses-vision-confidence-policy.php');
 foreach(['confidence_policy.create','confidence_policy.activate','confidence_policy.retire','confidence_policy.verify','confidence_policy.decide','confidence_decision.verify'] as $action)v84_assert(str_contains($api,$action),'V8 confidence-policy API missing '.$action);
 v84_assert(str_contains($page,'Adaptive Confidence &amp; Decision Policy'),'Vision Lab must expose Section 4 adaptive confidence controls.');
+v84_assert(str_contains($deviceApi,"vision.confidence_decision"),'Authenticated glasses runtime must expose governed confidence decisions.');
 v84_assert(str_contains($source,'GLASSES_VISION_CONFIDENCE_HARD_FLOOR=0.50'),'Global 0.50 safety floor must be explicit.');
 v84_assert(!str_contains($source,'rollout.activate')&&!str_contains($source,'rollout.advance')&&!str_contains($source,'kds_transition'),'Confidence policy must remain a decision layer only.');
 
