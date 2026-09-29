@@ -70,6 +70,7 @@ function glasses_vision_scene_entities_normalize(array $input,array $build,?arra
     if(count($input)>120)throw new InvalidArgumentException('Scene contains too many entities.');
     $allowed=['ingredient','tool','container','hand','product','equipment','surface','unknown'];
     $validComponents=[];foreach((array)$build['components'] as $c)$validComponents[(string)$c['componentKey']]=true;
+    $mappingByLabel=[];foreach((array)($profile['mappings']??[]) as $mapping)$mappingByLabel[(string)$mapping['normalizedLabel']]=$mapping;
     $seen=[];$trackingSeen=[];$entities=[];
     foreach(array_values($input) as $i=>$raw){
         if(!is_array($raw))throw new InvalidArgumentException('Scene entity payload is invalid.');
@@ -85,8 +86,6 @@ function glasses_vision_scene_entities_normalize(array $input,array $build,?arra
         $requestedComponent=mb_substr(trim((string)($raw['componentKey']??'')),0,160,'UTF-8')?:null;
         if($requestedComponent!==null&&$kind!=='ingredient')
             throw new InvalidArgumentException('Only ingredient scene entities may bind to recipe components.');
-        $mappingByLabel=[];
-        foreach((array)($profile['mappings']??[]) as $mapping)$mappingByLabel[(string)$mapping['normalizedLabel']]=$mapping;
         $componentKey=null;
         if($kind==='ingredient'&&$normalizedLabel!==''){
             $mapping=$mappingByLabel[$normalizedLabel]??null;
