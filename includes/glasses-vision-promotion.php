@@ -149,8 +149,8 @@ function glasses_vision_promotion_create_rollout(PDO $pdo,int $org,string $publi
         if((string)$p['status']!=='authorized')throw new InvalidArgumentException('Only an authorized promotion may create its draft rollout.');
 
         $source=glasses_vision_promotion_source($pdo,$org,(string)$p['review_public_id']);
-        if(!hash_equals((string)$p['promotion_hash'],hash('sha256',glasses_vision_training_release_json(json_decode((string)$p['audit_json'],true)?:[]))))
-            throw new InvalidArgumentException('Promotion audit snapshot hash does not match its authorization.');
+        $integrity=glasses_vision_promotion_verify($pdo,$org,$p);
+        if(!$integrity['passed'])throw new InvalidArgumentException('Promotion audit chain failed integrity verification.');
 
         $rollout=glasses_vision_model_rollout_create($pdo,$org,[
           'targetPackagePublicId'=>(string)$p['challenger_public_id'],
