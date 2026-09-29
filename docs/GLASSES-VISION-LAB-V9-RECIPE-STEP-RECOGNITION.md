@@ -15,7 +15,7 @@ Recognition consumes the build definition captured by the active build session:
 - current build-component statuses;
 - current expected component.
 
-The build definition must still be the same canonical definition attached to the active build. Recognition fails closed if the build is no longer active or the definition identity no longer matches the scene.
+The build definition must still be the same canonical definition attached to the active build. Recognition also recomputes the live canonical build-context SHA-256. A scene that was valid when captured cannot generate new current-step guidance after component/KDS/build state advances. Historical recognitions remain verifiable.
 
 ## Scene evidence
 
