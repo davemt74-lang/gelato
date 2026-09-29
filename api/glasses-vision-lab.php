@@ -47,6 +47,7 @@ try{
  if(!app_has_permission('glasses.manage',$user))app_json_response(['ok'=>false,'message'=>'AR glasses management permission required.'],403);
  $in=app_json_input();app_verify_request_csrf($in);$action=(string)($in['action']??'');$actor=(int)$user['id'];
  if($action==='mining.run')app_json_response(['ok'=>true,'run'=>glasses_v11_mining_run($pdo,$org,is_array($in['policy']??null)?$in['policy']:[],$actor)],201);
+ if($action==='mining.dismiss')app_json_response(['ok'=>true,'candidate'=>glasses_v11_mining_dismiss($pdo,$org,(string)($in['candidatePublicId']??''),(string)($in['reason']??''),$actor)]);
  if($action==='annotation.submit')app_json_response(['ok'=>true,'correction'=>glasses_v11_annotation_submit($pdo,$org,$in,$actor)],201);
  if($action==='annotation.review')app_json_response(['ok'=>true,'correction'=>glasses_v11_annotation_review($pdo,$org,(string)($in['correctionPublicId']??''),(string)($in['decision']??''),(string)($in['notes']??''),$actor)]);
  if($action==='annotation.adjudicate')app_json_response(['ok'=>true,'correction'=>glasses_v11_annotation_adjudicate($pdo,$org,(string)($in['correctionPublicId']??''),(string)($in['decision']??''),(string)($in['notes']??''),$actor)]);
