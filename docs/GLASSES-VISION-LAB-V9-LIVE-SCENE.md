@@ -32,7 +32,7 @@ Each entity can carry:
 
 - stable entity key;
 - detector label;
-- optional canonical build component key;
+- optional requested canonical build component key (never trusted as authority);
 - tracking ID;
 - provenance source (`vision_model`, `device_runtime`, `sensor_fusion`, or `operator`);
 - confidence;
@@ -41,7 +41,7 @@ Each entity can carry:
 
 Tracking IDs are unique within a frame so relationships and later temporal reasoning cannot ambiguously reference two visible entities.
 
-A component key is accepted only when it belongs to the active canonical build. Scene understanding cannot invent recipe mappings.
+Ingredient labels are normalized and resolved through the existing governed Vision Label Profile for the exact detector/build. The server auto-fills the canonical component key when a mapping exists. A device-supplied component key is only treated as a consistency assertion and must match that governed mapping exactly. Non-ingredient entities cannot bind to recipe components.
 
 ## Canonical context
 
@@ -56,6 +56,7 @@ The server binds every scene to:
 - build definition;
 - expected recipe components and current canonical component;
 - exact vision model assignment key;
+- exact Vision Label Profile hash;
 - exact model package and artifact SHA-256;
 - exact compatible station calibration, ingredient zones and work regions;
 - a canonical SHA-256 of the complete build/order context used for that frame.
@@ -110,6 +111,7 @@ Every scene stores:
 
 - source fingerprint SHA-256;
 - exact assignment key;
+- exact Vision Label Profile hash;
 - model artifact SHA-256;
 - calibration source hash when applicable;
 - per-entity SHA-256;
