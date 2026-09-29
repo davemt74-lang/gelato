@@ -168,6 +168,13 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
       <div class="inline-actions"><button id="refreshDeviceHealth" type="button">Refresh Health</button><button id="downloadDiagnostics" type="button">Download Diagnostics</button></div>
       <p class="calibration-note">Battery and thermal values remain explicitly unavailable until the AIR3 vendor adapter supplies them.</p>
     </section>
+    <section class="console-card runtime-recovery-card">
+      <div class="console-heading"><div><small>V10 RUNTIME RECOVERY</small><strong>Disconnect / reconnect state</strong></div><span id="runtimeRecoveryState">READY</span></div>
+      <div id="runtimeRecoveryDetail" class="vision-model-status"><strong>READY</strong><span>Canonical work synchronized.</span></div>
+      <div id="runtimeRecoveryMetrics" class="vision-metrics">attempt 0 · stale frames cleared · observations allowed</div>
+      <div class="inline-actions"><button id="simulateNetworkLoss" type="button">Simulate Network Loss</button><button id="resumeRuntime" type="button">Resume Runtime</button><button id="clearRecoveryState" type="button">Clear Saved Resume</button></div>
+      <p class="calibration-note">Recovery clears queued frames and temporal tracking, reloads canonical station work, rehydrates the existing build, then waits for fresh camera evidence before automatic observations resume.</p>
+    </section>
     <section class="console-card calibration-card" id="calibrationPanel">
       <div class="console-heading"><div><small>PROJECTION CALIBRATION</small><strong>Lens layout & display tuning</strong></div><span id="calibrationState">LOCKED</span></div>
       <div class="calibration-grid">
@@ -350,6 +357,6 @@ window.GELATO_GLASSES_SIMULATOR={
   canManageMedia:<?=app_has_permission('glasses.manage',$user)?'true':'false'?>
 };
 </script>
-<script src="assets/js/glasses-web-simulator.js?v=20260929-v10-3"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20260929-v10-4"></script>
 </body>
 </html>

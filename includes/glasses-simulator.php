@@ -12,6 +12,7 @@ require_once __DIR__.'/glasses-vision-profiles.php';
 require_once __DIR__.'/glasses-hardware-runtime.php';
 require_once __DIR__.'/glasses-frame-pipeline.php';
 require_once __DIR__.'/glasses-device-health.php';
+require_once __DIR__.'/glasses-runtime-recovery.php';
 
 function glasses_simulator_can_write(array $user): bool
 {
@@ -72,6 +73,13 @@ function glasses_simulator_dispatch(PDO $pdo,array $user,array $in): array
         'validation.evaluate','handoff.expo','vision.shadow_report','vision.shadow_complete'
     ],true);
     $device=glasses_simulator_device($pdo,$user,(string)($in['devicePublicId']??''),$write);
+
+    if($action==='hardware.recovery.contract'){
+        return ['recovery'=>glasses_runtime_recovery_contract((array)($in['policy']??[]))];
+    }
+    if($action==='hardware.recovery.decide'){
+        return ['recovery'=>glasses_runtime_recovery_decide((array)($in['snapshot']??[]),(array)($in['policy']??[]))];
+    }
 
     if($action==='hardware.health.normalize'){
         return ['health'=>glasses_device_health_normalize((array)($in['snapshot']??[]))];
