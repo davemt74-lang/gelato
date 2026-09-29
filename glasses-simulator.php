@@ -160,6 +160,14 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
       <div id="hardwareRuntimeCapabilities" class="vision-metrics">Camera · display · input · inference</div>
       <p class="calibration-note">The simulator implements the production hardware contract now. The proprietary AIR3 SDK will plug into the same adapter boundary when its files arrive.</p>
     </section>
+    <section class="console-card device-health-card">
+      <div class="console-heading"><div><small>V10 DEVICE HEALTH</small><strong>Telemetry & diagnostics</strong></div><span id="deviceHealthState">LOADING</span></div>
+      <div id="deviceHealthSummary" class="vision-model-status"><strong>INITIALIZING</strong><span>Collecting runtime telemetry…</span></div>
+      <div id="deviceHealthMetrics" class="vision-metrics">FPS 0 · latency 0ms · dropped 0 · timeout 0</div>
+      <div id="deviceHealthHardware" class="vision-metrics">Battery SDK pending · thermal SDK pending</div>
+      <div class="inline-actions"><button id="refreshDeviceHealth" type="button">Refresh Health</button><button id="downloadDiagnostics" type="button">Download Diagnostics</button></div>
+      <p class="calibration-note">Battery and thermal values remain explicitly unavailable until the AIR3 vendor adapter supplies them.</p>
+    </section>
     <section class="console-card calibration-card" id="calibrationPanel">
       <div class="console-heading"><div><small>PROJECTION CALIBRATION</small><strong>Lens layout & display tuning</strong></div><span id="calibrationState">LOCKED</span></div>
       <div class="calibration-grid">
@@ -342,6 +350,6 @@ window.GELATO_GLASSES_SIMULATOR={
   canManageMedia:<?=app_has_permission('glasses.manage',$user)?'true':'false'?>
 };
 </script>
-<script src="assets/js/glasses-web-simulator.js?v=20260929-v10-2"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20260929-v10-3"></script>
 </body>
 </html>
