@@ -301,7 +301,10 @@ function glasses_vision_calibration_profile_select(PDO $pdo,int $org,array $inpu
       'decision'=>$decision,'matchScore'=>$selected?(float)$selected['match']['score']:0.0,
     ];
     $selectionHash=hash('sha256',glasses_vision_training_release_json($selectionMaterial));
-    $key=hash('sha256',glasses_vision_training_release_json(['device'=>$device['public_id'],'package'=>$package['public_id']??null,'analysis'=>$analysis['publicId']??null,'contextFingerprint'=>$contextFingerprint,'runtime'=>$runtime]));
+    // Selection identity follows the complete immutable decision evidence. The same
+    // request may legitimately produce a new decision after profile activation,
+    // retirement, or station-fallback changes; those decisions must not collide.
+    $key=$selectionHash;
     $existing=$pdo->prepare("SELECT public_id,selection_hash FROM glasses_vision_calibration_selections WHERE organization_id=? AND selection_key=? LIMIT 1");
     $existing->execute([$org,$key]);$e=$existing->fetch();
     if($e){
