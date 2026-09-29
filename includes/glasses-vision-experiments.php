@@ -41,11 +41,13 @@ function glasses_vision_experiment_event(PDO $pdo,int $org,int $experimentId,str
 function glasses_vision_experiment_row(PDO $pdo,int $org,string $publicId,bool $forUpdate=false): array
 {
     $q=$pdo->prepare("SELECT x.*,cp.public_id champion_public_id,cp.artifact_sha256 champion_sha,cp.model_name champion_name,cp.model_version champion_version,
+      cp.detector_name champion_detector_name,cp.runtime_type champion_runtime_type,cp.platform champion_platform,
       d.public_id dataset_public_id,d.dataset_hash,d.status dataset_status,
       r.public_id release_public_id,r.release_hash,r.training_profile,r.status release_status,
       qf.public_id qualification_public_id,qf.qualification_hash,
       tr.public_id training_run_public_id,tr.output_sha256 training_run_output_sha,
-      xp.public_id challenger_public_id,xp.artifact_sha256 challenger_sha,xp.model_name challenger_name,xp.model_version challenger_version
+      xp.public_id challenger_public_id,xp.artifact_sha256 challenger_sha,xp.model_name challenger_name,xp.model_version challenger_version,
+      xp.detector_name challenger_detector_name,xp.runtime_type challenger_runtime_type,xp.platform challenger_platform
       FROM glasses_vision_model_experiments x
       JOIN glasses_vision_model_packages cp ON cp.id=x.champion_package_id AND cp.organization_id=x.organization_id
       JOIN glasses_vision_dataset_versions d ON d.id=x.candidate_dataset_id AND d.organization_id=x.organization_id
@@ -66,12 +68,12 @@ function glasses_vision_experiment_public(PDO $pdo,int $org,array $r): array
     return [
       'schema'=>GLASSES_VISION_EXPERIMENT_SCHEMA,'publicId'=>$r['public_id'],'status'=>$r['status'],'experimentHash'=>$r['experiment_hash'],
       'hypothesis'=>$r['hypothesis'],'trainingConfig'=>json_decode((string)$r['training_config_json'],true)?:[],
-      'champion'=>['publicId'=>$r['champion_public_id'],'artifactSha256'=>$r['champion_sha'],'name'=>$r['champion_name'],'version'=>$r['champion_version']],
+      'champion'=>['publicId'=>$r['champion_public_id'],'artifactSha256'=>$r['champion_sha'],'name'=>$r['champion_name'],'version'=>$r['champion_version'],'detectorName'=>$r['champion_detector_name'],'runtimeType'=>$r['champion_runtime_type'],'platform'=>$r['champion_platform']],
       'candidateDataset'=>['publicId'=>$r['dataset_public_id'],'datasetHash'=>$r['dataset_hash'],'status'=>$r['dataset_status']],
       'trainingRelease'=>['publicId'=>$r['release_public_id'],'releaseHash'=>$r['release_hash'],'profile'=>$r['training_profile'],'status'=>$r['release_status']],
       'qualification'=>['publicId'=>$r['qualification_public_id'],'qualificationHash'=>$r['qualification_hash']],
       'trainingRun'=>$r['training_run_id']!==null?['publicId'=>$r['training_run_public_id'],'outputSha256'=>$r['training_run_output_sha']]:null,
-      'challenger'=>$r['challenger_package_id']!==null?['publicId'=>$r['challenger_public_id'],'artifactSha256'=>$r['challenger_sha'],'name'=>$r['challenger_name'],'version'=>$r['challenger_version']]:null,
+      'challenger'=>$r['challenger_package_id']!==null?['publicId'=>$r['challenger_public_id'],'artifactSha256'=>$r['challenger_sha'],'name'=>$r['challenger_name'],'version'=>$r['challenger_version'],'detectorName'=>$r['challenger_detector_name'],'runtimeType'=>$r['challenger_runtime_type'],'platform'=>$r['challenger_platform']]:null,
       'events'=>$events,'createdAt'=>$r['created_at'],'startedAt'=>$r['started_at'],'completedAt'=>$r['completed_at'],
     ];
 }
@@ -153,6 +155,7 @@ function glasses_vision_experiment_attach_run(PDO $pdo,int $org,string $publicId
         $run=glasses_vision_lineage_training_run_row($pdo,$org,$runPublicId);
         if((string)$run['status']!=='completed'||empty($run['output_sha256']))throw new InvalidArgumentException('Experiment requires a completed training run.');
         if((int)$run['training_release_id']!==(int)$x['training_release_id'])throw new InvalidArgumentException('Training run does not belong to the experiment release.');
+        if((int)$run['qualification_id']!==(int)$x['qualification_id'])throw new InvalidArgumentException('Training run does not use the experiment qualification attestation.');
         $expected=json_decode((string)$x['training_config_json'],true)?:[];$actual=json_decode((string)$run['config_json'],true)?:[];
         if(!glasses_vision_experiment_config_matches($expected,$actual))throw new InvalidArgumentException('Training run configuration does not match the experiment contract.');
         $pdo->prepare("UPDATE glasses_vision_model_experiments SET status='trained',training_run_id=? WHERE organization_id=? AND id=?")
@@ -171,6 +174,10 @@ function glasses_vision_experiment_bind_challenger(PDO $pdo,int $org,string $pub
         if((string)$x['status']!=='trained'||$x['training_run_id']===null)throw new InvalidArgumentException('Experiment must have its completed training run before binding a challenger.');
         $model=glasses_vision_model_package_row($pdo,$org,$modelPublicId,false);
         if((string)$model['status']!=='ready')throw new InvalidArgumentException('Experiment challenger model must be ready.');
+        if((string)$model['detector_name']!==(string)$x['champion_detector_name']||
+           (string)$model['runtime_type']!==(string)$x['champion_runtime_type']||
+           (string)$model['platform']!==(string)$x['champion_platform'])
+            throw new InvalidArgumentException('Experiment challenger must match the champion detector, runtime, and platform family.');
         if(!hash_equals((string)$x['training_run_output_sha'],(string)$model['artifact_sha256']))throw new InvalidArgumentException('Challenger artifact SHA-256 does not match the experiment training output.');
         glasses_vision_lineage_bind_model($pdo,$org,(string)$x['training_run_public_id'],$modelPublicId,$actor);
         $pdo->prepare("UPDATE glasses_vision_model_experiments SET status='completed',challenger_package_id=?,completed_by=?,completed_at=NOW(6) WHERE organization_id=? AND id=?")
