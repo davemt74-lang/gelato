@@ -431,6 +431,37 @@ final class UpgradeService
 
     private static function executeStatement(PDO $pdo, string $sql, bool $allowAlreadyAppliedDdl): void
     {
+        // MySQL (unlike MariaDB) rejects ALTER TABLE ADD COLUMN IF NOT EXISTS.
+        // Keep shipped migration SQL immutable for SHA-256 tracking, and lower
+        // this *single-column* form only when executing it. This also supports
+        // retrying a migration after a prior, untracked partial DDL application.
+        if (preg_match(
+            '/^ALTER\s+TABLE\s+(\x60?[A-Za-z_][A-Za-z0-9_]*\x60?)\s+ADD\s+(?:COLUMN\s+)?IF\s+NOT\s+EXISTS\s+(\x60?[A-Za-z_][A-Za-z0-9_]*\x60?)(?=\s)/i',
+            $sql,
+            $parts
+        ) === 1) {
+            $table = trim($parts[1], chr(96));
+            $column = trim($parts[2], chr(96));
+            $lookup = $pdo->prepare(
+                'SELECT COUNT(*) FROM information_schema.columns '
+                . 'WHERE table_schema=DATABASE() AND table_name=? AND column_name=?'
+            );
+            $lookup->execute([$table, $column]);
+            if ((int)$lookup->fetchColumn() > 0) {
+                return; // IF NOT EXISTS semantics, without unsupported DDL.
+            }
+            $normalized = preg_replace(
+                '/\bADD\s+(?:COLUMN\s+)?IF\s+NOT\s+EXISTS\b/i',
+                'ADD COLUMN',
+                $sql,
+                1
+            );
+            if ($normalized === null) {
+                throw new RuntimeException('Could not normalize conditional ADD COLUMN statement.');
+            }
+            $sql = $normalized;
+        }
+
         try {
             $pdo->exec($sql);
         } catch (PDOException $error) {
