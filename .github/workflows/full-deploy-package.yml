@@ -64,6 +64,8 @@ jobs:
             includes/admin-route-access.php
             includes/admin-control-core.php
             tests/admin-superuser-navigation-recovery-contract.php
+            tests/deployment-navigation-verification-contract.php
+            deployment-check.php
             pos.php
             kds.php
             glasses-vision-lab.php
@@ -85,6 +87,7 @@ jobs:
           done < <(find "$deploy_root" -type f -name '*.php' -print0)
 
           php tests/admin-superuser-navigation-recovery-contract.php
+          php tests/deployment-navigation-verification-contract.php
           php tests/role-permission-enforcement-contract.php
           php tests/universal-admin-page-shell-contract.php
 
