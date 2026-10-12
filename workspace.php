@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require __DIR__ . '/includes/bootstrap.php';
 require __DIR__ . '/includes/admin-control-core.php';
+require_once __DIR__ . '/includes/admin-shell-core.php';
 require_once __DIR__ . '/includes/admin-dashboard-core.php';
 $user = app_require_auth();
 if (($user['role_slug'] ?? '') === 'wholesale_customer') {
@@ -24,14 +25,16 @@ $roleRows = $pdo->prepare(
 $roleRows->execute(['organization_id' => $organizationId]);
 $roles = [];
 foreach ($roleRows->fetchAll() as $role) {
-    $permissions = (int)$role['is_owner_role'] === 1 ? ['*'] : array_values(array_filter(explode(',', (string)$role['permission_keys'])));
+    // Reflect the canonical server-side authorization of the current system role.
+    $isOwner = app_role_has_owner_authority($role);
+    $permissions = $isOwner ? ['*'] : array_values(array_filter(explode(',', (string)$role['permission_keys'])));
     $roles[] = [
         'id' => 'db-role-' . $role['id'],
         'name' => $role['name'],
         'slug' => $role['slug'],
         'description' => $role['description'] ?? '',
         'system' => (bool)$role['is_system_role'],
-        'owner' => (bool)$role['is_owner_role'],
+        'owner' => $isOwner,
         'permissions' => $permissions,
     ];
 }
@@ -148,6 +151,34 @@ if (!is_string($html)) {
 }
 $script = '<script>window.RESTAURANT_SERVER_SESSION=true;window.RESTAURANT_CSRF_TOKEN=' . json_encode(app_csrf_token(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) . ';window.RESTAURANT_CURRENT_USER_ID=' . (int)$user['id'] . ';window.RESTAURANT_ADMIN_CONTROL_ALLOWED=' . ($adminControlAllowed ? 'true' : 'false') . ';window.RESTAURANT_ADMIN_DASHBOARD_ALLOWED=' . ($adminDashboardAllowed ? 'true' : 'false') . ';(function(d){localStorage.setItem("restaurant-admin-users-v1",JSON.stringify(d.users));localStorage.setItem("restaurant-admin-roles-v1",JSON.stringify(d.roles));localStorage.setItem("restaurant-admin-permissions-v1",JSON.stringify(d.permissions));localStorage.setItem("restaurant-jobs-v1",JSON.stringify(d.jobs||[]));localStorage.setItem("restaurant-admin-session-v1",JSON.stringify(d.session));})(' . json_encode($bootstrap, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) . ');if(window.RESTAURANT_ADMIN_CONTROL_ALLOWED){document.addEventListener("DOMContentLoaded",function(){var settings=document.getElementById("profileSettingsLink");if(!settings||document.getElementById("restaurantAdminControlLink"))return;var link=document.createElement("a");link.id="restaurantAdminControlLink";link.href="admin.php";link.textContent="▦ Restaurant Admin";settings.insertAdjacentElement("afterend",link);});}</script>';
 $html = str_replace('<script src="js/auth.js"></script>', $script . "\n  <script src=\"js/auth.js\"></script>\n  <script src=\"js/floor-planner-module.js\"></script>", $html);
+// Server-rendered navigation stays available when browser-local role data or JS is stale.
+if ($adminControlAllowed) {
+    $releaseSha = is_file(__DIR__ . '/DEPLOY_SHA.txt')
+        ? trim((string)file_get_contents(__DIR__ . '/DEPLOY_SHA.txt')) : 'unknown';
+    $navHtml = '<details id="gelato-server-navigation" class="gelato-server-navigation">'
+        . '<summary>Admin tools <span class="gelato-version-label">Build ' . app_escape(substr($releaseSha, 0, 8)) . '</span></summary>'
+        . '<div class="gelato-server-navigation-panel"><strong>Available administration tools</strong>';
+    foreach (admin_shell_filtered_navigation($user) as $group) {
+        $navHtml .= '<div class="gelato-server-navigation-group"><b>' . app_escape((string)$group['label']) . '</b>';
+        foreach ($group['items'] as $item) {
+            $navHtml .= '<a href="' . app_escape((string)$item['href']) . '">'
+                . app_escape((string)$item['label']) . '</a>';
+        }
+        $navHtml .= '</div>';
+    }
+    $navHtml .= '<div class="gelato-server-navigation-group"><a href="deployment-check.php">Deployment and permissions check</a></div></div></details>';
+    $navCss = '<style id="gelato-server-navigation-styles">'
+        . '.gelato-server-navigation{position:fixed;top:72px;right:15px;z-index:10040;font:600 12px/1.35 system-ui,sans-serif}'
+        . '.gelato-server-navigation>summary{cursor:pointer;list-style:none;background:#17231f;color:white;border:1px solid #53645d;padding:11px 14px;border-radius:12px;box-shadow:0 6px 25px #0003}'
+        . '.gelato-version-label{font-size:9px;color:#c6f0dc;margin-left:8px}'
+        . '.gelato-server-navigation-panel{position:absolute;right:0;top:calc(100% + 7px);width:min(500px,90vw);max-height:calc(100vh - 140px);overflow:auto;padding:16px;border:1px solid #ddd;background:white;color:#151a18;border-radius:13px;box-shadow:0 20px 65px #0003}'
+        . '.gelato-server-navigation-group{display:flex;gap:7px;align-items:baseline;flex-wrap:wrap;padding:9px 0;border-top:1px solid #eee}'
+        . '.gelato-server-navigation-group b{min-width:100%;font-size:11px;color:#555}'
+        . '.gelato-server-navigation-group a{padding:6px 9px;background:#f1f5f2;border:1px solid #e5eae6;border-radius:7px;text-decoration:none;color:#193f30;font-size:11px}'
+        . '</style>';
+    $html = str_replace('</head>', $navCss . '</head>', $html);
+    $html = str_replace('<body>', '<body>' . $navHtml, $html);
+}
 if ($adminDashboardAllowed) {
     $html = str_replace('</head>', "  <link rel=\"stylesheet\" href=\"css/admin-command-dashboard.css?v=20260914-command1\">\n</head>", $html);
     $html = str_replace('</body>', "  <script src=\"js/admin-command-dashboard.js?v=20260914-command1\"></script>\n</body>", $html);
