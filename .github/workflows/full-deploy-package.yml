@@ -69,6 +69,8 @@ jobs:
             tests/admin-superuser-navigation-recovery-contract.php
             tests/deployment-navigation-verification-contract.php
             tests/static-workspace-entry-contract.php
+            tests/mysql-conditional-add-column-compatibility.php
+            includes/UpgradeService.php
             deployment-check.php
             pos.php
             kds.php
@@ -93,6 +95,7 @@ jobs:
           php tests/admin-superuser-navigation-recovery-contract.php
           php tests/deployment-navigation-verification-contract.php
           php tests/static-workspace-entry-contract.php
+          php tests/mysql-conditional-add-column-compatibility.php
           php tests/role-permission-enforcement-contract.php
           php tests/universal-admin-page-shell-contract.php
 
