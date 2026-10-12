@@ -138,6 +138,18 @@ function app_schema_is_installed(PDO $pdo): bool
     }
 }
 
+/**
+ * Treat the canonical organization system Super Admin as owner-authorized
+ * even when an older migration cleared its owner flag. A name or slug on
+ * a user-created role must never grant owner authority.
+ */
+function app_role_has_owner_authority(array $role): bool
+{
+    return (int)($role['is_owner_role'] ?? 0) === 1
+        || ((string)($role['role_slug'] ?? $role['slug'] ?? '') === 'super_admin'
+            && (int)($role['is_system_role'] ?? 0) === 1);
+}
+
 function app_owner_exists(PDO $pdo): bool
 {
     if (!app_schema_is_installed($pdo)) {
@@ -147,8 +159,9 @@ function app_owner_exists(PDO $pdo): bool
             FROM users u
             INNER JOIN organization_memberships om ON om.user_id = u.id
             INNER JOIN user_roles ur ON ur.membership_id = om.id AND ur.revoked_at IS NULL
-            INNER JOIN roles r ON r.id = ur.role_id AND r.is_owner_role = 1
-            WHERE u.status = 'active' AND u.archived_at IS NULL";
+            INNER JOIN roles r ON r.id = ur.role_id AND r.organization_id = om.organization_id
+              AND (r.is_owner_role = 1 OR (r.slug = 'super_admin' AND r.is_system_role = 1))
+            WHERE om.status = 'active' AND u.status = 'active' AND u.archived_at IS NULL";
     return (int)$pdo->query($sql)->fetchColumn() > 0;
 }
 
@@ -178,9 +191,11 @@ function app_current_user(): ?array
             INNER JOIN organization_memberships om ON om.user_id = u.id AND om.organization_id = :organization_id
             INNER JOIN organizations o ON o.id = om.organization_id
             INNER JOIN user_roles ur ON ur.membership_id = om.id AND ur.revoked_at IS NULL
-            INNER JOIN roles r ON r.id = ur.role_id
-            WHERE u.id = :user_id AND u.status = 'active' AND u.archived_at IS NULL
-            ORDER BY r.is_owner_role DESC, r.id ASC
+            INNER JOIN roles r ON r.id = ur.role_id AND r.organization_id = om.organization_id
+            WHERE u.id = :user_id AND om.status = 'active'
+              AND u.status = 'active' AND u.archived_at IS NULL
+            ORDER BY (r.is_owner_role = 1 OR (r.slug = 'super_admin' AND r.is_system_role = 1)) DESC,
+                     r.is_owner_role DESC, r.id ASC
             LIMIT 1";
     $statement = app_pdo()->prepare($sql);
     $statement->execute(['organization_id' => $organizationId, 'user_id' => $userId]);
@@ -194,12 +209,14 @@ function app_current_user(): ?array
         "SELECT DISTINCT p.permission_key
          FROM organization_memberships om
          INNER JOIN user_roles ur ON ur.membership_id = om.id AND ur.revoked_at IS NULL
+         INNER JOIN roles r ON r.id = ur.role_id AND r.organization_id = om.organization_id
          INNER JOIN role_permissions rp ON rp.role_id = ur.role_id
          INNER JOIN permissions p ON p.id = rp.permission_id
-         WHERE om.user_id = :user_id AND om.organization_id = :organization_id"
+         WHERE om.user_id = :user_id AND om.organization_id = :organization_id AND om.status = 'active'"
     );
     $permissionStatement->execute(['user_id' => $userId, 'organization_id' => $organizationId]);
     $permissions = $permissionStatement->fetchAll(PDO::FETCH_COLUMN);
+    $row['is_owner_role'] = app_role_has_owner_authority($row) ? 1 : 0;
     $row['permissions'] = (int)$row['is_owner_role'] === 1 ? ['*'] : array_values($permissions);
     $user = $row;
     return $user;

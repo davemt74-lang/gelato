@@ -67,6 +67,15 @@ function admin_route_access_catalog(): array
         'wholesale-purchasing.php'=>['any'=>['wholesale.manage']],
         'wholesale-receivables.php'=>['any'=>['wholesale.receivables.view']],
 
+        'pos.php'=>['any'=>['pos.use']],
+        'kds.php'=>['any'=>['kds.view']],
+        'glasses-vision-lab.php'=>['any'=>['glasses.view']],
+        'glasses-vision-operations.php'=>['any'=>['glasses.view']],
+        'glasses-vision-models.php'=>['any'=>['glasses.view']],
+        'glasses-vision-profiles.php'=>['any'=>['glasses.view']],
+        'glasses-learning.php'=>['any'=>['glasses.view']],
+        'glasses-calibration-studio.php'=>['any'=>['glasses.view']],
+
         // Specialized workstations that are launched from the canonical shell
         // still need shell visibility to match the workstation's own guard.
         'floor-planner.php'=>['any'=>['floorplans.view']],
