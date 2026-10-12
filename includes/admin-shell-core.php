@@ -115,6 +115,8 @@ function admin_shell_navigation_catalog(): array
         ]],
         ['id'=>'operations','label'=>'Operations','items'=>[
             ['icon'=>'▤','label'=>'Menu Manager','href'=>'menu-manager.php','permissions'=>['menu.view','menu.manage']],
+            ['icon'=>'▦','label'=>'POS','href'=>'pos.php','permissions'=>['pos.use']],
+            ['icon'=>'⌁','label'=>'Kitchen Display (KDS)','href'=>'kds.php','permissions'=>['kds.view']],
             ['icon'=>'↗','label'=>'Online Orders','href'=>'online-orders-admin.php','permissions'=>['pos.use','pos.manage','kds.view','kds.configure','crm.view','crm.manage']],
             ['icon'=>'✓','label'=>'Pickup Fulfillment','href'=>'pickup-fulfillment.php','permissions'=>['online_orders.fulfill','pos.use','pos.manage','kds.view','kds.update','kds.configure','crm.view','crm.manage']],
             ['icon'=>'!','label'=>'Order Recovery','href'=>'order-recovery.php','permissions'=>['order_recovery.view','order_recovery.manage','order_recovery.refund']],
@@ -137,6 +139,14 @@ function admin_shell_navigation_catalog(): array
             ['icon'=>'◈','label'=>'Catering Pipeline','href'=>'catering-pipeline.php','permissions'=>['catering.view','catering.manage']],
             ['icon'=>'◇','label'=>'Wholesale','href'=>'wholesale-pipeline.php','permissions'=>['wholesale.view','wholesale.manage']],
             ['icon'=>'◎','label'=>'Wholesale Customers','href'=>'wholesale-accounts.php','permissions'=>['wholesale.view','wholesale.manage']],
+        ]],
+        ['id'=>'vision','label'=>'Vision & AR Glasses','items'=>[
+            ['icon'=>'◎','label'=>'Vision Lab','href'=>'glasses-vision-lab.php','permissions'=>['glasses.view']],
+            ['icon'=>'◉','label'=>'Vision Operations','href'=>'glasses-vision-operations.php','permissions'=>['glasses.view']],
+            ['icon'=>'◫','label'=>'Vision Models','href'=>'glasses-vision-models.php','permissions'=>['glasses.view']],
+            ['icon'=>'◇','label'=>'Vision Labels','href'=>'glasses-vision-profiles.php','permissions'=>['glasses.view']],
+            ['icon'=>'◈','label'=>'Vision Learning','href'=>'glasses-learning.php','permissions'=>['glasses.view']],
+            ['icon'=>'◉','label'=>'Calibration Studio','href'=>'glasses-calibration-studio.php','permissions'=>['glasses.view']],
         ]],
         ['id'=>'ai','label'=>'AI & Knowledge','items'=>[
             ['icon'=>'✦','label'=>'Owner Agent','href'=>'workspace.php#owner','permissions'=>['agent.owner_view']],

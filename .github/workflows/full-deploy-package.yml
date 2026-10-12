@@ -56,6 +56,14 @@ jobs:
 
           required=(
             index.php
+            admin.php
+            floor-planner-v2.php
+            floor-planner-ops-legacy.php
+            js/floor-planner-v2.js
+            includes/admin-shell-core.php
+            includes/admin-route-access.php
+            includes/admin-control-core.php
+            tests/admin-superuser-navigation-recovery-contract.php
             pos.php
             kds.php
             glasses-vision-lab.php
@@ -75,6 +83,10 @@ jobs:
           while IFS= read -r -d '' file; do
             php -l "$file" >/dev/null
           done < <(find "$deploy_root" -type f -name '*.php' -print0)
+
+          php tests/admin-superuser-navigation-recovery-contract.php
+          php tests/role-permission-enforcement-contract.php
+          php tests/universal-admin-page-shell-contract.php
 
           (cd "$deploy_root" && zip -q -r "$GITHUB_WORKSPACE/gelato-full-deploy.zip" .)
           unzip -t "$GITHUB_WORKSPACE/gelato-full-deploy.zip"
