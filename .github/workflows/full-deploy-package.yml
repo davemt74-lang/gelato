@@ -56,6 +56,9 @@ jobs:
 
           required=(
             index.php
+            index.html
+            .htaccess
+            workspace.php
             admin.php
             floor-planner-v2.php
             floor-planner-ops-legacy.php
@@ -65,6 +68,7 @@ jobs:
             includes/admin-control-core.php
             tests/admin-superuser-navigation-recovery-contract.php
             tests/deployment-navigation-verification-contract.php
+            tests/static-workspace-entry-contract.php
             deployment-check.php
             pos.php
             kds.php
@@ -88,6 +92,7 @@ jobs:
 
           php tests/admin-superuser-navigation-recovery-contract.php
           php tests/deployment-navigation-verification-contract.php
+          php tests/static-workspace-entry-contract.php
           php tests/role-permission-enforcement-contract.php
           php tests/universal-admin-page-shell-contract.php
 

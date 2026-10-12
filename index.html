@@ -7,6 +7,16 @@
   <title>Restaurant Agentic Training Workspace</title>
   <link rel="stylesheet" href="css/admin.css?v=20260804-jobs1">
   <script src="js/auth.js"></script>
+  <!-- Legacy static URL must enter through the authenticated PHP workspace. -->
+  <script id="gelato-canonical-workspace-entry">
+    (function () {
+      if (window.RESTAURANT_SERVER_SESSION === true) return;
+      var target = new URL('workspace.php', window.location.href);
+      target.search = window.location.search;
+      target.hash = window.location.hash;
+      window.location.replace(target.href);
+    })();
+  </script>
   <script src="js/auth-guard.js"></script>
   <style>
     :root{

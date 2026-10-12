@@ -1,0 +1,12 @@
+# PHP is the application entry; legacy static admin shell cannot load permissions.
+DirectoryIndex index.php index.html
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteRule ^index\.html$ workspace.php [R=302,L,QSA]
+</IfModule>
+<IfModule mod_headers.c>
+  <FilesMatch "^(index\.html|workspace\.php|admin\.php|deployment-check\.php)$">
+    Header always set Cache-Control "no-store, no-cache, must-revalidate, max-age=0"
+    Header always set Pragma "no-cache"
+  </FilesMatch>
+</IfModule>
