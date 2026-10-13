@@ -2,6 +2,25 @@
 
 The Web Glasses Simulator is a browser-based design, training, and integration surface for the Gelato AR glasses workflow.
 
+## HUD-only preview and voice navigation
+
+The stage is now bounded to the viewing window, rather than stretching to the full height of diagnostic panels. Choose **HUD Only** for a frameless, larger, readable live view; **Glasses Outline** restores the calibrated optical frame. The last saved frame choice is respected; a new installation starts in HUD Only. Kitchen work, ticket names, station, instructions, and quantities remain visible before any build session is started.
+
+The **Next Step**, **Next Item**, **Previous**, **Item Added**, and **Repeat** buttons are always available when relevant. They operate on the selected KDS item and its preview instructions. The same commands work with the optional **Enable Voice** button (on browsers supporting Web Speech Recognition), which requests microphone access only when clicked:
+
+- “Next” or “next step” moves the preview instruction forward.
+- “Next item” moves to the next live KDS item. “Previous item” moves back.
+- “Item added” acknowledges the current preview step locally and moves to the next instruction; **it does not mark ingredients verified, update KDS, or mutate POS**.
+- “Repeat” reads the selected item and current instruction.
+- “Status” reads the order count and selection.
+- “Stop listening” stops voice mode.
+
+**Speak replies** controls voice response playback. If speech recognition is unavailable or permission is denied, the manual buttons still work. The mic is never started automatically. The event log and a temporary caption explain each action.
+
+For safety, an active build cannot be advanced or ingredient-confirmed using preview navigation: verified observations continue through the existing governed Detect / Validation / Expo workflow. The new frontend never starts a build, records ingredients, or sends kitchen state changes from voice commands.
+
+The right sidebar now puts **Work**, **Simulator Readiness**, **Ingredient Detections**, **Build Exceptions**, and **Event Log** first. Hardware SDK diagnostics, vision/model experiments, calibration, and datasets are retained under the **Advanced settings** expander.
+
 ## Live on load — no physical glasses required
 
 The browser simulator **defaults to Live Gelato**. On load it enumerates the authenticated operator's authorized restaurant locations and supplies a virtual **Browser preview · All stations** display plus optional station-specific virtual displays. No hardware pairing, new glasses-device record, or developer configuration is necessary to see active KDS orders.
