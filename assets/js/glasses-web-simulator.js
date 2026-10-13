@@ -164,7 +164,8 @@ function liveWorkFingerprint(work){
     table:x.ticket?.tableName||'',service:x.ticket?.serviceMode||'',
     name:x.posLine?.name||'',option:x.posLine?.optionName||'',
     qty:x.posLine?.quantity??null,special:x.posLine?.specialInstructions||'',
-    modifiers:(x.posLine?.modifiers||[]).map(m=>m.name||m.label||String(m))
+    modifiers:(x.posLine?.modifiers||[]).map(m=>m.name||m.label||String(m)),
+    posOpenSeconds:x.timing?.posOpenAgeSeconds??null
   }));
   return JSON.stringify({revision:work?.revision||'',station:work?.station?.publicId||'',focus:work?.focusItem?.kdsItemPublicId||'',items});
 }
@@ -192,7 +193,7 @@ function applyLiveWork(work,{announce=false}={}){
     if(activeBuildItem&&ids.includes(activeBuildItem))state.selectedKdsItemPublicId=activeBuildItem;
     else state.selectedKdsItemPublicId=work?.focusItem?.kdsItemPublicId||ids[0]||'';
   }
-  state.syncFingerprint=next;state.lastSyncAt=Date.now();render();
+  state.syncFingerprint=next;state.lastSyncAt=Date.now();state.ticketSyncAt=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();render();
   if(previous&&previous!==next)log('ORDER','POS/KDS updated · '+items.length+' active item(s).');
   return previous!==next;
 }
@@ -1093,7 +1094,36 @@ function deriveSteps(){const item=selectedItem();const fromBuild=state.build?.co
 function itemName(){return selectedItem()?.posLine?.name||state.build?.context?.itemName||'No focused item';}
 function currentComponent(){return state.build?.components?.find(c=>!c.optional&&!['confirmed','ignored'].includes(c.status))||null;}
 function orderItems(){const items=state.work?.items||[];return items.length?items:(state.work?.focusItem?[state.work.focusItem]:[]);}
-function elapsedLabel(item,index){const source=item?.startedAt||item?.createdAt||item?.ticket?.openedAt;if(source){const ms=Date.now()-new Date(source).getTime();if(Number.isFinite(ms)&&ms>=0){const m=Math.floor(ms/60000),s=Math.floor(ms/1000)%60;return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');}}return state.mode==='mock'?(index===0?'04:12':'02:38'):'--:--';}
+function ticketElapsedSeconds(item,index){
+  if(state.mode!=='live'){
+    const source=item?.startedAt||item?.createdAt||item?.ticket?.openedAt;
+    if(source){const ms=Date.now()-new Date(source).getTime();if(Number.isFinite(ms)&&ms>=0)return Math.floor(ms/1000);}
+    return null;
+  }
+  const baseline=item?.timing?.posOpenAgeSeconds;
+  if(!Number.isFinite(Number(baseline))||baseline===null||baseline===undefined)return null;
+  if(!Number.isFinite(state.ticketSyncAt))return Math.max(0,Math.floor(Number(baseline)));
+  const clock=typeof performance!=='undefined'&&performance.now?performance.now():Date.now();
+  const delta=Math.max(0,clock-state.ticketSyncAt)/1000;
+  return Math.max(0,Math.floor(Number(baseline)+delta));
+}
+function elapsedLabel(item,index){
+  const seconds=ticketElapsedSeconds(item,index);
+  if(seconds===null)return state.mode==='mock'?'DEMO':'--:--';
+  const hours=Math.floor(seconds/3600),minutes=Math.floor(seconds%3600/60),remainder=seconds%60;
+  const mm=String(minutes).padStart(2,'0'),ss=String(remainder).padStart(2,'0');
+  return hours?String(hours)+':'+mm+':'+ss:mm+':'+ss;
+}
+function tickLiveTicketTimers(){
+  if(state.mode!=='live'||document.hidden)return;
+  const reference=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+  const age=Number.isFinite(state.ticketSyncAt)?(reference-state.ticketSyncAt)/1000:Infinity;
+  const freshness=$('simTicketTimeSync');
+  if(freshness)freshness.textContent=age<8?'POS TIME · SYNCED':age<20?'POS TIME · DELAYED':'POS TIME · STALE';
+  const items=orderItems().slice(0,5);
+  const spans=$('hudOrders')?.querySelectorAll?.('[data-pos-ticket-clock]')||[];
+  spans.forEach((span,index)=>{if(items[index])span.textContent=elapsedLabel(items[index],index);});
+}
 function renderTopStatus(){
   const now=new Date(),live=state.mode==='live';
   $('hudClock').textContent=now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
@@ -1105,7 +1135,7 @@ function renderTopStatus(){
 function renderOrdersQueue(item){
   const items=orderItems();
   $('hudOrdersCount').textContent=String(items.length);
-  $('hudOrders').innerHTML=items.slice(0,5).map((x,i)=>'<div class="hud-order-row '+(x.kdsItemPublicId===item?.kdsItemPublicId?'active':'')+'"><span class="ticket">#'+escapeHtml(x.ticket?.checkNumber||String(i+1).padStart(3,'0'))+'</span><span class="item">'+escapeHtml(x.posLine?.name||'Kitchen item')+'</span><span class="age">'+escapeHtml(elapsedLabel(x,i))+'</span></div>').join('')||'<span class="sim-muted">No active orders</span>';
+  $('hudOrders').innerHTML=items.slice(0,5).map((x,i)=>'<div class="hud-order-row '+(x.kdsItemPublicId===item?.kdsItemPublicId?'active':'')+'"><span class="ticket">#'+escapeHtml(x.ticket?.checkNumber||String(i+1).padStart(3,'0'))+'</span><span class="item">'+escapeHtml(x.posLine?.name||'Kitchen item')+'</span><span class="age" data-pos-ticket-clock="1">'+escapeHtml(elapsedLabel(x,i))+'</span></div>').join('')||'<span class="sim-muted">No active orders</span>';
 }
 function buildProgressIndex(steps,comps){
   const confirmed=comps.filter(c=>c.status==='confirmed'||(c.optional&&c.status==='ignored')).length;
@@ -1472,6 +1502,7 @@ function applyCalibration(){
 
   for(const [name,r] of Object.entries(calibration.regions)){const el=$(name);if(!el)continue;el.style.setProperty('--region-x',r.x+'%');el.style.setProperty('--region-y',r.y+'%');el.style.setProperty('--region-w',r.w+'%');el.style.setProperty('--region-h',r.h+'%');}
   const controls={hudOpacity:['opacity','%'],hudBrightness:['brightness','%'],hudScale:['scale','%'],safeWidth:['safeWidth','%'],safeHeight:['safeHeight','%'],leftEyeX:['leftEyeX','%'],leftEyeY:['leftEyeY','%'],rightEyeX:['rightEyeX','%'],rightEyeY:['rightEyeY','%']};
+  $('rightWidth').value=String(calibration.regions.hudRight.w);$('rightWidthValue').textContent=String(Math.round(calibration.regions.hudRight.w))+'%';
   for(const [id,[key,suffix]] of Object.entries(controls)){if($(id)){$(id).value=String(calibration[key]);$(id+'Value').textContent=String(calibration[key])+suffix;}}
 }
 function setCalibrationEnabled(enabled){
@@ -1497,6 +1528,12 @@ function factoryCalibration(){calibration=deepClone(calibrationDefaults);saveCal
 for(const [id,key] of Object.entries({hudOpacity:'opacity',hudBrightness:'brightness',hudScale:'scale',safeWidth:'safeWidth',safeHeight:'safeHeight',leftEyeX:'leftEyeX',leftEyeY:'leftEyeY',rightEyeX:'rightEyeX',rightEyeY:'rightEyeY'})){
   $(id).addEventListener('input',e=>{calibration[key]=Number(e.target.value);saveCalibration();});
 }
+$('rightWidth').addEventListener('input',e=>{
+  const region=calibration.regions.hudRight,oldRight=region.x+region.w;
+  region.w=clamp(Number(e.target.value),15,55);
+  region.x=clamp(oldRight-region.w,0,100-region.w);
+  saveCalibration();
+});
 $('calibrationToggle').addEventListener('click',()=>setCalibrationEnabled(!calibrationEnabled));
 $('savePreset').addEventListener('click',savePreset);
 $('deletePreset').addEventListener('click',deletePreset);
@@ -1691,5 +1728,5 @@ window.GelatoGlassesNavigation={dispatch:simulatorNavigation,context:()=>({
   mode:state.mode,items:orderItems().length,item:selectedItem()?.posLine?.name||null,
   step:(state.previewStepIndex||0)+1,virtual:!!state.device?.virtualPreview
 })};
-(async()=>{await loadDevices();const cp=cameraPrefs();if(cp.resolution)$('cameraResolution').value=cp.resolution;if(cp.fit)$('cameraFit').value=cp.fit;$('cameraMirror').checked=!!cp.mirror;applyCameraPresentation();await enumerateCameras();if(!cameraSupported())setCameraHealth('error','UNSUPPORTED');refreshPresets();applyCalibration();render();if(state.device){startLiveStationSync();}else{setSyncBadge('error','NO DISPLAY');}setInterval(renderTopStatus,30000);renderRuntimeRecovery();refreshDeviceHealth();setInterval(refreshDeviceHealth,5000);const savedResume=recoveryStored();if(savedResume?.devicePublicId&&state.device?.publicId===savedResume.devicePublicId&&!state.device.virtualPreview){resumeRuntimeRecovery('app_restart_resume');}log('SYSTEM','Simulator ready. Pizza Line Reference HUD loaded.');})();
+(async()=>{await loadDevices();const cp=cameraPrefs();if(cp.resolution)$('cameraResolution').value=cp.resolution;if(cp.fit)$('cameraFit').value=cp.fit;$('cameraMirror').checked=!!cp.mirror;applyCameraPresentation();await enumerateCameras();if(!cameraSupported())setCameraHealth('error','UNSUPPORTED');refreshPresets();applyCalibration();render();if(state.device){startLiveStationSync();}else{setSyncBadge('error','NO DISPLAY');}setInterval(renderTopStatus,30000);setInterval(tickLiveTicketTimers,1000);renderRuntimeRecovery();refreshDeviceHealth();setInterval(refreshDeviceHealth,5000);const savedResume=recoveryStored();if(savedResume?.devicePublicId&&state.device?.publicId===savedResume.devicePublicId&&!state.device.virtualPreview){resumeRuntimeRecovery('app_restart_resume');}log('SYSTEM','Simulator ready. Pizza Line Reference HUD loaded.');})();
 })();
