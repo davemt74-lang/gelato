@@ -11,6 +11,9 @@ on:
       - 'assets/js/glasses-simulator-voice.js'
       - 'assets/js/glasses-voice-device.js'
       - 'assets/js/glasses-simulator-tabs.js'
+      - 'assets/js/glasses-multicamera.js'
+      - 'js/voice-session-presence.js'
+      - 'tests/glasses-training-foundation.test.js'
       - 'assets/css/glasses-simulator-device-first.css'
       - 'tests/glasses-voice-device.test.js'
       - 'tests/glasses-voice-recovery.test.js'
@@ -58,6 +61,8 @@ jobs:
           node --check assets/js/glasses-simulator-voice.js
           node --check assets/js/glasses-voice-device.js
           node --check assets/js/glasses-simulator-tabs.js
+          node --check assets/js/glasses-multicamera.js
+          node --check js/voice-session-presence.js
 
       - name: Simulator architecture contract
         run: php tests/glasses-web-simulator-contract.php
@@ -68,6 +73,7 @@ jobs:
           node tests/glasses-simulator-csrf.test.js
           node tests/glasses-live-kds-commands.test.js
           node tests/glasses-hud-manual-voice-parity.test.js
+          node tests/glasses-training-foundation.test.js
           php tests/glasses-live-kds-contract.php
           node tests/glasses-voice-device.test.js
           node tests/glasses-voice-recovery.test.js
