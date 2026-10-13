@@ -12,7 +12,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <title>Web Glasses Simulator · Gelato</title>
 <link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20261013-live1">
 <link rel="stylesheet" href="assets/css/glasses-simulator-hud-ux.css?v=20261013-voice1">
-<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-265">
+<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-266multi">
 </head>
 <body>
 <header class="sim-topbar">
@@ -23,6 +23,12 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
   <div class="sim-top-actions">
     <label>Mode <select id="modeSelect"><option value="live" selected>Live Gelato</option><option value="mock">Mock Demo</option></select></label>
     <label>Device <select id="deviceSelect"><option value="">Finding live kitchen displays…</option></select></label>
+    <label>Runtime <select id="glassesRuntimeSelect" aria-label="Glasses runtime"><option value="">New runtime…</option></select></label>
+    <label>Assign employee <select id="glassesRuntimeEmployee" aria-label="Assign employee to glasses runtime"><option value="">Loading staff…</option></select></label>
+    <button id="glassesRuntimeNew" type="button" title="Assign employee to selected paired glasses">New</button>
+    <button id="glassesRuntimeOpen" type="button" title="Open isolated glasses runtime">Open</button>
+    <button id="glassesRuntimeEnd" type="button" title="End and release this glasses runtime">End</button>
+    <span id="glassesRuntimeStatus" role="status" aria-live="polite">Loading runtimes…</span>
     <button id="refreshWork" type="button">Refresh work</button>
     <label>Scene <select id="sceneSourceSelect"><option value="image">Image</option><option value="camera">Browser Camera</option></select></label>
     <label class="asset-load" id="sceneFileLabel">Scene Image <input id="sceneFile" type="file" accept="image/*"></label>
@@ -34,6 +40,13 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
   </div>
 </header>
 
+<div class="glasses-runtime-training-controls" aria-label="Existing glasses training programs">
+ <label>Assigned training <select id="glassesRuntimeTrainingSelect"><option value="">No training selected</option></select></label>
+ <button id="glassesRuntimeTrainingStart" type="button">Start Training</button>
+ <button id="glassesRuntimeTrainingEnd" type="button">Finish Training</button>
+ <span id="glassesRuntimeTrainingStatus" role="status" aria-live="polite">Uses existing Vision Lab programs and supervised sessions.</span>
+ <a href="glasses-vision-lab.php" title="Review existing programs, missions, and datasets">Vision Lab</a>
+</div>
 <main class="sim-layout">
   <section class="sim-stage-panel">
     <div class="sim-status-row">
@@ -472,6 +485,7 @@ window.GELATO_GLASSES_SIMULATOR={
   api:'api/glasses-simulator.php',
   mediaApi:'api/glasses-vision-media.php',
   userId:<?=(int)$user['id']?>,
+  runtimePublicId:<?=json_encode(trim((string)($_GET['runtime']??'')),JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT)?>,
   canManageMedia:<?=app_has_permission('glasses.manage',$user)?'true':'false'?>
 };
 </script>
@@ -479,6 +493,7 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-v10-cook-ux-harness.js?v=20260929-v10-6"></script>
 <script src="js/voice-session-presence.js?v=20261013-presence1"></script>
 <script src="assets/js/glasses-item-assembly.js?v=20261013-265"></script>
+<script src="assets/js/glasses-employee-runtimes.js?v=20261013-266multi"></script>
 <script src="assets/js/glasses-assembly-recognition.js?v=20261013-266"></script>
 <script src="assets/js/glasses-web-simulator.js?v=20261013-265"></script>
 <script src="assets/js/glasses-voice-device.js?v=20261013-device1"></script>
