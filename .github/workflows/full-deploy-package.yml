@@ -102,6 +102,7 @@ on:
       - 'tests/glasses-simulator-csrf.test.js'
       - 'tests/glasses-live-kds-commands.test.js'
       - 'tests/glasses-hud-manual-voice-parity.test.js'
+      - 'tests/glasses-operator-hud-ux.test.js'
       - 'tests/glasses-live-kds-contract.php'
       - 'assets/css/glasses-web-simulator.css'
       - 'tests/glasses-live-virtual-preview-contract.php'
@@ -269,6 +270,7 @@ jobs:
             tests/glasses-simulator-csrf.test.js
             tests/glasses-live-kds-commands.test.js
             tests/glasses-hud-manual-voice-parity.test.js
+            tests/glasses-operator-hud-ux.test.js
             tests/glasses-live-kds-contract.php
             includes/glasses-simulator.php
             tests/glasses-live-virtual-preview-contract.php
@@ -376,6 +378,7 @@ jobs:
           node tests/glasses-simulator-csrf.test.js
           node tests/glasses-live-kds-commands.test.js
           node tests/glasses-hud-manual-voice-parity.test.js
+          node tests/glasses-operator-hud-ux.test.js
           php tests/glasses-live-kds-contract.php
           node --check assets/js/glasses-web-simulator.js
           node --check assets/js/glasses-pos-kds-test.js
