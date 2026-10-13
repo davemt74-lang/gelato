@@ -11,6 +11,9 @@ on:
       - 'js/kds-agent-context.js'
       - 'js/kds-agent-sidebar.js'
       - 'js/kds-voice-listener.js'
+      - 'js/voice-turn-taking.js'
+      - 'tests/voice-turn-taking.test.js'
+      - 'tests/voice-barge-in-contract.php'
       - 'js/kds.js'
       - 'tests/kds-slot-voice-contract.php'
       - 'includes/kds-slot-references.php'
@@ -30,6 +33,9 @@ on:
       - 'js/kds-agent-context.js'
       - 'js/kds-agent-sidebar.js'
       - 'js/kds-voice-listener.js'
+      - 'js/voice-turn-taking.js'
+      - 'tests/voice-turn-taking.test.js'
+      - 'tests/voice-barge-in-contract.php'
       - 'js/kds.js'
       - 'tests/kds-slot-voice-contract.php'
       - 'includes/kds-slot-references.php'
@@ -59,6 +65,8 @@ jobs:
           node --check js/kds-agent-context.js
           node --check js/kds-agent-sidebar.js
           node --check js/kds-voice-listener.js
+          node --check js/voice-turn-taking.js
+          php -l tests/voice-barge-in-contract.php
           node --check js/kds.js
           php -l tests/kds-slot-voice-contract.php
           php -l includes/kds-slot-references.php
@@ -69,3 +77,5 @@ jobs:
           php tests/kds-slot-voice-contract.php
           php tests/kds-global-order-reference.php
           node tests/kds-slot-voice.test.js
+          php tests/voice-barge-in-contract.php
+          node tests/voice-turn-taking.test.js
