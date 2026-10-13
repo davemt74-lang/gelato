@@ -64,6 +64,13 @@
       const label=document.createElement('span');
       label.textContent=photo.id?'Saved Vision Lab image':'Captured locally · requires storage consent';
       box.append(label);
+      const selectedItem=state.candidates.find(c=>c.kdsItemPublicId===$('gpfItem'+stage)?.value);
+      const refs=window.GelatoCameraWorkspace?.referenceMatches?.(photo,selectedItem?.menuItemId)||[];
+      const confidence=document.createElement('span');
+      confidence.textContent=refs.length?
+        'Closest menu reference: '+refs[0].similarityScore+'% visual similarity · not order verification':
+        'No matching menu reference saved · human order verification required';
+      box.append(confidence);
     }else box.textContent='No photo selected — capture automatically or manually.';
   }
   function render(){
