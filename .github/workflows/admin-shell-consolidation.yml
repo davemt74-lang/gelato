@@ -38,6 +38,8 @@ on:
       - 'js/floor-planner-module.js'
       - 'js/employee-home-module.js'
       - 'tests/admin-shell-consolidation-contract.php'
+      - 'tests/workspace-admin-sidebar-dedupe-contract.php'
+      - 'css/admin-tech-theme.css'
       - 'tests/universal-admin-page-shell-contract.php'
       - '.github/workflows/admin-shell-consolidation.yml'
   push:
@@ -79,6 +81,8 @@ on:
       - 'js/floor-planner-module.js'
       - 'js/employee-home-module.js'
       - 'tests/admin-shell-consolidation-contract.php'
+      - 'tests/workspace-admin-sidebar-dedupe-contract.php'
+      - 'css/admin-tech-theme.css'
       - 'tests/universal-admin-page-shell-contract.php'
       - '.github/workflows/admin-shell-consolidation.yml'
 
@@ -102,6 +106,7 @@ jobs:
           php -l includes/admin-shell-core.php
           php -l api/admin-shell.php
           php -l tests/admin-shell-consolidation-contract.php
+          php -l tests/workspace-admin-sidebar-dedupe-contract.php
           php -l tests/universal-admin-page-shell-contract.php
           php -l tests/admin-responsive-layout-contract.php
           php -l workspace.php
@@ -116,5 +121,6 @@ jobs:
       - name: Admin shell contract
         run: |
           php tests/admin-shell-consolidation-contract.php
+          php tests/workspace-admin-sidebar-dedupe-contract.php
           php tests/universal-admin-page-shell-contract.php
           php tests/admin-responsive-layout-contract.php
