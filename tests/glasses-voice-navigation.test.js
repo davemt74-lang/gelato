@@ -48,7 +48,8 @@ for(const [id,command] of [['simNavNext','next'],['simNavNextItem','next_item'],
   elt(id).fire('click');assert.equal(actions.at(-1),command);
 }
 assert.equal(elt('simNavContext').textContent,'Test Pizza · Step 2 · Preview only');
+assert.equal(elt('simVoiceToggle').disabled,true,'missing SpeechRecognition must disable microphone but preserve buttons');
 assert.equal(elt('simVoiceToggle').disabled,true,'unsupported browser must not expose a broken mic');
-assert.ok(elt('simVoiceFeedback').textContent.includes('unavailable'));
+assert.equal(elt('simVoiceFeedback').textContent,'Handled previous','manual navigation updates the live instruction feedback');
 assert.ok(!/\bfetch\s*\(|XMLHttpRequest|navigator\.sendBeacon/.test(source),'voice navigation may not write directly to POS/KDS');
 console.log('glasses-voice-navigation=ok');
