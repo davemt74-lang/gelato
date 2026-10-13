@@ -1197,7 +1197,7 @@ function render(){
   $('connectionBadge').style.color=live?'var(--good)':'var(--blue)';
   const station=state.work?.station?.name||state.device?.stationName||'Unassigned station';
   $('stationBadge').textContent=station;
-  $('buildBadge').textContent=build?'Build '+build.publicId:(live?'Live order preview · no build active':'Mock · no build');
+  $('buildBadge').textContent=build?'Build '+build.publicId:(live?'Live POS/KDS · no glasses build active':'Mock · no build');
   const guide=$('simLiveGuide');
   if(guide){
     const noHardware=!!state.device?.virtualPreview;
@@ -1216,8 +1216,10 @@ function render(){
   const workItems=orderItems();
   $('workItemSelect').innerHTML=workItems.length?workItems.map(x=>'<option value="'+escapeHtml(x.kdsItemPublicId)+'" '+(x.kdsItemPublicId===item?.kdsItemPublicId?'selected':'')+'>'+escapeHtml(x.posLine?.name||'Kitchen item')+' · '+escapeHtml(x.status||'')+' · #'+escapeHtml(x.ticket?.checkNumber||'')+'</option>').join(''):'<option value="">No station work</option>';
   $('workItemSelect').disabled=!!build||workItems.length===0;
+  if(state.finishConfirmation&&state.finishConfirmation.ticket!==item?.ticket?.checkPublicId)state.finishConfirmation=null;
   $('workMeta').innerHTML=[
     ['Ticket',item?.ticket?.checkNumber||'—'],['Table',item?.ticket?.tableName||'—'],
+    ['Operator note',item?.latestOperatorNote||'None'],
     ['Guests',item?.ticket?.guestCount||'—'],['Special',item?.posLine?.specialInstructions||'None']
   ].map(([a,b])=>'<div><small>'+escapeHtml(a)+'</small><strong>'+escapeHtml(b)+'</strong></div>').join('');
   const steps=deriveSteps(),comp=currentComponent(),comps=build?.components||[];
@@ -1236,6 +1238,7 @@ function render(){
   $('lowConfidenceDetection').disabled=live;
   $('completeMockBuild').disabled=live;
   window.GelatoGlassesVoiceUI?.refresh?.();
+  updateKitchenControls();
   const controls={
     startBuild:!live?'Start a demonstration build.':state.device?.virtualPreview?'Read-only preview: choose a paired device for live build actions.':!item?'Waiting for a KDS item.':!state.device?.simulatorWritable?'Requires glasses.manage and kds.update for this location.':'Start a governed build session.',
     autoPlayBuild:'Mock-only demonstration. Switch Mode to Mock.',
@@ -1512,8 +1515,129 @@ bindRegionEditor('hudRight');bindRegionEditor('hudStatus');bindRegionEditor('hud
 refreshPresets();applyCalibration();applyFrameMode();
 $('exceptions').addEventListener('click',e=>{const b=e.target.closest('[data-resolve]');if(b)resolveUnexpected(b.dataset.resolve);});
 
-/** Spoken and manual navigation share these read-only preview controls. */
-function simulatorNavigation(action){
+/** Live POS ticket/KDS controls are routed through one authorized server dispatcher.
+ * A browser preview can change kitchen workflow, but cannot fabricate build
+ * validation, create POS sales, or mark observed ingredients as verified. */
+const KITCHEN_COMMANDS=new Set(['start_item','ready_item','start_order','ready_order','hold_order','fire_order','finish_order','item_added']);
+const KITCHEN_TICKET_ACTIONS={start_order:'start',ready_order:'ready',hold_order:'hold',fire_order:'fire',finish_order:'bump'};
+function kitchenWritable(){
+  return state.mode==='mock'||(state.mode==='live'&&!!state.device?.kitchenWritable);
+}
+function updateKitchenControls(){
+  const current=selectedItem(),hasTicket=!!current?.ticket?.checkPublicId;
+  const editable=kitchenWritable()&&!state.kitchenBusy;
+  const status=current?.status||'';
+  const allSame=orderItems().filter(x=>x.ticket?.checkPublicId===current?.ticket?.checkPublicId);
+  const buttonRules={
+    start_item:editable&&status==='queued'&&!state.build,
+    ready_item:editable&&status==='in_progress'&&!state.build,
+    start_order:editable&&hasTicket&&allSame.some(x=>x.status==='queued')&&!state.build,
+    ready_order:editable&&hasTicket&&allSame.some(x=>x.status==='in_progress')&&!state.build,
+    hold_order:editable&&hasTicket&&allSame.some(x=>x.status==='queued')&&!state.build,
+    fire_order:editable&&hasTicket&&allSame.some(x=>x.status==='held')&&!state.build,
+    finish_order:editable&&hasTicket&&!(state.device?.stationPublicId)&&allSame.length>0&&
+      allSame.every(x=>x.status==='ready')&&!state.build,
+    item_added:editable&&['queued','in_progress','ready'].includes(status)&&!state.build,
+    next_item:!state.build&&orderItems().length>0,
+    previous_item:!state.build&&orderItems().length>0,
+    next:!!current&&!state.build,
+    previous:!!current&&!state.build
+  };
+  for(const node of document.querySelectorAll('[data-glasses-command]')){
+    const command=node.dataset.glassesCommand;
+    if(Object.hasOwn(buttonRules,command)){
+      node.disabled=!buttonRules[command];
+      node.setAttribute('aria-disabled',node.disabled?'true':'false');
+      node.title=node.disabled?(state.mode==='live'&&!state.device?.kitchenWritable?
+        'Requires kds.view and kds.update for this restaurant location.':
+        command==='finish_order'&&state.device?.stationPublicId?
+        'Choose All stations / Expo to finish an entire ticket.':
+        state.build?'Finish the active glasses build first.':
+        'This command is unavailable for the selected item or its current status.'):'';
+    }
+  }
+  const detail=$('simKitchenCommandStatus');
+  if(detail)detail.textContent=state.mode==='mock'?'MOCK · no kitchen writes':
+    state.device?.kitchenWritable?'LIVE KDS · authorized updates':'VIEW ONLY · Kitchen update permission required';
+}
+async function kitchenCommand(action,{spoken=false}={}){
+  const item=selectedItem();
+  if(!item)return {ok:false,message:'Choose a live kitchen item first.'};
+  if(!kitchenWritable())return {ok:false,message:'You do not have permission to update KDS at this location.'};
+  if(state.build)return {ok:false,message:'Finish the active glasses build before changing the kitchen workflow.'};
+  if(state.kitchenBusy)return {ok:false,message:'A kitchen action is already being processed.'};
+  const ticket=item.ticket?.checkPublicId||'';
+  if(action==='finish_order'){
+    if(state.device?.stationPublicId)return {ok:false,message:'Choose All stations / Expo before finishing a ticket.'};
+    const confirmation=state.finishConfirmation,now=Date.now();
+    if(!confirmation||confirmation.ticket!==ticket||confirmation.expires<now){
+      state.finishConfirmation={ticket,expires:now+12000};
+      return {ok:true,message:'Confirm finish ticket #'+(item.ticket?.checkNumber||'')+
+        ': all active items must be Ready. Press Finish Ticket or repeat “finish order” within 12 seconds.'};
+    }
+  }else state.finishConfirmation=null;
+  const matching=orderItems().filter(x=>x.ticket?.checkPublicId===ticket);
+  const matchingByStatus=(status)=>matching.filter(x=>x.status===status);
+  if(action==='finish_order'&&(!matching.length||matching.some(x=>x.status!=='ready')))
+    return {ok:false,message:'All ticket items must be marked Ready before finishing at Expo.'};
+  let note='',data={};
+  if(action==='item_added'){
+    const input=$('simItemNoteInput');
+    note=String(input?.value||'').trim();
+    if(!note&&spoken){
+      const raw=String(deriveSteps()[Math.min(state.previewStepIndex||0,Math.max(0,deriveSteps().length-1))]||'').trim();
+      note=raw?('Operator reported added: '+raw.replace(/^add\s+/i,'')):'';
+    }
+    if(!note&&!spoken&&typeof window.prompt==='function'){
+      note=String(window.prompt('What was added? This saves a kitchen note, not a POS change or ingredient verification.','')||'').trim();
+    }
+    if(note.length<3||note.length>250)
+      return {ok:false,message:'Describe what was added (3–250 characters). This will be a kitchen note only.'};
+    data={kdsItemPublicId:item.kdsItemPublicId,expectedStatus:item.status,note};
+  }else if(action==='start_item'||action==='ready_item'){
+    const expected=action==='start_item'?'queued':'in_progress';
+    if(item.status!==expected)return {ok:false,message:'Item is currently '+item.status+'. Refresh to confirm its state.'};
+    data={kdsItemPublicId:item.kdsItemPublicId,expectedStatus:expected,status:action==='start_item'?'in_progress':'ready'};
+  }else{
+    const actionStatus={start_order:'queued',ready_order:'in_progress',hold_order:'queued',fire_order:'held'};
+    if(action!=='finish_order'&&!matchingByStatus(actionStatus[action]).length)
+      return {ok:false,message:'No eligible items on ticket #'+(item.ticket?.checkNumber||'')+'.'};
+    data={checkPublicId:ticket,ticketAction:KITCHEN_TICKET_ACTIONS[action]};
+  }
+  state.kitchenBusy=true;updateKitchenControls();
+  try{
+    if(state.mode==='mock'){
+      if(action==='item_added')item.latestOperatorNote=note;
+      else if(action==='start_item'||action==='ready_item')item.status=data.status;
+      else {
+        const from={start_order:'queued',ready_order:'in_progress',hold_order:'queued',fire_order:'held',finish_order:'ready'}[action];
+        const to={start_order:'in_progress',ready_order:'ready',hold_order:'held',fire_order:'queued',finish_order:'completed'}[action];
+        matching.forEach(x=>{if(x.status===from)x.status=to;});
+        state.work.items=state.work.items.filter(x=>x.status!=='completed');
+      }
+    }else{
+      const type=action==='item_added'?'kds.item.note':
+        ['start_item','ready_item'].includes(action)?'kds.item.transition':'kds.ticket.action';
+      await api(type,data);
+    }
+    state.finishConfirmation=null;
+    if(action==='item_added'&&$('simItemNoteInput'))$('simItemNoteInput').value='';
+    if(state.mode==='live')await syncLiveStationWork(true);
+    else render();
+    const message=action==='item_added'?'Kitchen note saved to the selected item. POS and ingredient verification were not changed.':
+      action==='finish_order'?'Ticket finished at Expo; POS payment remains separate.':
+      action.replaceAll('_',' ')+' completed on '+(item.ticket?.checkNumber||'ticket')+'.';
+    log(state.mode==='live'?'KDS':'MOCK',message);
+    return {ok:true,message};
+  }catch(error){
+    log('KDS',String(error?.message||'Kitchen action failed.'));
+    return {ok:false,message:String(error?.message||'Kitchen action failed.')};
+  }finally{state.kitchenBusy=false;updateKitchenControls();}
+}
+
+/** Spoken and manual navigation share the same real kitchen command entry point. */
+function simulatorNavigation(action,options={}){
+  if(KITCHEN_COMMANDS.has(action))return kitchenCommand(action,options);
   const items=orderItems(),current=selectedItem();
   if(action==='next_item'||action==='previous_item'){
     if(!items.length)return {ok:false,message:'No kitchen orders yet. Send an order to KDS first.'};
@@ -1542,7 +1666,7 @@ function simulatorNavigation(action){
     if(!current)return {ok:false,message:'No current item. Waiting for kitchen orders.'};
     const steps=deriveSteps();return {ok:true,message:'Ticket '+(current.ticket?.checkNumber||'')+', '+(current.posLine?.name||'Kitchen item')+'. '+(steps[state.previewStepIndex||0]||'Review item')+'.'};
   }
-  if(action==='status')return {ok:true,message:state.mode==='mock'?'Mock demonstration; sample orders only.':'Live display, '+items.length+' KDS item'+(items.length===1?'':'s')+'. '+(current?'Selected '+(current.posLine?.name||'item')+'.':'No active KDS work.')+(state.device?.virtualPreview?' Read-only browser preview.':' Paired device selected.')};
+  if(action==='status')return {ok:true,message:state.mode==='mock'?'Mock demonstration; sample orders only.':'Live display, '+items.length+' KDS item'+(items.length===1?'':'s')+'. '+(current?'Selected '+(current.posLine?.name||'item')+'.':'No active KDS work.')+(state.device?.virtualPreview?(state.device?.kitchenWritable?' Kitchen controls enabled.':' View-only; kitchen changes require KDS update permission.'):' Paired device selected.')};
   return {ok:false,message:'Unknown command. Try next, next item, previous, item added, repeat, or status.'};
 }
 window.GelatoGlassesNavigation={dispatch:simulatorNavigation,context:()=>({
