@@ -866,3 +866,46 @@ html,body{max-width:100%;overflow-x:hidden}
  top:2px!important;left:2px!important;display:block!important;
  background:#194a31!important;color:#e4fff0!important;border-color:#8adeaa!important;
 }
+
+/* Section 272 — employee runtime subtabs share Camera's compact style. */
+.sgv-tabbed-console #sgv-panel-runtime .glasses-runtime-tabs{
+ display:flex;gap:5px;flex-wrap:wrap;align-items:stretch;
+ padding:4px 0;margin:0;min-width:0;
+}
+.sgv-tabbed-console #sgv-panel-runtime .glasses-runtime-tabs[hidden]{display:none!important}
+.sgv-tabbed-console #sgv-panel-runtime .glasses-runtime-tabs button{
+ appearance:none;display:flex;align-items:center;justify-content:center;gap:5px;
+ flex:1 1 84px;min-width:70px;max-width:150px;min-height:36px;padding:6px;
+ font:750 10px/1.25 system-ui;cursor:pointer;border-radius:7px;
+ border:1px solid #345e46;background:#10251a;color:#d2f3dc;
+ overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.sgv-tabbed-console #sgv-panel-runtime .glasses-runtime-tabs button[aria-selected="true"]{
+ background:#245a3d;border-color:#74d59c;color:#fff;
+}
+.sgv-tabbed-console #sgv-panel-runtime .glasses-runtime-tabs button:focus-visible{
+ outline:2px solid #9effc1;outline-offset:2px;
+}
+.sgv-tabbed-console #sgv-panel-runtime .glasses-runtime-tabs button span{
+ flex:none;min-width:17px;height:17px;display:grid;place-items:center;
+ border-radius:5px;background:#367e54;color:#fff;font:800 10px/1 system-ui;
+}
+.sgv-tabbed-console #sgv-panel-runtime .glasses-runtime-tabs button:not([aria-selected="true"]) span{
+ background:#1b4730;
+}
+.sgv-tabbed-console #sgv-panel-runtime #glassesRuntimeSelectLabel[hidden]{display:none!important}
+/* The personal UI setting belongs in the same runtime controls, not another card. */
+.sgv-tabbed-console #sgv-panel-runtime .glasses-runtime-save-ui{
+ display:flex;align-items:center;flex-wrap:wrap;gap:6px;
+ border-top:1px solid #31513f;padding-top:8px;flex:1 1 100%;
+}
+.sgv-tabbed-console #sgv-panel-runtime .glasses-runtime-save-ui button{
+ background:#245d3f;color:#f3fff7;border:1px solid #6ac18b;
+ font:750 11px/1.3 system-ui;padding:7px 11px;
+}
+.sgv-tabbed-console #sgv-panel-runtime #sgvUserPrefsStatus{
+ font:600 10px/1.35 system-ui;color:#b5d9c4;flex:1 1 120px;
+}
+.sgv-tabbed-console #sgv-panel-runtime #sgvUserPrefsStatus[data-state="saved"]{color:#96f2b4}
+.sgv-tabbed-console #sgv-panel-runtime #sgvUserPrefsStatus[data-state="error"]{color:#ffb69e}
+.sgv-tabbed-console #sgv-panel-runtime #sgvRuntimeTelemetry{display:none!important}
