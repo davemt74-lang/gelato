@@ -1484,14 +1484,9 @@ async function focusKitchenItem(publicId,{autoBegin=true}={}){
   if(!next)return {ok:false,message:'KDS selection is stale. Refresh your orders.'};
   state.selectedKdsItemPublicId=next.kdsItemPublicId;
   state.previewStepIndex=0;state.validation=null;render();
-  if(autoBegin&&state.mode==='mock'){await startBuild();return {ok:true,message:'Mock build started.'};}
-  if(autoBegin&&state.mode==='live'&&state.device?.simulatorWritable&&next.status==='in_progress'){
-    await startBuild();return {ok:true,message:'Governed build requested for selected item.'};
-  }
-  return {ok:true,message:'Selected item ingredients displayed. '+(state.device?.virtualPreview?
-    'Browser preview does not certify ingredient observations.':
-    next.status==='queued'?'Item is queued: start it in KDS to authorize live build evidence.':
-    'Live build evidence requires an authorized session.')};
+  // Immediately display this menu item's assembly list. Governed build.sessions and
+  // official KDS transitions are separate explicit actions, never triggered by tab selection.
+  return {ok:true,message:'Selected '+(next.posLine?.name||'item')+' assembly ingredients from its menu configuration. No KDS change.'};
 }
 $('hudOrders').addEventListener('click',event=>{
   const ticketButton=event.target.closest('[data-kds-order-slot]');
@@ -1820,7 +1815,7 @@ async function kitchenCommand(action,{spoken=false}={}){
     const input=$('simItemNoteInput');
     note=String(input?.value||'').trim();
     if(!note&&spoken){
-      const raw=String(deriveSteps()[Math.min(state.previewStepIndex||0,Math.max(0,deriveSteps().length-1))]||'').trim();
+      const raw=String(currentAssemblyIngredient(item)?.name||'').trim();
       note=raw?('Operator reported added: '+raw.replace(/^add\s+/i,'')):'';
     }
     if(!note&&!spoken&&typeof window.prompt==='function'){
