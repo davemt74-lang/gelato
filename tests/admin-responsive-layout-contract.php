@@ -21,6 +21,7 @@ assertAdminResponsive(str_contains($base, 'width:min(1460px,calc(100% - 24px))')
 assertAdminResponsive(str_contains($layout, '.admin-control .admin-shell') && str_contains($layout, 'margin-inline:auto'), 'shared shell gutters');
 assertAdminResponsive(str_contains($layout, '.vl-grid>') && str_contains($layout, 'min-width:0'), 'Vision Lab grid children can shrink');
 assertAdminResponsive(str_contains($layout, '.vl-table table') && str_contains($layout, 'table-layout:fixed'), 'Vision Lab desktop tables wrap inside column');
+assertAdminResponsive(str_contains($layout, '(.gvo-table-wrap,.gvm-table-wrap,.gvp-table-wrap) table{width:100%;min-width:0!important;table-layout:fixed}'), 'other Vision tables do not overflow desktop panels');
 assertAdminResponsive(str_contains($layout, '@media(max-width:1260px)') && str_contains($layout, '.vl-hero,.vl-grid'), 'sidebar-aware Vision Lab breakpoint');
 assertAdminResponsive(str_contains($layout, '@media(max-width:780px)') && str_contains($layout, 'content:attr(data-label)'), 'mobile cards have visible field names');
 foreach (['.gvo-table-wrap','.gvm-table-wrap','.gvp-table-wrap'] as $table) {
