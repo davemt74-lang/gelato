@@ -59,12 +59,9 @@ async function rehydrateCanonicalBuild(){
       if(d.buildSession?.status==='active'&&['queued','in_progress'].includes(d.buildSession?.kdsStatus)){state.build=d.buildSession;state.validation=null;saveRecoveryResume();return true;}
     }catch(e){log('RECOVERY','Saved build could not be rehydrated: '+e.message);}
   }
-  const item=selectedItem(),candidateKds=(saved?.devicePublicId===state.device?.publicId?saved?.kdsItemPublicId:null)||item?.kdsItemPublicId||null;
-  if(!candidateKds)return false;
-  const current=(state.work?.items||[]).find(x=>x.kdsItemPublicId===candidateKds)||state.work?.focusItem;
-  if(current&&!['queued','in_progress'].includes(current.status||''))throw new Error('Canonical kitchen work is no longer resumable.');
-  const d=await api('build.start',{kdsItemPublicId:candidateKds,sourceRevision:state.work?.revision||''});
-  state.build=d.buildSession;state.validation=null;saveRecoveryResume();return true;
+  // Recovery restores only a previously saved active session. Entering Live
+  // or reconnecting must never create a fresh kitchen build implicitly.
+  return false;
 }
 async function resumeRuntimeRecovery(reason='manual_resume'){
   if(state.mode!=='live'){state.recovery.state='ready';state.recovery.suppressAutomatic=false;state.recovery.lastReason='mock_runtime_ready';renderRuntimeRecovery();return true;}
