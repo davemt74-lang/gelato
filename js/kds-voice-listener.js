@@ -62,8 +62,11 @@
       try{answer=await askKitchen('read all orders');}
       catch(error){answer=readAll();status('warn','Using local kitchen readout: '+(error.message||'server not responding'));}
     } else if(/^(?:status|kitchen status|how many orders)\b/.test(phrase)){
-      const current=snapshot();const count=current.allSlots?.length||0;
-      answer=count+' active orders across '+Math.max(1,Math.ceil(count/8))+' KDS page(s), eight displayed at a time. '+(count?'Say read any order number from 1 to '+count+'.':'Waiting for kitchen orders.');
+      try{answer=await askKitchen('kitchen status');}
+      catch(error){const current=snapshot(),count=current.allSlots?.length||0;
+        answer=count+' active KDS orders, eight visible per page. '+(count?'Say read any order number from 1 to '+count+'.':'Waiting for kitchen orders.');
+        status('warn','Kitchen API unavailable; read-only local status shown.');
+      }
     } else if(/^(?:help|commands|what can i say)\b/.test(phrase)){
       answer='Say read order 1, repeat order 12, read all orders, or kitchen status. Orders are numbered across all KDS pages, eight per screen. Hands-free mode also recognizes Hey Gelato.';
     } else if(/^(?:stop listening|turn off voice|microphone off)\b/.test(phrase)){
