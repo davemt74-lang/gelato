@@ -3,6 +3,7 @@ declare(strict_types=1);
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/operational-access.php';
 require_once __DIR__.'/../includes/kds-production.php';
+require_once __DIR__.'/../includes/kds-slot-references.php';
 
 $user=app_require_auth();
 $pdo=app_pdo();
@@ -193,23 +194,25 @@ try{
         }
     }
 
-    // "Read order 4" is a CURRENT VISIBLE SLOT reference, not POS ticket #4.
-    // Compare the browser's displayed mapping to the authoritative board. If
-    // the order cards have moved, refuse to read a different ticket silently.
-    if(preg_match('/\b(?:read|repeat|describe|what(?:\x27s| is)?(?: on| in)?|status(?: of)?|tell me about)\s+(?:the\s+)?(?:order|ticket|slot)\s*#?\s*([1-8])\b/u',$normalized,$slotMatch)){
+    // Order N is the current one-based position in the entire active KDS
+    // queue, not a POS ticket number and not a page-local 1–8 number.
+    // Cross-check the client position against the latest server-side board:
+    // never read the wrong ticket when a new order changes the sorting.
+    if(preg_match('/\b(?:read|repeat|describe|what(?:\x27s| is)?(?: on| in)?|status(?: of)?|tell me about)\s+(?:the\s+)?(?:order|slot)\s*(?:number\s*|#\s*)?([1-9]\d*)\b/u',$normalized,$slotMatch)){
         $slot=(int)$slotMatch[1];
-        $page=max(0,min(1000,(int)($context['visiblePage']??0)));
-        $shown=is_array($context['visibleSlots']??null)?$context['visibleSlots']:[];
-        $pageTickets=array_slice($tickets,$page*8,8);
-        $onScreen=$shown[$slot-1]??null;
-        $current=$pageTickets[$slot-1]??null;
-        if(!is_array($onScreen)||!$current||((int)($onScreen['slot']??0))!==$slot
-          ||(string)($onScreen['checkPublicId']??'')!==(string)$current['checkPublicId']){
-            app_json_response(['ok'=>true,'skill'=>'kds.slot_changed','answer'=>'The order positions have changed. Please refresh the KDS board and ask again.','data'=>['slot'=>$slot],'sources'=>['Kitchen Display → Visible Order Slots']]);
+        $all=is_array($context['allSlots']??null)?$context['allSlots']:[];
+        $resolved=kds_resolve_order_reference($tickets,$all,$slot);
+        if($resolved['status']==='empty'||$resolved['status']==='invalid'){
+            app_json_response(['ok'=>true,'skill'=>'kds.slot_empty','answer'=>'Order '.$slot.' is not active. This station has '.count($tickets).' active orders across '.max(1,(int)ceil(count($tickets)/8)).' page(s).','data'=>['slot'=>$slot,'total'=>count($tickets)],'sources'=>['Kitchen Display → Active Orders']]);
         }
-        $current['visibleSlot']=$slot;
-        app_json_response(['ok'=>true,'skill'=>'kds.visible_order','answer'=>'Order '.$slot.', '.kda_ticket_detail($current,true),'data'=>['slot'=>$slot,'ticket'=>$current],'sources'=>['Kitchen Display → Visible Order Slots']]);
+        if($resolved['status']==='stale'){
+            app_json_response(['ok'=>true,'skill'=>'kds.slot_changed','answer'=>'Order '.$slot.' changed position since your KDS display refreshed. Refresh the order list and ask again.','data'=>['slot'=>$slot],'sources'=>['Kitchen Display → Active Orders']]);
+        }
+        $current=$resolved['ticket'];
+        $current['orderReference']=$slot;
+        app_json_response(['ok'=>true,'skill'=>'kds.order_reference','answer'=>'Order '.$slot.', '.kda_ticket_detail($current,true),'data'=>['slot'=>$slot,'ticket'=>$current],'sources'=>['Kitchen Display → Active Orders']]);
     }
+
     $ticket=kda_match_ticket($tickets,$message,$selectedCheckId);
     if($ticket){
         app_json_response(['ok'=>true,'skill'=>'kds.order_detail','answer'=>kda_ticket_detail($ticket,true),'data'=>['ticket'=>$ticket],'sources'=>['Kitchen Display → Live Order']]);

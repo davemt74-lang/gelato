@@ -24,7 +24,7 @@ kva_assert(str_contains($sidebar,"const ANNOUNCE_KEY = 'gelato.kds.voiceNewOrder
 kva_assert(str_contains($sidebar,'if (!previous) return;'),'The first observed board must establish a baseline instead of announcing existing tickets.');
 kva_assert(str_contains($sidebar,"type:'new_order'")&&str_contains($sidebar,"type:'order_update'"),'KDS observer must distinguish new tickets from later fired additions.');
 kva_assert(str_contains($sidebar,'!priorItems.has(String(item.public_id))'),'Order updates must announce only newly observed ticket items.');
-kva_assert(str_contains($sidebar,'state.voiceQueue.push(message)')&&str_contains($sidebar,'pumpSpeech()'),'Spoken KDS announcements must be queued rather than overlapping.');
+kva_assert(str_contains($sidebar,'state.voiceQueue.push(remaining.slice')&&str_contains($sidebar,'state.voiceQueue.push(remaining)')&&str_contains($sidebar,'pumpSpeech()'),'Spoken KDS announcements must be queued rather than overlapping.');
 kva_assert(str_contains($sidebar,'Special instruction:')&&str_contains($sidebar,'ticket.tableName')&&str_contains($sidebar,'ticket.checkNumber'),'New-order speech must include order/table context and special instructions.');
 kva_assert(str_contains($sidebar,'Read active orders now')&&str_contains($sidebar,'GelatoKdsVoice?.readAll?.()'),'KDS must provide an explicit read-current-board voice action.');
 

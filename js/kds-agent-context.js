@@ -14,6 +14,7 @@
     return {
       visiblePage:slots.page,
       visibleSlots:slots.slots,
+      allSlots:slots.allSlots,
       module:'kds',
       route:(location.pathname.split('/').pop()||'kds.php'),
       pageTitle:'Kitchen Display System',
@@ -23,7 +24,7 @@
       kitchenItemPublicId:clean(state.kitchenItemPublicId,100),
     };
   }
-  function transportSnapshot(){const c=snapshot();return {module:c.module,route:c.route,locationId:c.locationId,stationPublicId:c.stationPublicId,checkPublicId:c.checkPublicId,kitchenItemPublicId:c.kitchenItemPublicId,visiblePage:c.visiblePage,visibleSlots:c.visibleSlots};}
+  function transportSnapshot(){const c=snapshot();return {module:c.module,route:c.route,locationId:c.locationId,stationPublicId:c.stationPublicId,checkPublicId:c.checkPublicId,kitchenItemPublicId:c.kitchenItemPublicId,visiblePage:c.visiblePage,visibleSlots:c.visibleSlots,allSlots:c.allSlots};}
   function description(c=snapshot()){return ['KDS',c.stationPublicId?'Station view':'Expo / All',c.checkPublicId?'Selected order':''].filter(Boolean).join(' · ');}
   function placeholder(){return 'Ask Gelato about kitchen load, orders, ready items, stations, or ticket status…';}
   function publish(){window.GelatoAgentPageContext?.publish?.();}

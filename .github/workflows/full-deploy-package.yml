@@ -16,6 +16,9 @@ on:
       - 'js/kds-voice-listener.js'
       - 'tests/kds-slot-voice-contract.php'
       - 'tests/kds-slot-voice.test.js'
+      - 'includes/kds-slot-references.php'
+      - 'tests/kds-global-order-reference.php'
+      - 'docs/KDS-GLOBAL-ORDER-REFERENCES.md'
       - 'api/glasses-simulator.php'
       - 'includes/glasses-simulator.php'
       - 'assets/js/glasses-web-simulator.js'
@@ -119,6 +122,8 @@ jobs:
             js/kds-voice-listener.js
             tests/kds-slot-voice-contract.php
             tests/kds-slot-voice.test.js
+            includes/kds-slot-references.php
+            tests/kds-global-order-reference.php
             assets/js/glasses-simulator-voice.js
             assets/css/glasses-simulator-hud-ux.css
             tests/glasses-hud-voice-contract.php
@@ -162,6 +167,8 @@ jobs:
           php tests/glasses-live-virtual-preview-contract.php
           php tests/glasses-hud-voice-contract.php
           php tests/kds-slot-voice-contract.php
+          php tests/kds-global-order-reference.php
+          php -l includes/kds-slot-references.php
           node --check js/kds-voice-listener.js
           node tests/kds-slot-voice.test.js
           node --check assets/js/glasses-simulator-voice.js

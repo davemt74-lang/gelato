@@ -13,6 +13,9 @@ on:
       - 'js/kds-voice-listener.js'
       - 'js/kds.js'
       - 'tests/kds-slot-voice-contract.php'
+      - 'includes/kds-slot-references.php'
+      - 'tests/kds-global-order-reference.php'
+      - 'docs/KDS-GLOBAL-ORDER-REFERENCES.md'
       - 'tests/kds-slot-voice.test.js'
       - 'tests/kds-voice-agent-contract.php'
       - '.github/workflows/kds-voice-agent.yml'
@@ -29,6 +32,9 @@ on:
       - 'js/kds-voice-listener.js'
       - 'js/kds.js'
       - 'tests/kds-slot-voice-contract.php'
+      - 'includes/kds-slot-references.php'
+      - 'tests/kds-global-order-reference.php'
+      - 'docs/KDS-GLOBAL-ORDER-REFERENCES.md'
       - 'tests/kds-slot-voice.test.js'
       - 'tests/kds-voice-agent-contract.php'
       - '.github/workflows/kds-voice-agent.yml'
@@ -55,8 +61,11 @@ jobs:
           node --check js/kds-voice-listener.js
           node --check js/kds.js
           php -l tests/kds-slot-voice-contract.php
+          php -l includes/kds-slot-references.php
+          php -l tests/kds-global-order-reference.php
       - name: KDS voice-only Agent contract
         run: |
           php tests/kds-voice-agent-contract.php
           php tests/kds-slot-voice-contract.php
+          php tests/kds-global-order-reference.php
           node tests/kds-slot-voice.test.js

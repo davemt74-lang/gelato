@@ -15,17 +15,17 @@
   function emitAnswer(text,kind='answer') {
     window.dispatchEvent(new CustomEvent('gelato-kds-voice-answer',{detail:{text:String(text||''),kind}}));
   }
-  function snapshot(){return window.GelatoKdsSlots?.snapshot?.()||{slots:[],page:0,locationId:0,stationPublicId:''};}
+  function snapshot(){return window.GelatoKdsSlots?.snapshot?.()||{slots:[],allSlots:[],total:0,page:0,locationId:0,stationPublicId:''};}
   function readSlot(slot){
     const number=Number(slot);
-    if(!Number.isInteger(number)||number<1||number>8)return 'Order positions are 1 through 8 on the current KDS page.';
+    if(!Number.isSafeInteger(number)||number<1)return 'Say an active order number, starting with order 1.';
     const result=window.GelatoKdsSlots?.read?.(number);
     return result?.text||'KDS board is not ready. Try again after the orders load.';
   }
   function readAll(){
-    const visible=snapshot().slots||[];
-    if(!visible.length)return 'There are no active orders on this KDS page.';
-    const items=visible.map(item=>readSlot(item.slot));
+    const all=snapshot().allSlots||[];
+    if(!all.length)return 'There are no active KDS orders.';
+    const items=all.map(item=>readSlot(item.slot));
     return items.join(' Next. ');
   }
   async function askKitchen(message){
@@ -35,7 +35,7 @@
       headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-Token':window.KDS_CONFIG?.csrf||''},
       body:JSON.stringify({csrf_token:window.KDS_CONFIG?.csrf||'',message,pageContext:{
         module:'kds',locationId:ctx.locationId,stationPublicId:ctx.stationPublicId,
-        checkPublicId:'',visiblePage:ctx.page,visibleSlots:ctx.slots
+        checkPublicId:'',visiblePage:ctx.page,visibleSlots:ctx.slots,allSlots:ctx.allSlots
       }})
     });
     const data=await response.json().catch(()=>({ok:false,message:'Invalid KDS response.'}));
@@ -51,17 +51,17 @@
     if(wakeRequired&&!woken&&now>=armedUntil)return {ignored:true};
     if(woken&&!phrase){armedUntil=now+10000;status('wake-detected','Hey Gelato heard. Say your order command.');return {ignored:true};}
     armedUntil=0;
-    const slot=phrase.match(/\b(?:order|ticket|slot)\s*(?:#\s*)?([1-8])\b/);
+    const slot=phrase.match(/\b(?:order|slot)\s*(?:number\s*|#\s*)?([1-9]\d*)\b/);
     let answer;
     if(slot && /^(?:read|repeat|tell me|what|what s|whats|show|status|check|order|ticket|slot)\b/.test(phrase)){
       answer=readSlot(slot[1]);
     } else if(/^(?:read|repeat|list|tell me)\s+(?:all\s+)?(?:the\s+)?(?:active\s+|current\s+)?orders?\b/.test(phrase)){
       answer=readAll();
     } else if(/^(?:status|kitchen status|how many orders)\b/.test(phrase)){
-      const slots=snapshot().slots||[];
-      answer=slots.length+' orders on this KDS page. '+(slots.length?'Say read order 1 through order 8.':'Waiting for kitchen orders.');
+      const current=snapshot();const count=current.allSlots?.length||0;
+      answer=count+' active orders across '+Math.max(1,Math.ceil(count/8))+' KDS page(s), eight displayed at a time. '+(count?'Say read any order number from 1 to '+count+'.':'Waiting for kitchen orders.');
     } else if(/^(?:help|commands|what can i say)\b/.test(phrase)){
-      answer='Say read order 1 through order 8, repeat order 4, read all orders, or kitchen status. Hands-free mode also recognizes Hey Gelato.';
+      answer='Say read order 1, repeat order 12, read all orders, or kitchen status. Orders are numbered across all KDS pages, eight per screen. Hands-free mode also recognizes Hey Gelato.';
     } else if(/^(?:stop listening|turn off voice|microphone off)\b/.test(phrase)){
       setMode('off');answer='Kitchen listening is off.';
     } else {
@@ -90,7 +90,7 @@
     try{
       const r=new SpeechRecognition();recognizer=r;
       r.lang='en-US';r.continuous=true;r.interimResults=false;r.maxAlternatives=1;
-      r.onstart=()=>{if(recognizer!==r)return;active=true;failures=0;status('listening',mode==='wake'?'Listening for “Hey Gelato”…':'Always-on listening · read order 1 through 8.');};
+      r.onstart=()=>{if(recognizer!==r)return;active=true;failures=0;status('listening',mode==='wake'?'Listening for “Hey Gelato”…':'Always-on listening · say read order 12 or any active order number.');};
       r.onresult=e=>{
         if(pausedForSpeech||mode==='off')return;
         for(let i=e.resultIndex;i<e.results.length;i++)if(e.results[i].isFinal){
