@@ -137,7 +137,7 @@
           advanced.appendChild(group);
       }
       nav.appendChild(advanced);
-      move(nav,overview);
+      move(nav,voice);
     }
     const diagnostics=document.createElement('section');diagnostics.className='console-card sgv-voice-cert';
     diagnostics.innerHTML='<div class="console-heading"><div><small>DEVICE READINESS</small><strong>Voice Device Certification</strong></div><span id="simVoiceCertBadge">NOT RUN</span></div>'+
@@ -147,6 +147,7 @@
       '<p class="calibration-note">Certification requests microphone permission only after you click Run Certification. It briefly tests capture, then releases the stream. Recover Voice requires an explicit click. Full microphone off never restarts automatically.</p>'+
       '<div id="simVoiceCertificationChecks" class="sgv-checks" aria-label="Certification checks"></div>';
     voice.appendChild(diagnostics);
+    move($('glassesHudNotificationSettingsCard'),voice);
     diagnostics.querySelector('#simVoiceRunCertification').addEventListener('click',certify);
     diagnostics.querySelector('#simVoiceRecover').addEventListener('click',()=>window.GelatoGlassesVoiceUI?.recoverVoice?.());
     diagnostics.querySelector('#simVoiceReset').addEventListener('click',()=>window.GelatoGlassesVoiceUI?.stopVoice?.());
