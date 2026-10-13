@@ -9,6 +9,9 @@ on:
       - 'index.html'
       - 'css/training-workspace-chat.css'
       - 'js/training-workspace-voice.js'
+      - 'js/voice-turn-taking.js'
+      - 'tests/voice-turn-taking.test.js'
+      - 'tests/voice-barge-in-contract.php'
       - 'js/dynamic-agent-canvas.js'
       - 'tests/training-chat-voice-contract.php'
       - 'tests/training-workspace-voice.test.js'
@@ -101,6 +104,9 @@ jobs:
             index.html
             css/training-workspace-chat.css
             js/training-workspace-voice.js
+            js/voice-turn-taking.js
+            tests/voice-turn-taking.test.js
+            tests/voice-barge-in-contract.php
             tests/training-chat-voice-contract.php
             tests/training-workspace-voice.test.js
             .htaccess
@@ -167,6 +173,9 @@ jobs:
           php tests/training-chat-voice-contract.php
           node --check js/training-workspace-voice.js
           node tests/training-workspace-voice.test.js
+          php tests/voice-barge-in-contract.php
+          node --check js/voice-turn-taking.js
+          node tests/voice-turn-taking.test.js
           php tests/mysql-conditional-add-column-compatibility.php
           php tests/mysql-foreign-key-diagnostics.php
           php tests/mysql-v11-stored-generated-fk-compatibility.php
