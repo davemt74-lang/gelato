@@ -16,6 +16,7 @@ $bootstrap = file_get_contents($root . '/includes/bootstrap.php');
 assertAdminResponsive(is_string($base) && is_string($layout) && is_string($script) && is_string($bootstrap), 'assets exist');
 assertAdminResponsive(str_contains($base, 'width:min(1460px,calc(100% - 40px))'), 'admin width must respect sidebar-adjusted content box');
 assertAdminResponsive(!str_contains($base, 'calc(100vw - 36px)'), 'viewport-width overshoot regression');
+assertAdminResponsive(str_contains($base, '.admin-control .admin-top-actions{display:flex;flex:1 1 100%;flex-wrap:wrap'), 'narrow fallback headers must wrap links');
 assertAdminResponsive(str_contains($base, 'width:min(1460px,calc(100% - 24px))'), 'mobile side gutters valid');
 assertAdminResponsive(str_contains($layout, '.admin-control .admin-shell') && str_contains($layout, 'margin-inline:auto'), 'shared shell gutters');
 assertAdminResponsive(str_contains($layout, '.vl-grid>') && str_contains($layout, 'min-width:0'), 'Vision Lab grid children can shrink');
@@ -32,5 +33,6 @@ assertAdminResponsive(str_contains($bootstrap, 'js/universal-admin-page-shell.js
 foreach (['glasses-vision-lab.php','glasses-vision-models.php','glasses-vision-operations.php','glasses-vision-profiles.php'] as $page) {
     $source = file_get_contents($root . '/' . $page);
     assertAdminResponsive(str_contains($source, 'js/universal-admin-page-shell.js?v=20261012-ui1'), "{$page} loads corrected shell");
+    assertAdminResponsive(str_contains($source, 'assets/css/admin-control.css?v=20261012-ui1'), "{$page} refreshes mobile-safe header CSS");
 }
 echo "admin-responsive-layout=ok\n";
