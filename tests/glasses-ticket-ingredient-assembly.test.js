@@ -48,7 +48,7 @@ assert.equal(model.nextItemInTicket(groups[0],'k2',id=>id==='k1'?acts:{}),null,
 const complete=model.ticketGroups([...Array.from({length:12},(_,i)=>item('Pizza'+i,['Sauce'],'t'+i,'k'+i))],8);
 assert.equal(complete.length,8,'at most eight actual occupied KDS tickets');
 assert.equal(model.ticketGroups([item('Cancelled',['A'],'t1','x','cancelled')]).length,0);
-assert.match(main,/function acknowledgeIngredient\(result\)/);
+assert.match(main,/function acknowledgeIngredient\(result,options=\{\}\)/,'operator acknowledgement includes voice origin for spoken duplicate suppression');
 assert.match(main,/actions\[ingredient\.id\]=result/);
 assert.match(main,/nextItemInTicket\(activeTicket\(\),item\.kdsItemPublicId/);
 assert.match(main,/official KDS readiness separately/);
