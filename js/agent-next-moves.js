@@ -31,6 +31,7 @@
     panel.id = 'gelato-agent-next-moves';
     panel.setAttribute('aria-label', 'Gelato Agent Next Moves');
     panel.innerHTML = '<header class="ganm-head"><div class="ganm-orb">G</div><div class="ganm-title"><strong>Next Moves</strong><span>Main Agent Brain · cross-node priorities</span></div><button class="ganm-close" type="button" aria-label="Close Next Moves">×</button></header><div class="ganm-list"></div>';
+    const voiceButton=document.createElement('button');voiceButton.type='button';voiceButton.textContent='Voice Diagnostics';voiceButton.className='ganm-diagnostics';voiceButton.style.cssText='margin:8px 12px;padding:9px 12px;border:1px solid #d9d9d2;border-radius:9px;background:#f1f5f2;color:#17231f;font-weight:700;cursor:pointer';voiceButton.addEventListener('click',()=>window.GelatoVoiceDiagnostics?.open?.());panel.appendChild(voiceButton);
     const toggle = document.createElement('button');toggle.type='button';toggle.className='ganm-toggle';toggle.innerHTML='Next Moves <span class="ganm-count">0</span>';
     document.body.append(panel,toggle);
     panel.querySelector('.ganm-close').addEventListener('click',()=>panel.classList.remove('open'));
