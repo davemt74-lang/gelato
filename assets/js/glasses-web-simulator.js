@@ -1355,7 +1355,7 @@ window.addEventListener('online',()=>{if(state.mode==='live'&&state.device?.virt
 window.addEventListener('beforeunload',()=>{saveRecoveryResume();stopVisionRuntime('idle');stopLiveStationSync('idle');if(state.browserModel.session&&typeof state.browserModel.session.release==='function')state.browserModel.session.release();if(state.shadowModel.session&&typeof state.shadowModel.session.release==='function')state.shadowModel.session.release();});
 const FRAME_MODE_KEY='gelato.webGlassesSimulator.frameMode.v1';
 const OPTICAL_MASK_KEY='gelato.webGlassesSimulator.opticalMask.v1';
-let frameMode=['svg','image','none'].includes(localStorage.getItem(FRAME_MODE_KEY))?localStorage.getItem(FRAME_MODE_KEY):'svg';
+let frameMode=['svg','image','none'].includes(localStorage.getItem(FRAME_MODE_KEY))?localStorage.getItem(FRAME_MODE_KEY):'none';
 let opticalMaskEnabled=localStorage.getItem(OPTICAL_MASK_KEY)!=='0';
 function applyFrameMode(){
   const stage=$('glassesStage');
