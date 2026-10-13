@@ -1,0 +1,106 @@
+/* Screen-sized HUD stage: never inherit the tall diagnostics column. */
+.sim-layout{align-items:start!important;min-width:0}
+.sim-stage-panel{position:sticky;top:8px;align-self:start;display:flex!important;flex-direction:column;gap:10px;min-width:0;max-width:100%}
+.glasses-stage{flex:none;min-height:460px!important;height:clamp(460px,calc(100vh - 235px),720px)!important;width:100%;max-width:100%;aspect-ratio:auto;overflow:hidden}
+.sim-status-row{flex-wrap:wrap}
+.sim-console{min-width:0;max-width:100%;overflow-x:hidden}
+.sim-live-guide{line-height:1.5;padding:10px 13px}
+.sim-navigation-panel{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:9px;border:1px solid #314c3f;background:#101c18;border-radius:12px;padding:10px 12px}
+.sim-navigation-group{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+.sim-navigation-panel button{appearance:none;border:1px solid #496955;background:#203a2c;color:#d7ffdf;border-radius:8px;font:700 12px/1.3 system-ui,sans-serif;padding:8px 11px;min-height:36px;cursor:pointer}
+.sim-navigation-panel button:hover,.sim-navigation-panel button:focus-visible{background:#315842;border-color:#83cea5;outline:2px solid #82dab155;outline-offset:1px}
+.sim-navigation-panel button[aria-pressed=true]{background:#1b6243;border-color:#84f2b6;color:#fff}
+.sim-navigation-panel .sim-nav-voice-button{background:#1c2e40;border-color:#497898}
+.sim-navigation-panel button:disabled{opacity:.4;cursor:not-allowed}
+.sim-navigation-panel .sim-nav-mode{font-size:11px;color:#e0ecde;font-weight:700}
+.sim-navigation-panel .sim-nav-help{color:#a1bfae;font-size:11px}
+.sim-navigation-panel .sim-nav-check{display:flex;gap:5px;align-items:center;font-size:11px;color:#b8caba}
+.sim-voice-feedback{color:#bdf8d0;min-height:1.1em;font-size:12px;line-height:1.4;flex:1 1 100%;overflow-wrap:anywhere}
+.sim-voice-feedback[data-state=error]{color:#ffd39a}
+.sim-voice-feedback[data-state=listening]{color:#88ddff}
+.sim-nav-feedback{position:absolute;z-index:12;left:4%;bottom:2%;width:92%;border:1px solid #4e8868;background:#0b251bcc;color:#d4ffe2;border-radius:10px;padding:9px 12px;font-size:13px;font-weight:650;backdrop-filter:blur(5px)}
+.sim-nav-feedback[hidden]{display:none}
+.glasses-stage .scene-copy{width:min(430px,64%);font-size:12px}
+.hud-orders-left{max-height:64%;overflow:auto;scrollbar-width:thin}
+.hud-orders-list{min-width:0}
+.hud-order-row{min-width:0}
+.hud-right-build{overflow:auto;scrollbar-width:thin;min-width:0}
+.hud-build-steps li{overflow-wrap:anywhere;line-height:1.4}
+.hud-next-card>strong{overflow-wrap:anywhere}
+.hud-build-card>strong{overflow-wrap:anywhere}
+.hud-orders-left,.hud-right-build,.hud-topbar{z-index:3}
+/* Frameless/HUD-only mode uses the available entire canvas and readable text. */
+.glasses-stage.frame-none .lens-projection{inset:0!important;transform:none!important;filter:none;opacity:1;--hud-opacity:1}
+.glasses-stage.frame-none .hud-topbar{top:2%;left:3%;width:94%;font-size:12px}
+.glasses-stage.frame-none .hud-clock strong{font-size:19px}
+.glasses-stage.frame-none .hud-clock span,
+.glasses-stage.frame-none .hud-system span{font-size:11px}
+.glasses-stage.frame-none .hud-orders-left{left:3%;top:16%;width:34%;max-height:74%;padding:13px;border-radius:12px;background:#071d1add}
+.glasses-stage.frame-none .hud-right-build{right:3%;top:16%;width:55%;max-height:74%;height:auto;gap:10px}
+.glasses-stage.frame-none .hud-order-row{grid-template-columns:auto minmax(0,1fr);gap:5px 9px;padding:9px}
+.glasses-stage.frame-none .hud-order-row .ticket{font-size:12px}
+.glasses-stage.frame-none .hud-order-row .item{font-size:12px;white-space:normal;overflow-wrap:anywhere}
+.glasses-stage.frame-none .hud-order-row .age{grid-column:1 / -1;font-size:10px}
+.glasses-stage.frame-none .hud-panel-title small,
+.glasses-stage.frame-none .hud-panel-title>span{font-size:11px}
+.glasses-stage.frame-none .hud-next-card>strong{font-size:clamp(18px,2.4vw,30px);line-height:1.25}
+.glasses-stage.frame-none .hud-build-card>strong{font-size:18px}
+.glasses-stage.frame-none .hud-build-card>span,
+.glasses-stage.frame-none .hud-build-steps li,
+.glasses-stage.frame-none .hud-validation-grid span,
+.glasses-stage.frame-none .hud-validation-panel strong{font-size:12px}
+.glasses-stage.frame-none .hud-center-clear{left:37%;width:8%;pointer-events:none}
+/* Honest read-only preview avoids presenting unavailable validation as verified. */
+.hud-validation-panel.preview{border-left-color:#94afad!important}
+.hud-validation-panel.preview strong{color:#d8e6e3}
+.sim-nav-command-examples{font-size:10px;color:#adc8b8}
+@media(max-width:1250px){
+ .sim-layout{grid-template-columns:minmax(0,1fr) minmax(300px,360px)}
+ .glasses-stage{min-height:430px!important;height:clamp(430px,calc(100vh - 240px),650px)!important}
+}
+@media(max-width:980px){
+ .sim-layout{grid-template-columns:minmax(0,1fr)}
+ .sim-stage-panel{position:relative;top:auto}
+ .glasses-stage{height:min(65vh,620px)!important;min-height:470px!important}
+ .sim-console{border-left:0}
+}
+@media(max-width:640px){
+ .sim-stage-panel{padding:8px}
+ .sim-navigation-panel{padding:8px}
+ .sim-navigation-panel button{font-size:11px;padding:8px}
+ .glasses-stage{min-height:510px!important;height:510px!important}
+ .glasses-stage.frame-none .hud-orders-left{left:2%;width:40%;padding:7px;top:17%;max-height:77%}
+ .glasses-stage.frame-none .hud-right-build{right:2%;width:53%;top:17%;max-height:77%;gap:5px}
+ .glasses-stage.frame-none .hud-order-row{padding:6px}
+ .glasses-stage.frame-none .hud-order-row .item,
+ .glasses-stage.frame-none .hud-order-row .ticket{font-size:10px}
+ .glasses-stage.frame-none .hud-next-card>strong{font-size:16px}
+ .glasses-stage.frame-none .hud-build-card>strong{font-size:13px}
+ .glasses-stage.frame-none .hud-build-steps li{font-size:10px}
+ .glasses-stage.frame-none .hud-clock strong{font-size:15px}
+ .glasses-stage.frame-none .hud-clock span,
+ .glasses-stage.frame-none .hud-system span{font-size:9px}
+ .glasses-stage.frame-none .hud-clock,.glasses-stage.frame-none .hud-system{padding:5px;gap:4px}
+ .glasses-stage.frame-none .hud-panel-title small,
+ .glasses-stage.frame-none .hud-panel-title>span{font-size:9px}
+}
+
+/* Everyday workflow first; advanced V10/V11 work remains discoverable. */
+.sim-console{display:flex;flex-direction:column;align-items:stretch;gap:10px}
+.sim-console>.console-card,.sim-console>.sim-advanced-settings{flex:0 0 auto}
+.sim-advanced-settings{border:1px solid #345044;border-radius:12px;background:#101c16;padding:10px;min-width:0}
+.sim-advanced-settings>summary{list-style:disclosure-closed;cursor:pointer;font:750 12px/1.5 system-ui,sans-serif;color:#b6e5c9;padding:8px}
+.sim-advanced-settings[open]>summary{list-style:disclosure-open}
+.sim-advanced-body{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;padding-top:10px;min-width:0}
+.sim-advanced-body>.console-card{min-width:0}
+
+/* Avoid device-selector overflow on 320–390px phones. */
+.sim-top-actions{min-width:0;max-width:100%}
+.sim-top-actions label{min-width:0;max-width:100%}
+.sim-top-actions select{min-width:0;max-width:100%}
+@media(max-width:640px){
+ .sim-topbar{min-width:0;max-width:100%;flex-wrap:wrap;align-items:flex-start}
+ .sim-top-actions{width:100%;min-width:0;justify-content:flex-start}
+ .sim-top-actions label:has(#deviceSelect){width:100%;flex-wrap:wrap}
+ .sim-top-actions #deviceSelect{flex:1 1 0;width:calc(100% - 46px);min-width:0;max-width:100%}
+}
