@@ -1474,8 +1474,8 @@ async function handoff(){try{
   const d=await api('handoff.expo',{buildSessionPublicId:state.build.publicId});log('LIVE','Explicit Expo handoff completed; KDS status '+(d.handoff.kdsStatus||'ready')+'.');await unloadGovernedVisionModel('build_reset');state.build=null;state.validation=null;clearRecoveryResume();await refreshWork();
 }catch(e){state.cookUx.handoffArmed=false;$('handoffExpo').textContent='Send to Expo / Finishing';log('ERROR',e.message);}}
 function resetSimulator(){stopShadowModel('build_reset');unloadGovernedVisionModel('build_reset');state.build=null;state.validation=null;state.selectedKdsItemPublicId='';clearTemporalRuntime();clearCameraTarget();$('detectionLayer').innerHTML='';log('SYSTEM','Simulator build state reset; POS/KDS records were not changed.');refreshWork();}
-$('modeSelect').addEventListener('change',async e=>{stopAutoPlay();stopLiveStationSync('idle');await unloadGovernedVisionModel('build_reset');state.mode=e.target.value;state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;clearTemporalRuntime();state.syncFingerprint='';log('MODE','Switched to '+state.mode+'.');if(state.mode==='live'){if(state.device?.virtualPreview){state.recovery.state='ready';renderRuntimeRecovery();startLiveStationSync();}else{enterRecovery('recovering','live_mode_selected');await resumeRuntimeRecovery('live_mode_selected');}}else{state.recovery.state='ready';state.recovery.suppressAutomatic=false;state.recovery.lastReason='mock_runtime_ready';renderRuntimeRecovery();await refreshWork();}});
-$('deviceSelect').addEventListener('change',async e=>{stopLiveStationSync('idle');await unloadGovernedVisionModel('build_reset');state.device=state.devices.find(x=>x.publicId===e.target.value)||null;if(state.device)localStorage.setItem(LIVE_DEVICE_KEY,state.device.publicId);window.dispatchEvent(new CustomEvent('gelato-glasses-location-change',{detail:{locationId:state.device?.locationId||null}}));state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;clearTemporalRuntime();state.syncFingerprint='';if(state.mode==='live'&&state.device){if(state.device.virtualPreview){state.recovery.state='ready';renderRuntimeRecovery();startLiveStationSync();}else{enterRecovery('recovering','device_changed');await resumeRuntimeRecovery('device_changed');}}else render();});
+$('modeSelect').addEventListener('change',async e=>{stopAutoPlay();stopLiveStationSync('idle');await unloadGovernedVisionModel('build_reset');state.mode=e.target.value;state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;clearAssemblySession();clearTemporalRuntime();state.syncFingerprint='';log('MODE','Switched to '+state.mode+'.');if(state.mode==='live'){if(state.device?.virtualPreview){state.recovery.state='ready';renderRuntimeRecovery();startLiveStationSync();}else{enterRecovery('recovering','live_mode_selected');await resumeRuntimeRecovery('live_mode_selected');}}else{state.recovery.state='ready';state.recovery.suppressAutomatic=false;state.recovery.lastReason='mock_runtime_ready';renderRuntimeRecovery();await refreshWork();}});
+$('deviceSelect').addEventListener('change',async e=>{stopLiveStationSync('idle');await unloadGovernedVisionModel('build_reset');state.device=state.devices.find(x=>x.publicId===e.target.value)||null;if(state.device)localStorage.setItem(LIVE_DEVICE_KEY,state.device.publicId);window.dispatchEvent(new CustomEvent('gelato-glasses-location-change',{detail:{locationId:state.device?.locationId||null}}));state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;clearAssemblySession();clearTemporalRuntime();state.syncFingerprint='';if(state.mode==='live'&&state.device){if(state.device.virtualPreview){state.recovery.state='ready';renderRuntimeRecovery();startLiveStationSync();}else{enterRecovery('recovering','device_changed');await resumeRuntimeRecovery('device_changed');}}else render();});
 /* Selecting a kitchen item goes directly to the recipe/build view; no extra load step.
  * Live build writes require a paired writable device and an already started KDS item. */
 async function focusKitchenItem(publicId,{autoBegin=true}={}){
@@ -1488,16 +1488,59 @@ async function focusKitchenItem(publicId,{autoBegin=true}={}){
   if(autoBegin&&state.mode==='live'&&state.device?.simulatorWritable&&next.status==='in_progress'){
     await startBuild();return {ok:true,message:'Governed build requested for selected item.'};
   }
-  return {ok:true,message:'Selected recipe displayed. '+(state.device?.virtualPreview?
+  return {ok:true,message:'Selected item ingredients displayed. '+(state.device?.virtualPreview?
     'Browser preview does not certify ingredient observations.':
     next.status==='queued'?'Item is queued: start it in KDS to authorize live build evidence.':
     'Live build evidence requires an authorized session.')};
 }
 $('hudOrders').addEventListener('click',event=>{
-  const button=event.target.closest('[data-kds-order-slot]');if(!button)return;
-  const group=visibleKdsTickets()[Number(button.dataset.kdsOrderSlot)-1];if(!group)return;
-  const current=selectedItem(),next=group.items.find(x=>x.kdsItemPublicId===current?.kdsItemPublicId)||group.items[0];
-  void focusKitchenItem(next.kdsItemPublicId);
+  const ticketButton=event.target.closest('[data-kds-order-slot]');
+  if(ticketButton){
+    const group=visibleKdsTickets()[Number(ticketButton.dataset.kdsOrderSlot)-1];if(!group)return;
+    const chosen=group.items.find(x=>x.kdsItemPublicId===selectedItem()?.kdsItemPublicId)||
+      group.items.find(x=>!ingredientSummary(x).complete&&!['ready','completed'].includes(x.status))||
+      group.items[0];
+    if(chosen)void focusKitchenItem(chosen.kdsItemPublicId);
+    return;
+  }
+  const itemButton=event.target.closest('[data-kds-ticket-item]');
+  if(itemButton){
+    const group=activeTicket(),next=group?.items[Number(itemButton.dataset.kdsTicketItem)];
+    if(next)void focusKitchenItem(next.kdsItemPublicId);
+  }
+});
+function acknowledgeIngredient(result){
+  const item=selectedItem();
+  if(!item)return {ok:false,message:'Select a KDS ticket and item first.'};
+  if(state.build)return {ok:false,message:'An authorized build is active. Its ingredient evidence must be completed through governed validation.'};
+  const ingredient=currentAssemblyIngredient(item);
+  if(!ingredient)return {ok:false,message:ingredientSummary(item).complete?
+    'All ingredients are accounted for on this item.':'No configured assembly ingredients found. Update this menu item in Menu Manager.'};
+  const actions=itemActions(item.kdsItemPublicId);
+  if(['added','skipped'].includes(actions[ingredient.id]))return {ok:false,message:'Ingredient was already accounted for.'};
+  actions[ingredient.id]=result;
+  ingredientCursor.delete(item.kdsItemPublicId);
+  const summary=ingredientSummary(item);
+  if(summary.complete){
+    const next=assembly()?.nextItemInTicket(activeTicket(),item.kdsItemPublicId,id=>itemActions(id));
+    if(next){
+      state.selectedKdsItemPublicId=next.kdsItemPublicId;
+      state.previewStepIndex=0;
+      render();
+      return {ok:true,message:ingredient.name+' '+result+'. Item assembled (manual checklist only). Now '+(next.posLine?.name||'next item')+' on this ticket. KDS state is unchanged.'};
+    }
+    render();
+    return {ok:true,message:ingredient.name+' '+result+'. All configured items on this ticket are accounted for in the local checklist. Confirm official KDS readiness separately.'};
+  }
+  render();
+  return {ok:true,message:ingredient.name+' '+result+'. Next: '+(currentAssemblyIngredient(item)?.name||'review item')+'. Manual entry only; no AI verification or KDS state change.'};
+}
+$('hudRight').addEventListener('click',event=>{
+  const action=event.target.closest('[data-hud-ingredient-action]')?.dataset.hudIngredientAction;
+  if(action==='added'||action==='skipped'){
+    const outcome=acknowledgeIngredient(action);
+    const target=$('simNavigationStatus');if(target)target.textContent=outcome.message;
+  }
 });
 $('workItemSelect').addEventListener('change',e=>{void focusKitchenItem(e.target.value);});
 $('refreshWork').addEventListener('click',refreshWork);$('startBuild').addEventListener('click',startBuild);$('resetSimulator').addEventListener('click',resetSimulator);$('injectUnexpected').addEventListener('click',injectUnexpected);$('evaluateBuild').addEventListener('click',validate);$('autoPlayBuild').addEventListener('click',toggleAutoPlay);$('nextDetection').addEventListener('click',playNextMockDetection);$('lowConfidenceDetection').addEventListener('click',injectLowConfidenceDetection);$('completeMockBuild').addEventListener('click',completeMockScenario);$('handoffExpo').addEventListener('click',handoff);$('clearLog').addEventListener('click',()=>{state.logs=[];renderLog();});
@@ -1832,34 +1875,37 @@ function simulatorNavigation(action,options={}){
   if(KITCHEN_COMMANDS.has(action))return kitchenCommand(action,options);
   const items=orderItems(),current=selectedItem();
   if(action==='next_item'||action==='previous_item'){
-    if(!items.length)return {ok:false,message:'No kitchen orders yet. Send an order to KDS first.'};
-    if(state.build)return {ok:false,message:'Active build is locked to the current item. Finish it before switching.'};
-    const index=Math.max(0,items.findIndex(x=>x.kdsItemPublicId===current?.kdsItemPublicId));
-    const next=(index+(action==='next_item'?1:items.length-1))%items.length;
-    state.selectedKdsItemPublicId=items[next].kdsItemPublicId;state.previewStepIndex=0;render();
-    return {ok:true,message:'Item '+(next+1)+' of '+items.length+': '+(items[next].posLine?.name||'Kitchen item')+', ticket '+(items[next].ticket?.checkNumber||'unknown')+'.'};
+    if(!current)return {ok:false,message:'No KDS item selected.'};
+    if(state.build)return {ok:false,message:'Finish the governed build before changing items.'};
+    const group=activeTicket();if(!group)return {ok:false,message:'No active ticket.'};
+    const index=group.items.findIndex(x=>x.kdsItemPublicId===current.kdsItemPublicId);
+    const next=group.items[(index+(action==='next_item'?1:group.items.length-1))%group.items.length];
+    if(!next)return {ok:false,message:'No additional item on this ticket.'};
+    state.selectedKdsItemPublicId=next.kdsItemPublicId;
+    state.previewStepIndex=0;render();
+    return {ok:true,message:'Selected '+(next.posLine?.name||'item')+' on KDS ticket #'+(kdsSlotForItem(next)||'—')+'.'};
   }
+  if(action==='ingredient_added'||action==='item_added')return acknowledgeIngredient('added');
+  if(action==='skip_ingredient')return acknowledgeIngredient('skipped');
   if(action==='next'||action==='previous'){
-    if(!current)return {ok:false,message:'No current KDS item. Send a POS ticket to KDS first.'};
-    if(state.build)return {ok:false,message:'Build steps are controlled by validated observations while a build is active.'};
-    const steps=deriveSteps();
-    state.previewStepIndex=Math.max(0,Math.min(Math.max(0,steps.length-1),(state.previewStepIndex||0)+(action==='next'?1:-1)));
-    render();return {ok:true,message:'Preview step '+((state.previewStepIndex||0)+1)+' of '+steps.length+': '+(steps[state.previewStepIndex]||'Review item')+'. No kitchen changes.'};
-  }
-  if(action==='item_added'){
-    if(!current)return {ok:false,message:'No kitchen item selected.'};
-    if(state.build)return {ok:false,message:'Ingredient confirmation requires evidence. Use the authorized Detect action on the active build.'};
-    const steps=deriveSteps(),step=steps[state.previewStepIndex||0]||'Current step';
-    state.previewStepIndex=Math.min(Math.max(0,steps.length-1),(state.previewStepIndex||0)+1);
-    render();
-    return {ok:true,message:'Preview acknowledgment: '+step+'. Next: '+(steps[state.previewStepIndex]||'Review ticket')+'. KDS was not changed.'};
+    if(!current)return {ok:false,message:'Select an item first.'};
+    const list=assembly()?.ingredientsFor(current)||[];
+    if(!list.length)return {ok:false,message:'No assembly ingredients configured for this item.'};
+    const currentId=currentAssemblyIngredient(current)?.id;
+    const cursor=Math.max(0,list.findIndex(i=>i.id===currentId));
+    const nextIndex=Math.max(0,Math.min(list.length-1,cursor+(action==='next'?1:-1)));
+    const next=list[nextIndex];
+    if(['added','skipped'].includes(itemActions(current.kdsItemPublicId)[next.id]))
+      return {ok:false,message:'That ingredient is already accounted for.'};
+    ingredientCursor.set(current.kdsItemPublicId,next.id);render();
+    return {ok:true,message:'Selected ingredient '+next.name+'. Mark Added or Skip to account for it.'};
   }
   if(action==='repeat'){
     if(!current)return {ok:false,message:'No current item. Waiting for kitchen orders.'};
-    const steps=deriveSteps();return {ok:true,message:'Ticket '+(current.ticket?.checkNumber||'')+', '+(current.posLine?.name||'Kitchen item')+'. '+(steps[state.previewStepIndex||0]||'Review item')+'.'};
+    const ingredient=currentAssemblyIngredient(current);return {ok:true,message:'KDS #'+(kdsSlotForItem(current)||'—')+' · '+(current.posLine?.name||'Kitchen item')+' · '+(ingredient?'Add '+ingredient.name:'Check item status')+'.'};
   }
   if(action==='status')return {ok:true,message:state.mode==='mock'?'Mock demonstration; sample orders only.':'Live display, '+items.length+' KDS item'+(items.length===1?'':'s')+'. '+(current?'Selected '+(current.posLine?.name||'item')+'.':'No active KDS work.')+(state.device?.virtualPreview?(state.device?.kitchenWritable?' Kitchen controls enabled.':' View-only; kitchen changes require KDS update permission.'):' Paired device selected.')};
-  return {ok:false,message:'Unknown command. Try next, next item, previous, item added, repeat, or status.'};
+  return {ok:false,message:'Unknown command. Try ingredient added, skip ingredient, next item, repeat, or status.'};
 }
 window.GelatoGlassesNavigation={dispatch:simulatorNavigation,context:()=>({
   mode:state.mode,items:orderItems().length,item:selectedItem()?.posLine?.name||null,
