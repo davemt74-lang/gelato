@@ -43,6 +43,7 @@ const nodes={
 };
 const ctx={Map,Array,Math,Number,String,JSON,
   assembly:()=>({
+    counts:()=>({total:0,accounted:0,complete:false}),
     ticketKey:item=>item?.ticket?.checkPublicId||item?.kdsItemPublicId||'',
     ticketGroups:items=>{
       const groups=new Map();
@@ -54,6 +55,7 @@ const ctx={Map,Array,Math,Number,String,JSON,
     }
   }),
   ingredientSummary:()=>({total:0,accounted:0,complete:false}),
+  itemActions:()=>({}),
   orderItems:()=>queue,elapsedLabel:()=> '03:25',selectedItem:()=>selection,
   escapeHtml:val=>String(val).replace(/[&<>"]/g,''),
   $:id=>nodes[id]};
