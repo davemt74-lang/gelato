@@ -33,7 +33,8 @@
     if (page === 'operations.php') ensureScript('js/operations-agent-context.js?v=20260915-context1', 'data-operations-agent-context-loader');
     if (page === 'kds.php' || page === 'kds-dashboard.php') ensureScript('js/kds-agent-context.js?v=20260915-context1', 'data-kds-agent-context-loader');
     ensureScript('js/voice-turn-taking.js?v=20261013-turn1','data-gelato-voice-turn-loader');
-    if (!window.GelatoGlobalAgent) ensureScript('js/global-agent.js?v=20261013-natural1', 'data-gelato-global-agent-loader');
+    ensureScript('js/proactive-listening-commands.js?v=20261013-listening1','data-gelato-listening-controls-loader');
+    if (!window.GelatoGlobalAgent) ensureScript('js/global-agent.js?v=20261013-listening1', 'data-gelato-global-agent-loader');
     ensureScript('js/dynamic-agent-canvas.js?v=20260915-drawer1', 'data-dynamic-agent-canvas-loader');
     ensureScript('js/agent-next-moves.js?v=20260916-brain1', 'data-agent-next-moves-loader');
   }
