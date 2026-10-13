@@ -23,6 +23,7 @@ function glasses_employee_runtime_public(array $row): array
     return [
         'publicId'=>(string)$row['public_id'],
         'devicePublicId'=>(string)$row['device_public_id'],
+        'deviceId'=>(int)$row['device_id'],
         'deviceName'=>(string)$row['device_display_name'],
         'employeeUserId'=>(int)$row['employee_user_id'],
         'employeeName'=>(string)$row['employee_display_name'],
@@ -205,6 +206,9 @@ function glasses_employee_runtime_end(PDO $pdo,array $user,string $publicId): ar
         if(!operational_location_allowed($pdo,$user,'glasses.manage',(int)$row['location_id']))
             throw new DomainException('You cannot manage this runtime location.');
         if($row['status']==='active'){
+            $q=$pdo->prepare("SELECT 1 FROM glasses_training_sessions WHERE organization_id=? AND device_id=? AND user_id=? AND status='active' LIMIT 1");
+            $q->execute([(int)$user['organization_id'],(int)$row['device_id'],(int)$row['employee_user_id']]);
+            if($q->fetchColumn())throw new DomainException('End or interrupt the existing training session before releasing the runtime.');
             $pdo->prepare("UPDATE glasses_employee_runtimes SET status='ended',active_slot=NULL,ended_at=NOW(6),ended_by=?,updated_at=NOW(6)
               WHERE organization_id=? AND id=? AND status='active'")
               ->execute([(int)$user['id'],(int)$user['organization_id'],(int)$row['id']]);
