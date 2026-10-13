@@ -31,6 +31,11 @@ function glasses_assembly_learning_submit(PDO $pdo,array $user,array $input): ar
     $org=(int)$user['organization_id'];
     $device=glasses_device_row($pdo,$org,(string)$runtime['device_public_id']);
     glasses_employee_runtime_assert_binding($pdo,$user,$runtimeId,$device);
+    // The employee is the wearer, but the authenticated account is the actor.
+    // Managers may supervise; an unrelated glasses viewer may not report as staff.
+    if((int)$user['id']!==(int)$runtime['employee_user_id']
+       &&!app_has_permission('glasses.manage',$user))
+        throw new DomainException('Only the assigned employee or an authorized glasses manager may submit training feedback.');
     if(!operational_location_allowed($pdo,$user,'glasses.view',(int)$device['location_id']))
         throw new DomainException('This restaurant location is not accessible.');
     if((int)($device['station_id']??0)<1)
