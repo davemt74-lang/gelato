@@ -10,6 +10,10 @@ on:
       - 'js/global-agent.js'
       - 'js/kds-agent-context.js'
       - 'js/kds-agent-sidebar.js'
+      - 'js/kds-voice-listener.js'
+      - 'js/kds.js'
+      - 'tests/kds-slot-voice-contract.php'
+      - 'tests/kds-slot-voice.test.js'
       - 'tests/kds-voice-agent-contract.php'
       - '.github/workflows/kds-voice-agent.yml'
   push:
@@ -22,6 +26,10 @@ on:
       - 'js/global-agent.js'
       - 'js/kds-agent-context.js'
       - 'js/kds-agent-sidebar.js'
+      - 'js/kds-voice-listener.js'
+      - 'js/kds.js'
+      - 'tests/kds-slot-voice-contract.php'
+      - 'tests/kds-slot-voice.test.js'
       - 'tests/kds-voice-agent-contract.php'
       - '.github/workflows/kds-voice-agent.yml'
 
@@ -44,5 +52,11 @@ jobs:
           node --check js/global-agent.js
           node --check js/kds-agent-context.js
           node --check js/kds-agent-sidebar.js
+          node --check js/kds-voice-listener.js
+          node --check js/kds.js
+          php -l tests/kds-slot-voice-contract.php
       - name: KDS voice-only Agent contract
-        run: php tests/kds-voice-agent-contract.php
+        run: |
+          php tests/kds-voice-agent-contract.php
+          php tests/kds-slot-voice-contract.php
+          node tests/kds-slot-voice.test.js
