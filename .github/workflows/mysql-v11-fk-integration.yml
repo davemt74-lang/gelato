@@ -1,0 +1,49 @@
+name: MySQL 8 v11 Annotation FK
+
+on:
+  pull_request:
+    paths:
+      - 'includes/UpgradeService.php'
+      - 'database/20261129_v11_annotation_corrections.sql'
+      - 'tests/mysql-v11-mysql8-integration.php'
+      - '.github/workflows/mysql-v11-fk-integration.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'includes/UpgradeService.php'
+      - 'database/20261129_v11_annotation_corrections.sql'
+      - 'tests/mysql-v11-mysql8-integration.php'
+      - '.github/workflows/mysql-v11-fk-integration.yml'
+
+jobs:
+  mysql-v11-fk:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: gelato_v11_fk_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --host=localhost --user=root --password=root"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring
+      - name: Verify MySQL 8 historical migration and partial-schema recovery
+        env:
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_DATABASE: gelato_v11_fk_ci
+          MYSQL_USER: root
+          MYSQL_PASSWORD: root
+        run: |
+          php -l includes/UpgradeService.php
+          php -l tests/mysql-v11-mysql8-integration.php
+          php tests/mysql-v11-mysql8-integration.php
