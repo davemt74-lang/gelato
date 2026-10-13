@@ -262,3 +262,8 @@ html,body{max-width:100%;overflow-x:hidden}
 .gc-reference span{font-size:10px;overflow-wrap:anywhere}
 #gcConsentWrap[hidden]{display:none!important}
 @media(max-width:1050px){.gc-photo{grid-template-columns:80px minmax(0,1fr)}.gc-photo>img{height:90px}}
+
+.gc-advanced{border:1px solid #365a42;border-radius:9px;background:#101d15;margin-top:9px;padding:8px}
+.gc-advanced summary{cursor:pointer;color:#c0efd1;font-size:11px;font-weight:800;padding:7px;list-style:disclosure-closed}
+.gc-advanced[open] summary{list-style:disclosure-open;margin-bottom:9px}
+#gcPaneTraining>.dataset-capture-panel{display:grid;gap:8px;padding:12px;border:1px solid #365c43;border-radius:10px;background:#102319}
