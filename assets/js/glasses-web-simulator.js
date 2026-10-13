@@ -193,6 +193,7 @@ function applyLiveWork(work,{announce=false}={}){
     else state.selectedKdsItemPublicId=work?.focusItem?.kdsItemPublicId||ids[0]||'';
   }
   state.syncFingerprint=next;state.lastSyncAt=Date.now();state.ticketSyncAt=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();render();
+  window.dispatchEvent(new CustomEvent('gelato-glasses-work-change',{detail:{items,locationId:state.device?.locationId||null}}));
   if(previous&&previous!==next)log('ORDER','POS/KDS updated · '+items.length+' active item(s).');
   return previous!==next;
 }
