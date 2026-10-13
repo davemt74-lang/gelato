@@ -1872,6 +1872,7 @@ async function kitchenCommand(action,{spoken=false}={}){
 
 /** Spoken and manual navigation share the same real kitchen command entry point. */
 function simulatorNavigation(action,options={}){
+  if(action==='ingredient_added'||action==='skip_ingredient')return acknowledgeIngredient(action==='ingredient_added'?'added':'skipped');
   if(KITCHEN_COMMANDS.has(action))return kitchenCommand(action,options);
   const items=orderItems(),current=selectedItem();
   if(action==='next_item'||action==='previous_item'){
@@ -1885,7 +1886,7 @@ function simulatorNavigation(action,options={}){
     state.previewStepIndex=0;render();
     return {ok:true,message:'Selected '+(next.posLine?.name||'item')+' on KDS ticket #'+(kdsSlotForItem(next)||'—')+'.'};
   }
-  if(action==='ingredient_added'||action==='item_added')return acknowledgeIngredient('added');
+
   if(action==='skip_ingredient')return acknowledgeIngredient('skipped');
   if(action==='next'||action==='previous'){
     if(!current)return {ok:false,message:'Select an item first.'};
