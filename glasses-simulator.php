@@ -12,7 +12,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <title>Web Glasses Simulator · Gelato</title>
 <link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20261013-live1">
 <link rel="stylesheet" href="assets/css/glasses-simulator-hud-ux.css?v=20261013-voice1">
-<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-runtime272">
+<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-hud273">
 </head>
 <body>
 <header class="sim-topbar">
@@ -100,31 +100,30 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
           </svg>
         </button>
         <section id="simHudEditorToolbar" class="sim-hud-editor-toolbar" aria-label="Lens display editor" hidden>
-          <div class="sim-hud-editor-heading">
-            <strong>Arrange lens displays</strong>
+          <div class="sim-hud-editor-strip">
+            <div class="sim-hud-editor-primary" role="group" aria-label="Lens display adjustments">
+              <label><span>Opacity</span><input id="hudOpacity" type="range" min="20" max="100" value="100"><output id="hudOpacityValue">100%</output></label>
+              <label><span>Brightness</span><input id="hudBrightness" type="range" min="50" max="180" value="100"><output id="hudBrightnessValue">100%</output></label>
+              <label><span>Left width</span><input id="leftWidth" type="range" min="12" max="50" value="23"><output id="leftWidthValue">23%</output></label>
+              <label><span>Right width</span><input id="rightWidth" type="range" min="15" max="55" value="29"><output id="rightWidthValue">29%</output></label>
+            </div>
+            <details class="sim-hud-editor-advanced" id="simHudEditorAdvanced">
+              <summary aria-label="Saved lens layouts and reset">Layouts <span aria-hidden="true">▾</span></summary>
+              <div id="calibrationPanel" class="sim-hud-editor-advanced-body">
+                <label class="preset-row"><span>Saved layout</span><select id="presetSelect"></select></label>
+                <div class="preset-actions">
+                  <input id="presetName" maxlength="48" placeholder="Layout name">
+                  <button id="savePreset" type="button">Save</button>
+                  <button id="deletePreset" type="button">Delete</button>
+                  <button id="resetCalibration" type="button">Reset layout</button>
+                </div>
+              </div>
+            </details>
             <button id="hudEditorDone" type="button" class="sim-hud-editor-done">Done</button>
           </div>
-          <p class="sim-hud-editor-scope" id="simHudEditorScope" role="status">
-            Drag either display to move it. Use the corner handle to resize.
+          <p class="sim-hud-editor-scope sim-hud-visually-hidden" id="simHudEditorScope" role="status">
+            Drag either panel to move; use its corner to resize.
           </p>
-          <div class="sim-hud-editor-primary">
-            <label><span>Opacity</span><input id="hudOpacity" type="range" min="20" max="100" value="100"><output id="hudOpacityValue">100%</output></label>
-            <label><span>Brightness</span><input id="hudBrightness" type="range" min="50" max="180" value="100"><output id="hudBrightnessValue">100%</output></label>
-            <label><span>Left width</span><input id="leftWidth" type="range" min="12" max="50" value="23"><output id="leftWidthValue">23%</output></label>
-            <label><span>Right width</span><input id="rightWidth" type="range" min="15" max="55" value="29"><output id="rightWidthValue">29%</output></label>
-          </div>
-          <details class="sim-hud-editor-advanced" id="simHudEditorAdvanced">
-            <summary>Saved layouts and reset</summary>
-            <div id="calibrationPanel" class="sim-hud-editor-advanced-body">
-              <label class="preset-row"><span>Saved layout</span><select id="presetSelect"></select></label>
-              <div class="preset-actions">
-                <input id="presetName" maxlength="48" placeholder="Layout name">
-                <button id="savePreset" type="button">Save</button>
-                <button id="deletePreset" type="button">Delete</button>
-                <button id="resetCalibration" type="button">Reset layout</button>
-              </div>
-            </div>
-          </details>
           <span id="calibrationState" class="sim-hud-editor-state" aria-live="polite">LOCKED</span>
         </section>
       </div>
@@ -513,7 +512,7 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-employee-runtimes.js?v=20261013-runtime272"></script>
 <script src="assets/js/glasses-assembly-recognition.js?v=20261013-266"></script>
 <script src="assets/js/glasses-hud-notifications.js?v=20261013-hud-edit2"></script>
-<script src="assets/js/glasses-web-simulator.js?v=20261013-hud-settings1"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20261013-hud273"></script>
 <script src="assets/js/glasses-voice-device.js?v=20261013-device1"></script>
 <script src="assets/js/glasses-simulator-voice.js?v=20261013-266a"></script>
 <script src="assets/js/glasses-multicamera.js?v=20261013-multi1"></script>
