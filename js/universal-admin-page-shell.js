@@ -75,6 +75,13 @@
       @media(max-width:560px){.uas-header-actions .uas-header-link:not(.dark):not(.kds){display:none}.uas-title strong{font-size:12px}.uas-header{gap:7px}}
     `;
     document.head.appendChild(style);
+    if (!document.querySelector('link[data-admin-responsive-layout]')) {
+      const layout = document.createElement('link');
+      layout.rel = 'stylesheet';
+      layout.href = 'assets/css/admin-responsive-layout.css?v=20261012-ui1';
+      layout.dataset.adminResponsiveLayout = '1';
+      document.head.appendChild(layout);
+    }
   }
 
   function renderSidebar(shell) {
@@ -196,7 +203,39 @@
     document.body.prepend(header);
   }
 
+  // Dense Vision Lab and admin tables render as labeled cards on phones.
+  // Watch only table wrappers for changes made by the API renderers.
+  function installResponsiveTableLabels() {
+    const wrappers = document.querySelectorAll('.vl-table,.gvo-table-wrap,.gvm-table-wrap,.gvp-table-wrap');
+    wrappers.forEach((wrapper) => {
+      let scheduled = false;
+      const applyLabels = () => {
+        scheduled = false;
+        wrapper.querySelectorAll('table').forEach((table) => {
+          const headings = Array.from(table.querySelectorAll('thead tr:first-child th')).map((th) =>
+            th.textContent.trim().replace(/\s+/g, ' ') || 'Actions');
+          table.querySelectorAll('tbody tr').forEach((row) => {
+            row.querySelectorAll('td').forEach((cell, index) => {
+              if (!cell.hasAttribute('data-label')) {
+                cell.setAttribute('data-label', headings[index] || 'Details');
+              }
+            });
+          });
+        });
+      };
+      const observer = new MutationObserver(() => {
+        if (!scheduled) {
+          scheduled = true;
+          window.requestAnimationFrame(applyLabels);
+        }
+      });
+      observer.observe(wrapper, {childList:true, subtree:true});
+      applyLabels();
+    });
+  }
+
   async function install() {
+    installResponsiveTableLabels();
     try {
       const shell = await loadShell();
       window.GELATO_ADMIN_SHELL = shell;
