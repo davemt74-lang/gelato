@@ -155,7 +155,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
           <button class="region-handle region-resize" type="button" tabindex="-1" aria-hidden="true">↘</button>
           <div class="hud-panel-title"><small>ACTIVE KDS TICKETS</small><span id="hudOrdersCount">0</span></div>
           <div class="sim-ticket-time-sync" id="simTicketTimeSync">POS TIME · WAITING</div>
-          <div id="hudOrders" class="hud-orders-list"></div>
+          <div id="hudOrders" class="hud-orders-list" aria-label="Active KDS ticket tabs and item lists"></div>
         </aside>
 
         <div id="hudCenterClear" class="hud-center-clear" aria-hidden="true"></div>
@@ -172,7 +172,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
             <strong id="hudCookAlertMessage">Correct the issue before continuing.</strong>
           </div>
           <div class="hud-card hud-build-card">
-            <div class="hud-panel-title"><small id="hudBuildMode">RECIPE PREVIEW</small><span id="hudBuildTicket">#1</span></div>
+            <div class="hud-panel-title"><small id="hudBuildMode">ITEM INGREDIENTS</small><span id="hudBuildTicket">#1</span></div>
             <strong id="hudBuildItem">Select a KDS item</strong>
             <div class="hud-current-instruction" id="hudCurrentInstruction" aria-live="polite">Choose a ticket to begin</div>
             <span id="hudBuildMeta">Table 12 · Regular</span>
@@ -478,6 +478,7 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-v10-soak-harness.js?v=20260929-v10-5"></script>
 <script src="assets/js/glasses-v10-cook-ux-harness.js?v=20260929-v10-6"></script>
 <script src="js/voice-session-presence.js?v=20261013-presence1"></script>
+<script src="assets/js/glasses-item-assembly.js?v=20261013-265"></script>
 <script src="assets/js/glasses-web-simulator.js?v=20261013-265"></script>
 <script src="assets/js/glasses-voice-device.js?v=20261013-device1"></script>
 <script src="assets/js/glasses-simulator-voice.js?v=20261013-265"></script>
