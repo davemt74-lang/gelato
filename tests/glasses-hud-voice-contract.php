@@ -9,7 +9,7 @@ $js=(string)file_get_contents($root.'/assets/js/glasses-web-simulator.js');
 $voice=(string)file_get_contents($root.'/assets/js/glasses-simulator-voice.js');
 $css=(string)file_get_contents($root.'/assets/css/glasses-simulator-hud-ux.css');
 hudAssert(str_contains($page,'assets/css/glasses-simulator-hud-ux.css?v=20261013-voice1'),'HUD stylesheet must be loaded after base simulator CSS');
-hudAssert(str_contains($page,'assets/js/glasses-simulator-voice.js?v=20261013-voice1'),'voice module must load after simulator');
+hudAssert(str_contains($page,'assets/js/glasses-simulator-voice.js?v=20261013-device1'),'voice module must load after simulator');
 foreach(['simViewHudOnly','simViewGlasses','simNavNext','simNavPrevious','simNavNextItem','simNavPreviousItem','simNavItemAdded','simNavRepeat','simVoiceToggle','simVoiceReplies','simVoiceHelp','simVoiceFeedback','simNavFeedback','simNavContext'] as $id)
     hudAssert(str_contains($page,'id="'.$id.'"'),'missing accessible control '.$id);
 hudAssert(str_contains($css,'.sim-stage-panel{position:sticky')&&str_contains($css,'.glasses-stage{flex:none;min-height:460px'),'stage must not stretch to match long diagnostics');
@@ -30,7 +30,7 @@ hudAssert(str_contains($js,"state.device?.virtualPreview?'WEB · LIVE'"),'virtua
 hudAssert(!str_contains($js,"' · 74°F'"),'fabricated temperature removed');
 hudAssert(!str_contains($js,"'87%'"),'fabricated battery removed');
 hudAssert(str_contains($js,"window.GelatoGlassesVoiceUI?.refresh?.();"),'voice HUD must update after KDS refresh');
-hudAssert(str_contains($js,"localStorage.getItem(FRAME_MODE_KEY):'none'"),'new installs default to readable HUD-only mode');
+hudAssert(str_contains($js,"localStorage.getItem(FRAME_MODE_KEY):'svg'"),'new installs default to visible glasses frame');
 hudAssert(str_contains($js,"'X-CSRF-Token':cfg.csrf"),'simulator API must send CSRF header');
 hudAssert(str_contains($js,'csrf_token:cfg.csrf'),'simulator API must send the server-expected csrf_token body field');
 hudAssert(!str_contains($js,'{csrf:cfg.csrf,action'),'deprecated CSRF field must not be sent');
