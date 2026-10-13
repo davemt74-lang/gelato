@@ -196,8 +196,8 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
         <aside class="hud-orders-left editable-region" id="hudOrdersRegion" data-region="hudOrdersRegion">
           <button class="region-handle region-move" type="button" aria-label="Move Left ticket display" title="Drag or use arrow keys">MOVE</button>
           <button class="region-handle region-resize" type="button" aria-label="Resize display" title="Drag or use Alt+arrow keys">↘</button>
-          <div class="hud-panel-title"><small>ACTIVE KDS TICKETS</small><span id="hudOrdersCount">0</span></div>
-          <div class="sim-ticket-time-sync" id="simTicketTimeSync">POS TIME · WAITING</div>
+          <div class="hud-panel-title hud-ticket-diagnostic" hidden aria-hidden="true"><small>ACTIVE KDS TICKETS</small><span id="hudOrdersCount">0</span></div>
+          <div class="sim-ticket-time-sync hud-ticket-diagnostic" id="simTicketTimeSync" hidden aria-hidden="true">POS TIME · WAITING</div>
           <div id="hudOrders" class="hud-orders-list" aria-label="Active KDS ticket tabs and item lists"></div>
         </aside>
 
@@ -221,8 +221,10 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
             <span id="hudBuildMeta">Table 12 · Regular</span>
             <ul id="hudBuildSteps" class="hud-build-steps" aria-label="Ingredients for selected item"></ul>
             <div id="hudAssemblySuggestion" class="hud-assembly-suggestion" role="status" hidden></div>
-            <div class="hud-ingredient-actions"><button type="button" data-hud-ingredient-action="added" id="hudIngredientAdded">Added ✓</button><button type="button" data-hud-ingredient-action="skipped" id="hudIngredientSkip">Skip ↷</button>
-            <button type="button" id="hudConfirmSuggestion" disabled hidden>Confirm ✓</button><button type="button" id="hudRejectSuggestion" disabled hidden>Reject</button></div>
+            <div class="hud-ingredient-actions">
+              <button type="button" id="hudConfirmSuggestion" disabled hidden>Confirm suggestion ✓</button>
+              <button type="button" id="hudRejectSuggestion" disabled hidden>Reject suggestion</button>
+            </div>
           </div>
           <div class="hud-card hud-validation-panel" id="validationCard">
             <div class="hud-panel-title"><small>INGREDIENT VALIDATION</small><span id="hudValidationState">BUILDING</span></div>
