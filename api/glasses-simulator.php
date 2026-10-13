@@ -57,6 +57,10 @@ try{
         $result=['runtime'=>glasses_employee_runtime_create($pdo,$user,(string)($in['devicePublicId']??''),(int)($in['employeeUserId']??0))];
     }elseif($action==='runtime.end'){
         $result=['runtime'=>glasses_employee_runtime_end($pdo,$user,(string)($in['runtimePublicId']??''))];
+    }elseif($action==='runtime.training_start'){
+        $result=['session'=>glasses_employee_runtime_training_start($pdo,$user,(string)($in['runtimePublicId']??''),(string)($in['assignmentPublicId']??''))];
+    }elseif($action==='runtime.training_end'){
+        $result=['session'=>glasses_employee_runtime_training_end($pdo,$user,(string)($in['runtimePublicId']??''),(string)($in['sessionPublicId']??''),(string)($in['status']??''))];
     }elseif($action==='runtime.heartbeat'){
         $result=['runtime'=>glasses_employee_runtime_heartbeat($pdo,$user,(string)($in['runtimePublicId']??''),(string)($in['devicePublicId']??''))];
     }else{
