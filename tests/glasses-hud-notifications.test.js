@@ -76,7 +76,7 @@ assert.equal(n.eventForCommand('hold_order'),'ticket.paused');
 assert.equal(n.eventForCommand('fire_order'),'ticket.resumed');
 assert.equal(n.eventForCommand('item_added'),null,'kitchen note is not a ticket lifecycle');
 assert.match(main,/if\(ticketEvent\)window\.GelatoGlassesHudNotifications\?\.announceTicket/,'only after successful KDS operation');
-assert.match(main,/const changes=previous&&state\.work/,'polling needs existing baseline');
+assert.match(main,/const changes=previous&&!state\.kitchenBusy&&state\.work/,'polling needs existing baseline and must not duplicate a local command notification');
 assert.match(main,/event:'ingredient\.skipped'/,'ingredient skips present as separate events');
 assert.match(main,/event:'ingredient\.low_confidence'/,'vision warning cannot mark completion');
 assert.match(voice,/speakNotification\(message\)/,'TTS uses existing voice flow');
