@@ -21,7 +21,8 @@ function validate(data){
  const picked=choice(data.catalog,data.menuItemId,data.ingredientKey,data.phase);
  if(!picked)return 'Select a configured menu ingredient and capture phase.';
  if(!data.blob||data.blob.size===0)return 'Select a camera capture or an image file.';
- if(!Number.isInteger(Number(data.cameraSlot))||Number(data.cameraSlot)<1||Number(data.cameraSlot)>5)return 'Select camera slot 1–5.';
+ if(data.source==='file_upload'){if(Number(data.cameraSlot)!==0)return 'An uploaded file must not impersonate a camera slot.';}
+ else if(data.source!=='runtime_camera'||!Number.isInteger(Number(data.cameraSlot))||Number(data.cameraSlot)<1||Number(data.cameraSlot)>5)return 'Select camera slot 1–5.';
  if(picked.guide.positive){
   const b=data.bbox;if(!b||![b.x,b.y,b.width,b.height].every(Number.isFinite)||
     b.width<=.03||b.height<=.03||b.x<0||b.y<0||b.x+b.width>1.00001||b.y+b.height>1.00001)
