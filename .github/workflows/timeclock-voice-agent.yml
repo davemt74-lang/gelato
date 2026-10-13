@@ -91,7 +91,9 @@ jobs:
           grep -q "timeclock.clock_in" api/timeclock-agent.php
           grep -q "attendance.labor" api/timeclock-agent.php
           grep -q "Listening Mode" timeclock.php
-          grep -q "No covert background recording" timeclock.php
+          grep -q "Saved preferences never turn it on automatically" timeclock.php
+          grep -q "Microphone Off" timeclock.php
+          grep -q "proactiveListeningStatus" timeclock.php
           grep -q "api/proactive-agent.php" js/timeclock-voice.js
           grep -q "api/timeclock-agent.php" js/restaurant-agent-bridge.js
           grep -q "Time Clock" js/floor-planner-module.js
