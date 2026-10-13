@@ -53,6 +53,9 @@ jobs:
           php -l tests/prep-inventory-intelligence-contract.php
           node --check js/prep-intelligence.js
 
+      - name: Prevent credential changes during upgrade
+        run: php tests/upgrade-credential-preservation.php
+
       - name: Upgrade security and behavior contract
         run: |
           grep -q "is_owner_role" upgrade.php
