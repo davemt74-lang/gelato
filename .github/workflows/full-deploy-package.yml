@@ -58,6 +58,12 @@ on:
       - 'assets/js/glasses-multicamera.js'
       - 'assets/js/glasses-camera-config.js'
       - 'assets/js/glasses-camera-workspace.js'
+      - 'assets/js/glasses-production-photo-flow.js'
+      - 'includes/glasses-order-photo-stages.php'
+      - 'api/glasses-order-photo-stages.php'
+      - 'database/20261210_section259_order_photo_stages.sql'
+      - 'tests/glasses-order-photo-stages-contract.php'
+      - 'tests/glasses-production-photo-flow.test.js'
       - 'assets/js/glasses-camera-similarity.js'
       - 'api/glasses-camera-photo-library.php'
       - 'includes/glasses-camera-photo-library.php'
@@ -204,6 +210,12 @@ jobs:
             assets/js/glasses-multicamera.js
             assets/js/glasses-camera-config.js
             assets/js/glasses-camera-workspace.js
+            assets/js/glasses-production-photo-flow.js
+            includes/glasses-order-photo-stages.php
+            api/glasses-order-photo-stages.php
+            database/20261210_section259_order_photo_stages.sql
+            tests/glasses-order-photo-stages-contract.php
+            tests/glasses-production-photo-flow.test.js
             assets/js/glasses-camera-similarity.js
             api/glasses-camera-photo-library.php
             includes/glasses-camera-photo-library.php
@@ -298,6 +310,11 @@ jobs:
           node --check assets/js/glasses-multicamera.js
           node --check assets/js/glasses-camera-config.js
           node --check assets/js/glasses-camera-workspace.js
+          node --check assets/js/glasses-production-photo-flow.js
+          node tests/glasses-production-photo-flow.test.js
+          php tests/glasses-order-photo-stages-contract.php
+          php -l api/glasses-order-photo-stages.php
+          php -l includes/glasses-order-photo-stages.php
           node --check assets/js/glasses-camera-similarity.js
           node tests/glasses-camera-photo-library.test.js
           php tests/glasses-camera-photo-library-contract.php
