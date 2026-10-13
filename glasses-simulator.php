@@ -12,7 +12,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <title>Web Glasses Simulator · Gelato</title>
 <link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20261013-live1">
 <link rel="stylesheet" href="assets/css/glasses-simulator-hud-ux.css?v=20261013-voice1">
-<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-kds2">
+<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-multi1">
 </head>
 <body>
 <header class="sim-topbar">
@@ -79,7 +79,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
       </div>
       <div class="sim-voice-feedback" id="simVoiceFeedback" role="status" aria-live="polite">Voice off</div>
       <div id="simNavContext" class="sim-nav-command-examples" aria-live="polite">Loading orders…</div>
-      <span class="sim-nav-command-examples">Say: “next” · “next item” · “item added” · “previous” · “repeat” · “status”</span>
+      <span class="sim-nav-command-examples">Say: “start ticket” · “next item” · “item ready” · “note added” · “finish ticket” · “status”</span>
     </nav>
     <div class="glasses-stage" id="glassesStage">
       <div class="scene-placeholder">
@@ -154,6 +154,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
           <button class="region-handle region-move" type="button" tabindex="-1" aria-hidden="true">MOVE</button>
           <button class="region-handle region-resize" type="button" tabindex="-1" aria-hidden="true">↘</button>
           <div class="hud-panel-title"><small>ACTIVE ORDERS</small><span id="hudOrdersCount">0</span></div>
+          <div class="sim-ticket-time-sync" id="simTicketTimeSync">POS TIME · WAITING</div>
           <div id="hudOrders" class="hud-orders-list"></div>
         </aside>
 
@@ -275,6 +276,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
         <label><span>Left eye Y</span><input id="leftEyeY" type="range" min="-20" max="20" value="0"><output id="leftEyeYValue">0%</output></label>
         <label><span>Right eye X</span><input id="rightEyeX" type="range" min="-20" max="20" value="0"><output id="rightEyeXValue">0%</output></label>
         <label><span>Right eye Y</span><input id="rightEyeY" type="range" min="-20" max="20" value="0"><output id="rightEyeYValue">0%</output></label>
+        <label><span>Right HUD width</span><input id="rightWidth" type="range" min="15" max="55" value="29"><output id="rightWidthValue">29%</output></label>
       </div>
       <label class="preset-row"><span>LAYOUT PRESET</span><select id="presetSelect"></select></label>
       <div class="preset-actions">
@@ -305,6 +307,30 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
         <button id="clearCameraTarget" type="button" disabled>Clear Target</button>
       </div>
       <div class="camera-meta" id="cameraMeta"><span>No active camera stream.</span></div>
+      <section class="sim-multicamera" id="simMultiCameraPanel" aria-labelledby="simMultiCameraTitle">
+        <header class="console-heading">
+          <div><small>MULTI-CAMERA SOURCES</small><strong id="simMultiCameraTitle">Camera 2–5 · Independent training feeds</strong></div>
+          <span id="simMultiCameraCount" role="status" aria-live="polite">0 / 4 AUX</span>
+        </header>
+        <p class="calibration-note">Camera 1 supplies the glasses HUD. Cameras 2–5 have separate previews for training and future builds. Each requires an explicit Start; no secondary feed changes POS, KDS, or build verification.</p>
+        <div id="simAuxCameraSlots" class="sim-aux-camera-slots" aria-label="Additional camera sources"></div>
+        <section class="sim-camera-training" id="simCameraTraining" hidden aria-labelledby="simCameraTrainingTitle">
+          <div class="console-heading"><div><small>VISION LAB CAPTURE</small><strong id="simCameraTrainingTitle">Review &amp; label frame</strong></div>
+            <span id="simCameraTrainingStatus">REVIEW REQUIRED</span></div>
+          <div class="sim-camera-training-frame" id="simCameraTrainingFrame">
+            <canvas id="simCameraTrainingImage" aria-label="Frozen training frame"></canvas>
+            <canvas id="simCameraTrainingOverlay" aria-label="Draw object boxes on frozen frame"></canvas>
+          </div>
+          <label class="work-picker"><span>OBJECT CLASS</span>
+            <input id="simCameraTrainingLabel" type="text" maxlength="80" autocomplete="off" placeholder="e.g., Mozzarella, Basil, Pizza"></label>
+          <p class="calibration-note">Enter an object class and drag a tight box around each instance. Samples are local until you explicitly export or opt into Vision Lab upload.</p>
+          <div class="inline-actions">
+            <button type="button" id="simCameraTrainingUndo">Undo Box</button>
+            <button type="button" id="simCameraTrainingSave" disabled>Add Labeled Sample</button>
+          </div>
+          <div id="simCameraTrainingFeedback" class="vision-metrics" role="status" aria-live="polite">Freeze an auxiliary frame to begin.</div>
+        </section>
+      </section>
       <div class="vision-runtime-panel">
         <div class="console-heading"><div><small>BROWSER VISION</small><strong>Detection runtime</strong></div><span id="visionHealth">VISION IDLE</span></div>
         <div class="frame-pipeline-panel">
@@ -447,9 +473,10 @@ window.GELATO_GLASSES_SIMULATOR={
 </script>
 <script src="assets/js/glasses-v10-soak-harness.js?v=20260929-v10-5"></script>
 <script src="assets/js/glasses-v10-cook-ux-harness.js?v=20260929-v10-6"></script>
-<script src="assets/js/glasses-web-simulator.js?v=20261013-kds2"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20261013-multi1"></script>
 <script src="assets/js/glasses-voice-device.js?v=20261013-device1"></script>
 <script src="assets/js/glasses-simulator-voice.js?v=20261013-kds2"></script>
+<script src="assets/js/glasses-multicamera.js?v=20261013-multi1"></script>
 <script src="assets/js/glasses-simulator-tabs.js?v=20261013-device1"></script>
 </body>
 </html>
