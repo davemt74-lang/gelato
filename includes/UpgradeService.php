@@ -431,6 +431,7 @@ final class UpgradeService
 
     private static function executeStatement(PDO $pdo, string $sql, bool $allowAlreadyAppliedDdl): void
     {
+        self::assertCredentialSafeMigration($sql);
         // MySQL (unlike MariaDB) rejects ALTER TABLE ADD COLUMN IF NOT EXISTS.
         // Keep shipped migration SQL immutable for SHA-256 tracking, and lower
         // this *single-column* form only when executing it. This also supports
@@ -611,6 +612,25 @@ final class UpgradeService
             : 'Column definitions appear compatible; check index and constraint definitions';
         return new PDOException($error->getMessage() . ' [FK preflight: ' . $detail . ']', 0, $error);
     }
+
+    /**
+     * Migration SQL cannot alter credential-bearing user records. Owner and
+     * password changes belong to authenticated account flows, never upgrades.
+     * DDL adding unrelated users columns is still permitted.
+     */
+    private static function assertCredentialSafeMigration(string $sql): void
+    {
+        $table = '(?:\`?[A-Za-z0-9_]+\`?\s*\.\s*)?\`?users\`?';
+        $userDml = '/^\s*(?:INSERT\s+(?:IGNORE\s+)?INTO|REPLACE\s+(?:INTO\s+)?|UPDATE\s+(?:LOW_PRIORITY\s+)?(?:IGNORE\s+)?|DELETE\s+FROM|TRUNCATE\s+(?:TABLE\s+)?|DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?)\s+' . $table . '(?![A-Za-z0-9_])/i';
+        if (preg_match($userDml, $sql) === 1) {
+            throw new RuntimeException('Upgrade blocked: SQL attempted to modify or replace user accounts. Passwords and owner records must survive deployment unchanged.');
+        }
+        if (preg_match('/^\s*ALTER\s+TABLE\s+' . $table . '(?![A-Za-z0-9_])/i', $sql) === 1
+            && preg_match('/\b(?:password_hash|password_changed_at|failed_login_count|locked_until)\b/i', $sql) === 1) {
+            throw new RuntimeException('Upgrade blocked: SQL attempted to modify authentication columns on users.');
+        }
+    }
+
 
     private static function isAlreadyAppliedDdlError(PDOException $error, string $sql): bool
     {
