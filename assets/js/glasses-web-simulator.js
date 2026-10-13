@@ -1211,8 +1211,14 @@ function render(){
     loadVisionModel:'Requires an active build, governed model assignment and authorized package.',
     startShadowModel:'Requires a governed active model build/session.',
     datasetExport:'Capture and label a dataset sample first.',
-    datasetUpload:'Requires glasses.manage, opt-in, and captured samples.'
+    datasetUpload:'Requires glasses.manage, opt-in, and captured samples.',
+    submitCameraTarget:'Manual camera observations require a writable device and active build. The live browser preview is read-only.'
   };
+  if(live&&state.device?.virtualPreview){
+    for(const id of ['loadVisionModel','startShadowModel','submitCameraTarget']){
+      const button=$(id);if(button)button.disabled=true;
+    }
+  }
   for(const button of document.querySelectorAll('button[id]')){
     if(button.disabled){
       const reason=controls[button.id]||'Unavailable until its prerequisite data, camera, build, or permission is ready.';
@@ -1221,6 +1227,13 @@ function render(){
       button.removeAttribute('aria-description');
       if(controls[button.id])button.title=button.id==='startBuild'?controls.startBuild:'Available';
     }
+  }
+  const audit=$('simControlAudit'),badge=$('simAuditBadge');
+  if(audit&&badge){
+    const all=[...document.querySelectorAll('button[id]')].filter(b=>!b.classList.contains('region-handle')&&b.id!=='simAuditDetails');
+    const disabled=all.filter(b=>b.disabled),ready=all.length-disabled.length;
+    badge.textContent=ready+' READY · '+disabled.length+' CONFIGURATION-DEPENDENT';
+    audit.innerHTML=all.map(b=>'<div class="sim-control-audit-item" data-state="'+(b.disabled?'disabled':'ready')+'"><strong>'+escapeHtml(b.textContent.trim().replace(/\\s+/g,' ')||b.id)+'</strong><span>'+escapeHtml(b.disabled?(b.title||'Prerequisite not yet ready.'):'Ready to use'+(b.title&&b.title!=='Available'?' · '+b.title:''))+'</span></div>').join('');
   }
 }
 function flashDetection(component,options={}){
