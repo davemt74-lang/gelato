@@ -86,7 +86,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
         <img id="sceneImage" alt="" hidden>
         <video id="cameraVideo" class="camera-video" autoplay muted playsinline hidden></video>
         <canvas id="cameraCaptureCanvas" hidden></canvas>
-        <div class="scene-copy" id="scenePlaceholder">Live KDS preview · add a scene image or enable the camera to see the kitchen behind the HUD.</div>
+        <div class="scene-copy" id="scenePlaceholder" aria-hidden="true"></div>
       </div>
       <img id="glassesImage" class="glasses-image" alt="" hidden>
       <svg id="svgGlassesLayer" class="svg-glasses-layer" viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
