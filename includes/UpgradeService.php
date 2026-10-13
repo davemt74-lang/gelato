@@ -621,7 +621,8 @@ final class UpgradeService
     private static function assertCredentialSafeMigration(string $sql): void
     {
         $table = '(?:\`?[A-Za-z0-9_]+\`?\s*\.\s*)?\`?users\`?';
-        $userDml = '/^\s*(?:INSERT\s+(?:IGNORE\s+)?INTO|REPLACE\s+(?:INTO\s+)?|UPDATE(?:\s+LOW_PRIORITY)?(?:\s+IGNORE)?|DELETE\s+FROM|TRUNCATE\s+(?:TABLE\s+)?|DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?)\s+' . $table . '(?![A-Za-z0-9_])/i';
+        $action = '(?:INSERT\s+(?:IGNORE\s+)?INTO|REPLACE(?:\s+INTO)?|UPDATE(?:\s+LOW_PRIORITY)?(?:\s+IGNORE)?|DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?|DROP\s+TABLE(?:\s+IF\s+EXISTS)?)';
+        $userDml = '/^\s*' . $action . '\s+' . $table . '(?![A-Za-z0-9_])/i';
         if (preg_match($userDml, $sql) === 1) {
             throw new RuntimeException('Upgrade blocked: SQL attempted to modify or replace user accounts. Passwords and owner records must survive deployment unchanged.');
         }
