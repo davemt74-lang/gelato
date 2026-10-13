@@ -383,6 +383,11 @@
     return {id,mediaPublicId:photo.uploadedMediaPublicId};
   }
   window.GelatoCameraWorkspace={mount,select,refresh,persistOrderPhoto,
+    getCapturedPhotos:()=>S.local.map(photo=>({
+      key:idOf(photo),slot:photo.slot,locationId:photo.locationId,
+      capturedAt:photo.capturedAt,blob:photo.blob||null,
+      fingerprint:photo.fingerprint||null
+    })).filter(x=>x.blob),
     referenceMatches:(photo,menuItemId)=>metric()?.compare?.(photo?.fingerprint?.hash||photo?.hash,
       S.photos.filter(p=>p.isReference&&p.menuItemId===menuItemId),{slot:photo?.slot})||[],
     getSavedPhotos:slot=>S.photos.filter(p=>p.slot===slot),
