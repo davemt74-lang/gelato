@@ -9,6 +9,12 @@ on:
       - 'assets/css/glasses-web-simulator.css'
       - 'assets/js/glasses-web-simulator.js'
       - 'assets/js/glasses-simulator-voice.js'
+      - 'assets/js/glasses-voice-device.js'
+      - 'assets/js/glasses-simulator-tabs.js'
+      - 'assets/css/glasses-simulator-device-first.css'
+      - 'tests/glasses-voice-device.test.js'
+      - 'tests/glasses-voice-recovery.test.js'
+      - 'tests/glasses-device-tabs-contract.php'
       - 'assets/css/glasses-simulator-hud-ux.css'
       - 'tests/glasses-hud-voice-contract.php'
       - 'tests/glasses-voice-navigation.test.js'
@@ -39,11 +45,14 @@ jobs:
           php -l tests/glasses-web-simulator-contract.php
           php -l tests/glasses-live-virtual-preview-contract.php
           php -l tests/glasses-hud-voice-contract.php
+          php -l tests/glasses-device-tabs-contract.php
 
       - name: JavaScript syntax
         run: |
           node --check assets/js/glasses-web-simulator.js
           node --check assets/js/glasses-simulator-voice.js
+          node --check assets/js/glasses-voice-device.js
+          node --check assets/js/glasses-simulator-tabs.js
 
       - name: Simulator architecture contract
         run: php tests/glasses-web-simulator-contract.php
@@ -51,6 +60,9 @@ jobs:
         run: |
           php tests/glasses-hud-voice-contract.php
           node tests/glasses-voice-navigation.test.js
+          node tests/glasses-voice-device.test.js
+          node tests/glasses-voice-recovery.test.js
+          php tests/glasses-device-tabs-contract.php
       - name: Hardware-free Live access, control state and write isolation
         run: php tests/glasses-live-virtual-preview-contract.php
 
