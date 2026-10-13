@@ -82,7 +82,7 @@ function sample(slot){
 }
 function consumeCapture(slot){
   const s=row(slot);
-  if(!s.ready||s.quality<45||now()-s.lastCapture<12000)return false;
+  if(!s.ready||s.quality<45||(s.lastCapture>0&&now()-s.lastCapture<12000))return false;
   s.ready=false;s.lastCapture=now();s.activitySince=0;s.stability=0;
   return true;
 }
