@@ -34,7 +34,7 @@ function speak(n){
  */
 function positionUnderLeftTickets(){
   const notice=$('glassesHudNotification'),tickets=$('hudOrdersRegion'),projection=$('lensProjection');
-  if(!notice||!tickets||!projection||notice.hidden)return;
+  if(!notice||!tickets?.getBoundingClientRect||!projection?.getBoundingClientRect||!notice.style||notice.hidden)return;
   const parent=projection.getBoundingClientRect(),box=tickets.getBoundingClientRect();
   if(!parent.width||!parent.height||!box.width)return;
   const scaleX=projection.clientWidth/parent.width||1,scaleY=projection.clientHeight/parent.height||1;
