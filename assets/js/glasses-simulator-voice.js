@@ -283,7 +283,11 @@
     lastError='device-lost';listening=false;releaseRecognition();scheduleRecovery('device-lost');
   });
   window.addEventListener('beforeunload',()=>{if(enabled)stopVoice();if('speechSynthesis' in window)window.speechSynthesis.cancel();});
-  window.GelatoGlassesVoiceUI={refresh,normalizePhrase,dispatch,startVoice,stopVoice,recoverVoice,status:voiceStatus};
+  window.GelatoGlassesVoiceUI={refresh,normalizePhrase,dispatch,startVoice,stopVoice,recoverVoice,status:voiceStatus,
+    speakNotification(message){
+      if(!enabled||document.hidden||!$('simVoiceReplies')?.checked)return false;
+      announce(String(message||'').slice(0,190));return true;
+    }};
   organizeControls();
   updateVoiceButton();
   refresh();
