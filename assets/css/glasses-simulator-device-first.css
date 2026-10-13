@@ -1,0 +1,79 @@
+/* Device-first simulator shell. Load after legacy HUD and base styles. */
+html,body{max-width:100%;overflow-x:hidden}
+.sim-topbar{height:64px;min-height:64px;padding:7px 12px;display:flex;flex-direction:row!important;flex-wrap:nowrap!important;align-items:center;gap:10px;overflow:hidden}
+.sim-topbar>div:first-child{flex:0 0 auto;min-width:0;max-width:190px}
+.sim-topbar>div:first-child strong{display:block;font-size:12px;line-height:1.2;white-space:nowrap}
+.sim-topbar>div:first-child span{display:block;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sim-top-actions{flex:1 1 auto;display:flex;flex-direction:row;flex-wrap:nowrap!important;justify-content:flex-end;gap:5px;min-width:0;overflow-x:auto;scrollbar-width:thin;padding:3px 0}
+.sim-top-actions label{flex:0 0 auto;gap:4px;white-space:nowrap;font-size:9px}
+.sim-top-actions select,.sim-top-actions button,.sim-top-actions a,.sim-top-actions .asset-load{flex:0 0 auto;padding:7px 8px!important;font-size:10px!important;white-space:nowrap}
+.sim-top-actions #deviceSelect{width:128px!important;min-width:0!important;max-width:128px!important;text-overflow:ellipsis;overflow:hidden}
+.sim-top-actions #modeSelect{max-width:108px}
+.sim-top-actions #sceneSourceSelect{max-width:110px}
+.sim-top-actions #frameModeSelect{max-width:72px}
+.sim-top-actions .sim-admin-link{background:#244934;border-color:#5da779;color:#e8ffed}
+.sim-layout{grid-template-columns:minmax(0,1fr) clamp(350px,28vw,420px)!important;min-width:0;height:calc(100dvh - 64px);min-height:600px;overflow:hidden;align-items:stretch!important}
+.sim-stage-panel{position:relative!important;top:auto!important;display:block!important;height:100%;min-height:0;align-self:stretch;overflow:hidden;padding:10px}
+.sim-stage-panel #glassesStage{height:100%!important;min-height:0!important;max-height:none!important;aspect-ratio:auto!important;width:100%;border-radius:18px}
+.sim-stage-panel .scene-copy{width:min(450px,80%)}
+.sim-console.sgv-tabbed-console{display:flex!important;flex-direction:column;align-items:stretch;padding:0!important;height:100%;min-height:0;overflow:hidden!important;gap:0;border-left:1px solid #294034}
+.sgv-tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:2px;padding:9px 9px 0;border-bottom:1px solid #284033;background:#0b1510;flex:0 0 auto}
+.sgv-tabs button{min-width:0;appearance:none;border:0;border-bottom:2px solid transparent;background:transparent;color:#a0bcab;font-size:10px!important;font-weight:800;line-height:1.3;padding:12px 2px 10px!important;border-radius:6px 6px 0 0;cursor:pointer;white-space:nowrap}
+.sgv-tabs button[aria-selected=true]{border-bottom-color:#86f3b1;background:#183226;color:#e5ffed}
+.sgv-tabs button:focus-visible{outline:2px solid #8bf7b9;outline-offset:-3px}
+.sgv-tab-contents{flex:1 1 auto;min-height:0;overflow:hidden}
+.sgv-tab-panel{height:100%;overflow-y:auto;overflow-x:hidden;padding:12px;scrollbar-width:thin;display:flex;flex-direction:column;align-items:stretch;gap:11px}
+.sgv-tab-panel[hidden]{display:none!important}
+.sgv-tab-panel>*{flex:0 0 auto;min-width:0}
+.sgv-tab-panel .sim-navigation-panel{display:grid;gap:9px;padding:10px;background:#101c18}
+.sgv-tab-panel .sim-navigation-group{flex-wrap:wrap}
+.sgv-tab-panel .sim-status-row{padding:5px 0}
+.sgv-tab-panel .sim-live-guide{margin:0}
+.sgv-intro{padding:14px;border:1px solid #3b6c4b;border-radius:12px;background:linear-gradient(120deg,#122b1d,#101b16);display:grid;gap:5px}
+.sgv-intro strong{color:#e4ffec;font-size:14px}
+.sgv-intro span{font-size:11px;color:#a6cfb6}
+.sgv-intro #simOverviewVoiceStatus{color:#a8e5ca;font-weight:800}
+.sgv-voice-controls .sim-navigation-group{display:flex;gap:8px}
+.sgv-voice-controls .sim-nav-voice-button{border-color:#5b9976;background:#204632}
+.sgv-voice-controls #simVoiceFeedback{font-size:11px}
+.sgv-status-grid{display:grid;gap:5px}
+.sgv-line{display:flex;justify-content:space-between;gap:9px;padding:7px 9px;background:#17251d;border:1px solid #2b3e32;border-radius:8px}
+.sgv-line span{font-size:10px;color:#b9d0c0}
+.sgv-line strong{font-size:10px;color:#d1fbe0;text-align:right;overflow-wrap:anywhere}
+.sgv-checks{display:grid;gap:7px}
+.sgv-check{border:1px solid #35493c;background:#142019;border-radius:8px;padding:9px;display:grid;grid-template-columns:1fr auto;gap:3px}
+.sgv-check strong{font-size:11px;color:#effaf1}
+.sgv-check span{font-size:9px;font-weight:850;letter-spacing:.05em;color:#b3d5b9}
+.sgv-check p{grid-column:1/-1;margin:0;font-size:10px;line-height:1.4;color:#a9bbae;overflow-wrap:anywhere}
+.sgv-check[data-status=ready]{border-left:3px solid #79f2a6}
+.sgv-check[data-status=warning]{border-left:3px solid #ffd37b}
+.sgv-check[data-status=failed]{border-left:3px solid #ff8d82}
+#simVoiceCertBadge[data-state=ready]{color:#7cf4a8}
+#simVoiceCertBadge[data-state=warning]{color:#ffde93}
+#simVoiceCertBadge[data-state=failed]{color:#ff978b}
+.sgv-tab-panel .camera-card{min-width:0}
+.sgv-tab-panel .console-card{width:100%;max-width:100%;min-width:0}
+@media(max-width:1050px){
+ .sim-topbar>div:first-child{max-width:135px}
+ .sim-topbar>div:first-child strong{font-size:10px}
+ .sim-layout{grid-template-columns:minmax(0,1fr) 350px!important}
+}
+@media(max-width:860px){
+ .sim-layout{grid-template-columns:minmax(0,1fr)!important;height:auto;min-height:0;overflow:visible}
+ .sim-stage-panel{height:min(68dvh,680px);min-height:390px}
+ .sim-console.sgv-tabbed-console{height:min(72dvh,750px);min-height:480px;border-left:0;border-top:1px solid #294034}
+}
+@media(max-width:640px){
+ .sim-topbar{height:60px;min-height:60px;padding:4px 8px;gap:5px}
+ .sim-topbar>div:first-child{max-width:110px}
+ .sim-topbar>div:first-child strong{white-space:normal;line-height:1.15}
+ .sim-topbar>div:first-child span{display:none}
+ .sim-top-actions{justify-content:flex-start;flex:1 1 auto}
+ .sim-top-actions label:has(#deviceSelect){width:auto;max-width:none;flex:0 0 auto}
+ .sim-top-actions #deviceSelect{flex:0 0 auto;width:105px!important;max-width:105px!important}
+ .sim-stage-panel{height:52dvh;min-height:330px;padding:6px}
+ .sim-stage-panel #glassesStage{height:100%!important;min-height:0!important}
+ .sim-console.sgv-tabbed-console{min-height:520px;height:74dvh}
+ .sgv-tabs button{font-size:9px!important}
+ .sgv-tab-panel{padding:9px}
+}
