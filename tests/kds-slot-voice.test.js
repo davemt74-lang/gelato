@@ -52,7 +52,7 @@ recognized.at(-1).emit('Hey Gelato read order 1');
 assert.ok(events.filter(x=>x.type==='gelato-kds-voice-answer').length>answers,'wake prefix allows command');
 assert.equal(voice.mode,'wake');
 voice.pauseForSpeech();
-assert.equal(voice.active,false,'speech must pause recognition to avoid acoustic feedback');
+assert.equal(voice.active,true,'wake-word barge-in requires recognition to remain active while the Agent speaks');
 voice.resumeAfterSpeech();
 assert.equal(voice.active,true);
 voice.setMode('off');
