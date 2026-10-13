@@ -193,6 +193,23 @@ try{
         }
     }
 
+    // "Read order 4" is a CURRENT VISIBLE SLOT reference, not POS ticket #4.
+    // Compare the browser's displayed mapping to the authoritative board. If
+    // the order cards have moved, refuse to read a different ticket silently.
+    if(preg_match('/\b(?:read|repeat|describe|what(?:\x27s| is)?(?: on| in)?|status(?: of)?|tell me about)\s+(?:the\s+)?(?:order|ticket|slot)\s*#?\s*([1-8])\b/u',$normalized,$slotMatch)){
+        $slot=(int)$slotMatch[1];
+        $page=max(0,min(1000,(int)($context['visiblePage']??0)));
+        $shown=is_array($context['visibleSlots']??null)?$context['visibleSlots']:[];
+        $pageTickets=array_slice($tickets,$page*8,8);
+        $onScreen=$shown[$slot-1]??null;
+        $current=$pageTickets[$slot-1]??null;
+        if(!is_array($onScreen)||!$current||((int)($onScreen['slot']??0))!==$slot
+          ||(string)($onScreen['checkPublicId']??'')!==(string)$current['checkPublicId']){
+            app_json_response(['ok'=>true,'skill'=>'kds.slot_changed','answer'=>'The order positions have changed. Please refresh the KDS board and ask again.','data'=>['slot'=>$slot],'sources'=>['Kitchen Display → Visible Order Slots']]);
+        }
+        $current['visibleSlot']=$slot;
+        app_json_response(['ok'=>true,'skill'=>'kds.visible_order','answer'=>'Order '.$slot.', '.kda_ticket_detail($current,true),'data'=>['slot'=>$slot,'ticket'=>$current],'sources'=>['Kitchen Display → Visible Order Slots']]);
+    }
     $ticket=kda_match_ticket($tickets,$message,$selectedCheckId);
     if($ticket){
         app_json_response(['ok'=>true,'skill'=>'kds.order_detail','answer'=>kda_ticket_detail($ticket,true),'data'=>['ticket'=>$ticket],'sources'=>['Kitchen Display → Live Order']]);
