@@ -18,7 +18,7 @@ kva_assert(str_contains($page,'js/agent-page-context.js')&&str_contains($page,'j
 kva_assert(str_contains($global,"document.body?.dataset.agentVoiceOnly === '1'"),'Global Agent must suppress its keyboard chat bar on voice-only workstations.');
 kva_assert(!str_contains($sidebar,'<textarea')&&!str_contains($sidebar,'type="text"'),'KDS Agent sidebar must not expose keyboard/text-entry input.');
 kva_assert(str_contains($sidebar,'Tap and speak')&&str_contains($sidebar,'talkOnce'),'KDS sidebar must expose tap-to-talk through the main Agent voice stack.');
-kva_assert(str_contains($sidebar,'Hands-free “Hey Gelato”')&&str_contains($sidebar,'setListening'),'KDS sidebar must support optional hands-free wake mode.');
+kva_assert(str_contains($sidebar,'Hands-free “Hey Gelato”')&&str_contains($sidebar,'GelatoKdsVoice?.setMode'),'KDS sidebar must support optional hands-free wake mode.');
 
 kva_assert(str_contains($sidebar,"const ANNOUNCE_KEY = 'gelato.kds.voiceNewOrders.v1'")&&str_contains($sidebar,'localStorage.setItem(ANNOUNCE_KEY'),'New-order voice announcement preference must persist per KDS device.');
 kva_assert(str_contains($sidebar,'if (!previous) return;'),'The first observed board must establish a baseline instead of announcing existing tickets.');
