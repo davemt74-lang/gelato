@@ -49,10 +49,10 @@ for(const id of ['simNavNext','simNavPrevious','simNavNextItem','simNavPreviousI
   assert.ok(!page.includes('id="'+id+'"'),'obsolete duplicated sidebar button removed: '+id);
 for(const [spoken,command] of [['next','next'],['previous','previous'],['next item','next_item'],['previous item','previous_item'],['ingredient added','ingredient_added'],['repeat','repeat']])
   assert.equal(parse(spoken),command,'voice navigation preserved: '+command);
-elt('simVoiceHelp').fire('click');assert.equal(actions.at(-1),'help');
+elt('simVoiceHelp').fire('click');assert.match(elt('simVoiceFeedback').textContent,/Say start ticket/,'voice help remains available without duplicate sidebar commands');
 assert.equal(elt('simNavContext').textContent,'Test Pizza · Step 2 · Preview only');
 assert.equal(elt('simVoiceToggle').disabled,true,'missing SpeechRecognition must disable microphone but preserve buttons');
 assert.equal(elt('simVoiceToggle').disabled,true,'unsupported browser must not expose a broken mic');
-assert.equal(elt('simVoiceFeedback').textContent,'Handled help','voice help still sends through shared dispatcher');
+assert.match(elt('simVoiceFeedback').textContent,/Say start ticket/,'help is handled locally without a KDS mutation');
 assert.ok(!/\bfetch\s*\(|XMLHttpRequest|navigator\.sendBeacon/.test(source),'voice navigation may not write directly to POS/KDS');
 console.log('glasses-voice-navigation=ok');
