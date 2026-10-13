@@ -365,6 +365,22 @@
       renderListening();
     }catch(error){status('Could not restore saved listening preference: '+error.message,4000);}
   }
+  async function enableWakeStandby(){
+    if(!has('agent.proactive')){status('Proactive Agent permission required.',3500);return false;}
+    if(!(window.SpeechRecognition||window.webkitSpeechRecognition)){
+      status('This browser cannot start wake-word recognition.',3500);return false;
+    }
+    try{
+      if(!(S.voiceEventId&&Date.now()<S.voiceUntil))stopContinuous();
+      await verifyVoice();
+    }catch(error){status(error.message||'Voice verification required.',4000);return false;}
+    S.listening=false;S.wakeStandby=true;
+    stopPoll();
+    const started=S.rec?true:startContinuous();
+    if(!started){S.wakeStandby=false;renderListening();return false;}
+    status('Wake standby · microphone active. Say “Hey Gelato, start listening”.',4500);
+    renderListening();return true;
+  }
   async function updateProactiveVoice(enabled){
     if(!has('agent.proactive'))return false;
     try{
@@ -560,6 +576,7 @@
     setListening,
     loadListeningPreference,
     updateProactiveVoice,
+    enableWakeStandby,
     get listeningStatus(){return {...listeningState(),savedListening:S.savedListening,listenActive:S.listening,microphoneActive:S.micActive,wakeStandby:S.wakeStandby};},
     talkOnce,
     interruptSpeech,
