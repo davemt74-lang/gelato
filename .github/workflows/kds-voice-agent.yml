@@ -20,6 +20,14 @@ on:
       - 'tests/kds-global-order-reference.php'
       - 'docs/KDS-GLOBAL-ORDER-REFERENCES.md'
       - 'tests/kds-slot-voice.test.js'
+      - 'includes/agent-voice-conversation.php'
+      - 'includes/kds-spoken-orders.php'
+      - 'js/kds-spoken-orders.js'
+      - 'tests/kds-natural-order-voice.php'
+      - 'tests/kds-natural-order-voice.test.js'
+      - 'tests/agent-verified-voice-greetings.php'
+      - 'tests/agent-natural-voice-history-contract.php'
+      - 'docs/AGENT-VOICE-PERSONALIZATION-HISTORY.md'
       - 'tests/kds-voice-agent-contract.php'
       - '.github/workflows/kds-voice-agent.yml'
   push:
@@ -42,6 +50,14 @@ on:
       - 'tests/kds-global-order-reference.php'
       - 'docs/KDS-GLOBAL-ORDER-REFERENCES.md'
       - 'tests/kds-slot-voice.test.js'
+      - 'includes/agent-voice-conversation.php'
+      - 'includes/kds-spoken-orders.php'
+      - 'js/kds-spoken-orders.js'
+      - 'tests/kds-natural-order-voice.php'
+      - 'tests/kds-natural-order-voice.test.js'
+      - 'tests/agent-verified-voice-greetings.php'
+      - 'tests/agent-natural-voice-history-contract.php'
+      - 'docs/AGENT-VOICE-PERSONALIZATION-HISTORY.md'
       - 'tests/kds-voice-agent-contract.php'
       - '.github/workflows/kds-voice-agent.yml'
 
@@ -71,11 +87,19 @@ jobs:
           php -l tests/kds-slot-voice-contract.php
           php -l includes/kds-slot-references.php
           php -l tests/kds-global-order-reference.php
+          php -l includes/agent-voice-conversation.php
+          php -l includes/kds-spoken-orders.php
+          node --check js/kds-spoken-orders.js
+          php -l tests/agent-verified-voice-greetings.php
       - name: KDS voice-only Agent contract
         run: |
           php tests/kds-voice-agent-contract.php
           php tests/kds-slot-voice-contract.php
           php tests/kds-global-order-reference.php
           node tests/kds-slot-voice.test.js
+          php tests/kds-natural-order-voice.php
+          node tests/kds-natural-order-voice.test.js
+          php tests/agent-verified-voice-greetings.php
+          php tests/agent-natural-voice-history-contract.php
           php tests/voice-barge-in-contract.php
           node tests/voice-turn-taking.test.js
