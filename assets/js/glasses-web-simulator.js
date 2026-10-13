@@ -8,6 +8,7 @@ const AUTO_ASSEMBLY_KEY='gelato.glasses.autoAssembly.v1:u'+String(cfg.userId||0)
 let autoAssemblyOptIn=false;
 try{autoAssemblyOptIn=localStorage.getItem(AUTO_ASSEMBLY_KEY)==='1';}catch{}
 let assemblySuggestion=null,assemblySuggestionSignature='',assemblyEpoch=0;
+const rejectedAssemblyTracks=new Set();
 function clearAssemblySuggestion(){assemblySuggestion=null;assemblySuggestionSignature='';assemblyEpoch++;}
 function setAutoAssemblyOptIn(value){
   autoAssemblyOptIn=!!value;
@@ -17,7 +18,7 @@ function setAutoAssemblyOptIn(value){
 }
 
 function itemActions(id){if(!assemblyProgress.has(id))assemblyProgress.set(id,{});return assemblyProgress.get(id);}
-function clearAssemblySession(){assemblyProgress.clear();ingredientCursor.clear();assemblySources.clear();clearAssemblySuggestion();}
+function clearAssemblySession(){assemblyProgress.clear();ingredientCursor.clear();assemblySources.clear();rejectedAssemblyTracks.clear();clearAssemblySuggestion();}
 const mock={
   work:{assignmentRequired:false,station:{publicId:'station-mock',name:'Sandwich / Pizza Line'},revision:'mock-revision',focusItem:{kdsItemPublicId:'kds-mock-1',status:'queued',ticket:{checkNumber:'1042',serviceMode:'dine_in',tableName:'Table 12',guestCount:2},posLine:{id:1,menuItemId:1,name:'Club Sandwich + Fries',optionName:'Regular',quantity:1,specialInstructions:'NO TOMATO · EXTRA BACON',modifiers:[{name:'Extra Bacon'}]},menu:{preparationNotes:'Build, slice and plate with fries.'},recipeSource:{status:'exact_name',recipe:{instructions:['Toast bread','Add mayo','Add turkey','Add bacon','Add lettuce','Add tomato','Top and slice','Plate with fries']}}},items:[],metrics:{queued:1,inProgress:0,ready:0,held:0}},
   components:['Toasted Bread','Mayo','Turkey','Bacon','Lettuce','Tomato','Fries'].map((name,i)=>({componentKey:'mock:'+i,displayName:name,expectedQuantity:i===0?3:1,detectedQuantity:0,unit:i===0?'slices':'portion',optional:false,status:'waiting',sortOrder:i+1})),
@@ -1017,7 +1018,8 @@ async function submitTemporalObservation(track,action,quantity,metadata={}){
       state.validation=null;render();return true;
     }
     const result=await api('build.observe',{buildSessionPublicId:state.build.publicId,observationKey:'browser-temporal-'+action+'-'+Date.now()+'-'+state.seq,componentKey:track.componentKey,displayName,observationAction:action,quantity,confidence:track.confidence||.9,trackingId:track.trackId,bbox:track.bbox,metadata:{source:'web_glasses_simulator_auto_vision',temporalSource:'web_glasses_simulator_temporal_vision',automatic:true,temporal:true,adapter:state.visionAdapter?.id||'fixture',...metadata}});
-    state.build=result.buildSession;state.validation=null;render();return true;
+    state.build=result.buildSession;state.validation=null;
+    reconcileAutomaticAssemblyEvidence();render();return true;
   }catch(e){log('ERROR',e.message);return false;}
 }
 async function processTemporalEvents(now){
@@ -1289,6 +1291,29 @@ function buildProgressIndex(steps,comps){
  * never derived from recipe instructions. Runtime, model, temporal tracking
  * and canonical build must agree before an Auto acknowledgment.
  */
+function reconcileAutomaticAssemblyEvidence(){
+ const build=state.build,item=selectedItem(),norm=window.GelatoGlassesAssemblyRecognition?.normalize;
+ if(!build||!item||!norm||build.kdsItemPublicId!==item.kdsItemPublicId)return;
+ let rolledBack=false;
+ for(const ingredient of assembly()?.ingredientsFor(item)||[]){
+   const key=item.kdsItemPublicId+'|'+ingredient.id,source=assemblySources.get(key);
+   if(source?.source!=='governed_recognition')continue;
+   const canonical=norm(String(ingredient.id).split(':').slice(1).join(':')||ingredient.name);
+   const component=(build.components||[]).find(c=>norm(c.displayName)===canonical);
+   if(component?.status==='confirmed')continue;
+   const actions=itemActions(item.kdsItemPublicId);
+   if(actions[ingredient.id]==='added')delete actions[ingredient.id];
+   assemblySources.delete(key);ingredientCursor.delete(item.kdsItemPublicId);rolledBack=true;
+ }
+ if(rolledBack){
+   clearAssemblySuggestion();
+   window.GelatoGlassesHudNotifications?.publish?.({
+     event:'ingredient.manual_confirmation',severity:'warning',
+     message:'Governed component no longer confirmed. Checklist reopened for review.',
+     speech:'Ingredient verification changed. Check ingredient.'
+   });
+ }
+}
 function assemblyRecognitionDecision(now=Date.now()){
  const recognizer=window.GelatoGlassesAssemblyRecognition;
  const item=selectedItem(),ingredient=currentAssemblyIngredient(item);
@@ -1320,6 +1345,7 @@ function refreshAssemblyRecognition(now=Date.now()){
  }
  const signature=[item.kdsItemPublicId,ingredient.id,decision.suggestion.trackId,
    decision.suggestion.modelSha256,state.build?.publicId].join('|');
+ if(rejectedAssemblyTracks.has(signature))return;
  if(assemblySuggestionSignature!==signature){
    assemblySuggestionSignature=signature;
    assemblySuggestion={...decision.suggestion,itemId:item.kdsItemPublicId,ingredientId:ingredient.id,
@@ -1359,6 +1385,7 @@ function rejectAssemblySuggestion(){
   event:'ingredient.manual_confirmation',severity:'info',
   message:'Suggestion rejected. Label correction can be sent to Vision Lab.'
  });
+ rejectedAssemblyTracks.add(assemblySuggestion.signature);
  clearAssemblySuggestion();render();
 }
 function currentAssemblyIngredient(item){
@@ -1400,7 +1427,7 @@ function renderBuildRail(item){
       '<span class="ingredient-result">'+(status==='added'?'Added':status==='skipped'?'Skipped':'')+'</span></li>';
   }).join('');
   for(const key of ['hudIngredientAdded','hudIngredientSkip']){
-    const el=$(key);if(el)el.disabled=!next;
+    const el=$(key);if(el)el.disabled=!next||!!state.build;
   }
 }
 function renderValidationPanel(comps,validation){
