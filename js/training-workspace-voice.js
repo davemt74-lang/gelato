@@ -91,7 +91,17 @@
     if(mode===next){stop();return;}
     discard();mode=next;retry=0;
     if(!Recognition){stop('Speech recognition unsupported in this browser');status('unsupported',statusNode.textContent);return;}
-    start();
+    // Never run the protected global Agent mic and the local Training mic
+    // simultaneously. Stop its session before starting local dictation.
+    if(window.GelatoGlobalAgent?.listening){
+      status('paused','Stopping global Agent microphone before dictation…');
+      Promise.resolve(window.GelatoGlobalAgent.setListening(false)).then(()=>{
+        if(mode===next)start();
+      }).catch(error=>{
+        stop('Could not release Agent microphone: '+(error?.message||'try again'));
+        status('error',statusNode.textContent);
+      });
+    }else start();
   }
   once.addEventListener('click',()=>select('once'));
   always.addEventListener('click',()=>select('always'));
@@ -101,6 +111,9 @@
   });
   document.querySelectorAll('#workspaceSwitch [data-workspace-mode]').forEach(button=>{
     button.addEventListener('click',()=>{
+      if(button.dataset.workspaceMode==='training'&&window.GelatoGlobalAgent?.listening){
+        Promise.resolve(window.GelatoGlobalAgent.setListening(false)).catch(()=>{});
+      }
       // Admin mode must never keep the Training microphone active.
       if(button.dataset.workspaceMode!=='training'&&mode!=='off')stop('Voice off · left Training mode');
     });
