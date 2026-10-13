@@ -961,6 +961,7 @@ function trackDetections(detections,now){
     const track=prev||{key,trackId:'webvision-'+(++state.visionFrameSeq)+'-'+Date.now(),firstSeen:now,lastSeen:now,frames:0,stable:false,present:false,submitted:false,submittedQuantity:0,removed:false,bbox:d.bbox,label:d.label,componentKey:d.componentKey};
     track.lastSeen=now;track.frames+=1;track.present=true;track.missingSince=0;track.bbox=d.bbox;track.confidence=d.confidence;track.label=d.label;track.componentKey=d.componentKey;
     track.profileMatched=d.profileMatched===true;track.profileMinimumConfidence=Number(d.profileMinimumConfidence||0);
+    track.detectorLabel=d.detectorLabel||d.label;
     if(track.frames>=VISION_STABLE_FRAMES)track.stable=true;
     state.temporalTracks.set(key,track);
   }
@@ -1017,7 +1018,14 @@ async function submitTemporalObservation(track,action,quantity,metadata={}){
       component.status=component.detectedQuantity<=0?'waiting':track.confidence<.75?'verify':component.detectedQuantity+.0001>=Number(component.expectedQuantity||1)?'confirmed':'detected';
       state.validation=null;render();return true;
     }
-    const result=await api('build.observe',{buildSessionPublicId:state.build.publicId,observationKey:'browser-temporal-'+action+'-'+Date.now()+'-'+state.seq,componentKey:track.componentKey,displayName,observationAction:action,quantity,confidence:track.confidence||.9,trackingId:track.trackId,bbox:track.bbox,metadata:{source:'web_glasses_simulator_auto_vision',temporalSource:'web_glasses_simulator_temporal_vision',automatic:true,temporal:true,adapter:state.visionAdapter?.id||'fixture',...metadata}});
+    const result=await api('build.observe',{buildSessionPublicId:state.build.publicId,observationKey:'browser-temporal-'+action+'-'+Date.now()+'-'+state.seq,componentKey:track.componentKey,displayName,observationAction:action,quantity,confidence:track.confidence||.9,trackingId:track.trackId,bbox:track.bbox,metadata:{source:'web_glasses_simulator_auto_vision',
+      temporalSource:'web_glasses_simulator_temporal_vision',automatic:true,temporal:true,
+      adapter:state.visionAdapter?.id||'fixture',runtimePublicId:cfg.runtimePublicId||'',
+      detectorName:state.browserModel.assignment?.detectorName||'',
+      detectorLabel:track.detectorLabel||'',modelSha256:state.browserModel.verifiedSha256||'',
+      profileHash:state.browserModel.profile?.profileHash||'',
+      requestedThreshold:Number($('visionConfidenceThreshold')?.value||75)/100,
+      ...metadata}});
     state.build=result.buildSession;state.validation=null;
     reconcileAutomaticAssemblyEvidence();render();return true;
   }catch(e){log('ERROR',e.message);return false;}
@@ -1196,7 +1204,7 @@ function stopVisionRuntime(reason='idle'){
   state.visionBusy=false;state.visionDetections=[];renderVisionOverlay();renderVisionHealth(reason);renderFramePipelineMetrics();
 }
 function startVisionRuntime(){
-  stopVisionRuntime('idle');state.visionMode=visionMode();state.visionSubmitted.clear();state.visionTracks.clear();state.visionFrameSeq=0;state.visionLastAt=0;state.framePipeline.nextSeq=0;resetFramePipelineMetrics();state.visionAdapter=VISION_ADAPTERS[$('visionAdapterSelect')?.value||'fixture']||VISION_ADAPTERS.fixture;
+  stopVisionRuntime('idle');clearTemporalRuntime();state.visionMode=visionMode();state.visionSubmitted.clear();state.visionTracks.clear();state.visionFrameSeq=0;state.visionLastAt=0;state.framePipeline.nextSeq=0;resetFramePipelineMetrics();state.visionAdapter=VISION_ADAPTERS[$('visionAdapterSelect')?.value||'fixture']||VISION_ADAPTERS.fixture;
   if(state.visionMode!=='manual'&&state.cameraStream&&!document.hidden){capturePipelineFrame();scheduleVisionCapture();renderVisionHealth('ready');}
 }
 
