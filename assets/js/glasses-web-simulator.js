@@ -151,6 +151,7 @@ function applyLiveWork(work,{announce=false}={}){
   const activeBuildItem=state.build?.kdsItemPublicId||'';
   state.work=work;
   if(!ids.includes(state.selectedKdsItemPublicId)){
+    state.previewStepIndex=0;
     if(activeBuildItem&&ids.includes(activeBuildItem))state.selectedKdsItemPublicId=activeBuildItem;
     else state.selectedKdsItemPublicId=work?.focusItem?.kdsItemPublicId||ids[0]||'';
   }
@@ -1058,10 +1059,10 @@ function elapsedLabel(item,index){const source=item?.startedAt||item?.createdAt|
 function renderTopStatus(){
   const now=new Date(),live=state.mode==='live';
   $('hudClock').textContent=now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-  $('hudStatusTemp').textContent=(state.work?.station?.name||state.device?.stationName||'KITCHEN').toUpperCase()+' · 74°F';
+  $('hudStatusTemp').textContent=(state.work?.station?.name||state.device?.stationName||'KITCHEN').toUpperCase();
   $('hudRuntimeState').textContent=state.cookUx.stopped?'STOPPED':(state.recovery.state!=='ready'?state.recovery.state.toUpperCase():(state.build?'BUILDING':'READY'));
-  $('hudConnectivity').textContent=live?'BT · LIVE':'SIM · LOCAL';
-  $('hudBattery').textContent='87%';
+  $('hudConnectivity').textContent=live?(state.device?.virtualPreview?'WEB · LIVE':'DEVICE · LIVE'):'SIM · LOCAL';
+  $('hudBattery').textContent=state.device?.virtualPreview?'BROWSER':(live?'BATTERY N/A':'SIM');
 }
 function renderOrdersQueue(item){
   const items=orderItems();
@@ -1079,7 +1080,7 @@ function renderBuildRail(item,steps,comps){
   $('hudBuildItem').textContent=itemName();
   const meta=[item?.ticket?.tableName||item?.ticket?.serviceMode,item?.posLine?.optionName,item?.posLine?.specialInstructions].filter(Boolean);
   $('hudBuildMeta').textContent=meta.join(' · ')||'No modifiers';
-  const idx=buildProgressIndex(steps,comps);
+  const idx=state.build?buildProgressIndex(steps,comps):Math.min(Math.max(0,state.previewStepIndex||0),Math.max(0,steps.length-1));
   $('hudBuildSteps').innerHTML=steps.slice(0,8).map((s,i)=>'<li class="'+(i<idx?'done':i===idx?'current':'')+'">'+escapeHtml(s)+'</li>').join('');
 }
 function renderValidationPanel(comps,validation){
@@ -1087,18 +1088,19 @@ function renderValidationPanel(comps,validation){
   const missing=comps.filter(c=>!c.optional&&!['confirmed','ignored','unexpected'].includes(c.status)).length;
   const accounted=comps.filter(c=>c.status==='confirmed'||(c.optional&&c.status==='ignored')).length;
   const required=comps.filter(c=>!c.optional&&c.status!=='unexpected').length;
-  const stateName=validation?.status==='ready_for_finishing'?'READY':validation?.status==='blocked'?'BLOCKED':comps.some(c=>c.status==='verify')?'VERIFY':'BUILDING';
+  const stateName=!state.build?'PREVIEW':validation?.status==='ready_for_finishing'?'READY':validation?.status==='blocked'?'BLOCKED':comps.some(c=>c.status==='verify')?'VERIFY':'BUILDING';
   $('hudValidationState').textContent=stateName;
   $('hudValidationCount').textContent=accounted+' / '+required+' accounted';
   $('hudValidationMissing').textContent=String(missing);
   $('hudValidationUnexpected').textContent=String(unexpected);
-  $('hudValidationDetail').textContent=validation?.summary?.next?.message||validation?.status||'Build in progress';
+  $('hudValidationDetail').textContent=!state.build?'Read-only overview · no build session started':(validation?.summary?.next?.message||validation?.status||'Build in progress');
   $('validationCard').className='hud-card hud-validation-panel '+stateName.toLowerCase();
 }
 function renderNextInstruction(comp,validation){
-  const next=comp?'Add '+comp.displayName:(validation?.nextStage==='expo_finishing'?'Send to Expo / Finishing':'Validate build');
+  const instructions=deriveSteps();
+  const next=comp?'Add '+comp.displayName:(!state.build&&selectedItem()?instructions[Math.min(state.previewStepIndex||0,Math.max(0,instructions.length-1))]||'Review ticket':validation?.nextStage==='expo_finishing'?'Send to Expo / Finishing':'Validate build');
   $('hudNextCenter').textContent=next;
-  $('hudNextTarget').textContent=comp?(Number(comp.detectedQuantity||0)+' / '+Number(comp.expectedQuantity||0)+' '+(comp.unit||'')):(validation?.status||'Product validation');
+  $('hudNextTarget').textContent=comp?(Number(comp.detectedQuantity||0)+' / '+Number(comp.expectedQuantity||0)+' '+(comp.unit||'')):(!state.build&&selectedItem()?'STEP '+((state.previewStepIndex||0)+1)+' OF '+instructions.length+' · PREVIEW ONLY':(validation?.status||'Product validation'));
 }
 function cookUxScenarioDefinition(key){
   return globalThis.GelatoCookUxHarness?.scenarios?.[key]||null;
@@ -1156,7 +1158,7 @@ function render(){
   $('connectionBadge').style.color=live?'var(--good)':'var(--blue)';
   const station=state.work?.station?.name||state.device?.stationName||'Unassigned station';
   $('stationBadge').textContent=station;
-  $('buildBadge').textContent=build?'Build '+build.publicId:'No active build';
+  $('buildBadge').textContent=build?'Build '+build.publicId:(live?'Live order preview · no build active':'Mock · no build');
   const guide=$('simLiveGuide');
   if(guide){
     const noHardware=!!state.device?.virtualPreview;
@@ -1194,6 +1196,7 @@ function render(){
   $('nextDetection').disabled=live;
   $('lowConfidenceDetection').disabled=live;
   $('completeMockBuild').disabled=live;
+  window.GelatoGlassesVoiceUI?.refresh?.();
   const controls={
     startBuild:!live?'Start a demonstration build.':state.device?.virtualPreview?'Read-only preview: choose a paired device for live build actions.':!item?'Waiting for a KDS item.':!state.device?.simulatorWritable?'Requires glasses.manage and kds.update for this location.':'Start a governed build session.',
     autoPlayBuild:'Mock-only demonstration. Switch Mode to Mock.',
@@ -1293,7 +1296,7 @@ async function handoff(){try{
 function resetSimulator(){stopShadowModel('build_reset');unloadGovernedVisionModel('build_reset');state.build=null;state.validation=null;state.selectedKdsItemPublicId='';clearTemporalRuntime();clearCameraTarget();$('detectionLayer').innerHTML='';log('SYSTEM','Simulator build state reset; POS/KDS records were not changed.');refreshWork();}
 $('modeSelect').addEventListener('change',async e=>{stopAutoPlay();stopLiveStationSync('idle');await unloadGovernedVisionModel('build_reset');state.mode=e.target.value;state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;clearTemporalRuntime();state.syncFingerprint='';log('MODE','Switched to '+state.mode+'.');if(state.mode==='live'){if(state.device?.virtualPreview){state.recovery.state='ready';renderRuntimeRecovery();startLiveStationSync();}else{enterRecovery('recovering','live_mode_selected');await resumeRuntimeRecovery('live_mode_selected');}}else{state.recovery.state='ready';state.recovery.suppressAutomatic=false;state.recovery.lastReason='mock_runtime_ready';renderRuntimeRecovery();await refreshWork();}});
 $('deviceSelect').addEventListener('change',async e=>{stopLiveStationSync('idle');await unloadGovernedVisionModel('build_reset');state.device=state.devices.find(x=>x.publicId===e.target.value)||null;if(state.device)localStorage.setItem(LIVE_DEVICE_KEY,state.device.publicId);state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;clearTemporalRuntime();state.syncFingerprint='';if(state.mode==='live'&&state.device){if(state.device.virtualPreview){state.recovery.state='ready';renderRuntimeRecovery();startLiveStationSync();}else{enterRecovery('recovering','device_changed');await resumeRuntimeRecovery('device_changed');}}else render();});
-$('workItemSelect').addEventListener('change',e=>{state.selectedKdsItemPublicId=e.target.value;state.validation=null;render();});
+$('workItemSelect').addEventListener('change',e=>{state.selectedKdsItemPublicId=e.target.value;state.previewStepIndex=0;state.validation=null;render();});
 $('refreshWork').addEventListener('click',refreshWork);$('startBuild').addEventListener('click',startBuild);$('resetSimulator').addEventListener('click',resetSimulator);$('injectUnexpected').addEventListener('click',injectUnexpected);$('evaluateBuild').addEventListener('click',validate);$('autoPlayBuild').addEventListener('click',toggleAutoPlay);$('nextDetection').addEventListener('click',playNextMockDetection);$('lowConfidenceDetection').addEventListener('click',injectLowConfidenceDetection);$('completeMockBuild').addEventListener('click',completeMockScenario);$('handoffExpo').addEventListener('click',handoff);$('clearLog').addEventListener('click',()=>{state.logs=[];renderLog();});
 $('sceneSourceSelect').addEventListener('change',async e=>{state.cameraSource=e.target.value;if(state.cameraSource==='camera'){await startCamera();}else{stopCamera();$('sceneImage').hidden=!$('sceneImage').src;$('scenePlaceholder').hidden=!!$('sceneImage').src;}});
 $('startCamera').addEventListener('click',startCamera);$('stopCamera').addEventListener('click',()=>stopCamera());$('captureFrame').addEventListener('click',captureCameraFrame);$('clearCameraTarget').addEventListener('click',clearCameraTarget);$('submitCameraTarget').addEventListener('click',submitCameraTargetObservation);
@@ -1469,5 +1472,43 @@ function bindRegionEditor(regionName){
 bindRegionEditor('hudRight');bindRegionEditor('hudStatus');bindRegionEditor('hudOrdersRegion');
 refreshPresets();applyCalibration();applyFrameMode();
 $('exceptions').addEventListener('click',e=>{const b=e.target.closest('[data-resolve]');if(b)resolveUnexpected(b.dataset.resolve);});
+
+/** Spoken and manual navigation share these read-only preview controls. */
+function simulatorNavigation(action){
+  const items=orderItems(),current=selectedItem();
+  if(action==='next_item'||action==='previous_item'){
+    if(!items.length)return {ok:false,message:'No kitchen orders yet. Send an order to KDS first.'};
+    if(state.build)return {ok:false,message:'Active build is locked to the current item. Finish it before switching.'};
+    const index=Math.max(0,items.findIndex(x=>x.kdsItemPublicId===current?.kdsItemPublicId));
+    const next=(index+(action==='next_item'?1:items.length-1))%items.length;
+    state.selectedKdsItemPublicId=items[next].kdsItemPublicId;state.previewStepIndex=0;render();
+    return {ok:true,message:'Item '+(next+1)+' of '+items.length+': '+(items[next].posLine?.name||'Kitchen item')+', ticket '+(items[next].ticket?.checkNumber||'unknown')+'.'};
+  }
+  if(action==='next'||action==='previous'){
+    if(!current)return {ok:false,message:'No current KDS item. Send a POS ticket to KDS first.'};
+    if(state.build)return {ok:false,message:'Build steps are controlled by validated observations while a build is active.'};
+    const steps=deriveSteps();
+    state.previewStepIndex=Math.max(0,Math.min(Math.max(0,steps.length-1),(state.previewStepIndex||0)+(action==='next'?1:-1)));
+    render();return {ok:true,message:'Preview step '+((state.previewStepIndex||0)+1)+' of '+steps.length+': '+(steps[state.previewStepIndex]||'Review item')+'. No kitchen changes.'};
+  }
+  if(action==='item_added'){
+    if(!current)return {ok:false,message:'No kitchen item selected.'};
+    if(state.build)return {ok:false,message:'Ingredient confirmation requires evidence. Use the authorized Detect action on the active build.'};
+    const steps=deriveSteps(),step=steps[state.previewStepIndex||0]||'Current step';
+    state.previewStepIndex=Math.min(Math.max(0,steps.length-1),(state.previewStepIndex||0)+1);
+    render();
+    return {ok:true,message:'Preview acknowledgment: '+step+'. Next: '+(steps[state.previewStepIndex]||'Review ticket')+'. KDS was not changed.'};
+  }
+  if(action==='repeat'){
+    if(!current)return {ok:false,message:'No current item. Waiting for kitchen orders.'};
+    const steps=deriveSteps();return {ok:true,message:'Ticket '+(current.ticket?.checkNumber||'')+', '+(current.posLine?.name||'Kitchen item')+'. '+(steps[state.previewStepIndex||0]||'Review item')+'.'};
+  }
+  if(action==='status')return {ok:true,message:state.mode==='mock'?'Mock demonstration; sample orders only.':'Live display, '+items.length+' KDS item'+(items.length===1?'':'s')+'. '+(current?'Selected '+(current.posLine?.name||'item')+'.':'No active KDS work.')+(state.device?.virtualPreview?' Read-only browser preview.':' Paired device selected.')};
+  return {ok:false,message:'Unknown command. Try next, next item, previous, item added, repeat, or status.'};
+}
+window.GelatoGlassesNavigation={dispatch:simulatorNavigation,context:()=>({
+  mode:state.mode,items:orderItems().length,item:selectedItem()?.posLine?.name||null,
+  step:(state.previewStepIndex||0)+1,virtual:!!state.device?.virtualPreview
+})};
 (async()=>{await loadDevices();const cp=cameraPrefs();if(cp.resolution)$('cameraResolution').value=cp.resolution;if(cp.fit)$('cameraFit').value=cp.fit;$('cameraMirror').checked=!!cp.mirror;applyCameraPresentation();await enumerateCameras();if(!cameraSupported())setCameraHealth('error','UNSUPPORTED');refreshPresets();applyCalibration();render();if(state.device){startLiveStationSync();}else{setSyncBadge('error','NO DISPLAY');}setInterval(renderTopStatus,30000);renderRuntimeRecovery();refreshDeviceHealth();setInterval(refreshDeviceHealth,5000);const savedResume=recoveryStored();if(savedResume?.devicePublicId&&state.device?.publicId===savedResume.devicePublicId&&!state.device.virtualPreview){resumeRuntimeRecovery('app_restart_resume');}log('SYSTEM','Simulator ready. Pizza Line Reference HUD loaded.');})();
 })();
