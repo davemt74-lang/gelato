@@ -9,7 +9,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Web Glasses Simulator · Gelato</title>
-<link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20260928-camera1">
+<link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20261013-live1">
 </head>
 <body>
 <header class="sim-topbar">
@@ -18,8 +18,8 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
     <span>POS + KDS + AR build projection</span>
   </div>
   <div class="sim-top-actions">
-    <label>Mode <select id="modeSelect"><option value="mock">Mock</option><option value="live">Live Gelato</option></select></label>
-    <label>Device <select id="deviceSelect"><option value="">Loading…</option></select></label>
+    <label>Mode <select id="modeSelect"><option value="live" selected>Live Gelato</option><option value="mock">Mock Demo</option></select></label>
+    <label>Device <select id="deviceSelect"><option value="">Finding live kitchen displays…</option></select></label>
     <button id="refreshWork" type="button">Refresh work</button>
     <label>Scene <select id="sceneSourceSelect"><option value="image">Image</option><option value="camera">Browser Camera</option></select></label>
     <label class="asset-load" id="sceneFileLabel">Scene Image <input id="sceneFile" type="file" accept="image/*"></label>
@@ -41,6 +41,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
       <span id="syncBadge" class="sim-sync-badge paused">SYNC PAUSED</span>
     </div>
 
+    <div class="sim-live-guide" id="simLiveGuide" role="status" aria-live="polite"><strong>CONNECTING LIVE DISPLAY</strong> · Finding an authorized location and kitchen orders; no hardware required.</div>
     <div class="glasses-stage" id="glassesStage">
       <div class="scene-placeholder">
         <img id="sceneImage" alt="" hidden>
@@ -155,6 +156,11 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
   </section>
 
   <aside class="sim-console">
+    <section class="console-card sim-audit-panel" id="simControlAuditPanel">
+      <div class="console-heading"><div><small>SIMULATOR READINESS</small><strong>What is working and why controls are unavailable</strong></div><span id="simAuditBadge">CHECKING</span></div>
+      <p class="calibration-note">Live browser preview loads on arrival without pairing glasses. It shows POS/KDS tickets but does not alter the kitchen. Camera, model-training, and build/Expo buttons enable only when their actual prerequisites are met.</p>
+      <details id="simAuditDetails" open><summary>Show control readiness and missing requirements</summary><div id="simControlAudit" class="sim-control-audit">Checking controls…</div></details>
+    </section>
     <section class="console-card hardware-runtime-card">
       <div class="console-heading"><div><small>V10 HARDWARE RUNTIME</small><strong>AIR3 adapter boundary</strong></div><span id="hardwareRuntimeState">LOADING</span></div>
       <div id="hardwareRuntimeDetail" class="vision-model-status"><strong>SIMULATOR</strong><span>Loading hardware runtime contract…</span></div>
@@ -391,6 +397,6 @@ window.GELATO_GLASSES_SIMULATOR={
 </script>
 <script src="assets/js/glasses-v10-soak-harness.js?v=20260929-v10-5"></script>
 <script src="assets/js/glasses-v10-cook-ux-harness.js?v=20260929-v10-6"></script>
-<script src="assets/js/glasses-web-simulator.js?v=20260929-v10-6"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20261013-live1"></script>
 </body>
 </html>

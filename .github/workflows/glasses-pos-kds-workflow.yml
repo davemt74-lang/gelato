@@ -47,5 +47,5 @@ jobs:
       - name: Preserve real POS KDS simulator routes
         run: |
           grep -q 'glasses_current_work' includes/glasses-simulator.php
-          grep -q '<option value="mock">Mock</option>' glasses-simulator.php
-          grep -q '<option value="live">Live Gelato</option>' glasses-simulator.php
+          grep -q '<option value="mock">Mock Demo</option>' glasses-simulator.php
+          grep -q '<option value="live" selected>Live Gelato</option>' glasses-simulator.php

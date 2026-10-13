@@ -20,7 +20,7 @@ try{
             $device=glasses_simulator_device($pdo,$user,(string)($_GET['devicePublicId']??''),false);
             app_json_response([
                 'ok'=>true,
-                'work'=>glasses_current_work($pdo,$device),
+                'work'=>!empty($device['virtual_preview'])?glasses_simulator_preview_work($pdo,$device):glasses_current_work($pdo,$device),
                 'sync'=>[
                     'serverTime'=>gmdate('c'),
                     'devicePublicId'=>(string)$device['public_id'],

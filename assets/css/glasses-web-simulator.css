@@ -150,3 +150,16 @@
 .shadow-model-panel .console-heading>span{font-size:7px;color:var(--muted);text-align:right}
 .shadow-model-panel .vision-model-status[data-state="passed"]{border-color:#2d6644;background:rgba(55,130,82,.08)}
 .shadow-model-panel .vision-model-status[data-state="completed"]{border-color:#6b5c31;background:rgba(180,145,61,.07)}
+
+/* Live browser preview and explicit disabled-control readiness diagnostics. */
+.sim-live-guide{padding:10px 13px;border:1px solid #36645b;background:#102a25;color:#c9f7db;border-radius:10px;font-size:11px;line-height:1.6;min-width:0;overflow-wrap:anywhere}
+.sim-live-guide strong{color:#a0ffd0}
+.sim-audit-panel{border-color:#36524b}
+.sim-audit-panel details{border:1px solid #30453d;border-radius:9px;padding:10px;margin-top:9px;background:#0b1713}
+.sim-audit-panel summary{font-size:11px;font-weight:800;cursor:pointer;color:#b9eed1}
+.sim-control-audit{display:grid;gap:5px;margin-top:10px;max-height:320px;overflow-y:auto}
+.sim-control-audit-item{display:grid;grid-template-columns:minmax(0,130px) minmax(0,1fr);gap:8px;padding:5px 6px;border-bottom:1px solid #22352b;font-size:10px;min-width:0}
+.sim-control-audit-item strong{color:#e3f2e8;overflow-wrap:anywhere}
+.sim-control-audit-item span{color:#b5c6bd;overflow-wrap:anywhere}
+.sim-control-audit-item[data-state="ready"] span{color:#77efae}
+.sim-control-audit-item[data-state="disabled"] span{color:#efcb86}

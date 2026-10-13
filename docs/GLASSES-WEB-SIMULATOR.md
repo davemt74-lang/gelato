@@ -2,6 +2,19 @@
 
 The Web Glasses Simulator is a browser-based design, training, and integration surface for the Gelato AR glasses workflow.
 
+## Live on load — no physical glasses required
+
+The browser simulator **defaults to Live Gelato**. On load it enumerates the authenticated operator's authorized restaurant locations and supplies a virtual **Browser preview · All stations** display plus optional station-specific virtual displays. No hardware pairing, new glasses-device record, or developer configuration is necessary to see active KDS orders.
+
+- Select any permitted virtual preview in **Device**. All stations is the default and includes all active KDS work for that location, including newly routed items on an existing ticket. Select a particular station to limit the queue.
+- The selected display persists locally. Existing paired devices remain available for operators who need actual governed build, vision-observation, or Expo actions.
+- The virtual display is **read-only**. A server-side write request using a preview device is rejected; automatic load, network recovery, and polling do not create build sessions.
+- Live work is polled at about 1.5-second intervals, and the simulator displays an order-update notice when the current KDS items, modifiers, quantities, instructions, or status change.
+- Tickets must be **sent/routed into KDS** to appear. Unsaved POS tickets and unsubmitted item edits cannot appear in the kitchen view.
+- A **Simulator Readiness** panel audits every button and shows when it is enabled and why it is disabled. Mock-only demo buttons stay disabled in Live mode; camera features require camera permission; model and write actions require their own approved setup and permissions.
+
+The virtual browser display intentionally provides real-order visualization rather than pretending to be physical glasses hardware or silently changing the kitchen. Pairing and station assignments for real glasses remain supported, but are no longer prerequisites for viewing live restaurant orders.
+
 ## Modes
 
 ### Mock

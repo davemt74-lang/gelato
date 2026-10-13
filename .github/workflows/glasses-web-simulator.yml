@@ -9,6 +9,7 @@ on:
       - 'assets/css/glasses-web-simulator.css'
       - 'assets/js/glasses-web-simulator.js'
       - 'tests/glasses-web-simulator-contract.php'
+      - 'tests/glasses-live-virtual-preview-contract.php'
       - 'docs/GLASSES-WEB-SIMULATOR.md'
       - '.github/workflows/glasses-web-simulator.yml'
   push:
@@ -32,12 +33,15 @@ jobs:
           php -l api/glasses-simulator.php
           php -l includes/glasses-simulator.php
           php -l tests/glasses-web-simulator-contract.php
+          php -l tests/glasses-live-virtual-preview-contract.php
 
       - name: JavaScript syntax
         run: node --check assets/js/glasses-web-simulator.js
 
       - name: Simulator architecture contract
         run: php tests/glasses-web-simulator-contract.php
+      - name: Hardware-free Live access, control state and write isolation
+        run: php tests/glasses-live-virtual-preview-contract.php
 
       - name: Preserve real POS KDS and AR authority
         run: |
