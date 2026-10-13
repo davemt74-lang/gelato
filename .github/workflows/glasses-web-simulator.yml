@@ -59,6 +59,12 @@ on:
       - 'tests/glasses-live-kds-commands.test.js'
       - 'tests/glasses-hud-manual-voice-parity.test.js'
       - 'tests/glasses-operator-hud-ux.test.js'
+      - 'assets/js/glasses-user-display-preferences.js'
+      - 'api/glasses-user-preferences.php'
+      - 'database/20261213_glasses_user_display_preferences.sql'
+      - 'tests/glasses-session-camera-badges.test.js'
+      - 'tests/glasses-user-display-preferences-contract.php'
+      - 'tests/glasses-hud-voice-contract.php'
       - 'tests/glasses-live-kds-contract.php'
       - 'tests/glasses-web-simulator-contract.php'
       - 'tests/glasses-live-virtual-preview-contract.php'
@@ -87,6 +93,8 @@ jobs:
           php -l api/glasses-camera-photo-library.php
           php -l api/glasses-order-photo-stages.php
           php -l api/glasses-photo-notifications.php
+          php -l api/glasses-user-preferences.php
+          php -l tests/glasses-user-display-preferences-contract.php
           php -l includes/glasses-customer-photo-notifications.php
           php -l includes/glasses-customer-photo-feedback.php
           php -l tests/glasses-customer-photo-feedback-contract.php
@@ -117,6 +125,7 @@ jobs:
           node --check assets/js/glasses-camera-config.js
           node --check assets/js/glasses-camera-runtime.js
           node --check assets/js/glasses-camera-workspace.js
+          node --check assets/js/glasses-user-display-preferences.js
           node --check assets/js/glasses-production-photo-flow.js
           node --check assets/js/glasses-customer-photo-notifications.js
           node --check assets/js/glasses-camera-similarity.js
@@ -132,6 +141,8 @@ jobs:
           node tests/glasses-live-kds-commands.test.js
           node tests/glasses-hud-manual-voice-parity.test.js
           node tests/glasses-operator-hud-ux.test.js
+          node tests/glasses-session-camera-badges.test.js
+          php tests/glasses-user-display-preferences-contract.php
           node tests/glasses-training-foundation.test.js
           node tests/glasses-camera-config.test.js
           node tests/glasses-camera-runtime.test.js
