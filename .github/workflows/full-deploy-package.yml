@@ -73,6 +73,8 @@ jobs:
             tests/mysql-foreign-key-diagnostics.php
             tests/mysql-v11-stored-generated-fk-compatibility.php
             tests/upgrade-credential-preservation.php
+            assets/css/admin-responsive-layout.css
+            tests/admin-responsive-layout-contract.php
             includes/UpgradeService.php
             deployment-check.php
             pos.php
@@ -104,6 +106,7 @@ jobs:
           php tests/upgrade-credential-preservation.php
           php tests/role-permission-enforcement-contract.php
           php tests/universal-admin-page-shell-contract.php
+          php tests/admin-responsive-layout-contract.php
 
           (cd "$deploy_root" && zip -q -r "$GITHUB_WORKSPACE/gelato-full-deploy.zip" .)
           unzip -t "$GITHUB_WORKSPACE/gelato-full-deploy.zip"
