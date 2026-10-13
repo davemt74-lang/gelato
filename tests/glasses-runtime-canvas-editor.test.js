@@ -9,9 +9,14 @@ for(const id of ['simHudEditorDock','calibrationToggle','simHudEditorToolbar','c
   'leftWidth','rightWidth','hudOpacityValue','hudBrightnessValue','leftWidthValue','rightWidthValue','hudOrdersRegion',
   'hudRight','hudBuildSteps','hudOrdersCount','simTicketTimeSync','glassesHudNotification','glassesHudNotificationTitle',
   'glassesHudNotificationMeta','glassesHudNotificationMessage'])single(id);
-assert.match(html,/id="simHudEditorDock"[\s\S]*?id="glassesStage"/,'calibration dock is above canvas');
+assert.match(html,/id="glassesStage"[\s\S]*?id="simHudEditorDock"/,'gear is inside canvas, not a new row');
 assert.match(html,/id="simHudEditorToolbar"[^>]*hidden/,'editor controls hidden until Edit Mode');
-assert.match(html,/id="simHudEditorAdvanced"/,'advanced settings use compact disclosure');
+assert.match(html,/id="simHudEditorAdvanced"/,'saved layouts still available');
+assert.match(html,/id="hudEditorDone"/,'Done closes editor');
+assert.match(html,/aria-label="Edit lens display layout"/,'gear is screen-reader accessible');
+assert.doesNotMatch(html,/id="leftEyeGuide"|id="rightEyeGuide"|id="safeAreaGuide"/,'obsolete optical calibration guides removed');
+for(const id of ['safeWidth','safeHeight','leftEyeX','leftEyeY','rightEyeX','rightEyeY','hudScale'])
+  assert.ok(!html.includes('id="'+id+'"'),'engineering calibration input removed: '+id);
 assert.match(html,/class="hud-panel-title hud-ticket-diagnostic" hidden/,'left ticket heading is not displayed');
 assert.match(html,/id="simTicketTimeSync" hidden/,'POS sync diagnostic is not displayed');
 assert.doesNotMatch(html,/id="hudIngredientAdded"|id="hudIngredientSkip"/,'no big Added/Skip buttons on lens');
@@ -28,6 +33,10 @@ assert.match(css,/#glassesStage \.hud-ticket-diagnostic\{display:none!important\
 assert.match(main,/function setCalibrationEnabled\(enabled\)/);
 assert.match(main,/dock\.dataset\.editing=calibrationEnabled/);
 assert.match(main,/tools\.hidden=!calibrationEnabled/,'toolbar follows Edit Mode');
+assert.match(main,/\$\('hudEditorDone'\)\.addEventListener\('click'/,'Done closes floating editor');
+assert.match(main,/toggle\.setAttribute\('aria-label',calibrationEnabled/,'gear accessible states');
+assert.match(main,/el\.addEventListener\('pointerdown'/,'whole panel draggable in edit mode');
+assert.match(main,/e\.target\.closest\('button,input,select,textarea,a/,'interactions are not intercepted');
 assert.match(main,/function bindRegionEditor\(regionName\)/);
 assert.match(main,/projection\.getBoundingClientRect\(\)/,'drag relative to scaled lens projection');
 assert.match(main,/window\.addEventListener\('pointermove',onMove\)/,'pointer drag');
@@ -35,6 +44,8 @@ assert.match(main,/move\.addEventListener\('keydown'/,'keyboard placement');
 assert.match(main,/resize\.addEventListener\('keydown'/,'keyboard resize');
 assert.match(main,/saveCalibration\(\)/,'existing per-runtime persistence');
 assert.match(css,/\.sim-hud-editor-dock\{/,'toolbar style');
+assert.match(css,/\.sim-stage-panel \.sim-hud-editor-dock\{[\s\S]*?position:absolute!important/,'gear floats without adding layout rows');
+assert.match(css,/#glassesStage\.calibrating \.safe-area-guide,[\s\S]*?display:none!important/,'optical guides stay hidden');
 assert.match(css,/\.sim-hud-editor-primary\{/,'four top controls');
 assert.match(css,/\.sim-hud-editor-advanced/);
 assert.match(notices,/positionUnderLeftTickets/);
