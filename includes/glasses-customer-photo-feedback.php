@@ -56,3 +56,29 @@ function glasses_customer_photo_feedback_save(PDO $pdo,int $org,int $customerId,
     catch(Throwable $e){error_log('[customer-photo-feedback-audit] '.$e->getMessage());}
     return ['saved'=>true,'rating'=>$v['rating']];
 }
+
+function glasses_customer_photo_feedback_staff(PDO $pdo,array $user,int $locationId):array
+{
+    glasses_customer_photo_staff_auth($pdo,$user,$locationId,false);
+    if(!glasses_customer_photo_feedback_ready($pdo))return [];
+    $q=$pdo->prepare("SELECT f.share_id,f.rating,f.comment,f.updated_at,s.stage,
+          oo.public_id order_public_id,c.check_number
+        FROM glasses_customer_photo_feedback f
+        JOIN glasses_order_photo_shares share ON share.organization_id=f.organization_id
+          AND share.id=f.share_id AND share.revoked_at IS NULL
+        JOIN glasses_order_photo_stages s ON s.organization_id=share.organization_id
+          AND s.id=share.stage_id AND s.photo_library_id=share.photo_library_id
+          AND s.status='confirmed'
+        JOIN online_orders oo ON oo.organization_id=share.organization_id
+          AND oo.id=share.online_order_id AND oo.customer_id=f.customer_id
+        JOIN kds_order_items k ON k.organization_id=s.organization_id AND k.id=s.kds_item_id
+          AND k.check_id=oo.pos_check_id
+        JOIN pos_checks c ON c.id=k.check_id AND c.organization_id=k.organization_id
+        WHERE f.organization_id=? AND share.location_id=? ORDER BY f.updated_at DESC LIMIT 100");
+    $q->execute([(int)$user['organization_id'],$locationId]);
+    return array_map(static fn(array $r):array=>[
+        'shareId'=>(int)$r['share_id'],'rating'=>(int)$r['rating'],
+        'comment'=>(string)($r['comment']??''),'updatedAt'=>(string)$r['updated_at'],
+        'stage'=>(string)$r['stage'],'checkNumber'=>(string)$r['check_number'],
+        'onlineOrderPublicId'=>(string)$r['order_public_id']],$q->fetchAll(PDO::FETCH_ASSOC));
+}
