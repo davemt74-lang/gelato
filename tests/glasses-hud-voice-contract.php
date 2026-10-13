@@ -10,8 +10,10 @@ $voice=(string)file_get_contents($root.'/assets/js/glasses-simulator-voice.js');
 $css=(string)file_get_contents($root.'/assets/css/glasses-simulator-hud-ux.css');
 hudAssert(str_contains($page,'assets/css/glasses-simulator-hud-ux.css?v=20261013-voice1'),'HUD stylesheet must be loaded after base simulator CSS');
 hudAssert(preg_match('~<script src="assets/js/glasses-web-simulator\\.js\\?v=[^"]+"></script>\\s*<script src="assets/js/glasses-voice-device\\.js\\?v=[^"]+"></script>\\s*<script src="assets/js/glasses-simulator-voice\\.js\\?v=[^"]+"></script>~',$page)===1,'voice module must load after simulator and voice device; cache version may change');
-foreach(['simViewHudOnly','simViewGlasses','simNavNext','simNavPrevious','simNavNextItem','simNavPreviousItem','simNavItemAdded','simNavRepeat','simVoiceToggle','simVoiceReplies','simVoiceHelp','simVoiceFeedback','simNavFeedback','simNavContext'] as $id)
+foreach(['simVoiceToggle','simVoiceReplies','simVoiceHelp','simVoiceFeedback','simNavFeedback','simNavContext'] as $id)
     hudAssert(str_contains($page,'id="'.$id.'"'),'missing accessible control '.$id);
+foreach(['simViewHudOnly','simViewGlasses','simNavNext','simNavPrevious','simNavNextItem','simNavPreviousItem','simNavItemAdded','simNavRepeat'] as $id)
+    hudAssert(!str_contains($page,'id="'.$id.'"'),'redundant right-sidebar navigation must not be rendered: '.$id);
 hudAssert(str_contains($css,'.sim-stage-panel{position:sticky')&&str_contains($css,'.glasses-stage{flex:none;min-height:460px'),'stage must not stretch to match long diagnostics');
 hudAssert(str_contains($css,'.glasses-stage.frame-none .lens-projection{inset:0!important'),'frameless mode must fill HUD stage');
 hudAssert(str_contains($css,'@media(max-width:640px)'),'HUD must support narrow phones');
