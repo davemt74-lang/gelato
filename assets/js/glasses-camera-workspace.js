@@ -246,7 +246,14 @@
     tb.setAttribute('role','tab');tb.setAttribute('aria-controls','gcPaneTraining');
     const train=document.createElement('section');train.id='gcPaneTraining';train.className='gc-camera-panel';train.hidden=true;
     train.setAttribute('role','tabpanel');train.setAttribute('aria-labelledby',tb.id);
-    tb.addEventListener('click',()=>select('training'));nav.append(tb);panes.append(train);
+    tb.addEventListener('click',()=>select('training'));
+    tb.addEventListener('keydown',event=>{
+      if(event.key==='ArrowRight'||event.key==='ArrowLeft'){
+        event.preventDefault();const next=event.key==='ArrowRight'?'camera1':'camera5';
+        select(next);controls[next].button.focus();
+      }
+    });
+    nav.append(tb);panes.append(train);
     controls.training={button:tb,pane:train};
     const old=$('simMultiCameraPanel');if(old)train.appendChild(old);
     const legacy=$('simCameraPhotoHistory')?.closest('.sim-camera-photo-history');if(legacy)legacy.hidden=true;
