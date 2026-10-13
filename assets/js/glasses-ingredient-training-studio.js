@@ -116,16 +116,17 @@ async function save(){
  const context={
    runtimePublicId:cfg.runtimePublicId,sessionPublicId:catalog.sessionPublicId,
    catalog,menuItemId:Number($('gitMenu').value),ingredientKey:$('gitIngredient').value,
-   phase:$('gitPhase').value,blob,
+   phase:$('gitPhase').value,blob,source,
    bbox:selected?.guide.positive?draftBox:null,
    cameraSlot:file?0:Number(photo?.slot||0),consent:$('gitConsent').checked
  };
  if(file){context.cameraSlot=0;} 
  const validation=plan.validate(context);if(validation){note(validation,true);return;}
+ if(file&&file.size>12582912){note('Image exceeds Vision Lab’s 12 MB upload limit.',true);return;}
  if(!file&&(!photo||photo.locationId!==catalog.locationId)){note('Captured photo location or camera changed. Select again.',true);return;}
  busy=true;$('gitSubmit').disabled=true;note('Saving to existing Vision Lab pending-review queue…');
  try{
-   const fp=photo?.fingerprint||(window.GelatoCameraSimilarity?.fingerprint?.(blob)?await window.GelatoCameraSimilarity.fingerprint(blob):null);
+   const fp=photo?.fingerprint||(window.GelatoCameraSimilarity?.fingerprint?await window.GelatoCameraSimilarity.fingerprint(blob):null);
    const response=await fetch('api/glasses-ingredient-training.php',{
      method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':cfg.csrf},
      body:JSON.stringify({action:'capture',csrf_token:cfg.csrf,
