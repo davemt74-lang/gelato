@@ -780,6 +780,7 @@ function decodeYoloV8(tensor,config){
   return nmsDetections(out,config.nmsIou,config.maxDetections);
 }
 async function unloadGovernedVisionModel(reason='unloaded'){
+  clearAssemblySuggestion();clearTemporalRuntime();stopVisionRuntime('model_unloaded');
   state.browserModel.loadEpoch+=1;const session=state.browserModel.session;
   state.browserModel.session=null;state.browserModel.assignment=null;state.browserModel.profile=null;state.browserModel.config=null;state.browserModel.package=null;state.browserModel.verifiedSha256=null;
   try{if(session&&typeof session.release==='function')await session.release();}catch{}
@@ -1079,7 +1080,7 @@ function renderTemporalPanel(){
 }
 async function autoEvaluateTemporalReadiness(now=Date.now()){
   const gate=temporalAssessment(now);state.temporalGate=gate;renderTemporalPanel();
-  if(visionMode()!=='automatic'||!gate.ready){state.temporalReadySince=0;return;}
+  if(visionMode()!=='automatic'||!gate.ready||state.mode==='live'&&!autoAssemblyOptIn){state.temporalReadySince=0;return;}
   if(!state.temporalReadySince){state.temporalReadySince=now;return;}
   if(now-state.temporalReadySince<VISION_READY_STABLE_MS||state.temporalValidationBusy)return;
   const fingerprint=(state.build?.publicId||'')+'|'+(state.build?.components||[]).map(c=>c.componentKey+':'+c.status+':'+c.detectedQuantity).join(',');
