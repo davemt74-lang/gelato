@@ -152,3 +152,33 @@ html,body{max-width:100%;overflow-x:hidden}
 .glasses-stage.calibrating .safe-area-guide{border-width:2px;box-shadow:0 0 20px #ffd37b22}
 /* Editing handles are attached to saved region geometry, even after Lock.
  * Disabling calibration hides the handles, not the chosen layout. */
+
+
+/* Camera 2–5 capture feeds never overlap the optical HUD. */
+.sim-multicamera{display:grid;gap:10px;border:1px solid #304c3b;border-radius:11px;padding:10px;background:#0e1a13}
+.sim-multicamera .console-heading{align-items:center}
+.sim-aux-camera-slots{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.sim-aux-camera{display:grid;align-content:start;gap:8px;min-width:0;background:#121d16;border:1px solid #345341;border-radius:10px;padding:9px}
+.sim-aux-camera header{display:flex;justify-content:space-between;gap:7px;align-items:center}
+.sim-aux-camera header strong{font-size:11px;color:#e5fff0}
+.sim-aux-camera header span{font-size:9px;color:#a5b9aa;max-width:60%;overflow-wrap:anywhere;text-align:right}
+.sim-aux-camera header span[data-state=ready]{color:#91f1b2}
+.sim-aux-camera header span[data-state=failed],.sim-aux-camera header span[data-state=blocked]{color:#ffb0a9}
+.sim-aux-camera label{display:grid;gap:3px;font-size:10px;color:#a6c8b2}
+.sim-aux-camera select{min-width:0;width:100%;padding:7px;background:#09140d;border:1px solid #43644c;color:#e3f8e8;border-radius:6px;font-size:10px}
+.sim-aux-preview{height:110px;border:1px solid #263e30;background:#050b07;border-radius:8px;overflow:hidden;display:grid;place-items:center}
+.sim-aux-preview video{width:100%;height:100%;object-fit:cover;grid-area:1/1}
+.sim-aux-preview video[hidden]{display:none}
+.sim-aux-preview p{grid-area:1/1;padding:8px;margin:0;font-size:10px;color:#819c87;text-align:center}
+.sim-aux-preview p[hidden]{display:none}
+.sim-aux-camera button,.sim-multicamera>button{border:1px solid #456750;background:#1c3928;color:#dafde4;border-radius:7px;padding:7px;font-size:10px;cursor:pointer}
+.sim-aux-camera .inline-actions{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.sim-aux-camera button[disabled]{opacity:.42;cursor:not-allowed}
+.sim-camera-training{display:grid;gap:9px;border:1px solid #44674f;padding:9px;border-radius:9px;background:#17271b}
+.sim-camera-training[hidden]{display:none!important}
+.sim-camera-training-frame{position:relative;line-height:0;max-width:100%;touch-action:none}
+.sim-camera-training-frame canvas{display:block;width:100%;height:auto;border:1px solid #4b7057;border-radius:6px}
+#simCameraTrainingOverlay{position:absolute;inset:0;cursor:crosshair;touch-action:none;border:0}
+#simCameraTrainingLabel{width:100%;min-width:0;background:#0b1710;border:1px solid #446750;color:#e3fbe8;border-radius:6px;padding:9px}
+.sim-ticket-time-sync{font-size:8px;letter-spacing:.08em;font-weight:800;color:#90d9ab}
+@media(max-width:1200px){.sim-aux-camera-slots{grid-template-columns:minmax(0,1fr)}}
