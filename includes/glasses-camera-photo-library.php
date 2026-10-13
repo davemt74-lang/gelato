@@ -71,11 +71,16 @@ function glasses_camera_photo_command(PDO $pdo,array $user,int $locationId,array
         $conf=$pdo->prepare("SELECT enabled FROM glasses_camera_locations WHERE organization_id=? AND location_id=? AND slot=? LIMIT 1");
         $conf->execute([$org,$locationId,$slot]);
         if(!(bool)$conf->fetchColumn())throw new DomainException('Camera is off. Enable the camera before saving photos.');
-        $media=$pdo->prepare("SELECT id,status,consent_basis,perceptual_hash FROM glasses_vision_training_media
+        $media=$pdo->prepare("SELECT id,status,consent_basis,perceptual_hash,metadata_json FROM glasses_vision_training_media
           WHERE organization_id=? AND public_id=? LIMIT 1");
         $media->execute([$org,$public]);$row=$media->fetch(PDO::FETCH_ASSOC);
         if(!$row||$row['status']!=='active'||$row['consent_basis']!=='training_media_opt_in')
             throw new DomainException('Only active, explicitly opted-in Vision Lab media can be saved.');
+        $provenance=json_decode((string)($row['metadata_json']??'{}'),true)?:[];
+        if(($provenance['source']??null)!=='camera_stage_gallery'||
+            (int)($provenance['cameraSlot']??0)!==$slot||
+            (int)($provenance['locationId']??0)!==$locationId)
+            throw new DomainException('The photo was not captured from this authorized camera location.');
         $existing=$pdo->prepare("SELECT id,location_id,camera_slot FROM glasses_camera_photo_library WHERE organization_id=? AND media_id=?");
         $existing->execute([$org,(int)$row['id']]);$prior=$existing->fetch(PDO::FETCH_ASSOC);
         if($prior){
