@@ -6,6 +6,12 @@ on:
   pull_request:
     paths:
       - 'workspace.php'
+      - 'glasses-pos-kds-test.php'
+      - 'glasses-vision-lab.php'
+      - 'assets/css/glasses-pos-kds-test.css'
+      - 'assets/js/glasses-pos-kds-test.js'
+      - 'assets/css/glasses-vision-lab.css'
+      - 'tests/glasses-pos-kds-workflow-contract.php'
       - 'js/workspace-shell-sync.js'
       - 'js/admin-shell-consolidation.js'
       - 'css/admin-tech-theme.css'
@@ -90,6 +96,11 @@ jobs:
             pos.php
             kds.php
             glasses-vision-lab.php
+            glasses-simulator.php
+            glasses-pos-kds-test.php
+            assets/css/glasses-pos-kds-test.css
+            assets/js/glasses-pos-kds-test.js
+            tests/glasses-pos-kds-workflow-contract.php
             upgrade.php
             database/install.sql
             includes/bootstrap.php
@@ -118,6 +129,8 @@ jobs:
           php tests/universal-admin-page-shell-contract.php
           php tests/workspace-admin-sidebar-dedupe-contract.php
           php tests/admin-responsive-layout-contract.php
+          php tests/glasses-pos-kds-workflow-contract.php
+          node --check assets/js/glasses-pos-kds-test.js
 
           (cd "$deploy_root" && zip -q -r "$GITHUB_WORKSPACE/gelato-full-deploy.zip" .)
           unzip -t "$GITHUB_WORKSPACE/gelato-full-deploy.zip"
