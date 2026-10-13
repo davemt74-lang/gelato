@@ -654,3 +654,19 @@ html,body{max-width:100%;overflow-x:hidden}
 .git-studio input[type=checkbox]{accent-color:#71ed99;flex:none}
 .git-studio #gitFeedback[data-error="1"]{color:#ffb2a0}
 @media(max-width:560px){.git-source-grid{grid-template-columns:1fr}}
+
+/* Every assigned headset has its own station and employee controls under Runtime. */
+.sgv-tabbed-console #sgv-panel-runtime .glasses-runtime-toolbar,
+.sgv-tabbed-console #sgv-panel-runtime .glasses-runtime-training-controls{
+ display:flex;flex-wrap:wrap;align-items:end;gap:8px;padding:12px;
+ background:#10231a;border:1px solid #315542;border-radius:9px;margin:7px 0;
+}
+.sgv-tabbed-console #sgv-panel-runtime .glasses-runtime-toolbar label,
+.sgv-tabbed-console #sgv-panel-runtime .glasses-runtime-training-controls label{
+ display:flex;flex-direction:column;gap:5px;font-size:10px;color:#c8ebd4;min-width:115px;flex:1 1 125px;
+}
+.sgv-tabbed-console #sgv-panel-runtime .glasses-runtime-toolbar select,
+.sgv-tabbed-console #sgv-panel-runtime .glasses-runtime-training-controls select{
+ width:100%;min-width:0;max-width:none;
+}
+#glassesRuntimeSaveStation[data-dirty="1"]{background:#197d43;border-color:#52d789;color:#fff}
