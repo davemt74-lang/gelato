@@ -12,7 +12,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <title>Web Glasses Simulator · Gelato</title>
 <link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20261013-live1">
 <link rel="stylesheet" href="assets/css/glasses-simulator-hud-ux.css?v=20261013-voice1">
-<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-261">
+<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-hud263">
 </head>
 <body>
 <header class="sim-topbar">
@@ -153,7 +153,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
         <aside class="hud-orders-left editable-region" id="hudOrdersRegion" data-region="hudOrdersRegion">
           <button class="region-handle region-move" type="button" tabindex="-1" aria-hidden="true">MOVE</button>
           <button class="region-handle region-resize" type="button" tabindex="-1" aria-hidden="true">↘</button>
-          <div class="hud-panel-title"><small>ACTIVE ORDERS</small><span id="hudOrdersCount">0</span></div>
+          <div class="hud-panel-title"><small>KDS ORDERS · 1–8</small><span id="hudOrdersCount">0</span></div>
           <div class="sim-ticket-time-sync" id="simTicketTimeSync">POS TIME · WAITING</div>
           <div id="hudOrders" class="hud-orders-list"></div>
         </aside>
@@ -172,8 +172,9 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
             <strong id="hudCookAlertMessage">Correct the issue before continuing.</strong>
           </div>
           <div class="hud-card hud-build-card">
-            <div class="hud-panel-title"><small>ACTIVE BUILD</small><span id="hudBuildTicket">#1042</span></div>
-            <strong id="hudBuildItem">Club Sandwich + Fries</strong>
+            <div class="hud-panel-title"><small>BUILDING</small><span id="hudBuildTicket">#1</span></div>
+            <strong id="hudBuildItem">Select a KDS item</strong>
+            <div class="hud-current-instruction" id="hudCurrentInstruction" aria-live="polite">Choose an order to view its recipe</div>
             <span id="hudBuildMeta">Table 12 · Regular</span>
             <ol id="hudBuildSteps" class="hud-build-steps"></ol>
           </div>
@@ -276,6 +277,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
         <label><span>Left eye Y</span><input id="leftEyeY" type="range" min="-20" max="20" value="0"><output id="leftEyeYValue">0%</output></label>
         <label><span>Right eye X</span><input id="rightEyeX" type="range" min="-20" max="20" value="0"><output id="rightEyeXValue">0%</output></label>
         <label><span>Right eye Y</span><input id="rightEyeY" type="range" min="-20" max="20" value="0"><output id="rightEyeYValue">0%</output></label>
+        <label><span>Left HUD width</span><input id="leftWidth" type="range" min="12" max="50" value="23"><output id="leftWidthValue">23%</output></label>
         <label><span>Right HUD width</span><input id="rightWidth" type="range" min="15" max="55" value="29"><output id="rightWidthValue">29%</output></label>
       </div>
       <label class="preset-row"><span>LAYOUT PRESET</span><select id="presetSelect"></select></label>
@@ -474,7 +476,7 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-v10-soak-harness.js?v=20260929-v10-5"></script>
 <script src="assets/js/glasses-v10-cook-ux-harness.js?v=20260929-v10-6"></script>
 <script src="js/voice-session-presence.js?v=20261013-presence1"></script>
-<script src="assets/js/glasses-web-simulator.js?v=20261013-order259"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20261013-hud263"></script>
 <script src="assets/js/glasses-voice-device.js?v=20261013-device1"></script>
 <script src="assets/js/glasses-simulator-voice.js?v=20261013-kds2"></script>
 <script src="assets/js/glasses-multicamera.js?v=20261013-multi1"></script>
