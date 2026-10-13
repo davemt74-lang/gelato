@@ -15,7 +15,8 @@ if(!app_has_permission('kds.view',$user)){http_response_code(403);exit('Kitchen 
 <script src="js/agent-page-context.js?v=20260915-context3"></script>
 <script src="js/kds-agent-context.js?v=20261013-global2"></script>
 <script src="js/voice-turn-taking.js?v=20261013-turn1"></script>
-<script src="js/global-agent.js?v=20261013-natural1"></script>
+<script src="js/proactive-listening-commands.js?v=20261013-listening1"></script>
+<script src="js/global-agent.js?v=20261013-listening1"></script>
 <script src="js/kds-spoken-orders.js?v=20261013-natural1"></script>
 <script src="js/kds-agent-sidebar.js?v=20261013-natural1"></script>
 <script src="js/kds.js?v=20261013-natural1"></script>
