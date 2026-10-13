@@ -59,7 +59,7 @@ previewAssert(str_contains($js,'if(state.device?.virtualPreview)return false;'),
 previewAssert(str_contains($js,'startLiveStationSync();'),'automatic live synchronization starts at load');
 previewAssert(str_contains($js,'simControlAudit'),'disabled controls audit present');
 previewAssert(str_contains($php,'id="simLiveGuide"')&&str_contains($php,'id="simControlAudit"'),'visible live/readiness status present');
-previewAssert(str_contains($api,"!empty($device['virtual_preview'])?glasses_simulator_preview_work"),'GET station updates support virtual display');
+previewAssert(str_contains($api,'glasses_simulator_preview_work($pdo,$device)'),'GET station updates support virtual display');
 previewAssert(str_contains((string)file_get_contents(__DIR__.'/../includes/glasses-simulator.php'),'kds_production_board($pdo,$org,$locationId,$stationId,false)'),'virtual preview reads real KDS board');
 previewAssert(!str_contains($js,'const state={mode:\'mock\''),'cannot silently regress to Mock boot');
 echo "glasses-live-virtual-preview=ok\n";
