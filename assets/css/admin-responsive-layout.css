@@ -38,6 +38,8 @@ body.gelato-universal-admin-page :is(.admin-shell,.admin-page,.content,.main){ m
 }
 .gvo-grid,.gvm-top-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 .gvo-table-wrap,.gvm-table-wrap,.gvp-table-wrap{max-width:100%;min-width:0;overflow-x:auto}
+:is(.gvo-table-wrap,.gvm-table-wrap,.gvp-table-wrap) table{width:100%;min-width:0!important;table-layout:fixed}
+:is(.gvo-table-wrap,.gvm-table-wrap,.gvp-table-wrap) :is(th,td){white-space:normal!important;overflow-wrap:anywhere}
 :is(.gvo-panel,.gvm-panel,.gvp-panel) :is(pre,code,p,small,strong){overflow-wrap:anywhere}
 @media(max-width:1260px){
  .vl-hero,.vl-grid,.vl-intel-columns,.vl-balance-columns,.vl-qa-columns,
