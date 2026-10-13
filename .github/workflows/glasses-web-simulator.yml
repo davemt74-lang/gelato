@@ -8,6 +8,12 @@ on:
       - 'includes/glasses-simulator.php'
       - 'assets/css/glasses-web-simulator.css'
       - 'assets/js/glasses-web-simulator.js'
+      - 'assets/js/glasses-hud-notifications.js'
+      - 'assets/js/glasses-employee-runtimes.js'
+      - 'includes/glasses-employee-runtimes.php'
+      - 'database/20261214_glasses_employee_runtimes.sql'
+      - 'tests/glasses-hud-notifications.test.js'
+      - 'docs/GLASSES-HUD-NOTIFICATIONS-SECTION266-ACCEPTANCE.md'
       - 'assets/js/glasses-item-assembly.js'
       - 'tests/glasses-ticket-ingredient-assembly.test.js'
       - 'assets/js/glasses-simulator-voice.js'
@@ -111,6 +117,7 @@ jobs:
           php -l includes/glasses-camera-locations.php
           php -l tests/glasses-camera-locations-contract.php
           php -l includes/glasses-simulator.php
+          php -l includes/glasses-employee-runtimes.php
           php -l tests/glasses-web-simulator-contract.php
           php -l tests/glasses-live-virtual-preview-contract.php
           php -l tests/glasses-hud-voice-contract.php
@@ -120,6 +127,8 @@ jobs:
       - name: JavaScript syntax
         run: |
           node --check assets/js/glasses-web-simulator.js
+          node --check assets/js/glasses-hud-notifications.js
+          node --check assets/js/glasses-employee-runtimes.js
           node --check assets/js/glasses-item-assembly.js
           node --check assets/js/glasses-simulator-voice.js
           node --check assets/js/glasses-voice-device.js
@@ -145,6 +154,7 @@ jobs:
           node tests/glasses-hud-manual-voice-parity.test.js
           node tests/glasses-operator-hud-ux.test.js
           node tests/glasses-ticket-ingredient-assembly.test.js
+          node tests/glasses-hud-notifications.test.js
           node tests/glasses-session-camera-badges.test.js
           php tests/glasses-user-display-preferences-contract.php
           node tests/glasses-training-foundation.test.js
