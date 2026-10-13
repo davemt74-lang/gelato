@@ -189,7 +189,7 @@ function scheduleLiveStationSync(delay=LIVE_SYNC_BASE_MS){
 function applyLiveWork(work,{announce=false}={}){
   const previous=state.syncFingerprint,next=liveWorkFingerprint(work);
   const notifier=window.GelatoGlassesHudNotifications;
-  const changes=previous&&state.work?.station?.publicId===work?.station?.publicId
+  const changes=previous&&!state.kitchenBusy&&state.work?.station?.publicId===work?.station?.publicId
     ?notifier?.transitioned?.(state.work.items||[],work?.items||[])||[]:[];
   const items=work?.items||[],ids=items.map(x=>x.kdsItemPublicId);
   const activeBuildItem=state.build?.kdsItemPublicId||'';
