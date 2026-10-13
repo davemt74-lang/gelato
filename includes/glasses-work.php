@@ -87,6 +87,7 @@ function glasses_work_item(PDO $pdo,int $org,array $row): array
         ],
         'timing'=>[
             'ageSeconds'=>(int)($row['ageSeconds']??0),
+            'posOpenAgeSeconds'=>isset($row['pos_open_age_seconds'])?max(0,(int)$row['pos_open_age_seconds']):null,
             'targetSeconds'=>(int)($row['target_seconds']??0),
             'slaRatio'=>(float)($row['slaRatio']??0),
             'warning'=>!empty($row['warning']),
