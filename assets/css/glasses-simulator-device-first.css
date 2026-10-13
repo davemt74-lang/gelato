@@ -182,3 +182,37 @@ html,body{max-width:100%;overflow-x:hidden}
 #simCameraTrainingLabel{width:100%;min-width:0;background:#0b1710;border:1px solid #446750;color:#e3fbe8;border-radius:6px;padding:9px}
 .sim-ticket-time-sync{font-size:8px;letter-spacing:.08em;font-weight:800;color:#90d9ab}
 @media(max-width:1200px){.sim-aux-camera-slots{grid-template-columns:minmax(0,1fr)}}
+
+
+/* Section 257 — persisted production camera locations, disabled-by-default capture */
+.camera-setup-controls{display:grid;gap:9px;border:1px solid #3b6149;border-radius:10px;padding:11px;background:#0e1e14;min-width:0}
+.camera-setup-head{display:flex;gap:8px;justify-content:space-between;align-items:center}
+.camera-setup-head strong{font-size:11px;color:#ddffeb}
+.camera-setup-head .cam-onoff{display:flex;align-items:center;gap:5px;font-size:11px;color:#dbffdf}
+.camera-setup-head input{accent-color:#7de9a7;width:18px;height:18px}
+.camera-setup-controls>label,.camera-setup-fields label{display:grid;gap:5px;font-size:10px;color:#b5d6c0}
+.camera-setup-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-items:end}
+.camera-setup-controls input:not([type=checkbox]),.camera-setup-controls select{width:100%;min-width:0;border:1px solid #456a52;background:#101c14;color:#e9fff0;padding:7px;border-radius:6px;font-size:11px}
+.camera-setup-zones{display:grid;gap:6px}
+.camera-setup-zones label{display:grid;grid-template-columns:55px minmax(0,1fr) 33px;align-items:center;gap:7px;font-size:10px;color:#bbdbc5}
+.camera-setup-zones input{min-width:0;accent-color:#9bedbd}
+.camera-setup-zones output{text-align:right;font-variant-numeric:tabular-nums}
+.camera-setup-controls .inline-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.camera-setup-controls button{border:1px solid #4b7154;background:#244331;color:#dffcea;border-radius:7px;padding:8px;font-size:10px;font-weight:700}
+.camera-setup-controls button:disabled{opacity:.4;cursor:not-allowed}
+.camera-capture-zone{position:absolute;z-index:16;pointer-events:auto;border:2px dashed #a4fabd;background:rgba(66,175,111,.05);box-shadow:0 0 0 1px rgba(0,0,0,.75);cursor:move;touch-action:none;min-width:12px;min-height:12px}
+.camera-capture-zone:after{content:"CAPTURE AREA";position:absolute;top:2px;left:4px;font-size:8px;font-weight:900;letter-spacing:.05em;background:#0a2015bb;color:#b6ffd0;padding:3px 5px;border-radius:3px}
+#glassesStage .camera-capture-zone{border-color:rgba(160,255,182,.75);z-index:10}
+.sim-aux-camera .camera-setup-controls{padding:7px;gap:7px}
+.sim-aux-camera .camera-setup-fields{grid-template-columns:minmax(0,1fr)}
+.sim-aux-camera .camera-setup-zones label{grid-template-columns:43px minmax(0,1fr) 29px}
+.sim-camera-photo-history{display:grid;gap:9px;border:1px solid #314f3b;border-radius:11px;padding:10px}
+.sim-camera-photo-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.camera-photo-entry{display:grid;gap:5px;background:#0d1b12;border:1px solid #385040;padding:7px;border-radius:8px;min-width:0}
+.camera-photo-entry img{width:100%;aspect-ratio:4/3;object-fit:contain;background:#050805}
+.camera-photo-entry span{color:#cde8d1;font-size:9px;overflow-wrap:anywhere}
+.camera-photo-entry button{border:1px solid #49654f;border-radius:6px;background:#21402d;color:#e1ffeb;padding:7px;font-size:10px}
+@media(max-width:1100px){.sim-camera-photo-grid{grid-template-columns:minmax(0,1fr)}}
+
+.camera-capture-zone{pointer-events:none;opacity:.66}
+.camera-zone-editing .camera-capture-zone,.camera-zone-editing#glassesStage .camera-capture-zone{pointer-events:auto;opacity:1}

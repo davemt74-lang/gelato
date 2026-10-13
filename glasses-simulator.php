@@ -12,7 +12,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <title>Web Glasses Simulator · Gelato</title>
 <link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20261013-live1">
 <link rel="stylesheet" href="assets/css/glasses-simulator-hud-ux.css?v=20261013-voice1">
-<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-multi1">
+<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-cam257">
 </head>
 <body>
 <header class="sim-topbar">
@@ -474,10 +474,11 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-v10-soak-harness.js?v=20260929-v10-5"></script>
 <script src="assets/js/glasses-v10-cook-ux-harness.js?v=20260929-v10-6"></script>
 <script src="js/voice-session-presence.js?v=20261013-presence1"></script>
-<script src="assets/js/glasses-web-simulator.js?v=20261013-multi1"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20261013-cam257"></script>
 <script src="assets/js/glasses-voice-device.js?v=20261013-device1"></script>
 <script src="assets/js/glasses-simulator-voice.js?v=20261013-kds2"></script>
 <script src="assets/js/glasses-multicamera.js?v=20261013-multi1"></script>
+<script src="assets/js/glasses-camera-config.js?v=20261013-cam257"></script>
 <script src="assets/js/glasses-simulator-tabs.js?v=20261013-device1"></script>
 </body>
 </html>

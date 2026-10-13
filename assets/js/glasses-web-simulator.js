@@ -302,6 +302,7 @@ async function loadDevices(){
       +state.devices.map(x=>'<option value="'+escapeHtml(x.publicId)+'">'+escapeHtml(x.locationName||'Restaurant')+' · '+escapeHtml(x.displayName)+(x.virtualPreview?' (no hardware)':'')+'</option>').join('');
     state.device=device;
     $('deviceSelect').value=device?.publicId||'';
+    window.dispatchEvent(new CustomEvent('gelato-glasses-location-change',{detail:{locationId:device?.locationId||null}}));
     log('SYSTEM',device?.virtualPreview?'Live browser preview selected — no physical glasses required.':'Loaded '+state.devices.length+' accessible displays.');
   }catch(e){
     state.devices=[];state.device=null;$('deviceSelect').innerHTML='<option value="">Cannot load displays</option>';
@@ -331,7 +332,9 @@ async function enumerateCameras(){
   $('cameraDeviceSelect').innerHTML='<option value="">Default camera</option>'+state.cameraDevices.map((d,i)=>'<option value="'+escapeHtml(d.deviceId)+'">'+escapeHtml(d.label||('Camera '+(i+1)))+'</option>').join('');
   if(saved&&state.cameraDevices.some(d=>d.deviceId===saved))$('cameraDeviceSelect').value=saved;
 }
+let cameraStartEpoch=0;
 function stopCamera(reason='stopped'){
+  ++cameraStartEpoch;
   stopVisionRuntime(reason);
   if(state.cameraStream)state.cameraStream.getTracks().forEach(t=>t.stop());
   state.dataset.frozen=false;state.dataset.drag=null;state.dataset.annotations=[];state.dataset.captureGroup=null;state.dataset.burstSeq=0;renderDatasetAnnotations();
@@ -342,16 +345,20 @@ function stopCamera(reason='stopped'){
   if(state.cameraSource==='camera')$('scenePlaceholder').hidden=false;
 }
 async function startCamera(){
+  if(window.GelatoCameraConfiguration?.isEnabled(1)!==true){log('CAMERA','Camera 1 is off in location settings. Turn it on in the Camera tab.');return;}
   if(!cameraSupported()){setCameraHealth('error','UNSUPPORTED');log('CAMERA','Browser camera API is unavailable.');return;}
   stopCamera();
+  const epoch=cameraStartEpoch;
   const [w,h]=($('cameraResolution').value||'1280x720').split('x').map(Number),deviceId=$('cameraDeviceSelect').value;
   const videoConstraints={width:{ideal:w},height:{ideal:h},frameRate:{ideal:30,max:30}};
   if(deviceId)videoConstraints.deviceId={exact:deviceId};else videoConstraints.facingMode={ideal:'environment'};
   setCameraHealth('starting','STARTING');
   try{
     const stream=await navigator.mediaDevices.getUserMedia({video:videoConstraints,audio:false});
+    if(epoch!==cameraStartEpoch||document.hidden||window.GelatoCameraConfiguration?.isEnabled(1)!==true){stream.getTracks().forEach(t=>t.stop());return;}
     state.cameraStream=stream;state.cameraTrack=stream.getVideoTracks()[0]||null;
     const video=$('cameraVideo');video.srcObject=stream;video.hidden=false;await video.play();
+    if(epoch!==cameraStartEpoch||document.hidden||window.GelatoCameraConfiguration?.isEnabled(1)!==true){stopCamera('disabled');return;}
     $('sceneImage').hidden=true;$('scenePlaceholder').hidden=true;
     $('startCamera').disabled=true;$('stopCamera').disabled=false;$('captureFrame').disabled=false;
     state.cameraSource='camera';$('sceneSourceSelect').value='camera';applyCameraPresentation();await enumerateCameras();
@@ -1403,7 +1410,7 @@ async function handoff(){try{
 }catch(e){state.cookUx.handoffArmed=false;$('handoffExpo').textContent='Send to Expo / Finishing';log('ERROR',e.message);}}
 function resetSimulator(){stopShadowModel('build_reset');unloadGovernedVisionModel('build_reset');state.build=null;state.validation=null;state.selectedKdsItemPublicId='';clearTemporalRuntime();clearCameraTarget();$('detectionLayer').innerHTML='';log('SYSTEM','Simulator build state reset; POS/KDS records were not changed.');refreshWork();}
 $('modeSelect').addEventListener('change',async e=>{stopAutoPlay();stopLiveStationSync('idle');await unloadGovernedVisionModel('build_reset');state.mode=e.target.value;state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;clearTemporalRuntime();state.syncFingerprint='';log('MODE','Switched to '+state.mode+'.');if(state.mode==='live'){if(state.device?.virtualPreview){state.recovery.state='ready';renderRuntimeRecovery();startLiveStationSync();}else{enterRecovery('recovering','live_mode_selected');await resumeRuntimeRecovery('live_mode_selected');}}else{state.recovery.state='ready';state.recovery.suppressAutomatic=false;state.recovery.lastReason='mock_runtime_ready';renderRuntimeRecovery();await refreshWork();}});
-$('deviceSelect').addEventListener('change',async e=>{stopLiveStationSync('idle');await unloadGovernedVisionModel('build_reset');state.device=state.devices.find(x=>x.publicId===e.target.value)||null;if(state.device)localStorage.setItem(LIVE_DEVICE_KEY,state.device.publicId);state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;clearTemporalRuntime();state.syncFingerprint='';if(state.mode==='live'&&state.device){if(state.device.virtualPreview){state.recovery.state='ready';renderRuntimeRecovery();startLiveStationSync();}else{enterRecovery('recovering','device_changed');await resumeRuntimeRecovery('device_changed');}}else render();});
+$('deviceSelect').addEventListener('change',async e=>{stopLiveStationSync('idle');await unloadGovernedVisionModel('build_reset');state.device=state.devices.find(x=>x.publicId===e.target.value)||null;if(state.device)localStorage.setItem(LIVE_DEVICE_KEY,state.device.publicId);window.dispatchEvent(new CustomEvent('gelato-glasses-location-change',{detail:{locationId:state.device?.locationId||null}}));state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;clearTemporalRuntime();state.syncFingerprint='';if(state.mode==='live'&&state.device){if(state.device.virtualPreview){state.recovery.state='ready';renderRuntimeRecovery();startLiveStationSync();}else{enterRecovery('recovering','device_changed');await resumeRuntimeRecovery('device_changed');}}else render();});
 $('workItemSelect').addEventListener('change',e=>{state.selectedKdsItemPublicId=e.target.value;state.previewStepIndex=0;state.validation=null;render();});
 $('refreshWork').addEventListener('click',refreshWork);$('startBuild').addEventListener('click',startBuild);$('resetSimulator').addEventListener('click',resetSimulator);$('injectUnexpected').addEventListener('click',injectUnexpected);$('evaluateBuild').addEventListener('click',validate);$('autoPlayBuild').addEventListener('click',toggleAutoPlay);$('nextDetection').addEventListener('click',playNextMockDetection);$('lowConfidenceDetection').addEventListener('click',injectLowConfidenceDetection);$('completeMockBuild').addEventListener('click',completeMockScenario);$('handoffExpo').addEventListener('click',handoff);$('clearLog').addEventListener('click',()=>{state.logs=[];renderLog();});
 $('sceneSourceSelect').addEventListener('change',async e=>{state.cameraSource=e.target.value;if(state.cameraSource==='camera'){await startCamera();}else{stopCamera();$('sceneImage').hidden=!$('sceneImage').src;$('scenePlaceholder').hidden=!!$('sceneImage').src;}});
@@ -1762,7 +1769,9 @@ function simulatorNavigation(action,options={}){
 }
 window.GelatoGlassesNavigation={dispatch:simulatorNavigation,context:()=>({
   mode:state.mode,items:orderItems().length,item:selectedItem()?.posLine?.name||null,
-  step:(state.previewStepIndex||0)+1,virtual:!!state.device?.virtualPreview
+  step:(state.previewStepIndex||0)+1,virtual:!!state.device?.virtualPreview,
+  locationId:state.device?.locationId||null,stationPublicId:state.device?.stationPublicId||null
 })};
+window.GelatoGlassesPrimaryCamera={stop:()=>stopCamera('disabled'),active:()=>!!state.cameraStream};
 (async()=>{await loadDevices();const cp=cameraPrefs();if(cp.resolution)$('cameraResolution').value=cp.resolution;if(cp.fit)$('cameraFit').value=cp.fit;$('cameraMirror').checked=!!cp.mirror;applyCameraPresentation();await enumerateCameras();if(!cameraSupported())setCameraHealth('error','UNSUPPORTED');refreshPresets();applyCalibration();render();if(state.device){startLiveStationSync();}else{setSyncBadge('error','NO DISPLAY');}setInterval(renderTopStatus,30000);setInterval(tickLiveTicketTimers,1000);renderRuntimeRecovery();refreshDeviceHealth();setInterval(refreshDeviceHealth,5000);const savedResume=recoveryStored();if(savedResume?.devicePublicId&&state.device?.publicId===savedResume.devicePublicId&&!state.device.virtualPreview){resumeRuntimeRecovery('app_restart_resume');}log('SYSTEM','Simulator ready. Pizza Line Reference HUD loaded.');})();
 })();
