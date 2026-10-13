@@ -1960,6 +1960,19 @@ function simulatorNavigation(action,options={}){
   if(action==='status')return {ok:true,message:state.mode==='mock'?'Mock demonstration; sample orders only.':'Live display, '+items.length+' KDS item'+(items.length===1?'':'s')+'. '+(current?'Selected '+(current.posLine?.name||'item')+'.':'No active KDS work.')+(state.device?.virtualPreview?(state.device?.kitchenWritable?' Kitchen controls enabled.':' View-only; kitchen changes require KDS update permission.'):' Paired device selected.')};
   return {ok:false,message:'Unknown command. Try ingredient added, skip ingredient, next item, repeat, or status.'};
 }
+window.GelatoGlassesAssemblyContext={current:()=>{
+  const item=selectedItem();
+  if(!item||state.mode!=='live'||state.device?.virtualPreview||!cfg.runtimePublicId)return null;
+  return {
+    kdsItemPublicId:item.kdsItemPublicId,
+    itemName:item.posLine?.name||'Kitchen item',
+    ticketNumber:item.ticket?.checkNumber||'',
+    devicePublicId:state.device?.publicId||'',
+    stationPublicId:state.device?.stationPublicId||'',
+    ingredients:assembly()?.ingredientsFor(item)||[],
+    currentIngredientId:currentAssemblyIngredient(item)?.id||''
+  };
+}};
 window.GelatoGlassesNavigation={dispatch:simulatorNavigation,context:()=>({
   mode:state.mode,items:orderItems().length,item:selectedItem()?.posLine?.name||null,
   step:(state.previewStepIndex||0)+1,virtual:!!state.device?.virtualPreview,
