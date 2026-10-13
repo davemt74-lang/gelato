@@ -59,6 +59,11 @@ assert.match(js,/operatorConfirmed:true/,'assisted uses explicit operator confir
 assert.match(js,/renderBuildRail\(item\)/,'suggestion visible on lens');
 assert.match(js,/assemblySources.set\(/,'local provenance distinguishes operator and governed recognition');
 assert.match(js,/if\(next&&!state.build\)/,'build cannot silently switch ticket item');
+assert.match(js,/reconcileAutomaticAssemblyEvidence\(\)/,'retractions reopen automatically acknowledged ingredients');
+assert.match(js,/rejectedAssemblyTracks.add\(assemblySuggestion.signature\)/,'rejected suggestion is not immediately repeated');
+assert.match(js,/state.mode==='live'&&!autoAssemblyOptIn\)\{state.temporalReadySince=0;return;\}/,'no automatic validation when opt-in is off');
+assert.match(js,/clearAssemblySuggestion\(\);clearTemporalRuntime\(\);stopVisionRuntime\('model_unloaded'\)/,'model unload invalidates transient recognition evidence');
+
 assert.match(html,/id="visionAssemblyAutoOptIn"/,'per-runtime explicit opt-in exists');
 assert.match(html,/id="hudAssemblySuggestion"/);
 assert.match(html,/id="hudConfirmSuggestion"/);
