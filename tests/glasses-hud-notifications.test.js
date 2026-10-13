@@ -1,0 +1,88 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const source=fs.readFileSync('assets/js/glasses-hud-notifications.js','utf8');
+const php=fs.readFileSync('glasses-simulator.php','utf8');
+const main=fs.readFileSync('assets/js/glasses-web-simulator.js','utf8');
+const voice=fs.readFileSync('assets/js/glasses-simulator-voice.js','utf8');
+const tabs=fs.readFileSync('assets/js/glasses-simulator-tabs.js','utf8');
+const css=fs.readFileSync('assets/css/glasses-simulator-device-first.css','utf8');
+let now=100000;
+const saved=new Map(),spoken=[];
+const makeEl=()=>({textContent:'',hidden:true,checked:false,dataset:{},innerHTML:'',listeners:{},
+  addEventListener(event,fn){this.listeners[event]=fn;},closest(){return null;}});
+const nodes=new Map(),el=id=>{if(!nodes.has(id))nodes.set(id,makeEl());return nodes.get(id);};
+el('simVoiceReplies').checked=true;
+const document={hidden:false,getElementById:el,documentElement:{classList:{contains:()=>false}}};
+let enabled=false;
+const window={
+ GELATO_GLASSES_SIMULATOR:{userId:36,runtimePublicId:'runtime-a'},
+ GelatoGlassesVoiceUI:{status:()=>({enabled}),speakNotification:s=>{spoken.push(s);return true;}}
+};
+const storage={getItem:k=>saved.get(k)||null,setItem:(k,v)=>saved.set(k,v)};
+const DateMock=class extends Date{static now(){return now;}};
+const timers=new Map();let counter=0;
+const scope={window,document,localStorage:storage,Date:DateMock,Map,Set,String,Object,Math,
+  setTimeout:(fn,delay)=>{timers.set(++counter,{fn,delay});return counter;},
+  clearTimeout:id=>timers.delete(id)};
+vm.runInNewContext(source,scope,{filename:'glasses-hud-notifications.js'});
+const n=window.GelatoGlassesHudNotifications,info={event:'item.selected',severity:'info',message:'Next item selected'};
+assert.ok(n,'HUD notification API exists');
+assert.equal(n.publish(info),true);
+assert.equal(el('glassesHudNotification').hidden,false,'visual info appears even if speech disabled');
+assert.equal(spoken.length,0,'voice disabled never speaks');
+n.clear();now+=8000;
+enabled=true;
+n.publish({...info,message:'Another item selected'});
+assert.equal(spoken.length,0,'default info speaking is off');
+n.clear();now+=8000;
+assert.equal(n.setVoice('info',true),true);
+n.publish({...info,message:'Third item selected'});
+assert.equal(spoken.length,1,'category can be explicitly enabled');
+assert.ok([...saved.keys()][0].includes('runtime-a'),'settings isolated by runtime ID');
+n.clear();now+=8000;
+n.publish({event:'ingredient.added',severity:'success',message:'Mozzarella added',spokenFromVoice:true});
+assert.equal(spoken.length,1,'spoken command does not also narrate notification');
+n.clear();now+=8000;
+el('simVoiceReplies').checked=false;
+n.publish({event:'runtime.blocked',severity:'blocking',message:'No active item'});
+assert.equal(spoken.length,1,'Speak replies master switch gates even blocking announcements');
+n.clear();now+=8000;
+el('simVoiceReplies').checked=true;
+n.setVoice('ticket.paused',false);
+const ticket={kdsItemPublicId:'item-1',ticket:{checkPublicId:'check-001',checkNumber:'260914',serviceMode:'pickup'},status:'queued'};
+assert.equal(n.announceTicket('ticket.paused',ticket),true);
+assert.equal(el('glassesHudNotificationTitle').textContent,'TICKET #260914');
+assert.equal(el('glassesHudNotificationMeta').textContent,'PICKUP · PAUSED');
+assert.equal(spoken.length,1,'per-ticket-event switch inhibits speech independently of severity');
+n.clear();now+=8000;
+n.setVoice('ticket.paused',true);
+n.announceTicket('ticket.paused',ticket);
+assert.equal(spoken.length,2);
+assert.match(spoken.at(-1),/Ticket 260914 paused/);
+assert.equal(n.announceTicket('ticket.paused',ticket),false,'duplicate event should not queue again');
+n.clear();now+=8000;
+assert.equal(n.announceTicket('ticket.finished',{ticket:{checkPublicId:'p',checkNumber:''}}),false,
+  'ticket event must be rooted in actual POS check number');
+const copy=(status)=>({...ticket,status});
+const transitions=n.transitioned([], [copy('in_progress')]);
+assert.equal(transitions.length,0,'first poll is not an event');
+assert.equal(n.transitioned([copy('queued')],[copy('in_progress')])[0].event,'ticket.started');
+assert.equal(n.transitioned([copy('in_progress')],[copy('held')])[0].event,'ticket.paused');
+assert.equal(n.transitioned([copy('held')],[copy('queued')])[0].event,'ticket.resumed');
+assert.equal(n.transitioned([copy('in_progress')],[copy('ready')])[0].event,'ticket.ready');
+assert.equal(n.transitioned([copy('ready')],[]).length,0,'disappearance never implies finished');
+assert.equal(n.eventForCommand('finish_order'),'ticket.finished');
+assert.equal(n.eventForCommand('hold_order'),'ticket.paused');
+assert.equal(n.eventForCommand('fire_order'),'ticket.resumed');
+assert.equal(n.eventForCommand('item_added'),null,'kitchen note is not a ticket lifecycle');
+assert.match(main,/if\(ticketEvent\)window\.GelatoGlassesHudNotifications\?\.announceTicket/,'only after successful KDS operation');
+assert.match(main,/const changes=previous&&state\.work/,'polling needs existing baseline');
+assert.match(main,/event:'ingredient\.skipped'/,'ingredient skips present as separate events');
+assert.match(main,/event:'ingredient\.low_confidence'/,'vision warning cannot mark completion');
+assert.match(voice,/speakNotification\(message\)/,'TTS uses existing voice flow');
+assert.match(tabs,/move\(nav,voice\)/,'overview does not show command wall');
+assert.ok(!php.includes('Say: “start ticket”'), 'command wall removed from production overview');
+assert.ok(!php.includes('id="hudRuntimeState"'),'in-lens debug chip removed');
+assert.match(php,/id="glassesHudNotificationVoiceSettings"/);
+assert.match(css,/\.glasses-hud-notification/);
+console.log('section266-hud-notifications-voice-ticket-lifecycle=ok');
