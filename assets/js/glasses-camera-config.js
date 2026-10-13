@@ -221,7 +221,8 @@
       url,slot,role:c.role,locationId:state.locationId,stationPublicId:c.stationPublicId||null,
       capturedAt:new Date().toISOString(),width:canvas.width,height:canvas.height,blob
     };
-    state.photos.push(photo);while(state.photos.length>10){const old=state.photos.shift();URL.revokeObjectURL(old.url);}
+    state.photos.push(photo);while(state.photos.length>45){const old=state.photos.shift();URL.revokeObjectURL(old.url);}
+    window.dispatchEvent(new CustomEvent('gelato-camera-photo-captured',{detail:{photo}}));
     const gallery=$('simCameraPhotoHistory');
     if(gallery){
       const card=document.createElement('div');card.className='camera-photo-entry';
@@ -235,8 +236,9 @@
       card.append(image,label,button);gallery.prepend(card);
       while(gallery.children.length>10)gallery.lastElementChild.remove();
     }
-    setNote(slot,'Test capture recorded locally at '+new Date(photo.capturedAt).toLocaleTimeString()+
-      '. No order association or customer notification was sent.');
+    setNote(slot,'Captured to Camera '+slot+' history at '+new Date(photo.capturedAt).toLocaleTimeString()+
+      '. To save the image permanently, review it in Training and explicitly opt in to Vision Lab storage.');
+    return photo;
   }
   function mount(){
     const cameraCard=$('simMultiCameraPanel')?.closest('.camera-card');
@@ -264,7 +266,8 @@
       stopAll();for(const p of state.photos)URL.revokeObjectURL(p.url);state.photos=[];
     });
   }
-  window.GelatoCameraConfiguration={MAX,isEnabled,stopAll,load,save,
+  window.GelatoCameraConfiguration={MAX,isEnabled,stopAll,load,save,capture,
+    getPhotos:slot=>state.photos.filter(p=>slot===undefined||p.slot===slot).slice(),
     get locationId(){return state.locationId;},
     status:()=>({locationId:state.locationId,ready:state.ready,slots:Array.from(state.slots.values()).map(x=>({slot:x.saved.slot,enabled:x.saved.enabled,role:x.saved.role}))})};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});

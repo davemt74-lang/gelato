@@ -57,6 +57,13 @@ on:
       - 'assets/js/glasses-simulator-tabs.js'
       - 'assets/js/glasses-multicamera.js'
       - 'assets/js/glasses-camera-config.js'
+      - 'assets/js/glasses-camera-workspace.js'
+      - 'assets/js/glasses-camera-similarity.js'
+      - 'api/glasses-camera-photo-library.php'
+      - 'includes/glasses-camera-photo-library.php'
+      - 'database/20261209_section258_camera_photo_library.sql'
+      - 'tests/glasses-camera-photo-library.test.js'
+      - 'tests/glasses-camera-photo-library-contract.php'
       - 'api/glasses-camera-locations.php'
       - 'includes/glasses-camera-locations.php'
       - 'database/20261208_section257_camera_locations.sql'
@@ -196,6 +203,13 @@ jobs:
             assets/js/glasses-simulator-tabs.js
             assets/js/glasses-multicamera.js
             assets/js/glasses-camera-config.js
+            assets/js/glasses-camera-workspace.js
+            assets/js/glasses-camera-similarity.js
+            api/glasses-camera-photo-library.php
+            includes/glasses-camera-photo-library.php
+            database/20261209_section258_camera_photo_library.sql
+            tests/glasses-camera-photo-library.test.js
+            tests/glasses-camera-photo-library-contract.php
             api/glasses-camera-locations.php
             includes/glasses-camera-locations.php
             database/20261208_section257_camera_locations.sql
@@ -283,6 +297,12 @@ jobs:
           node --check assets/js/glasses-simulator-tabs.js
           node --check assets/js/glasses-multicamera.js
           node --check assets/js/glasses-camera-config.js
+          node --check assets/js/glasses-camera-workspace.js
+          node --check assets/js/glasses-camera-similarity.js
+          node tests/glasses-camera-photo-library.test.js
+          php tests/glasses-camera-photo-library-contract.php
+          php -l api/glasses-camera-photo-library.php
+          php -l includes/glasses-camera-photo-library.php
           node tests/glasses-camera-config.test.js
           php tests/glasses-camera-locations-contract.php
           php -l api/glasses-camera-locations.php

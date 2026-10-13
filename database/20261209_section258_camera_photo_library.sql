@@ -1,0 +1,31 @@
+-- Gelato Section 258: Saved camera photos share the existing private Vision Lab media store.
+-- All images require explicit operator opt-in; no automatic customer publication.
+CREATE TABLE glasses_camera_photo_library (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  organization_id BIGINT UNSIGNED NOT NULL,
+  location_id BIGINT UNSIGNED NOT NULL,
+  camera_slot TINYINT UNSIGNED NOT NULL,
+  media_id BIGINT UNSIGNED NOT NULL,
+  menu_item_id BIGINT UNSIGNED NULL,
+  photo_role VARCHAR(24) NOT NULL DEFAULT 'gallery',
+  is_reference TINYINT(1) NOT NULL DEFAULT 0,
+  employee_rating TINYINT UNSIGNED NULL,
+  review_note VARCHAR(300) NULL,
+  status VARCHAR(24) NOT NULL DEFAULT 'active',
+  added_by BIGINT UNSIGNED NOT NULL,
+  added_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  updated_by BIGINT UNSIGNED NULL,
+  updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_glasses_camera_media (organization_id,media_id),
+  KEY idx_glasses_camera_photo_location (organization_id,location_id,camera_slot,status,added_at),
+  KEY idx_glasses_camera_photo_reference (organization_id,location_id,menu_item_id,is_reference,status),
+  CONSTRAINT fk_glasses_camera_photo_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  CONSTRAINT fk_glasses_camera_photo_location FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE,
+  CONSTRAINT fk_glasses_camera_photo_media FOREIGN KEY (media_id) REFERENCES glasses_vision_training_media(id),
+  CONSTRAINT fk_glasses_camera_photo_menu FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE SET NULL,
+  CONSTRAINT fk_glasses_camera_photo_added FOREIGN KEY (added_by) REFERENCES users(id),
+  CONSTRAINT fk_glasses_camera_photo_updated FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL,
+  CONSTRAINT chk_glasses_camera_photo_slot CHECK (camera_slot BETWEEN 1 AND 5),
+  CONSTRAINT chk_glasses_camera_photo_rating CHECK (employee_rating BETWEEN 1 AND 5 OR employee_rating IS NULL)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
