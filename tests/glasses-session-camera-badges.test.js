@@ -35,7 +35,7 @@ assert.match(voice,/active\.interimResults=true/);
 assert.match(voice,/Listening: /);
 assert.match(voice,/Heard: /);
 assert.match(ui,/cameraResolution/);
-assert.match(ui,/voiceReplies/);
+assert.match(main,/voiceReplies:/,'simulator stores voice response preference without saving microphone permission');
 assert.match(ui,/gelato-glasses-tab-select/);
 assert.match(ui,/gelato-camera-tab-select/);
 assert.match(main,/GelatoGlassesDisplayPreferences/);
