@@ -114,7 +114,16 @@
   function toggleDrawer() {if(state.drawerOpen){closeDrawer();return;}state.drawerPending=false;openDrawer();}
   function renderDrawerError(error) {state.drawerPending=false;state.drawerRefreshQueued=false;const root=document.querySelector('.gar-messages');if(!root)return;root.innerHTML=`<div class="gar-empty">${esc(error?.message||'Gelato could not load this conversation.')}</div>`;}
   async function submit() {const input=document.querySelector('.gda-input'),text=String(input?.value||'').trim();if(!text||!window.GelatoGlobalAgent)return;input.value='';setStatus('Gelato is checking the restaurant context…');try{await window.GelatoGlobalAgent.send(text,false);}catch(error){setStatus(error.message||'Gelato could not complete that request.');}}
-  function routeFooterToAgentView() {if(isWorkspacePage())open();else openDrawer({pending:true});}
+  function routeFooterToAgentView() {
+    // The training workspace owns its inline composer and quiz flow.
+    // Never cover its answers with the global Agent modal.
+    if(isWorkspacePage()&&document.querySelector('#workspaceSwitch [data-workspace-mode="training"].active')){
+      document.getElementById('chatInput')?.focus();
+      return;
+    }
+    if(isWorkspacePage())open();
+    else openDrawer({pending:true});
+  }
   function hookFooter() {
     removeLegacyCanvasButton();ensureDrawerToggle();
     document.addEventListener('click',(event)=>{if(event.target.closest('#gaSend'))routeFooterToAgentView();if(event.target.closest('#gaMic'))routeFooterToAgentView();},true);
@@ -123,7 +132,12 @@
   }
 
   window.addEventListener('gelato-agent-ready',()=>{removeLegacyCanvasButton();ensureDrawerToggle();if(state.open)refresh().catch(()=>{});if(state.drawerOpen)refreshDrawer().catch(()=>{});});
-  window.addEventListener('gelato-agent-response',(event)=>{state.activeThread=event.detail?.threadId||window.GelatoGlobalAgent?.threadId||state.activeThread;if(isWorkspacePage()){if(!state.open)open();setStatus('');refreshThreadsAndMessages().catch(error=>setStatus(error.message));return;}state.drawerPending=false;if(!state.drawerOpen)openDrawer();refreshDrawer().catch(error=>renderDrawerError(error));});
+  window.addEventListener('gelato-agent-response',(event)=>{state.activeThread=event.detail?.threadId||window.GelatoGlobalAgent?.threadId||state.activeThread;if(isWorkspacePage()){
+    // Refresh only after explicit user opening. An Agent reply must never
+    // create a modal over an in-progress training quiz.
+    if(state.open){setStatus('');refreshThreadsAndMessages().catch(error=>setStatus(error.message));}
+    return;
+  }state.drawerPending=false;if(!state.drawerOpen)openDrawer();refreshDrawer().catch(error=>renderDrawerError(error));});
   window.addEventListener('gelato-agent-error',(event)=>{const message=event.detail?.message||'Gelato could not complete that request.';if(isWorkspacePage()){setStatus(message);return;}state.drawerPending=false;if(!state.drawerOpen)openDrawer({skipRefresh:true});renderDrawerError(new Error(message));});
   window.addEventListener('gelato-agent-context-change',(event)=>{if(state.drawerOpen&&event.detail){const context=document.querySelector('.gar-context');if(context)context.textContent=window.GelatoAgentPageContext?.description?.(event.detail)||pageContext();}});
 
