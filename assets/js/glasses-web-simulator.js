@@ -9,7 +9,44 @@ const mock={
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function log(type,msg){const line={at:new Date(),type,msg};state.logs.unshift(line);state.logs=state.logs.slice(0,80);renderLog();}
 function renderLog(){$('eventLog').innerHTML=state.logs.map(x=>'<div class="event-line"><b>'+escapeHtml(x.type)+'</b> '+escapeHtml(x.at.toLocaleTimeString())+' · '+escapeHtml(x.msg)+'</div>').join('')||'<span class="sim-muted">No events yet.</span>';}
-async function api(action,payload={}){if(state.recovery?.networkFault)throw new Error('SIMULATED_NETWORK_OFFLINE');const r=await fetch(cfg.api,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':cfg.csrf},credentials:'same-origin',body:JSON.stringify({csrf_token:cfg.csrf,action,devicePublicId:state.device?.publicId||'',...payload})});const d=await r.json().catch(()=>({ok:false,message:'Invalid server response.'}));if(!r.ok||!d.ok)throw new Error(d.message||'Simulator request failed.');return d;}
+const SIM_READ_ONLY_ACTIONS=new Set([
+  'hardware.health.normalize','hardware.diagnostics.bundle','hardware.cook_ux.evaluate',
+  'hardware.soak.evaluate','hardware.recovery.contract','hardware.recovery.decide',
+  'hardware.frame_pipeline','hardware.runtime','hardware.frame.prepare',
+  'hardware.display.prepare','hardware.input.prepare','hardware.model.prepare',
+  'work','build.get','validation.get','vision.model_assignment','vision.profile',
+  'vision.shadow_assignment'
+]);
+async function refreshSimulatorCsrf(){
+  const r=await fetch(cfg.api,{method:'GET',credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}});
+  const data=await r.json().catch(()=>null);
+  if(!r.ok||!data?.ok||!(/^[a-f0-9]{64}$/i.test(String(data.csrfToken||''))))
+    throw new Error('Your login session needs attention. Sign in again or refresh the simulator.');
+  cfg.csrf=data.csrfToken;
+  return data;
+}
+async function api(action,payload={}){
+  if(state.recovery?.networkFault)throw new Error('SIMULATED_NETWORK_OFFLINE');
+  async function post(){
+    const r=await fetch(cfg.api,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-CSRF-Token':cfg.csrf},
+      credentials:'same-origin',cache:'no-store',
+      body:JSON.stringify({csrf_token:cfg.csrf,action,devicePublicId:state.device?.publicId||'',...payload})
+    });
+    const d=await r.json().catch(()=>({ok:false,message:'Invalid server response.'}));
+    return {r,d};
+  }
+  let {r,d}=await post();
+  if(r.status===419){
+    await refreshSimulatorCsrf();
+    if(!SIM_READ_ONLY_ACTIONS.has(action))
+      throw new Error('Security session refreshed. Repeat your action to avoid duplicate kitchen changes.');
+    ({r,d}=await post());
+  }
+  if(!r.ok||!d.ok)throw new Error(d.message||'Simulator request failed.');
+  return d;
+}
 const LIVE_SYNC_BASE_MS=1500;
 const LIVE_SYNC_MAX_BACKOFF_MS=10000;
 const RUNTIME_RECOVERY_KEY='gelato.webGlassesSimulator.runtimeRecovery.v1';
@@ -240,8 +277,8 @@ function renderNormalizedDeviceHealth(health){
   const h=health?.hardware||{};hardware.textContent=(h.batteryPercent==null?'Battery SDK pending':'Battery '+Math.round(h.batteryPercent)+'%')+' · '+(h.temperatureC==null?'thermal SDK pending':'thermal '+Number(h.temperatureC).toFixed(1)+'°C');
 }
 async function refreshDeviceHealth(){
-  try{const d=await api('hardware.health.normalize',{snapshot:rawDeviceHealthSnapshot()});renderNormalizedDeviceHealth(d.health);return d.health;}
-  catch(e){const badge=$('deviceHealthState');if(badge)badge.textContent='ERROR';log('HEALTH',e.message);return null;}
+  try{const d=await api('hardware.health.normalize',{snapshot:rawDeviceHealthSnapshot()});renderNormalizedDeviceHealth(d.health);state.lastHealthError='';return d.health;}
+  catch(e){const badge=$('deviceHealthState');if(badge)badge.textContent='ERROR';if(state.lastHealthError!==e.message){log('HEALTH',e.message);state.lastHealthError=e.message;}return null;}
 }
 async function downloadDeviceDiagnostics(){
   try{
@@ -255,6 +292,7 @@ async function loadDevices(){
   try{
     const r=await fetch(cfg.api,{credentials:'same-origin',cache:'no-store'});
     const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.message||'Device list failed.');
+    if(/^[a-f0-9]{64}$/i.test(String(d.csrfToken||'')))cfg.csrf=d.csrfToken;
     state.hardwareRuntime=d.hardwareRuntime||null;renderHardwareRuntime();state.devices=d.devices||[];
     const preferred=localStorage.getItem(LIVE_DEVICE_KEY)||'';
     const device=state.devices.find(x=>x.publicId===preferred&&(x.virtualPreview||x.stationPublicId!==null))
