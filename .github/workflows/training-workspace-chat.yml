@@ -7,6 +7,9 @@ on:
       - 'index.html'
       - 'css/training-workspace-chat.css'
       - 'js/training-workspace-voice.js'
+      - 'js/voice-turn-taking.js'
+      - 'tests/voice-turn-taking.test.js'
+      - 'tests/voice-barge-in-contract.php'
       - 'js/dynamic-agent-canvas.js'
       - 'tests/training-chat-voice-contract.php'
       - 'tests/training-workspace-voice.test.js'
@@ -18,6 +21,9 @@ on:
       - 'index.html'
       - 'css/training-workspace-chat.css'
       - 'js/training-workspace-voice.js'
+      - 'js/voice-turn-taking.js'
+      - 'tests/voice-turn-taking.test.js'
+      - 'tests/voice-barge-in-contract.php'
       - 'js/dynamic-agent-canvas.js'
       - 'tests/training-chat-voice-contract.php'
       - 'tests/training-workspace-voice.test.js'
@@ -40,8 +46,12 @@ jobs:
           php -l tests/training-chat-voice-contract.php
           node --check js/dynamic-agent-canvas.js
           node --check js/training-workspace-voice.js
+          node --check js/voice-turn-taking.js
+          php -l tests/voice-barge-in-contract.php
           node --check tests/training-workspace-voice.test.js
       - name: Training conversation, popup, color contrast and microphone contract
         run: |
           php tests/training-chat-voice-contract.php
           node tests/training-workspace-voice.test.js
+          php tests/voice-barge-in-contract.php
+          node tests/voice-turn-taking.test.js

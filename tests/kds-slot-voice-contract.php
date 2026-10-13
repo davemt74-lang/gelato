@@ -9,7 +9,7 @@ $voice=(string)file_get_contents($root.'/js/kds-voice-listener.js');
 $context=(string)file_get_contents($root.'/js/kds-agent-context.js');
 $api=(string)file_get_contents($root.'/api/kds-agent.php');
 slotAssert(str_contains($page,'id="kdsSlotBar"'),'slot toolbar mounted');
-slotAssert(str_contains($page,'js/kds-voice-listener.js?v=20261013-global2'),'read-only listener loaded');
+slotAssert(str_contains($page,'js/kds-voice-listener.js?v=20261013-barge1'),'read-only listener loaded');
 slotAssert(str_contains($page,'js/kds.js?v=20261013-global2'),'display cache invalidated');
 slotAssert(str_contains($kds,'page:0,pageSize:8'),'eight on-screen positions defined');
 slotAssert(str_contains($kds,'data-kds-slot='),'order badge attached to ticket card');

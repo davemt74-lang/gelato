@@ -64,6 +64,7 @@
       .kds-agent-quick{width:100%;border:1px solid #3c443d;border-radius:11px;background:#202520;color:#fff;padding:10px 12px;font-size:10px;font-weight:900;cursor:pointer}.kds-agent-quick:disabled{opacity:.45;cursor:not-allowed}.kds-agent-card{border:1px solid #303731;border-radius:12px;background:#171b18;padding:12px}.kds-agent-card .eyebrow{font-size:8px;font-weight:900;letter-spacing:.11em;text-transform:uppercase;color:#8f978f;margin-bottom:7px}.kds-agent-card .copy{font-size:11px;line-height:1.55;color:#eef1ed;white-space:pre-wrap}.kds-agent-card.user .copy{color:#ffd7c8}.kds-agent-status{min-height:38px;padding:10px 11px;border-radius:10px;background:#202520;color:#cad1cb;font-size:10px;line-height:1.4}.kds-agent-status.good{color:#aee9c6;background:#173126}.kds-agent-status.warn{color:#ffdba1;background:#302719}.kds-agent-status.bad{color:#ffb2ac;background:#351f1e}
       .kds-agent-foot{padding:12px 14px;border-top:1px solid #343b35;color:#8f978f;font-size:8px;line-height:1.45;background:#131713}.kds-agent-foot strong{color:#cbd1cc}
       .kds-agent-mic-status{display:flex;align-items:center;gap:9px;flex-wrap:wrap;border:1px solid #45504a;background:#1a211d;padding:10px 12px;border-radius:11px;font-size:10px;color:#c2cec3}.kds-agent-mic-status strong{font-size:10px;color:#fafcf9}.kds-agent-mic-status [id=kdsAgentMicMessage]{flex:1 1 180px;overflow-wrap:anywhere}.kds-agent-mic-led{width:11px;height:11px;flex:0 0 11px;border-radius:50%;background:#767e76}.kds-agent-mic-status[data-state=listening] .kds-agent-mic-led{background:#55df8f;box-shadow:0 0 0 5px #55df8f22;animation:kdsAgentPulse 1.8s infinite}.kds-agent-mic-status[data-state=retrying] .kds-agent-mic-led,.kds-agent-mic-status[data-state=starting] .kds-agent-mic-led{background:#f0b24f}.kds-agent-mic-status[data-state=blocked] .kds-agent-mic-led,.kds-agent-mic-status[data-state=error] .kds-agent-mic-led{background:#eb6b64}
+      .kds-interrupt{background:#46271c;color:#fff2e9;border-color:#a44f31}.kds-voice-profile{display:grid;gap:6px}.kds-voice-profile label{color:#d6ddd5;font-size:10px;font-weight:800}.kds-voice-profile select{width:100%;min-width:0;padding:9px;background:#252e29;color:#fff;border:1px solid #49584c;border-radius:8px;font-size:11px}.kds-voice-help{margin:4px 0 0;font-size:9px;line-height:1.5;color:#aeb6ae}
       @keyframes kdsAgentPulse{50%{box-shadow:0 0 0 17px rgba(239,106,58,.13)}}
       @media(max-width:700px){.kds-agent-handle{min-height:116px;width:46px}.kds-agent-panel{width:min(370px,96vw)}.kds-agent-mic{width:96px;height:96px}}
     `;
@@ -83,6 +84,15 @@
           <button class="kds-agent-toggle" id="kdsAgentListen" type="button" aria-pressed="false"><span><strong>Hands-free “Hey Gelato”</strong><small>Say Hey Gelato, then read any active order number (for example, order 12).</small></span><span class="kds-agent-switch" aria-hidden="true"></span></button><button class="kds-agent-toggle" id="kdsAgentAlways" type="button" aria-pressed="false"><span><strong>Always-on listening</strong><small>After you enable the mic, listen for order commands without the wake phrase while this KDS tab is active.</small></span><span class="kds-agent-switch" aria-hidden="true"></span></button><div class="kds-agent-mic-status" id="kdsAgentMicStatus" role="status" aria-live="polite" data-state="off"><span class="kds-agent-mic-led"></span><strong>MIC OFF</strong><span id="kdsAgentMicMessage">Select a voice mode to begin.</span></div>
           <button class="kds-agent-toggle" id="kdsAgentAnnounce" type="button" aria-pressed="false"><span><strong>Voice new-order announcements</strong><small>Read each new kitchen order—and later fired additions to that order—as it arrives.</small></span><span class="kds-agent-switch" aria-hidden="true"></span></button>
           <button class="kds-agent-quick" id="kdsAgentReadOrders" type="button">🔊 Read active orders now</button>
+          <button class="kds-agent-quick kds-interrupt" id="kdsAgentStopSpeaking" type="button" aria-label="Stop Gelato speaking">■ Stop speaking / Interrupt</button>
+          <section class="kds-agent-card kds-voice-profile" aria-label="Kitchen microphone and voice profile">
+            <div class="eyebrow">Voice & noise profile · this device</div>
+            <label for="kdsVoiceEnvironment">Background environment</label>
+            <select id="kdsVoiceEnvironment"><option value="quiet">Quiet room</option><option value="standard">Normal workspace</option><option value="noisy">Busy kitchen / TV (wake phrase required)</option></select>
+            <label for="kdsVoiceOutput">Gelato speaking voice</label><select id="kdsVoiceOutput"><option value="">Default system voice</option></select>
+            <label for="kdsVoiceRate">Speaking speed</label><select id="kdsVoiceRate"><option value=".85">Slower</option><option value="1">Normal</option><option value="1.15">Faster</option></select>
+            <p class="kds-voice-help">Say “Hey Gelato stop” during speech, or tap Stop speaking. Noise filtering is device-local and is not voice identity verification. A headset works best for talk-over.</p>
+          </section>
           <div class="kds-agent-status" id="kdsAgentStatus">Connecting to Gelato Agent…</div>
           <section class="kds-agent-card user" id="kdsAgentHeard" hidden><div class="eyebrow">Heard</div><div class="copy"></div></section>
           <section class="kds-agent-card" id="kdsAgentAnswer" hidden><div class="eyebrow">Gelato</div><div class="copy"></div></section>
@@ -98,9 +108,43 @@
     document.getElementById('kdsAgentAlways')?.addEventListener('click', toggleAlways);
     document.getElementById('kdsAgentAnnounce')?.addEventListener('click', toggleAnnouncements);
     document.getElementById('kdsAgentReadOrders')?.addEventListener('click', readOrdersNow);
+    document.getElementById('kdsAgentStopSpeaking')?.addEventListener('click',()=>{
+      state.voiceQueue=[];state.speaking=false;
+      window.GelatoVoiceTurns?.interrupt?.('kds-button');
+      window.GelatoKdsVoice?.resumeAfterSpeech?.();
+      setStatus('Speech interrupted. Listening for your next command.','good');
+    });
+    setupVoiceProfile();
     renderState();
   }
 
+  function setupVoiceProfile(){
+    const turns=window.GelatoVoiceTurns;
+    if(!turns)return;
+    const profile=document.getElementById('kdsVoiceEnvironment');
+    const voice=document.getElementById('kdsVoiceOutput');
+    const rate=document.getElementById('kdsVoiceRate');
+    if(profile){profile.value=turns.environment;profile.addEventListener('change',()=>{turns.setEnvironment(profile.value);setStatus('Voice environment: '+profile.selectedOptions[0]?.textContent,'good');});}
+    if(rate){rate.value=String(turns.rate);rate.addEventListener('change',()=>turns.setRate(rate.value));}
+    const fill=()=>{
+      if(!voice)return;
+      const current=turns.voiceURI;
+      voice.innerHTML='<option value="">Default system voice</option>';
+      for(const v of turns.voices){
+        const opt=document.createElement('option');opt.value=v.voiceURI;
+        opt.textContent=(v.name||'Voice')+' · '+(v.lang||'English');voice.appendChild(opt);
+      }
+      voice.value=current;if(voice.value!==current)voice.value='';
+    };
+    fill();window.speechSynthesis?.addEventListener?.('voiceschanged',fill);
+    voice?.addEventListener('change',()=>turns.setVoice(voice.value));
+  }
+  window.addEventListener('gelato-voice-turn',event=>{
+    if(event.detail?.kind==='interrupted'&&event.detail?.owner==='kds'){
+      state.voiceQueue=[];state.speaking=false;
+      window.GelatoKdsVoice?.resumeAfterSpeech?.();
+    }
+  });
   function open() {
     state.open = true;
     document.getElementById('kdsAgentPanel')?.classList.add('open');
@@ -248,6 +292,15 @@
     window.GelatoKdsVoice?.pauseForSpeech?.();
     const message = state.voiceQueue.shift();
     state.speaking = true;
+    if(window.GelatoVoiceTurns?.speak){
+      window.GelatoVoiceTurns.speak(message,{owner:'kds',onEnd:({interrupted})=>{
+        state.speaking=false;
+        if(interrupted)state.voiceQueue=[];
+        if(state.voiceQueue.length)pumpSpeech();
+        else window.GelatoKdsVoice?.resumeAfterSpeech?.();
+      }});
+      return;
+    }
     const utterance = new SpeechSynthesisUtterance(message);
     utterance.rate = 1;
     utterance.onend = utterance.onerror = () => {

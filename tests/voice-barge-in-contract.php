@@ -1,0 +1,35 @@
+<?php
+declare(strict_types=1);
+$root=dirname(__DIR__);
+function voiceAssert(bool $ok,string $message):void{if(!$ok)throw new RuntimeException('Voice turn-taking: '.$message);}
+$shared=(string)file_get_contents($root.'/js/voice-turn-taking.js');
+$global=(string)file_get_contents($root.'/js/global-agent.js');
+$loader=(string)file_get_contents($root.'/js/global-add-canvas.js');
+$kds=(string)file_get_contents($root.'/js/kds-voice-listener.js');
+$sidebar=(string)file_get_contents($root.'/js/kds-agent-sidebar.js');
+$training=(string)file_get_contents($root.'/js/training-workspace-voice.js');
+$canvas=(string)file_get_contents($root.'/js/dynamic-agent-canvas.js');
+$workspace=(string)file_get_contents($root.'/workspace.php');
+$kdsPage=(string)file_get_contents($root.'/kds.php');
+$index=(string)file_get_contents($root.'/index.html');
+voiceAssert(str_contains($loader,'js/voice-turn-taking.js?v=20261013-turn1'),'global Agent loader uses shared turn-taking');
+voiceAssert(strpos($kdsPage,'js/voice-turn-taking.js')<strpos($kdsPage,'js/global-agent.js'),'KDS loads turn-taking before Agent');
+voiceAssert(strpos($workspace,'js/voice-turn-taking.js')<strpos($workspace,'js/training-workspace-voice.js'),'Training loads controller first');
+voiceAssert(str_contains($shared,'echo')&&str_contains($shared,'wake-required-while-speaking'),'echo and background speech excluded from barge in');
+voiceAssert(str_contains($shared,'speechSynthesis?.cancel')&&str_contains($shared,'function interrupt(source'),'interrupt actively cancels TTS');
+voiceAssert(str_contains($shared,'lastEnd<1400')&&str_contains($shared,'post-tts-echo'),'post TTS echo quarantine');
+voiceAssert(str_contains($shared,"quiet:")&&str_contains($shared,"noisy:"),'quiet and kitchen profiles supported');
+voiceAssert(str_contains($shared,'gelato.voice.device.v1'),'user consent/device-local preferences persisted');
+voiceAssert(str_contains($global,'interruptSpeech')&&str_contains($global,'id="gaInterrupt"'),'global Agent has stop speech button');
+voiceAssert(str_contains($global,'GelatoVoiceTurns?.evaluate'),'global hands-free recognizer uses echo/wake gate');
+voiceAssert(str_contains($sidebar,'id="kdsAgentStopSpeaking"'),'KDS has accessible Stop speaking button');
+voiceAssert(str_contains($sidebar,'id="kdsVoiceEnvironment"')&&str_contains($sidebar,'id="kdsVoiceOutput"'),'KDS has environment and playback-voice profiles');
+voiceAssert(str_contains($kds,'interimResults=true')&&str_contains($kds,'kds-voice-barge-in'),'KDS recognizes interruption during speech');
+voiceAssert(str_contains($kds,'Keep recognition armed'),'KDS does not turn mic off during TTS');
+voiceAssert(str_contains($training,'training-voice-barge-in')&&str_contains($training,'decision.kind'),'Training filters TTS echo and permits barge-in');
+voiceAssert(str_contains($index,'id="trainingSpeakReplies"')&&str_contains($index,'id="trainingStopSpeech"'),'Training has optional spoken replies and interrupt controls');
+voiceAssert(str_contains($canvas,'gda-interrupt')&&str_contains($canvas,'gda-voice-environment'),'Agent canvas exposes stop and background mode');
+voiceAssert(str_contains($global,'verifyVoice()')&&str_contains($global,"agent.proactive"),'existing protected Agent voice enrollment and proactive permission remain');
+voiceAssert(str_contains($sidebar,'kds-agent-mic-status'),'KDS microphone status preserved');
+voiceAssert(!str_contains($shared,'voice-identity.php'),'acoustic profile does not impersonate biometric voice identity');
+echo "voice-barge-in-contract=ok\n";

@@ -4,6 +4,7 @@
   const PreferenceKey='gelato.kds.listenPreference.v2';
   const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
   let mode='off',active=false,recognizer=null,restartTimer=null,failures=0,voiceBusy=false,pausedForSpeech=false,armedUntil=0;
+  let lastBargeIn=0;
   let preferred='off';
   try { preferred=localStorage.getItem(PreferenceKey)||'off'; } catch {}
   const status=(code,message)=>{
@@ -78,23 +79,36 @@
   }
   function scheduleRestart(){
     cancelRestart();
-    if(mode==='off'||pausedForSpeech||document.hidden)return;
+    if(mode==='off'||document.hidden)return;
     const delay=Math.min(8000,500*Math.pow(2,Math.min(failures,4)));
     status('retrying','Microphone reconnecting in '+(delay/1000).toFixed(1)+'s…');
     restartTimer=setTimeout(()=>{restartTimer=null;startRecognition();},delay);
   }
   function startRecognition(){
-    if(mode==='off'||pausedForSpeech||document.hidden)return;
+    if(mode==='off'||document.hidden)return;
     if(!SpeechRecognition){mode='off';status('unsupported','Speech recognition is unavailable. Try Chrome or use the KDS controls.');return;}
     stopRecognition();
     try{
       const r=new SpeechRecognition();recognizer=r;
-      r.lang='en-US';r.continuous=true;r.interimResults=false;r.maxAlternatives=1;
+      r.lang='en-US';r.continuous=true;r.interimResults=true;r.maxAlternatives=1;
       r.onstart=()=>{if(recognizer!==r)return;active=true;failures=0;status('listening',mode==='wake'?'Listening for “Hey Gelato”…':'Always-on listening · say read order 12 or any active order number.');};
       r.onresult=e=>{
-        if(pausedForSpeech||mode==='off')return;
-        for(let i=e.resultIndex;i<e.results.length;i++)if(e.results[i].isFinal){
-          const words=e.results[i][0]?.transcript||'';
+        if(mode==='off')return;
+        for(let i=e.resultIndex;i<e.results.length;i++){
+          const result=e.results[i];
+          const words=result[0]?.transcript||'';
+          const decision=window.GelatoVoiceTurns?.evaluate?.(words,result[0]?.confidence,{wakeRequired:mode==='wake'});
+          if(decision?.kind==='interrupt'){
+            if(Date.now()-lastBargeIn>1000){
+              lastBargeIn=Date.now();
+              window.GelatoVoiceTurns?.interrupt?.('kds-voice-barge-in');
+              status('interrupted','Gelato stopped. You can give the next command.');
+            }
+            continue;
+          }
+          if(Date.now()-lastBargeIn<1300&&/^(?:hey\s+gelato\s+)?(?:stop|stop speaking|interrupt)\b/i.test(words.trim()))continue;
+          if(!result.isFinal||decision?.kind==='ignored')continue;
+          if(decision?.interrupt)window.GelatoVoiceTurns?.interrupt?.('kds-voice-barge-in');
           status('heard','Heard: '+words);
           Promise.resolve(handleCommand(words,{wakeRequired:mode==='wake'})).catch(err=>status('error',err.message||'Voice request failed.'));
         }
@@ -107,7 +121,7 @@
         }
         if(code!=='no-speech'&&code!=='aborted')status('error','Speech recognition: '+code);
       };
-      r.onend=()=>{if(recognizer!==r)return;active=false;recognizer=null;if(mode!=='off'&&!pausedForSpeech){failures++;scheduleRestart();}};
+      r.onend=()=>{if(recognizer!==r)return;active=false;recognizer=null;if(mode!=='off'){failures++;scheduleRestart();}};
       r.start();status('starting','Requesting microphone…');
     }catch(e){
       active=false;recognizer=null;
@@ -132,16 +146,21 @@
   }
   function pauseForSpeech(){
     if(mode==='off')return;
-    pausedForSpeech=true;stopRecognition();
-    status('speaking','Gelato is speaking. Listening pauses to avoid hearing itself.');
+    // Keep recognition armed for an explicit Hey Gelato barge-in.
+    // During TTS, generic/background transcripts are rejected by the shared
+    // echo guard; no protected order mutations are performed by this channel.
+    pausedForSpeech=true;
+    status('speaking','Gelato speaking · say “Hey Gelato stop” or press Stop speaking.');
   }
   function resumeAfterSpeech(){
     if(mode==='off'||!pausedForSpeech)return;
     pausedForSpeech=false;
     if(document.hidden){status('paused','Microphone paused while KDS is in the background.');return;}
-    startRecognition();
+    if(!recognizer)startRecognition();
+    else status('listening',mode==='wake'?'Listening for Hey Gelato…':'Listening for a kitchen command.');
   }
   function talkOnce(){
+    if(window.GelatoVoiceTurns?.speaking)window.GelatoVoiceTurns.interrupt('tap-to-interrupt');
     if(!SpeechRecognition){status('unsupported','Speech recognition unavailable; use the order reference buttons.');return false;}
     if(mode!=='off'){status('listening','Already listening · say read order 4.');return true;}
     stopRecognition();
@@ -157,7 +176,7 @@
     if(document.hidden){
       stopRecognition();
       if(mode!=='off')status('paused','KDS is in the background. Microphone paused.');
-    } else if(mode!=='off'&&!pausedForSpeech)startRecognition();
+    } else if(mode!=='off')startRecognition();
   });
   window.addEventListener('beforeunload',stopRecognition);
   window.GelatoKdsVoice={setMode,get mode(){return mode;},get active(){return active;},get supported(){return !!SpeechRecognition;},

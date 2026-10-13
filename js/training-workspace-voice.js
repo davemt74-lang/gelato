@@ -6,6 +6,7 @@
   const once=$('trainingVoiceOnce'),always=$('trainingVoiceAlways'),statusNode=$('trainingVoiceStatus');
   if(!once||!always||!statusNode||!$('chatInput')||!$('sendChat'))return;
   let mode='off',rec=null,active=false,retry=0,retryTimer=null;
+  let repliesEnabled=false,replyTimer=null,replyBuffer=[],lastInterrupt=0;
   const trainingActive=()=>!!document.querySelector('#workspaceSwitch [data-workspace-mode="training"].active')
     &&!!$('page-workspace')?.classList.contains('active');
   function status(code,detail) {
@@ -41,7 +42,7 @@
     if(!Recognition){stop('Browser speech recognition unavailable · type your answer instead');status('unsupported',statusNode.textContent);return;}
     discard();
     const current=new Recognition();rec=current;
-    current.lang='en-US';current.continuous=mode==='always';current.interimResults=false;
+    current.lang='en-US';current.continuous=mode==='always';current.interimResults=true;
     current.maxAlternatives=1;
     current.onstart=()=>{
       if(rec!==current)return;
@@ -52,14 +53,26 @@
       if(rec!==current||document.hidden||!trainingActive())return;
       for(let i=event.resultIndex;i<event.results.length;i++){
         const result=event.results[i];
-        if(!result?.isFinal)continue;
-        const spoken=String(result[0]?.transcript||'').trim();
+        const spoken=String(result?.[0]?.transcript||'').trim();
         if(!spoken)continue;
-        // Training owns the composer and quiz session. Do not send to the
-        // global Agent backend, open a modal or bypass existing grading.
-        $('chatInput').value=spoken;
+        const decision=window.GelatoVoiceTurns?.evaluate?.(spoken,result[0]?.confidence)||{kind:'command',text:spoken};
+        if(decision.kind==='interrupt'){
+          if(Date.now()-lastInterrupt>950){
+            lastInterrupt=Date.now();
+            stopReplies('training-voice-barge-in');
+            status('interrupted','Gelato stopped speaking. Continue your answer.');
+          }
+          continue;
+        }
+        if(!result?.isFinal||decision.kind==='ignored')continue;
+        if(decision.interrupt)stopReplies('training-voice-barge-in');
+        // A wake-prefixed utterance while Gelato speaks contains the user's
+        // answer after the wake phrase, not text from the agent output.
+        const answer=decision.interrupt?spoken.replace(/^(?:hey|hi|ok|okay)s+gelatos*/i,'').trim():spoken;
+        if(!answer)continue;
+        $('chatInput').value=answer;
         $('sendChat').click();
-        status('heard','Answer received: '+spoken.slice(0,90));
+        status('heard','Answer received: '+answer.slice(0,90));
         if(mode==='once'){stop('Answer submitted · microphone off');return;}
       }
     };
@@ -103,6 +116,50 @@
       });
     }else start();
   }
+  function stopReplies(source='button'){
+    if(replyTimer!==null){clearTimeout(replyTimer);replyTimer=null;}
+    replyBuffer=[];
+    window.GelatoVoiceTurns?.interrupt?.(source);
+  }
+  const replies=document.getElementById('trainingSpeakReplies');
+  const stopButton=document.getElementById('trainingStopSpeech');
+  const environment=document.getElementById('trainingVoiceEnvironment');
+  let savedReplies=false;try{savedReplies=localStorage.getItem('gelato.training.replies.v1')==='1'}catch{}
+  repliesEnabled=savedReplies;
+  function syncReplyUI(){
+    replies?.setAttribute('aria-pressed',repliesEnabled?'true':'false');
+    if(replies)replies.title=repliesEnabled?'Mute Agent replies':'Read Agent replies aloud';
+  }
+  syncReplyUI();
+  replies?.addEventListener('click',()=>{
+    repliesEnabled=!repliesEnabled;syncReplyUI();
+    try{localStorage.setItem('gelato.training.replies.v1',repliesEnabled?'1':'0')}catch{}
+    if(!repliesEnabled)stopReplies('training-replies-off');
+    status('off',repliesEnabled?'Voice replies enabled · interrupt with Hey Gelato stop or ■':'Voice replies muted');
+  });
+  stopButton?.addEventListener('click',()=>{stopReplies('training-stop-button');status('interrupted','Gelato stopped speaking. You can answer now.');});
+  if(environment){environment.value=window.GelatoVoiceTurns?.environment||'standard';
+    environment.addEventListener('change',()=>{
+      window.GelatoVoiceTurns?.setEnvironment?.(environment.value);
+      status('off',environment.value==='noisy'?'Busy kitchen profile · say Hey Gelato before commands.':'Microphone background profile updated.');
+    });
+  }
+  window.addEventListener('gelato-voice-turn',event=>{
+    if(event.detail?.kind==='interrupted'&&event.detail?.owner==='training')replyBuffer=[];
+  });
+  window.addEventListener('gelato-training-agent-message',event=>{
+    if(!repliesEnabled||!trainingActive())return;
+    const text=String(event.detail?.text||'').trim();
+    if(!text)return;
+    replyBuffer.push(text.slice(0,2200));
+    if(replyTimer!==null)clearTimeout(replyTimer);
+    replyTimer=setTimeout(()=>{
+      replyTimer=null;
+      const message=replyBuffer.join('. ');replyBuffer=[];
+      const started=window.GelatoVoiceTurns?.speak?.(message,{owner:'training'});
+      if(started)status('speaking','Gelato speaking · say “Hey Gelato stop” or press ■ to interrupt.');
+    },180);
+  });
   once.addEventListener('click',()=>select('once'));
   always.addEventListener('click',()=>select('always'));
   document.addEventListener('visibilitychange',()=>{
@@ -118,7 +175,7 @@
       if(button.dataset.workspaceMode!=='training'&&mode!=='off')stop('Voice off · left Training mode');
     });
   });
-  window.addEventListener('beforeunload',discard);
+  window.addEventListener('beforeunload',()=>{discard();stopReplies('page-unload');});
   window.GelatoTrainingVoice={get mode(){return mode;},get active(){return active;},
     get supported(){return !!Recognition;},stop,startOnce:()=>select('once'),toggleAlways:()=>select('always')};
   if(!Recognition){once.disabled=true;always.disabled=true;status('unsupported','Speech recognition unavailable · type answers normally');}
