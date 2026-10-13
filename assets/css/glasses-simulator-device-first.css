@@ -670,3 +670,18 @@ html,body{max-width:100%;overflow-x:hidden}
  width:100%;min-width:0;max-width:none;
 }
 #glassesRuntimeSaveStation[data-dirty="1"]{background:#197d43;border-color:#52d789;color:#fff}
+
+/* Existing Vision Lab operator-feedback queue; shown only under Camera > Training. */
+.gal-studio{display:grid;gap:9px;padding:12px;margin:8px 0 12px;
+ background:#11271e;border:1px solid #355d42;border-radius:8px;color:#dff8e5}
+.gal-head small{display:block;color:#89c4a5;font:700 9px/1.4 system-ui;letter-spacing:.08em}
+.gal-head strong{display:block;font:750 14px/1.5 system-ui}
+.gal-studio p{margin:0;font-size:11px;line-height:1.5;color:#acc8b5}
+.gal-studio .gal-context{background:#102219;color:#c7f3d5;padding:7px;border-radius:5px;font:650 11px/1.4 system-ui}
+.gal-studio label{display:grid;gap:5px;color:#b9ddc8;font:650 11px/1.4 system-ui}
+.gal-studio input,.gal-studio select{width:100%;min-width:0;padding:8px;border-radius:5px;
+ background:#071c13;color:#edfef1;border:1px solid #41634e}
+.gal-studio button{border:1px solid #489a68;background:#1b7040;padding:9px;border-radius:5px;
+ color:#fff;font:750 11px/1.3 system-ui}
+.gal-studio button:disabled{opacity:.4;cursor:not-allowed}
+.gal-studio #galFeedback[data-error="1"]{color:#ffb4a3}
