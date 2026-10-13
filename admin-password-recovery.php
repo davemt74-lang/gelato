@@ -31,7 +31,7 @@ try {
 }
 
 $adminStatement = $pdo->query(
-    "SELECT DISTINCT u.id, u.email, u.display_name, u.status, om.organization_id
+    "SELECT u.id, u.email, u.display_name, u.status, om.organization_id
      FROM users u
      INNER JOIN organization_memberships om
        ON om.user_id = u.id AND om.status = 'active'

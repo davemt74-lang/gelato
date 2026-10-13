@@ -6,6 +6,8 @@ on:
       - 'includes/UpgradeService.php'
       - 'database/20261129_v11_annotation_corrections.sql'
       - 'tests/mysql-v11-mysql8-integration.php'
+      - 'admin-password-recovery.php'
+      - 'tests/mysql8-admin-recovery-query.php'
       - '.github/workflows/mysql-v11-fk-integration.yml'
   push:
     branches: [main]
@@ -13,6 +15,8 @@ on:
       - 'includes/UpgradeService.php'
       - 'database/20261129_v11_annotation_corrections.sql'
       - 'tests/mysql-v11-mysql8-integration.php'
+      - 'admin-password-recovery.php'
+      - 'tests/mysql8-admin-recovery-query.php'
       - '.github/workflows/mysql-v11-fk-integration.yml'
 
 jobs:
@@ -47,3 +51,6 @@ jobs:
           php -l includes/UpgradeService.php
           php -l tests/mysql-v11-mysql8-integration.php
           php tests/mysql-v11-mysql8-integration.php
+          php -l admin-password-recovery.php
+          php -l tests/mysql8-admin-recovery-query.php
+          php tests/mysql8-admin-recovery-query.php
