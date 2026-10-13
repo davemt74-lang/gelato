@@ -33,7 +33,7 @@ $boot=[
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <title>AR Vision Label Profiles | Restaurant Admin</title>
-<link rel="stylesheet" href="assets/css/admin-control.css?v=20260914-1">
+<link rel="stylesheet" href="assets/css/admin-control.css?v=20261012-ui1">
 <link rel="stylesheet" href="assets/css/glasses-vision-profiles.css?v=20260928-1">
 </head>
 <body class="admin-control gvp-page">
