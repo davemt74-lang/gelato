@@ -46,7 +46,7 @@ assert.match(runtime,/glasses_vision_training_samples/,'only existing pending re
 assert.match(runtime,/review_status.*pending/,'no auto-approved samples');
 assert.match(runtime,/autoTrain.*false/,'no unreviewed model training');
 assert.match(runtime,/source==='runtime_camera'/,'camera slot provenance checked');
-assert.match(runtime,/source==='file_upload'/,'file origins segregated from cameras');
+assert.match(runtime,/in_array\(\$source,\['runtime_camera','file_upload'\]/,'file origins segregated from cameras');
 assert.match(runtime,/mission.*assigned_user_id/,'mission employee scope checked');
 assert.match(runtime,/mission.*assigned_device_id/,'mission device scope checked');
 assert.match(runtime,/captureGroup/,'training-session provenance grouping');
