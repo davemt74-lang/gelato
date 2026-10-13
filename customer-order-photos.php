@@ -32,13 +32,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
 }
 $photos=($order!=='')?glasses_customer_photo_visible($pdo,$org,$customerId,$order):[];
 $reviews=glasses_customer_photo_feedback_list($pdo,$org,$customerId,$photos);
-$groups=[];
-foreach($photos as $p){
-    $itemKey=(string)$p['kdsItemPublicId'];
-    if(!isset($groups[$itemKey]))$groups[$itemKey]=['name'=>(string)$p['itemName'],'pre_oven'=>null,'post_oven'=>null];
-    $stage=(string)$p['stage'];
-    if($stage==='pre_oven'||$stage==='post_oven')$groups[$itemKey][$stage]=$p;
-}
+$groups=glasses_customer_photo_group_by_item($photos);
 header('Cache-Control: private, no-store, max-age=0');
 header('X-Robots-Tag: noindex, nofollow');
 ?>
