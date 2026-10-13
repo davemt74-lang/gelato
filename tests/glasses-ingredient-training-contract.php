@@ -17,7 +17,7 @@ foreach([
  'autoTrain','false','NOW(6)'
 ] as $str)ingredientGate(str_contains($backend,$str),'missing governed training integration '.$str);
 ingredientGate(!str_contains($backend,'CREATE TABLE'),'must reuse existing Vision Lab schema');
-ingredientGate(str_contains($backend,'source===')===false,'no ad hoc operator-provided trust');
+ingredientGate(str_contains($backend,"in_array(\$source,['runtime_camera','file_upload']"),'capture source must use explicit allowlist');
 ingredientGate(str_contains($api,'app_require_auth()'),'authentication required');
 ingredientGate(str_contains($api,'app_verify_request_csrf($in)'),'CSRF required');
 ingredientGate(str_contains($api,"glasses_ingredient_training_capture("),'API must use validated runtime bridge');
