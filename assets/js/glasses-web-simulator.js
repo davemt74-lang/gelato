@@ -992,9 +992,21 @@ async function submitTemporalObservation(track,action,quantity,metadata={}){
       !state.browserModel.verifiedSha256||state.browserModel.assignment?.action!=='apply'||
       state.browserModel.assignment?.compatibility?.compatible!==true||
       !track.stable||track.profileMatched!==true||track.firstSeen<state.recovery.freshBarrierUntil||
+      !Number.isFinite(track.confidence)||
+      track.confidence<Math.max(.90,Number($('visionConfidenceThreshold')?.value||75)/100,
+        Number(track.profileMinimumConfidence||0))||
+      !!sequenceViolationFor(track.componentKey)||
       selectedItem()?.kdsItemPublicId!==state.build.kdsItemPublicId))return false;
   const component=state.build.components?.find(c=>c.componentKey===track.componentKey);
   const displayName=component?.displayName||track.label||track.componentKey;
+  if(state.mode==='live'){
+    const item=selectedItem();
+    if(!item||item.status!=='in_progress'||state.build.status!=='active')return false;
+    const norm=window.GelatoGlassesAssemblyRecognition?.normalize;
+    if(!norm||!assembly()?.ingredientsFor(item).some(i=>
+      norm(String(i.id).split(':').slice(1).join(':')||i.name)===norm(displayName)))
+      return false;
+  }
   try{
     if(state.mode==='mock'){
       if(!component)return false;
@@ -1303,7 +1315,7 @@ function refreshAssemblyRecognition(now=Date.now()){
  const decision=assemblyRecognitionDecision(now);
  const item=selectedItem(),ingredient=currentAssemblyIngredient(item);
  if(!decision||!decision.suggestion||!item||!ingredient){
-   if(assemblySuggestion)clearAssemblySuggestion();
+   if(assemblySuggestion){clearAssemblySuggestion();renderBuildRail(item);}
    return;
  }
  const signature=[item.kdsItemPublicId,ingredient.id,decision.suggestion.trackId,
@@ -1319,6 +1331,7 @@ function refreshAssemblyRecognition(now=Date.now()){
      speech:'Ingredient suggestion needs review.',
      dedupeKey:'assembly_suggestion|'+signature
    });
+   if(visionMode()==='assisted')renderBuildRail(item);
  }
  if(decision.automatic&&visionMode()==='automatic'){
    const approved=acknowledgeIngredient('added',{
@@ -1373,8 +1386,8 @@ function renderBuildRail(item){
     sug.hidden=!active;
     if(active)sug.textContent=next.name+' · '+Math.round(assemblySuggestion.confidence*100)+'% · suggestion (not yet confirmed)';
   }
-  if(confirm)confirm.disabled=!active;
-  if(reject)reject.disabled=!active;
+  if(confirm){confirm.hidden=!active;confirm.disabled=!active;}
+  if(reject){reject.hidden=!active;reject.disabled=!active;}
   $('hudCurrentInstruction').textContent=!item?'Select an active ticket':
     !list.length?'No assembly ingredients configured — update Menu Manager':
     summary.complete?'Ingredients accounted for · '+summary.accounted+'/'+summary.total:
