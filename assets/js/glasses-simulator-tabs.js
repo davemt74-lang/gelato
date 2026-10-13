@@ -160,7 +160,8 @@
     const cards=Array.from(rail.querySelectorAll('.console-card')).filter(card=>card!==diagnostics&&card!==voice.querySelector('.sgv-voice-controls'));
     for(const card of cards){
       const id=card.id||'';
-      const group=id==='simControlAuditPanel'||card.querySelector('#consoleItem')||card.querySelector('#exceptions')?'overview':
+      const group=id==='simControlAuditPanel'?'runtime':
+        card.querySelector('#consoleItem')?'overview':
         card.classList.contains('camera-card')||card.classList.contains('calibration-card')?'camera':
         card.classList.contains('hardware-runtime-card')||card.classList.contains('device-health-card')||
           card.classList.contains('runtime-recovery-card')?'runtime':'build';
