@@ -66,7 +66,8 @@
       <div id="gelato-agent-status" role="status"></div>
       <div id="gelato-agent-bar" aria-label="Gelato Restaurant Agent">
         <button class="ga-listen" id="gaListen" title="Listening Mode"><span>◉</span><i id="gelato-agent-dot"></i></button>
-        <button id="gaMic" title="Talk once">🎙</button>
+        <button id="gaMic" title="Talk once or interrupt speech">🎙</button>
+        <button id="gaInterrupt" title="Stop Gelato speaking" aria-label="Stop Agent speech">■</button>
         <textarea id="gaInput" rows="1" placeholder="Ask Gelato about prep, inventory, schedules, catering, wholesale, equipment…"></textarea>
         <a href="agent-canvas.php" id="gaCanvas" title="Open Agent Canvas">▣</a>
         <button class="ga-send" id="gaSend" title="Send">↑</button>
@@ -81,6 +82,7 @@
       }
     });
     q('gaMic').onclick = talkOnce;
+    q('gaInterrupt').onclick = () => interruptSpeech('button');
     q('gaListen').onclick = () => setListening(!S.listening);
   }
 
@@ -121,6 +123,7 @@
   }
 
   async function send(raw, voice = false) {
+    if(!voice)interruptSpeech('typed-message');
     const text = String(raw || '').trim();
     if (!text || S.busy) return null;
 
@@ -200,13 +203,17 @@
     }
   }
 
+  function interruptSpeech(source='button') {
+    const done=window.GelatoVoiceTurns?.interrupt?.(source)||false;
+    if(done)status('Agent stopped speaking. Listening is ready.',2600);
+    return done;
+  }
   function speak(text) {
-    try {
-      speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(String(text).slice(0, 1600));
-      utterance.rate = 1;
-      speechSynthesis.speak(utterance);
-    } catch {}
+    if(window.GelatoVoiceTurns?.speak){
+      window.GelatoVoiceTurns.speak(text,{owner:'global-agent'});
+      return;
+    }
+    try {speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(String(text).slice(0,1600));speechSynthesis.speak(utterance);} catch {}
   }
 
   async function captureFeatures(milliseconds = 2800) {
@@ -282,6 +289,7 @@
 
   async function talkOnce() {
     try {
+      interruptSpeech('talk-once');
       await verifyVoice();
       status('Listening…');
       const text = await speechOnce();
@@ -340,14 +348,23 @@
     }
 
     S.rec = new SpeechRecognition();
+    const activeRec=S.rec;
     S.rec.lang = 'en-US';
     S.rec.continuous = true;
-    S.rec.interimResults = false;
+    S.rec.interimResults = true;
     S.rec.onresult = (event) => {
       for (let index = event.resultIndex; index < event.results.length; index++) {
-        if (!event.results[index].isFinal) continue;
-        const text = event.results[index][0].transcript.trim();
+        const result=event.results[index];
+        const text = result[0].transcript.trim();
+        const evaluation=window.GelatoVoiceTurns?.evaluate?.(text,result[0].confidence,{wakeRequired:true});
+        if(evaluation?.kind==='interrupt'){
+          interruptSpeech('voice-barge-in');
+          status('Voice interruption heard. Agent stopped.');return;
+        }
+        if (!result.isFinal) continue;
+        if (evaluation?.kind==='ignored')continue;
         if (/^hey\s+gelato\b/i.test(text)) {
+          if(evaluation?.interrupt)interruptSpeech('voice-barge-in');
           if (Date.now() >= S.voiceUntil) {
             setListening(false);
             status('Voice check expired. Re-enable Listening Mode.', 4500);
@@ -359,15 +376,16 @@
       }
     };
     S.rec.onerror = (event) => {
+      if (S.rec!==activeRec)return;
       if (!['no-speech', 'aborted'].includes(event.error)) status('Listening: ' + event.error, 3000);
     };
     S.rec.onend = () => {
-      if (S.listening) {
-        setTimeout(() => {
-          try { S.rec?.start(); } catch {}
-        }, 450);
+      if (S.rec!==activeRec)return;
+      if (S.listening && !document.hidden) {
+        setTimeout(() => {if(S.listening&&S.rec===activeRec){try{activeRec.start()}catch{}}}, 650);
       }
     };
+    if(document.hidden){status('Agent microphone paused · tab hidden.');return;}
     try { S.rec.start(); } catch {}
   }
 
@@ -435,10 +453,17 @@
     }
   }
 
+  document.addEventListener('visibilitychange',()=>{
+    if(document.hidden){stopContinuous();if(S.listening)status('Agent microphone paused · tab hidden.');}
+    else if(S.listening)startContinuous();
+  });
+  window.addEventListener('beforeunload',()=>{stopContinuous();interruptSpeech('page-unload');});
+
   window.GelatoGlobalAgent = {
     send,
     setListening,
     talkOnce,
+    interruptSpeech,
     selectThread,
     get threadId() { return S.thread; },
     get user() { return S.user; },
