@@ -52,6 +52,8 @@ on:
       - 'api/glasses-simulator.php'
       - 'includes/glasses-simulator.php'
       - 'assets/js/glasses-web-simulator.js'
+      - 'assets/js/glasses-item-assembly.js'
+      - 'tests/glasses-ticket-ingredient-assembly.test.js'
       - 'assets/js/glasses-simulator-voice.js'
       - 'assets/js/glasses-voice-device.js'
       - 'assets/js/glasses-simulator-tabs.js'
@@ -234,6 +236,8 @@ jobs:
             assets/js/glasses-camera-runtime.js
             tests/glasses-camera-runtime.test.js
             assets/js/glasses-camera-workspace.js
+            assets/js/glasses-item-assembly.js
+            tests/glasses-ticket-ingredient-assembly.test.js
             assets/js/glasses-production-photo-flow.js
             api/glasses-photo-notifications.php
             includes/glasses-customer-photo-notifications.php
@@ -394,9 +398,11 @@ jobs:
           node tests/glasses-live-kds-commands.test.js
           node tests/glasses-hud-manual-voice-parity.test.js
           node tests/glasses-operator-hud-ux.test.js
+          node tests/glasses-ticket-ingredient-assembly.test.js
           node tests/glasses-session-camera-badges.test.js
           php tests/glasses-live-kds-contract.php
           node --check assets/js/glasses-web-simulator.js
+          node --check assets/js/glasses-item-assembly.js
           node --check assets/js/glasses-pos-kds-test.js
 
           (cd "$deploy_root" && zip -q -r "$GITHUB_WORKSPACE/gelato-full-deploy.zip" .)

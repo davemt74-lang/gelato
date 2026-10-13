@@ -2,6 +2,10 @@
 const cfg=window.GELATO_GLASSES_SIMULATOR||{};
 const $=id=>document.getElementById(id);
 const state={mode:'live',devices:[],device:null,work:null,selectedKdsItemPublicId:'',build:null,validation:null,seq:1,logs:[],autoPlayTimer:null,syncTimer:null,syncBusy:false,syncErrors:0,reconnectCount:0,syncFingerprint:'',syncAbort:null,syncEpoch:0,lastSyncAt:null,cameraStream:null,cameraTrack:null,cameraTarget:null,cameraDevices:[],cameraSource:'image',visionMode:'manual',visionTimer:null,visionBusy:false,visionFrameSeq:0,visionLastAt:0,visionLatencyMs:0,visionFps:0,visionDetections:[],visionTracks:new Map(),visionSubmitted:new Set(),visionAdapter:null,temporalTracks:new Map(),temporalEvents:[],temporalSequence:[],temporalViolations:[],temporalValidationBusy:false,temporalValidationFingerprint:'',temporalReadySince:0,temporalGate:null,browserModel:{status:'idle',session:null,assignment:null,profile:null,config:null,package:null,verifiedSha256:null,loadEpoch:0},dataset:{annotations:[],samples:[],drag:null,frozen:false,captureGroup:null,burstSeq:0,uploading:false},activeLearning:{enabled:true,candidates:[],capturing:false,lastCaptureByKey:new Map(),maxQueue:30,cooldownMs:10000},shadowModel:{status:'idle',session:null,assignment:null,config:null,package:null,verifiedSha256:null,runPublicId:null,summary:null,frameSeq:0,busy:false},hardwareRuntime:null,stationSoakReport:null,cookUx:{stopped:false,preview:null,acceptance:null,handoffArmed:false},recovery:{state:'ready',attempt:0,epoch:0,networkFault:false,suppressAutomatic:false,freshBarrierUntil:0,lastReason:'runtime_ready',timer:null},framePipeline:{queue:[],worker:false,epoch:0,nextSeq:0,currentAbort:null,metrics:{acceptedFrames:0,processedFrames:0,droppedFrames:0,staleFrames:0,timedOutFrames:0,cancelledFrames:0,failedFrames:0,queueDepth:0,maxObservedQueueDepth:0,lastProcessedSequence:0}}};
+const assembly=()=>window.GelatoGlassesItemAssembly;
+const assemblyProgress=new Map(),ingredientCursor=new Map();
+function itemActions(id){if(!assemblyProgress.has(id))assemblyProgress.set(id,{});return assemblyProgress.get(id);}
+function clearAssemblySession(){assemblyProgress.clear();ingredientCursor.clear();}
 const mock={
   work:{assignmentRequired:false,station:{publicId:'station-mock',name:'Sandwich / Pizza Line'},revision:'mock-revision',focusItem:{kdsItemPublicId:'kds-mock-1',status:'queued',ticket:{checkNumber:'1042',serviceMode:'dine_in',tableName:'Table 12',guestCount:2},posLine:{id:1,menuItemId:1,name:'Club Sandwich + Fries',optionName:'Regular',quantity:1,specialInstructions:'NO TOMATO · EXTRA BACON',modifiers:[{name:'Extra Bacon'}]},menu:{preparationNotes:'Build, slice and plate with fries.'},recipeSource:{status:'exact_name',recipe:{instructions:['Toast bread','Add mayo','Add turkey','Add bacon','Add lettuce','Add tomato','Top and slice','Plate with fries']}}},items:[],metrics:{queued:1,inProgress:0,ready:0,held:0}},
   components:['Toasted Bread','Mayo','Turkey','Bacon','Lettuce','Tomato','Fries'].map((name,i)=>({componentKey:'mock:'+i,displayName:name,expectedQuantity:i===0?3:1,detectedQuantity:0,unit:i===0?'slices':'portion',optional:false,status:'waiting',sortOrder:i+1})),
@@ -1176,38 +1180,43 @@ function renderTopStatus(){
   $('hudConnectivity').textContent=live?(state.device?.virtualPreview?'WEB · LIVE':'DEVICE · LIVE'):'SIM · LOCAL';
   $('hudBattery').textContent=state.device?.virtualPreview?'BROWSER':(live?'BATTERY N/A':'SIM');
 }
-/* Short KDS 1–8 slots, grouped by stable POS check ID; not long POS numbers. */
-function visibleKdsTickets(){
-  const groups=new Map();
-  for(const item of orderItems()){
-    const key=item.ticket?.checkPublicId||item.kdsItemPublicId;
-    if(!key)continue;
-    if(!groups.has(key)){
-      if(groups.size>=8)continue;
-      groups.set(key,{key,items:[]});
-    }
-    groups.get(key).items.push(item);
-  }
-  return Array.from(groups.values());
-}
+/* Only occupied KDS tickets become tabs; positions 1–8 are view-local. */
+function visibleKdsTickets(){return assembly()?.ticketGroups?.(orderItems(),8)||[];}
 function kdsSlotForItem(item){
   if(!item)return null;
-  const key=item.ticket?.checkPublicId||item.kdsItemPublicId;
-  const idx=visibleKdsTickets().findIndex(group=>group.key===key);
+  const key=assembly()?.ticketKey(item),idx=visibleKdsTickets().findIndex(g=>g.key===key);
   return idx>=0?idx+1:null;
 }
+function activeTicket(){
+  const key=assembly()?.ticketKey(selectedItem());
+  return visibleKdsTickets().find(g=>g.key===key)||visibleKdsTickets()[0]||null;
+}
+function ingredientSummary(item){
+  return assembly()?.counts(item,itemActions(item.kdsItemPublicId))||{total:0,accounted:0,complete:false};
+}
 function renderOrdersQueue(item){
-  const tickets=visibleKdsTickets();
+  const tickets=visibleKdsTickets(),selected=activeTicket();
   $('hudOrdersCount').textContent=String(tickets.length);
-  $('hudOrders').innerHTML=tickets.map((group,i)=>{
-    const active=group.items.some(x=>x.kdsItemPublicId===item?.kdsItemPublicId);
-    const focus=active?item:group.items[0];
-    const count=group.items.length;
-    return '<button type="button" class="hud-order-row '+(active?'active':'')+'" data-kds-order-slot="'+(i+1)+'" aria-label="Select KDS order '+(i+1)+'">'+
-      '<span class="ticket">#'+(i+1)+'</span><span class="item">'+escapeHtml(focus.posLine?.name||'Kitchen item')+
-      (count>1?' +'+(count-1):'')+'</span><span class="age" data-pos-ticket-clock="'+(i+1)+'">'+
-      escapeHtml(elapsedLabel(group.items[0],i))+'</span></button>';
-  }).join('')||'<span class="sim-muted">No active orders</span>';
+  const tabs=tickets.map((g,i)=>{
+    const active=g.key===selected?.key;
+    const finished=g.items.filter(x=>['ready','completed'].includes(x.status)||ingredientSummary(x).complete).length;
+    return '<button type="button" role="tab" aria-selected="'+(active?'true':'false')+
+      '" class="hud-ticket-tab '+(active?'active':'')+'" data-kds-order-slot="'+(i+1)+
+      '" aria-label="KDS ticket '+(i+1)+', '+g.items.length+' items">'+
+      '<span class="ticket">#'+(i+1)+'</span><span class="ticket-progress">'+finished+'/'+g.items.length+
+      '</span><span class="age" data-pos-ticket-clock="'+(i+1)+'">'+escapeHtml(elapsedLabel(g.items[0],i))+'</span></button>';
+  }).join('');
+  const items=selected?.items.map((line,index)=>{
+    const summary=ingredientSummary(line),active=line.kdsItemPublicId===item?.kdsItemPublicId;
+    const status=['ready','completed'].includes(line.status)?'READY':
+      summary.complete?'ASSEMBLED':summary.total?summary.accounted+'/'+summary.total:'SETUP';
+    return '<button type="button" class="hud-ticket-item '+(active?'active':'')+
+      '" data-kds-ticket-item="'+index+'" aria-pressed="'+(active?'true':'false')+'">'+
+      '<span class="item">'+escapeHtml(line.posLine?.name||'Kitchen item')+'</span>'+
+      '<span class="item-state">'+escapeHtml(status)+'</span></button>';
+  }).join('')||'';
+  $('hudOrders').innerHTML='<div class="hud-ticket-tabs" role="tablist" aria-label="Occupied KDS tickets">'+tabs+'</div>'+
+    (selected?'<div class="hud-ticket-item-list" aria-label="Items on selected ticket">'+items+'</div>':'<span class="sim-muted">No active KDS tickets</span>');
   $('hudOrdersRegion').classList.toggle('hud-queue-empty',tickets.length===0);
 }
 function buildProgressIndex(steps,comps){
@@ -1216,15 +1225,38 @@ function buildProgressIndex(steps,comps){
   if(!comps.length)return 0;
   return Math.min(steps.length-1,Math.floor((confirmed/Math.max(1,comps.length))*steps.length));
 }
-function renderBuildRail(item,steps,comps){
-  $('hudBuildMode').textContent=state.build?'ACTIVE BUILD':item?.status==='in_progress'?'BUILD RECIPE':item?.status==='queued'?'QUEUED · RECIPE':'RECIPE PREVIEW';
+function currentAssemblyIngredient(item){
+  if(!item)return null;
+  const actions=itemActions(item.kdsItemPublicId),list=assembly()?.ingredientsFor(item)||[];
+  const current=list.find(i=>i.id===ingredientCursor.get(item.kdsItemPublicId));
+  if(current&&!['added','skipped'].includes(actions[current.id]))return current;
+  const next=assembly()?.nextUnaccounted(item,actions)||null;
+  if(next)ingredientCursor.set(item.kdsItemPublicId,next.id);
+  return next;
+}
+function renderBuildRail(item){
+  const list=item?assembly()?.ingredientsFor(item)||[]:[],actions=item?itemActions(item.kdsItemPublicId):{};
+  const summary=item?ingredientSummary(item):{total:0,accounted:0,complete:false};
+  $('hudBuildMode').textContent=item?'ITEM INGREDIENTS':'SELECT A TICKET';
   $('hudBuildTicket').textContent=kdsSlotForItem(item)?'#'+kdsSlotForItem(item):'—';
-  $('hudBuildItem').textContent=item?.posLine?.name||state.build?.context?.itemName||'Choose a KDS item';
-  const meta=[item?.ticket?.tableName||item?.ticket?.serviceMode,item?.posLine?.optionName,item?.posLine?.specialInstructions].filter(Boolean);
-  $('hudBuildMeta').textContent=meta.join(' · ')||'';
-  const idx=state.build?buildProgressIndex(steps,comps):Math.min(Math.max(0,state.previewStepIndex||0),Math.max(0,steps.length-1));
-  $('hudCurrentInstruction').textContent=item?'Step '+(idx+1)+' of '+steps.length+' · '+(steps[idx]||'Review KDS item'):'Choose an item to view its build';
-  $('hudBuildSteps').innerHTML=steps.length>1?steps.slice(idx,idx+4).map((step,i)=>'<li class="'+(i===0?'current':'')+'">'+escapeHtml(step)+'</li>').join(''):'';
+  $('hudBuildItem').textContent=item?.posLine?.name||'Choose a ticket';
+  const modifiers=(item?.posLine?.modifiers||[]).map(m=>m.name).filter(Boolean);
+  $('hudBuildMeta').textContent=[item?.posLine?.specialInstructions,modifiers.length?'Modifiers: '+modifiers.join(', '):''].filter(Boolean).join(' · ');
+  const next=currentAssemblyIngredient(item);
+  $('hudCurrentInstruction').textContent=!item?'Select an active ticket':
+    !list.length?'No assembly ingredients configured — update Menu Manager':
+    summary.complete?'Ingredients accounted for · '+summary.accounted+'/'+summary.total:
+    summary.accounted+'/'+summary.total+' accounted · '+(next?.name||'Choose ingredient');
+  $('hudBuildSteps').innerHTML=list.map(ingredient=>{
+    const status=actions[ingredient.id]||'pending',active=ingredient.id===next?.id;
+    return '<li class="hud-assembly-ingredient '+status+(active?' current':'')+'">'+
+      '<span class="ingredient-state">'+(status==='added'?'✓':status==='skipped'?'↷':active?'●':'○')+'</span>'+
+      '<span class="ingredient-name">'+escapeHtml(ingredient.name)+(ingredient.optional?' · optional':'')+'</span>'+
+      '<span class="ingredient-result">'+(status==='added'?'Added':status==='skipped'?'Skipped':'')+'</span></li>';
+  }).join('');
+  for(const key of ['hudIngredientAdded','hudIngredientSkip']){
+    const el=$(key);if(el)el.disabled=!next||!!state.build;
+  }
 }
 function renderValidationPanel(comps,validation){
   const unexpected=comps.filter(c=>c.status==='unexpected').length;
@@ -1328,8 +1360,8 @@ function render(){
     ['Operator note',item?.latestOperatorNote||'None'],
     ['Guests',item?.ticket?.guestCount||'—'],['Special',item?.posLine?.specialInstructions||'None']
   ].map(([a,b])=>'<div><small>'+escapeHtml(a)+'</small><strong>'+escapeHtml(b)+'</strong></div>').join('');
-  const steps=deriveSteps(),comp=currentComponent(),comps=build?.components||[];
-  renderTopStatus();renderOrdersQueue(item);renderNextInstruction(comp,validation);renderBuildRail(item,steps,comps);renderValidationPanel(comps,validation);renderCookUxState(comps,validation);
+  const comp=currentComponent(),comps=build?.components||[];
+  renderTopStatus();renderOrdersQueue(item);renderNextInstruction(comp,validation);renderBuildRail(item);renderValidationPanel(comps,validation);renderCookUxState(comps,validation);
   $('componentCount').textContent=String(comps.length);renderCameraTargetComponents();renderDatasetClassOptions();renderDatasetAnnotations();renderActiveLearning();
   $('componentControls').innerHTML=comps.filter(c=>c.status!=='unexpected'&&c.status!=='ignored').map(c=>'<div class="component-row '+escapeHtml(c.status)+'"><div class="copy"><strong>'+escapeHtml(c.displayName)+'</strong><small>'+escapeHtml(c.status)+' · '+Number(c.detectedQuantity||0)+' / '+Number(c.expectedQuantity||0)+' '+escapeHtml(c.unit||'')+'</small></div><button type="button" data-detect="'+escapeHtml(c.componentKey)+'" '+(c.status==='confirmed'||(live&&!automaticObservationsAllowed())?'disabled':'')+'>Detect</button></div>').join('')||'<span class="sim-muted">Start a build to simulate detections.</span>';
   const unexpected=comps.filter(c=>c.status==='unexpected');
@@ -1442,8 +1474,8 @@ async function handoff(){try{
   const d=await api('handoff.expo',{buildSessionPublicId:state.build.publicId});log('LIVE','Explicit Expo handoff completed; KDS status '+(d.handoff.kdsStatus||'ready')+'.');await unloadGovernedVisionModel('build_reset');state.build=null;state.validation=null;clearRecoveryResume();await refreshWork();
 }catch(e){state.cookUx.handoffArmed=false;$('handoffExpo').textContent='Send to Expo / Finishing';log('ERROR',e.message);}}
 function resetSimulator(){stopShadowModel('build_reset');unloadGovernedVisionModel('build_reset');state.build=null;state.validation=null;state.selectedKdsItemPublicId='';clearTemporalRuntime();clearCameraTarget();$('detectionLayer').innerHTML='';log('SYSTEM','Simulator build state reset; POS/KDS records were not changed.');refreshWork();}
-$('modeSelect').addEventListener('change',async e=>{stopAutoPlay();stopLiveStationSync('idle');await unloadGovernedVisionModel('build_reset');state.mode=e.target.value;state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;clearTemporalRuntime();state.syncFingerprint='';log('MODE','Switched to '+state.mode+'.');if(state.mode==='live'){if(state.device?.virtualPreview){state.recovery.state='ready';renderRuntimeRecovery();startLiveStationSync();}else{enterRecovery('recovering','live_mode_selected');await resumeRuntimeRecovery('live_mode_selected');}}else{state.recovery.state='ready';state.recovery.suppressAutomatic=false;state.recovery.lastReason='mock_runtime_ready';renderRuntimeRecovery();await refreshWork();}});
-$('deviceSelect').addEventListener('change',async e=>{stopLiveStationSync('idle');await unloadGovernedVisionModel('build_reset');state.device=state.devices.find(x=>x.publicId===e.target.value)||null;if(state.device)localStorage.setItem(LIVE_DEVICE_KEY,state.device.publicId);window.dispatchEvent(new CustomEvent('gelato-glasses-location-change',{detail:{locationId:state.device?.locationId||null}}));state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;clearTemporalRuntime();state.syncFingerprint='';if(state.mode==='live'&&state.device){if(state.device.virtualPreview){state.recovery.state='ready';renderRuntimeRecovery();startLiveStationSync();}else{enterRecovery('recovering','device_changed');await resumeRuntimeRecovery('device_changed');}}else render();});
+$('modeSelect').addEventListener('change',async e=>{stopAutoPlay();stopLiveStationSync('idle');await unloadGovernedVisionModel('build_reset');state.mode=e.target.value;state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;clearAssemblySession();clearTemporalRuntime();state.syncFingerprint='';log('MODE','Switched to '+state.mode+'.');if(state.mode==='live'){if(state.device?.virtualPreview){state.recovery.state='ready';renderRuntimeRecovery();startLiveStationSync();}else{enterRecovery('recovering','live_mode_selected');await resumeRuntimeRecovery('live_mode_selected');}}else{state.recovery.state='ready';state.recovery.suppressAutomatic=false;state.recovery.lastReason='mock_runtime_ready';renderRuntimeRecovery();await refreshWork();}});
+$('deviceSelect').addEventListener('change',async e=>{stopLiveStationSync('idle');await unloadGovernedVisionModel('build_reset');state.device=state.devices.find(x=>x.publicId===e.target.value)||null;if(state.device)localStorage.setItem(LIVE_DEVICE_KEY,state.device.publicId);window.dispatchEvent(new CustomEvent('gelato-glasses-location-change',{detail:{locationId:state.device?.locationId||null}}));state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;clearAssemblySession();clearTemporalRuntime();state.syncFingerprint='';if(state.mode==='live'&&state.device){if(state.device.virtualPreview){state.recovery.state='ready';renderRuntimeRecovery();startLiveStationSync();}else{enterRecovery('recovering','device_changed');await resumeRuntimeRecovery('device_changed');}}else render();});
 /* Selecting a kitchen item goes directly to the recipe/build view; no extra load step.
  * Live build writes require a paired writable device and an already started KDS item. */
 async function focusKitchenItem(publicId,{autoBegin=true}={}){
@@ -1452,20 +1484,58 @@ async function focusKitchenItem(publicId,{autoBegin=true}={}){
   if(!next)return {ok:false,message:'KDS selection is stale. Refresh your orders.'};
   state.selectedKdsItemPublicId=next.kdsItemPublicId;
   state.previewStepIndex=0;state.validation=null;render();
-  if(autoBegin&&state.mode==='mock'){await startBuild();return {ok:true,message:'Mock build started.'};}
-  if(autoBegin&&state.mode==='live'&&state.device?.simulatorWritable&&next.status==='in_progress'){
-    await startBuild();return {ok:true,message:'Governed build requested for selected item.'};
-  }
-  return {ok:true,message:'Selected recipe displayed. '+(state.device?.virtualPreview?
-    'Browser preview does not certify ingredient observations.':
-    next.status==='queued'?'Item is queued: start it in KDS to authorize live build evidence.':
-    'Live build evidence requires an authorized session.')};
+  // Immediately display this menu item's assembly list. Governed build.sessions and
+  // official KDS transitions are separate explicit actions, never triggered by tab selection.
+  return {ok:true,message:'Selected '+(next.posLine?.name||'item')+' assembly ingredients from its menu configuration. No KDS change.'};
 }
 $('hudOrders').addEventListener('click',event=>{
-  const button=event.target.closest('[data-kds-order-slot]');if(!button)return;
-  const group=visibleKdsTickets()[Number(button.dataset.kdsOrderSlot)-1];if(!group)return;
-  const current=selectedItem(),next=group.items.find(x=>x.kdsItemPublicId===current?.kdsItemPublicId)||group.items[0];
-  void focusKitchenItem(next.kdsItemPublicId);
+  const ticketButton=event.target.closest('[data-kds-order-slot]');
+  if(ticketButton){
+    const group=visibleKdsTickets()[Number(ticketButton.dataset.kdsOrderSlot)-1];if(!group)return;
+    const chosen=group.items.find(x=>x.kdsItemPublicId===selectedItem()?.kdsItemPublicId)||
+      group.items.find(x=>!ingredientSummary(x).complete&&!['ready','completed'].includes(x.status))||
+      group.items[0];
+    if(chosen)void focusKitchenItem(chosen.kdsItemPublicId);
+    return;
+  }
+  const itemButton=event.target.closest('[data-kds-ticket-item]');
+  if(itemButton){
+    const group=activeTicket(),next=group?.items[Number(itemButton.dataset.kdsTicketItem)];
+    if(next)void focusKitchenItem(next.kdsItemPublicId);
+  }
+});
+function acknowledgeIngredient(result){
+  const item=selectedItem();
+  if(!item)return {ok:false,message:'Select a KDS ticket and item first.'};
+  if(state.build)return {ok:false,message:'An authorized build is active. Its ingredient evidence must be completed through governed validation.'};
+  const ingredient=currentAssemblyIngredient(item);
+  if(!ingredient)return {ok:false,message:ingredientSummary(item).complete?
+    'All ingredients are accounted for on this item.':'No configured assembly ingredients found. Update this menu item in Menu Manager.'};
+  const actions=itemActions(item.kdsItemPublicId);
+  if(['added','skipped'].includes(actions[ingredient.id]))return {ok:false,message:'Ingredient was already accounted for.'};
+  actions[ingredient.id]=result;
+  ingredientCursor.delete(item.kdsItemPublicId);
+  const summary=ingredientSummary(item);
+  if(summary.complete){
+    const next=assembly()?.nextItemInTicket(activeTicket(),item.kdsItemPublicId,id=>itemActions(id));
+    if(next){
+      state.selectedKdsItemPublicId=next.kdsItemPublicId;
+      state.previewStepIndex=0;
+      render();
+      return {ok:true,message:ingredient.name+' '+result+'. Item assembled (manual checklist only). Now '+(next.posLine?.name||'next item')+' on this ticket. KDS state is unchanged.'};
+    }
+    render();
+    return {ok:true,message:ingredient.name+' '+result+'. All configured items on this ticket are accounted for in the local checklist. Confirm official KDS readiness separately.'};
+  }
+  render();
+  return {ok:true,message:ingredient.name+' '+result+'. Next: '+(currentAssemblyIngredient(item)?.name||'review item')+'. Manual entry only; no AI verification or KDS state change.'};
+}
+$('hudRight').addEventListener('click',event=>{
+  const action=event.target.closest('[data-hud-ingredient-action]')?.dataset.hudIngredientAction;
+  if(action==='added'||action==='skipped'){
+    const outcome=acknowledgeIngredient(action);
+    const target=$('simNavigationStatus');if(target)target.textContent=outcome.message;
+  }
 });
 $('workItemSelect').addEventListener('change',e=>{void focusKitchenItem(e.target.value);});
 $('refreshWork').addEventListener('click',refreshWork);$('startBuild').addEventListener('click',startBuild);$('resetSimulator').addEventListener('click',resetSimulator);$('injectUnexpected').addEventListener('click',injectUnexpected);$('evaluateBuild').addEventListener('click',validate);$('autoPlayBuild').addEventListener('click',toggleAutoPlay);$('nextDetection').addEventListener('click',playNextMockDetection);$('lowConfidenceDetection').addEventListener('click',injectLowConfidenceDetection);$('completeMockBuild').addEventListener('click',completeMockScenario);$('handoffExpo').addEventListener('click',handoff);$('clearLog').addEventListener('click',()=>{state.logs=[];renderLog();});
@@ -1745,7 +1815,7 @@ async function kitchenCommand(action,{spoken=false}={}){
     const input=$('simItemNoteInput');
     note=String(input?.value||'').trim();
     if(!note&&spoken){
-      const raw=String(deriveSteps()[Math.min(state.previewStepIndex||0,Math.max(0,deriveSteps().length-1))]||'').trim();
+      const raw=String(currentAssemblyIngredient(item)?.name||'').trim();
       note=raw?('Operator reported added: '+raw.replace(/^add\s+/i,'')):'';
     }
     if(!note&&!spoken&&typeof window.prompt==='function'){
@@ -1797,37 +1867,41 @@ async function kitchenCommand(action,{spoken=false}={}){
 
 /** Spoken and manual navigation share the same real kitchen command entry point. */
 function simulatorNavigation(action,options={}){
+  if(action==='ingredient_added'||action==='skip_ingredient')return acknowledgeIngredient(action==='ingredient_added'?'added':'skipped');
   if(KITCHEN_COMMANDS.has(action))return kitchenCommand(action,options);
   const items=orderItems(),current=selectedItem();
   if(action==='next_item'||action==='previous_item'){
-    if(!items.length)return {ok:false,message:'No kitchen orders yet. Send an order to KDS first.'};
-    if(state.build)return {ok:false,message:'Active build is locked to the current item. Finish it before switching.'};
-    const index=Math.max(0,items.findIndex(x=>x.kdsItemPublicId===current?.kdsItemPublicId));
-    const next=(index+(action==='next_item'?1:items.length-1))%items.length;
-    state.selectedKdsItemPublicId=items[next].kdsItemPublicId;state.previewStepIndex=0;render();
-    return {ok:true,message:'Item '+(next+1)+' of '+items.length+': '+(items[next].posLine?.name||'Kitchen item')+', ticket '+(items[next].ticket?.checkNumber||'unknown')+'.'};
+    if(!current)return {ok:false,message:'No KDS item selected.'};
+    if(state.build)return {ok:false,message:'Finish the governed build before changing items.'};
+    const group=activeTicket();if(!group)return {ok:false,message:'No active ticket.'};
+    const index=group.items.findIndex(x=>x.kdsItemPublicId===current.kdsItemPublicId);
+    const next=group.items[(index+(action==='next_item'?1:group.items.length-1))%group.items.length];
+    if(!next)return {ok:false,message:'No additional item on this ticket.'};
+    state.selectedKdsItemPublicId=next.kdsItemPublicId;
+    state.previewStepIndex=0;render();
+    return {ok:true,message:'Selected '+(next.posLine?.name||'item')+' on KDS ticket #'+(kdsSlotForItem(next)||'—')+'.'};
   }
+
+  if(action==='skip_ingredient')return acknowledgeIngredient('skipped');
   if(action==='next'||action==='previous'){
-    if(!current)return {ok:false,message:'No current KDS item. Send a POS ticket to KDS first.'};
-    if(state.build)return {ok:false,message:'Build steps are controlled by validated observations while a build is active.'};
-    const steps=deriveSteps();
-    state.previewStepIndex=Math.max(0,Math.min(Math.max(0,steps.length-1),(state.previewStepIndex||0)+(action==='next'?1:-1)));
-    render();return {ok:true,message:'Preview step '+((state.previewStepIndex||0)+1)+' of '+steps.length+': '+(steps[state.previewStepIndex]||'Review item')+'. No kitchen changes.'};
-  }
-  if(action==='item_added'){
-    if(!current)return {ok:false,message:'No kitchen item selected.'};
-    if(state.build)return {ok:false,message:'Ingredient confirmation requires evidence. Use the authorized Detect action on the active build.'};
-    const steps=deriveSteps(),step=steps[state.previewStepIndex||0]||'Current step';
-    state.previewStepIndex=Math.min(Math.max(0,steps.length-1),(state.previewStepIndex||0)+1);
-    render();
-    return {ok:true,message:'Preview acknowledgment: '+step+'. Next: '+(steps[state.previewStepIndex]||'Review ticket')+'. KDS was not changed.'};
+    if(!current)return {ok:false,message:'Select an item first.'};
+    const list=assembly()?.ingredientsFor(current)||[];
+    if(!list.length)return {ok:false,message:'No assembly ingredients configured for this item.'};
+    const currentId=currentAssemblyIngredient(current)?.id;
+    const cursor=Math.max(0,list.findIndex(i=>i.id===currentId));
+    const nextIndex=Math.max(0,Math.min(list.length-1,cursor+(action==='next'?1:-1)));
+    const next=list[nextIndex];
+    if(['added','skipped'].includes(itemActions(current.kdsItemPublicId)[next.id]))
+      return {ok:false,message:'That ingredient is already accounted for.'};
+    ingredientCursor.set(current.kdsItemPublicId,next.id);render();
+    return {ok:true,message:'Selected ingredient '+next.name+'. Mark Added or Skip to account for it.'};
   }
   if(action==='repeat'){
     if(!current)return {ok:false,message:'No current item. Waiting for kitchen orders.'};
-    const steps=deriveSteps();return {ok:true,message:'Ticket '+(current.ticket?.checkNumber||'')+', '+(current.posLine?.name||'Kitchen item')+'. '+(steps[state.previewStepIndex||0]||'Review item')+'.'};
+    const ingredient=currentAssemblyIngredient(current);return {ok:true,message:'KDS #'+(kdsSlotForItem(current)||'—')+' · '+(current.posLine?.name||'Kitchen item')+' · '+(ingredient?'Add '+ingredient.name:'Check item status')+'.'};
   }
   if(action==='status')return {ok:true,message:state.mode==='mock'?'Mock demonstration; sample orders only.':'Live display, '+items.length+' KDS item'+(items.length===1?'':'s')+'. '+(current?'Selected '+(current.posLine?.name||'item')+'.':'No active KDS work.')+(state.device?.virtualPreview?(state.device?.kitchenWritable?' Kitchen controls enabled.':' View-only; kitchen changes require KDS update permission.'):' Paired device selected.')};
-  return {ok:false,message:'Unknown command. Try next, next item, previous, item added, repeat, or status.'};
+  return {ok:false,message:'Unknown command. Try ingredient added, skip ingredient, next item, repeat, or status.'};
 }
 window.GelatoGlassesNavigation={dispatch:simulatorNavigation,context:()=>({
   mode:state.mode,items:orderItems().length,item:selectedItem()?.posLine?.name||null,

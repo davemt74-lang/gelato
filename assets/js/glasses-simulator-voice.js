@@ -44,7 +44,8 @@
     if(/^(?:note added|note ingredient added|i added an item)$/.test(phrase))return 'item_added';
     if(/^(?:next (?:item|order|ticket)|skip (?:item|order|ticket)|following (?:item|order))$/.test(phrase))return 'next_item';
     if(/^(?:previous (?:item|order|ticket)|last (?:item|order))$/.test(phrase))return 'previous_item';
-    if(/^(?:item added|ingredient added|added item|i added it|added|mark step done)$/.test(phrase))return 'item_added';
+    if(/^(?:item added|ingredient added|added item|i added it|added|mark ingredient done)$/.test(phrase))return 'ingredient_added';
+    if(/^(?:skip ingredient|skip topping|skip this ingredient|ingredient skipped)$/.test(phrase))return 'skip_ingredient';
     if(/^(?:next|next step|continue|move on|go forward)$/.test(phrase))return 'next';
     if(/^(?:previous|previous step|back|go back)$/.test(phrase))return 'previous';
     if(/^(?:repeat|repeat step|what's next|what is next|read this step)$/.test(phrase))return 'repeat';
@@ -54,7 +55,7 @@
   function dispatch(command,{spoken=false}={}){
     if(command==='stop_voice'){stopVoice();flash('Voice listening stopped.');return;}
     if(command==='help'){
-      const message='Say start ticket, start item, next item, item ready, ticket ready, finish ticket twice to confirm, item added, hold ticket, fire ticket, repeat, or status.';
+      const message='Say start ticket, start item, ingredient added, skip ingredient, next item, item ready, ticket ready, finish ticket twice to confirm, hold ticket, fire ticket, repeat, or status.';
       feedback(message);flash(message);if(spoken)announce(message);return;
     }
     const provider=nav();
@@ -257,7 +258,7 @@
   const commands=[
     ['simNavNext','next'],['simNavPrevious','previous'],
     ['simNavNextItem','next_item'],['simNavPreviousItem','previous_item'],
-    ['simNavItemAdded','item_added'],['simNavRepeat','repeat']
+    ['simNavItemAdded','ingredient_added'],['simNavRepeat','repeat']
   ];
   for(const [id,command] of commands)$(id)?.addEventListener('click',()=>dispatch(command));
   // HUD overlay buttons and voice use the same action dispatcher and permissions.
