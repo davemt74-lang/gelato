@@ -22,4 +22,21 @@ $route=gaw_route(['permissions'=>['resumes.view'],'role_slug'=>'manager'],'Show 
 $route=gaw_route(['permissions'=>['audit.view'],'role_slug'=>'manager'],'What recent employee activity happened today?');gaw_test(($route['route']??'')==='api/workspace-workforce-agent.php','employee activity intent did not route to workforce Agent',16);
 $actionId=gaw_record_action($pdo,$org,$u1,$threadId,['messageDatabaseId'=>$agentMessage['databaseId'],'skill'=>'employee.prep','route'=>'api/employee-agent.php','request'=>['message'=>'What is my prep list?'],'result'=>['answer'=>'You have two prep tasks.']]);gaw_test(str_starts_with($actionId,'act-'),'action receipt was not created',17);$count=(int)$pdo->query("SELECT COUNT(*) FROM restaurant_agent_actions WHERE organization_id={$org} AND user_id={$u1}")->fetchColumn();gaw_test($count===1,'action receipt count mismatch',18);
 $threads=gaw_threads($pdo,$org,$u1);gaw_test(count($threads)===1&&(int)$threads[0]['message_count']===2,'thread summary did not include messages',19);
+$history=gaw_history_page($pdo,$org,$u1,$threadId,0,80);
+gaw_test(count($history['messages'])===2&&!empty($history['messages'][0]['created_at']),'complete history retains message timestamps',31);
+gaw_test(($history['messages'][0]['channel']??'')==='voice','voice channel survives full history',32);
+try{gaw_history_page($pdo,$org,$u2,$threadId,0,80);gaw_test(false,'other user could retrieve private history',33);}
+catch(InvalidArgumentException){}
+for($i=0;$i<88;$i++)gaw_append($pdo,$org,$u1,$threadId,'user','History sample '.($i+1),['channel'=>'text']);
+$page1=gaw_history_page($pdo,$org,$u1,$threadId,0,80);
+gaw_test(count($page1['messages'])===80&&$page1['hasMore']&&$page1['nextBeforeId']!==null,'history first page cursor missing',34);
+$page2=gaw_history_page($pdo,$org,$u1,$threadId,(int)$page1['nextBeforeId'],80);
+gaw_test(count($page2['messages'])===10&&!$page2['hasMore'],'history second page missing oldest messages',35);
+$pdo->prepare('UPDATE agent_conversations SET archived_at=NOW(6),status=? WHERE organization_id=? AND user_id=? AND public_id=?')->execute(['archived',$org,$u1,$threadId]);
+gaw_test(gaw_thread($pdo,$org,$u1,$threadId)===null,'archived thread should not accept new conversation sends',36);
+$archive=gaw_history_page($pdo,$org,$u1,$threadId,0,80);
+gaw_test(count($archive['messages'])===80&&!empty($archive['thread']['archived_at']),'owner cannot view archived history',37);
+$threadsAll=gaw_history_threads($pdo,$org,$u1);
+gaw_test(count($threadsAll['threads'])===1&&!empty($threadsAll['threads'][0]['archived_at']),'archived thread missing from complete history',38);
+gaw_test(count(gaw_history_threads($pdo,$org,$u2)['threads'])===0,'another employee could list private history',39);
 echo "thread={$threadId} messages=".count($messages)." actions={$count}\n";
