@@ -5,8 +5,14 @@
   const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
   const toggle=$('simVoiceToggle'),status=$('simVoiceFeedback'),stage=$('glassesStage'),notice=$('simNavFeedback');
   let recognizer=null,enabled=false,listening=false,attempts=0,restartTimer=null,noticeTimer=null;
+  function transcript(text){
+    const el=$('simVoiceTranscriptText');
+    if(el)el.textContent=String(text||'').slice(0,240);
+  }
   function feedback(message,state='idle'){
     if(status){status.textContent=message;status.dataset.state=state;}
+    if(state==='error'||state==='blocked')transcript('Voice unavailable — use the manual controls');
+    window.dispatchEvent?.(new CustomEvent('gelato-glasses-voice-status',{detail:{state}}));
   }
   function announce(message){
     if(!$('simVoiceReplies')?.checked||!('speechSynthesis' in window))return;
@@ -106,6 +112,7 @@
     ++sequence;enabled=false;listening=false;attempts=0;lastError='none';
     clearRecovery();releaseRecognition();diag('off');updateVoiceButton();
     feedback('Microphone off. Manual navigation remains available.');
+    transcript('Microphone off · Enable Voice to listen');
   }
   function scheduleRecovery(reason='aborted'){
     if(!enabled||document.hidden||recoverScheduled)return;
@@ -134,21 +141,22 @@
     if(!Recognition){enabled=false;diag('failed',{error:'start-failed'});updateVoiceButton();return;}
     const token=sequence;
     const active=new Recognition();recognizer=active;active.__starting=true;
-    active.lang='en-US';active.interimResults=false;active.continuous=true;active.maxAlternatives=1;
+    active.lang='en-US';active.interimResults=true;active.continuous=true;active.maxAlternatives=1;
     active.onstart=()=>{
       if(recognizer!==active||!enabled||token!==sequence)return;
       active.__starting=false;listening=true;diag('active',{microphoneActive:true});
       feedback('Listening · Say “next”, “next item”, or “item added”.','listening');
+      transcript('Listening… say a kitchen command');
     };
     active.onresult=event=>{
       if(recognizer!==active||!enabled)return;
       attempts=0; // A real result proves recovery reached a functional recognition cycle.
       for(let i=event.resultIndex;i<event.results.length;i++){
-        if(event.results[i].isFinal) {
-          const transcript=String(event.results[i][0]?.transcript||'');
-          if(recentSpeech&&transcript.trim().toLowerCase()===recentSpeech)continue;
-          commandFromSpeech(transcript);
-        }
+        const heard=String(event.results[i][0]?.transcript||'').trim();
+        if(!heard)continue;
+        if(recentSpeech&&heard.toLowerCase()===recentSpeech)continue; // Never display agent echo as a user command.
+        transcript((event.results[i].isFinal?'Heard: ':'Listening: ')+heard);
+        if(event.results[i].isFinal)commandFromSpeech(heard);
       }
     };
     active.onerror=event=>{
@@ -279,4 +287,5 @@
   updateVoiceButton();
   refresh();
   feedback(Recognition?'Voice off. Click Enable Voice to allow microphone access.':'Speech recognition unavailable here; navigation buttons are ready.');
+  transcript(Recognition?'Microphone off · Enable Voice to listen':'Speech recognition unavailable · use buttons');
 })();
