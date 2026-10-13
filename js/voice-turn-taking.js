@@ -52,10 +52,11 @@
   }
   function interrupt(source='button'){
     const wasSpeaking=speaking;
+    const interruptedOwner=owner;
     const cb=endCallback;
     token++;speaking=false;pending=[];current='';owner='';endCallback=null;lastEnd=Date.now();
     try{window.speechSynthesis?.cancel?.()}catch{}
-    if(wasSpeaking){notify('interrupted',{source});try{cb?.({interrupted:true,source})}catch{}}
+    if(wasSpeaking){notify('interrupted',{source,owner:interruptedOwner});try{cb?.({interrupted:true,source})}catch{}}
     return wasSpeaking;
   }
   function speak(text,options={}){
