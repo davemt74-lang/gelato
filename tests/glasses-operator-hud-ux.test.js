@@ -8,16 +8,17 @@ assert.match(page,/id="leftWidth" type="range"/);
 assert.match(page,/id="leftWidthValue"/);
 assert.match(page,/id="hudCurrentInstruction"/);
 assert.match(page,/id="hudBuildMode"/);
-assert.match(page,/KDS ORDERS · 1–8/);
+assert.match(page,/ACTIVE KDS TICKETS/);
 assert.match(src,/calibration\.regions\.hudOrdersRegion\.w/);
 assert.match(src,/\$\('leftWidth'\)\.addEventListener\('input'/);
 assert.match(src,/saveCalibration\(\)/);
 assert.match(src,/async function focusKitchenItem/);
 assert.match(src,/\$\('hudOrders'\)\.addEventListener\('click'/);
 assert.match(src,/state\.device\?\.simulatorWritable&&next\.status==='in_progress'/);
-assert.match(src,/Recipe steps unavailable/);
+assert.match(src,/function renderBuildRail\(item\)/);
+assert.match(src,/No assembly ingredients configured/);
 assert.doesNotMatch(src,/:\['Load work','Build item','Validate','Send to Expo'\]/);
-assert.match(src,/state\.build\?'ACTIVE BUILD'/);
+assert.match(src,/item\?'ITEM INGREDIENTS'/);
 assert.match(src,/validationCard'\)\.hidden=!state\.build/);
 assert.match(css,/#glassesStage:not\(\.calibrating\) \.camera-capture-zone\{display:none!important/);
 assert.match(css,/#glassesStage\.calibrating \.camera-capture-zone\{display:block/);
@@ -40,8 +41,20 @@ const nodes={
  hudOrdersRegion:{classList:{toggle(){}}}
 };
 const ctx={Map,Array,Math,Number,String,JSON,
+  assembly:()=>({
+    ticketKey:item=>item?.ticket?.checkPublicId||item?.kdsItemPublicId||'',
+    ticketGroups:items=>{
+      const groups=new Map();
+      for(const item of items){if(['cancelled','completed'].includes(item.status))continue;
+        const key=item.ticket?.checkPublicId||item.kdsItemPublicId;
+        if(!groups.has(key)){if(groups.size>=8)continue;groups.set(key,{key,items:[]});}
+        groups.get(key)?.items.push(item);}
+      return [...groups.values()];
+    }
+  }),
+  ingredientSummary:()=>({total:0,accounted:0,complete:false}),
   orderItems:()=>queue,elapsedLabel:()=> '03:25',selectedItem:()=>selection,
-  escapeHtml:val=>String(val).replace(/[&<>"']/g,''),
+  escapeHtml:val=>String(val).replace(/[&<>"]/g,''),
   $:id=>nodes[id]};
 vm.runInNewContext(blocks+'\nthis.visibleKdsTickets=visibleKdsTickets;this.kdsSlotForItem=kdsSlotForItem;this.renderOrdersQueue=renderOrdersQueue;',ctx);
 const ticket=(id,check,line)=>({kdsItemPublicId:id,ticket:{checkPublicId:check,checkNumber:'269014-ABCDEFGHIJ'+check},posLine:{name:line}});
