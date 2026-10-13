@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require __DIR__.'/../includes/bootstrap.php';
 require __DIR__.'/../includes/agent-workspace-core.php';
+require_once __DIR__.'/../includes/agent-voice-conversation.php';
 require_once __DIR__.'/../includes/agent-node-registry.php';
 require_once __DIR__.'/../includes/admin-control-core.php';
 require_once __DIR__.'/../includes/menu-training-knowledge.php';
@@ -29,7 +30,24 @@ if($_SERVER['REQUEST_METHOD']!=='POST'){header('Allow: GET, POST');app_json_resp
 $in=app_json_input();app_verify_request_csrf($in);$action=(string)($in['action']??'');
 try{
     if($action==='new_thread'){$thread=gaw_create_thread($pdo,$org,$uid,(string)($in['channel']??'text'));app_audit($pdo,$org,$uid,'agent.thread_created','agent_conversation',(string)$thread['public_id']);app_json_response(['ok'=>true,'thread'=>$thread]);}
-    if($action==='append'){$thread=trim((string)($in['threadId']??''));$role=(string)($in['role']??'user');$message=gaw_append($pdo,$org,$uid,$thread,$role,(string)($in['content']??''),['channel'=>$in['channel']??'text','skill'=>$in['skill']??null,'tool'=>$in['tool']??null,'voiceEventId'=>$in['voiceEventId']??null,'structured'=>$in['structured']??null,'sources'=>is_array($in['sources']??null)?$in['sources']:[]]);app_json_response(['ok'=>true,'message'=>$message]);}
+    if($action==='append'){
+        $thread=trim((string)($in['threadId']??''));
+        $role=(string)($in['role']??'user');
+        $channel=(string)($in['channel']??'text');
+        $voiceEvent=(string)($in['voiceEventId']??'');
+        $greeting=null;
+        if($role==='user'&&$channel==='voice'){
+            $speaker=avc_verified_speaker($pdo,$org,$user,$voiceEvent);
+            if($speaker&&(int)$speaker['userId']===$uid)
+                $greeting=avc_greeting($pdo,$org,$uid,(string)$speaker['firstName']);
+        }
+        $message=gaw_append($pdo,$org,$uid,$thread,$role,(string)($in['content']??''),[
+            'channel'=>$channel,'skill'=>$in['skill']??null,'tool'=>$in['tool']??null,
+            'voiceEventId'=>$voiceEvent,'structured'=>$in['structured']??null,
+            'sources'=>is_array($in['sources']??null)?$in['sources']:[]
+        ]);
+        app_json_response(['ok'=>true,'message'=>$message,'greeting'=>$greeting?['text'=>$greeting,'verified'=>true]:null]);
+    }
     if($action==='route'){
         $message=trim((string)($in['message']??''));if($message==='')throw new InvalidArgumentException('Enter an Agent request.');
         $text=mb_strtolower(preg_replace('/^hey\s+gelato[,\s]*/iu','',$message)??$message,'UTF-8');
