@@ -23,7 +23,7 @@
       if(dot)dot.dataset.state=enabled[slot-1]?'enabled':'disabled';
       if(number)number.textContent=String(session.count[slot]);
       button.classList.toggle('has-unread',session.unread[slot]>0);
-      button.setAttribute('aria-label','Camera '+slot+
+      button.setAttribute('aria-label','Cam '+slot+
         (enabled[slot-1]?' enabled':' disabled')+
         ' · '+session.count[slot]+' new photo'+(session.count[slot]===1?'':'s')+' this session'+
         (session.unread[slot]?' · '+session.unread[slot]+' unread':''));
@@ -263,7 +263,7 @@
     shell.append(nav,panes);panel.prepend(shell);
     for(let slot=1;slot<=5;slot++){
       const name='camera'+slot,button=document.createElement('button');button.type='button';
-      const label=document.createElement('span');label.textContent='Camera '+slot;
+      const label=document.createElement('span');label.textContent='Cam '+slot;
       const dot=document.createElement('span');dot.className='gc-camera-status-dot';
       dot.dataset.state='disabled';dot.setAttribute('aria-hidden','true');
       const counter=document.createElement('span');counter.className='gc-session-new-count';
