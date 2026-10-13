@@ -18,7 +18,7 @@ voiceBrainCheck(str_contains($brain,"voice.manage"),'cross-user greeting require
 voiceBrainCheck(str_contains($brain,'DATE_SUB(NOW(6),INTERVAL 15 MINUTE)'),'expired matches never greet by name');
 voiceBrainCheck(str_contains($brain,"role='user'")&&str_contains($brain,'TIMESTAMPDIFF'),'greeting based on user message history not client clock');
 voiceBrainCheck(str_contains($brain,"idle_min")&&str_contains($brain,"CURRENT_DATE()"),'first conversation per day and idle period');
-voiceBrainCheck(str_contains($brain,"gaw_append($pdo,$org,$uid,$thread,'user'")&&str_contains($brain,"gaw_append($pdo,$org,$uid,$thread,'agent'"),'KDS user and agent replies saved to existing Agent Brain');
+voiceBrainCheck(str_contains($brain,'gaw_append($pdo,$org,$uid,$thread,\'user\'')&&str_contains($brain,'gaw_append($pdo,$org,$uid,$thread,\'agent\''),'KDS user and agent replies saved to existing Agent Brain');
 voiceBrainCheck(str_contains($brain,"actorUserId"),'manager-mediated speaker logs retain actor identity');
 voiceBrainCheck(str_contains($api,'avc_verified_speaker')&&str_contains($api,'avc_greeting'),'Global Agent only greets verified voice owner');
 voiceBrainCheck(str_contains($global,'identifySpeaker')&&str_contains($global,'sessionUserMatch'),'global matching preserves signed-in account boundary');
