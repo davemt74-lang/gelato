@@ -12,6 +12,7 @@
     voiceEventId: '',
     voiceUntil: 0,
     listening: false,
+    lastBargeIn: 0,
     rec: null,
     poll: null,
   };
@@ -358,9 +359,11 @@
         const text = result[0].transcript.trim();
         const evaluation=window.GelatoVoiceTurns?.evaluate?.(text,result[0].confidence,{wakeRequired:true});
         if(evaluation?.kind==='interrupt'){
+          S.lastBargeIn=Date.now();
           interruptSpeech('voice-barge-in');
           status('Voice interruption heard. Agent stopped.');return;
         }
+        if(Date.now()-S.lastBargeIn<1300&&/^(?:hey\s+gelato\s+)?(?:stop|stop speaking|interrupt)\b/i.test(text))continue;
         if (!result.isFinal) continue;
         if (evaluation?.kind==='ignored')continue;
         if (/^hey\s+gelato\b/i.test(text)) {
