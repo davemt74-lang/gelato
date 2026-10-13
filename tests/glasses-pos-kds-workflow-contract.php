@@ -39,7 +39,7 @@ testGlassesWorkflow(!str_contains($js,'fetch('),'test board must not silently mo
 testGlassesWorkflow(str_contains($css,'grid-template-columns:repeat(3,minmax(0,1fr))'),'side-by-side layout missing');
 testGlassesWorkflow(str_contains($css,'@media(max-width:1120px)'),'responsive one-panel mode missing');
 testGlassesWorkflow(str_contains($visionCss,'.vl-workflow-modes'),'Vision Lab cards lack responsive CSS');
-testGlassesWorkflow(str_contains($sim,'<option value="mock">Mock</option>') && str_contains($sim,'<option value="live">Live Gelato</option>'),'simulator mode switch missing');
+testGlassesWorkflow(str_contains($sim,'<option value="mock">Mock Demo</option>') && str_contains($sim,'<option value="live" selected>Live Gelato</option>'),'simulator mode switch missing');
 testGlassesWorkflow(str_contains($simApi,"'action'") || str_contains($simApi,"'work'"),'existing simulator API missing');
 testGlassesWorkflow(str_contains($simServer,'glasses_current_work('),'live simulator no longer reads real KDS work');
 echo "glasses-pos-kds-workflow=ok\n";
