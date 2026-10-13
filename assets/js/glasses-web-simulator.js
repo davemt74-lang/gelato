@@ -1098,9 +1098,9 @@ function renderValidationPanel(comps,validation){
 }
 function renderNextInstruction(comp,validation){
   const instructions=deriveSteps();
-  const next=comp?'Add '+comp.displayName:(!state.build&&selectedItem()?instructions[Math.min(state.previewStepIndex||0,Math.max(0,instructions.length-1))]||'Review ticket':validation?.nextStage==='expo_finishing'?'Send to Expo / Finishing':'Validate build');
+  const next=!selectedItem()&&!state.build?'Waiting for KDS orders':comp?'Add '+comp.displayName:(!state.build&&selectedItem()?instructions[Math.min(state.previewStepIndex||0,Math.max(0,instructions.length-1))]||'Review ticket':validation?.nextStage==='expo_finishing'?'Send to Expo / Finishing':'Validate build');
   $('hudNextCenter').textContent=next;
-  $('hudNextTarget').textContent=comp?(Number(comp.detectedQuantity||0)+' / '+Number(comp.expectedQuantity||0)+' '+(comp.unit||'')):(!state.build&&selectedItem()?'STEP '+((state.previewStepIndex||0)+1)+' OF '+instructions.length+' · PREVIEW ONLY':(validation?.status||'Product validation'));
+  $('hudNextTarget').textContent=!selectedItem()&&!state.build?'Send a POS ticket to KDS':comp?(Number(comp.detectedQuantity||0)+' / '+Number(comp.expectedQuantity||0)+' '+(comp.unit||'')):(!state.build&&selectedItem()?'STEP '+((state.previewStepIndex||0)+1)+' OF '+instructions.length+' · PREVIEW ONLY':(validation?.status||'Product validation'));
 }
 function cookUxScenarioDefinition(key){
   return globalThis.GelatoCookUxHarness?.scenarios?.[key]||null;
@@ -1113,6 +1113,7 @@ function setCookUxAlert(definition){
   title.textContent=definition.title||'CHECK';tone.textContent=(definition.tone||'advisory').toUpperCase();message.textContent=definition.message||'Review before continuing.';
 }
 function renderCookUxState(comps,validation){
+  if(!state.build&&!state.cookUx.preview&&!state.cookUx.stopped){setCookUxAlert(null);return;}
   if(state.cookUx.preview){setCookUxAlert(cookUxScenarioDefinition(state.cookUx.preview));return;}
   if(state.cookUx.stopped){setCookUxAlert(cookUxScenarioDefinition('stop_cancel'));return;}
   if(state.recovery.state==='blocked'){setCookUxAlert(cookUxScenarioDefinition('recovery_blocked'));return;}
