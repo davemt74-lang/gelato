@@ -479,6 +479,7 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-v10-cook-ux-harness.js?v=20260929-v10-6"></script>
 <script src="js/voice-session-presence.js?v=20261013-presence1"></script>
 <script src="assets/js/glasses-item-assembly.js?v=20261013-265"></script>
+<script src="assets/js/glasses-assembly-recognition.js?v=20261013-266"></script>
 <script src="assets/js/glasses-web-simulator.js?v=20261013-265"></script>
 <script src="assets/js/glasses-voice-device.js?v=20261013-device1"></script>
 <script src="assets/js/glasses-simulator-voice.js?v=20261013-265"></script>
