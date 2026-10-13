@@ -12,7 +12,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <title>Web Glasses Simulator · Gelato</title>
 <link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20261013-live1">
 <link rel="stylesheet" href="assets/css/glasses-simulator-hud-ux.css?v=20261013-voice1">
-<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-hud-edit1">
+<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-hud-edit2">
 </head>
 <body>
 <header class="sim-topbar">
@@ -516,8 +516,8 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-item-assembly.js?v=20261013-265"></script>
 <script src="assets/js/glasses-employee-runtimes.js?v=20261013-268"></script>
 <script src="assets/js/glasses-assembly-recognition.js?v=20261013-266"></script>
-<script src="assets/js/glasses-hud-notifications.js?v=20261013-266a"></script>
-<script src="assets/js/glasses-web-simulator.js?v=20261013-hud-edit1"></script>
+<script src="assets/js/glasses-hud-notifications.js?v=20261013-hud-edit2"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20261013-hud-edit2"></script>
 <script src="assets/js/glasses-voice-device.js?v=20261013-device1"></script>
 <script src="assets/js/glasses-simulator-voice.js?v=20261013-266a"></script>
 <script src="assets/js/glasses-multicamera.js?v=20261013-multi1"></script>
