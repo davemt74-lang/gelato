@@ -19,6 +19,7 @@ on:
       - 'includes/glasses-employee-runtimes.php'
       - 'database/20261214_glasses_employee_runtimes.sql'
       - 'tests/glasses-hud-notifications.test.js'
+      - 'tests/glasses-runtime-canvas-editor.test.js'
       - 'tests/glasses-employee-runtime-contract.php'
       - 'docs/GLASSES-HUD-NOTIFICATIONS-SECTION266-ACCEPTANCE.md'
       - 'assets/js/glasses-item-assembly.js'
@@ -189,6 +190,7 @@ jobs:
           php -l tests/glasses-assembly-auto-server-contract.php
           php tests/glasses-assembly-auto-server-contract.php
           node tests/glasses-hud-notifications.test.js
+          node tests/glasses-runtime-canvas-editor.test.js
           node tests/glasses-session-camera-badges.test.js
           php -l includes/glasses-ingredient-training.php
           php -l api/glasses-ingredient-training.php
