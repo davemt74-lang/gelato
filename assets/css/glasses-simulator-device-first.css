@@ -513,3 +513,41 @@ html,body{max-width:100%;overflow-x:hidden}
   .sgv-tabbed-console .gc-camera-tabs [role="tab"]{min-width:95px}
   .sgv-live-transcript{grid-template-columns:1fr;gap:3px}
 }
+
+/* Section 265: only occupied KDS tabs, then ticket items. */
+#glassesStage .hud-orders-list{display:grid;gap:7px;min-width:0}
+#glassesStage .hud-ticket-tabs{display:flex;flex-wrap:wrap;gap:4px;min-width:0}
+#glassesStage .hud-ticket-tab{display:flex;align-items:center;flex-direction:column;gap:2px;min-width:41px;
+  flex:1 1 41px;max-width:78px;background:rgba(3,22,13,.55);border:1px solid rgba(120,196,146,.4);
+  border-radius:6px;padding:5px 3px;color:#d8fbe5;cursor:pointer}
+#glassesStage .hud-ticket-tab.active{background:rgba(22,96,50,.7);border-color:#97ffc0;box-shadow:inset 0 0 0 1px rgba(152,255,188,.26)}
+#glassesStage .hud-ticket-tab .ticket{font-size:15px;font-weight:900;line-height:1}
+#glassesStage .hud-ticket-tab .ticket-progress{font-size:9px;font-weight:750}
+#glassesStage .hud-ticket-tab .age{font-size:8px;font-variant-numeric:tabular-nums;white-space:nowrap}
+#glassesStage .hud-ticket-item-list{display:grid;gap:4px;min-width:0}
+#glassesStage .hud-ticket-item{width:100%;min-width:0;background:rgba(9,36,22,.3);border:0;
+  border-left:2px solid rgba(144,204,162,.36);border-radius:3px;padding:6px 5px;
+  display:flex;align-items:center;justify-content:space-between;gap:6px;text-align:left;
+  color:#e0fbe7;cursor:pointer}
+#glassesStage .hud-ticket-item.active{background:rgba(51,124,75,.44);border-left-color:#a3ffbe}
+#glassesStage .hud-ticket-item .item{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px;font-weight:700}
+#glassesStage .hud-ticket-item .item-state{font-size:8px;white-space:nowrap;color:#b5edbf}
+#glassesStage .hud-ticket-tab:focus-visible,
+#glassesStage .hud-ticket-item:focus-visible{outline:2px solid #bdffcd;outline-offset:1px}
+
+/* Right lens is a menu-item ingredient checklist, NOT a preparation recipe. */
+#glassesStage .hud-current-instruction{font-size:10px}
+#glassesStage .hud-build-steps{list-style:none;padding:0;margin:0;display:grid;gap:2px}
+#glassesStage .hud-assembly-ingredient{display:flex;gap:6px;align-items:center;padding:5px 3px;
+  font-size:10px;line-height:1.25;color:#e0f9e8;border-left:2px solid transparent}
+#glassesStage .hud-assembly-ingredient.current{border-left-color:#86ffa4;background:rgba(44,144,76,.21);font-weight:900}
+#glassesStage .hud-assembly-ingredient.added{color:#96e8ac}
+#glassesStage .hud-assembly-ingredient.skipped{color:#b6b3a3;text-decoration:line-through}
+#glassesStage .hud-assembly-ingredient .ingredient-state{flex:none;width:15px;text-align:center}
+#glassesStage .hud-assembly-ingredient .ingredient-name{min-width:0;flex:1;overflow-wrap:anywhere}
+#glassesStage .hud-assembly-ingredient .ingredient-result{font-size:8px}
+#glassesStage .hud-ingredient-actions{display:flex;gap:7px}
+#glassesStage .hud-ingredient-actions button{flex:1;min-width:0;border:1px solid #53946b;background:#24553b;
+  color:#e3ffeb;border-radius:6px;font:800 10px/1.2 system-ui;padding:7px 3px;cursor:pointer}
+#glassesStage .hud-ingredient-actions button:disabled{opacity:.36;cursor:not-allowed}
+@media(prefers-reduced-motion:reduce){#glassesStage .hud-ticket-tab{transition:none}}
