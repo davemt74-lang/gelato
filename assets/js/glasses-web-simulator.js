@@ -200,7 +200,9 @@ function applyLiveWork(work,{announce=false}={}){
     else state.selectedKdsItemPublicId=work?.focusItem?.kdsItemPublicId||ids[0]||'';
   }
   state.syncFingerprint=next;state.lastSyncAt=Date.now();state.ticketSyncAt=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();render();
-  for(const change of changes)notifier?.announceTicket?.(change.event,change.item);
+  for(const change of changes)notifier?.announceTicket?.(change.event,change.item,{
+    stationName:state.device?.stationPublicId?(state.device.stationName||state.work?.station?.name||'Kitchen station'):''
+  });
   window.dispatchEvent(new CustomEvent('gelato-glasses-work-change',{detail:{items,locationId:state.device?.locationId||null}}));
   if(previous&&previous!==next)log('ORDER','POS/KDS updated · '+items.length+' active item(s).');
   return previous!==next;
@@ -1900,8 +1902,14 @@ async function kitchenCommand(action,{spoken=false}={}){
     if(action==='item_added'&&$('simItemNoteInput'))$('simItemNoteInput').value='';
     if(state.mode==='live')await syncLiveStationWork(true);
     else render();
-    const ticketEvent=window.GelatoGlassesHudNotifications?.eventForCommand?.(action);
-    if(ticketEvent)window.GelatoGlassesHudNotifications?.announceTicket?.(ticketEvent,item,{spokenFromVoice:spoken});
+    const hudNotice=window.GelatoGlassesHudNotifications;
+    const ticketEvent=hudNotice?.eventForCommand?.(action);
+    const stage=hudNotice?.stateByTicket?.(orderItems())?.get(ticket)?.stage||null;
+    if(ticketEvent&&hudNotice?.qualifiedCommandEvent?.(ticketEvent,stage))
+      hudNotice.announceTicket(ticketEvent,item,{
+        spokenFromVoice:spoken,
+        stationName:state.device?.stationPublicId?(state.device.stationName||state.work?.station?.name||'Kitchen station'):''
+      });
     const message=action==='item_added'?'Kitchen note saved to the selected item. POS and ingredient verification were not changed.':
       action==='finish_order'?'Ticket finished at Expo; POS payment remains separate.':
       action.replaceAll('_',' ')+' completed on '+(item.ticket?.checkNumber||'ticket')+'.';

@@ -37,7 +37,7 @@ function render(){
     :(CATEGORY[active.severity]||'NOTICE').toUpperCase();
   if(msg)msg.textContent=active.message;
   if(meta)meta.textContent=active.ticketNumber
-    ?[String(active.serviceMode||'').replaceAll('_',' ').toUpperCase(),String(active.ticketStatus||'').toUpperCase()].filter(Boolean).join(' · ')
+    ?[String(active.serviceMode||'').replaceAll('_',' ').toUpperCase(),String(active.ticketStatus||'').toUpperCase(),String(active.stationName||'').toUpperCase()].filter(Boolean).join(' · ')
     :(active.event||'').replaceAll('.',' ').toUpperCase();
 }
 function advance(){
@@ -59,6 +59,7 @@ function publish(input={}){
     ticketPublicId:String(input.ticketPublicId||'').trim().slice(0,90),
     serviceMode:String(input.serviceMode||'').trim().slice(0,45),
     ticketStatus:String(input.ticketStatus||'').trim().slice(0,30),
+    stationName:String(input.stationName||'').trim().slice(0,70),
     spokenFromVoice:!!input.spokenFromVoice,createdAt:Date.now()};
   const key=String(input.dedupeKey||[n.event,n.ticketPublicId,n.ticketNumber,n.message].join('|')).slice(0,320);
   for(const [k,ts] of recent)if(n.createdAt-ts>15000)recent.delete(k);
@@ -104,11 +105,12 @@ const TITLES={'ticket.started':'started','ticket.ready':'ready','ticket.paused':
   'ticket.resumed':'resumed','ticket.finished':'finished'};
 function announceTicket(event,item,opts={}){
   if(!Object.hasOwn(TITLES,event)||!item?.ticket?.checkPublicId||!item?.ticket?.checkNumber)return false;
-  const t=ticketDetails(item),action=TITLES[event],noun='Ticket '+t.ticketNumber;
+  const t=ticketDetails(item),action=TITLES[event],noun='Ticket '+t.ticketNumber,
+    stationName=String(opts.stationName||'').trim().slice(0,70),where=stationName?' at '+stationName:'';
   const severity=event==='ticket.paused'?'warning':event==='ticket.finished'?'success':'info';
   return publish({event,severity,...t,ticketStatus:action,
-    message:'Ticket #'+t.ticketNumber+' '+action+'.',speech:noun+' '+action+'.',
-    spokenFromVoice:!!opts.spokenFromVoice});
+    message:'Ticket #'+t.ticketNumber+' '+action+where+'.',speech:noun+' '+action+where+'.',
+    stationName,spokenFromVoice:!!opts.spokenFromVoice});
 }
 function stateByTicket(items){
   const groups=new Map();
@@ -145,11 +147,21 @@ function transitioned(before,after){
   }
   return events; // No missing-ticket-to-finished event.
 }
+function qualifiedCommandEvent(event,stage){
+  // Successful KDS actions can affect only a subset of the ticket's items.
+  // Do not announce an entire ticket paused/ready until the scoped items agree.
+  if(event==='ticket.finished')return true; // explicit successful two-step Expo bump
+  if(event==='ticket.started')return stage==='started';
+  if(event==='ticket.ready')return stage==='ready';
+  if(event==='ticket.paused')return stage==='paused';
+  if(event==='ticket.resumed')return stage==='queued'||stage==='started';
+  return false;
+}
 function clear(){
   queue=[];active=null;if(timer){clearTimeout(timer);timer=null;}render();
 }
 createControls();
 window.GelatoGlassesHudNotifications={publish,announceTicket,transitioned,stateByTicket,
   setVoice,voiceSettings:()=>({...settings}),voiceEligible,history:()=>history.slice(),clear,
-  eventForCommand:action=>STATUS_EVENTS[action]||null};
+  eventForCommand:action=>STATUS_EVENTS[action]||null,qualifiedCommandEvent};
 })();
