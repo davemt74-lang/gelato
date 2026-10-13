@@ -395,3 +395,9 @@ html,body{max-width:100%;overflow-x:hidden}
 .sgv-tab-panel .sgv-advanced-kds{border:1px solid #2d5139;border-radius:8px;padding:8px;color:#c8ebd0}
 .sgv-tab-panel .sgv-advanced-kds summary{cursor:pointer;font-size:11px;font-weight:800;padding:5px}
 .sgv-tab-panel .sgv-advanced-kds[open]{display:grid;gap:8px}
+
+/* Order selection works even though the rest of the on-lens overlay is observational. */
+#glassesStage .hud-orders-left{pointer-events:auto}
+#glassesStage .hud-orders-left .hud-order-row{pointer-events:auto}
+#glassesStage.frame-none .hud-order-row .age{grid-column:auto!important}
+#glassesStage .hud-validation-panel:not([hidden]){display:grid}
