@@ -36,12 +36,18 @@ gws_assert(str_contains($js,"bindLocalImage('sceneFile'"),'Simulator must bind l
 gws_assert(str_contains($css,'.hud-right'),'HUD must keep persistent projection on the right side.');
 gws_assert(str_contains($css,'.detection-box'),'HUD must support ingredient bounding boxes.');
 gws_assert(str_contains($page,'calibrationToggle'),'Simulator must expose calibration mode.');
-gws_assert(str_contains($page,'safeAreaGuide')&&str_contains($page,'leftEyeGuide')&&str_contains($page,'rightEyeGuide'),'Simulator must expose safe-area and per-eye guides.');
+gws_assert(!str_contains($page,'id="safeAreaGuide"')&&!str_contains($page,'id="leftEyeGuide"')&&!str_contains($page,'id="rightEyeGuide"'),
+  'Projection calibration guide boxes must not clutter the glasses canvas.');
 gws_assert(str_contains($page,'presetSelect')&&str_contains($page,'savePreset'),'Simulator must expose layout presets.');
 gws_assert(str_contains($js,"CAL_KEY='gelato.webGlassesSimulator.calibration.v1'"),'Calibration must persist in browser storage.');
 gws_assert(str_contains($js,'bindRegionEditor'),'Calibration must support drag/resize region editing.');
 gws_assert(str_contains($js,'leftEyeX')&&str_contains($js,'rightEyeY'),'Calibration must support per-eye alignment.');
-gws_assert(str_contains($css,'.glasses-stage.calibrating .eye-guide'),'Calibration guides must be visible only while editing.');
+$deviceCss=gws_file('assets/css/glasses-simulator-device-first.css');
+gws_assert(str_contains($deviceCss,'#glassesStage.calibrating .safe-area-guide')&&str_contains($deviceCss,'display:none!important'),
+  'Engineering calibration guides must remain hidden even in HUD editing mode.');
+gws_assert(str_contains($page,'id="calibrationToggle"')&&str_contains($page,'id="hudEditorDone"')&&
+  str_contains($page,'id="hudOpacity"')&&str_contains($page,'id="rightWidth"'),
+  'HUD editing must offer compact in-canvas settings and moveable left/right widths.');
 gws_assert(str_contains($page,'svgGlassesLayer')&&str_contains($page,'outsideLensMask'),'Simulator must render a native SVG glasses frame with optical occlusion mask.');
 gws_assert(str_contains($page,'frameModeSelect'),'Simulator must expose SVG, uploaded-image, and frameless modes.');
 gws_assert(str_contains($page,'opticalMaskToggle'),'Simulator must expose independent lens-mask control.');

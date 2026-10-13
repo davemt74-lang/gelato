@@ -1916,7 +1916,7 @@ function applyCalibration(){
   }
 
   for(const [name,r] of Object.entries(calibration.regions)){const el=$(name);if(!el)continue;el.style.setProperty('--region-x',r.x+'%');el.style.setProperty('--region-y',r.y+'%');el.style.setProperty('--region-w',r.w+'%');el.style.setProperty('--region-h',r.h+'%');}
-  const controls={hudOpacity:['opacity','%'],hudBrightness:['brightness','%'],hudScale:['scale','%'],safeWidth:['safeWidth','%'],safeHeight:['safeHeight','%'],leftEyeX:['leftEyeX','%'],leftEyeY:['leftEyeY','%'],rightEyeX:['rightEyeX','%'],rightEyeY:['rightEyeY','%']};
+  const controls={hudOpacity:['opacity','%'],hudBrightness:['brightness','%']};
   $('rightWidth').value=String(calibration.regions.hudRight.w);$('rightWidthValue').textContent=String(Math.round(calibration.regions.hudRight.w))+'%';
   window.GelatoGlassesHudNotifications?.positionUnderLeftTickets?.();
   $('leftWidth').value=String(calibration.regions.hudOrdersRegion.w);$('leftWidthValue').textContent=String(Math.round(calibration.regions.hudOrdersRegion.w))+'%';
@@ -1929,12 +1929,15 @@ function setCalibrationEnabled(enabled){
   const toggle=$('calibrationToggle'),dock=$('simHudEditorDock'),tools=$('simHudEditorToolbar');
   toggle.setAttribute('aria-pressed',calibrationEnabled?'true':'false');
   toggle.setAttribute('aria-expanded',calibrationEnabled?'true':'false');
-  toggle.textContent=calibrationEnabled?'Finish editing':'Edit display';
+  toggle.setAttribute('aria-label',calibrationEnabled?'Finish editing lens display layout':'Edit lens display layout');
+  toggle.title=calibrationEnabled?'Finish editing lens layout':'Edit lens display layout';
   dock.dataset.editing=calibrationEnabled?'true':'false';
   tools.hidden=!calibrationEnabled;
   $('calibrationState').textContent=calibrationEnabled?'EDITING':'LOCKED';
-  $('simHudEditorScope').textContent=(cfg.runtimePublicId?'Saved for this glasses runtime':'Preview layout · open runtime to isolate device')+
-    (calibrationEnabled?' · Drag the left or right display':'');
+  $('simHudEditorScope').textContent=calibrationEnabled
+    ?'Drag either panel to move it; drag its corner to resize. '+
+      (cfg.runtimePublicId?'Changes save to these glasses.':'Preview only: open a runtime to save per glasses.')
+    :'Lens layout editor is closed.';
   if(calibrationEnabled)$('hudOrdersRegion').querySelector('.region-move')?.focus();
   applyCalibration();
   log('CALIBRATION',calibrationEnabled?'Lens layout editing enabled.':'Lens layout saved and locked.');
@@ -1951,8 +1954,8 @@ function loadPreset(name){if(!name||!presets[name])return;calibration=normalizeC
 function deletePreset(){
   const name=$('presetSelect').value;if(!name||!presets[name])return;delete presets[name];localStorage.setItem(PRESET_KEY,JSON.stringify(presets));refreshPresets();$('presetName').value='';log('CALIBRATION','Deleted preset '+name+'.');
 }
-function factoryCalibration(){calibration=deepClone(calibrationDefaults);saveCalibration();log('CALIBRATION','Restored factory projection geometry.');}
-for(const [id,key] of Object.entries({hudOpacity:'opacity',hudBrightness:'brightness',hudScale:'scale',safeWidth:'safeWidth',safeHeight:'safeHeight',leftEyeX:'leftEyeX',leftEyeY:'leftEyeY',rightEyeX:'rightEyeX',rightEyeY:'rightEyeY'})){
+function factoryCalibration(){calibration=deepClone(calibrationDefaults);saveCalibration();log('CALIBRATION','Reset left and right display positions.');}
+for(const [id,key] of Object.entries({hudOpacity:'opacity',hudBrightness:'brightness'})){
   $(id).addEventListener('input',e=>{calibration[key]=Number(e.target.value);saveCalibration();});
 }
 $('leftWidth').addEventListener('input',e=>{
@@ -1967,6 +1970,10 @@ $('rightWidth').addEventListener('input',e=>{
   saveCalibration();
 });
 $('calibrationToggle').addEventListener('click',()=>setCalibrationEnabled(!calibrationEnabled));
+$('hudEditorDone').addEventListener('click',()=>{setCalibrationEnabled(false);$('calibrationToggle').focus();});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&calibrationEnabled){setCalibrationEnabled(false);$('calibrationToggle').focus();}
+});
 $('savePreset').addEventListener('click',savePreset);
 $('deletePreset').addEventListener('click',deletePreset);
 $('resetCalibration').addEventListener('click',factoryCalibration);
@@ -2020,12 +2027,15 @@ function bindRegionEditor(regionName){
     window.addEventListener('pointerup',end,{once:true});
     window.addEventListener('pointercancel',end,{once:true});
   };
-  // Header drag works in addition to the Move handle; normal kitchen clicks are
-  // left alone when Edit Mode is off.
-  const header=el.querySelector(':scope > .hud-panel-title')||el.querySelector('.hud-card .hud-panel-title');
+  // In Edit Mode, the body of either display is a drag surface. Preserve
+  // ordinary ticket and ingredient interactions when editing is disabled.
+  el.addEventListener('pointerdown',e=>{
+    if(!calibrationEnabled||regionName==='hudStatus')return;
+    if(e.target.closest('button,input,select,textarea,a,[role="button"],.region-resize'))return;
+    begin(e,'move');
+  });
   move.addEventListener('pointerdown',e=>begin(e,'move'));
   resize.addEventListener('pointerdown',e=>begin(e,'resize'));
-  if(header)header.addEventListener('pointerdown',e=>begin(e,'move'));
   move.addEventListener('keydown',e=>keyboard(e,'move'));
   resize.addEventListener('keydown',e=>keyboard(e,'resize'));
 }
