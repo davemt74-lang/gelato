@@ -237,10 +237,18 @@
       section.innerHTML='<div class="gc-heading"><strong>Camera '+slot+' · Photo History & Gallery</strong><span id="gcCount'+slot+'">0 photos</span></div>'+
         '<p class="sim-muted">Photos stay local until you explicitly save to private Vision Lab. Automatic visual scores are not ingredient or order verification.</p>'+
         '<div class="gc-gallery" id="gcGallery'+slot+'"></div>';
-      view.appendChild(section);
       const take=document.createElement('button');take.type='button';take.className='gc-capture-button';
       take.textContent='Capture Photo · Camera '+slot;take.addEventListener('click',()=>void window.GelatoCameraConfiguration.capture(slot));
-      section.before(take);
+      if(slot===1){
+        view.insertBefore(section,view.firstChild);
+        view.insertBefore(take,section);
+        const advanced=card.querySelector('.vision-runtime-panel');
+        if(advanced){
+          const details=document.createElement('details');details.className='gc-advanced';
+          const summary=document.createElement('summary');summary.textContent='Advanced detection, inference & vision controls';
+          details.append(summary,advanced);card.append(details);
+        }
+      }else{view.appendChild(section);section.before(take);}
     }
     const tb=document.createElement('button');tb.type='button';tb.textContent='Training';tb.id='gcTabTraining';
     tb.setAttribute('role','tab');tb.setAttribute('aria-controls','gcPaneTraining');
@@ -256,6 +264,8 @@
     nav.append(tb);panes.append(train);
     controls.training={button:tb,pane:train};
     const old=$('simMultiCameraPanel');if(old)train.appendChild(old);
+    const originalDataset=$('datasetCaptureSample')?.closest('.dataset-capture-panel');
+    if(originalDataset)train.appendChild(originalDataset);
     const legacy=$('simCameraPhotoHistory')?.closest('.sim-camera-photo-history');if(legacy)legacy.hidden=true;
     const block=document.createElement('section');block.className='gc-training-workflow';
     block.innerHTML='<div class="gc-heading"><strong>Menu Item Photo Training</strong><span id="gcLibraryState">LOADING</span></div>'+
