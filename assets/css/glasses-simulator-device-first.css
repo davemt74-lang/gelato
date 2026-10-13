@@ -317,3 +317,81 @@ html,body{max-width:100%;overflow-x:hidden}
   border-radius:8px;padding:9px;min-width:0}
 .gcr-camera strong{color:#dbffe8;font-size:11px}
 .gcr-camera span{color:#acd2b8;font-size:9px;line-height:1.5;overflow-wrap:anywhere}
+
+
+/* HUD 263 — operator-first lens layout. The scene capture zone appears only while Calibrating. */
+#glassesStage:not(.calibrating) .camera-capture-zone{display:none!important;pointer-events:none!important}
+#glassesStage.calibrating .camera-capture-zone{display:block;pointer-events:auto;opacity:1}
+#glassesStage:not(.calibrating) .eye-guide,
+#glassesStage:not(.calibrating) .safe-area-guide{display:none!important}
+#glassesStage .hud-clock{display:none!important}
+#glassesStage .hud-topbar{justify-content:flex-end;pointer-events:none}
+#glassesStage.calibrating .hud-topbar{pointer-events:auto}
+
+/* The quick actions live below the lenses: no enclosing button-panel frame. */
+.sim-stage-panel .sim-glasses-quick-actions{
+  left:50%!important;right:auto!important;bottom:12px!important;
+  transform:translateX(-50%)!important;width:max-content!important;
+  max-width:calc(100% - 24px)!important;
+  display:flex;justify-content:center;align-items:center;
+  border:0!important;border-radius:0!important;box-shadow:none!important;
+  background:transparent!important;backdrop-filter:none!important;
+  padding:4px 0!important;overflow-x:auto;gap:7px;
+}
+.sim-glasses-quick-actions button{min-height:35px}
+@media(max-width:600px){
+  .sim-stage-panel .sim-glasses-quick-actions{max-width:calc(100% - 12px)!important;gap:4px}
+}
+
+/* KDS list fills only as much vertical space as its active short-slot tickets use. */
+.glasses-stage .hud-orders-left,
+.glasses-stage.calibrating .hud-orders-left,
+.glasses-stage.frame-none .hud-orders-left{
+  height:max-content!important;min-height:0!important;
+  max-height:67%!important;overflow-y:auto;overflow-x:hidden;
+  align-content:start;gap:3px;
+  box-sizing:border-box;
+}
+.glasses-stage .hud-orders-list{display:grid;gap:3px;min-width:0}
+.glasses-stage .hud-order-row,
+.glasses-stage.frame-none .hud-order-row{
+  appearance:none;cursor:pointer;color:inherit;font-family:inherit;
+  width:100%;max-width:100%;min-width:0;margin:0;
+  background:rgba(2,15,10,.17);text-align:left;
+  grid-template-columns:minmax(13px,auto) minmax(0,1fr) auto;
+  gap:5px;padding:5px 4px;min-height:24px;
+  border-top:0;border-right:0;border-bottom:0;
+  border-left:2px solid rgba(133,222,178,.22);border-radius:3px;
+}
+.glasses-stage .hud-order-row.active{border-left-color:#86ffbc;background:rgba(21,111,68,.23)}
+.glasses-stage .hud-order-row .ticket{font-weight:850;font-size:11px;color:#caffdc}
+.glasses-stage .hud-order-row .item{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px}
+.glasses-stage .hud-order-row .age{font-variant-numeric:tabular-nums;white-space:nowrap;font-size:9px}
+.glasses-stage .hud-order-row:focus-visible{outline:2px solid #bcffe1;outline-offset:-1px}
+.glasses-stage .hud-orders-left.hud-queue-empty{padding-block:6px}
+
+/* One build panel, driven by the selected POS recipe; no meaningless Load work stage. */
+#glassesStage .hud-next-card{display:none!important}
+#glassesStage .hud-right-build,
+#glassesStage.calibrating .hud-right-build{
+  height:max-content!important;max-height:82%!important;
+  overflow-y:auto;align-content:start;gap:5px;
+}
+#glassesStage .hud-build-card{display:grid;gap:7px;padding:9px;border-radius:8px}
+#glassesStage .hud-build-card .hud-panel-title{margin:0}
+#glassesStage .hud-build-card>strong{font-size:clamp(12px,1.45vw,19px);line-height:1.18}
+#glassesStage .hud-current-instruction{
+  border-left:2px solid #8cffa9;
+  background:rgba(53,155,86,.12);padding:7px 8px;
+  font-size:clamp(10px,1.1vw,14px);line-height:1.35;
+  color:#dfffe7;font-weight:800;overflow-wrap:anywhere;
+}
+#glassesStage .hud-build-steps{margin:2px 0 0;padding:0 0 0 15px}
+#glassesStage .hud-build-steps li{font-size:9px;line-height:1.35;padding:1px 0}
+#glassesStage .hud-validation-panel[hidden],
+#glassesStage .hud-cook-alert[hidden]{display:none!important}
+#glassesStage .hud-build-card>span:empty{display:none}
+.sgv-tab-panel #simAuditDetails:not([open]){max-height:none}
+.sgv-tab-panel .sgv-advanced-kds{border:1px solid #2d5139;border-radius:8px;padding:8px;color:#c8ebd0}
+.sgv-tab-panel .sgv-advanced-kds summary{cursor:pointer;font-size:11px;font-weight:800;padding:5px}
+.sgv-tab-panel .sgv-advanced-kds[open]{display:grid;gap:8px}
