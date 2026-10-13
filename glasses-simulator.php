@@ -178,7 +178,9 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
             <div class="hud-current-instruction" id="hudCurrentInstruction" aria-live="polite">Choose a ticket to begin</div>
             <span id="hudBuildMeta">Table 12 · Regular</span>
             <ul id="hudBuildSteps" class="hud-build-steps" aria-label="Ingredients for selected item"></ul>
-            <div class="hud-ingredient-actions"><button type="button" data-hud-ingredient-action="added" id="hudIngredientAdded">Added ✓</button><button type="button" data-hud-ingredient-action="skipped" id="hudIngredientSkip">Skip ↷</button></div>
+            <div id="hudAssemblySuggestion" class="hud-assembly-suggestion" role="status" hidden></div>
+            <div class="hud-ingredient-actions"><button type="button" data-hud-ingredient-action="added" id="hudIngredientAdded">Added ✓</button><button type="button" data-hud-ingredient-action="skipped" id="hudIngredientSkip">Skip ↷</button>
+            <button type="button" id="hudConfirmSuggestion" disabled hidden>Confirm ✓</button><button type="button" id="hudRejectSuggestion" disabled hidden>Reject</button></div>
           </div>
           <div class="hud-card hud-validation-panel" id="validationCard">
             <div class="hud-panel-title"><small>INGREDIENT VALIDATION</small><span id="hudValidationState">BUILDING</span></div>
@@ -379,7 +381,9 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
           <div id="shadowModelStatus" class="vision-model-status"><strong>IDLE</strong><span>No shadow challenger loaded.</span></div>
           <p class="calibration-note">The challenger scores the same camera frames but never writes build observations, validation, KDS state, or rollout selection.</p>
         </div>
-        <label class="vision-confidence"><span>Auto confidence threshold</span><input id="visionConfidenceThreshold" type="range" min="40" max="99" value="75"><output id="visionConfidenceValue">75%</output></label>
+        <label class="vision-confidence"><span>Camera confidence threshold</span><input id="visionConfidenceThreshold" type="range" min="40" max="99" value="75"><output id="visionConfidenceValue">75%</output></label>
+        <label class="camera-toggle-row"><input id="visionAssemblyAutoOptIn" type="checkbox"> Allow qualified automatic checklist progress for this employee runtime (off by default)</label>
+        <p class="calibration-note">Manual: operator Added/Skip. Assisted: camera suggestion requires Confirm/Reject. Automatic: ONNX model + reviewed mapping + stable fresh track + confirmed governed build, and explicit opt-in. Checklist does not mark KDS ready.</p>
         <div id="visionMetrics" class="vision-metrics">FPS 0.0 · 0ms · 0 det</div>
         <p class="calibration-note">Governed ONNX loads only the model package assigned to the selected device/build, verifies its registered byte size and SHA-256 in the browser, and applies the active Gelato label profile before detections enter temporal tracking.</p>
         <div class="temporal-validation-panel">
