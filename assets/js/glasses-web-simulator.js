@@ -36,7 +36,7 @@ async function api(action,payload={}){
       method:'POST',
       headers:{'Content-Type':'application/json','X-CSRF-Token':cfg.csrf},
       credentials:'same-origin',cache:'no-store',
-      body:JSON.stringify({csrf_token:cfg.csrf,action,devicePublicId:state.device?.publicId||'',...payload})
+      body:JSON.stringify({csrf_token:cfg.csrf,action,devicePublicId:state.device?.publicId||'',runtimePublicId:cfg.runtimePublicId||'',...payload})
     });
     const d=await r.json().catch(()=>({ok:false,message:'Invalid server response.'}));
     return {r,d};
@@ -53,7 +53,7 @@ async function api(action,payload={}){
 }
 const LIVE_SYNC_BASE_MS=1500;
 const LIVE_SYNC_MAX_BACKOFF_MS=10000;
-const RUNTIME_RECOVERY_KEY='gelato.webGlassesSimulator.runtimeRecovery.v1'+':u'+String(cfg.userId||0);
+const RUNTIME_RECOVERY_KEY='gelato.webGlassesSimulator.runtimeRecovery.v1'+':u'+String(cfg.userId||0)+':rt'+String(cfg.runtimePublicId||'default');
 const RUNTIME_FRESH_BARRIER_MS=750;
 function recoveryStored(){
   try{return JSON.parse(localStorage.getItem(RUNTIME_RECOVERY_KEY)||'null');}catch{return null;}
@@ -209,6 +209,7 @@ async function fetchLiveStationWork(devicePublicId){
   try{
     const url=new URL(cfg.api,window.location.href);
     url.searchParams.set('action','work');url.searchParams.set('devicePublicId',devicePublicId);
+    if(cfg.runtimePublicId)url.searchParams.set('runtimePublicId',cfg.runtimePublicId);
     const r=await fetch(url.toString(),{method:'GET',credentials:'same-origin',cache:'no-store',signal:controller.signal});
     const d=await r.json().catch(()=>({ok:false,message:'Invalid server response.'}));
     if(!r.ok||!d.ok)throw new Error(d.message||'Live station synchronization failed.');
@@ -292,17 +293,20 @@ async function downloadDeviceDiagnostics(){
     a.href=url;a.download='gelato-glasses-diagnostics-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);log('HEALTH','Diagnostic bundle exported.');
   }catch(e){log('ERROR',e.message);}
 }
-const LIVE_DEVICE_KEY='gelato.webGlassesSimulator.selectedDisplay.v2'+':u'+String(cfg.userId||0);
+const RUNTIME_STORAGE_SCOPE=':rt'+String(cfg.runtimePublicId||'default');
+const LIVE_DEVICE_KEY='gelato.webGlassesSimulator.selectedDisplay.v2'+':u'+String(cfg.userId||0)+RUNTIME_STORAGE_SCOPE;
 async function loadDevices(){
   try{
     const r=await fetch(cfg.api,{credentials:'same-origin',cache:'no-store'});
     const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.message||'Device list failed.');
     if(/^[a-f0-9]{64}$/i.test(String(d.csrfToken||'')))cfg.csrf=d.csrfToken;
     state.hardwareRuntime=d.hardwareRuntime||null;renderHardwareRuntime();state.devices=d.devices||[];
+    const boundRuntime=await window.GelatoGlassesRuntimes?.bootstrap?.(state.devices);
     const preferred=localStorage.getItem(LIVE_DEVICE_KEY)||'';
-    const device=state.devices.find(x=>x.publicId===preferred&&(x.virtualPreview||x.stationPublicId!==null))
-      ||state.devices.find(x=>x.virtualPreview&&x.stationPublicId===null)
-      ||state.devices.find(x=>x.stationPublicId)||state.devices[0]||null;
+    const device=(boundRuntime?state.devices.find(x=>x.publicId===boundRuntime.devicePublicId&&!x.virtualPreview):null)
+      ||(!cfg.runtimePublicId&&state.devices.find(x=>x.publicId===preferred&&(x.virtualPreview||x.stationPublicId!==null)))
+      ||(!cfg.runtimePublicId&&state.devices.find(x=>x.virtualPreview&&x.stationPublicId===null))
+      ||(!cfg.runtimePublicId&&state.devices.find(x=>x.stationPublicId))||(!cfg.runtimePublicId&&state.devices[0])||null;
     $('deviceSelect').innerHTML='<option value="">'+(state.devices.length?'Choose display…':'No permitted locations or devices')+'</option>'
       +state.devices.map(x=>'<option value="'+escapeHtml(x.publicId)+'">'+escapeHtml(x.locationName||'Restaurant')+' · '+escapeHtml(x.displayName)+(x.virtualPreview?' (no hardware)':'')+'</option>').join('');
     state.device=device;
@@ -314,7 +318,7 @@ async function loadDevices(){
     log('ERROR',e.message);setSyncBadge('error','SETUP ERROR');
   }
 }
-const CAMERA_PREF_KEY='gelato.webGlassesSimulator.cameraPrefs.v1'+':u'+String(cfg.userId||0);
+const CAMERA_PREF_KEY='gelato.webGlassesSimulator.cameraPrefs.v1'+':u'+String(cfg.userId||0)+':rt'+String(cfg.runtimePublicId||'default');
 function cameraSupported(){return !!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia);}
 function cameraPrefs(){try{return JSON.parse(localStorage.getItem(CAMERA_PREF_KEY)||'{}');}catch{return {};}}
 function saveCameraPrefs(){
@@ -1473,8 +1477,8 @@ async function handoff(){try{
   const d=await api('handoff.expo',{buildSessionPublicId:state.build.publicId});log('LIVE','Explicit Expo handoff completed; KDS status '+(d.handoff.kdsStatus||'ready')+'.');await unloadGovernedVisionModel('build_reset');state.build=null;state.validation=null;clearRecoveryResume();await refreshWork();
 }catch(e){state.cookUx.handoffArmed=false;$('handoffExpo').textContent='Send to Expo / Finishing';log('ERROR',e.message);}}
 function resetSimulator(){stopShadowModel('build_reset');unloadGovernedVisionModel('build_reset');state.build=null;state.validation=null;state.selectedKdsItemPublicId='';clearTemporalRuntime();clearCameraTarget();$('detectionLayer').innerHTML='';log('SYSTEM','Simulator build state reset; POS/KDS records were not changed.');refreshWork();}
-$('modeSelect').addEventListener('change',async e=>{stopAutoPlay();stopLiveStationSync('idle');await unloadGovernedVisionModel('build_reset');state.mode=e.target.value;state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;clearAssemblySession();clearTemporalRuntime();state.syncFingerprint='';log('MODE','Switched to '+state.mode+'.');if(state.mode==='live'){if(state.device?.virtualPreview){state.recovery.state='ready';renderRuntimeRecovery();startLiveStationSync();}else{enterRecovery('recovering','live_mode_selected');await resumeRuntimeRecovery('live_mode_selected');}}else{state.recovery.state='ready';state.recovery.suppressAutomatic=false;state.recovery.lastReason='mock_runtime_ready';renderRuntimeRecovery();await refreshWork();}});
-$('deviceSelect').addEventListener('change',async e=>{stopLiveStationSync('idle');await unloadGovernedVisionModel('build_reset');state.device=state.devices.find(x=>x.publicId===e.target.value)||null;if(state.device)localStorage.setItem(LIVE_DEVICE_KEY,state.device.publicId);window.dispatchEvent(new CustomEvent('gelato-glasses-location-change',{detail:{locationId:state.device?.locationId||null}}));state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;clearAssemblySession();clearTemporalRuntime();state.syncFingerprint='';if(state.mode==='live'&&state.device){if(state.device.virtualPreview){state.recovery.state='ready';renderRuntimeRecovery();startLiveStationSync();}else{enterRecovery('recovering','device_changed');await resumeRuntimeRecovery('device_changed');}}else render();});
+$('modeSelect').addEventListener('change',async e=>{if(cfg.runtimePublicId&&e.target.value!=='live'){e.target.value='live';return;}stopAutoPlay();stopLiveStationSync('idle');await unloadGovernedVisionModel('build_reset');state.mode=e.target.value;state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;clearAssemblySession();clearTemporalRuntime();state.syncFingerprint='';log('MODE','Switched to '+state.mode+'.');if(state.mode==='live'){if(state.device?.virtualPreview){state.recovery.state='ready';renderRuntimeRecovery();startLiveStationSync();}else{enterRecovery('recovering','live_mode_selected');await resumeRuntimeRecovery('live_mode_selected');}}else{state.recovery.state='ready';state.recovery.suppressAutomatic=false;state.recovery.lastReason='mock_runtime_ready';renderRuntimeRecovery();await refreshWork();}});
+$('deviceSelect').addEventListener('change',async e=>{if(cfg.runtimePublicId){e.target.value=state.device?.publicId||'';return;}stopLiveStationSync('idle');await unloadGovernedVisionModel('build_reset');state.device=state.devices.find(x=>x.publicId===e.target.value)||null;if(state.device)localStorage.setItem(LIVE_DEVICE_KEY,state.device.publicId);window.dispatchEvent(new CustomEvent('gelato-glasses-location-change',{detail:{locationId:state.device?.locationId||null}}));state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;clearAssemblySession();clearTemporalRuntime();state.syncFingerprint='';if(state.mode==='live'&&state.device){if(state.device.virtualPreview){state.recovery.state='ready';renderRuntimeRecovery();startLiveStationSync();}else{enterRecovery('recovering','device_changed');await resumeRuntimeRecovery('device_changed');}}else render();});
 /* Selecting a kitchen item goes directly to the recipe/build view; no extra load step.
  * Live build writes require a paired writable device and an already started KDS item. */
 async function focusKitchenItem(publicId,{autoBegin=true}={}){
@@ -1593,8 +1597,8 @@ document.addEventListener('visibilitychange',()=>{if(state.cameraTrack){state.ca
 window.addEventListener('offline',()=>{enterRecovery('disconnected','network_lost',{stopSync:true});setSyncBadge('error','OFFLINE');});
 window.addEventListener('online',()=>{if(state.mode==='live'&&state.device?.virtualPreview){state.recovery.networkFault=false;startLiveStationSync();}else if(state.mode==='live'&&state.device)resumeRuntimeRecovery('network_restored');});
 window.addEventListener('beforeunload',()=>{saveRecoveryResume();stopVisionRuntime('idle');stopLiveStationSync('idle');if(state.browserModel.session&&typeof state.browserModel.session.release==='function')state.browserModel.session.release();if(state.shadowModel.session&&typeof state.shadowModel.session.release==='function')state.shadowModel.session.release();});
-const FRAME_MODE_KEY='gelato.webGlassesSimulator.frameMode.v1'+':u'+String(cfg.userId||0);
-const OPTICAL_MASK_KEY='gelato.webGlassesSimulator.opticalMask.v1'+':u'+String(cfg.userId||0);
+const FRAME_MODE_KEY='gelato.webGlassesSimulator.frameMode.v1'+':u'+String(cfg.userId||0)+':rt'+String(cfg.runtimePublicId||'default');
+const OPTICAL_MASK_KEY='gelato.webGlassesSimulator.opticalMask.v1'+':u'+String(cfg.userId||0)+':rt'+String(cfg.runtimePublicId||'default');
 let frameMode=['svg','image','none'].includes(localStorage.getItem(FRAME_MODE_KEY))?localStorage.getItem(FRAME_MODE_KEY):'svg';
 let opticalMaskEnabled=localStorage.getItem(OPTICAL_MASK_KEY)!=='0';
 function applyFrameMode(){
@@ -1618,8 +1622,8 @@ bindLocalImage('sceneFile','sceneImage',()=>{$('scenePlaceholder').hidden=true;}
 bindLocalImage('glassesFile','glassesImage',()=>{frameMode='image';localStorage.setItem(FRAME_MODE_KEY,frameMode);applyFrameMode();});
 $('componentControls').addEventListener('click',e=>{const b=e.target.closest('[data-detect]');if(b)detect(b.dataset.detect);});
 
-const CAL_KEY='gelato.webGlassesSimulator.calibration.v1'+':u'+String(cfg.userId||0);
-const PRESET_KEY='gelato.webGlassesSimulator.presets.v1'+':u'+String(cfg.userId||0);
+const CAL_KEY='gelato.webGlassesSimulator.calibration.v1'+':u'+String(cfg.userId||0)+':rt'+String(cfg.runtimePublicId||'default');
+const PRESET_KEY='gelato.webGlassesSimulator.presets.v1'+':u'+String(cfg.userId||0)+':rt'+String(cfg.runtimePublicId||'default');
 const calibrationDefaults={
   opacity:100,brightness:100,scale:100,safeWidth:80,safeHeight:66,
   leftEyeX:0,leftEyeY:0,rightEyeX:0,rightEyeY:0,
@@ -1940,7 +1944,7 @@ window.GelatoGlassesDisplayPreferences={
     if(typeof prefs.cameraMirror==='boolean')$('cameraMirror').checked=prefs.cameraMirror;
     applyCameraPresentation();
     if(typeof prefs.voiceReplies==='boolean')$('simVoiceReplies').checked=prefs.voiceReplies;
-    if(prefs.devicePublicId&&state.devices.some(d=>d.publicId===prefs.devicePublicId)&&
+    if(!cfg.runtimePublicId&&prefs.devicePublicId&&state.devices.some(d=>d.publicId===prefs.devicePublicId)&&
        state.device?.publicId!==prefs.devicePublicId){
       $('deviceSelect').value=prefs.devicePublicId;
       $('deviceSelect').dispatchEvent(new Event('change'));
@@ -1950,12 +1954,17 @@ window.GelatoGlassesDisplayPreferences={
     if(['camera1','camera2','camera3','camera4','camera5','training'].includes(prefs.activeCameraTab))
       window.GelatoCameraWorkspace?.select?.(prefs.activeCameraTab);
     // This restores UI selection only. Never starts microphone, camera capture or KDS writes.
-    if(prefs.mode==='mock'&&state.mode==='live'){
+    if(!cfg.runtimePublicId&&prefs.mode==='mock'&&state.mode==='live'){
       $('modeSelect').value='mock';
       $('modeSelect').dispatchEvent(new Event('change'));
     }
   }
 };
 window.GelatoGlassesPrimaryCamera={stop:()=>stopCamera('disabled'),active:()=>!!state.cameraStream};
+window.addEventListener('gelato-glasses-runtime-revoked',()=>{
+  stopLiveStationSync('runtime_revoked');stopVisionRuntime('runtime_revoked');stopCamera('runtime_revoked');
+  state.recovery.suppressAutomatic=true;state.recovery.state='blocked';state.build=null;state.validation=null;
+  clearAssemblySession();render();log('SYSTEM','Assigned runtime was ended or access revoked. Refresh from runtime manager.');
+});
 (async()=>{await loadDevices();window.GelatoGlassesDisplayPreferences.ready=true;window.dispatchEvent(new CustomEvent('gelato-glasses-preferences-ready'));const cp=cameraPrefs();if(cp.resolution)$('cameraResolution').value=cp.resolution;if(cp.fit)$('cameraFit').value=cp.fit;$('cameraMirror').checked=!!cp.mirror;applyCameraPresentation();await enumerateCameras();if(!cameraSupported())setCameraHealth('error','UNSUPPORTED');refreshPresets();applyCalibration();render();if(state.device){startLiveStationSync();}else{setSyncBadge('error','NO DISPLAY');}setInterval(renderTopStatus,30000);setInterval(tickLiveTicketTimers,1000);renderRuntimeRecovery();refreshDeviceHealth();setInterval(refreshDeviceHealth,5000);const savedResume=recoveryStored();if(savedResume?.devicePublicId&&state.device?.publicId===savedResume.devicePublicId&&!state.device.virtualPreview){resumeRuntimeRecovery('app_restart_resume');}log('SYSTEM','Simulator ready. Pizza Line Reference HUD loaded.');})();
 })();
