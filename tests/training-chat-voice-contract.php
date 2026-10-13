@@ -1,0 +1,32 @@
+<?php
+declare(strict_types=1);
+$root=dirname(__DIR__);
+function trainingCheck(bool $ok,string $msg):void{if(!$ok){fwrite(STDERR,"FAIL Training Chat: {$msg}\n");exit(1);}}
+$index=(string)file_get_contents($root.'/index.html');
+$workspace=(string)file_get_contents($root.'/workspace.php');
+$style=(string)file_get_contents($root.'/css/training-workspace-chat.css');
+$voice=(string)file_get_contents($root.'/js/training-workspace-voice.js');
+$canvas=(string)file_get_contents($root.'/js/dynamic-agent-canvas.js');
+$global=(string)file_get_contents($root.'/js/global-agent.js');
+trainingCheck(str_contains($index,'id="messages"')&&str_contains($index,'id="chatInput"')&&str_contains($index,'id="sendChat"'),'inline conversation must stay the owner of quiz answers');
+trainingCheck(str_contains($index,'state.agentTraining?.active')&&str_contains($index,'handleGuidedTrainingInput(q)'),'quiz answers must continue through the existing Training grader');
+trainingCheck(str_contains($index,'e.stopPropagation();sendMessage();'),'Training Enter must stop propagation and send inline');
+trainingCheck(str_contains($index,'id="trainingVoiceOnce"')&&str_contains($index,'id="trainingVoiceAlways"'),'two explicit Training mic modes required');
+trainingCheck(str_contains($index,'id="trainingVoiceStatus" role="status" aria-live="polite"'),'microphone state must be accessible');
+trainingCheck(str_contains($workspace,'css/training-workspace-chat.css?v=20261013-training1'),'chat contrast loads in authenticated workspace');
+trainingCheck(str_contains($workspace,'js/training-workspace-voice.js?v=20261013-training1'),'voice controller loads after inline Training handlers');
+trainingCheck(str_contains($style,'body.gelato-admin-tech-theme #page-workspace .message.user .bubble'),'user bubbles beat newer Admin theme CSS specificity');
+trainingCheck(str_contains($style,'background:#182823!important')&&str_contains($style,'color:#fff!important'),'user bubble contrast must remain readable');
+trainingCheck(str_contains($style,'#gelato-agent-bar')&&str_contains($style,'[data-workspace-mode="training"].active'),'hide duplicate global composer only in Training');
+trainingCheck(str_contains($canvas,'if(state.open){setStatus('),'Agent replies must refresh only explicitly opened popup');
+trainingCheck(!str_contains($canvas,'if(!state.open)open();setStatus('),'global Agent replies must not auto-open over a quiz');
+trainingCheck(str_contains($canvas,"document.getElementById('chatInput')?.focus()"),'footer action should route to inline Training composer');
+trainingCheck(str_contains($global,"#gelato-agent-bar"),'global Agent remains available on other pages');
+trainingCheck(str_contains($voice,'window.SpeechRecognition||window.webkitSpeechRecognition'),'voice capability detection required');
+trainingCheck(str_contains($voice,"current.continuous=mode==='always'"),'one answer and continuous dictation must be distinct');
+trainingCheck(str_contains($voice,"$('sendChat').click()"),'speech goes through existing Training quiz submission');
+trainingCheck(!str_contains($voice,'GelatoGlobalAgent.send'),'voice must not submit quiz answers to separate Agent');
+trainingCheck(str_contains($voice,"['not-allowed','service-not-allowed','audio-capture']"),'blocked mic states must be actionable');
+trainingCheck(str_contains($voice,'document.hidden')&&str_contains($voice,"data-workspace-mode"),'mic must pause in hidden tab and stop when switching out of Training');
+trainingCheck(!str_contains($voice,'start();\n})();'),'microphone must never auto-start on load');
+echo "training-chat-voice-contract=ok\n";
