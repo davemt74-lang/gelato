@@ -36,7 +36,7 @@ $boot=[
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <title>AR Vision Model Rollouts | Restaurant Admin</title>
-<link rel="stylesheet" href="assets/css/admin-control.css?v=20260914-1">
+<link rel="stylesheet" href="assets/css/admin-control.css?v=20261012-ui1">
 <link rel="stylesheet" href="assets/css/glasses-vision-models.css?v=20260928-recovery1">
 </head>
 <body class="admin-control gvm-page">
