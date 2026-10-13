@@ -23,7 +23,7 @@ assert.match(files.core,/glasses_customer_photo_delivery_gate/);
 assert.match(files.core,/glasses_customer_photo_customer_opted/);
 assert.match(files.core,/glasses_customer_photo_location_enabled/);
 assert.match(files.core,/glasses_customer_photo_staff_auth/);
-assert.match(files.core,/glasses_camera_location_authorize\(\$pdo,\$user,\$locationId,\$write\)/);
+assert.match(files.core,/glasses_order_photo_auth\(\$pdo,\$user,\$locationId,\$write\)/);
 assert.match(files.core,/FOR UPDATE/);
 assert.match(files.core,/customer_inbox_send_direct/);
 assert.match(files.core,/share\.photo_library_id/);
