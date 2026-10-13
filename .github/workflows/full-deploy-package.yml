@@ -53,6 +53,12 @@ on:
       - 'includes/glasses-simulator.php'
       - 'assets/js/glasses-web-simulator.js'
       - 'assets/js/glasses-simulator-voice.js'
+      - 'assets/js/glasses-voice-device.js'
+      - 'assets/js/glasses-simulator-tabs.js'
+      - 'assets/css/glasses-simulator-device-first.css'
+      - 'tests/glasses-voice-device.test.js'
+      - 'tests/glasses-voice-recovery.test.js'
+      - 'tests/glasses-device-tabs-contract.php'
       - 'assets/css/glasses-simulator-hud-ux.css'
       - 'tests/glasses-hud-voice-contract.php'
       - 'tests/glasses-voice-navigation.test.js'
@@ -173,6 +179,12 @@ jobs:
             includes/kds-slot-references.php
             tests/kds-global-order-reference.php
             assets/js/glasses-simulator-voice.js
+            assets/js/glasses-voice-device.js
+            assets/js/glasses-simulator-tabs.js
+            assets/css/glasses-simulator-device-first.css
+            tests/glasses-voice-device.test.js
+            tests/glasses-voice-recovery.test.js
+            tests/glasses-device-tabs-contract.php
             assets/css/glasses-simulator-hud-ux.css
             tests/glasses-hud-voice-contract.php
             tests/glasses-voice-navigation.test.js
@@ -241,6 +253,11 @@ jobs:
           php -l includes/kds-spoken-orders.php
           node --check js/kds-spoken-orders.js
           node --check assets/js/glasses-simulator-voice.js
+          node --check assets/js/glasses-voice-device.js
+          node --check assets/js/glasses-simulator-tabs.js
+          node tests/glasses-voice-device.test.js
+          node tests/glasses-voice-recovery.test.js
+          php tests/glasses-device-tabs-contract.php
           node tests/glasses-voice-navigation.test.js
           node --check assets/js/glasses-web-simulator.js
           node --check assets/js/glasses-pos-kds-test.js
