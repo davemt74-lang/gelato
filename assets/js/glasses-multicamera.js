@@ -33,6 +33,7 @@
   }
   async function start(slot) {
     const s=slots.get(slot);if(!s||s.busy)return;
+    if(window.GelatoCameraConfiguration?.isEnabled(slot)!==true){setStatus(slot,'blocked','Camera location is switched OFF. Enable it before starting.');return;}
     if(!navigator.mediaDevices?.getUserMedia){setStatus(slot,'failed','Browser camera API unavailable. Use HTTPS or localhost.');return;}
     const id=s.device.value,issue=conflict(id,slot);
     if(issue){setStatus(slot,'blocked',issue);return;}
@@ -41,10 +42,10 @@
     let stream=null;
     try{
       stream=await navigator.mediaDevices.getUserMedia({video:{deviceId:{exact:id},width:{ideal:1280},height:{ideal:720},frameRate:{ideal:15,max:30}},audio:false});
-      if(token!==s.epoch||document.hidden){stream.getTracks().forEach(t=>t.stop());return;}
+      if(token!==s.epoch||document.hidden||window.GelatoCameraConfiguration?.isEnabled(slot)!==true){stream.getTracks().forEach(t=>t.stop());return;}
       s.stream=stream;s.video.srcObject=stream;s.video.hidden=false;s.preview.hidden=true;
       await s.video.play();
-      if(token!==s.epoch||document.hidden){stop(slot,{reason:'PAUSED · TAB HIDDEN'});return;}
+      if(token!==s.epoch||document.hidden||window.GelatoCameraConfiguration?.isEnabled(slot)!==true){stop(slot,{reason:'PAUSED / DISABLED'});return;}
       s.stop.disabled=false;s.freeze.disabled=false;
       const videoTrack=stream.getVideoTracks()[0];
       videoTrack?.addEventListener?.('ended',()=>{if(s.stream===stream)stop(slot,{reason:'DEVICE DISCONNECTED'});},{once:true});
@@ -189,7 +190,8 @@
     navigator.mediaDevices?.addEventListener?.('devicechange',()=>void refreshDevices());
     void refreshDevices();
   }
-  window.GelatoGlassesMultiCamera={MAX,stopAll,refreshDevices,
+  window.GelatoGlassesMultiCamera={MAX,stop,stopAll,refreshDevices,
+    video:slot=>slots.get(slot)?.stream?slots.get(slot).video:null,
     status:()=>AUX.map(slot=>({slot,active:!!slots.get(slot)?.stream,state:slots.get(slot)?.status||'off'}))};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});
   else mount();
