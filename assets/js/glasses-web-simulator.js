@@ -1288,6 +1288,7 @@ function renderOrdersQueue(item){
   $('hudOrders').innerHTML='<div class="hud-ticket-tabs" role="tablist" aria-label="Occupied KDS tickets">'+tabs+'</div>'+
     (selected?'<div class="hud-ticket-item-list" aria-label="Items on selected ticket">'+items+'</div>':'<span class="sim-muted">No active KDS tickets</span>');
   $('hudOrdersRegion').classList.toggle('hud-queue-empty',tickets.length===0);
+  window.GelatoGlassesHudNotifications?.positionUnderLeftTickets?.();
 }
 function buildProgressIndex(steps,comps){
   const confirmed=comps.filter(c=>c.status==='confirmed'||(c.optional&&c.status==='ignored')).length;
@@ -1917,6 +1918,7 @@ function applyCalibration(){
   for(const [name,r] of Object.entries(calibration.regions)){const el=$(name);if(!el)continue;el.style.setProperty('--region-x',r.x+'%');el.style.setProperty('--region-y',r.y+'%');el.style.setProperty('--region-w',r.w+'%');el.style.setProperty('--region-h',r.h+'%');}
   const controls={hudOpacity:['opacity','%'],hudBrightness:['brightness','%'],hudScale:['scale','%'],safeWidth:['safeWidth','%'],safeHeight:['safeHeight','%'],leftEyeX:['leftEyeX','%'],leftEyeY:['leftEyeY','%'],rightEyeX:['rightEyeX','%'],rightEyeY:['rightEyeY','%']};
   $('rightWidth').value=String(calibration.regions.hudRight.w);$('rightWidthValue').textContent=String(Math.round(calibration.regions.hudRight.w))+'%';
+  window.GelatoGlassesHudNotifications?.positionUnderLeftTickets?.();
   $('leftWidth').value=String(calibration.regions.hudOrdersRegion.w);$('leftWidthValue').textContent=String(Math.round(calibration.regions.hudOrdersRegion.w))+'%';
   for(const [id,[key,suffix]] of Object.entries(controls)){if($(id)){$(id).value=String(calibration[key]);$(id+'Value').textContent=String(calibration[key])+suffix;}}
 }
