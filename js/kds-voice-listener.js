@@ -106,6 +106,7 @@
             }
             continue;
           }
+          if(Date.now()-lastBargeIn<1300&&/^(?:hey\s+gelato\s+)?(?:stop|stop speaking|interrupt)\b/i.test(words.trim()))continue;
           if(!result.isFinal||decision?.kind==='ignored')continue;
           if(decision?.interrupt)window.GelatoVoiceTurns?.interrupt?.('kds-voice-barge-in');
           status('heard','Heard: '+words);
