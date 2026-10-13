@@ -18,6 +18,56 @@ function post(action,payload={}){
 async function refresh(){
  const d=await json(cfg.api+'?action=runtimes');catalog=d;render();return d;
 }
+function renderRuntimeTabs(choices,current){
+ const strip=byId('glassesRuntimeTabs'),label=byId('glassesRuntimeSelectLabel');
+ if(!strip)return;
+ const multi=choices.length>1;
+ strip.hidden=!multi;
+ if(label)label.hidden=multi;
+ strip.replaceChildren();
+ if(!multi)return;
+ const tabs=choices.map((runtime,i)=>({
+   id:runtime.publicId,name:'Glasses '+(i+1),
+   detail:runtime.employeeName+' · '+runtime.deviceName+
+     (runtime.stationName?' · '+runtime.stationName:''),
+   index:i+1
+ }));
+ if(!cfg.runtimePublicId)tabs.push({id:'',name:'New',detail:'Create another assigned glasses runtime',index:'+'});
+ const select=byId('glassesRuntimeSelect');
+ const activate=id=>{
+   if(cfg.runtimePublicId){
+     // Each paired glasses session has its own isolated camera, voice, station
+     // and build state. Open another session instead of silently reassigning it.
+     if(!id||id===cfg.runtimePublicId)return;
+     const url=new URL(location.href);url.searchParams.set('runtime',id);
+     window.open(url.toString(),'_blank','noopener');
+     return;
+   }
+   select.value=id;render();
+ };
+ for(const [i,tab] of tabs.entries()){
+   const btn=document.createElement('button');btn.type='button';btn.setAttribute('role','tab');
+   const selected=(current===tab.id);
+   btn.setAttribute('aria-selected',selected?'true':'false');btn.tabIndex=selected?0:-1;
+   btn.setAttribute('aria-label',tab.name+' · '+tab.detail);
+   btn.title=tab.detail;btn.dataset.runtimeId=tab.id;
+   const number=document.createElement('span');number.textContent=String(tab.index);
+   number.setAttribute('aria-hidden','true');
+   const name=document.createTextNode(tab.name);btn.append(number,name);
+   btn.addEventListener('click',()=>activate(tab.id));
+   btn.addEventListener('keydown',event=>{
+     const next=event.key==='ArrowRight'?i+1:event.key==='ArrowLeft'?i-1:
+       event.key==='Home'?0:event.key==='End'?tabs.length-1:-1;
+     if(next<0)return;
+     event.preventDefault();
+     const target=tabs[(next+tabs.length)%tabs.length];
+     if(!cfg.runtimePublicId)activate(target.id);
+     const sibling=Array.from(strip.querySelectorAll('[role="tab"]'))[(next+tabs.length)%tabs.length];
+     sibling?.focus();
+   });
+   strip.appendChild(btn);
+ }
+}
 function render(){
  const select=byId('glassesRuntimeSelect'),employee=byId('glassesRuntimeEmployee');
  if(!select||!employee)return;
@@ -28,18 +78,23 @@ function render(){
  select.value=cfg.runtimePublicId||(choices.some(x=>x.publicId===previous)?previous:'');
  if(cfg.runtimePublicId)select.value=cfg.runtimePublicId;
  const chosen=choices.find(r=>r.publicId===select.value)||null;
+ renderRuntimeTabs(choices,select.value);
  const deviceSelect=byId('deviceSelect');
  if(chosen&&deviceSelect){deviceSelect.value=chosen.devicePublicId;deviceSelect.disabled=true;}
  else if(deviceSelect&&!cfg.runtimePublicId)deviceSelect.disabled=false;
- renderStation(chosen);
- renderTraining(chosen);
+ const previousEmployee=employee.value;
  employee.innerHTML='<option value="">Assign employee…</option>'+
    (catalog.employees||[]).map(e=>'<option value="'+e.id+'">'+esc(e.displayName)+(e.employeeNumber?' · '+esc(e.employeeNumber):'')+'</option>').join('');
  if(chosen&&!(catalog.employees||[]).some(e=>e.id===chosen.employeeUserId))
    employee.innerHTML+='<option value="'+chosen.employeeUserId+'">'+esc(chosen.employeeName)+'</option>';
- employee.value=chosen?String(chosen.employeeUserId):'';
+ employee.value=chosen?String(chosen.employeeUserId):
+   (catalog.employees||[]).some(e=>String(e.id)===previousEmployee)?previousEmployee:'';
  employee.disabled=!!chosen||(catalog.employees||[]).length===0;
- byId('glassesRuntimeNew').disabled=!!cfg.runtimePublicId||!!chosen||!catalog.schemaReady||(catalog.employees||[]).length===0;
+ renderStation(chosen);
+ renderTraining(chosen);
+ byId('glassesRuntimeNew').disabled=!!cfg.runtimePublicId||!!chosen||!catalog.schemaReady||
+   !(catalog.employees||[]).length||!selectedDevice()||!!selectedDevice()?.virtualPreview||
+   !byId('glassesRuntimeStation')?.value||!employee.value;
  byId('glassesRuntimeOpen').disabled=!chosen;
  byId('glassesRuntimeEnd').disabled=!chosen||(catalog.employees||[]).length===0;
  if(!catalog.schemaReady){status('Install the multi-runtime migration with upgrade.php.',true);return;}

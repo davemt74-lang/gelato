@@ -67,14 +67,15 @@ async function boot(){
 }
 function mount(){
   const runtime=$('sgv-panel-runtime');
-  if(runtime){
-    const card=document.createElement('section');card.className='console-card sgv-user-preferences';
-    card.innerHTML='<div class="console-heading"><div><small>PERSONAL DISPLAY SETTINGS</small>'+
-      '<strong>Camera & Glasses Layout</strong></div></div>'+
-      '<p class="sim-muted">Layout, selected device, frame, camera presentation and tabs save per account. Microphone or camera access never starts automatically.</p>'+
-      '<div class="inline-actions"><button id="sgvSaveUserPrefs" type="button">Save My UI Settings</button></div>'+
-      '<p id="sgvUserPrefsStatus" class="sim-muted" role="status" aria-live="polite">Loading settings…</p>';
-    runtime.prepend(card);
+  const toolbar=runtime?.querySelector('.glasses-runtime-toolbar');
+  if(toolbar){
+    // Reuse the existing per-account API and snapshot; no second preferences card,
+    // no new table, and no automatic microphone/camera startup.
+    const group=document.createElement('div');
+    group.className='glasses-runtime-save-ui';
+    group.innerHTML='<button id="sgvSaveUserPrefs" type="button" title="Save personal camera, lens and tab layout settings">Save My UI Settings</button>'+
+      '<span id="sgvUserPrefsStatus" role="status" aria-live="polite">Loading settings…</span>';
+    toolbar.appendChild(group);
     $('sgvSaveUserPrefs').addEventListener('click',()=>void save());
   }
   document.addEventListener('change',event=>{
