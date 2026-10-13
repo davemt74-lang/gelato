@@ -28,7 +28,7 @@ const end=runtimes.indexOf('function render(){',start);
 assert.ok(start>0&&end>start,'runtime subtab renderer exists');
 const byIdMap={};
 function element(){
- return {hidden:false,children:[],attributes:{},listeners:{},
+ return {hidden:false,children:[],attributes:{},listeners:{},dataset:{},
    appendChild(child){this.children.push(child);return child},
    append(...children){this.children.push(...children)},
    replaceChildren(){this.children=[]},
