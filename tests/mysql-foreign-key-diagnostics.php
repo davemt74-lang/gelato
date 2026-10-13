@@ -33,7 +33,7 @@ try {
     throw new RuntimeException('Expected FK rejection');
 } catch (PDOException $e) {
     if (!str_contains($e->getMessage(), 'fk_demo_org')
-        || !str_contains($e->getMessage(), 'BIGINT UNSIGNED')
+        || !str_contains(strtolower($e->getMessage()), 'bigint unsigned')
         || !str_contains($e->getMessage(), 'int unsigned')) {
         throw new RuntimeException('Missing actionable FK mismatch diagnostics: ' . $e->getMessage());
     }
