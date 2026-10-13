@@ -59,6 +59,102 @@
     if (avatar && account.initials) avatar.textContent = account.initials;
   }
 
+  function navDestination(href) {
+    try {
+      const url = new URL(String(href || ''), window.location.href);
+      if (url.origin !== window.location.origin) return '';
+      return url.pathname.split('/').pop().toLowerCase() + url.hash.toLowerCase();
+    } catch {
+      return '';
+    }
+  }
+
+  function syncAdminSidebar(shell) {
+    const adminNav = document.querySelector('[data-nav-group="admin"]');
+    if (!adminNav) return;
+
+    // Server permission-filtered catalog owns this list. Keep in-canvas
+    // buttons when allowed, and use one accessible link per PHP destination.
+    const destinations = new Map();
+    (shell.navigation || []).forEach((group) => {
+      (group.items || []).forEach((item) => {
+        const destination = navDestination(item.href);
+        if (!destination || destinations.has(destination)) return;
+        destinations.set(destination, { ...item, group: group.id });
+      });
+    });
+    let reconciling = false;
+    let scheduled = false;
+    const reconcile = () => {
+      if (reconciling) return;
+      reconciling = true;
+      try {
+        adminNav.querySelectorAll('.gelato-sidebar-route-link,.gelato-sidebar-route-heading').forEach((node) => node.remove());
+        const spaButtons = new Map();
+        adminNav.querySelectorAll('.nav-btn[data-nav]').forEach((node) => {
+          const destination = navDestination('workspace.php#' + (node.dataset.nav || ''));
+          if (!destinations.has(destination) || spaButtons.has(destination)) {
+            node.remove();
+          } else {
+            spaButtons.set(destination, node);
+            node.removeAttribute('disabled');
+            node.removeAttribute('aria-disabled');
+          }
+        });
+        // Modules may add old JavaScript buttons late. They point at PHP
+        // modules and have no native SPA data-nav; canonical links replace them.
+        adminNav.querySelectorAll('.nav-btn:not([data-nav])').forEach((node) => node.remove());
+        const existingLinks = new Map();
+        adminNav.querySelectorAll('a[href]').forEach((node) => {
+          const destination = navDestination(node.getAttribute('href'));
+          if (!destinations.has(destination) || spaButtons.has(destination) || existingLinks.has(destination)) {
+            node.remove();
+          } else {
+            existingLinks.set(destination, node);
+          }
+        });
+        destinations.forEach((item, destination) => {
+          if (spaButtons.has(destination)) return;
+          let link = existingLinks.get(destination);
+          if (!link) {
+            link = document.createElement('a');
+            link.className = 'nav-item gelato-canonical-nav-link';
+            link.href = item.href;
+            link.innerHTML = '<span class="nav-ico"></span><span class="gelato-nav-label"></span>';
+          }
+          link.classList.add('gelato-canonical-nav-link');
+          link.removeAttribute('aria-disabled');
+          link.removeAttribute('disabled');
+          if (!link.querySelector('.gelato-nav-label')) {
+            link.innerHTML = '<span class="nav-ico"></span><span class="gelato-nav-label"></span>';
+          }
+          link.querySelector('.nav-ico').textContent = item.icon || '◇';
+          link.querySelector('.gelato-nav-label').textContent = item.label || '';
+          const groupItems = adminNav.querySelector('[data-admin-nav-section="' + item.group + '"] .admin-nav-section-items');
+          const container = groupItems || adminNav;
+          if (!link.isConnected || link.parentElement !== container) container.appendChild(link);
+        });
+      } finally {
+        reconciling = false;
+      }
+    };
+    const schedule = () => {
+      if (scheduled) return;
+      scheduled = true;
+      requestAnimationFrame(() => {
+        scheduled = false;
+        reconcile();
+      });
+    };
+    reconcile();
+    if (adminNav.dataset.canonicalSidebarObserver !== '1') {
+      adminNav.dataset.canonicalSidebarObserver = '1';
+      new MutationObserver((mutations) => {
+        if (!reconciling && mutations.some((mutation) => mutation.type === 'childList')) schedule();
+      }).observe(adminNav, { childList: true, subtree: true });
+    }
+  }
+
   function syncProfileMenu(shell) {
     const list = document.querySelector('.profile-menu-list');
     if (!list) return;
@@ -87,6 +183,7 @@
       const shell = await loadShell();
       window.GELATO_ADMIN_SHELL = shell;
       syncHeader(shell);
+      syncAdminSidebar(shell);
       syncProfileMenu(shell);
       ensureAddCanvas();
       ensureWorkspaceEnhancements();

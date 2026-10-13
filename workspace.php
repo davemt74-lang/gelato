@@ -172,29 +172,11 @@ if ($adminControlAllowed) {
         $navHtml .= '</div>';
     }
     $navHtml .= '<div class="gelato-server-navigation-group"><a href="deployment-check.php">Deployment and permissions check</a></div></div></details>';
-    // Render authorized PHP module routes inside the *actual* Admin sidebar.
-    $sidebarRoutes = '<div class="gelato-sidebar-route-heading">Restaurant operations</div>';
-    foreach (admin_shell_filtered_navigation($user) as $group) {
-        $sidebarRoutes .= '<div class="gelato-sidebar-route-heading">'
-            . app_escape((string)$group['label']) . '</div>';
-        foreach ($group['items'] as $item) {
-            $sidebarRoutes .= '<a class="gelato-sidebar-route-link" href="'
-                . app_escape((string)$item['href']) . '">'
-                . app_escape((string)$item['icon']) . ' &nbsp; '
-                . app_escape((string)$item['label']) . '</a>';
-        }
-    }
-    $sidebarRoutes .= '<a class="gelato-sidebar-route-link" href="deployment-check.php">'
-        . 'Deployment and permissions check</a>';
-    $adminNavEnd = '</nav>' . "\n" . '    <div class="side-foot">';
-    $adminNavReplacement = $sidebarRoutes . '</nav>' . "\n" . '    <div class="side-foot">';
-    $html = str_replace($adminNavEnd, $adminNavReplacement, $html);
+    // The inline Admin sidebar is reconciled from the canonical API by
+    // workspace-shell-sync.js. Keep the independent Admin tools fallback,
+    // but do not inject a second copy of the same routes into the sidebar.
     $navCss = '<style id="gelato-server-navigation-styles">'
         . '.gelato-server-navigation{position:fixed;top:72px;right:15px;z-index:10040;font:600 12px/1.35 system-ui,sans-serif}'
-        . '.nav[data-nav-group="admin"].active{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin}'
-        . '.gelato-sidebar-route-heading{padding:12px 10px 5px;color:#d5b09d;font-size:9px;letter-spacing:.09em;text-transform:uppercase;font-weight:900}'
-        . '.gelato-sidebar-route-link{display:block;padding:9px 10px;color:#d7dfda;text-decoration:none;border-radius:7px;font:650 11px/1.2 system-ui,sans-serif;white-space:normal}'
-        . '.gelato-sidebar-route-link:hover,.gelato-sidebar-route-link:focus-visible{background:#334139;color:#fff}'
         . '.gelato-server-navigation>summary{cursor:pointer;list-style:none;background:#17231f;color:white;border:1px solid #53645d;padding:11px 14px;border-radius:12px;box-shadow:0 6px 25px #0003}'
         . '.gelato-version-label{font-size:9px;color:#c6f0dc;margin-left:8px}'
         . '.gelato-server-navigation-panel{position:absolute;right:0;top:calc(100% + 7px);width:min(500px,90vw);max-height:calc(100vh - 140px);overflow:auto;padding:16px;border:1px solid #ddd;background:white;color:#151a18;border-radius:13px;box-shadow:0 20px 65px #0003}'
@@ -217,8 +199,8 @@ if ($adminDashboardAllowed) {
     $html = str_replace('</body>', "  <script src=\"js/admin-command-dashboard.js?v=20260914-command1\"></script>\n</body>", $html);
 }
 if ($adminControlAllowed) {
-    $html = str_replace('</head>', "  <link rel=\"stylesheet\" href=\"css/admin-tech-theme.css?v=20260915-tech1\">\n</head>", $html);
+    $html = str_replace('</head>', "  <link rel=\"stylesheet\" href=\"css/admin-tech-theme.css?v=20261013-nav1\">\n</head>", $html);
     $html = str_replace('<body>', '<body class="gelato-admin-tech-theme">', $html);
 }
-$html = str_replace('</body>', "  <script src=\"js/workspace-shell-sync.js?v=20260915-shell1\"></script>\n</body>", $html);
+$html = str_replace('</body>', "  <script src=\"js/workspace-shell-sync.js?v=20261013-nav1\"></script>\n</body>", $html);
 echo $html;

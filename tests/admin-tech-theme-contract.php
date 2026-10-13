@@ -18,7 +18,7 @@ $checks=[
     'mobile universal breakpoint exists'=>str_contains($css,'@media(max-width:900px)')&&str_contains($css,'.uas-sidebar'),
     'mobile compact breakpoint exists'=>str_contains($css,'@media(max-width:520px)'),
     'universal shell loads theme'=>str_contains($shell,"css/admin-tech-theme.css?v=20260915-tech1")&&str_contains($shell,'ensureTheme();'),
-    'workspace loads theme last'=>str_contains($workspace,'css/admin-tech-theme.css?v=20260915-tech1'),
+    'workspace loads theme last'=>str_contains($workspace,'css/admin-tech-theme.css?v=20261013-nav1'),
     'workspace adds theme body class'=>str_contains($workspace,'gelato-admin-tech-theme'),
     'customer pages are not targeted'=>!str_contains($css,'customer-page'),
 ];

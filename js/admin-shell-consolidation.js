@@ -15,6 +15,7 @@
     {id: 'website', label: 'Website & Locations'},
     {id: 'operations', label: 'Operations'},
     {id: 'sales', label: 'Sales & Events'},
+    {id: 'vision', label: 'Vision & AR Glasses'},
     {id: 'ai', label: 'AI & Knowledge'},
   ];
 
@@ -112,6 +113,7 @@
   function adminNavCategory(node) {
     const signature = adminNavSignature(node);
     if (/owner agent|agent canvas|public ai agent|knowledge center|llm/.test(signature)) return 'ai';
+    if (/vision lab|vision operations|vision models|vision labels|vision learning|calibration studio|glasses/.test(signature)) return 'vision';
     if (/sales intelligence|customer crm|customer promotions|wholesale|catering/.test(signature)) return 'sales';
     if (/landing page|public site|locations?|brand settings?/.test(signature)) return 'website';
     if (/employee home|user accounts?|account types?|resume|jobs?|form builder|staff scheduling|my schedule|time clock|my time/.test(signature)) return 'team';
@@ -125,6 +127,7 @@
       [/landing page/, 110], [/public site/, 120], [/locations?/, 130], [/brand settings?/, 140],
       [/online orders/, 200], [/\boperations\b/, 210], [/floor planner/, 220], [/equipment catalog/, 230], [/recipe library/, 240], [/purchasing|receiving/, 250],
       [/sales intelligence/, 300], [/customer crm/, 310], [/customer promotions/, 320], [/catering operations/, 330], [/catering pipeline/, 340], [/wholesale(?!.*customer)/, 350], [/wholesale customers?/, 360],
+      [/vision lab/, 370], [/vision operations/, 380], [/vision models/, 390], [/vision labels/, 400], [/vision learning/, 405], [/calibration studio/, 407],
       [/owner agent/, 410], [/agent canvas/, 420], [/public ai agent/, 430], [/knowledge center/, 440], [/llm/, 450],
     ];
     for (const [pattern, rank] of rules) {
