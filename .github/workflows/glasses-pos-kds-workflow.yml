@@ -1,0 +1,51 @@
+name: POS KDS Glasses Workflow
+
+on:
+  pull_request:
+    paths:
+      - 'glasses-vision-lab.php'
+      - 'assets/css/glasses-vision-lab.css'
+      - 'glasses-pos-kds-test.php'
+      - 'assets/css/glasses-pos-kds-test.css'
+      - 'assets/js/glasses-pos-kds-test.js'
+      - 'tests/glasses-pos-kds-workflow-contract.php'
+      - 'docs/GLASSES-POS-KDS-TEST-WORKFLOW.md'
+      - '.github/workflows/glasses-pos-kds-workflow.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'glasses-vision-lab.php'
+      - 'assets/css/glasses-vision-lab.css'
+      - 'glasses-pos-kds-test.php'
+      - 'assets/css/glasses-pos-kds-test.css'
+      - 'assets/js/glasses-pos-kds-test.js'
+      - 'tests/glasses-pos-kds-workflow-contract.php'
+      - 'docs/GLASSES-POS-KDS-TEST-WORKFLOW.md'
+      - '.github/workflows/glasses-pos-kds-workflow.yml'
+
+jobs:
+  glasses-integration-workflow:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: PHP syntax and permission contract
+        run: |
+          php -l glasses-vision-lab.php
+          php -l glasses-pos-kds-test.php
+          php -l tests/glasses-pos-kds-workflow-contract.php
+          php tests/glasses-pos-kds-workflow-contract.php
+      - name: JavaScript syntax and no auto-order mutation
+        run: |
+          node --check assets/js/glasses-pos-kds-test.js
+          ! grep -E 'fetch\(|XMLHttpRequest|sendBeacon|\.submit\(' assets/js/glasses-pos-kds-test.js
+      - name: Preserve real POS KDS simulator routes
+        run: |
+          grep -q 'glasses_current_work' includes/glasses-simulator.php
+          grep -q '<option value="mock">Mock</option>' glasses-simulator.php
+          grep -q '<option value="live">Live Gelato</option>' glasses-simulator.php
