@@ -15,6 +15,14 @@ on:
       - 'assets/js/glasses-camera-config.js'
       - 'assets/js/glasses-camera-workspace.js'
       - 'assets/js/glasses-production-photo-flow.js'
+      - 'api/glasses-photo-notifications.php'
+      - 'includes/glasses-customer-photo-notifications.php'
+      - 'database/20261211_section260_customer_photo_notifications.sql'
+      - 'customer-order-photos.php'
+      - 'customer-order-photo.php'
+      - 'assets/js/glasses-customer-photo-notifications.js'
+      - 'tests/glasses-customer-photo-policy.php'
+      - 'tests/glasses-customer-photo-notifications.test.js'
       - 'includes/glasses-order-photo-stages.php'
       - 'api/glasses-order-photo-stages.php'
       - 'database/20261210_section259_order_photo_stages.sql'
@@ -70,6 +78,12 @@ jobs:
           php -l api/glasses-camera-locations.php
           php -l api/glasses-camera-photo-library.php
           php -l api/glasses-order-photo-stages.php
+          php -l api/glasses-photo-notifications.php
+          php -l includes/glasses-customer-photo-notifications.php
+          php -l customer-order-photos.php
+          php -l customer-order-photo.php
+          php -l customer-account.php
+          php -l tests/glasses-customer-photo-policy.php
           php -l includes/glasses-order-photo-stages.php
           php -l tests/glasses-order-photo-stages-contract.php
           php -l includes/glasses-camera-photo-library.php
@@ -93,6 +107,7 @@ jobs:
           node --check assets/js/glasses-camera-config.js
           node --check assets/js/glasses-camera-workspace.js
           node --check assets/js/glasses-production-photo-flow.js
+          node --check assets/js/glasses-customer-photo-notifications.js
           node --check assets/js/glasses-camera-similarity.js
           node --check js/voice-session-presence.js
 
@@ -109,6 +124,8 @@ jobs:
           node tests/glasses-camera-config.test.js
           node tests/glasses-camera-photo-library.test.js
           node tests/glasses-production-photo-flow.test.js
+          node tests/glasses-customer-photo-notifications.test.js
+          php tests/glasses-customer-photo-policy.php
           php tests/glasses-order-photo-stages-contract.php
           php tests/glasses-camera-photo-library-contract.php
           php tests/glasses-camera-locations-contract.php
