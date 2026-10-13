@@ -47,8 +47,8 @@ for(const [phrase,want] of Object.entries(commands)){
 const page=fs.readFileSync('glasses-simulator.php','utf8');
 for(const id of ['simNavNext','simNavPrevious','simNavNextItem','simNavPreviousItem','simNavItemAdded','simNavRepeat','simViewHudOnly','simViewGlasses'])
   assert.ok(!page.includes('id="'+id+'"'),'obsolete duplicated sidebar button removed: '+id);
-for(const command of ['next','previous','next_item','previous_item','ingredient_added','repeat'])
-  assert.equal(typeof parse(command),'string','voice navigation preserved: '+command);
+for(const [spoken,command] of [['next','next'],['previous','previous'],['next item','next_item'],['previous item','previous_item'],['ingredient added','ingredient_added'],['repeat','repeat']])
+  assert.equal(parse(spoken),command,'voice navigation preserved: '+command);
 elt('simVoiceHelp').fire('click');assert.equal(actions.at(-1),'help');
 assert.equal(elt('simNavContext').textContent,'Test Pizza · Step 2 · Preview only');
 assert.equal(elt('simVoiceToggle').disabled,true,'missing SpeechRecognition must disable microphone but preserve buttons');
