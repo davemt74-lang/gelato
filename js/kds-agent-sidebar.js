@@ -9,6 +9,8 @@
     ready: false,
     busy: false,
     listening: false,
+    listenMode: 'off',
+    micStatus: 'off',
     announceNewOrders: false,
     boards: new Map(),
     lastBoard: null,
@@ -61,6 +63,7 @@
       .kds-agent-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid #343b35;border-radius:12px;background:#171b18;color:#fff;padding:11px 12px;cursor:pointer;text-align:left}.kds-agent-toggle strong{display:block;font-size:10px}.kds-agent-toggle small{display:block;color:#9da59e;font-size:8px;margin-top:3px;line-height:1.4}.kds-agent-switch{width:36px;height:20px;border-radius:999px;background:#444a45;padding:3px;transition:background .15s;flex:0 0 auto}.kds-agent-switch::after{content:"";display:block;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .15s}.kds-agent-toggle.on .kds-agent-switch{background:#2d8057}.kds-agent-toggle.on .kds-agent-switch::after{transform:translateX(16px)}.kds-agent-toggle:disabled{opacity:.45;cursor:not-allowed}
       .kds-agent-quick{width:100%;border:1px solid #3c443d;border-radius:11px;background:#202520;color:#fff;padding:10px 12px;font-size:10px;font-weight:900;cursor:pointer}.kds-agent-quick:disabled{opacity:.45;cursor:not-allowed}.kds-agent-card{border:1px solid #303731;border-radius:12px;background:#171b18;padding:12px}.kds-agent-card .eyebrow{font-size:8px;font-weight:900;letter-spacing:.11em;text-transform:uppercase;color:#8f978f;margin-bottom:7px}.kds-agent-card .copy{font-size:11px;line-height:1.55;color:#eef1ed;white-space:pre-wrap}.kds-agent-card.user .copy{color:#ffd7c8}.kds-agent-status{min-height:38px;padding:10px 11px;border-radius:10px;background:#202520;color:#cad1cb;font-size:10px;line-height:1.4}.kds-agent-status.good{color:#aee9c6;background:#173126}.kds-agent-status.warn{color:#ffdba1;background:#302719}.kds-agent-status.bad{color:#ffb2ac;background:#351f1e}
       .kds-agent-foot{padding:12px 14px;border-top:1px solid #343b35;color:#8f978f;font-size:8px;line-height:1.45;background:#131713}.kds-agent-foot strong{color:#cbd1cc}
+      .kds-agent-mic-status{display:flex;align-items:center;gap:9px;flex-wrap:wrap;border:1px solid #45504a;background:#1a211d;padding:10px 12px;border-radius:11px;font-size:10px;color:#c2cec3}.kds-agent-mic-status strong{font-size:10px;color:#fafcf9}.kds-agent-mic-status [id=kdsAgentMicMessage]{flex:1 1 180px;overflow-wrap:anywhere}.kds-agent-mic-led{width:11px;height:11px;flex:0 0 11px;border-radius:50%;background:#767e76}.kds-agent-mic-status[data-state=listening] .kds-agent-mic-led{background:#55df8f;box-shadow:0 0 0 5px #55df8f22;animation:kdsAgentPulse 1.8s infinite}.kds-agent-mic-status[data-state=retrying] .kds-agent-mic-led,.kds-agent-mic-status[data-state=starting] .kds-agent-mic-led{background:#f0b24f}.kds-agent-mic-status[data-state=blocked] .kds-agent-mic-led,.kds-agent-mic-status[data-state=error] .kds-agent-mic-led{background:#eb6b64}
       @keyframes kdsAgentPulse{50%{box-shadow:0 0 0 17px rgba(239,106,58,.13)}}
       @media(max-width:700px){.kds-agent-handle{min-height:116px;width:46px}.kds-agent-panel{width:min(370px,96vw)}.kds-agent-mic{width:96px;height:96px}}
     `;
@@ -76,15 +79,15 @@
         <header class="kds-agent-head"><div class="kds-agent-title"><span class="kds-agent-logo">✦</span><span><strong>Gelato Voice Agent</strong><small>KDS · voice-only kitchen assistant</small></span></div><button class="kds-agent-close" id="kdsAgentClose" type="button" aria-label="Close Agent">×</button></header>
         <div class="kds-agent-body">
           <div class="kds-agent-context" id="kdsAgentContext"><strong>Kitchen context</strong><br>Waiting for the live KDS board…</div>
-          <section class="kds-agent-voice"><button class="kds-agent-mic" id="kdsAgentMic" type="button" aria-label="Ask Gelato by voice">🎙</button><strong>Tap and speak</strong><p>Ask about any active order, table, ticket number, item, special instruction, station load, late ticket, ready order, All Day count, or recent completed order.</p></section>
-          <button class="kds-agent-toggle" id="kdsAgentListen" type="button" aria-pressed="false"><span><strong>Hands-free “Hey Gelato”</strong><small>Listen for the wake phrase while the KDS stays open.</small></span><span class="kds-agent-switch" aria-hidden="true"></span></button>
+          <section class="kds-agent-voice"><button class="kds-agent-mic" id="kdsAgentMic" type="button" aria-label="Ask Gelato by voice">🎙</button><strong>Tap and speak</strong><p>Say “Read order 1”, “Repeat order 4”, “Read all orders”, or ask about stations and special instructions. Order 1–8 means the visible KDS card position, not the POS ticket number.</p></section>
+          <button class="kds-agent-toggle" id="kdsAgentListen" type="button" aria-pressed="false"><span><strong>Hands-free “Hey Gelato”</strong><small>Say Hey Gelato, then read order 1–8 or ask a kitchen question.</small></span><span class="kds-agent-switch" aria-hidden="true"></span></button><button class="kds-agent-toggle" id="kdsAgentAlways" type="button" aria-pressed="false"><span><strong>Always-on listening</strong><small>After you enable the mic, listen for order commands without the wake phrase while this KDS tab is active.</small></span><span class="kds-agent-switch" aria-hidden="true"></span></button><div class="kds-agent-mic-status" id="kdsAgentMicStatus" role="status" aria-live="polite" data-state="off"><span class="kds-agent-mic-led"></span><strong>MIC OFF</strong><span id="kdsAgentMicMessage">Select a voice mode to begin.</span></div>
           <button class="kds-agent-toggle" id="kdsAgentAnnounce" type="button" aria-pressed="false"><span><strong>Voice new-order announcements</strong><small>Read each new kitchen order—and later fired additions to that order—as it arrives.</small></span><span class="kds-agent-switch" aria-hidden="true"></span></button>
           <button class="kds-agent-quick" id="kdsAgentReadOrders" type="button">🔊 Read active orders now</button>
           <div class="kds-agent-status" id="kdsAgentStatus">Connecting to Gelato Agent…</div>
           <section class="kds-agent-card user" id="kdsAgentHeard" hidden><div class="eyebrow">Heard</div><div class="copy"></div></section>
           <section class="kds-agent-card" id="kdsAgentAnswer" hidden><div class="eyebrow">Gelato</div><div class="copy"></div></section>
         </div>
-        <footer class="kds-agent-foot"><strong>Same Agent Brain, same permissions.</strong> Voice identity protects spoken requests. New-order announcements are local to this KDS device and can be switched off at any time. There is no text-entry mode on the KDS display.</footer>
+        <footer class="kds-agent-foot"><strong>Kitchen voice reads only the authorized live KDS board; order actions cannot be changed through listening.</strong> Microphone mode requires a click to start each session. Voice announcements remain separately switchable. No text-entry field is exposed.</footer>
       </aside>
     `);
 
@@ -92,6 +95,7 @@
     document.getElementById('kdsAgentClose')?.addEventListener('click', close);
     document.getElementById('kdsAgentMic')?.addEventListener('click', talkOnce);
     document.getElementById('kdsAgentListen')?.addEventListener('click', toggleListening);
+    document.getElementById('kdsAgentAlways')?.addEventListener('click', toggleAlways);
     document.getElementById('kdsAgentAnnounce')?.addEventListener('click', toggleAnnouncements);
     document.getElementById('kdsAgentReadOrders')?.addEventListener('click', readOrdersNow);
     renderState();
@@ -127,8 +131,11 @@
       mic.classList.toggle('busy', state.busy);
     }
     const listen = document.getElementById('kdsAgentListen');
-    listen?.classList.toggle('on', state.listening);
-    listen?.setAttribute('aria-pressed', state.listening ? 'true' : 'false');
+    listen?.classList.toggle('on', state.listenMode === 'wake');
+    listen?.setAttribute('aria-pressed', state.listenMode === 'wake' ? 'true' : 'false');
+    const always=document.getElementById('kdsAgentAlways');
+    always?.classList.toggle('on',state.listenMode==='always');
+    always?.setAttribute('aria-pressed',state.listenMode==='always'?'true':'false');
     const announce = document.getElementById('kdsAgentAnnounce');
     announce?.classList.toggle('on', state.announceNewOrders);
     announce?.setAttribute('aria-pressed', state.announceNewOrders ? 'true' : 'false');
@@ -152,23 +159,19 @@
   }
 
   async function talkOnce() {
-    if (!state.ready || state.busy) return;
-    state.busy = true;
-    renderState();
-    setStatus('Voice check and listening…');
-    try {
-      await window.GelatoGlobalAgent?.talkOnce?.();
-    } finally {
-      state.busy = false;
-      renderState();
-    }
+    if (!state.ready) return;
+    const started=window.GelatoKdsVoice?.talkOnce?.();
+    if(!started)setStatus('Microphone unavailable. Check browser permissions and the MIC status below.','warn');
   }
 
-  async function toggleListening() {
+  function toggleListening() {
     if (!state.ready) return;
-    const next = !state.listening;
-    setStatus(next ? 'Starting hands-free listening…' : 'Stopping hands-free listening…');
-    await window.GelatoGlobalAgent?.setListening?.(next);
+    window.GelatoKdsVoice?.setMode?.(state.listenMode==='wake'?'off':'wake');
+  }
+
+  function toggleAlways() {
+    if (!state.ready) return;
+    window.GelatoKdsVoice?.setMode?.(state.listenMode==='always'?'off':'always');
   }
 
   function toggleAnnouncements() {
@@ -189,9 +192,8 @@
     renderState();
     setStatus('Gelato is reading the live KDS board…');
     try {
-      const result = await window.GelatoGlobalAgent?.send?.('Read the active KDS orders aloud in concise kitchen order. Include ticket number or table, quantities, item names, and important special instructions.', false);
-      const answer = result?.answer || result?.reply || '';
-      if (answer) queueSpeech(answer);
+      const answer=window.GelatoKdsVoice?.readAll?.()||'Kitchen orders have not loaded yet.';
+      queueSpeech(answer);setStatus('Reading visible Order 1–8 references.','good');
     } catch (error) {
       setStatus(error?.message || 'Gelato could not read the current orders.', 'bad');
     } finally {
@@ -211,7 +213,11 @@
   function ticketAnnouncement(ticket, addedItems = null) {
     const items = Array.isArray(addedItems) ? addedItems : (ticket.items || []);
     const update = Array.isArray(addedItems);
-    const parts = [update ? `Order update ${clean(ticket.checkNumber, 80)}` : `New order ${clean(ticket.checkNumber, 80)}`];
+    const page=window.GelatoKdsSlots?.snapshot?.().page||0;
+    const current=(state.lastBoard?.tickets||[]).slice(page*8,(page+1)*8);
+    const slot=current.findIndex(t=>String(t.checkPublicId)===String(ticket.checkPublicId));
+    const prefix=slot>=0?'Order '+(slot+1)+', ticket '+clean(ticket.checkNumber,80):'Ticket '+clean(ticket.checkNumber,80);
+    const parts = [update ? 'Updated '+prefix : 'New '+prefix];
     if (ticket.tableName) parts.push(`table ${clean(ticket.tableName, 80)}`);
     else if (ticket.serviceMode) parts.push(clean(String(ticket.serviceMode).replaceAll('_',' '), 60));
     if (!update && Number(ticket.guestCount || 0) > 0) parts.push(`${Number(ticket.guestCount)} guests`);
@@ -229,13 +235,14 @@
 
   function pumpSpeech() {
     if (state.speaking || !state.voiceQueue.length || !window.speechSynthesis) return;
+    window.GelatoKdsVoice?.pauseForSpeech?.();
     const message = state.voiceQueue.shift();
     state.speaking = true;
     const utterance = new SpeechSynthesisUtterance(message);
     utterance.rate = 1;
     utterance.onend = utterance.onerror = () => {
       state.speaking = false;
-      pumpSpeech();
+      if(state.voiceQueue.length)pumpSpeech();else window.GelatoKdsVoice?.resumeAfterSpeech?.();
     };
     speechSynthesis.speak(utterance);
   }
@@ -292,7 +299,8 @@
 
   window.addEventListener('gelato-agent-ready', () => {
     state.ready = true;
-    state.listening = Boolean(window.GelatoGlobalAgent?.listening);
+    state.listening = Boolean(window.GelatoKdsVoice?.active);
+    state.listenMode = window.GelatoKdsVoice?.mode||'off';
     setStatus(canVoiceOutput() ? 'Voice Agent ready.' : 'Agent ready. Voice output permission is not enabled for this account.', canVoiceOutput() ? 'good' : 'warn');
     renderState();
   });
@@ -314,9 +322,21 @@
     card.hidden = false;
     card.querySelector('.copy').textContent = answer;
   });
-  window.addEventListener('gelato-agent-listening-change', (event) => {
-    state.listening = Boolean(event.detail?.listening);
+  window.addEventListener('gelato-kds-voice-state',(event)=>{
+    const next=event.detail||{};
+    state.listenMode=next.mode||'off';state.listening=!!next.active;state.micStatus=next.code||'off';
+    const badge=document.getElementById('kdsAgentMicStatus');
+    if(badge){badge.dataset.state=state.micStatus;badge.querySelector('strong').textContent=state.listenMode==='off'?'MIC OFF':state.micStatus==='listening'?'MIC LISTENING':state.micStatus==='speaking'?'SPEAKING':state.micStatus==='paused'?'MIC PAUSED':'MIC '+state.micStatus.toUpperCase();badge.querySelector('#kdsAgentMicMessage').textContent=next.message||'';}
+    if(['blocked','unsupported','error'].includes(state.micStatus))setStatus(next.message||'Microphone unavailable.','warn');
     renderState();
+  });
+  window.addEventListener('gelato-kds-voice-answer',(event)=>{
+    const text=clean(event.detail?.text,1800);
+    if(!text)return;
+    const card=document.getElementById('kdsAgentAnswer');
+    if(card){card.hidden=false;card.querySelector('.copy').textContent=text;}
+    queueSpeech(text);
+    setStatus('Order reference answered. '+(state.listenMode==='off'?'Microphone off.':'Listening will resume after playback.'),'good');
   });
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && state.open) {
