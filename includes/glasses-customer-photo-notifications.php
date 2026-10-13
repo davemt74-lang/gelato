@@ -230,7 +230,8 @@ function glasses_customer_photo_visible(PDO $pdo,int $org,int $customerId,string
     if(!glasses_customer_photo_ready($pdo))return [];
     if(!glasses_customer_photo_customer_opted($pdo,$org,$customerId))return [];
     $query=$pdo->prepare("SELECT oo.id,oo.location_id FROM online_orders oo
-        WHERE oo.organization_id=? AND oo.customer_id=? AND oo.public_id=? AND oo.status<>'cancelled'");
+        WHERE oo.organization_id=? AND oo.customer_id=? AND oo.public_id=?
+            AND oo.status IN ('ready','kitchen_complete','completed')");
     $query->execute([$org,$customerId,$orderPublic]);$order=$query->fetch(PDO::FETCH_ASSOC);
     if(!$order||!glasses_customer_photo_location_enabled($pdo,$org,(int)$order['location_id']))return [];
     $q=$pdo->prepare("SELECT share.id share_id,p.id photo_id,m.public_id media_public_id,
