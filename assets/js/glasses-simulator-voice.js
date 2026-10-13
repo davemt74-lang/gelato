@@ -85,7 +85,7 @@
     const previous=recognizer;recognizer=null;
     if(!previous)return;
     previous.onend=null;previous.onerror=null;previous.onresult=null;previous.onstart=null;
-    try{previous.abort?.()||previous.stop?.();}catch{}
+    try{if(typeof previous.abort==='function')previous.abort();else previous.stop?.();}catch{}
   }
   function stopVoice(){
     ++sequence;enabled=false;listening=false;attempts=0;lastError='none';
