@@ -23,12 +23,6 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
   <div class="sim-top-actions">
     <label>Mode <select id="modeSelect"><option value="live" selected>Live Gelato</option><option value="mock">Mock Demo</option></select></label>
     <label>Device <select id="deviceSelect"><option value="">Finding live kitchen displays…</option></select></label>
-    <label>Runtime <select id="glassesRuntimeSelect" aria-label="Glasses runtime"><option value="">New runtime…</option></select></label>
-    <label>Assign employee <select id="glassesRuntimeEmployee" aria-label="Assign employee to glasses runtime"><option value="">Loading staff…</option></select></label>
-    <button id="glassesRuntimeNew" type="button" title="Assign employee to selected paired glasses">New</button>
-    <button id="glassesRuntimeOpen" type="button" title="Open isolated glasses runtime">Open</button>
-    <button id="glassesRuntimeEnd" type="button" title="End and release this glasses runtime">End</button>
-    <span id="glassesRuntimeStatus" role="status" aria-live="polite">Loading runtimes…</span>
     <button id="refreshWork" type="button">Refresh work</button>
     <label>Scene <select id="sceneSourceSelect"><option value="image">Image</option><option value="camera">Browser Camera</option></select></label>
     <label class="asset-load" id="sceneFileLabel">Scene Image <input id="sceneFile" type="file" accept="image/*"></label>
@@ -40,6 +34,14 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
   </div>
 </header>
 
+<div class="glasses-runtime-toolbar" aria-label="Multiple assigned employee glasses runtimes">
+    <label>Runtime <select id="glassesRuntimeSelect" aria-label="Glasses runtime"><option value="">New runtime…</option></select></label>
+    <label>Assign employee <select id="glassesRuntimeEmployee" aria-label="Assign employee to glasses runtime"><option value="">Loading staff…</option></select></label>
+    <button id="glassesRuntimeNew" type="button" title="Assign employee to selected paired glasses">New</button>
+    <button id="glassesRuntimeOpen" type="button" title="Open isolated glasses runtime">Open</button>
+    <button id="glassesRuntimeEnd" type="button" title="End and release this glasses runtime">End</button>
+    <span id="glassesRuntimeStatus" role="status" aria-live="polite">Loading runtimes…</span>
+</div>
 <div class="glasses-runtime-training-controls" aria-label="Existing glasses training programs">
  <label>Assigned training <select id="glassesRuntimeTrainingSelect"><option value="">No training selected</option></select></label>
  <button id="glassesRuntimeTrainingStart" type="button">Start Training</button>
