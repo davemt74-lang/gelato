@@ -318,6 +318,19 @@
     }
   }
 
+  function parseListeningCommand(text){
+    const external=window.GelatoProactiveCommands?.parse?.(text,S.wakePhrase);
+    if(external)return external;
+    // Do not depend on dynamic script insertion order for a security-sensitive
+    // wake-only command. These are the only recognized start/stop controls.
+    const phrase=String(text||'').toLowerCase().replace(/[.,!?;:]/g,' ').replace(/\\s+/g,' ').trim();
+    if(!phrase.startsWith('hey gelato '))return null;
+    const command=phrase.slice('hey gelato '.length);
+    if(/^(start listening|resume listening|enable listening)( please)?$/.test(command))return 'start';
+    if(/^(stop listening|pause listening)( please)?$/.test(command))return 'stop';
+    if(/^(microphone off|turn off microphone|stop microphone|mic off)( please)?$/.test(command))return 'off';
+    return null;
+  }
   function listeningState(){
     return window.GelatoProactiveCommands?.display?.({
       saved:S.savedListening,active:S.listening&&S.micActive,
@@ -351,6 +364,17 @@
       S.listening=false;S.wakeStandby=false;S.micActive=false;
       renderListening();
     }catch(error){status('Could not restore saved listening preference: '+error.message,4000);}
+  }
+  async function updateProactiveVoice(enabled){
+    if(!has('agent.proactive'))return false;
+    try{
+      const data=await post('api/proactive-agent.php',{
+        action:'preferences',listeningEnabled:S.savedListening,
+        proactiveVoiceEnabled:!!enabled,wakePhrase:S.wakePhrase
+      });
+      S.proactiveVoiceEnabled=!!Number(data.preferences?.proactive_voice_enabled??Number(!!enabled));
+      renderListening();return true;
+    }catch(error){status(error.message,3500);return false;}
   }
   async function setListening(on,{keepWake=false}={}){
     if(on){
@@ -405,14 +429,10 @@
         const result=event.results[index],text=String(result[0]?.transcript||'').trim();
         const evaluation=window.GelatoVoiceTurns?.evaluate?.(text,result[0]?.confidence,{wakeRequired:true});
         if(evaluation?.kind==='ignored')continue;
-        if(evaluation?.kind==='interrupt'){
-          S.lastBargeIn=Date.now();
-          interruptSpeech('voice-barge-in');
-          status('Gelato stopped speaking.',2200);
-          continue;
-        }
-        if(!result.isFinal)continue;
-        const command=window.GelatoProactiveCommands?.parse?.(text,S.wakePhrase);
+        // Evaluate explicit stop/start controls before generic speech barge-in.
+        // "Hey Gelato stop listening" must update the saved preference,
+        // not merely silence the current text-to-speech response.
+        const command=result.isFinal?parseListeningCommand(text):null;
         if(command){
           if(command==='start'&&!S.listening){
             void setListening(true);
@@ -423,7 +443,13 @@
           }
           return;
         }
-        if(!S.listening||Date.now()-S.lastBargeIn<1300)continue;
+        if(evaluation?.kind==='interrupt'){
+          S.lastBargeIn=Date.now();
+          interruptSpeech('voice-barge-in');
+          status('Gelato stopped speaking.',2200);
+          continue;
+        }
+        if(!result.isFinal||!S.listening||Date.now()-S.lastBargeIn<1300)continue;
         if(/^hey\s+gelato\b/i.test(text)){
           if(evaluation?.interrupt)interruptSpeech('voice-barge-in');
           if(Date.now()>=S.voiceUntil){
@@ -462,7 +488,7 @@
     if(S.rec){
       const old=S.rec;S.rec=null;
       old.onend=null;old.onresult=null;old.onerror=null;
-      try{old.abort?.()??old.stop?.();}catch{}
+      try{if(typeof old.abort==='function')old.abort();else old.stop?.();}catch{}
     }
     S.micActive=false;renderListening();
   }
@@ -486,7 +512,7 @@
             threadId: S.thread,
           },
         }));
-        if (has('voice.agent')) speak(event.message);
+        if (S.proactiveVoiceEnabled&&has('voice.agent')) speak(event.message);
       }
     } catch {}
   }
@@ -533,6 +559,7 @@
     send,
     setListening,
     loadListeningPreference,
+    updateProactiveVoice,
     get listeningStatus(){return {...listeningState(),savedListening:S.savedListening,listenActive:S.listening,microphoneActive:S.micActive,wakeStandby:S.wakeStandby};},
     talkOnce,
     interruptSpeech,
