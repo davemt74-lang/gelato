@@ -68,7 +68,9 @@ function sample(slot){
     if(slot===2||slot===3){
       if(diff>.075){s.activity='moving';s.activitySince=now();s.stability=0;s.ready=false;}
       else if(s.activitySince&&now()-s.activitySince>1800&&quality>=45){
+        const wasReady=s.ready;
         s.stability++;s.activity='stable_scene_candidate';s.ready=s.stability>=2;
+        if(s.ready&&!wasReady)window.dispatchEvent?.(new CustomEvent('gelato-camera-runtime-ready',{detail:{slot,quality}}));
       }else if(!s.activitySince){s.activity='awaiting_scene_change';s.ready=false;}
       else{s.activity='settling';s.ready=false;}
     }
@@ -109,8 +111,38 @@ function policy(slot) {
     quality:s.quality,activity:s.activity,confidence:s.detectorConfidence,
     source:'scene_activity_heuristic',trainedPizzaDetection:false};
 }
+function renderDiagnostics(){
+  const root=document.getElementById('gcrDiagnostics');if(!root)return;
+  root.replaceChildren();
+  for(let slot=1;slot<=5;slot++){
+    const c=status(slot),article=document.createElement('article');
+    article.className='gcr-camera';
+    const title=document.createElement('strong');title.textContent='Camera '+slot+' · '+(c.enabled?'ENABLED':'OFF');
+    const health=document.createElement('span');
+    const age=c.lastFrame?Math.max(0,Math.floor((now()-c.lastFrame)/1000)):null;
+    health.textContent=(c.active?'LIVE':'NO STREAM')+' · '+c.state+
+      ' · last sample '+(age===null?'never':age+'s ago')+
+      ' · image quality '+(c.quality||'—')+'/100'+
+      (c.retries?' · recoveries '+c.retries+'/3':'');
+    const evidence=document.createElement('span');
+    evidence.textContent=(slot===2||slot===3?
+      'Scene: '+c.activity+' · automatic candidate '+(c.ready?'ready':'waiting'):'No oven matching')+
+      ' · trained pizza detector: '+c.detector;
+    article.append(title,health,evidence);root.append(article);
+  }
+  const note=document.getElementById('gcrRuntimeStatus');
+  if(note)note.textContent='Session-bound: camera feeds require this browser page open and visible. '+
+    'Stage detection currently uses scene activity and image quality; no trained pizza confidence is implied.';
+}
 function mount(){
   if(S.monitor)return;S.monitor=true;
+  const overview=document.getElementById('sgv-panel-overview');
+  if(overview){
+    const panel=document.createElement('section');panel.className='console-card gcr-panel';
+    panel.innerHTML='<div class="console-heading"><div><small>SECTION 261 · CAMERA HEALTH</small><strong>Production Camera Runtime</strong></div></div>'+
+      '<p id="gcrRuntimeStatus" class="sim-muted"></p><div id="gcrDiagnostics" class="gcr-grid"></div>';
+    overview.append(panel);
+  }
   for(let slot=1;slot<=5;slot++)row(slot);
   document.addEventListener('visibilitychange',()=>{
     if(document.hidden)for(let slot=2;slot<=5;slot++){
@@ -128,7 +160,8 @@ function mount(){
       if(s.desired&&!conf()?.isStreaming?.(slot))trackStopped(slot,'device_changed');
     }
   });
-  setInterval(()=>{void poll();},1500);
+  setInterval(()=>{void poll();renderDiagnostics();},1500);
+  renderDiagnostics();
 }
 window.GelatoCameraRuntime={mount,start,stop,trackStopped,status,policy,consumeCapture,poll,
   snapshot:()=>({sessionBound:true,backgroundSupported:false,locationId:conf()?.locationId||0,
