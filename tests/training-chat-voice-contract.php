@@ -14,7 +14,7 @@ trainingCheck(str_contains($index,'e.stopPropagation();sendMessage();'),'Trainin
 trainingCheck(str_contains($index,'id="trainingVoiceOnce"')&&str_contains($index,'id="trainingVoiceAlways"'),'two explicit Training mic modes required');
 trainingCheck(str_contains($index,'id="trainingVoiceStatus" role="status" aria-live="polite"'),'microphone state must be accessible');
 trainingCheck(str_contains($workspace,'css/training-workspace-chat.css?v=20261013-training1'),'chat contrast loads in authenticated workspace');
-trainingCheck(str_contains($workspace,'js/training-workspace-voice.js?v=20261013-training1'),'voice controller loads after inline Training handlers');
+trainingCheck(str_contains($workspace,'js/training-workspace-voice.js?v=20261013-barge1'),'voice controller loads after inline Training handlers');
 trainingCheck(str_contains($style,'body.gelato-admin-tech-theme #page-workspace .message.user .bubble'),'user bubbles beat newer Admin theme CSS specificity');
 trainingCheck(str_contains($style,'background:#182823!important')&&str_contains($style,'color:#fff!important'),'user bubble contrast must remain readable');
 trainingCheck(str_contains($style,'#gelato-agent-bar')&&str_contains($style,'[data-workspace-mode="training"].active'),'hide duplicate global composer only in Training');
