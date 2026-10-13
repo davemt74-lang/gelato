@@ -3,12 +3,13 @@
   if(window.GelatoCustomerPhotoNotifications)return;
   const $=id=>document.getElementById(id);
   const url='api/glasses-photo-notifications.php';
-  const state={locationId:0,seq:0,busy:false,refreshing:false,enabled:false,photos:[],canManage:false};
+  const state={locationId:0,seq:0,busy:false,refreshing:false,enabled:false,photos:[],feedback:[],canManage:false};
   const cfg=()=>window.GELATO_GLASSES_SIMULATOR||{};
   const location=()=>Number(window.GelatoCameraConfiguration?.locationId||0);
   const msg=value=>{const node=$('gcDeliveryStatus');if(node)node.textContent=value;};
   const detail=photo=>{
     const enabled=state.enabled&&photo.customerOptedIn;
+    if(photo.stage==='pre_oven'&&photo.approved)return 'Before-oven photo approved for private gallery; Inbox update waits for finished-pizza photo';
     return photo.notified?'Customer Inbox photo update sent':
       !state.enabled?'Restaurant sharing OFF':
       !photo.customerOptedIn?'Customer has not opted in':
@@ -31,7 +32,7 @@
       img.src='api/glasses-vision-media.php?publicId='+encodeURIComponent(photo.mediaPublicId);
       const info=document.createElement('div');info.className='gc-delivery-info';
       const heading=document.createElement('strong');
-      heading.textContent='Ticket #'+photo.checkNumber+' · '+photo.orderStatus;
+      heading.textContent='Ticket #'+photo.checkNumber+' · '+(photo.stage==='pre_oven'?'Before Oven':'After Oven')+' · '+photo.orderStatus;
       const status=document.createElement('span');status.textContent=detail(photo);
       const approval=document.createElement('span');
       approval.textContent=photo.approved?'Approved for customer sharing':'Not approved for customer sharing';
@@ -45,12 +46,24 @@
         void change(photo.approved?'revoke':'approve',photo);
       });
       actions.append(approvalButton);
-      if(photo.approved&&!photo.notified){
+      if(photo.approved&&!photo.notified&&photo.stage==='post_oven'){
         const retry=document.createElement('button');retry.type='button';retry.textContent='Retry Inbox';
         retry.disabled=!state.canManage||state.busy||!state.enabled;
         retry.addEventListener('click',()=>void change('retry',photo));actions.append(retry);
       }
       row.append(img,info,actions);list.append(row);
+    }
+    const feedbackList=$('gcDeliveryFeedback');
+    if(feedbackList){
+      feedbackList.replaceChildren();
+      if(!state.feedback.length)feedbackList.textContent='No customer photo ratings yet.';
+      for(const review of state.feedback.slice(0,30)){
+        const row=document.createElement('article');row.className='gc-delivery-review';
+        const head=document.createElement('strong');head.textContent='Ticket #'+review.checkNumber+
+          ' · '+(review.stage==='pre_oven'?'Before Oven':'After Oven')+' · '+review.rating+'/5 stars';
+        const comment=document.createElement('p');comment.textContent=review.comment||'Rating only';
+        row.append(head,comment);feedbackList.append(row);
+      }
     }
   }
   async function refresh({quiet=false}={}){
@@ -66,11 +79,11 @@
       if(!response.ok||!data.ok)throw new Error(data.message||'Could not load photo delivery settings.');
       if(/^[0-9a-f]{64}$/i.test(String(data.csrfToken||'')))cfg().csrf=data.csrfToken;
       state.enabled=!!data.delivery.enabled;
-      state.photos=data.delivery.photos||[];
+      state.photos=data.delivery.photos||[];state.feedback=data.delivery.feedback||[];
       state.canManage=!!data.delivery.canManage;paint();
       if(!quiet)msg('Customer photo delivery settings synchronized. Existing order updates remain independent.');
     }catch(e){
-      state.photos=[];state.enabled=false;state.canManage=false;paint();
+      state.photos=[];state.feedback=[];state.enabled=false;state.canManage=false;paint();
       if(!quiet)msg(e.message||'Customer photo delivery requires database upgrade and appropriate permissions.');
     }finally{state.refreshing=false;}
   }
@@ -94,7 +107,7 @@
       const data=await post(body);
       if(epoch!==state.seq)return;
       state.enabled=!!data.delivery.enabled;
-      state.photos=data.delivery.photos||[];
+      state.photos=data.delivery.photos||[];state.feedback=data.delivery.feedback||[];
       state.canManage=!!data.delivery.canManage;
       const result=data.result||{};
       const delivered=result.delivery||result;
@@ -116,7 +129,10 @@
       '<div class="inline-actions"><button id="gcDeliverySave" type="button">Save Sharing Setting</button>'+
       '<button id="gcDeliveryRefresh" type="button">Refresh Photos</button></div>'+
       '<p id="gcDeliveryStatus" role="status" aria-live="polite" class="sim-muted">Photo notifications are off until explicitly enabled.</p>'+
-      '<div id="gcDeliveryCandidates" class="gc-delivery-candidates"></div>';
+      '<div id="gcDeliveryCandidates" class="gc-delivery-candidates"></div>'+
+      '<div class="gc-heading"><strong>Customer Photo Ratings</strong></div>'+
+      '<div id="gcDeliveryFeedback" class="gc-delivery-feedback"></div>'+
+      '<p class="sim-muted">Delivery: customer Inbox is supported. Email and SMS photo delivery are unavailable until an approved provider integration and separate consent controls are configured.</p>';
     overview.appendChild(card);
     $('gcDeliverySave').addEventListener('click',()=>{
       if($('gcDeliveryEnabled').checked&&

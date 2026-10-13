@@ -40,6 +40,10 @@ function glasses_customer_photo_location_enabled(PDO $pdo,int $org,int $location
     $q->execute([$org,$location]);
     return (bool)$q->fetchColumn();
 }
+function glasses_customer_photo_stage_camera_valid(string $stage,int $slot):bool
+{
+    return ($stage==='pre_oven'&&$slot===2)||($stage==='post_oven'&&$slot===3);
+}
 function glasses_customer_photo_staff_auth(PDO $pdo,array $user,int $locationId,bool $write):void
 {
     glasses_order_photo_auth($pdo,$user,$locationId,$write);
@@ -47,7 +51,7 @@ function glasses_customer_photo_staff_auth(PDO $pdo,array $user,int $locationId,
 }
 function glasses_customer_photo_share_candidates(PDO $pdo,int $org,int $locationId):array
 {
-    $q=$pdo->prepare("SELECT s.id stage_id,s.revision,s.reviewed_at,s.photo_library_id,
+    $q=$pdo->prepare("SELECT s.id stage_id,s.stage,s.revision,s.reviewed_at,s.photo_library_id,
         k.public_id kds_public_id,c.check_number,oo.id online_order_id,oo.public_id order_public_id,
         oo.customer_id,oo.status order_status,m.public_id media_public_id,p.menu_item_id,
         share.id share_id,share.revoked_at,share.photo_library_id approved_photo_id,notif.id notification_id, pref.enabled customer_opted
@@ -57,7 +61,7 @@ function glasses_customer_photo_share_candidates(PDO $pdo,int $org,int $location
         JOIN online_orders oo ON oo.pos_check_id=k.check_id AND oo.organization_id=s.organization_id
             AND oo.location_id=s.location_id
         JOIN glasses_camera_photo_library p ON p.id=s.photo_library_id AND p.organization_id=s.organization_id
-            AND p.location_id=s.location_id AND p.status='active' AND p.camera_slot=3
+            AND p.location_id=s.location_id AND p.status='active' AND p.camera_slot=s.camera_slot
         JOIN glasses_vision_training_media m ON m.id=p.media_id AND m.organization_id=p.organization_id
             AND m.status='active' AND (m.retention_until IS NULL OR m.retention_until>NOW(6))
         LEFT JOIN glasses_order_photo_shares share ON share.organization_id=s.organization_id AND share.stage_id=s.id
@@ -65,13 +69,14 @@ function glasses_customer_photo_share_candidates(PDO $pdo,int $org,int $location
             AND notif.online_order_id=oo.id
         LEFT JOIN glasses_customer_photo_preferences pref ON pref.organization_id=s.organization_id
             AND pref.customer_id=oo.customer_id
-        WHERE s.organization_id=? AND s.location_id=? AND s.stage='post_oven' AND s.status='confirmed'
-            AND s.camera_slot=3 AND k.status<>'cancelled' AND oo.status<>'cancelled'
+        WHERE s.organization_id=? AND s.location_id=? AND s.stage IN ('pre_oven','post_oven') AND s.status='confirmed'
+            AND s.camera_slot=CASE WHEN s.stage='pre_oven' THEN 2 ELSE 3 END AND k.status<>'cancelled' AND oo.status<>'cancelled'
         ORDER BY s.reviewed_at DESC LIMIT 100");
     $q->execute([$org,$locationId]);
     $rows=[];
     foreach($q->fetchAll(PDO::FETCH_ASSOC) as $r)$rows[]=[
         'stageId'=>(int)$r['stage_id'],'revision'=>(int)$r['revision'],
+        'stage'=>(string)$r['stage'],
         'photoLibraryId'=>(int)$r['photo_library_id'],
         'kdsItemPublicId'=>(string)$r['kds_public_id'],'checkNumber'=>(string)$r['check_number'],
         'onlineOrderPublicId'=>(string)$r['order_public_id'],
@@ -204,11 +209,11 @@ function glasses_customer_photo_staff_action(PDO $pdo,array $user,int $locationI
             JOIN online_orders oo ON oo.pos_check_id=k.check_id AND oo.organization_id=s.organization_id
                 AND oo.location_id=s.location_id
             JOIN glasses_camera_photo_library p ON p.id=s.photo_library_id AND p.organization_id=s.organization_id
-                AND p.location_id=s.location_id AND p.camera_slot=3
+                AND p.location_id=s.location_id AND p.camera_slot=s.camera_slot
             JOIN glasses_vision_training_media m ON m.id=p.media_id AND m.organization_id=p.organization_id
             WHERE s.organization_id=? AND s.location_id=? AND s.id=? AND oo.id=? AND oo.status<>'cancelled' FOR UPDATE");
         $q->execute([$org,$locationId,$stageId,$orderId]);$stage=$q->fetch(PDO::FETCH_ASSOC);
-        if(!$stage||$stage['status']!=='confirmed'||$stage['stage']!=='post_oven'||(int)$stage['camera_slot']!==3
+        if(!$stage||$stage['status']!=='confirmed'||!glasses_customer_photo_stage_camera_valid((string)$stage['stage'],(int)$stage['camera_slot'])
             ||(int)$stage['revision']!==$revision||$stage['item_status']==='cancelled'
             ||$stage['photo_status']!=='active'||$stage['media_status']!=='active'
             ||($stage['retention_until']!==null&&strtotime((string)$stage['retention_until'])<=time()))
@@ -235,9 +240,9 @@ function glasses_customer_photo_staff_action(PDO $pdo,array $user,int $locationI
         }
         app_audit($pdo,$org,$actor,'glasses.customer_photo_'.$action,'camera_photo_stage',(string)$stageId,null,
             ['locationId'=>$locationId,'orderId'=>$orderId,'stageRevision'=>$revision]);
-        return [$action==='approve'?'approved':'revoked'=>true];
+        return [$action==='approve'?'approved':'revoked'=>true,'stage'=>(string)$stage['stage']];
     });
-    if($action==='approve')$result['delivery']=glasses_customer_photo_notify_safe($pdo,$org,$orderId,$actor);
+    if($action==='approve'&&($result['stage']??'')==='post_oven')$result['delivery']=glasses_customer_photo_notify_safe($pdo,$org,$orderId,$actor);
     return $result;
 }
 function glasses_customer_photo_visible(PDO $pdo,int $org,int $customerId,string $orderPublic):array
@@ -250,12 +255,13 @@ function glasses_customer_photo_visible(PDO $pdo,int $org,int $customerId,string
     $query->execute([$org,$customerId,$orderPublic]);$order=$query->fetch(PDO::FETCH_ASSOC);
     if(!$order||!glasses_customer_photo_location_enabled($pdo,$org,(int)$order['location_id']))return [];
     $q=$pdo->prepare("SELECT share.id share_id,p.id photo_id,m.public_id media_public_id,
-        i.item_name_snapshot item_name,s.reviewed_at
+        i.item_name_snapshot item_name,k.public_id kds_item_public_id,s.stage,s.reviewed_at
         FROM glasses_order_photo_shares share
         JOIN glasses_order_photo_stages s ON s.id=share.stage_id
             AND s.organization_id=share.organization_id AND s.photo_library_id=share.photo_library_id
             AND s.status='confirmed'
-            AND s.stage='post_oven' AND s.camera_slot=3
+            AND s.stage IN ('pre_oven','post_oven')
+            AND s.camera_slot=CASE WHEN s.stage='pre_oven' THEN 2 ELSE 3 END
         JOIN kds_order_items k ON k.id=s.kds_item_id AND k.organization_id=s.organization_id
             AND k.status<>'cancelled'
         JOIN online_orders linked_order ON linked_order.organization_id=share.organization_id
@@ -271,6 +277,7 @@ function glasses_customer_photo_visible(PDO $pdo,int $org,int $customerId,string
     $q->execute([$org,(int)$order['location_id'],(int)$order['id']]);
     return array_map(static fn($r)=>['shareId'=>(int)$r['share_id'],
         'photoId'=>(int)$r['photo_id'],'mediaPublicId'=>(string)$r['media_public_id'],
-        'itemName'=>(string)$r['item_name'],'reviewedAt'=>(string)$r['reviewed_at']],
+        'itemName'=>(string)$r['item_name'],'reviewedAt'=>(string)$r['reviewed_at'],
+        'stage'=>(string)$r['stage'],'kdsItemPublicId'=>(string)$r['kds_item_public_id']],
         $q->fetchAll(PDO::FETCH_ASSOC));
 }

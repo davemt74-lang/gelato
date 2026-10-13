@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__.'/../includes/bootstrap.php';
-require_once __DIR__.'/../includes/glasses-customer-photo-notifications.php';
+require_once __DIR__.'/../includes/glasses-customer-photo-feedback.php';
 $user=app_require_auth();$pdo=app_pdo();
 header('Cache-Control: private, no-store, max-age=0');
 try{
@@ -9,7 +9,8 @@ try{
         $location=filter_var($_GET['locationId']??null,FILTER_VALIDATE_INT);
         if(!$location)throw new InvalidArgumentException('Choose a restaurant location.');
         app_json_response(['ok'=>true,'csrfToken'=>app_csrf_token(),
-            'delivery'=>glasses_customer_photo_staff_snapshot($pdo,$user,(int)$location)]);
+            'delivery'=>array_merge(glasses_customer_photo_staff_snapshot($pdo,$user,(int)$location),
+               ['feedback'=>glasses_customer_photo_feedback_staff($pdo,$user,(int)$location)])]);
     }
     if($_SERVER['REQUEST_METHOD']!=='POST'){
         header('Allow: GET, POST');
@@ -21,7 +22,8 @@ try{
     if(!is_int($location)||$location<1)throw new InvalidArgumentException('Choose a valid restaurant location.');
     $result=glasses_customer_photo_staff_action($pdo,$user,$location,$data);
     app_json_response(['ok'=>true,'result'=>$result,
-        'delivery'=>glasses_customer_photo_staff_snapshot($pdo,$user,$location)]);
+        'delivery'=>array_merge(glasses_customer_photo_staff_snapshot($pdo,$user,$location),
+            ['feedback'=>glasses_customer_photo_feedback_staff($pdo,$user,$location)])]);
 }catch(DomainException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],403);}
 catch(InvalidArgumentException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);}
 catch(Throwable $e){error_log('[glasses-photo-delivery] '.$e->getMessage());
