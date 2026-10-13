@@ -12,7 +12,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <title>Web Glasses Simulator · Gelato</title>
 <link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20261013-live1">
 <link rel="stylesheet" href="assets/css/glasses-simulator-hud-ux.css?v=20261013-voice1">
-<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-hud263">
+<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-hud264">
 </head>
 <body>
 <header class="sim-topbar">
@@ -470,22 +470,24 @@ window.GELATO_GLASSES_SIMULATOR={
   csrf:<?=json_encode(app_csrf_token(),JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT)?>,
   api:'api/glasses-simulator.php',
   mediaApi:'api/glasses-vision-media.php',
+  userId:<?=(int)$user['id']?>,
   canManageMedia:<?=app_has_permission('glasses.manage',$user)?'true':'false'?>
 };
 </script>
 <script src="assets/js/glasses-v10-soak-harness.js?v=20260929-v10-5"></script>
 <script src="assets/js/glasses-v10-cook-ux-harness.js?v=20260929-v10-6"></script>
 <script src="js/voice-session-presence.js?v=20261013-presence1"></script>
-<script src="assets/js/glasses-web-simulator.js?v=20261013-hud263"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20261013-hud264"></script>
 <script src="assets/js/glasses-voice-device.js?v=20261013-device1"></script>
-<script src="assets/js/glasses-simulator-voice.js?v=20261013-kds2"></script>
+<script src="assets/js/glasses-simulator-voice.js?v=20261013-hud264"></script>
 <script src="assets/js/glasses-multicamera.js?v=20261013-multi1"></script>
-<script src="assets/js/glasses-camera-config.js?v=20261013-ref258"></script>
+<script src="assets/js/glasses-camera-config.js?v=20261013-hud264"></script>
 <script src="assets/js/glasses-camera-runtime.js?v=20261013-261"></script>
-<script src="assets/js/glasses-simulator-tabs.js?v=20261013-device1"></script>
+<script src="assets/js/glasses-simulator-tabs.js?v=20261013-hud264"></script>
 <script src="assets/js/glasses-camera-similarity.js?v=20261013-ref258"></script>
-<script src="assets/js/glasses-camera-workspace.js?v=20261013-ref258"></script>
+<script src="assets/js/glasses-camera-workspace.js?v=20261013-hud264"></script>
 <script src="assets/js/glasses-production-photo-flow.js?v=20261013-261"></script>
+<script src="assets/js/glasses-user-display-preferences.js?v=20261013-hud264"></script>
 <script src="assets/js/glasses-customer-photo-notifications.js?v=20261013-photo260"></script>
 </body>
 </html>
