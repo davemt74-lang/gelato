@@ -37,14 +37,14 @@ assert.ok(win.GelatoGlassesVoiceUI,'voice/UI module should install');
 const parse=win.GelatoGlassesVoiceUI.normalizePhrase;
 const commands={
   'next':'next','Next Step.':'next','next item':'next_item',
-  'previous item':'previous_item','item added':'item_added','ingredient added':'item_added',
+  'previous item':'previous_item','item added':'ingredient_added','ingredient added':'ingredient_added','skip ingredient':'skip_ingredient','note added':'item_added',
   'repeat':'repeat','what is next':'repeat','status':'status',
   'stop listening':'stop_voice','help':'help'
 };
 for(const [phrase,want] of Object.entries(commands)){
   assert.equal(parse(phrase),want,'phrase '+phrase);
 }
-for(const [id,command] of [['simNavNext','next'],['simNavNextItem','next_item'],['simNavItemAdded','item_added'],['simNavPrevious','previous']]){
+for(const [id,command] of [['simNavNext','next'],['simNavNextItem','next_item'],['simNavItemAdded','ingredient_added'],['simNavPrevious','previous']]){
   elt(id).fire('click');assert.equal(actions.at(-1),command);
 }
 assert.equal(elt('simNavContext').textContent,'Test Pizza · Step 2 · Preview only');
