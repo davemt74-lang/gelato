@@ -50,7 +50,7 @@ function glasses_customer_photo_share_candidates(PDO $pdo,int $org,int $location
     $q=$pdo->prepare("SELECT s.id stage_id,s.revision,s.reviewed_at,s.photo_library_id,
         k.public_id kds_public_id,c.check_number,oo.id online_order_id,oo.public_id order_public_id,
         oo.customer_id,oo.status order_status,m.public_id media_public_id,p.menu_item_id,
-        share.id share_id,share.revoked_at,notif.id notification_id, pref.enabled customer_opted
+        share.id share_id,share.revoked_at,share.photo_library_id approved_photo_id,notif.id notification_id, pref.enabled customer_opted
         FROM glasses_order_photo_stages s
         JOIN kds_order_items k ON k.id=s.kds_item_id AND k.organization_id=s.organization_id AND k.location_id=s.location_id
         JOIN pos_checks c ON c.id=k.check_id AND c.organization_id=k.organization_id
@@ -78,7 +78,8 @@ function glasses_customer_photo_share_candidates(PDO $pdo,int $org,int $location
         'orderStatus'=>(string)$r['order_status'],
         'mediaPublicId'=>(string)$r['media_public_id'],
         'customerOptedIn'=>(bool)$r['customer_opted'],
-        'approved'=>$r['share_id']!==null&&$r['revoked_at']===null,
+        'approved'=>$r['share_id']!==null&&$r['revoked_at']===null&&
+            (int)$r['approved_photo_id']===(int)$r['photo_library_id'],
         'notified'=>$r['notification_id']!==null,
         'reviewedAt'=>(string)$r['reviewed_at']
     ];
@@ -116,6 +117,7 @@ function glasses_customer_photo_notify_once(PDO $pdo,int $org,int $onlineOrderId
         $items=$pdo->prepare("SELECT COUNT(*) FROM glasses_order_photo_shares share
           JOIN glasses_order_photo_stages s ON s.id=share.stage_id
             AND s.organization_id=share.organization_id AND s.location_id=share.location_id
+            AND s.photo_library_id=share.photo_library_id
           JOIN kds_order_items k ON k.id=s.kds_item_id AND k.organization_id=s.organization_id
           JOIN glasses_camera_photo_library p ON p.id=s.photo_library_id AND p.organization_id=s.organization_id
             AND p.location_id=s.location_id AND p.status='active'
@@ -196,19 +198,19 @@ function glasses_customer_photo_staff_action(PDO $pdo,array $user,int $locationI
             ||$stage['photo_status']!=='active'||$stage['media_status']!=='active'
             ||($stage['retention_until']!==null&&strtotime((string)$stage['retention_until'])<=time()))
             throw new DomainException('Photo must be confirmed, current, active, and from the correct oven camera.');
-        $current=$pdo->prepare("SELECT id,revoked_at FROM glasses_order_photo_shares
+        $current=$pdo->prepare("SELECT id,revoked_at,photo_library_id FROM glasses_order_photo_shares
             WHERE organization_id=? AND stage_id=? FOR UPDATE");
         $current->execute([$org,$stageId]);$row=$current->fetch(PDO::FETCH_ASSOC);
         if($action==='approve'){
-            if($row&&$row['revoked_at']===null)return ['approved'=>true,'existing'=>true];
+            if($row&&$row['revoked_at']===null&&(int)$row['photo_library_id']===(int)$stage['photo_library_id'])return ['approved'=>true,'existing'=>true];
             if($row){
                 $pdo->prepare("UPDATE glasses_order_photo_shares
-                    SET revoked_at=NULL,revoked_by=NULL,approved_by=?,approved_at=NOW(6)
-                    WHERE organization_id=? AND id=?")->execute([$actor,$org,(int)$row['id']]);
+                    SET revoked_at=NULL,revoked_by=NULL,photo_library_id=?,approved_by=?,approved_at=NOW(6)
+                    WHERE organization_id=? AND id=?")->execute([(int)$stage['photo_library_id'],$actor,$org,(int)$row['id']]);
             }else{
                 $pdo->prepare("INSERT INTO glasses_order_photo_shares
-                  (organization_id,location_id,online_order_id,stage_id,approved_by) VALUES (?,?,?,?,?)")
-                  ->execute([$org,$locationId,$orderId,$stageId,$actor]);
+                  (organization_id,location_id,online_order_id,stage_id,photo_library_id,approved_by) VALUES (?,?,?,?,?,?)")
+                  ->execute([$org,$locationId,$orderId,$stageId,(int)$stage['photo_library_id'],$actor]);
             }
         }else{
             if(!$row||$row['revoked_at']!==null)return ['revoked'=>true,'existing'=>true];
@@ -235,13 +237,14 @@ function glasses_customer_photo_visible(PDO $pdo,int $org,int $customerId,string
         i.item_name_snapshot item_name,s.reviewed_at
         FROM glasses_order_photo_shares share
         JOIN glasses_order_photo_stages s ON s.id=share.stage_id
-            AND s.organization_id=share.organization_id AND s.status='confirmed'
+            AND s.organization_id=share.organization_id AND s.photo_library_id=share.photo_library_id
+            AND s.status='confirmed'
             AND s.stage='post_oven' AND s.camera_slot=3
         JOIN kds_order_items k ON k.id=s.kds_item_id AND k.organization_id=s.organization_id
             AND k.status<>'cancelled'
         JOIN pos_check_items i ON i.id=k.pos_check_item_id AND i.organization_id=k.organization_id
         JOIN glasses_camera_photo_library p ON p.id=s.photo_library_id AND p.organization_id=s.organization_id
-            AND p.location_id=share.location_id AND p.status='active'
+            AND p.location_id=share.location_id AND p.id=share.photo_library_id AND p.status='active'
         JOIN glasses_vision_training_media m ON m.id=p.media_id AND m.organization_id=p.organization_id
             AND m.status='active' AND (m.retention_until IS NULL OR m.retention_until>NOW(6))
         WHERE share.organization_id=? AND share.location_id=? AND share.online_order_id=?
