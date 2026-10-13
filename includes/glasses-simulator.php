@@ -9,6 +9,7 @@ require_once __DIR__.'/glasses-validation.php';
 require_once __DIR__.'/glasses-handoff.php';
 require_once __DIR__.'/glasses-vision-models.php';
 require_once __DIR__.'/glasses-vision-profiles.php';
+require_once __DIR__.'/glasses-assembly-auto-gate.php';
 require_once __DIR__.'/glasses-hardware-runtime.php';
 require_once __DIR__.'/glasses-employee-runtimes.php';
 require_once __DIR__.'/glasses-frame-pipeline.php';
@@ -360,6 +361,7 @@ function glasses_simulator_dispatch(PDO $pdo,array $user,array $in): array
         return ['shadow'=>glasses_vision_shadow_complete($pdo,$device,$session,$run)];
     }
     if($action==='build.observe'){
+        glasses_assembly_auto_observation_validate($pdo,$device,$user,$session,$in);
         return ['buildSession'=>glasses_build_observe($pdo,$device,$session,$in)];
     }
     if($action==='build.confirm'){
