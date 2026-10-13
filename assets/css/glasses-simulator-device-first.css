@@ -108,3 +108,47 @@ html,body{max-width:100%;overflow-x:hidden}
  .sim-glasses-quick-actions{bottom:8px;left:8px;right:8px;gap:4px;padding:5px}
  .sim-glasses-quick-actions button{min-height:34px;padding:6px 8px;font-size:10px}
 }
+
+/* Calibration V2: the safe zone is the real projection geometry in every mode,
+ * not only a dashed rectangle visible while editing. */
+.glasses-stage .lens-projection,
+.glasses-stage.frame-none .lens-projection{
+  inset:auto!important;left:50%!important;top:50%!important;
+  right:auto!important;bottom:auto!important;
+  width:var(--safe-width,80%)!important;height:var(--safe-height,66%)!important;
+  transform:translate(-50%,-50%) scale(var(--hud-scale,1))!important;
+  transform-origin:center!important;
+  opacity:var(--hud-opacity,1)!important;
+  filter:brightness(var(--hud-brightness,1))!important;
+}
+.glasses-stage .hud-orders-left,.glasses-stage.calibrating .hud-orders-left{
+  left:var(--region-x,1%)!important;top:var(--region-y,17%)!important;
+  width:var(--region-w,23%)!important;height:var(--region-h,61%)!important;
+  max-height:unset!important;overflow:auto;
+  transform:translate(var(--left-eye-shift-x,0px),var(--left-eye-shift-y,0px))!important;
+}
+.glasses-stage .hud-right-build,.glasses-stage.calibrating .hud-right-build{
+  right:auto!important;left:var(--region-x,70%)!important;top:var(--region-y,13%)!important;
+  width:var(--region-w,29%)!important;height:var(--region-h,72%)!important;
+  transform:translate(var(--right-eye-shift-x,0px),var(--right-eye-shift-y,0px))!important;
+}
+.glasses-stage .hud-topbar,.glasses-stage.calibrating .hud-topbar{
+  left:var(--region-x,2%)!important;top:var(--region-y,1%)!important;
+  width:var(--region-w,96%)!important;height:var(--region-h,12%)!important;
+  min-height:28px;
+}
+.glasses-stage .hud-topbar .hud-clock{
+  transform:translate(var(--left-eye-shift-x,0px),var(--left-eye-shift-y,0px))!important;
+}
+.glasses-stage .hud-topbar .hud-system{
+  transform:translate(var(--right-eye-shift-x,0px),var(--right-eye-shift-y,0px))!important;
+}
+.glasses-stage .left-eye-guide{
+  transform:translate(var(--left-eye-shift-x,0px),var(--left-eye-shift-y,0px))!important;
+}
+.glasses-stage .right-eye-guide{
+  transform:translate(var(--right-eye-shift-x,0px),var(--right-eye-shift-y,0px))!important;
+}
+.glasses-stage.calibrating .safe-area-guide{border-width:2px;box-shadow:0 0 20px #ffd37b22}
+/* Editing handles are attached to saved region geometry, even after Lock.
+ * Disabling calibration hides the handles, not the chosen layout. */
