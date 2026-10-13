@@ -26,7 +26,7 @@ kva_assert(str_contains($sidebar,"type:'new_order'")&&str_contains($sidebar,"typ
 kva_assert(str_contains($sidebar,'!priorItems.has(String(item.public_id))'),'Order updates must announce only newly observed ticket items.');
 kva_assert(str_contains($sidebar,'state.voiceQueue.push(message)')&&str_contains($sidebar,'pumpSpeech()'),'Spoken KDS announcements must be queued rather than overlapping.');
 kva_assert(str_contains($sidebar,'Special instruction:')&&str_contains($sidebar,'ticket.tableName')&&str_contains($sidebar,'ticket.checkNumber'),'New-order speech must include order/table context and special instructions.');
-kva_assert(str_contains($sidebar,'Read active orders now')&&str_contains($sidebar,"Read the active KDS orders aloud"),'KDS must provide an explicit read-current-board voice action.');
+kva_assert(str_contains($sidebar,'Read active orders now')&&str_contains($sidebar,'GelatoKdsVoice?.readAll?.()'),'KDS must provide an explicit read-current-board voice action.');
 
 kva_assert((str_contains($context,"module:'kds'")||str_contains($context,"module: 'kds'"))&&str_contains($context,'locationId')&&str_contains($context,'checkPublicId')&&str_contains($context,'kitchenItemPublicId')&&str_contains($context,'stationPublicId'),'KDS page context must send stable identifiers to the shared Agent.');
 kva_assert(str_contains($agent,"app_has_permission('kds.view',\$user)")&&str_contains($agent,'operational_location_allowed'),'KDS Agent knowledge must be permission- and location-scoped server-side.');
