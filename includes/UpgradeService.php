@@ -512,6 +512,7 @@ final class UpgradeService
         );
         $scopeInfo->execute([$table, 'correction_scope_id']);
         $scope = $scopeInfo->fetch(PDO::FETCH_ASSOC);
+        if (is_array($scope)) $scope = array_change_key_case($scope, CASE_LOWER);
         $virtualDefinition = 'correction_scope_id BIGINT UNSIGNED GENERATED ALWAYS AS (COALESCE(correction_id,0)) VIRTUAL';
         if ($scope === false) {
             $pdo->exec('ALTER TABLE glasses_vision_sample_reviews ADD COLUMN ' . $virtualDefinition . ' AFTER correction_id');
