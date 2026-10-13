@@ -83,6 +83,7 @@ function kds_production_board(PDO $pdo,int $org,int $locationId,?string $station
         TIMESTAMPDIFF(SECOND,k.completed_at,NOW(6)) completed_age_seconds,
         s.public_id station_public_id,s.name station_name,s.target_seconds,
         c.public_id check_public_id,c.check_number,c.business_date,c.service_mode,c.table_name,c.guest_count,c.status check_status,
+        TIMESTAMPDIFF(SECOND,c.opened_at,NOW(6)) pos_open_age_seconds,
         ou.display_name opened_by_name,
         i.id pos_check_item_id,i.menu_item_id,i.item_name_snapshot,i.option_name_snapshot,i.quantity,i.special_instructions,i.status pos_item_status"
         .$itemExtra.$serviceSelect."

@@ -77,3 +77,108 @@ html,body{max-width:100%;overflow-x:hidden}
  .sgv-tabs button{font-size:9px!important}
  .sgv-tab-panel{padding:9px}
 }
+/* Direct HUD/manual KDS controls. Keep the projection clear above the bottom rail. */
+.sim-stage-panel{position:relative!important}
+.sim-glasses-quick-actions{
+ position:absolute;left:18px;right:18px;bottom:17px;z-index:18;
+ display:flex;flex-wrap:nowrap;gap:5px;overflow-x:auto;overscroll-behavior-x:contain;
+ padding:7px;background:rgba(7,20,13,.92);backdrop-filter:blur(12px);
+ border:1px solid rgba(120,203,150,.42);border-radius:12px;
+ box-shadow:0 10px 28px rgba(0,0,0,.35);scrollbar-width:thin
+}
+.sim-glasses-quick-actions button{
+ flex:0 0 auto;min-height:38px;border-radius:8px;border:1px solid #466b51;
+ background:#183d2a;color:#d7ffe3;padding:7px 10px;
+ font:750 11px/1.2 system-ui,sans-serif;cursor:pointer;white-space:nowrap
+}
+.sim-glasses-quick-actions .sim-quick-finish{background:#42522c;border-color:#9caf65;color:#fff5d2}
+.sim-glasses-quick-actions button:disabled,[data-glasses-command]:disabled{opacity:.38;cursor:not-allowed}
+.sim-glasses-quick-actions button:focus-visible,[data-glasses-command]:focus-visible{outline:2px solid #a2ffc2;outline-offset:2px}
+.sim-navigation-panel .sim-kitchen-commands{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch;width:100%;gap:6px}
+.sim-navigation-panel .sim-kitchen-commands button{white-space:normal;text-align:center;min-height:40px}
+.sim-navigation-panel .sim-kitchen-note{display:grid;width:100%;gap:7px}
+.sim-navigation-panel .sim-kitchen-note label{display:grid;gap:5px;width:100%;font-size:11px;color:#a9cfb7}
+.sim-navigation-panel .sim-kitchen-note input{
+ width:100%;min-width:0;min-height:38px;padding:8px 10px;border-radius:8px;
+ border:1px solid #41634d;background:#081b10;color:#edfff1;
+ font:12px/1.3 system-ui,sans-serif
+}
+.sim-navigation-panel #simKitchenCommandStatus{font-size:10px;line-height:1.4}
+@media(max-width:640px){
+ .sim-glasses-quick-actions{bottom:8px;left:8px;right:8px;gap:4px;padding:5px}
+ .sim-glasses-quick-actions button{min-height:34px;padding:6px 8px;font-size:10px}
+}
+
+/* Calibration V2: the safe zone is the real projection geometry in every mode,
+ * not only a dashed rectangle visible while editing. */
+.glasses-stage .lens-projection,
+.glasses-stage.frame-none .lens-projection{
+  inset:auto!important;left:50%!important;top:50%!important;
+  right:auto!important;bottom:auto!important;
+  width:var(--safe-width,80%)!important;height:var(--safe-height,66%)!important;
+  transform:translate(-50%,-50%) scale(var(--hud-scale,1))!important;
+  transform-origin:center!important;
+  opacity:var(--hud-opacity,1)!important;
+  filter:brightness(var(--hud-brightness,1))!important;
+}
+.glasses-stage .hud-orders-left,.glasses-stage.calibrating .hud-orders-left{
+  left:var(--region-x,1%)!important;top:var(--region-y,17%)!important;
+  width:var(--region-w,23%)!important;height:var(--region-h,61%)!important;
+  max-height:unset!important;overflow:auto;
+  transform:translate(var(--left-eye-shift-x,0px),var(--left-eye-shift-y,0px))!important;
+}
+.glasses-stage .hud-right-build,.glasses-stage.calibrating .hud-right-build{
+  right:auto!important;left:var(--region-x,70%)!important;top:var(--region-y,13%)!important;
+  width:var(--region-w,29%)!important;height:var(--region-h,72%)!important;
+  transform:translate(var(--right-eye-shift-x,0px),var(--right-eye-shift-y,0px))!important;
+}
+.glasses-stage .hud-topbar,.glasses-stage.calibrating .hud-topbar{
+  left:var(--region-x,2%)!important;top:var(--region-y,1%)!important;
+  width:var(--region-w,96%)!important;height:var(--region-h,12%)!important;
+  min-height:28px;
+}
+.glasses-stage .hud-topbar .hud-clock{
+  transform:translate(var(--left-eye-shift-x,0px),var(--left-eye-shift-y,0px))!important;
+}
+.glasses-stage .hud-topbar .hud-system{
+  transform:translate(var(--right-eye-shift-x,0px),var(--right-eye-shift-y,0px))!important;
+}
+.glasses-stage .left-eye-guide{
+  transform:translate(var(--left-eye-shift-x,0px),var(--left-eye-shift-y,0px))!important;
+}
+.glasses-stage .right-eye-guide{
+  transform:translate(var(--right-eye-shift-x,0px),var(--right-eye-shift-y,0px))!important;
+}
+.glasses-stage.calibrating .safe-area-guide{border-width:2px;box-shadow:0 0 20px #ffd37b22}
+/* Editing handles are attached to saved region geometry, even after Lock.
+ * Disabling calibration hides the handles, not the chosen layout. */
+
+
+/* Camera 2–5 capture feeds never overlap the optical HUD. */
+.sim-multicamera{display:grid;gap:10px;border:1px solid #304c3b;border-radius:11px;padding:10px;background:#0e1a13}
+.sim-multicamera .console-heading{align-items:center}
+.sim-aux-camera-slots{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.sim-aux-camera{display:grid;align-content:start;gap:8px;min-width:0;background:#121d16;border:1px solid #345341;border-radius:10px;padding:9px}
+.sim-aux-camera header{display:flex;justify-content:space-between;gap:7px;align-items:center}
+.sim-aux-camera header strong{font-size:11px;color:#e5fff0}
+.sim-aux-camera header span{font-size:9px;color:#a5b9aa;max-width:60%;overflow-wrap:anywhere;text-align:right}
+.sim-aux-camera header span[data-state=ready]{color:#91f1b2}
+.sim-aux-camera header span[data-state=failed],.sim-aux-camera header span[data-state=blocked]{color:#ffb0a9}
+.sim-aux-camera label{display:grid;gap:3px;font-size:10px;color:#a6c8b2}
+.sim-aux-camera select{min-width:0;width:100%;padding:7px;background:#09140d;border:1px solid #43644c;color:#e3f8e8;border-radius:6px;font-size:10px}
+.sim-aux-preview{height:110px;border:1px solid #263e30;background:#050b07;border-radius:8px;overflow:hidden;display:grid;place-items:center}
+.sim-aux-preview video{width:100%;height:100%;object-fit:cover;grid-area:1/1}
+.sim-aux-preview video[hidden]{display:none}
+.sim-aux-preview p{grid-area:1/1;padding:8px;margin:0;font-size:10px;color:#819c87;text-align:center}
+.sim-aux-preview p[hidden]{display:none}
+.sim-aux-camera button,.sim-multicamera>button{border:1px solid #456750;background:#1c3928;color:#dafde4;border-radius:7px;padding:7px;font-size:10px;cursor:pointer}
+.sim-aux-camera .inline-actions{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.sim-aux-camera button[disabled]{opacity:.42;cursor:not-allowed}
+.sim-camera-training{display:grid;gap:9px;border:1px solid #44674f;padding:9px;border-radius:9px;background:#17271b}
+.sim-camera-training[hidden]{display:none!important}
+.sim-camera-training-frame{position:relative;line-height:0;max-width:100%;touch-action:none}
+.sim-camera-training-frame canvas{display:block;width:100%;height:auto;border:1px solid #4b7057;border-radius:6px}
+#simCameraTrainingOverlay{position:absolute;inset:0;cursor:crosshair;touch-action:none;border:0}
+#simCameraTrainingLabel{width:100%;min-width:0;background:#0b1710;border:1px solid #446750;color:#e3fbe8;border-radius:6px;padding:9px}
+.sim-ticket-time-sync{font-size:8px;letter-spacing:.08em;font-weight:800;color:#90d9ab}
+@media(max-width:1200px){.sim-aux-camera-slots{grid-template-columns:minmax(0,1fr)}}

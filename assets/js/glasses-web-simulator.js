@@ -9,7 +9,44 @@ const mock={
 function escapeHtml(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function log(type,msg){const line={at:new Date(),type,msg};state.logs.unshift(line);state.logs=state.logs.slice(0,80);renderLog();}
 function renderLog(){$('eventLog').innerHTML=state.logs.map(x=>'<div class="event-line"><b>'+escapeHtml(x.type)+'</b> '+escapeHtml(x.at.toLocaleTimeString())+' · '+escapeHtml(x.msg)+'</div>').join('')||'<span class="sim-muted">No events yet.</span>';}
-async function api(action,payload={}){if(state.recovery?.networkFault)throw new Error('SIMULATED_NETWORK_OFFLINE');const r=await fetch(cfg.api,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':cfg.csrf},credentials:'same-origin',body:JSON.stringify({csrf_token:cfg.csrf,action,devicePublicId:state.device?.publicId||'',...payload})});const d=await r.json().catch(()=>({ok:false,message:'Invalid server response.'}));if(!r.ok||!d.ok)throw new Error(d.message||'Simulator request failed.');return d;}
+const SIM_READ_ONLY_ACTIONS=new Set([
+  'hardware.health.normalize','hardware.diagnostics.bundle','hardware.cook_ux.evaluate',
+  'hardware.soak.evaluate','hardware.recovery.contract','hardware.recovery.decide',
+  'hardware.frame_pipeline','hardware.runtime','hardware.frame.prepare',
+  'hardware.display.prepare','hardware.input.prepare','hardware.model.prepare',
+  'work','build.get','validation.get','vision.model_assignment','vision.profile',
+  'vision.shadow_assignment'
+]);
+async function refreshSimulatorCsrf(){
+  const r=await fetch(cfg.api,{method:'GET',credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}});
+  const data=await r.json().catch(()=>null);
+  if(!r.ok||!data?.ok||!(/^[a-f0-9]{64}$/i.test(String(data.csrfToken||''))))
+    throw new Error('Your login session needs attention. Sign in again or refresh the simulator.');
+  cfg.csrf=data.csrfToken;
+  return data;
+}
+async function api(action,payload={}){
+  if(state.recovery?.networkFault)throw new Error('SIMULATED_NETWORK_OFFLINE');
+  async function post(){
+    const r=await fetch(cfg.api,{
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-CSRF-Token':cfg.csrf},
+      credentials:'same-origin',cache:'no-store',
+      body:JSON.stringify({csrf_token:cfg.csrf,action,devicePublicId:state.device?.publicId||'',...payload})
+    });
+    const d=await r.json().catch(()=>({ok:false,message:'Invalid server response.'}));
+    return {r,d};
+  }
+  let {r,d}=await post();
+  if(r.status===419){
+    await refreshSimulatorCsrf();
+    if(!SIM_READ_ONLY_ACTIONS.has(action))
+      throw new Error('Security session refreshed. Repeat your action to avoid duplicate kitchen changes.');
+    ({r,d}=await post());
+  }
+  if(!r.ok||!d.ok)throw new Error(d.message||'Simulator request failed.');
+  return d;
+}
 const LIVE_SYNC_BASE_MS=1500;
 const LIVE_SYNC_MAX_BACKOFF_MS=10000;
 const RUNTIME_RECOVERY_KEY='gelato.webGlassesSimulator.runtimeRecovery.v1';
@@ -155,7 +192,7 @@ function applyLiveWork(work,{announce=false}={}){
     if(activeBuildItem&&ids.includes(activeBuildItem))state.selectedKdsItemPublicId=activeBuildItem;
     else state.selectedKdsItemPublicId=work?.focusItem?.kdsItemPublicId||ids[0]||'';
   }
-  state.syncFingerprint=next;state.lastSyncAt=Date.now();render();
+  state.syncFingerprint=next;state.lastSyncAt=Date.now();state.ticketSyncAt=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();render();
   if(previous&&previous!==next)log('ORDER','POS/KDS updated · '+items.length+' active item(s).');
   return previous!==next;
 }
@@ -240,8 +277,8 @@ function renderNormalizedDeviceHealth(health){
   const h=health?.hardware||{};hardware.textContent=(h.batteryPercent==null?'Battery SDK pending':'Battery '+Math.round(h.batteryPercent)+'%')+' · '+(h.temperatureC==null?'thermal SDK pending':'thermal '+Number(h.temperatureC).toFixed(1)+'°C');
 }
 async function refreshDeviceHealth(){
-  try{const d=await api('hardware.health.normalize',{snapshot:rawDeviceHealthSnapshot()});renderNormalizedDeviceHealth(d.health);return d.health;}
-  catch(e){const badge=$('deviceHealthState');if(badge)badge.textContent='ERROR';log('HEALTH',e.message);return null;}
+  try{const d=await api('hardware.health.normalize',{snapshot:rawDeviceHealthSnapshot()});renderNormalizedDeviceHealth(d.health);state.lastHealthError='';return d.health;}
+  catch(e){const badge=$('deviceHealthState');if(badge)badge.textContent='ERROR';if(state.lastHealthError!==e.message){log('HEALTH',e.message);state.lastHealthError=e.message;}return null;}
 }
 async function downloadDeviceDiagnostics(){
   try{
@@ -255,6 +292,7 @@ async function loadDevices(){
   try{
     const r=await fetch(cfg.api,{credentials:'same-origin',cache:'no-store'});
     const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.message||'Device list failed.');
+    if(/^[a-f0-9]{64}$/i.test(String(d.csrfToken||'')))cfg.csrf=d.csrfToken;
     state.hardwareRuntime=d.hardwareRuntime||null;renderHardwareRuntime();state.devices=d.devices||[];
     const preferred=localStorage.getItem(LIVE_DEVICE_KEY)||'';
     const device=state.devices.find(x=>x.publicId===preferred&&(x.virtualPreview||x.stationPublicId!==null))
@@ -397,8 +435,9 @@ function renderDatasetClassOptions(){
   const select=$('datasetClassSelect');if(!select)return;
   const previous=select.value;
   const comps=(state.build?.components||[]).filter(c=>c.status!=='unexpected'&&c.status!=='ignored');
-  select.innerHTML=comps.length?comps.map(c=>'<option value="'+escapeHtml(c.displayName)+'">'+escapeHtml(c.displayName)+'</option>').join(''):'<option value="">Start a build to load ingredient classes</option>';
-  if(comps.some(c=>c.displayName===previous))select.value=previous;
+  const names=comps.length?comps.map(c=>c.displayName):datasetClasses();
+  select.innerHTML=names.length?names.map(name=>'<option value="'+escapeHtml(name)+'">'+escapeHtml(name)+'</option>').join(''):'<option value="">Label a training sample or start a build</option>';
+  if(names.includes(previous))select.value=previous;
 }
 function renderDatasetAnnotations(){
   const layer=$('datasetAnnotationLayer');if(layer){layer.innerHTML='';for(const [i,a] of state.dataset.annotations.entries()){const g=normalizedBoxToStage(a.bbox);if(!g)continue;const el=document.createElement('div');el.className='dataset-box';el.style.left=(g.left*100)+'%';el.style.top=(g.top*100)+'%';el.style.width=(g.width*100)+'%';el.style.height=(g.height*100)+'%';el.innerHTML='<span>'+escapeHtml(a.label)+' #'+(i+1)+'</span>';layer.appendChild(el);}}
@@ -470,8 +509,8 @@ async function uploadDatasetSamples(){
   let uploaded=0;
   try{
     for(const sample of pending){
-      const settings=state.cameraTrack?.getSettings?.()||{};
-      const payload={action:'upload',csrf_token:cfg.csrf,consentBasis:'training_media_opt_in',retentionDays:Number($('datasetRetentionDays')?.value||365),imageBase64:bytesToBase64(sample.bytes),annotations:sample.annotations,capturedAt:sample.capturedAt,devicePublicId:state.device?.publicId||null,buildSessionPublicId:sample.buildPublicId||null,captureGroup:sample.captureGroup||null,burstIndex:sample.burstIndex,perceptualHash:sample.features?.perceptualHash||null,brightnessMean:sample.features?.brightnessMean,contrastMean:sample.features?.contrastMean,blurScore:sample.features?.blurScore,distanceBucket:$('datasetDistanceBucket')?.value||null,occlusionBucket:$('datasetOcclusionBucket')?.value||null,pose:{pitch:$('datasetCameraPitch')?.value!==''?Number($('datasetCameraPitch').value):null,yaw:$('datasetCameraYaw')?.value!==''?Number($('datasetCameraYaw').value):null,roll:$('datasetCameraRoll')?.value!==''?Number($('datasetCameraRoll').value):null},camera:{facing:settings.facingMode||null,deviceKey:settings.deviceId||null,width:settings.width||sample.width,height:settings.height||sample.height,fps:settings.frameRate||null},detectorConfidence:sample.detectorConfidence,metadata:{source:'web_glasses_simulator',localSampleIndex:sample.index}};
+      const settings=sample.trainingCameraSlot?{}:(state.cameraTrack?.getSettings?.()||{});
+      const payload={action:'upload',csrf_token:cfg.csrf,consentBasis:'training_media_opt_in',retentionDays:Number($('datasetRetentionDays')?.value||365),imageBase64:bytesToBase64(sample.bytes),annotations:sample.annotations,capturedAt:sample.capturedAt,devicePublicId:state.device?.publicId||null,buildSessionPublicId:sample.buildPublicId||null,captureGroup:sample.captureGroup||null,burstIndex:sample.burstIndex,perceptualHash:sample.features?.perceptualHash||null,brightnessMean:sample.features?.brightnessMean,contrastMean:sample.features?.contrastMean,blurScore:sample.features?.blurScore,distanceBucket:$('datasetDistanceBucket')?.value||null,occlusionBucket:$('datasetOcclusionBucket')?.value||null,pose:{pitch:$('datasetCameraPitch')?.value!==''?Number($('datasetCameraPitch').value):null,yaw:$('datasetCameraYaw')?.value!==''?Number($('datasetCameraYaw').value):null,roll:$('datasetCameraRoll')?.value!==''?Number($('datasetCameraRoll').value):null},camera:{facing:settings.facingMode||null,deviceKey:settings.deviceId||null,width:settings.width||sample.width,height:settings.height||sample.height,fps:settings.frameRate||null},detectorConfidence:sample.detectorConfidence,metadata:{source:sample.trainingCameraSlot?'web_glasses_aux_training':'web_glasses_simulator',cameraSlot:sample.trainingCameraSlot||1,reviewed:!!sample.reviewed,localSampleIndex:sample.index}};
       const r=await fetch(cfg.mediaApi,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload)}),d=await r.json().catch(()=>({ok:false,message:'Invalid media response.'}));
       if(!r.ok||!d.ok)throw new Error(d.message||'Training media upload failed.');
       sample.mediaPublicId=d.media.publicId;sample.samplePublicId=d.media.samplePublicId;uploaded++;$('datasetUploadState').textContent='Uploaded '+uploaded+'/'+pending.length;
@@ -572,10 +611,46 @@ function exportDatasetZip(){
   if(!classes.length){log('DATASET','At least one positively labeled class is required before YOLO export.');return;}
   const activeLearningSamples=state.dataset.samples.filter(s=>s.activeLearning);
   const reviewCounts=activeLearningSamples.reduce((acc,s)=>{const key=s.activeLearning.reviewOutcome||'unknown';acc[key]=(acc[key]||0)+1;return acc;},{});
-  const manifest={schema:'gelato.vision_training_dataset.v1',createdAt:new Date().toISOString(),format:'yolo_detection',sampleCount:state.dataset.samples.length,classCount:classes.length,classes:classes.map((name,index)=>({index,name,slug:datasetSlug(name)})),activeLearning:{schema:'gelato.vision_active_learning.v1',reviewedSampleCount:activeLearningSamples.length,reviewOutcomes:reviewCounts},samples:state.dataset.samples.map(s=>({index:s.index,width:s.width,height:s.height,annotations:s.annotations.length,capturedAt:s.capturedAt,buildPublicId:s.buildPublicId,captureGroup:s.captureGroup||null,burstIndex:s.burstIndex??null,station:s.station,activeLearning:s.activeLearning||null}))};
+  const manifest={schema:'gelato.vision_training_dataset.v1',createdAt:new Date().toISOString(),format:'yolo_detection',sampleCount:state.dataset.samples.length,classCount:classes.length,classes:classes.map((name,index)=>({index,name,slug:datasetSlug(name)})),activeLearning:{schema:'gelato.vision_active_learning.v1',reviewedSampleCount:activeLearningSamples.length,reviewOutcomes:reviewCounts},samples:state.dataset.samples.map(s=>({index:s.index,width:s.width,height:s.height,annotations:s.annotations.length,capturedAt:s.capturedAt,buildPublicId:s.buildPublicId,captureGroup:s.captureGroup||null,burstIndex:s.burstIndex??null,station:s.station,activeLearning:s.activeLearning||null,trainingCameraSlot:s.trainingCameraSlot||1,reviewed:!!s.reviewed}))};
   entries.push({name:'data.yaml',data:yaml},{name:'gelato-manifest.json',data:JSON.stringify(manifest,null,2)+'\n'},{name:'README.txt',data:'Gelato local vision training dataset\nFormat: YOLO object detection\nImages and labels were captured in the Web Glasses Simulator.\nNo POS/KDS/build state is modified by dataset capture.\n'});
   const blob=zipStore(entries),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='gelato-vision-dataset-'+new Date().toISOString().replace(/[:.]/g,'-')+'.zip';a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);log('DATASET','Exported '+state.dataset.samples.length+' YOLO training sample(s).');
 }
+
+/* Explicitly reviewed auxiliary-camera samples enter the existing local
+ * dataset. This API cannot submit POS/KDS or ingredient evidence. */
+async function acceptReviewedAuxiliaryFrame(frame,annotations,{slot}={}){
+  if(!frame||!Number.isFinite(frame.width)||!Number.isFinite(frame.height)||frame.width<1||frame.height<1)
+    throw new Error('Capture a valid camera frame first.');
+  if(!Number.isInteger(slot)||slot<2||slot>5)throw new Error('Invalid auxiliary camera slot.');
+  if(!Array.isArray(annotations)||annotations.length<1||annotations.length>100)
+    throw new Error('Review and label at least one visible object before adding this sample.');
+  const valid=annotations.map(item=>{
+    const label=String(item?.label||'').trim().slice(0,80),b=item?.bbox||{};
+    if(!label||!Number.isFinite(b.x)||!Number.isFinite(b.y)||!Number.isFinite(b.width)||!Number.isFinite(b.height)||
+      b.width<=0||b.height<=0||b.x<0||b.y<0||b.x+b.width>1.001||b.y+b.height>1.001)
+      throw new Error('A label or bounding box is invalid. Correct it before saving.');
+    return {label,bbox:{x:b.x,y:b.y,width:b.width,height:b.height}};
+  });
+  const blob=await canvasToBlob(frame,'image/jpeg',.92);
+  if(!blob)throw new Error('Could not encode the reviewed training sample.');
+  const bytes=new Uint8Array(await blob.arrayBuffer()),index=state.dataset.samples.length+1;
+  const features=datasetVisualFeatures(frame);
+  const capturedAt=new Date().toISOString();
+  state.dataset.samples.push({
+    index,width:frame.width,height:frame.height,bytes,annotations:valid,capturedAt,
+    buildPublicId:null,station:null,captureGroup:'aux-camera-'+slot+'-'+Date.now().toString(36),
+    burstIndex:0,features,detectorConfidence:null,mediaPublicId:null,samplePublicId:null,
+    trainingCameraSlot:slot,reviewed:true
+  });
+  renderDatasetAnnotations();renderDatasetClassOptions();
+  log('TRAINING','Reviewed Camera '+slot+' sample #'+index+' added locally with '+valid.length+' object(s).');
+  return {index,annotations:valid.length};
+}
+window.GelatoGlassesTraining={
+  acceptReviewedAuxiliaryFrame,
+  get sampleCount(){return state.dataset.samples.length;},
+  get activePrimaryDeviceId(){return state.cameraTrack?.getSettings?.().deviceId||'';}
+};
 
 const VISION_TRACK_TTL_MS=1800;
 const VISION_STABLE_FRAMES=3;
@@ -1055,7 +1130,36 @@ function deriveSteps(){const item=selectedItem();const fromBuild=state.build?.co
 function itemName(){return selectedItem()?.posLine?.name||state.build?.context?.itemName||'No focused item';}
 function currentComponent(){return state.build?.components?.find(c=>!c.optional&&!['confirmed','ignored'].includes(c.status))||null;}
 function orderItems(){const items=state.work?.items||[];return items.length?items:(state.work?.focusItem?[state.work.focusItem]:[]);}
-function elapsedLabel(item,index){const source=item?.startedAt||item?.createdAt||item?.ticket?.openedAt;if(source){const ms=Date.now()-new Date(source).getTime();if(Number.isFinite(ms)&&ms>=0){const m=Math.floor(ms/60000),s=Math.floor(ms/1000)%60;return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');}}return state.mode==='mock'?(index===0?'04:12':'02:38'):'--:--';}
+function ticketElapsedSeconds(item,index){
+  if(state.mode!=='live'){
+    const source=item?.startedAt||item?.createdAt||item?.ticket?.openedAt;
+    if(source){const ms=Date.now()-new Date(source).getTime();if(Number.isFinite(ms)&&ms>=0)return Math.floor(ms/1000);}
+    return null;
+  }
+  const baseline=item?.timing?.posOpenAgeSeconds;
+  if(!Number.isFinite(Number(baseline))||baseline===null||baseline===undefined)return null;
+  if(!Number.isFinite(state.ticketSyncAt))return Math.max(0,Math.floor(Number(baseline)));
+  const clock=typeof performance!=='undefined'&&performance.now?performance.now():Date.now();
+  const delta=Math.max(0,clock-state.ticketSyncAt)/1000;
+  return Math.max(0,Math.floor(Number(baseline)+delta));
+}
+function elapsedLabel(item,index){
+  const seconds=ticketElapsedSeconds(item,index);
+  if(seconds===null)return state.mode==='mock'?'DEMO':'--:--';
+  const hours=Math.floor(seconds/3600),minutes=Math.floor(seconds%3600/60),remainder=seconds%60;
+  const mm=String(minutes).padStart(2,'0'),ss=String(remainder).padStart(2,'0');
+  return hours?String(hours)+':'+mm+':'+ss:mm+':'+ss;
+}
+function tickLiveTicketTimers(){
+  if(state.mode!=='live'||document.hidden)return;
+  const reference=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();
+  const age=Number.isFinite(state.ticketSyncAt)?(reference-state.ticketSyncAt)/1000:Infinity;
+  const freshness=$('simTicketTimeSync');
+  if(freshness)freshness.textContent=age<8?'POS TIME · SYNCED':age<20?'POS TIME · DELAYED':'POS TIME · STALE';
+  const items=orderItems().slice(0,5);
+  const spans=$('hudOrders')?.querySelectorAll?.('[data-pos-ticket-clock]')||[];
+  spans.forEach((span,index)=>{if(items[index])span.textContent=elapsedLabel(items[index],index);});
+}
 function renderTopStatus(){
   const now=new Date(),live=state.mode==='live';
   $('hudClock').textContent=now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
@@ -1067,7 +1171,7 @@ function renderTopStatus(){
 function renderOrdersQueue(item){
   const items=orderItems();
   $('hudOrdersCount').textContent=String(items.length);
-  $('hudOrders').innerHTML=items.slice(0,5).map((x,i)=>'<div class="hud-order-row '+(x.kdsItemPublicId===item?.kdsItemPublicId?'active':'')+'"><span class="ticket">#'+escapeHtml(x.ticket?.checkNumber||String(i+1).padStart(3,'0'))+'</span><span class="item">'+escapeHtml(x.posLine?.name||'Kitchen item')+'</span><span class="age">'+escapeHtml(elapsedLabel(x,i))+'</span></div>').join('')||'<span class="sim-muted">No active orders</span>';
+  $('hudOrders').innerHTML=items.slice(0,5).map((x,i)=>'<div class="hud-order-row '+(x.kdsItemPublicId===item?.kdsItemPublicId?'active':'')+'"><span class="ticket">#'+escapeHtml(x.ticket?.checkNumber||String(i+1).padStart(3,'0'))+'</span><span class="item">'+escapeHtml(x.posLine?.name||'Kitchen item')+'</span><span class="age" data-pos-ticket-clock="1">'+escapeHtml(elapsedLabel(x,i))+'</span></div>').join('')||'<span class="sim-muted">No active orders</span>';
 }
 function buildProgressIndex(steps,comps){
   const confirmed=comps.filter(c=>c.status==='confirmed'||(c.optional&&c.status==='ignored')).length;
@@ -1159,7 +1263,7 @@ function render(){
   $('connectionBadge').style.color=live?'var(--good)':'var(--blue)';
   const station=state.work?.station?.name||state.device?.stationName||'Unassigned station';
   $('stationBadge').textContent=station;
-  $('buildBadge').textContent=build?'Build '+build.publicId:(live?'Live order preview · no build active':'Mock · no build');
+  $('buildBadge').textContent=build?'Build '+build.publicId:(live?'Live POS/KDS · no glasses build active':'Mock · no build');
   const guide=$('simLiveGuide');
   if(guide){
     const noHardware=!!state.device?.virtualPreview;
@@ -1178,8 +1282,10 @@ function render(){
   const workItems=orderItems();
   $('workItemSelect').innerHTML=workItems.length?workItems.map(x=>'<option value="'+escapeHtml(x.kdsItemPublicId)+'" '+(x.kdsItemPublicId===item?.kdsItemPublicId?'selected':'')+'>'+escapeHtml(x.posLine?.name||'Kitchen item')+' · '+escapeHtml(x.status||'')+' · #'+escapeHtml(x.ticket?.checkNumber||'')+'</option>').join(''):'<option value="">No station work</option>';
   $('workItemSelect').disabled=!!build||workItems.length===0;
+  if(state.finishConfirmation&&state.finishConfirmation.ticket!==item?.ticket?.checkPublicId)state.finishConfirmation=null;
   $('workMeta').innerHTML=[
     ['Ticket',item?.ticket?.checkNumber||'—'],['Table',item?.ticket?.tableName||'—'],
+    ['Operator note',item?.latestOperatorNote||'None'],
     ['Guests',item?.ticket?.guestCount||'—'],['Special',item?.posLine?.specialInstructions||'None']
   ].map(([a,b])=>'<div><small>'+escapeHtml(a)+'</small><strong>'+escapeHtml(b)+'</strong></div>').join('');
   const steps=deriveSteps(),comp=currentComponent(),comps=build?.components||[];
@@ -1198,6 +1304,7 @@ function render(){
   $('lowConfidenceDetection').disabled=live;
   $('completeMockBuild').disabled=live;
   window.GelatoGlassesVoiceUI?.refresh?.();
+  updateKitchenControls();
   const controls={
     startBuild:!live?'Start a demonstration build.':state.device?.virtualPreview?'Read-only preview: choose a paired device for live build actions.':!item?'Waiting for a KDS item.':!state.device?.simulatorWritable?'Requires glasses.manage and kds.update for this location.':'Start a governed build session.',
     autoPlayBuild:'Mock-only demonstration. Switch Mode to Mock.',
@@ -1417,8 +1524,21 @@ function applyCalibration(){
   stage.style.setProperty('--safe-width',calibration.safeWidth+'%');stage.style.setProperty('--safe-height',calibration.safeHeight+'%');
   stage.style.setProperty('--left-eye-x',calibration.leftEyeX+'%');stage.style.setProperty('--left-eye-y',calibration.leftEyeY+'%');
   stage.style.setProperty('--right-eye-x',calibration.rightEyeX+'%');stage.style.setProperty('--right-eye-y',calibration.rightEyeY+'%');
+  // Position the actual left/right HUD independently, not only the editing
+  // guides. Use stage-sized pixel offsets so ±20 corresponds to a noticeable
+  // ±10% adjustment of the full lens surface on every responsive size.
+  const width=Math.max(1,stage.clientWidth||stage.getBoundingClientRect?.().width||1);
+  const height=Math.max(1,stage.clientHeight||stage.getBoundingClientRect?.().height||1);
+  for(const side of ['left','right']){
+    stage.style.setProperty('--'+side+'-eye-shift-x',
+      (Math.round(width*calibration[side+'EyeX']/200*10)/10)+'px');
+    stage.style.setProperty('--'+side+'-eye-shift-y',
+      (Math.round(height*calibration[side+'EyeY']/200*10)/10)+'px');
+  }
+
   for(const [name,r] of Object.entries(calibration.regions)){const el=$(name);if(!el)continue;el.style.setProperty('--region-x',r.x+'%');el.style.setProperty('--region-y',r.y+'%');el.style.setProperty('--region-w',r.w+'%');el.style.setProperty('--region-h',r.h+'%');}
   const controls={hudOpacity:['opacity','%'],hudBrightness:['brightness','%'],hudScale:['scale','%'],safeWidth:['safeWidth','%'],safeHeight:['safeHeight','%'],leftEyeX:['leftEyeX','%'],leftEyeY:['leftEyeY','%'],rightEyeX:['rightEyeX','%'],rightEyeY:['rightEyeY','%']};
+  $('rightWidth').value=String(calibration.regions.hudRight.w);$('rightWidthValue').textContent=String(Math.round(calibration.regions.hudRight.w))+'%';
   for(const [id,[key,suffix]] of Object.entries(controls)){if($(id)){$(id).value=String(calibration[key]);$(id+'Value').textContent=String(calibration[key])+suffix;}}
 }
 function setCalibrationEnabled(enabled){
@@ -1444,6 +1564,12 @@ function factoryCalibration(){calibration=deepClone(calibrationDefaults);saveCal
 for(const [id,key] of Object.entries({hudOpacity:'opacity',hudBrightness:'brightness',hudScale:'scale',safeWidth:'safeWidth',safeHeight:'safeHeight',leftEyeX:'leftEyeX',leftEyeY:'leftEyeY',rightEyeX:'rightEyeX',rightEyeY:'rightEyeY'})){
   $(id).addEventListener('input',e=>{calibration[key]=Number(e.target.value);saveCalibration();});
 }
+$('rightWidth').addEventListener('input',e=>{
+  const region=calibration.regions.hudRight,oldRight=region.x+region.w;
+  region.w=clamp(Number(e.target.value),15,55);
+  region.x=clamp(oldRight-region.w,0,100-region.w);
+  saveCalibration();
+});
 $('calibrationToggle').addEventListener('click',()=>setCalibrationEnabled(!calibrationEnabled));
 $('savePreset').addEventListener('click',savePreset);
 $('deletePreset').addEventListener('click',deletePreset);
@@ -1472,10 +1598,137 @@ function bindRegionEditor(regionName){
 }
 bindRegionEditor('hudRight');bindRegionEditor('hudStatus');bindRegionEditor('hudOrdersRegion');
 refreshPresets();applyCalibration();applyFrameMode();
+// Recompute stage-relative stereo offsets after a responsive resize or tab change.
+if(typeof ResizeObserver==='function'){
+  const glassesCalibrationObserver=new ResizeObserver(()=>applyCalibration());
+  glassesCalibrationObserver.observe($('glassesStage'));
+}else window.addEventListener('resize',applyCalibration);
+
 $('exceptions').addEventListener('click',e=>{const b=e.target.closest('[data-resolve]');if(b)resolveUnexpected(b.dataset.resolve);});
 
-/** Spoken and manual navigation share these read-only preview controls. */
-function simulatorNavigation(action){
+/** Live POS ticket/KDS controls are routed through one authorized server dispatcher.
+ * A browser preview can change kitchen workflow, but cannot fabricate build
+ * validation, create POS sales, or mark observed ingredients as verified. */
+const KITCHEN_COMMANDS=new Set(['start_item','ready_item','start_order','ready_order','hold_order','fire_order','finish_order','item_added']);
+const KITCHEN_TICKET_ACTIONS={start_order:'start',ready_order:'ready',hold_order:'hold',fire_order:'fire',finish_order:'bump'};
+function kitchenWritable(){
+  return state.mode==='mock'||(state.mode==='live'&&!!state.device?.kitchenWritable);
+}
+function updateKitchenControls(){
+  const current=selectedItem(),hasTicket=!!current?.ticket?.checkPublicId;
+  const editable=kitchenWritable()&&!state.kitchenBusy;
+  const status=current?.status||'';
+  const allSame=orderItems().filter(x=>x.ticket?.checkPublicId===current?.ticket?.checkPublicId);
+  const buttonRules={
+    start_item:editable&&status==='queued'&&!state.build,
+    ready_item:editable&&status==='in_progress'&&!state.build,
+    start_order:editable&&hasTicket&&allSame.some(x=>x.status==='queued')&&!state.build,
+    ready_order:editable&&hasTicket&&allSame.some(x=>x.status==='in_progress')&&!state.build,
+    hold_order:editable&&hasTicket&&allSame.some(x=>x.status==='queued')&&!state.build,
+    fire_order:editable&&hasTicket&&allSame.some(x=>x.status==='held')&&!state.build,
+    finish_order:editable&&hasTicket&&!(state.device?.stationPublicId)&&allSame.length>0&&
+      allSame.every(x=>x.status==='ready')&&!state.build,
+    item_added:editable&&['queued','in_progress','ready'].includes(status)&&!state.build,
+    next_item:!state.build&&orderItems().length>0,
+    previous_item:!state.build&&orderItems().length>0,
+    next:!!current&&!state.build,
+    previous:!!current&&!state.build
+  };
+  for(const node of document.querySelectorAll('[data-glasses-command]')){
+    const command=node.dataset.glassesCommand;
+    if(Object.hasOwn(buttonRules,command)){
+      node.disabled=!buttonRules[command];
+      node.setAttribute('aria-disabled',node.disabled?'true':'false');
+      node.title=node.disabled?(state.mode==='live'&&!state.device?.kitchenWritable?
+        'Requires kds.view and kds.update for this restaurant location.':
+        command==='finish_order'&&state.device?.stationPublicId?
+        'Choose All stations / Expo to finish an entire ticket.':
+        state.build?'Finish the active glasses build first.':
+        'This command is unavailable for the selected item or its current status.'):'';
+    }
+  }
+  const detail=$('simKitchenCommandStatus');
+  if(detail)detail.textContent=state.mode==='mock'?'MOCK · no kitchen writes':
+    state.device?.kitchenWritable?'LIVE KDS · authorized updates':'VIEW ONLY · Kitchen update permission required';
+}
+async function kitchenCommand(action,{spoken=false}={}){
+  const item=selectedItem();
+  if(!item)return {ok:false,message:'Choose a live kitchen item first.'};
+  if(!kitchenWritable())return {ok:false,message:'You do not have permission to update KDS at this location.'};
+  if(state.build)return {ok:false,message:'Finish the active glasses build before changing the kitchen workflow.'};
+  if(state.kitchenBusy)return {ok:false,message:'A kitchen action is already being processed.'};
+  const ticket=item.ticket?.checkPublicId||'';
+  const matching=orderItems().filter(x=>x.ticket?.checkPublicId===ticket);
+  const matchingByStatus=status=>matching.filter(x=>x.status===status);
+  if(action==='finish_order'&&(!matching.length||matching.some(x=>x.status!=='ready')))
+    return {ok:false,message:'All ticket items must be marked Ready before finishing at Expo.'};
+  if(action==='finish_order'){
+    if(state.device?.stationPublicId)return {ok:false,message:'Choose All stations / Expo before finishing a ticket.'};
+    const confirmation=state.finishConfirmation,now=Date.now();
+    if(!confirmation||confirmation.ticket!==ticket||confirmation.expires<now){
+      state.finishConfirmation={ticket,expires:now+12000};
+      return {ok:true,message:'Confirm finish ticket #'+(item.ticket?.checkNumber||'')+
+        ': all active items must be Ready. Press Finish Ticket or repeat “finish order” within 12 seconds.'};
+    }
+  }else state.finishConfirmation=null;
+  let note='',data={};
+  if(action==='item_added'){
+    const input=$('simItemNoteInput');
+    note=String(input?.value||'').trim();
+    if(!note&&spoken){
+      const raw=String(deriveSteps()[Math.min(state.previewStepIndex||0,Math.max(0,deriveSteps().length-1))]||'').trim();
+      note=raw?('Operator reported added: '+raw.replace(/^add\s+/i,'')):'';
+    }
+    if(!note&&!spoken&&typeof window.prompt==='function'){
+      note=String(window.prompt('What was added? This saves a kitchen note, not a POS change or ingredient verification.','')||'').trim();
+    }
+    if(note.length<3||note.length>250)
+      return {ok:false,message:'Describe what was added (3–250 characters). This will be a kitchen note only.'};
+    data={kdsItemPublicId:item.kdsItemPublicId,expectedStatus:item.status,note};
+  }else if(action==='start_item'||action==='ready_item'){
+    const expected=action==='start_item'?'queued':'in_progress';
+    if(item.status!==expected)return {ok:false,message:'Item is currently '+item.status+'. Refresh to confirm its state.'};
+    data={kdsItemPublicId:item.kdsItemPublicId,expectedStatus:expected,status:action==='start_item'?'in_progress':'ready'};
+  }else{
+    const actionStatus={start_order:'queued',ready_order:'in_progress',hold_order:'queued',fire_order:'held'};
+    if(action!=='finish_order'&&!matchingByStatus(actionStatus[action]).length)
+      return {ok:false,message:'No eligible items on ticket #'+(item.ticket?.checkNumber||'')+'.'};
+    data={checkPublicId:ticket,ticketAction:KITCHEN_TICKET_ACTIONS[action]};
+  }
+  state.kitchenBusy=true;updateKitchenControls();
+  try{
+    if(state.mode==='mock'){
+      if(action==='item_added')item.latestOperatorNote=note;
+      else if(action==='start_item'||action==='ready_item')item.status=data.status;
+      else {
+        const from={start_order:'queued',ready_order:'in_progress',hold_order:'queued',fire_order:'held',finish_order:'ready'}[action];
+        const to={start_order:'in_progress',ready_order:'ready',hold_order:'held',fire_order:'queued',finish_order:'completed'}[action];
+        matching.forEach(x=>{if(x.status===from)x.status=to;});
+        state.work.items=state.work.items.filter(x=>x.status!=='completed');
+      }
+    }else{
+      const type=action==='item_added'?'kds.item.note':
+        ['start_item','ready_item'].includes(action)?'kds.item.transition':'kds.ticket.action';
+      await api(type,data);
+    }
+    state.finishConfirmation=null;
+    if(action==='item_added'&&$('simItemNoteInput'))$('simItemNoteInput').value='';
+    if(state.mode==='live')await syncLiveStationWork(true);
+    else render();
+    const message=action==='item_added'?'Kitchen note saved to the selected item. POS and ingredient verification were not changed.':
+      action==='finish_order'?'Ticket finished at Expo; POS payment remains separate.':
+      action.replaceAll('_',' ')+' completed on '+(item.ticket?.checkNumber||'ticket')+'.';
+    log(state.mode==='live'?'KDS':'MOCK',message);
+    return {ok:true,message};
+  }catch(error){
+    log('KDS',String(error?.message||'Kitchen action failed.'));
+    return {ok:false,message:String(error?.message||'Kitchen action failed.')};
+  }finally{state.kitchenBusy=false;updateKitchenControls();}
+}
+
+/** Spoken and manual navigation share the same real kitchen command entry point. */
+function simulatorNavigation(action,options={}){
+  if(KITCHEN_COMMANDS.has(action))return kitchenCommand(action,options);
   const items=orderItems(),current=selectedItem();
   if(action==='next_item'||action==='previous_item'){
     if(!items.length)return {ok:false,message:'No kitchen orders yet. Send an order to KDS first.'};
@@ -1504,12 +1757,12 @@ function simulatorNavigation(action){
     if(!current)return {ok:false,message:'No current item. Waiting for kitchen orders.'};
     const steps=deriveSteps();return {ok:true,message:'Ticket '+(current.ticket?.checkNumber||'')+', '+(current.posLine?.name||'Kitchen item')+'. '+(steps[state.previewStepIndex||0]||'Review item')+'.'};
   }
-  if(action==='status')return {ok:true,message:state.mode==='mock'?'Mock demonstration; sample orders only.':'Live display, '+items.length+' KDS item'+(items.length===1?'':'s')+'. '+(current?'Selected '+(current.posLine?.name||'item')+'.':'No active KDS work.')+(state.device?.virtualPreview?' Read-only browser preview.':' Paired device selected.')};
+  if(action==='status')return {ok:true,message:state.mode==='mock'?'Mock demonstration; sample orders only.':'Live display, '+items.length+' KDS item'+(items.length===1?'':'s')+'. '+(current?'Selected '+(current.posLine?.name||'item')+'.':'No active KDS work.')+(state.device?.virtualPreview?(state.device?.kitchenWritable?' Kitchen controls enabled.':' View-only; kitchen changes require KDS update permission.'):' Paired device selected.')};
   return {ok:false,message:'Unknown command. Try next, next item, previous, item added, repeat, or status.'};
 }
 window.GelatoGlassesNavigation={dispatch:simulatorNavigation,context:()=>({
   mode:state.mode,items:orderItems().length,item:selectedItem()?.posLine?.name||null,
   step:(state.previewStepIndex||0)+1,virtual:!!state.device?.virtualPreview
 })};
-(async()=>{await loadDevices();const cp=cameraPrefs();if(cp.resolution)$('cameraResolution').value=cp.resolution;if(cp.fit)$('cameraFit').value=cp.fit;$('cameraMirror').checked=!!cp.mirror;applyCameraPresentation();await enumerateCameras();if(!cameraSupported())setCameraHealth('error','UNSUPPORTED');refreshPresets();applyCalibration();render();if(state.device){startLiveStationSync();}else{setSyncBadge('error','NO DISPLAY');}setInterval(renderTopStatus,30000);renderRuntimeRecovery();refreshDeviceHealth();setInterval(refreshDeviceHealth,5000);const savedResume=recoveryStored();if(savedResume?.devicePublicId&&state.device?.publicId===savedResume.devicePublicId&&!state.device.virtualPreview){resumeRuntimeRecovery('app_restart_resume');}log('SYSTEM','Simulator ready. Pizza Line Reference HUD loaded.');})();
+(async()=>{await loadDevices();const cp=cameraPrefs();if(cp.resolution)$('cameraResolution').value=cp.resolution;if(cp.fit)$('cameraFit').value=cp.fit;$('cameraMirror').checked=!!cp.mirror;applyCameraPresentation();await enumerateCameras();if(!cameraSupported())setCameraHealth('error','UNSUPPORTED');refreshPresets();applyCalibration();render();if(state.device){startLiveStationSync();}else{setSyncBadge('error','NO DISPLAY');}setInterval(renderTopStatus,30000);setInterval(tickLiveTicketTimers,1000);renderRuntimeRecovery();refreshDeviceHealth();setInterval(refreshDeviceHealth,5000);const savedResume=recoveryStored();if(savedResume?.devicePublicId&&state.device?.publicId===savedResume.devicePublicId&&!state.device.virtualPreview){resumeRuntimeRecovery('app_restart_resume');}log('SYSTEM','Simulator ready. Pizza Line Reference HUD loaded.');})();
 })();

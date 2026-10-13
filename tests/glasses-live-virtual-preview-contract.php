@@ -31,6 +31,7 @@ $list=glasses_simulator_virtual_devices($db,$owner);
 previewAssert(count($list)===2,'one location creates All stations and Pizza Line displays');
 previewAssert($list[0]['publicId']==='preview:3:all'&&$list[0]['virtualPreview']===true,'default is hardware-free all-stations display');
 previewAssert($list[1]['publicId']==='preview:3:pizza-line','per-station browser preview available');
+previewAssert($list[0]['kitchenWritable']===true,'KDS-authorized users may update kitchen status without paired hardware');
 previewAssert($list[0]['simulatorWritable']===false&&$list[1]['simulatorWritable']===false,'virtual previews are never writable');
 $preview=glasses_simulator_preview_device($db,$owner,'preview:3:all',false);
 previewAssert($preview['id']===0&&$preview['station_public_id']===null,'unrouted all-stations projection uses no device record');
@@ -59,7 +60,7 @@ previewAssert(str_contains($js,'if(state.device?.virtualPreview)return false;'),
 previewAssert(str_contains($js,'startLiveStationSync();'),'automatic live synchronization starts at load');
 previewAssert(str_contains($js,'simControlAudit'),'disabled controls audit present');
 previewAssert(str_contains($php,'id="simLiveGuide"')&&str_contains($php,'id="simControlAudit"'),'visible live/readiness status present');
-previewAssert(str_contains($api,'glasses_simulator_preview_work($pdo,$device)'),'GET station updates support virtual display');
+previewAssert(str_contains($api,'glasses_simulator_work_with_notes($pdo,$device)'),'GET station updates support operator notes');
 previewAssert(str_contains((string)file_get_contents(__DIR__.'/../includes/glasses-simulator.php'),'kds_production_board($pdo,$org,$locationId,$stationId,false)'),'virtual preview reads real KDS board');
 previewAssert(!str_contains($js,'const state={mode:\'mock\''),'cannot silently regress to Mock boot');
 echo "glasses-live-virtual-preview=ok\n";

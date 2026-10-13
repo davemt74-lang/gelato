@@ -32,7 +32,10 @@ function glasses_simulator_virtual_devices(PDO $pdo,array $user): array
             'platform'=>'browser_preview','status'=>'active','locationId'=>$id,
             'locationName'=>(string)$location['name'],
             'stationPublicId'=>null,'stationName'=>'All kitchen stations',
-            'simulatorWritable'=>false,'virtualPreview'=>true
+            'simulatorWritable'=>false,'virtualPreview'=>true,
+            'kitchenWritable'=>app_has_permission('kds.view',$user)&&app_has_permission('kds.update',$user)
+                &&operational_location_allowed($pdo,$user,'kds.view',$id)
+                &&operational_location_allowed($pdo,$user,'kds.update',$id)
         ];
         $out[]=['publicId'=>'preview:'.$id.':all']+$base;
         $stations=$pdo->prepare("SELECT public_id,name FROM kds_stations WHERE organization_id=? AND location_id=? AND status='active' ORDER BY name,id");
@@ -110,6 +113,9 @@ function glasses_simulator_devices(PDO $pdo,array $user): array
         if((string)($device['status']??'')!=='active')continue;
         $locationId=(int)($device['locationId']??0);
         if($locationId<1||!operational_location_allowed($pdo,$user,'glasses.view',$locationId))continue;
+        $device['kitchenWritable']=app_has_permission('kds.view',$user)&&app_has_permission('kds.update',$user)
+            &&operational_location_allowed($pdo,$user,'kds.view',$locationId)
+            &&operational_location_allowed($pdo,$user,'kds.update',$locationId);
         $device['simulatorWritable']=glasses_simulator_can_write($user)
             && operational_location_allowed($pdo,$user,'glasses.manage',$locationId)
             && operational_location_allowed($pdo,$user,'kds.update',$locationId);
@@ -148,6 +154,109 @@ function glasses_simulator_build_payload(PDO $pdo,array $device,string $sessionP
     return glasses_build_payload($pdo,$org,$sessionPublicId);
 }
 
+
+/** KDS controls are separate from physical glasses builds. A virtual display
+ * may update only scoped, authenticated kitchen state, never fabricate vision evidence. */
+function glasses_simulator_kds_command(PDO $pdo,array $user,array $device,array $in): array
+{
+    require_once __DIR__.'/online-order-lifecycle.php';
+    $org=(int)$user['organization_id'];
+    $uid=(int)$user['id'];
+    $locationId=(int)$device['location_id'];
+    if(!app_has_permission('kds.view',$user)||!app_has_permission('kds.update',$user)
+        ||!operational_location_allowed($pdo,$user,'kds.view',$locationId)
+        ||!operational_location_allowed($pdo,$user,'kds.update',$locationId)){
+        throw new DomainException('Kitchen Display update permission is required at this location.');
+    }
+    $action=(string)($in['action']??'');
+    $station=(string)($device['station_public_id']??'');
+    $stationId=(int)($device['station_id']??0);
+    $checkPublicId=trim((string)($in['checkPublicId']??''));
+    if($action==='kds.ticket.action'){
+        $ticketAction=trim((string)($in['ticketAction']??''));
+        if(!in_array($ticketAction,['fire','hold','start','ready','bump'],true))
+            throw new InvalidArgumentException('Unsupported kitchen ticket action.');
+        if($checkPublicId==='')throw new InvalidArgumentException('Select a live kitchen ticket.');
+        $result=kds_production_ticket_action($pdo,$org,$locationId,$checkPublicId,$ticketAction,$station!==''?$station:null,$uid);
+        online_order_lifecycle_sync_safe($pdo,$org,$checkPublicId,$uid);
+        app_audit($pdo,$org,$uid,'glasses.simulator_ticket_action','pos_check',$checkPublicId,null,[
+            'locationId'=>$locationId,'station'=>$station,'action'=>$ticketAction,'affected'=>(int)($result['affected']??0)
+        ]);
+        return ['kdsResult'=>$result];
+    }
+    if(!in_array($action,['kds.item.transition','kds.item.note'],true))
+        throw new InvalidArgumentException('Unsupported kitchen command.');
+    $itemPublicId=trim((string)($in['kdsItemPublicId']??''));
+    if($itemPublicId==='')throw new InvalidArgumentException('Select a kitchen item.');
+    $item=kds_item($pdo,$org,$itemPublicId,false);
+    if((int)$item['location_id']!==$locationId||
+        ($stationId>0&&(int)$item['station_id']!==$stationId))
+        throw new DomainException('The selected kitchen item is outside this device or station scope.');
+    $expected=trim((string)($in['expectedStatus']??''));
+    if($expected===''||!hash_equals($expected,(string)$item['status']))
+        throw new InvalidArgumentException('Kitchen status changed. Refresh the live orders before retrying.');
+    if($action==='kds.item.transition'){
+        $to=trim((string)($in['status']??''));
+        if(!in_array($to,['in_progress','ready'],true))
+            throw new InvalidArgumentException('Only Start Item and Item Ready are available here.');
+        $updated=kds_transition($pdo,$org,$itemPublicId,$to,$uid,'Glasses simulator operator control.');
+        online_order_lifecycle_sync_by_check_id_safe($pdo,$org,(int)$updated['check_id'],$uid);
+        app_audit($pdo,$org,$uid,'glasses.simulator_item_transition','kds_order_item',$itemPublicId,null,[
+            'locationId'=>$locationId,'from'=>$expected,'to'=>$to
+        ]);
+        return ['kdsResult'=>['kdsItemPublicId'=>$itemPublicId,'status'=>(string)$updated['status']]];
+    }
+    if(!in_array($expected,['queued','in_progress','ready'],true))
+        throw new InvalidArgumentException('Cannot add a kitchen note to a completed, cancelled or held item.');
+    $note=trim((string)($in['note']??''));
+    if(mb_strlen($note,'UTF-8')<3||mb_strlen($note,'UTF-8')>250)
+        throw new InvalidArgumentException('Enter a short item note (3–250 characters).');
+    kds_transaction($pdo,function()use($pdo,$org,$itemPublicId,$expected,$note,$uid):void{
+        $locked=kds_item($pdo,$org,$itemPublicId,true);
+        if((string)$locked['status']!==$expected)
+            throw new InvalidArgumentException('Kitchen item changed while writing the note. Refresh and retry.');
+        kds_event($pdo,$org,(int)$locked['id'],'glasses_item_note',$expected,$expected,$note,$uid);
+    });
+    app_audit($pdo,$org,$uid,'glasses.simulator_item_note','kds_order_item',$itemPublicId,null,[
+        'locationId'=>$locationId,'noteLength'=>mb_strlen($note,'UTF-8')
+    ]);
+    return ['kdsResult'=>['kdsItemPublicId'=>$itemPublicId,'noted'=>true,'note'=>$note]];
+}
+
+/** Batch latest operator notes into the live HUD; avoids N+1 per-item queries. */
+function glasses_simulator_work_with_notes(PDO $pdo,array $device): array
+{
+    $work=!empty($device['virtual_preview'])
+        ? glasses_simulator_preview_work($pdo,$device)
+        : glasses_current_work($pdo,$device);
+    $items=(array)($work['items']??[]);
+    if(!$items)return $work;
+    $ids=array_values(array_unique(array_filter(array_map(
+        static fn(array $item):string=>(string)($item['kdsItemPublicId']??''),$items
+    ))));
+    if(!$ids)return $work;
+    $ids=array_slice($ids,0,150);
+    $placeholders=implode(',',array_fill(0,count($ids),'?'));
+    $query=$pdo->prepare("SELECT k.public_id, e.note FROM kds_order_events e
+        JOIN kds_order_items k ON k.organization_id=e.organization_id AND k.id=e.kds_order_item_id
+        WHERE e.organization_id=? AND e.event_type='glasses_item_note' AND k.public_id IN ($placeholders)
+        ORDER BY e.id DESC");
+    $query->execute(array_merge([(int)$device['organization_id']],$ids));
+    $last=[];
+    foreach($query->fetchAll(PDO::FETCH_ASSOC) as $row){
+        $id=(string)$row['public_id'];
+        if(!array_key_exists($id,$last))$last[$id]=(string)$row['note'];
+    }
+    foreach($work['items'] as &$item){
+        $item['latestOperatorNote']=$last[(string)$item['kdsItemPublicId']]??null;
+    }
+    unset($item);
+    if(is_array($work['focusItem']??null)){
+        $work['focusItem']['latestOperatorNote']=$last[(string)$work['focusItem']['kdsItemPublicId']]??null;
+    }
+    return $work;
+}
+
 function glasses_simulator_dispatch(PDO $pdo,array $user,array $in): array
 {
     $action=trim((string)($in['action']??''));
@@ -156,6 +265,11 @@ function glasses_simulator_dispatch(PDO $pdo,array $user,array $in): array
         'validation.evaluate','handoff.expo','vision.shadow_report','vision.shadow_complete'
     ],true);
     $device=glasses_simulator_device($pdo,$user,(string)($in['devicePublicId']??''),$write);
+
+    if(in_array($action,['kds.ticket.action','kds.item.transition','kds.item.note'],true)){
+        if(!kds_ready($pdo))throw new DomainException('Kitchen Display is not configured.');
+        return glasses_simulator_kds_command($pdo,$user,$device,$in);
+    }
 
     if($action==='hardware.cook_ux.evaluate'){
         return ['cookUx'=>glasses_cook_ux_evaluate((array)($in['report']??[]))];
@@ -200,7 +314,7 @@ function glasses_simulator_dispatch(PDO $pdo,array $user,array $in): array
     }
 
     if($action==='work'){
-        return ['work'=>!empty($device['virtual_preview'])?glasses_simulator_preview_work($pdo,$device):glasses_current_work($pdo,$device)];
+        return ['work'=>glasses_simulator_work_with_notes($pdo,$device)];
     }
 
     if($action==='build.start'){

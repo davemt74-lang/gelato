@@ -346,6 +346,7 @@
       button.setAttribute('aria-label',button.title);
       button.setAttribute('aria-pressed',S.listening?'true':'false');
     }
+    window.GelatoVoicePresence?.report?.('global-agent',!!S.micActive,S.micActive?(S.listening?'active':'wake_standby'):'off');
     window.dispatchEvent(new CustomEvent('gelato-agent-listening-change',{
       detail:{listening:S.listening,microphoneActive:S.micActive,
         wakeStandby:S.wakeStandby,savedListening:S.savedListening,

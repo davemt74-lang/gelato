@@ -55,6 +55,9 @@ on:
       - 'assets/js/glasses-simulator-voice.js'
       - 'assets/js/glasses-voice-device.js'
       - 'assets/js/glasses-simulator-tabs.js'
+      - 'assets/js/glasses-multicamera.js'
+      - 'js/voice-session-presence.js'
+      - 'tests/glasses-training-foundation.test.js'
       - 'assets/css/glasses-simulator-device-first.css'
       - 'tests/glasses-voice-device.test.js'
       - 'tests/glasses-voice-recovery.test.js'
@@ -62,6 +65,10 @@ on:
       - 'assets/css/glasses-simulator-hud-ux.css'
       - 'tests/glasses-hud-voice-contract.php'
       - 'tests/glasses-voice-navigation.test.js'
+      - 'tests/glasses-simulator-csrf.test.js'
+      - 'tests/glasses-live-kds-commands.test.js'
+      - 'tests/glasses-hud-manual-voice-parity.test.js'
+      - 'tests/glasses-live-kds-contract.php'
       - 'assets/css/glasses-web-simulator.css'
       - 'tests/glasses-live-virtual-preview-contract.php'
       - 'glasses-vision-lab.php'
@@ -181,6 +188,9 @@ jobs:
             assets/js/glasses-simulator-voice.js
             assets/js/glasses-voice-device.js
             assets/js/glasses-simulator-tabs.js
+            assets/js/glasses-multicamera.js
+            js/voice-session-presence.js
+            tests/glasses-training-foundation.test.js
             assets/css/glasses-simulator-device-first.css
             tests/glasses-voice-device.test.js
             tests/glasses-voice-recovery.test.js
@@ -188,6 +198,10 @@ jobs:
             assets/css/glasses-simulator-hud-ux.css
             tests/glasses-hud-voice-contract.php
             tests/glasses-voice-navigation.test.js
+            tests/glasses-simulator-csrf.test.js
+            tests/glasses-live-kds-commands.test.js
+            tests/glasses-hud-manual-voice-parity.test.js
+            tests/glasses-live-kds-contract.php
             includes/glasses-simulator.php
             tests/glasses-live-virtual-preview-contract.php
             glasses-pos-kds-test.php
@@ -255,10 +269,17 @@ jobs:
           node --check assets/js/glasses-simulator-voice.js
           node --check assets/js/glasses-voice-device.js
           node --check assets/js/glasses-simulator-tabs.js
+          node --check assets/js/glasses-multicamera.js
+          node --check js/voice-session-presence.js
+          node tests/glasses-training-foundation.test.js
           node tests/glasses-voice-device.test.js
           node tests/glasses-voice-recovery.test.js
           php tests/glasses-device-tabs-contract.php
           node tests/glasses-voice-navigation.test.js
+          node tests/glasses-simulator-csrf.test.js
+          node tests/glasses-live-kds-commands.test.js
+          node tests/glasses-hud-manual-voice-parity.test.js
+          php tests/glasses-live-kds-contract.php
           node --check assets/js/glasses-web-simulator.js
           node --check assets/js/glasses-pos-kds-test.js
 

@@ -34,6 +34,7 @@
     if(next==='off') {state.consented=false;state.retries=0;state.microphoneActive=false;}
     if(['blocked','failed','paused'].includes(next))state.microphoneActive=false;
     log(next,error);
+    window.GelatoVoicePresence?.report?.('glasses',state.microphoneActive,next);
     emit();return true;
   }
   const recoveryDelay = attempt => attempt>=1 && attempt<=MAX_RETRIES ? RETRY_DELAYS[attempt-1] : null;

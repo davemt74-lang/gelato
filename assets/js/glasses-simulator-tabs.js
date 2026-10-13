@@ -26,8 +26,7 @@
   }
   function line(label,value){return '<div class="sgv-line"><span>'+esc(label)+'</span><strong>'+esc(value)+'</strong></div>';}
   function voiceUI(){
-    const target=$('simVoiceCertification');
-    if(!target)return;
+    // Voice diagnostics and Overview are created by this panel, not a nonexistent target.
     const v=window.GelatoGlassesVoiceDevice?.snapshot?.()||{};
     const r=window.GelatoGlassesVoiceUI?.status?.()||{};
     const summary=$('simVoiceCertificationSummary');
@@ -56,7 +55,16 @@
       if(!previous)result.textContent='Select Run Certification to test this browser microphone. No audio is recorded or stored.';
     }
     const live=$('simOverviewVoiceStatus');
-    if(live)live.textContent=r.microphoneActive?'Mic active':r.enabled?'Recovering / paused':'Mic off';
+    const remote=window.GelatoVoicePresence?.snapshot?.().remote||[];
+    const another=remote.find(peer=>peer.active);
+    if(live)live.textContent=r.microphoneActive?'Glasses mic active · Listening':
+      r.enabled?'Glasses mic '+(r.state==='starting'?'starting':r.state==='recovering'?'recovering':'paused')+
+      (another?' · Another Gelato tab also listening':''):
+      another?'Glasses mic off · '+(another.source==='global-agent'?'Global Agent':another.source==='timeclock'?'Time Clock':'Glasses')+' mic active in another tab':
+      'Glasses mic off · Click Enable Voice';
+    const input=$('simVoicePermissionNote');
+    if(input)input.textContent='Microphone permission allows access; it does not mean this page is capturing audio.';
+
   }
   async function certify(){
     if(diagnosticsBusy)return;
@@ -89,7 +97,7 @@
     rail.prepend(container);rail.prepend(tabs);
     const overview=section('overview'),voice=section('voice');
     const intro=document.createElement('div');intro.className='sgv-intro';
-    intro.innerHTML='<strong>Live glasses display</strong><span>Read-only browser preview; actions remain permission-scoped.</span><span id="simOverviewVoiceStatus">Mic off</span>';
+    intro.innerHTML='<strong>Live glasses display</strong><span>Live KDS updates are permission-scoped; glasses build validation still requires a paired device.</span><span id="simOverviewVoiceStatus" role="status" aria-live="polite">Checking microphone…</span><span id="simVoicePermissionNote">Browser permission is not an active microphone session.</span>';
     overview.appendChild(intro);
     // Preserve existing IDs, listeners and live objects: move nodes, never clone.
     move(stage.querySelector('.sim-status-row'),overview);
@@ -99,10 +107,10 @@
       const groups=Array.from(nav.querySelectorAll(':scope > .sim-navigation-group'));
       const voiceBlock=document.createElement('section');voiceBlock.className='console-card sgv-voice-controls';
       voiceBlock.innerHTML='<div class="console-heading"><div><small>VOICE CONTROLS</small><strong>Hands-free navigation</strong></div></div>';
-      if(groups[2])move(groups[2],voiceBlock);
+      const voiceGroup=groups.find(group=>group.querySelector('#simVoiceToggle'));
+      if(voiceGroup)move(voiceGroup,voiceBlock);
       move($('simVoiceFeedback'),voiceBlock);
-      move($('simVoiceHelp'),voiceBlock);
-      voice.appendChild(voiceBlock);
+        voice.appendChild(voiceBlock);
       move(nav,overview);
     }
     const diagnostics=document.createElement('section');diagnostics.className='console-card sgv-voice-cert';
@@ -135,6 +143,7 @@
     // Legacy advanced wrapper was an organization aid, not a feature. Its cards are moved intact.
     rail.querySelector('#simAdvancedSettings')?.remove();
     window.addEventListener('gelato-glasses-voice-device-change',voiceUI);
+    window.addEventListener('gelato-voice-presence-change',voiceUI);
     window.addEventListener('gelato-glasses-voice-status',voiceUI);
     select('overview');voiceUI();
   }

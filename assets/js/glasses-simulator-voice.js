@@ -28,6 +28,14 @@
     phrase=phrase.replace(/^(?:okay |ok |hey |gelato |glasses |please )+/g,'').trim();
     if(/^(?:stop (?:listening|voice)|turn (?:off|voice off)|microphone off)$/.test(phrase))return 'stop_voice';
     if(/^(?:help|commands|voice commands|what can i say)$/.test(phrase))return 'help';
+    if(/^(?:start|begin|work on|prepare) (?:the )?(?:ticket|order)$/.test(phrase))return 'start_order';
+    if(/^(?:start|begin) (?:the )?(?:current )?item$/.test(phrase))return 'start_item';
+    if(/^(?:mark )?(?:the )?(?:current )?item (?:ready|done|finished)$/.test(phrase))return 'ready_item';
+    if(/^(?:mark )?(?:the )?(?:ticket|order) ready$/.test(phrase))return 'ready_order';
+    if(/^(?:finish|complete|bump) (?:the )?(?:ticket|order)$/.test(phrase))return 'finish_order';
+    if(/^(?:hold|pause) (?:the )?(?:ticket|order)$/.test(phrase))return 'hold_order';
+    if(/^(?:fire|release) (?:the )?(?:ticket|order)$/.test(phrase))return 'fire_order';
+    if(/^(?:note added|note ingredient added|i added an item)$/.test(phrase))return 'item_added';
     if(/^(?:next (?:item|order|ticket)|skip (?:item|order|ticket)|following (?:item|order))$/.test(phrase))return 'next_item';
     if(/^(?:previous (?:item|order|ticket)|last (?:item|order))$/.test(phrase))return 'previous_item';
     if(/^(?:item added|ingredient added|added item|i added it|added|mark step done)$/.test(phrase))return 'item_added';
@@ -40,20 +48,27 @@
   function dispatch(command,{spoken=false}={}){
     if(command==='stop_voice'){stopVoice();flash('Voice listening stopped.');return;}
     if(command==='help'){
-      const message='Say next for the next build instruction, next item for the next POS item, item added to acknowledge a preview step, previous, repeat, status, or stop listening.';
+      const message='Say start ticket, start item, next item, item ready, ticket ready, finish ticket twice to confirm, item added, hold ticket, fire ticket, repeat, or status.';
       feedback(message);flash(message);if(spoken)announce(message);return;
     }
     const provider=nav();
     if(!provider||typeof provider.dispatch!=='function'){
       feedback('Simulator is still starting. Try again in a moment.','error');return;
     }
-    const result=provider.dispatch(command)||{ok:false,message:'Command failed.'};
-    feedback(result.message,result.ok?'ready':'error');
-    flash(result.message);
-    if(spoken)announce(result.message);
+    const complete=result=>{
+      const outcome=result||{ok:false,message:'Command failed.'};
+      feedback(outcome.message,outcome.ok?'ready':'error');
+      flash(outcome.message);
+      if(spoken)announce(outcome.message);
+    };
+    try{
+      const result=provider.dispatch(command,{spoken});
+      if(result&&typeof result.then==='function')void result.then(complete).catch(e=>complete({ok:false,message:e?.message||'Kitchen command failed.'}));
+      else complete(result);
+    }catch(e){complete({ok:false,message:e?.message||'Kitchen command failed.'});}
   }
   function commandFromSpeech(transcript){
-    feedback('Heard: '+transcript,'ready');
+    feedback('Voice command received.','ready');
     const action=normalizePhrase(transcript);
     if(!action){
       const message='Command not recognized. Try next, next item, item added, repeat, or status.';
@@ -237,6 +252,15 @@
     ['simNavItemAdded','item_added'],['simNavRepeat','repeat']
   ];
   for(const [id,command] of commands)$(id)?.addEventListener('click',()=>dispatch(command));
+  // HUD overlay buttons and voice use the same action dispatcher and permissions.
+  document.addEventListener('click',event=>{
+    const button=event.target?.closest?.('[data-glasses-command]');
+    if(!button||button.disabled)return;
+    const action=button.dataset.glassesCommand;
+    if(!action)return;
+    dispatch(action,{spoken:false});
+  });
+
   toggle?.addEventListener('click',startVoice);
   $('simVoiceHelp')?.addEventListener('click',()=>dispatch('help'));
   $('simViewHudOnly')?.addEventListener('click',()=>frame('none'));
