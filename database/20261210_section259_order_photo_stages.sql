@@ -16,6 +16,7 @@ CREATE TABLE glasses_order_photo_stages (
  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
  PRIMARY KEY (id),
  UNIQUE KEY uq_order_photo_stage (organization_id,kds_item_id,stage),
+ UNIQUE KEY uq_order_photo_unique_image (organization_id,photo_library_id),
  KEY idx_order_photo_stage_location (organization_id,location_id,status,reviewed_at),
  CONSTRAINT fk_order_photo_stage_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
  CONSTRAINT fk_order_photo_stage_location FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE,
