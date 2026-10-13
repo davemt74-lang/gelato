@@ -99,7 +99,8 @@
       const groups=Array.from(nav.querySelectorAll(':scope > .sim-navigation-group'));
       const voiceBlock=document.createElement('section');voiceBlock.className='console-card sgv-voice-controls';
       voiceBlock.innerHTML='<div class="console-heading"><div><small>VOICE CONTROLS</small><strong>Hands-free navigation</strong></div></div>';
-      if(groups[2])move(groups[2],voiceBlock);
+      const voiceGroup=groups.find(group=>group.querySelector('#simVoiceToggle'));
+      if(voiceGroup)move(voiceGroup,voiceBlock);
       move($('simVoiceFeedback'),voiceBlock);
       move($('simVoiceHelp'),voiceBlock);
       voice.appendChild(voiceBlock);
