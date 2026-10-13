@@ -60,7 +60,7 @@ assert.match(html,/assets\/js\/glasses-item-assembly\.js/);
 assert.doesNotMatch(html,/id="hudIngredientAdded"|id="hudIngredientSkip"/,'no duplicated large Added/Skip lens buttons');
 assert.match(main,/data-hud-ingredient-action=/,'small per-ingredient Added/Skip icons are rendered by ingredient row');
 assert.match(main,/data-hud-ingredient-index=/,'each icon is bound to its own ingredient index');
-assert.match(main,/options\\.ingredientId/,'row actions address the selected ingredient, not just the next row');
+assert.match(main,/options\.ingredientId/,'row actions address the selected ingredient, not just the next row');
 assert.match(main,/operator_row_icon/,'per-row operator acknowledgements retain source');
 assert.match(voice,/return 'ingredient_added'/);
 assert.match(voice,/return 'skip_ingredient'/);
