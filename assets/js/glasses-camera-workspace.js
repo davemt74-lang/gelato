@@ -317,7 +317,10 @@
     photo.id=id;photo.mediaPublicId=photo.uploadedMediaPublicId;
     return {id,mediaPublicId:photo.uploadedMediaPublicId};
   }
-  window.GelatoCameraWorkspace={mount,select,refresh,persistOrderPhoto,getSavedPhotos:slot=>S.photos.filter(p=>p.slot===slot),status:()=>({active:S.active,locationId:S.locationId,photos:S.photos.length,local:S.local.length})};
+  window.GelatoCameraWorkspace={mount,select,refresh,persistOrderPhoto,
+    referenceMatches:(photo,menuItemId)=>metric()?.compare?.(photo?.fingerprint?.hash||photo?.hash,
+      S.photos.filter(p=>p.isReference&&p.menuItemId===menuItemId),{slot:photo?.slot})||[],
+    getSavedPhotos:slot=>S.photos.filter(p=>p.slot===slot),status:()=>({active:S.active,locationId:S.locationId,photos:S.photos.length,local:S.local.length})};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});
   else mount();
 })();

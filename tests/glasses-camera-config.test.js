@@ -35,7 +35,7 @@ assert.match(css,/\.camera-zone-editing \.camera-capture-zone/);
 assert.match(simulator,/cameraStartEpoch/);
 assert.match(simulator,/window\.GelatoCameraConfiguration\?\.isEnabled\(1\)!==true/);
 assert.match(camera,/window\.GelatoCameraConfiguration\?\.isEnabled\(slot\)!==true/);
-assert.match(camera,/window\.GelatoGlassesMultiCamera=\{MAX,stop,stopAll/);
+assert.match(camera,/window\.GelatoGlassesMultiCamera=\{MAX,start,stop,stopAll/);
 assert.ok(!/fetch\('api\/.*order-photo/i.test(client),'camera setup does not auto send photos');
 assert.ok(!/build\.observe/.test(client),'camera setup must not create ingredient evidence');
 const sandbox={window:{},document:{readyState:'loading',addEventListener(){},getElementById(){return null}},

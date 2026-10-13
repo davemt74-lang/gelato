@@ -48,11 +48,12 @@
       if(token!==s.epoch||document.hidden||window.GelatoCameraConfiguration?.isEnabled(slot)!==true){stop(slot,{reason:'PAUSED / DISABLED'});return;}
       s.stop.disabled=false;s.freeze.disabled=false;
       const videoTrack=stream.getVideoTracks()[0];
-      videoTrack?.addEventListener?.('ended',()=>{if(s.stream===stream)stop(slot,{reason:'DEVICE DISCONNECTED'});},{once:true});
+      videoTrack?.addEventListener?.('ended',()=>{if(s.stream===stream){stop(slot,{reason:'DEVICE DISCONNECTED'});window.GelatoCameraRuntime?.trackStopped?.(slot,'device_disconnected');}},{once:true});
       setStatus(slot,'ready','LIVE · '+(videoTrack?.label||'Camera '+slot));
     }catch(e){
       if(stream){stream.getTracks().forEach(t=>t.stop());if(s.stream===stream){s.stream=null;s.video.srcObject=null;s.video.hidden=true;s.preview.hidden=false;}}
       const name=String(e?.name||'');
+      window.GelatoCameraRuntime?.trackStopped?.(slot,/NotAllowed|Security/.test(name)?'permission_denied':'start_failed');
       setStatus(slot,'failed',/NotAllowed|Security/.test(name)?'Permission denied. Allow this camera in the browser.':
         /NotFound|Overconstrained/.test(name)?'Device unavailable. Refresh the camera list.':
         'Camera could not start. Close other apps using this input.');
@@ -170,8 +171,8 @@
         start:card.querySelector('[data-start]'),stop:card.querySelector('[data-stop]'),
         freeze:card.querySelector('[data-freeze]'),stream:null,status:'off',epoch:0,busy:false,activeTraining:false,frozen:false};
       slots.set(slot,s);
-      s.start.addEventListener('click',()=>void start(slot));
-      s.stop.addEventListener('click',()=>stop(slot));
+      s.start.addEventListener('click',()=>void (window.GelatoCameraRuntime?.start?.(slot)||start(slot)));
+      s.stop.addEventListener('click',()=>window.GelatoCameraRuntime?.stop?.(slot,'manual_stop')||stop(slot));
       s.freeze.addEventListener('click',()=>freeze(slot));
     }
     const panel=$('simMultiCameraPanel');
@@ -190,7 +191,7 @@
     navigator.mediaDevices?.addEventListener?.('devicechange',()=>void refreshDevices());
     void refreshDevices();
   }
-  window.GelatoGlassesMultiCamera={MAX,stop,stopAll,refreshDevices,
+  window.GelatoGlassesMultiCamera={MAX,start,stop,stopAll,refreshDevices,
     video:slot=>slots.get(slot)?.stream?slots.get(slot).video:null,
     status:()=>AUX.map(slot=>({slot,active:!!slots.get(slot)?.stream,state:slots.get(slot)?.status||'off'}))};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});

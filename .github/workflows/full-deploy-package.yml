@@ -57,6 +57,8 @@ on:
       - 'assets/js/glasses-simulator-tabs.js'
       - 'assets/js/glasses-multicamera.js'
       - 'assets/js/glasses-camera-config.js'
+      - 'assets/js/glasses-camera-runtime.js'
+      - 'tests/glasses-camera-runtime.test.js'
       - 'assets/js/glasses-camera-workspace.js'
       - 'assets/js/glasses-production-photo-flow.js'
       - 'api/glasses-photo-notifications.php'
@@ -217,6 +219,8 @@ jobs:
             assets/js/glasses-simulator-tabs.js
             assets/js/glasses-multicamera.js
             assets/js/glasses-camera-config.js
+            assets/js/glasses-camera-runtime.js
+            tests/glasses-camera-runtime.test.js
             assets/js/glasses-camera-workspace.js
             assets/js/glasses-production-photo-flow.js
             api/glasses-photo-notifications.php
@@ -325,6 +329,8 @@ jobs:
           node --check assets/js/glasses-simulator-tabs.js
           node --check assets/js/glasses-multicamera.js
           node --check assets/js/glasses-camera-config.js
+          node --check assets/js/glasses-camera-runtime.js
+          node tests/glasses-camera-runtime.test.js
           node --check assets/js/glasses-camera-workspace.js
           node --check assets/js/glasses-production-photo-flow.js
           node --check assets/js/glasses-customer-photo-notifications.js

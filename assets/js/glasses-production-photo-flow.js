@@ -64,6 +64,13 @@
       const label=document.createElement('span');
       label.textContent=photo.id?'Saved Vision Lab image':'Captured locally · requires storage consent';
       box.append(label);
+      const selectedItem=state.candidates.find(c=>c.kdsItemPublicId===$('gpfItem'+stage)?.value);
+      const refs=window.GelatoCameraWorkspace?.referenceMatches?.(photo,selectedItem?.menuItemId)||[];
+      const confidence=document.createElement('span');
+      confidence.textContent=refs.length?
+        'Closest menu reference: '+refs[0].similarityScore+'% visual similarity · not order verification':
+        'No matching menu reference saved · human order verification required';
+      box.append(confidence);
     }else box.textContent='No photo selected — capture automatically or manually.';
   }
   function render(){
@@ -164,8 +171,13 @@
       const candidate=eligibleAutomatic(step.stage);
       if(!candidate||record(step.stage,candidate.kdsItemPublicId))continue;
       if(!config()?.isStreaming?.(step.slot))continue;
+      const cameraPolicy=window.GelatoCameraRuntime?.policy?.(step.slot);
+      // Require an observed scene change followed by stable, quality-checked frames.
+      // This is NOT a trained pizza detection or an assertion of item identity.
+      if(!cameraPolicy?.sceneCandidate||cameraPolicy.quality<45)continue;
       const id=step.stage+':'+candidate.kdsItemPublicId;
       if(state.attempted.has(id))continue;
+      if(!window.GelatoCameraRuntime?.consumeCapture?.(step.slot))continue;
       state.attempted.add(id);
       try{
         const photo=await capture(step,{automatic:true});
@@ -173,8 +185,8 @@
         state.pending.set(step.stage,{candidateId:candidate.kdsItemPublicId,photo});
         $('gpfItem'+step.stage).value=candidate.kdsItemPublicId;
         listPhotos(step.stage);
-        note(step.stage,'Auto-captured for the sole eligible ticket #'+candidate.checkNumber+
-          '. Employee review is still required before linking this image.');
+        note(step.stage,'Stable scene candidate (not verified pizza detection), photo quality '+cameraPolicy.quality+
+          '/100, sole eligible KDS ticket #'+candidate.checkNumber+'. Confirm pizza identity manually.');
       }catch(e){state.attempted.delete(id);note(step.stage,e.message||'Auto capture paused.');}
     }
   }
@@ -299,6 +311,7 @@
     });
     window.addEventListener('gelato-glasses-work-change',onWork);
     window.addEventListener('gelato-camera-photo-captured',()=>{for(const s of STEPS)listPhotos(s.stage);});
+    window.addEventListener('gelato-camera-runtime-ready',()=>void automaticTick());
     window.addEventListener('pagehide',()=>{state.seq++;state.pending.clear();});
     setInterval(()=>{if(!document.hidden&&state.locationId&&!state.busy&&Date.now()-state.lastRefresh>7500)
       void refresh({silent:true});else void automaticTick();},2200);
