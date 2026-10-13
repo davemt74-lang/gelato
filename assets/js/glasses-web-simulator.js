@@ -317,6 +317,7 @@ async function loadDevices(){
       +state.devices.map(x=>'<option value="'+escapeHtml(x.publicId)+'">'+escapeHtml(x.locationName||'Restaurant')+' · '+escapeHtml(x.displayName)+(x.virtualPreview?' (no hardware)':'')+'</option>').join('');
     state.device=device;
     $('deviceSelect').value=device?.publicId||'';
+    window.GelatoGlassesRuntimes?.syncDevices?.(state.devices);
     window.dispatchEvent(new CustomEvent('gelato-glasses-location-change',{detail:{locationId:device?.locationId||null}}));
     log('SYSTEM',device?.virtualPreview?'Live browser preview selected — no physical glasses required.':'Loaded '+state.devices.length+' accessible displays.');
   }catch(e){
