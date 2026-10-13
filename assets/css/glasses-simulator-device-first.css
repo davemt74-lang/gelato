@@ -629,3 +629,28 @@ html,body{max-width:100%;overflow-x:hidden}
 @media(max-width:680px){
   .sgv-tabbed-console .gc-camera-tabs [role="tab"]{min-width:0!important;font-size:8px;padding:7px 1px}
 }
+
+/* Section 267: camera tab hosts the existing reviewed ingredient training workflow. */
+.git-studio{display:grid;gap:9px;margin-top:12px;padding:12px;background:#10251a;border:1px solid #366044;border-radius:10px;color:#e4fdec}
+.git-studio[hidden]{display:none!important}
+.git-head{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.git-head div{display:grid;gap:4px}.git-head small{font-size:9px;color:#9bc4aa;letter-spacing:.08em}
+.git-head strong{font-size:14px}
+.git-studio p{margin:0;color:#b5d0c0;line-height:1.5;font-size:11px}
+.git-studio label{display:grid;gap:5px;min-width:0;color:#e0f6e8;font-size:11px;font-weight:650}
+.git-studio select,.git-studio input[type=file]{width:100%;min-width:0;border:1px solid #45684e;background:#091911;color:#e6f8ec;border-radius:6px;padding:7px}
+.git-context{font:650 10px/1.4 system-ui;color:#a7eabb}
+.git-guidance{background:#183a28;border-left:3px solid #5adf90;padding:8px}
+.git-source-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.git-frame{position:relative;min-height:130px;display:grid;place-items:center;overflow:hidden;background:#06120d;border:1px solid #335a40;border-radius:9px}
+.git-frame img{display:block;width:100%;height:auto;max-height:350px;object-fit:contain;grid-area:1/1}
+.git-frame img[hidden]{display:none!important}
+.git-frame canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
+.git-frame canvas[hidden]{display:none!important}
+.git-studio button{border:1px solid #549769;color:#eaffef;background:#1b4d30;border-radius:6px;padding:8px 9px;font:700 11px/1.2 system-ui}
+.git-studio button:disabled{opacity:.5}
+.git-studio .git-save{background:#167641;border-color:#5bee97}
+.git-studio .git-optin{display:flex;gap:7px;align-items:start}
+.git-studio input[type=checkbox]{accent-color:#71ed99;flex:none}
+.git-studio #gitFeedback[data-error="1"]{color:#ffb2a0}
+@media(max-width:560px){.git-source-grid{grid-template-columns:1fr}}
