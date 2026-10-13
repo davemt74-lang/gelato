@@ -12,7 +12,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <title>Web Glasses Simulator · Gelato</title>
 <link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20261013-live1">
 <link rel="stylesheet" href="assets/css/glasses-simulator-hud-ux.css?v=20261013-voice1">
-<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-hud264">
+<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-265">
 </head>
 <body>
 <header class="sim-topbar">
@@ -66,7 +66,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
         <button type="button" data-glasses-command="finish_order">Finish Ticket</button>
         <button type="button" data-glasses-command="hold_order">Hold Ticket</button>
         <button type="button" data-glasses-command="fire_order">Fire Ticket</button>
-        <button type="button" data-glasses-command="item_added">Note Added</button>
+        <button type="button" data-glasses-command="ingredient_added">Ingredient Added</button><button type="button" data-glasses-command="skip_ingredient">Skip Ingredient</button>
       </div>
       <div class="sim-navigation-group sim-kitchen-note">
         <label for="simItemNoteInput">Item note <input id="simItemNoteInput" type="text" maxlength="250" autocomplete="off" placeholder="Ingredient or change added"></label>
@@ -153,7 +153,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
         <aside class="hud-orders-left editable-region" id="hudOrdersRegion" data-region="hudOrdersRegion">
           <button class="region-handle region-move" type="button" tabindex="-1" aria-hidden="true">MOVE</button>
           <button class="region-handle region-resize" type="button" tabindex="-1" aria-hidden="true">↘</button>
-          <div class="hud-panel-title"><small>KDS ORDERS · 1–8</small><span id="hudOrdersCount">0</span></div>
+          <div class="hud-panel-title"><small>ACTIVE KDS TICKETS</small><span id="hudOrdersCount">0</span></div>
           <div class="sim-ticket-time-sync" id="simTicketTimeSync">POS TIME · WAITING</div>
           <div id="hudOrders" class="hud-orders-list"></div>
         </aside>
@@ -174,9 +174,10 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
           <div class="hud-card hud-build-card">
             <div class="hud-panel-title"><small id="hudBuildMode">RECIPE PREVIEW</small><span id="hudBuildTicket">#1</span></div>
             <strong id="hudBuildItem">Select a KDS item</strong>
-            <div class="hud-current-instruction" id="hudCurrentInstruction" aria-live="polite">Choose an order to view its recipe</div>
+            <div class="hud-current-instruction" id="hudCurrentInstruction" aria-live="polite">Choose a ticket to begin</div>
             <span id="hudBuildMeta">Table 12 · Regular</span>
-            <ol id="hudBuildSteps" class="hud-build-steps"></ol>
+            <ul id="hudBuildSteps" class="hud-build-steps" aria-label="Ingredients for selected item"></ul>
+            <div class="hud-ingredient-actions"><button type="button" data-hud-ingredient-action="added" id="hudIngredientAdded">Added ✓</button><button type="button" data-hud-ingredient-action="skipped" id="hudIngredientSkip">Skip ↷</button></div>
           </div>
           <div class="hud-card hud-validation-panel" id="validationCard">
             <div class="hud-panel-title"><small>INGREDIENT VALIDATION</small><span id="hudValidationState">BUILDING</span></div>
@@ -477,9 +478,9 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-v10-soak-harness.js?v=20260929-v10-5"></script>
 <script src="assets/js/glasses-v10-cook-ux-harness.js?v=20260929-v10-6"></script>
 <script src="js/voice-session-presence.js?v=20261013-presence1"></script>
-<script src="assets/js/glasses-web-simulator.js?v=20261013-hud264"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20261013-265"></script>
 <script src="assets/js/glasses-voice-device.js?v=20261013-device1"></script>
-<script src="assets/js/glasses-simulator-voice.js?v=20261013-hud264"></script>
+<script src="assets/js/glasses-simulator-voice.js?v=20261013-265"></script>
 <script src="assets/js/glasses-multicamera.js?v=20261013-multi1"></script>
 <script src="assets/js/glasses-camera-config.js?v=20261013-hud264"></script>
 <script src="assets/js/glasses-camera-runtime.js?v=20261013-261"></script>
