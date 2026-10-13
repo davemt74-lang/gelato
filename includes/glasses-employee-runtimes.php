@@ -8,6 +8,8 @@ declare(strict_types=1);
  */
 require_once __DIR__.'/glasses-core.php';
 require_once __DIR__.'/employee-home-core.php';
+require_once __DIR__.'/glasses-vision-lab.php';
+require_once __DIR__.'/glasses-training-identity.php';
 require_once __DIR__.'/operational-access.php';
 
 function glasses_employee_runtimes_ready(PDO $pdo): bool
@@ -29,7 +31,8 @@ function glasses_employee_runtime_public(array $row): array
         'stationName'=>$row['station_name']??null,
         'status'=>(string)$row['status'],
         'lastSeenAt'=>$row['last_seen_at']??null,
-        'startedAt'=>$row['started_at']??null
+        'startedAt'=>$row['started_at']??null,
+        'wearerAssignmentPublicId'=>$row['wearer_assignment_public_id']??null
     ];
 }
 
@@ -43,12 +46,14 @@ function glasses_employee_runtime_row(PDO $pdo,array $user,string $publicId,bool
     $sql="SELECT r.*,d.public_id device_public_id,d.display_name device_display_name,
         d.location_id,d.station_id,d.status device_status,d.revoked_at device_revoked_at,
         l.name location_name,s.name station_name,u.display_name employee_display_name,
+        a.public_id wearer_assignment_public_id,a.released_at wearer_released_at,
         u.status employee_status,u.archived_at employee_archived_at,om.status membership_status
       FROM glasses_employee_runtimes r
       JOIN glasses_devices d ON d.id=r.device_id AND d.organization_id=r.organization_id
       JOIN locations l ON l.id=d.location_id AND l.organization_id=r.organization_id
       LEFT JOIN kds_stations s ON s.id=d.station_id AND s.organization_id=r.organization_id
       JOIN users u ON u.id=r.employee_user_id
+      JOIN glasses_user_device_assignments a ON a.id=r.wearer_assignment_id AND a.organization_id=r.organization_id
       LEFT JOIN organization_memberships om ON om.organization_id=r.organization_id AND om.user_id=r.employee_user_id
       WHERE r.organization_id=? AND r.public_id=? LIMIT 1".($forUpdate?' FOR UPDATE':'');
     $q=$pdo->prepare($sql);$q->execute([$org,$id]);
@@ -66,7 +71,7 @@ function glasses_employee_runtime_assert_binding(PDO $pdo,array $user,string $pu
     if($row['status']!=='active'||(int)($row['active_slot']??0)!==1||
        $row['device_status']!=='active'||!empty($row['device_revoked_at'])||
        $row['employee_status']!=='active'||!empty($row['employee_archived_at'])||
-       $row['membership_status']!=='active')
+       $row['membership_status']!=='active'||$row['wearer_released_at']!==null)
         throw new DomainException('Runtime or employee assignment is inactive. Select an active runtime.');
     if((int)$row['device_id']!==(int)$device['id']||
        (string)$row['device_public_id']!==(string)$device['public_id'])
@@ -81,12 +86,14 @@ function glasses_employee_runtime_catalog(PDO $pdo,array $user): array
     $org=(int)$user['organization_id'];
     $q=$pdo->prepare("SELECT r.public_id,r.employee_user_id,r.status,r.started_at,r.last_seen_at,
       d.public_id device_public_id,d.display_name device_display_name,d.location_id,
-      l.name location_name,s.name station_name,u.display_name employee_display_name
+      l.name location_name,s.name station_name,u.display_name employee_display_name,
+      a.public_id wearer_assignment_public_id
       FROM glasses_employee_runtimes r
       JOIN glasses_devices d ON d.id=r.device_id AND d.organization_id=r.organization_id
       JOIN locations l ON l.id=d.location_id AND l.organization_id=r.organization_id
       LEFT JOIN kds_stations s ON s.id=d.station_id AND s.organization_id=r.organization_id
       JOIN users u ON u.id=r.employee_user_id
+      JOIN glasses_user_device_assignments a ON a.id=r.wearer_assignment_id AND a.organization_id=r.organization_id
       WHERE r.organization_id=? AND r.status='active' AND d.status='active'
       ORDER BY r.started_at ASC,r.id ASC");
     $q->execute([$org]);
@@ -95,22 +102,43 @@ function glasses_employee_runtime_catalog(PDO $pdo,array $user): array
         if(!operational_location_allowed($pdo,$user,'glasses.view',(int)$row['location_id']))continue;
         $runtimes[]=glasses_employee_runtime_public($row);
     }
-    $employees=[];
-    if(app_has_permission('glasses.manage',$user)){
-        $q=$pdo->prepare("SELECT u.id,u.display_name,om.employee_number,om.primary_location_id
-          FROM organization_memberships om
-          JOIN users u ON u.id=om.user_id
-          WHERE om.organization_id=? AND om.status='active'
-            AND u.status='active' AND u.archived_at IS NULL
-          ORDER BY u.display_name,u.id");
+    // Reuse the canonical V11 training/employee directory; no duplicate roster.
+    $employees=app_has_permission('glasses.manage',$user) && glasses_training_ready($pdo)
+        ?glasses_training_employee_catalog($pdo,$org):[];
+    $trainingAssignments=[];
+    $activeSessions=[];
+    if(glasses_training_ready($pdo)){
+        $q=$pdo->prepare("SELECT a.public_id,a.user_id,a.device_id,a.mode,a.status,
+            p.name program_name,p.public_id program_public_id
+          FROM glasses_training_assignments a
+          JOIN glasses_training_programs p ON p.id=a.program_id
+          WHERE a.organization_id=? AND a.status IN ('assigned','active')
+            AND p.status='active' ORDER BY p.name,a.id");
         $q->execute([$org]);
-        $employees=array_map(static fn(array $r):array=>[
-            'id'=>(int)$r['id'],'displayName'=>(string)$r['display_name'],
-            'employeeNumber'=>$r['employee_number'],
-            'primaryLocationId'=>$r['primary_location_id']!==null?(int)$r['primary_location_id']:null
+        foreach($q->fetchAll(PDO::FETCH_ASSOC) as $row){
+            $trainingAssignments[]=[
+                'publicId'=>(string)$row['public_id'],
+                'employeeUserId'=>(int)$row['user_id'],
+                'deviceId'=>$row['device_id']!==null?(int)$row['device_id']:null,
+                'programName'=>(string)$row['program_name'],
+                'programPublicId'=>(string)$row['program_public_id'],
+                'mode'=>(string)$row['mode'],'status'=>(string)$row['status']
+            ];
+        }
+        $q=$pdo->prepare("SELECT s.public_id,s.user_id,s.device_id,s.status,a.public_id assignment_public_id
+          FROM glasses_training_sessions s
+          JOIN glasses_training_assignments a ON a.id=s.assignment_id
+          WHERE s.organization_id=? AND s.status='active'");
+        $q->execute([$org]);
+        $activeSessions=array_map(static fn(array $r):array=>[
+            'publicId'=>(string)$r['public_id'],
+            'employeeUserId'=>(int)$r['user_id'],
+            'deviceId'=>(int)$r['device_id'],
+            'assignmentPublicId'=>(string)$r['assignment_public_id']
         ],$q->fetchAll(PDO::FETCH_ASSOC));
     }
-    return ['schemaReady'=>true,'runtimes'=>$runtimes,'employees'=>$employees];
+    return ['schemaReady'=>true,'runtimes'=>$runtimes,'employees'=>$employees,
+        'trainingAssignments'=>$trainingAssignments,'activeTrainingSessions'=>$activeSessions];
 }
 
 function glasses_employee_runtime_create(PDO $pdo,array $user,string $devicePublicId,int $employeeId): array
@@ -136,12 +164,26 @@ function glasses_employee_runtime_create(PDO $pdo,array $user,string $devicePubl
         $q->execute([$org,(int)$device['id'],$employeeId]);
         if($q->fetchColumn())
             throw new DomainException('This glasses device or employee already has an active runtime. End it before reassignment.');
+        // The existing Vision Lab wearer ledger remains the identity source of truth.
+        // Reject silently stealing an assigned device from another employee.
+        if(!glasses_vision_lab_ready($pdo))
+            throw new DomainException('Existing Vision Lab wearer assignments are not installed.');
+        $q=$pdo->prepare("SELECT id,public_id,user_id FROM glasses_user_device_assignments
+          WHERE organization_id=? AND device_id=? AND released_at IS NULL LIMIT 1 FOR UPDATE");
+        $q->execute([$org,(int)$device['id']]);$wearer=$q->fetch(PDO::FETCH_ASSOC);
+        if($wearer&&(int)$wearer['user_id']!==$employeeId)
+            throw new DomainException('This device is already assigned to another wearer in Vision Lab. Release that assignment first.');
+        if(!$wearer){
+            $identity=glasses_vision_lab_assign_device($pdo,$org,$devicePublicId,$employeeId,'operator','manual',(int)$user['id']);
+            $q=$pdo->prepare("SELECT id,public_id,user_id FROM glasses_user_device_assignments WHERE organization_id=? AND public_id=?");
+            $q->execute([$org,(string)$identity['publicId']]);$wearer=$q->fetch(PDO::FETCH_ASSOC);
+        }
         $publicId=glasses_public_id('runtime');
         try{
             $pdo->prepare("INSERT INTO glasses_employee_runtimes
-              (organization_id,public_id,device_id,employee_user_id,status,active_slot,started_by,last_seen_at)
-              VALUES (?,?,?,?,'active',1,?,NOW(6))")
-              ->execute([$org,$publicId,(int)$device['id'],$employeeId,(int)$user['id']]);
+              (organization_id,public_id,device_id,employee_user_id,wearer_assignment_id,status,active_slot,started_by,last_seen_at)
+              VALUES (?,?,?,?,?,'active',1,?,NOW(6))")
+              ->execute([$org,$publicId,(int)$device['id'],$employeeId,(int)$wearer['id'],(int)$user['id']]);
         }catch(PDOException $e){
             if((string)$e->getCode()==='23000')
                 throw new DomainException('This employee or device has already been assigned to a runtime.');
@@ -166,6 +208,10 @@ function glasses_employee_runtime_end(PDO $pdo,array $user,string $publicId): ar
             $pdo->prepare("UPDATE glasses_employee_runtimes SET status='ended',active_slot=NULL,ended_at=NOW(6),ended_by=?,updated_at=NOW(6)
               WHERE organization_id=? AND id=? AND status='active'")
               ->execute([(int)$user['id'],(int)$user['organization_id'],(int)$row['id']]);
+            // Release only the exact wearer record bound to this runtime.
+            $pdo->prepare("UPDATE glasses_user_device_assignments SET released_at=COALESCE(released_at,NOW(6)),
+              release_reason=COALESCE(release_reason,'runtime_ended') WHERE organization_id=? AND id=? AND released_at IS NULL")
+              ->execute([(int)$user['organization_id'],(int)$row['wearer_assignment_id']]);
             glasses_device_event($pdo,(int)$user['organization_id'],(int)$row['device_id'],
               'runtime_employee_released',(int)$row['location_id'],
               $row['station_id']!==null?(int)$row['station_id']:null,
@@ -183,4 +229,45 @@ function glasses_employee_runtime_heartbeat(PDO $pdo,array $user,string $publicI
       WHERE organization_id=? AND public_id=? AND status='active'")
       ->execute([(int)$user['organization_id'],$publicId]);
     return $runtime;
+}
+
+/** Start an EXISTING assigned training program; never create a parallel program. */
+function glasses_employee_runtime_training_start(PDO $pdo,array $user,string $runtimePublicId,string $assignmentPublicId): array
+{
+    if(!app_has_permission('glasses.manage',$user))
+        throw new DomainException('Training session management requires glasses.manage.');
+    $row=glasses_employee_runtime_row($pdo,$user,$runtimePublicId);
+    $device=glasses_device_row($pdo,(int)$user['organization_id'],(string)$row['device_public_id']);
+    glasses_employee_runtime_assert_binding($pdo,$user,$runtimePublicId,$device);
+    if(!glasses_training_ready($pdo))throw new DomainException('Existing V11 training programs are unavailable.');
+    $org=(int)$user['organization_id'];
+    $assignment=glasses_training_assignment($pdo,$org,$assignmentPublicId);
+    if((int)$assignment['user_id']!==(int)$row['employee_user_id']||
+        ($assignment['device_id']!==null&&(int)$assignment['device_id']!==(int)$row['device_id']))
+        throw new DomainException('Training assignment does not belong to this employee and device.');
+    if($assignment['location_id']!==null&&(int)$assignment['location_id']!==(int)$row['location_id'])
+        throw new DomainException('Training is assigned to a different location.');
+    if($assignment['station_id']!==null&&(int)$assignment['station_id']!==(int)$row['station_id'])
+        throw new DomainException('Training is assigned to a different kitchen station.');
+    return glasses_training_session_start($pdo,$org,$assignmentPublicId,$device,(int)$user['id'],
+        ['runtimePublicId'=>$runtimePublicId,'source'=>'glasses_employee_runtime']);
+}
+
+function glasses_employee_runtime_training_end(PDO $pdo,array $user,string $runtimePublicId,string $sessionPublicId,string $status): array
+{
+    if(!app_has_permission('glasses.manage',$user))
+        throw new DomainException('Training session management requires glasses.manage.');
+    if(!in_array($status,['completed','interrupted'],true))
+        throw new InvalidArgumentException('Training session status must be completed or interrupted.');
+    $row=glasses_employee_runtime_row($pdo,$user,$runtimePublicId);
+    $device=glasses_device_row($pdo,(int)$user['organization_id'],(string)$row['device_public_id']);
+    glasses_employee_runtime_assert_binding($pdo,$user,$runtimePublicId,$device);
+    $org=(int)$user['organization_id'];
+    $session=glasses_training_session($pdo,$org,$sessionPublicId);
+    $context=is_array($session['context']??null)?$session['context']:[];
+    if((int)$session['user_id']!==(int)$row['employee_user_id']||
+        (int)$session['device_id']!==(int)$row['device_id']||
+        (string)($context['runtimePublicId']??'')!==$runtimePublicId)
+        throw new DomainException('Training session does not belong to this runtime.');
+    return glasses_training_session_end($pdo,$org,$sessionPublicId,$status,'ended_from_glasses_runtime',(int)$user['id']);
 }
