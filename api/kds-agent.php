@@ -4,6 +4,8 @@ require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/operational-access.php';
 require_once __DIR__.'/../includes/kds-production.php';
 require_once __DIR__.'/../includes/kds-slot-references.php';
+require_once __DIR__.'/../includes/kds-spoken-orders.php';
+require_once __DIR__.'/../includes/agent-voice-conversation.php';
 
 $user=app_require_auth();
 $pdo=app_pdo();
@@ -17,6 +19,24 @@ app_verify_request_csrf($input);
 $message=trim((string)($input['message']??''));
 if($message===''||mb_strlen($message,'UTF-8')>2400)app_json_response(['ok'=>false,'message'=>'Ask Gelato a kitchen question no longer than 2,400 characters.'],422);
 $context=is_array($input['pageContext']??null)?$input['pageContext']:[];
+
+/**
+ * Personalization is only used with a fresh, server-verified enrolled voice.
+ * KDS retains permissions of the authenticated operator, never the speaker.
+ */
+function kda_spoken_personalization(PDO $pdo,int $org,array $actor,array $input,array $context,string $question,string $answer):array
+{
+    $event=(string)($input['voiceEventId']??'');
+    $speaker=avc_verified_speaker($pdo,$org,$actor,$event);
+    if(!$speaker)return ['answer'=>$answer,'verifiedSpeaker'=>null];
+    $greeting=null;
+    try{$greeting=avc_greeting($pdo,$org,(int)$speaker['userId'],(string)$speaker['firstName']);}
+    catch(Throwable $e){error_log('KDS voice greeting unavailable: '.get_class($e));}
+    $spoken=$greeting?$greeting.' '.$answer:$answer;
+    try{avc_kds_record($pdo,$org,$actor,$speaker,$question,$spoken,$event,$context);}
+    catch(Throwable $e){error_log('KDS Agent Brain voice history unavailable: '.get_class($e));}
+    return ['answer'=>$spoken,'verifiedSpeaker'=>['userId'=>$speaker['userId'],'firstName'=>$speaker['firstName'],'greetingUsed'=>$greeting!==null]];
+}
 
 function kda_allowed_locations(PDO $pdo,int $org,array $user): array
 {
@@ -210,12 +230,14 @@ try{
         }
         $current=$resolved['ticket'];
         $current['orderReference']=$slot;
-        app_json_response(['ok'=>true,'skill'=>'kds.order_reference','answer'=>'Order '.$slot.', '.kda_ticket_detail($current,true),'data'=>['slot'=>$slot,'ticket'=>$current],'sources'=>['Kitchen Display → Active Orders']]);
+        $spoken=kda_spoken_personalization($pdo,$org,$user,$input,$context,$message,kso_ticket($current,$slot));
+        app_json_response(['ok'=>true,'skill'=>'kds.order_reference','answer'=>$spoken['answer'],'verifiedSpeaker'=>$spoken['verifiedSpeaker'],'data'=>['slot'=>$slot,'ticket'=>$current],'sources'=>['Kitchen Display → Active Orders']]);
     }
 
     $ticket=kda_match_ticket($tickets,$message,$selectedCheckId);
     if($ticket){
-        app_json_response(['ok'=>true,'skill'=>'kds.order_detail','answer'=>kda_ticket_detail($ticket,true),'data'=>['ticket'=>$ticket],'sources'=>['Kitchen Display → Live Order']]);
+        $spoken=kda_spoken_personalization($pdo,$org,$user,$input,$context,$message,kso_ticket($ticket));
+        app_json_response(['ok'=>true,'skill'=>'kds.order_detail','answer'=>$spoken['answer'],'verifiedSpeaker'=>$spoken['verifiedSpeaker'],'data'=>['ticket'=>$ticket],'sources'=>['Kitchen Display → Live Order']]);
     }
 
     if(preg_match('/\b(?:order history|recent completed|completed orders?|finished orders?|last completed)\b/u',$normalized)){
@@ -230,8 +252,10 @@ try{
     if(preg_match('/\b(?:read|list|tell me|what are|what\x27s|whats)\s+(?:all\s+)?(?:the\s+)?(?:active\s+|current\s+)?(?:kds\s+)?orders?\b|\borders?\s+(?:in|on)\s+(?:the\s+)?(?:kitchen|kds)\b/u',$normalized)){
         $ordered=$tickets;usort($ordered,static fn($a,$b)=>kda_ticket_age($b)<=>kda_ticket_age($a));
         if(!$ordered)app_json_response(['ok'=>true,'skill'=>'kds.read_orders','answer'=>'There are no active kitchen orders right now.','data'=>['tickets'=>[]],'sources'=>['Kitchen Display → Live Orders']]);
-        $parts=[];foreach(array_slice($ordered,0,20) as $row)$parts[]=kda_ticket_detail($row,true);
-        app_json_response(['ok'=>true,'skill'=>'kds.read_orders','answer'=>implode(' Next order. ',$parts),'data'=>['tickets'=>array_slice($ordered,0,20)],'sources'=>['Kitchen Display → Live Orders']]);
+        $parts=[];foreach($tickets as $index=>$row)$parts[]=kso_ticket($row,$index+1);
+        $summary=count($tickets)===1?'There is one active order. ':'There are '.count($tickets).' active orders. ';
+        $spoken=kda_spoken_personalization($pdo,$org,$user,$input,$context,$message,$summary.implode(' Next order. ',$parts));
+        app_json_response(['ok'=>true,'skill'=>'kds.read_orders','answer'=>$spoken['answer'],'verifiedSpeaker'=>$spoken['verifiedSpeaker'],'data'=>['count'=>count($tickets),'tickets'=>$tickets],'sources'=>['Kitchen Display → Live Orders']]);
     }
 
     if(preg_match('/\b(?:newest|latest|just came in|most recent|last order|new order)\b/u',$normalized)){
