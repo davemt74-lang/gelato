@@ -3,9 +3,21 @@ const cfg=window.GELATO_GLASSES_SIMULATOR||{};
 const $=id=>document.getElementById(id);
 const state={mode:'live',devices:[],device:null,work:null,selectedKdsItemPublicId:'',build:null,validation:null,seq:1,logs:[],autoPlayTimer:null,syncTimer:null,syncBusy:false,syncErrors:0,reconnectCount:0,syncFingerprint:'',syncAbort:null,syncEpoch:0,lastSyncAt:null,cameraStream:null,cameraTrack:null,cameraTarget:null,cameraDevices:[],cameraSource:'image',visionMode:'manual',visionTimer:null,visionBusy:false,visionFrameSeq:0,visionLastAt:0,visionLatencyMs:0,visionFps:0,visionDetections:[],visionTracks:new Map(),visionSubmitted:new Set(),visionAdapter:null,temporalTracks:new Map(),temporalEvents:[],temporalSequence:[],temporalViolations:[],temporalValidationBusy:false,temporalValidationFingerprint:'',temporalReadySince:0,temporalGate:null,browserModel:{status:'idle',session:null,assignment:null,profile:null,config:null,package:null,verifiedSha256:null,loadEpoch:0},dataset:{annotations:[],samples:[],drag:null,frozen:false,captureGroup:null,burstSeq:0,uploading:false},activeLearning:{enabled:true,candidates:[],capturing:false,lastCaptureByKey:new Map(),maxQueue:30,cooldownMs:10000},shadowModel:{status:'idle',session:null,assignment:null,config:null,package:null,verifiedSha256:null,runPublicId:null,summary:null,frameSeq:0,busy:false},hardwareRuntime:null,stationSoakReport:null,cookUx:{stopped:false,preview:null,acceptance:null,handoffArmed:false},recovery:{state:'ready',attempt:0,epoch:0,networkFault:false,suppressAutomatic:false,freshBarrierUntil:0,lastReason:'runtime_ready',timer:null},framePipeline:{queue:[],worker:false,epoch:0,nextSeq:0,currentAbort:null,metrics:{acceptedFrames:0,processedFrames:0,droppedFrames:0,staleFrames:0,timedOutFrames:0,cancelledFrames:0,failedFrames:0,queueDepth:0,maxObservedQueueDepth:0,lastProcessedSequence:0}}};
 const assembly=()=>window.GelatoGlassesItemAssembly;
-const assemblyProgress=new Map(),ingredientCursor=new Map();
+const assemblyProgress=new Map(),ingredientCursor=new Map(),assemblySources=new Map();
+const AUTO_ASSEMBLY_KEY='gelato.glasses.autoAssembly.v1:u'+String(cfg.userId||0)+':rt'+String(cfg.runtimePublicId||'default');
+let autoAssemblyOptIn=false;
+try{autoAssemblyOptIn=localStorage.getItem(AUTO_ASSEMBLY_KEY)==='1';}catch{}
+let assemblySuggestion=null,assemblySuggestionSignature='',assemblyEpoch=0;
+function clearAssemblySuggestion(){assemblySuggestion=null;assemblySuggestionSignature='';assemblyEpoch++;}
+function setAutoAssemblyOptIn(value){
+  autoAssemblyOptIn=!!value;
+  try{localStorage.setItem(AUTO_ASSEMBLY_KEY,autoAssemblyOptIn?'1':'0');}catch{}
+  if(!autoAssemblyOptIn)clearAssemblySuggestion();
+  render();return autoAssemblyOptIn;
+}
+
 function itemActions(id){if(!assemblyProgress.has(id))assemblyProgress.set(id,{});return assemblyProgress.get(id);}
-function clearAssemblySession(){assemblyProgress.clear();ingredientCursor.clear();}
+function clearAssemblySession(){assemblyProgress.clear();ingredientCursor.clear();assemblySources.clear();clearAssemblySuggestion();}
 const mock={
   work:{assignmentRequired:false,station:{publicId:'station-mock',name:'Sandwich / Pizza Line'},revision:'mock-revision',focusItem:{kdsItemPublicId:'kds-mock-1',status:'queued',ticket:{checkNumber:'1042',serviceMode:'dine_in',tableName:'Table 12',guestCount:2},posLine:{id:1,menuItemId:1,name:'Club Sandwich + Fries',optionName:'Regular',quantity:1,specialInstructions:'NO TOMATO · EXTRA BACON',modifiers:[{name:'Extra Bacon'}]},menu:{preparationNotes:'Build, slice and plate with fries.'},recipeSource:{status:'exact_name',recipe:{instructions:['Toast bread','Add mayo','Add turkey','Add bacon','Add lettuce','Add tomato','Top and slice','Plate with fries']}}},items:[],metrics:{queued:1,inProgress:0,ready:0,held:0}},
   components:['Toasted Bread','Mayo','Turkey','Bacon','Lettuce','Tomato','Fries'].map((name,i)=>({componentKey:'mock:'+i,displayName:name,expectedQuantity:i===0?3:1,detectedQuantity:0,unit:i===0?'slices':'portion',optional:false,status:'waiting',sortOrder:i+1})),
@@ -947,6 +959,7 @@ function trackDetections(detections,now){
     const prev=state.temporalTracks.get(key);
     const track=prev||{key,trackId:'webvision-'+(++state.visionFrameSeq)+'-'+Date.now(),firstSeen:now,lastSeen:now,frames:0,stable:false,present:false,submitted:false,submittedQuantity:0,removed:false,bbox:d.bbox,label:d.label,componentKey:d.componentKey};
     track.lastSeen=now;track.frames+=1;track.present=true;track.missingSince=0;track.bbox=d.bbox;track.confidence=d.confidence;track.label=d.label;track.componentKey=d.componentKey;
+    track.profileMatched=d.profileMatched===true;track.profileMinimumConfidence=Number(d.profileMinimumConfidence||0);
     if(track.frames>=VISION_STABLE_FRAMES)track.stable=true;
     state.temporalTracks.set(key,track);
   }
@@ -971,6 +984,15 @@ function pushTemporalEvent(type,track,extra={}){
 async function submitTemporalObservation(track,action,quantity,metadata={}){
   if(!automaticObservationsAllowed())return false;
   if(!state.build||!track.componentKey)return false;
+  // Never submit production evidence from a test fixture, unprofiled label,
+  // unverified model, old build, or disabled opt-in.
+  if(state.mode==='live'&&(!autoAssemblyOptIn||!cfg.runtimePublicId||
+      !state.cameraStream||visionMode()!=='automatic'||
+      state.visionAdapter?.id!=='onnx'||state.browserModel.status!=='ready'||
+      !state.browserModel.verifiedSha256||state.browserModel.assignment?.action!=='apply'||
+      state.browserModel.assignment?.compatibility?.compatible!==true||
+      !track.stable||track.profileMatched!==true||track.firstSeen<state.recovery.freshBarrierUntil||
+      selectedItem()?.kdsItemPublicId!==state.build.kdsItemPublicId))return false;
   const component=state.build.components?.find(c=>c.componentKey===track.componentKey);
   const displayName=component?.displayName||track.label||track.componentKey;
   try{
@@ -987,7 +1009,7 @@ async function submitTemporalObservation(track,action,quantity,metadata={}){
   }catch(e){log('ERROR',e.message);return false;}
 }
 async function processTemporalEvents(now){
-  if(visionMode()!=='automatic'||!state.build)return;
+  if(visionMode()!=='automatic'||!state.build||state.mode==='live'&&!autoAssemblyOptIn)return;
   for(const track of state.temporalTracks.values()){
     if(track.present&&track.stable&&!track.submitted){
       const component=state.build.components?.find(c=>c.componentKey===track.componentKey);
@@ -1110,6 +1132,7 @@ async function deliverVisionInference(frame,raw,started){
   if(state.shadowModel.status==='ready')runShadowFrame(frame,filtered);
   state.visionDetections=trackDetections(filtered,nowWall);renderVisionOverlay();
   await processTemporalEvents(nowWall);await autoEvaluateTemporalReadiness(nowWall);
+  refreshAssemblyRecognition(nowWall);
   state.visionLatencyMs=performance.now()-started;
   const now=performance.now();if(state.visionLastAt){const instant=1000/Math.max(1,now-state.visionLastAt);state.visionFps=state.visionFps?state.visionFps*.7+instant*.3:instant;}state.visionLastAt=now;
   m.processedFrames++;m.lastProcessedSequence=frame.seq;renderVisionHealth('ready');
@@ -1155,7 +1178,7 @@ function injectFrameBurst(){
 }
 function stopVisionRuntime(reason='idle'){
   if(state.visionTimer){clearTimeout(state.visionTimer);state.visionTimer=null;}
-  state.framePipeline.epoch++;state.framePipeline.queue=[];if(state.framePipeline.currentAbort)state.framePipeline.currentAbort.abort();state.framePipeline.currentAbort=null;state.framePipeline.worker=false;
+  clearAssemblySuggestion();state.framePipeline.epoch++;state.framePipeline.queue=[];if(state.framePipeline.currentAbort)state.framePipeline.currentAbort.abort();state.framePipeline.currentAbort=null;state.framePipeline.worker=false;
   state.visionBusy=false;state.visionDetections=[];renderVisionOverlay();renderVisionHealth(reason);renderFramePipelineMetrics();
 }
 function startVisionRuntime(){
@@ -1249,6 +1272,82 @@ function buildProgressIndex(steps,comps){
   if(!comps.length)return 0;
   return Math.min(steps.length-1,Math.floor((confirmed/Math.max(1,comps.length))*steps.length));
 }
+/**
+ * Read-only classifier → selected item's local checklist. The menu label is
+ * never derived from recipe instructions. Runtime, model, temporal tracking
+ * and canonical build must agree before an Auto acknowledgment.
+ */
+function assemblyRecognitionDecision(now=Date.now()){
+ const recognizer=window.GelatoGlassesAssemblyRecognition;
+ const item=selectedItem(),ingredient=currentAssemblyIngredient(item);
+ if(!recognizer||!item||!ingredient||state.mode!=='live')return null;
+ const stage=state.browserModel;
+ const canonical=String(ingredient.id||'').split(':').slice(1).join(':')||ingredient.name;
+ return recognizer.evaluate({
+   mode:visionMode(),adapter:state.visionAdapter?.id||'fixture',
+   modelReady:stage.status==='ready'&&!!stage.verifiedSha256,
+   modelSha256:stage.verifiedSha256,
+   modelAssignment:stage.assignment,
+   cameraReady:!!state.cameraStream&&!document.hidden,
+   runtimeReady:!!cfg.runtimePublicId&&!!state.device&&!state.device.virtualPreview&&
+     !!state.device.stationPublicId&&automaticObservationsAllowed(),
+   item,ingredient:{...ingredient,canonicalName:canonical},
+   build:state.build,
+   tracks:[...state.temporalTracks.values()],
+   now,barrierAt:state.recovery.freshBarrierUntil,
+   threshold:Number($('visionConfidenceThreshold')?.value||75)/100,
+   allowAutomatic:autoAssemblyOptIn
+ });
+}
+function refreshAssemblyRecognition(now=Date.now()){
+ const decision=assemblyRecognitionDecision(now);
+ const item=selectedItem(),ingredient=currentAssemblyIngredient(item);
+ if(!decision||!decision.suggestion||!item||!ingredient){
+   if(assemblySuggestion)clearAssemblySuggestion();
+   return;
+ }
+ const signature=[item.kdsItemPublicId,ingredient.id,decision.suggestion.trackId,
+   decision.suggestion.modelSha256,state.build?.publicId].join('|');
+ if(assemblySuggestionSignature!==signature){
+   assemblySuggestionSignature=signature;
+   assemblySuggestion={...decision.suggestion,itemId:item.kdsItemPublicId,ingredientId:ingredient.id,
+      signature,mode:visionMode(),at:now};
+   window.GelatoGlassesHudNotifications?.publish?.({
+     event:'ingredient.manual_confirmation',severity:'warning',
+     message:ingredient.name+' detected ('+Math.round(decision.suggestion.confidence*100)+
+       '%). '+(visionMode()==='assisted'?'Confirm or reject suggestion.':'Awaiting qualified build evidence.'),
+     speech:'Ingredient suggestion needs review.',
+     dedupeKey:'assembly_suggestion|'+signature
+   });
+ }
+ if(decision.automatic&&visionMode()==='automatic'){
+   const approved=acknowledgeIngredient('added',{
+     governedQualified:true,evidence:assemblySuggestion,source:'governed_recognition'
+   });
+   if(approved.ok)clearAssemblySuggestion();
+ }
+}
+function confirmAssemblySuggestion(){
+ const pending=assemblySuggestion,item=selectedItem(),ingredient=currentAssemblyIngredient(item);
+ if(!pending||!item||!ingredient||pending.itemId!==item.kdsItemPublicId||
+    pending.ingredientId!==ingredient.id)return {ok:false,message:'No current ingredient suggestion.'};
+ const current=assemblyRecognitionDecision();
+ if(!current?.suggestion||current.suggestion.trackId!==pending.trackId||
+    current.suggestion.modelSha256!==pending.modelSha256)
+   return {ok:false,message:'Camera evidence is stale. Wait for a fresh suggestion.'};
+ const result=acknowledgeIngredient('added',{operatorConfirmed:true,source:'operator_confirmed_suggestion',
+   evidence:pending});
+ if(result.ok)clearAssemblySuggestion();
+ return result;
+}
+function rejectAssemblySuggestion(){
+ if(!assemblySuggestion)return;
+ window.GelatoGlassesHudNotifications?.publish?.({
+  event:'ingredient.manual_confirmation',severity:'info',
+  message:'Suggestion rejected. Label correction can be sent to Vision Lab.'
+ });
+ clearAssemblySuggestion();render();
+}
 function currentAssemblyIngredient(item){
   if(!item)return null;
   const actions=itemActions(item.kdsItemPublicId),list=assembly()?.ingredientsFor(item)||[];
@@ -1267,6 +1366,15 @@ function renderBuildRail(item){
   const modifiers=(item?.posLine?.modifiers||[]).map(m=>m.name).filter(Boolean);
   $('hudBuildMeta').textContent=[item?.posLine?.specialInstructions,modifiers.length?'Modifiers: '+modifiers.join(', '):''].filter(Boolean).join(' · ');
   const next=currentAssemblyIngredient(item);
+  const sug=$('hudAssemblySuggestion'),confirm=$('hudConfirmSuggestion'),reject=$('hudRejectSuggestion');
+  const active=assemblySuggestion&&assemblySuggestion.itemId===item?.kdsItemPublicId&&
+     assemblySuggestion.ingredientId===next?.id&&visionMode()==='assisted';
+  if(sug){
+    sug.hidden=!active;
+    if(active)sug.textContent=next.name+' · '+Math.round(assemblySuggestion.confidence*100)+'% · suggestion (not yet confirmed)';
+  }
+  if(confirm)confirm.disabled=!active;
+  if(reject)reject.disabled=!active;
   $('hudCurrentInstruction').textContent=!item?'Select an active ticket':
     !list.length?'No assembly ingredients configured — update Menu Manager':
     summary.complete?'Ingredients accounted for · '+summary.accounted+'/'+summary.total:
@@ -1279,7 +1387,7 @@ function renderBuildRail(item){
       '<span class="ingredient-result">'+(status==='added'?'Added':status==='skipped'?'Skipped':'')+'</span></li>';
   }).join('');
   for(const key of ['hudIngredientAdded','hudIngredientSkip']){
-    const el=$(key);if(el)el.disabled=!next||!!state.build;
+    const el=$(key);if(el)el.disabled=!next;
   }
 }
 function renderValidationPanel(comps,validation){
@@ -1538,18 +1646,29 @@ function acknowledgeIngredient(result,options={}){
     window.GelatoGlassesHudNotifications?.publish?.({event:'runtime.blocked',severity:'blocking',message:'No active item selected.'});
     return {ok:false,message:'Select a KDS ticket and item first.'};
   }
-  if(state.build)return {ok:false,message:'An authorized build is active. Its ingredient evidence must be completed through governed validation.'};
+  if(state.build&&!options.governedQualified&&!options.operatorConfirmed)
+    return {ok:false,message:'An authorized build is active. Use Confirm suggestion for local checklist progress; it does not change governed build verification.'};
+  if(options.governedQualified){
+    const fresh=assemblyRecognitionDecision();
+    if(!fresh?.automatic||!fresh.suggestion||fresh.suggestion.trackId!==options.evidence?.trackId||
+       !autoAssemblyOptIn)
+      return {ok:false,message:'Governed camera evidence is not current. No ingredient acknowledged.'};
+  }
   const ingredient=currentAssemblyIngredient(item);
   if(!ingredient)return {ok:false,message:ingredientSummary(item).complete?
     'All ingredients are accounted for on this item.':'No configured assembly ingredients found. Update this menu item in Menu Manager.'};
   const actions=itemActions(item.kdsItemPublicId);
   if(['added','skipped'].includes(actions[ingredient.id]))return {ok:false,message:'Ingredient was already accounted for.'};
   actions[ingredient.id]=result;
+  assemblySources.set(item.kdsItemPublicId+'|'+ingredient.id,{
+    source:options.source||'operator',modelSha256:options.evidence?.modelSha256||null,
+    trackId:options.evidence?.trackId||null,at:Date.now()
+  });
   ingredientCursor.delete(item.kdsItemPublicId);
   window.GelatoGlassesHudNotifications?.publish?.({
     event:result==='skipped'?'ingredient.skipped':'ingredient.added',
     severity:result==='skipped'?'info':'success',
-    message:ingredient.name+(result==='skipped'?' skipped.':' added (operator acknowledgment).'),
+    message:ingredient.name+(result==='skipped'?' skipped.':options.governedQualified?' acknowledged with governed camera evidence.':' added (operator acknowledgment).'),
     speech:ingredient.name+(result==='skipped'?' skipped.':' added.'),
     spokenFromVoice:!!options.spoken
   });
@@ -1562,7 +1681,7 @@ function acknowledgeIngredient(result,options={}){
       spokenFromVoice:!!options.spoken
     });
     const next=assembly()?.nextItemInTicket(activeTicket(),item.kdsItemPublicId,id=>itemActions(id));
-    if(next){
+    if(next&&!state.build){
       state.selectedKdsItemPublicId=next.kdsItemPublicId;
       state.previewStepIndex=0;
       render();
@@ -1579,6 +1698,11 @@ function acknowledgeIngredient(result,options={}){
   render();
   return {ok:true,message:ingredient.name+' '+result+'. Next: '+(currentAssemblyIngredient(item)?.name||'review item')+'. Manual entry only; no AI verification or KDS state change.'};
 }
+$('hudConfirmSuggestion')?.addEventListener('click',()=>{
+ const result=confirmAssemblySuggestion();const el=$('simNavigationStatus');if(el)el.textContent=result.message;
+});
+$('hudRejectSuggestion')?.addEventListener('click',rejectAssemblySuggestion);
+$('visionAssemblyAutoOptIn')?.addEventListener('change',event=>setAutoAssemblyOptIn(event.target.checked));
 $('hudRight').addEventListener('click',event=>{
   const action=event.target.closest('[data-hud-ingredient-action]')?.dataset.hudIngredientAction;
   if(action==='added'||action==='skipped'){
@@ -1594,8 +1718,8 @@ $('cameraFit').addEventListener('change',applyCameraPresentation);$('cameraMirro
 $('cameraDeviceSelect').addEventListener('change',async()=>{saveCameraPrefs();if(state.cameraStream)await startCamera();});
 $('cameraResolution').addEventListener('change',async()=>{saveCameraPrefs();if(state.cameraStream)await startCamera();});
 $('cameraManualTarget').addEventListener('change',e=>{$('glassesStage').classList.toggle('camera-targeting',e.target.checked);if(!e.target.checked)clearCameraTarget();});
-$('visionMode').addEventListener('change',()=>{state.visionMode=visionMode();startVisionRuntime();});
-$('visionAdapterSelect').addEventListener('change',()=>{state.visionAdapter=VISION_ADAPTERS[$('visionAdapterSelect').value]||VISION_ADAPTERS.fixture;clearTemporalRuntime();startVisionRuntime();});
+$('visionMode').addEventListener('change',()=>{clearAssemblySuggestion();state.visionMode=visionMode();startVisionRuntime();});
+$('visionAdapterSelect').addEventListener('change',()=>{clearAssemblySuggestion();state.visionAdapter=VISION_ADAPTERS[$('visionAdapterSelect').value]||VISION_ADAPTERS.fixture;clearTemporalRuntime();startVisionRuntime();});
 $('loadVisionModel').addEventListener('click',()=>loadGovernedVisionModel().catch(e=>{setVisionModelStatus('error',e.message);log('ERROR',e.message);}));
 $('unloadVisionModel').addEventListener('click',()=>unloadGovernedVisionModel());
 $('startShadowModel').addEventListener('click',()=>startShadowModel().catch(e=>{setShadowStatus('error',e.message);log('SHADOW',e.message);}));
@@ -2028,6 +2152,12 @@ window.GelatoGlassesDisplayPreferences={
   }
 };
 window.GelatoGlassesPrimaryCamera={stop:()=>stopCamera('disabled'),active:()=>!!state.cameraStream};
+window.GelatoGlassesAssemblyRecognitionRuntime={
+  decision:()=>assemblyRecognitionDecision(),sources:()=>new Map(assemblySources),
+  confirm:confirmAssemblySuggestion,reject:rejectAssemblySuggestion,
+  setAutoOptIn:setAutoAssemblyOptIn
+};
+if($('visionAssemblyAutoOptIn'))$('visionAssemblyAutoOptIn').checked=autoAssemblyOptIn;
 window.addEventListener('gelato-glasses-runtime-revoked',()=>{
   stopLiveStationSync('runtime_revoked');stopVisionRuntime('runtime_revoked');stopCamera('runtime_revoked');
   state.recovery.suppressAutomatic=true;state.recovery.state='blocked';state.build=null;state.validation=null;
