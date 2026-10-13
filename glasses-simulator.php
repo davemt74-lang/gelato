@@ -10,6 +10,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Web Glasses Simulator · Gelato</title>
 <link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20261013-live1">
+<link rel="stylesheet" href="assets/css/glasses-simulator-hud-ux.css?v=20261013-voice1">
 </head>
 <body>
 <header class="sim-topbar">
@@ -42,12 +43,35 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
     </div>
 
     <div class="sim-live-guide" id="simLiveGuide" role="status" aria-live="polite"><strong>CONNECTING LIVE DISPLAY</strong> · Finding an authorized location and kitchen orders; no hardware required.</div>
+    <nav class="sim-navigation-panel" aria-label="Simulator HUD and voice navigation">
+      <div class="sim-navigation-group">
+        <span class="sim-nav-mode">PREVIEW</span>
+        <button id="simViewHudOnly" type="button" aria-pressed="false">HUD Only</button>
+        <button id="simViewGlasses" type="button" aria-pressed="false">Glasses Outline</button>
+      </div>
+      <div class="sim-navigation-group" aria-label="Kitchen navigation">
+        <button id="simNavPrevious" type="button" title="Previous recipe step">← Step</button>
+        <button id="simNavNext" type="button" title="Next recipe step">Next →</button>
+        <button id="simNavPreviousItem" type="button" title="Previous KDS item">← Item</button>
+        <button id="simNavNextItem" type="button" title="Next KDS item">Next Item →</button>
+        <button id="simNavItemAdded" type="button" title="Preview-only acknowledgement; never changes KDS">Item Added ✓</button>
+        <button id="simNavRepeat" type="button" title="Repeat current item and instruction">Repeat</button>
+      </div>
+      <div class="sim-navigation-group">
+        <button id="simVoiceToggle" class="sim-nav-voice-button" type="button" aria-pressed="false">Enable Voice</button>
+        <label class="sim-nav-check"><input id="simVoiceReplies" type="checkbox" checked> Speak replies</label>
+        <button id="simVoiceHelp" type="button">Commands ?</button>
+      </div>
+      <div class="sim-voice-feedback" id="simVoiceFeedback" role="status" aria-live="polite">Voice off</div>
+      <div id="simNavContext" class="sim-nav-command-examples" aria-live="polite">Loading orders…</div>
+      <span class="sim-nav-command-examples">Say: “next” · “next item” · “item added” · “previous” · “repeat” · “status”</span>
+    </nav>
     <div class="glasses-stage" id="glassesStage">
       <div class="scene-placeholder">
         <img id="sceneImage" alt="" hidden>
         <video id="cameraVideo" class="camera-video" autoplay muted playsinline hidden></video>
         <canvas id="cameraCaptureCanvas" hidden></canvas>
-        <div class="scene-copy" id="scenePlaceholder">Drop your final kitchen artwork in or switch Scene to Browser Camera.</div>
+        <div class="scene-copy" id="scenePlaceholder">Live KDS preview · add a scene image or enable the camera to see the kitchen behind the HUD.</div>
       </div>
       <img id="glassesImage" class="glasses-image" alt="" hidden>
       <svg id="svgGlassesLayer" class="svg-glasses-layer" viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
@@ -148,6 +172,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
           </div>
         </aside>
 
+        <output id="simNavFeedback" class="sim-nav-feedback" role="status" aria-live="polite" hidden></output>
         <div id="detectionLayer" class="detection-layer"></div>
         <div id="visionDetectionLayer" class="vision-detection-layer"></div>
         <div id="datasetAnnotationLayer" class="dataset-annotation-layer"></div>
@@ -398,5 +423,6 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-v10-soak-harness.js?v=20260929-v10-5"></script>
 <script src="assets/js/glasses-v10-cook-ux-harness.js?v=20260929-v10-6"></script>
 <script src="assets/js/glasses-web-simulator.js?v=20261013-live1"></script>
+<script src="assets/js/glasses-simulator-voice.js?v=20261013-voice1"></script>
 </body>
 </html>
