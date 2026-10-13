@@ -10,6 +10,13 @@ on:
       - 'css/training-workspace-chat.css'
       - 'js/training-workspace-voice.js'
       - 'js/voice-turn-taking.js'
+      - 'js/proactive-listening-commands.js'
+      - 'tests/proactive-listening-commands.test.js'
+      - 'tests/proactive-global-listening.test.js'
+      - 'tests/proactive-listening-contract.php'
+      - 'js/timeclock-voice.js'
+      - 'api/proactive-agent.php'
+      - 'timeclock.php'
       - 'tests/voice-turn-taking.test.js'
       - 'tests/voice-barge-in-contract.php'
       - 'js/dynamic-agent-canvas.js'
@@ -117,6 +124,10 @@ jobs:
             css/training-workspace-chat.css
             js/training-workspace-voice.js
             js/voice-turn-taking.js
+            js/proactive-listening-commands.js
+            tests/proactive-listening-commands.test.js
+            tests/proactive-global-listening.test.js
+            tests/proactive-listening-contract.php
             tests/voice-turn-taking.test.js
             tests/voice-barge-in-contract.php
             tests/training-chat-voice-contract.php
@@ -195,6 +206,12 @@ jobs:
           php tests/voice-barge-in-contract.php
           node --check js/voice-turn-taking.js
           node tests/voice-turn-taking.test.js
+          php tests/proactive-listening-contract.php
+          node --check js/proactive-listening-commands.js
+          node --check js/global-agent.js
+          node --check js/timeclock-voice.js
+          node tests/proactive-listening-commands.test.js
+          node tests/proactive-global-listening.test.js
           php tests/mysql-conditional-add-column-compatibility.php
           php tests/mysql-foreign-key-diagnostics.php
           php tests/mysql-v11-stored-generated-fk-compatibility.php
