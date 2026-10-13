@@ -256,7 +256,7 @@ async function loadDevices(){
     const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.message||'Device list failed.');
     state.hardwareRuntime=d.hardwareRuntime||null;renderHardwareRuntime();state.devices=d.devices||[];
     const preferred=localStorage.getItem(LIVE_DEVICE_KEY)||'';
-    const device=state.devices.find(x=>x.publicId===preferred&&x.stationPublicId!==null)
+    const device=state.devices.find(x=>x.publicId===preferred&&(x.virtualPreview||x.stationPublicId!==null))
       ||state.devices.find(x=>x.virtualPreview&&x.stationPublicId===null)
       ||state.devices.find(x=>x.stationPublicId)||state.devices[0]||null;
     $('deviceSelect').innerHTML='<option value="">'+(state.devices.length?'Choose display…':'No permitted locations or devices')+'</option>'
