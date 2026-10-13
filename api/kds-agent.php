@@ -38,6 +38,20 @@ function kda_spoken_personalization(PDO $pdo,int $org,array $actor,array $input,
     return ['answer'=>$spoken,'verifiedSpeaker'=>['userId'=>$speaker['userId'],'firstName'=>$speaker['firstName'],'greetingUsed'=>$greeting!==null]];
 }
 
+/** Unified read-only kitchen reply. Every freshly voice-verified Q&A gets
+ * exactly one greeting decision and one per-user Agent Brain history record. */
+function kda_reply(array $payload):void
+{
+    global $pdo,$org,$user,$input,$context,$message;
+    if(!empty($payload['ok'])&&is_string($payload['answer']??null)
+        &&trim($payload['answer'])!==''&&!empty($input['voiceEventId'])){
+        $spoken=kda_spoken_personalization($pdo,$org,$user,$input,$context,$message,$payload['answer']);
+        $payload['answer']=$spoken['answer'];
+        $payload['verifiedSpeaker']=$spoken['verifiedSpeaker'];
+    }
+    app_json_response($payload);
+}
+
 function kda_allowed_locations(PDO $pdo,int $org,array $user): array
 {
     $q=$pdo->prepare("SELECT id,name FROM locations WHERE organization_id=? AND status='active' ORDER BY name,id");
@@ -210,7 +224,7 @@ try{
         if((int)$item['location_id']!==$locationId)throw new DomainException('That kitchen item belongs to a different restaurant location.');
         if(preg_match('/\b(?:this|selected|current)\s+(?:item|ticket item)|what(?:\x27s| is)\s+(?:this|selected)\s+item|status\s+of\s+(?:this|selected)\s+item\b/u',$normalized)){
             $answer=kda_item_phrase($item,true).' on order '.(string)$item['check_number'].'.';
-            app_json_response(['ok'=>true,'skill'=>'kds.selected_item','answer'=>$answer,'data'=>['itemPublicId'=>$selectedItemId,'status'=>$item['status'],'station'=>$item['station_name']],'sources'=>['Kitchen Display → Live Item']]);
+            kda_reply(['ok'=>true,'skill'=>'kds.selected_item','answer'=>$answer,'data'=>['itemPublicId'=>$selectedItemId,'status'=>$item['status'],'station'=>$item['station_name']],'sources'=>['Kitchen Display → Live Item']]);
         }
     }
 
@@ -223,103 +237,103 @@ try{
         $all=is_array($context['allSlots']??null)?$context['allSlots']:[];
         $resolved=kds_resolve_order_reference($tickets,$all,$slot);
         if($resolved['status']==='empty'||$resolved['status']==='invalid'){
-            app_json_response(['ok'=>true,'skill'=>'kds.slot_empty','answer'=>'Order '.$slot.' is not active. This station has '.count($tickets).' active orders across '.max(1,(int)ceil(count($tickets)/8)).' page(s).','data'=>['slot'=>$slot,'total'=>count($tickets)],'sources'=>['Kitchen Display → Active Orders']]);
+            kda_reply(['ok'=>true,'skill'=>'kds.slot_empty','answer'=>'Order '.$slot.' is not active. This station has '.count($tickets).' active orders across '.max(1,(int)ceil(count($tickets)/8)).' page(s).','data'=>['slot'=>$slot,'total'=>count($tickets)],'sources'=>['Kitchen Display → Active Orders']]);
         }
         if($resolved['status']==='stale'){
-            app_json_response(['ok'=>true,'skill'=>'kds.slot_changed','answer'=>'Order '.$slot.' changed position since your KDS display refreshed. Refresh the order list and ask again.','data'=>['slot'=>$slot],'sources'=>['Kitchen Display → Active Orders']]);
+            kda_reply(['ok'=>true,'skill'=>'kds.slot_changed','answer'=>'Order '.$slot.' changed position since your KDS display refreshed. Refresh the order list and ask again.','data'=>['slot'=>$slot],'sources'=>['Kitchen Display → Active Orders']]);
         }
         $current=$resolved['ticket'];
         $current['orderReference']=$slot;
-        $spoken=kda_spoken_personalization($pdo,$org,$user,$input,$context,$message,kso_ticket($current,$slot));
-        app_json_response(['ok'=>true,'skill'=>'kds.order_reference','answer'=>$spoken['answer'],'verifiedSpeaker'=>$spoken['verifiedSpeaker'],'data'=>['slot'=>$slot,'ticket'=>$current],'sources'=>['Kitchen Display → Active Orders']]);
+
+        kda_reply(['ok'=>true,'skill'=>'kds.order_reference','answer'=>kso_ticket($current,$slot),'data'=>['slot'=>$slot,'ticket'=>$current],'sources'=>['Kitchen Display → Active Orders']]);
     }
 
     $ticket=kda_match_ticket($tickets,$message,$selectedCheckId);
     if($ticket){
-        $spoken=kda_spoken_personalization($pdo,$org,$user,$input,$context,$message,kso_ticket($ticket));
-        app_json_response(['ok'=>true,'skill'=>'kds.order_detail','answer'=>$spoken['answer'],'verifiedSpeaker'=>$spoken['verifiedSpeaker'],'data'=>['ticket'=>$ticket],'sources'=>['Kitchen Display → Live Order']]);
+
+        kda_reply(['ok'=>true,'skill'=>'kds.order_detail','answer'=>kso_ticket($ticket),'data'=>['ticket'=>$ticket],'sources'=>['Kitchen Display → Live Order']]);
     }
 
     if(preg_match('/\b(?:order history|recent completed|completed orders?|finished orders?|last completed)\b/u',$normalized)){
         $history=kda_recent_history($pdo,$org,$locationId);
         $historyTicket=kda_match_ticket($history,$message,$selectedCheckId);
-        if($historyTicket)app_json_response(['ok'=>true,'skill'=>'kds.order_history_detail','answer'=>kda_ticket_detail($historyTicket,true).' Completed '.(string)($historyTicket['completedAt']??'recently').'.','data'=>['ticket'=>$historyTicket],'sources'=>['Kitchen Display → 24-Hour Order History']]);
+        if($historyTicket)kda_reply(['ok'=>true,'skill'=>'kds.order_history_detail','answer'=>kda_ticket_detail($historyTicket,true).' Completed '.(string)($historyTicket['completedAt']??'recently').'.','data'=>['ticket'=>$historyTicket],'sources'=>['Kitchen Display → 24-Hour Order History']]);
         $parts=[];foreach(array_slice($history,0,8) as $row)$parts[]=kda_ticket_label($row).' completed '.(string)($row['completedAt']??'');
         $answer=$history?'Recent completed kitchen orders: '.implode('; ',$parts).'.':'There are no completed or cancelled kitchen orders in the last 24 hours.';
-        app_json_response(['ok'=>true,'skill'=>'kds.order_history','answer'=>$answer,'data'=>['count'=>count($history),'tickets'=>array_slice($history,0,20)],'sources'=>['Kitchen Display → 24-Hour Order History']]);
+        kda_reply(['ok'=>true,'skill'=>'kds.order_history','answer'=>$answer,'data'=>['count'=>count($history),'tickets'=>array_slice($history,0,20)],'sources'=>['Kitchen Display → 24-Hour Order History']]);
     }
 
     if(preg_match('/\b(?:read|list|tell me|what are|what\x27s|whats)\s+(?:all\s+)?(?:the\s+)?(?:active\s+|current\s+)?(?:kds\s+)?orders?\b|\borders?\s+(?:in|on)\s+(?:the\s+)?(?:kitchen|kds)\b/u',$normalized)){
         $ordered=$tickets;usort($ordered,static fn($a,$b)=>kda_ticket_age($b)<=>kda_ticket_age($a));
-        if(!$ordered)app_json_response(['ok'=>true,'skill'=>'kds.read_orders','answer'=>'There are no active kitchen orders right now.','data'=>['tickets'=>[]],'sources'=>['Kitchen Display → Live Orders']]);
+        if(!$ordered)kda_reply(['ok'=>true,'skill'=>'kds.read_orders','answer'=>'There are no active kitchen orders right now.','data'=>['tickets'=>[]],'sources'=>['Kitchen Display → Live Orders']]);
         $parts=[];foreach($tickets as $index=>$row)$parts[]=kso_ticket($row,$index+1);
         $summary=count($tickets)===1?'There is one active order. ':'There are '.count($tickets).' active orders. ';
-        $spoken=kda_spoken_personalization($pdo,$org,$user,$input,$context,$message,$summary.implode(' Next order. ',$parts));
-        app_json_response(['ok'=>true,'skill'=>'kds.read_orders','answer'=>$spoken['answer'],'verifiedSpeaker'=>$spoken['verifiedSpeaker'],'data'=>['count'=>count($tickets),'tickets'=>$tickets],'sources'=>['Kitchen Display → Live Orders']]);
+
+        kda_reply(['ok'=>true,'skill'=>'kds.read_orders','answer'=>$summary.implode(' Next order. ',$parts),'data'=>['count'=>count($tickets),'tickets'=>$tickets],'sources'=>['Kitchen Display → Live Orders']]);
     }
 
     if(preg_match('/\b(?:newest|latest|just came in|most recent|last order|new order)\b/u',$normalized)){
         $newest=kda_newest_ticket($tickets);
         $answer=$newest?'Newest active kitchen order: '.kda_ticket_detail($newest,true):'There are no active kitchen orders right now.';
-        app_json_response(['ok'=>true,'skill'=>'kds.newest_order','answer'=>$answer,'data'=>['ticket'=>$newest],'sources'=>['Kitchen Display → Live Orders']]);
+        kda_reply(['ok'=>true,'skill'=>'kds.newest_order','answer'=>$answer,'data'=>['ticket'=>$newest],'sources'=>['Kitchen Display → Live Orders']]);
     }
 
     if(preg_match('/\b(?:special instructions?|mods?|modifications?|allerg(?:y|ies)|notes?)\b/u',$normalized)){
         $rows=[];
         foreach($tickets as $order)foreach((array)($order['items']??[]) as $item)if(trim((string)($item['special_instructions']??''))!=='')$rows[]='order '.(string)$order['checkNumber'].', '.kda_item_phrase($item,false);
         $answer=$rows?'Current kitchen special instructions: '.implode('; ',array_slice($rows,0,20)).'.':'There are no special instructions on the active KDS orders.';
-        app_json_response(['ok'=>true,'skill'=>'kds.special_instructions','answer'=>$answer,'data'=>['count'=>count($rows)],'sources'=>['Kitchen Display → Live Order Instructions']]);
+        kda_reply(['ok'=>true,'skill'=>'kds.special_instructions','answer'=>$answer,'data'=>['count'=>count($rows)],'sources'=>['Kitchen Display → Live Order Instructions']]);
     }
 
     if(preg_match('/\b(?:late|behind|overdue|slow|sla)\b/u',$normalized)){
         $rows=array_values(array_filter($tickets,static fn($row)=>!empty($row['late'])));
         $parts=array_map('kda_ticket_label',array_slice($rows,0,8));
         $answer=$rows?count($rows).' late kitchen ticket'.(count($rows)===1?'':'s').': '.implode('; ',$parts).'.':'No kitchen tickets are currently beyond their station target.';
-        app_json_response(['ok'=>true,'skill'=>'kds.late','answer'=>$answer,'data'=>['count'=>count($rows),'tickets'=>array_slice($rows,0,12)],'sources'=>['Kitchen Display → Live Board']]);
+        kda_reply(['ok'=>true,'skill'=>'kds.late','answer'=>$answer,'data'=>['count'=>count($rows),'tickets'=>array_slice($rows,0,12)],'sources'=>['Kitchen Display → Live Board']]);
     }
 
     if(preg_match('/\b(?:ready|ready to bump|pickup|expo)\b/u',$normalized)){
         $rows=array_values(array_filter($tickets,static fn($row)=>!empty($row['readyToBump'])||((int)($row['ready']??0)>0)));
         $parts=array_map('kda_ticket_label',array_slice($rows,0,8));
         $answer=$rows?count($rows).' ticket'.(count($rows)===1?'':'s').' have ready items: '.implode('; ',$parts).'.':'No active kitchen tickets currently have ready items.';
-        app_json_response(['ok'=>true,'skill'=>'kds.ready','answer'=>$answer,'data'=>['count'=>count($rows),'tickets'=>array_slice($rows,0,12)],'sources'=>['Kitchen Display → Expo']]);
+        kda_reply(['ok'=>true,'skill'=>'kds.ready','answer'=>$answer,'data'=>['count'=>count($rows),'tickets'=>array_slice($rows,0,12)],'sources'=>['Kitchen Display → Expo']]);
     }
 
     if(preg_match('/\b(?:held|on hold|holds?)\b/u',$normalized)){
         $rows=array_values(array_filter($tickets,static fn($row)=>(int)($row['held']??0)>0));
         $parts=[];foreach(array_slice($rows,0,10) as $row)$parts[]=kda_ticket_label($row).' with '.(int)$row['held'].' held item'.((int)$row['held']===1?'':'s');
         $answer=$rows?'Held kitchen work: '.implode('; ',$parts).'.':'No active kitchen ticket has held items.';
-        app_json_response(['ok'=>true,'skill'=>'kds.held','answer'=>$answer,'data'=>['count'=>count($rows),'tickets'=>array_slice($rows,0,12)],'sources'=>['Kitchen Display → Live Orders']]);
+        kda_reply(['ok'=>true,'skill'=>'kds.held','answer'=>$answer,'data'=>['count'=>count($rows),'tickets'=>array_slice($rows,0,12)],'sources'=>['Kitchen Display → Live Orders']]);
     }
 
     if(preg_match('/\b(?:unrouted|no station|missing route|routing)\b/u',$normalized)){
         $items=array_values(array_filter((array)$board['items'],static fn($item)=>$item['station_id']===null&&!in_array((string)$item['status'],['completed','cancelled'],true)));
         $parts=[];foreach(array_slice($items,0,10) as $item)$parts[]='order '.(string)$item['check_number'].', '.kda_item_phrase($item,false);
         $answer=$items?count($items).' active kitchen item'.(count($items)===1?' is':'s are').' unrouted: '.implode('; ',$parts).'.':'No active kitchen items are unrouted.';
-        app_json_response(['ok'=>true,'skill'=>'kds.unrouted','answer'=>$answer,'data'=>['count'=>count($items),'items'=>array_slice($items,0,15)],'sources'=>['Kitchen Display → Routing']]);
+        kda_reply(['ok'=>true,'skill'=>'kds.unrouted','answer'=>$answer,'data'=>['count'=>count($items),'items'=>array_slice($items,0,15)],'sources'=>['Kitchen Display → Routing']]);
     }
 
     if(preg_match('/\b(?:all day|all-day|production totals?|item counts?|how many)\b/u',$normalized)){
         $rows=(array)$board['allDay'];$parts=[];
         foreach(array_slice($rows,0,20) as $row)$parts[]=(string)$row['name'].' '.kda_qty((float)$row['quantity']).' active: '.kda_qty((float)$row['queued']).' queued, '.kda_qty((float)$row['inProgress']).' cooking, '.kda_qty((float)$row['ready']).' ready';
         $answer=$rows?'All Day active fire: '.implode('; ',$parts).'.':'There are no active fired items in the kitchen.';
-        app_json_response(['ok'=>true,'skill'=>'kds.all_day','answer'=>$answer,'data'=>array_slice($rows,0,30),'sources'=>['Kitchen Display → All Day']]);
+        kda_reply(['ok'=>true,'skill'=>'kds.all_day','answer'=>$answer,'data'=>array_slice($rows,0,30),'sources'=>['Kitchen Display → All Day']]);
     }
 
     if(preg_match('/\b(?:station|stations|load|busy|busiest)\b/u',$normalized)){
         $parts=[];
         foreach((array)$board['stations'] as $row){$count=(int)($board['stationCounts'][(string)$row['public_id']]??0);$parts[]=(string)$row['name'].' '.$count.' active';}
         if((int)($board['stationCounts']['unrouted']??0)>0)$parts[]='Unrouted '.(int)$board['stationCounts']['unrouted'];
-        app_json_response(['ok'=>true,'skill'=>'kds.stations','answer'=>$parts?'Station load: '.implode('; ',$parts).'.':'No active kitchen stations are configured.','data'=>['stationCounts'=>$board['stationCounts']],'sources'=>['Kitchen Display → Stations']]);
+        kda_reply(['ok'=>true,'skill'=>'kds.stations','answer'=>$parts?'Station load: '.implode('; ',$parts).'.':'No active kitchen stations are configured.','data'=>['stationCounts'=>$board['stationCounts']],'sources'=>['Kitchen Display → Stations']]);
     }
 
     if(preg_match('/\b(?:next|oldest|what should.*work|priority order)\b/u',$normalized)){
         $ordered=$tickets;usort($ordered,static fn($a,$b)=>kda_ticket_age($b)<=>kda_ticket_age($a));$next=$ordered[0]??null;
-        app_json_response(['ok'=>true,'skill'=>'kds.next_order','answer'=>$next?'Oldest active kitchen order: '.kda_ticket_detail($next,true):'There are no active kitchen orders right now.','data'=>['ticket'=>$next],'sources'=>['Kitchen Display → Live Orders']]);
+        kda_reply(['ok'=>true,'skill'=>'kds.next_order','answer'=>$next?'Oldest active kitchen order: '.kda_ticket_detail($next,true):'There are no active kitchen orders right now.','data'=>['ticket'=>$next],'sources'=>['Kitchen Display → Live Orders']]);
     }
 
     $location=(array)$board['location'];
     $answer=(string)$location['name'].' kitchen: '.(int)$metrics['tickets'].' active ticket'.((int)$metrics['tickets']===1?'':'s').', '.(int)$metrics['queued'].' queued, '.(int)$metrics['inProgress'].' in progress, '.(int)$metrics['ready'].' ready, '.(int)$metrics['held'].' held, '.(int)$metrics['late'].' late, '.(int)$metrics['unrouted'].' unrouted, and '.(int)$metrics['readyTickets'].' ready-to-bump ticket'.((int)$metrics['readyTickets']===1?'':'s').'. Ask for any order number, table, special instructions, All Day item count, station load, or recent completed order.';
-    app_json_response(['ok'=>true,'skill'=>'kds.snapshot','answer'=>$answer,'data'=>['location'=>$location,'metrics'=>$metrics,'stationCounts'=>$board['stationCounts'],'tickets'=>$tickets],'sources'=>['Kitchen Display → Live Board']]);
+    kda_reply(['ok'=>true,'skill'=>'kds.snapshot','answer'=>$answer,'data'=>['location'=>$location,'metrics'=>$metrics,'stationCounts'=>$board['stationCounts'],'tickets'=>$tickets],'sources'=>['Kitchen Display → Live Board']]);
 }catch(DomainException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],403);}
 catch(Throwable $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);}
