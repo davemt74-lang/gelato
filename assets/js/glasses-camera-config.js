@@ -19,7 +19,7 @@
   }
   function stopAll(){for(let slot=1;slot<=MAX;slot++)stop(slot);}
   function cameraSource(slot){
-    if(slot===1)return state.ready&&window.GelatoGlassesPrimaryCamera?.active?.()?$ ('cameraVideo'):null;
+    if(slot===1)return state.ready&&window.GelatoGlassesPrimaryCamera?.active?.()?$('cameraVideo'):null;
     return window.GelatoGlassesMultiCamera?.video?.(slot)||null;
   }
   function normalizeZone(box){
@@ -62,6 +62,8 @@
     }
     zonePreview(slot);
     const action=$('camCapture'+slot);if(action)action.disabled=!isEnabled(slot)||!cameraSource(slot);
+    if(slot===1){const button=$('startCamera');if(button&&!window.GelatoGlassesPrimaryCamera?.active?.())button.disabled=!isEnabled(slot);}
+    else {const start=document.querySelector('.sim-aux-camera[data-slot="'+slot+'"] [data-start]');if(start)start.disabled=!isEnabled(slot)||!!window.GelatoGlassesMultiCamera?.video?.(slot);}
     setNote(slot,state.ready?(d.enabled?'Enabled · select Start Camera to begin capture':'Off · browser camera cannot start until enabled'):'Select a restaurant location to configure cameras.');
   }
   function createPanel(slot,container){
@@ -80,6 +82,7 @@
         '<label>'+({x:'Left',y:'Top',width:'Width',height:'Height'}[key])+
         ' <input type="range" min="0" max="100" step="1" id="cam'+slot+key+'">'+
         '<output id="cam'+slot+key+'Value">0%</output></label>').join('')+'</div>'+
+      '<button type="button" id="camEdit'+slot+'">Edit Capture Zone</button>'+ 
       '<div class="inline-actions"><button type="button" id="camSave'+slot+'" data-config-save="1">Save Setup</button>'+
       '<button type="button" id="camCapture'+slot+'" data-config-capture="1">Test Photo</button></div>'+
       '<div class="sim-muted" id="camConfigMessage'+slot+'" role="status"></div>';
@@ -90,9 +93,6 @@
     container.prepend(wrapper);
     const record={saved:defaults(slot),draft:defaults(slot),panel:wrapper,zone:null};
     state.slots.set(slot,record);
-    for(const [key,id] of [['displayName','Name'],['role','Role'],['stationPublicId','Station'],['rotation','Rotation']]){
-      $( 'cam'+id+slot ); // No-op: IDs are camName1/camRole1, wired below.
-    }
     $('camName'+slot).addEventListener('input',e=>{record.draft.displayName=e.target.value;});
     $('camRole'+slot).addEventListener('change',e=>{record.draft.role=e.target.value;});
     $('camStation'+slot).addEventListener('change',e=>{record.draft.stationPublicId=e.target.value||null;});
@@ -107,6 +107,13 @@
       if(!e.target.checked)stop(slot);
       record.draft.enabled=e.target.checked;
       await save(slot);
+    });
+    $('camEdit'+slot).addEventListener('click',()=>{
+      const preview=slot===1?$('glassesStage'):container.querySelector('.sim-aux-preview');
+      if(!preview)return;
+      const editing=preview.classList.toggle('camera-zone-editing');
+      $('camEdit'+slot).textContent=editing?'Finish Zone Editing':'Edit Capture Zone';
+      setNote(slot,editing?'Drag the capture outline, then Save Setup.':'Zone editing disabled. Save Setup to persist your changes.');
     });
     $('camSave'+slot).addEventListener('click',()=>void save(slot));
     $('camCapture'+slot).addEventListener('click',()=>void capture(slot));
@@ -197,7 +204,7 @@
     if(!isEnabled(slot))return setNote(slot,'Camera location is OFF. Enable it before capture.');
     const src=cameraSource(slot);
     if(!src||!src.videoWidth||!src.videoHeight)return setNote(slot,'Start this camera and wait for a live frame.');
-    const c=state.slots.get(slot).saved,zone=c.zone,rotation=c.rotation;
+    const c=state.slots.get(slot).saved,zone=c.zone,rotation=c.rotation,epoch=state.seq,locationId=state.locationId;
     const canvas=document.createElement('canvas'),srcW=src.videoWidth,srcH=src.videoHeight;
     const cropW=Math.max(1,Math.round(srcW*zone.width)),cropH=Math.max(1,Math.round(srcH*zone.height));
     canvas.width=rotation%180===0?cropW:cropH;
@@ -209,6 +216,7 @@
       -cropW/2,-cropH/2,cropW,cropH);
     const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/jpeg',.92));
     if(!blob)return setNote(slot,'Could not encode the frame.');
+    if(epoch!==state.seq||locationId!==state.locationId||!isEnabled(slot))return;
     const url=URL.createObjectURL(blob),photo={
       url,slot,role:c.role,locationId:state.locationId,stationPublicId:c.stationPublicId||null,
       capturedAt:new Date().toISOString(),width:canvas.width,height:canvas.height,blob
