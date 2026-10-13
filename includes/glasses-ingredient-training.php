@@ -163,7 +163,9 @@ function glasses_ingredient_training_capture(PDO $pdo,array $user,array $input):
         'devicePublicId'=>(string)$device['public_id'],
         'missionPublicId'=>$mission?(string)$mission['public_id']:null,
         'annotations'=>$annotations,
-        'capturedAt'=>gmdate('Y-m-d H:i:s'),
+        // Use the DB clock with microseconds so an assignment started during the
+        // same second is still correctly attributed (assigned_at is DATETIME(6)).
+        'capturedAt'=>(string)$pdo->query("SELECT DATE_FORMAT(NOW(6),'%Y-%m-%d %H:%i:%s.%f')")->fetchColumn(),
         'retentionDays'=>365,
         'perceptualHash'=>$fingerprint['hash']??null,
         'brightnessMean'=>$fingerprint['brightnessMean']??null,
