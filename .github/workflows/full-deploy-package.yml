@@ -54,6 +54,8 @@ on:
       - 'assets/js/glasses-web-simulator.js'
       - 'assets/js/glasses-hud-notifications.js'
       - 'assets/js/glasses-employee-runtimes.js'
+      - 'tests/glasses-runtime-station-contract.test.js'
+      - 'docs/GLASSES-SECTION268-REUSE-AUDIT.md'
       - 'includes/glasses-employee-runtimes.php'
       - 'database/20261214_glasses_employee_runtimes.sql'
       - 'tests/glasses-hud-notifications.test.js'
@@ -429,6 +431,7 @@ jobs:
           node --check assets/js/glasses-web-simulator.js
           node --check assets/js/glasses-hud-notifications.js
           node --check assets/js/glasses-employee-runtimes.js
+          node tests/glasses-runtime-station-contract.test.js
           node --check assets/js/glasses-item-assembly.js
           node --check assets/js/glasses-pos-kds-test.js
 
