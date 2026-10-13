@@ -1,0 +1,82 @@
+/* Training chat owns its inline conversation. Admin mode may still use the global Agent. */
+body:has(#workspaceSwitch [data-workspace-mode="training"].active) #gelato-agent-bar,
+body:has(#workspaceSwitch [data-workspace-mode="training"].active) #gelato-agent-status,
+body:has(#workspaceSwitch [data-workspace-mode="training"].active) #gelato-agent-response-drawer {
+  display:none!important;
+  pointer-events:none!important;
+}
+/* Restore accessible text contrast regardless of white-card Admin theme overrides. */
+#page-workspace .message.user .bubble,
+body.gelato-admin-tech-theme #page-workspace .message.user .bubble {
+  background:#182823!important;
+  color:#fff!important;
+  border:1px solid #182823!important;
+  overflow-wrap:anywhere;
+}
+#page-workspace .message.user .bubble :is(p,strong,em,span,li),
+body.gelato-admin-tech-theme #page-workspace .message.user .bubble :is(p,strong,em,span,li) {
+  color:inherit!important;
+}
+#page-workspace .message.agent .bubble,
+body.gelato-admin-tech-theme #page-workspace .message.agent .bubble{
+  background:#fff!important;
+  color:#182320!important;
+  overflow-wrap:anywhere;
+}
+#page-workspace .message.agent .bubble :is(h4,p,li){color:inherit}
+#page-workspace .composer{z-index:15}
+#page-workspace .composer-inner{min-width:0}
+#page-workspace .composer-box{
+  grid-template-columns:40px 40px 40px 40px minmax(0,1fr) 42px;
+  gap:7px;
+  align-items:center;
+  max-width:100%;
+}
+#page-workspace .composer-box textarea{min-width:0;width:100%;color:#182320;font-size:13px}
+#page-workspace .composer-box .training-voice-once,
+#page-workspace .composer-box .training-voice-always{
+  font-size:18px;
+  font-weight:800;
+  color:#204639;
+  background:#e8f0eb;
+}
+#page-workspace .composer-box .training-voice-once[aria-pressed="true"],
+#page-workspace .composer-box .training-voice-always[aria-pressed="true"]{
+  background:#aee3bb;
+  color:#0d3920;
+  box-shadow:0 0 0 2px #26734340;
+}
+#page-workspace .composer-box .training-voice-once:focus-visible,
+#page-workspace .composer-box .training-voice-always:focus-visible{
+  outline:2px solid #24754b;
+  outline-offset:2px;
+}
+#page-workspace .composer-box .training-voice-once:disabled,
+#page-workspace .composer-box .training-voice-always:disabled{
+  opacity:.48;
+  cursor:not-allowed;
+}
+#page-workspace .composer-meta{flex-wrap:wrap;align-items:center;justify-content:space-between}
+#trainingVoiceStatus{font-size:10px;line-height:1.35;color:#425c4a;font-weight:750}
+#trainingVoiceStatus[data-state="listening"]{color:#086d3f}
+#trainingVoiceStatus[data-state="blocked"],
+#trainingVoiceStatus[data-state="error"],
+#trainingVoiceStatus[data-state="unsupported"]{color:#a33224}
+#trainingVoiceStatus[data-state="paused"]{color:#996518}
+@media(max-width:650px){
+  #page-workspace .composer{padding:8px 7px 12px}
+  #page-workspace .composer-box{
+    grid-template-columns:34px 34px 34px 34px minmax(0,1fr) 36px;
+    gap:4px;padding:6px
+  }
+  #page-workspace .composer-box .icon-btn,
+  #page-workspace .composer-box .send-btn{width:34px;height:36px;font-size:15px}
+  #page-workspace .composer-box textarea{font-size:12px;padding-left:2px}
+}
+@media(max-width:420px){
+  #page-workspace .composer-box{grid-template-columns:34px 34px minmax(0,1fr) 34px 34px 36px}
+  #page-workspace #chatInput{grid-column:3;grid-row:1}
+  #page-workspace #trainingVoiceOnce{grid-column:4;grid-row:1}
+  #page-workspace #trainingVoiceAlways{grid-column:5;grid-row:1}
+  #page-workspace #sendChat{grid-column:6;grid-row:1}
+}

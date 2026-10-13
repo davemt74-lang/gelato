@@ -1,0 +1,47 @@
+name: Training Workspace Chat and Listening
+
+on:
+  pull_request:
+    paths:
+      - 'workspace.php'
+      - 'index.html'
+      - 'css/training-workspace-chat.css'
+      - 'js/training-workspace-voice.js'
+      - 'js/dynamic-agent-canvas.js'
+      - 'tests/training-chat-voice-contract.php'
+      - 'tests/training-workspace-voice.test.js'
+      - '.github/workflows/training-workspace-chat.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'workspace.php'
+      - 'index.html'
+      - 'css/training-workspace-chat.css'
+      - 'js/training-workspace-voice.js'
+      - 'js/dynamic-agent-canvas.js'
+      - 'tests/training-chat-voice-contract.php'
+      - 'tests/training-workspace-voice.test.js'
+      - '.github/workflows/training-workspace-chat.yml'
+
+jobs:
+  training-chat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax and changed assets
+        run: |
+          php -l workspace.php
+          php -l tests/training-chat-voice-contract.php
+          node --check js/dynamic-agent-canvas.js
+          node --check js/training-workspace-voice.js
+          node --check tests/training-workspace-voice.test.js
+      - name: Training conversation, popup, color contrast and microphone contract
+        run: |
+          php tests/training-chat-voice-contract.php
+          node tests/training-workspace-voice.test.js

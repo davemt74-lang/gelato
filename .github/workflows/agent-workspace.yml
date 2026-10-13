@@ -13,6 +13,12 @@ on:
       - 'js/global-agent.js'
       - 'js/agent-canvas.js'
       - 'js/dynamic-agent-canvas.js'
+      - 'workspace.php'
+      - 'index.html'
+      - 'css/training-workspace-chat.css'
+      - 'js/training-workspace-voice.js'
+      - 'tests/training-chat-voice-contract.php'
+      - 'tests/training-workspace-voice.test.js'
       - 'js/global-add-canvas.js'
       - 'js/workspace-command-enhancements.js'
       - 'js/workspace-shell-sync.js'
@@ -35,6 +41,12 @@ on:
       - 'js/global-agent.js'
       - 'js/agent-canvas.js'
       - 'js/dynamic-agent-canvas.js'
+      - 'workspace.php'
+      - 'index.html'
+      - 'css/training-workspace-chat.css'
+      - 'js/training-workspace-voice.js'
+      - 'tests/training-chat-voice-contract.php'
+      - 'tests/training-workspace-voice.test.js'
       - 'js/global-add-canvas.js'
       - 'js/workspace-command-enhancements.js'
       - 'js/workspace-shell-sync.js'
@@ -78,6 +90,8 @@ jobs:
           node --check js/global-agent.js
           node --check js/agent-canvas.js
           node --check js/dynamic-agent-canvas.js
+          node --check js/training-workspace-voice.js
+          php -l tests/training-chat-voice-contract.php
           node --check js/global-add-canvas.js
           node --check js/workspace-command-enhancements.js
           node --check js/workspace-shell-sync.js
@@ -138,6 +152,10 @@ jobs:
           test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260913_zzzzzz_agent_workspace';")" = "1"
       - name: Verify conversation isolation, routing and action receipts
         run: php tests/agent-workspace-contract.php
+      - name: Inline Training Chat and Voice acceptance
+        run: |
+          php tests/training-chat-voice-contract.php
+          node tests/training-workspace-voice.test.js
       - name: Verify upgrader idempotence
         run: |
           php <<'PHP'

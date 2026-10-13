@@ -6,6 +6,12 @@ on:
   pull_request:
     paths:
       - 'workspace.php'
+      - 'index.html'
+      - 'css/training-workspace-chat.css'
+      - 'js/training-workspace-voice.js'
+      - 'js/dynamic-agent-canvas.js'
+      - 'tests/training-chat-voice-contract.php'
+      - 'tests/training-workspace-voice.test.js'
       - 'glasses-pos-kds-test.php'
       - 'glasses-simulator.php'
       - 'kds.php'
@@ -93,6 +99,10 @@ jobs:
           required=(
             index.php
             index.html
+            css/training-workspace-chat.css
+            js/training-workspace-voice.js
+            tests/training-chat-voice-contract.php
+            tests/training-workspace-voice.test.js
             .htaccess
             workspace.php
             admin.php
@@ -154,6 +164,9 @@ jobs:
           php tests/admin-superuser-navigation-recovery-contract.php
           php tests/deployment-navigation-verification-contract.php
           php tests/static-workspace-entry-contract.php
+          php tests/training-chat-voice-contract.php
+          node --check js/training-workspace-voice.js
+          node tests/training-workspace-voice.test.js
           php tests/mysql-conditional-add-column-compatibility.php
           php tests/mysql-foreign-key-diagnostics.php
           php tests/mysql-v11-stored-generated-fk-compatibility.php
