@@ -93,9 +93,8 @@
         const label=document.createElement('span');label.textContent=labels[name];
         const count=document.createElement('span');count.id='sgvCameraEnabledCount';
         count.className='sgv-camera-active-count';count.textContent='0';count.setAttribute('aria-hidden','true');
-        const unread=document.createElement('span');unread.id='sgvCameraUnreadDot';
-        unread.className='sgv-camera-unread-dot';unread.setAttribute('aria-hidden','true');unread.hidden=true;
-        button.append(label,count,unread);
+        count.dataset.state='off';count.setAttribute('aria-label','0 cameras active');
+        button.append(label,count);
       }else button.textContent=labels[name];
       button.setAttribute('role','tab');button.setAttribute('aria-controls','sgv-panel-'+name);
       button.addEventListener('click',()=>select(name));
@@ -176,9 +175,8 @@
       const summary=event?.detail||window.GelatoCameraWorkspace?.sessionStatus?.()||{};
       const enabled=Number(summary.enabledCount??summary.enabled?.filter(Boolean)?.length??0);
       const unread=Number(summary.unreadPhotos??summary.unread?.reduce((a,b)=>a+b,0)??0);
-      const badge=$('sgvCameraEnabledCount'),marker=$('sgvCameraUnreadDot');
-      if(badge)badge.textContent=String(enabled);
-      if(marker)marker.hidden=unread===0;
+      const badge=$('sgvCameraEnabledCount');
+      if(badge){badge.textContent=String(enabled);badge.dataset.state=enabled>0?'active':'off';badge.setAttribute('aria-label',enabled+' cameras active');}
       const tab=$('sgv-tab-camera');
       if(tab){
         tab.classList.toggle('has-unread',unread>0);

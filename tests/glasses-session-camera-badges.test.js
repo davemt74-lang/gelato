@@ -9,7 +9,7 @@ const css=fs.readFileSync('assets/css/glasses-simulator-device-first.css','utf8'
 const ui=fs.readFileSync('assets/js/glasses-user-display-preferences.js','utf8');
 const page=fs.readFileSync('glasses-simulator.php','utf8');
 assert.match(tabs,/sgvCameraEnabledCount/);
-assert.match(tabs,/sgvCameraUnreadDot/);
+assert.doesNotMatch(tabs,/sgvCameraUnreadDot/,'camera tab has one combined status/count icon');
 assert.match(tabs,/gelato-camera-session-updated/);
 assert.match(tabs,/sgvVoiceStatusDot/);
 assert.match(tabs,/simVoiceTranscriptText/);
@@ -24,7 +24,7 @@ assert.match(workspace,/session\.count\[slot\]\+\+/);
 assert.match(workspace,/resetPhotoSession\(locationId\)/);
 assert.match(workspace,/session\.unread\[Number\(name\.slice\(-1\)\)\]=0/);
 assert.match(workspace,/window\.GelatoGlassesTabs\?\.active!=='camera'/);
-assert.match(workspace,/gc-camera-status-dot/);
+assert.doesNotMatch(workspace,/gc-camera-status-dot/,'camera sub-tabs have one combined status/count icon');
 assert.match(workspace,/gc-session-new-count/);
 assert.match(workspace,/label\.textContent='Cam '\+slot/,'camera tabs use compact Cam 1–5 labels');
 assert.match(workspace,/button\.setAttribute\('aria-label','Cam '\+slot\+/,'accessible tab label stays in sync');
@@ -32,7 +32,9 @@ assert.doesNotMatch(workspace,/label\.textContent='Camera '\+slot/,'old tab labe
 assert.match(css,/gc-new-photo-pulse/);
 assert.match(css,/@media\(prefers-reduced-motion:reduce\)/);
 assert.match(css,/sgv-camera-active-count/);
-assert.match(css,/gc-camera-status-dot\[data-state="enabled"\]/);
+assert.match(css,/#sgv-panel-camera\s*\{[\s\S]*?scrollbar-width:none/,'Camera panel has no visible nested scrollbar');
+assert.match(css,/grid-template-columns:repeat\(6,minmax\(0,1fr\)\)/,'camera selector fits six tabs without scrolling');
+assert.match(css,/gc-session-new-count\[data-state="active"\]/);
 assert.match(css,/sgv-voice-dot\[data-state="active"\]/);
 assert.match(voice,/active\.interimResults=true/);
 assert.match(voice,/Listening: /);

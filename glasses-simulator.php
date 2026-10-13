@@ -12,7 +12,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <title>Web Glasses Simulator · Gelato</title>
 <link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20261013-live1">
 <link rel="stylesheet" href="assets/css/glasses-simulator-hud-ux.css?v=20261013-voice1">
-<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-266a">
+<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-267">
 </head>
 <body>
 <header class="sim-topbar">
@@ -60,19 +60,6 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 
     <div class="sim-live-guide" id="simLiveGuide" role="status" aria-live="polite"><strong>CONNECTING LIVE DISPLAY</strong> · Finding an authorized location and kitchen orders; no hardware required.</div>
     <nav class="sim-navigation-panel" aria-label="Simulator HUD and voice navigation">
-      <div class="sim-navigation-group">
-        <span class="sim-nav-mode">PREVIEW</span>
-        <button id="simViewHudOnly" type="button" aria-pressed="false">HUD Only</button>
-        <button id="simViewGlasses" type="button" aria-pressed="false">Glasses Outline</button>
-      </div>
-      <div class="sim-navigation-group" aria-label="Kitchen navigation">
-        <button id="simNavPrevious" type="button" title="Previous assembly ingredient">← Step</button>
-        <button id="simNavNext" type="button" title="Next assembly ingredient">Next →</button>
-        <button id="simNavPreviousItem" type="button" title="Previous KDS item">← Item</button>
-        <button id="simNavNextItem" type="button" title="Next KDS item">Next Item →</button>
-        <button id="simNavItemAdded" type="button" title="Account for the current assembly ingredient; does not change KDS">Ingredient Added ✓</button>
-        <button id="simNavRepeat" type="button" title="Repeat current item and instruction">Repeat</button>
-      </div>
       <div class="sim-navigation-group sim-kitchen-commands" aria-label="Live kitchen workflow controls">
         <button type="button" data-glasses-command="start_order">Start Ticket</button>
         <button type="button" data-glasses-command="start_item">Start Item</button>
@@ -508,9 +495,11 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-multicamera.js?v=20261013-multi1"></script>
 <script src="assets/js/glasses-camera-config.js?v=20261013-hud264"></script>
 <script src="assets/js/glasses-camera-runtime.js?v=20261013-261"></script>
-<script src="assets/js/glasses-simulator-tabs.js?v=20261013-266a"></script>
+<script src="assets/js/glasses-simulator-tabs.js?v=20261013-267"></script>
 <script src="assets/js/glasses-camera-similarity.js?v=20261013-ref258"></script>
-<script src="assets/js/glasses-camera-workspace.js?v=20261013-hud264"></script>
+<script src="assets/js/glasses-camera-workspace.js?v=20261013-267"></script>
+<script src="assets/js/glasses-ingredient-training-plan.js?v=20261013-267"></script>
+<script src="assets/js/glasses-ingredient-training-studio.js?v=20261013-267"></script>
 <script src="assets/js/glasses-production-photo-flow.js?v=20261013-261"></script>
 <script src="assets/js/glasses-user-display-preferences.js?v=20261013-hud264"></script>
 <script src="assets/js/glasses-customer-photo-notifications.js?v=20261013-photo260"></script>
