@@ -43,7 +43,7 @@
     if(session.photoKeys.has(key))return;
     session.photoKeys.add(key);
     session.count[slot]++;
-    if(S.active!=='camera'+slot)session.unread[slot]++;
+    if(S.active!=='camera'+slot||window.GelatoGlassesTabs?.active!=='camera')session.unread[slot]++;
     updateCameraBadges();
   }
 
@@ -343,6 +343,9 @@
       void addLocal(photo);
     });
     window.addEventListener('gelato-camera-configuration-changed',updateCameraBadges);
+    window.addEventListener('gelato-glasses-tab-select',event=>{
+      if(event.detail?.tab==='camera')select(S.active);
+    });
     window.addEventListener('gelato-glasses-location-change',event=>{
       const locationId=Number(event.detail?.locationId||0);
       if(session.locationId!==locationId)resetPhotoSession(locationId);
