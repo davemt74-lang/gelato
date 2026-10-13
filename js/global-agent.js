@@ -432,19 +432,20 @@
       return true;
     }catch(error){status(error.message,4500);return false;}
   }
+  function diag(kind,details){window.GelatoVoiceDiagnostics?.record?.('global-agent',kind,details);}
   function startContinuous(){
     const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
     if(!SpeechRecognition||document.hidden||(!S.listening&&!S.wakeStandby))return false;
     stopContinuous();
-    const activeRec=new SpeechRecognition();S.rec=activeRec;
+    const activeRec=new SpeechRecognition();S.rec=activeRec;diag('starting');
     activeRec.lang='en-US';activeRec.continuous=true;activeRec.interimResults=true;
-    activeRec.onstart=()=>{if(S.rec!==activeRec)return;S.micActive=true;renderListening();};
+    activeRec.onstart=()=>{if(S.rec!==activeRec)return;S.micActive=true;diag('active');renderListening();};
     activeRec.onresult=event=>{
       if(S.rec!==activeRec)return;
       for(let index=event.resultIndex;index<event.results.length;index++){
         const result=event.results[index],text=String(result[0]?.transcript||'').trim();
         const evaluation=window.GelatoVoiceTurns?.evaluate?.(text,result[0]?.confidence,{wakeRequired:true});
-        if(evaluation?.kind==='ignored')continue;
+        if(evaluation?.kind==='ignored'){if(['tts-echo','post-tts-echo'].includes(evaluation.reason))diag('echo-ignored');continue;}
         // Evaluate explicit stop/start controls before generic speech barge-in.
         // "Hey Gelato stop listening" must update the saved preference,
         // not merely silence the current text-to-speech response.
@@ -460,7 +461,7 @@
           return;
         }
         if(evaluation?.kind==='interrupt'){
-          S.lastBargeIn=Date.now();
+          S.lastBargeIn=Date.now();diag('barge-in');
           interruptSpeech('voice-barge-in');
           status('Gelato stopped speaking.',2200);
           continue;
@@ -480,9 +481,9 @@
     };
     activeRec.onerror=event=>{
       if(S.rec!==activeRec)return;
-      const error=String(event.error||'unknown');
+      const error=String(event.error||'unknown');diag('error',{error});
       if(['not-allowed','service-not-allowed','audio-capture'].includes(error)){
-        stopContinuous();S.listening=false;S.wakeStandby=false;stopPoll();
+        stopContinuous();S.listening=false;S.wakeStandby=false;stopPoll();diag('blocked',{error});
         status('Microphone blocked: '+error+'. Check browser settings.',5000);
         renderListening();return;
       }
@@ -490,12 +491,12 @@
     };
     activeRec.onend=()=>{
       if(S.rec!==activeRec)return;
-      S.micActive=false;renderListening();
+      S.micActive=false;diag('ended');renderListening();
       if((S.listening||S.wakeStandby)&&!document.hidden){
-        setTimeout(()=>{if(S.rec===activeRec&&(S.listening||S.wakeStandby)&&!document.hidden){try{activeRec.start();}catch{}}},650);
+        setTimeout(()=>{if(S.rec===activeRec&&(S.listening||S.wakeStandby)&&!document.hidden){try{diag('retry');activeRec.start();}catch{diag('failed',{error:'start-failed'});S.listening=false;S.wakeStandby=false;stopPoll();stopContinuous();}}},650);
       }
     };
-    try{activeRec.start();return true;}catch(error){
+    try{activeRec.start();return true;}catch(error){diag('failed',{error:'start-failed'});
       stopContinuous();status('Could not start microphone: '+(error.message||'unavailable'),3500);
       renderListening();return false;
     }
@@ -506,7 +507,7 @@
       old.onend=null;old.onresult=null;old.onerror=null;
       try{if(typeof old.abort==='function')old.abort();else old.stop?.();}catch{}
     }
-    S.micActive=false;renderListening();
+    S.micActive=false;diag('off');renderListening();
   }
 
   async function poll() {
@@ -566,7 +567,7 @@
   }
 
   document.addEventListener('visibilitychange',()=>{
-    if(document.hidden){stopContinuous();if(S.listening||S.wakeStandby)status('Microphone paused · tab hidden.');}
+    if(document.hidden){stopContinuous();diag('paused');if(S.listening||S.wakeStandby)status('Microphone paused · tab hidden.');}
     else if(S.listening||S.wakeStandby)startContinuous();
   });
   window.addEventListener('beforeunload',()=>{stopContinuous();interruptSpeech('page-unload');});

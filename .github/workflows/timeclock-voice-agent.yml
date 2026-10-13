@@ -11,6 +11,8 @@ on:
       - 'includes/timeclock-voice-core.php'
       - 'js/timeclock-voice.js'
       - 'js/proactive-listening-commands.js'
+      - 'js/voice-diagnostics.js'
+      - 'tests/voice-diagnostics.test.js'
       - 'tests/proactive-listening-commands.test.js'
       - 'tests/proactive-global-listening.test.js'
       - 'tests/proactive-listening-contract.php'
@@ -71,6 +73,8 @@ jobs:
           php -l tests/timeclock-voice-contract.php
           node --check js/timeclock-voice.js
           node --check js/global-agent.js
+          node --check js/voice-diagnostics.js
+          node tests/voice-diagnostics.test.js
           node --check js/proactive-listening-commands.js
           node --check tests/proactive-global-listening.test.js
           php -l tests/proactive-listening-contract.php

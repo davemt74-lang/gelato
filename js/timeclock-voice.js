@@ -110,24 +110,25 @@ async function enableWakeStandby(){
  return true;
 }
 async function microphoneOff(){return setListening(false,{keepWake:false});}
+function diag(kind,details){window.GelatoVoiceDiagnostics?.record?.('timeclock',kind,details)}
 function startContinuous(){
  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
  if(!SR||document.hidden||(!listening&&!wakeStandby))return false;
  stopContinuous();
- const r=new SR();recognizer=r;r.lang='en-US';r.continuous=true;r.interimResults=true;r.maxAlternatives=1;
- r.onstart=()=>{if(recognizer!==r)return;microphoneActive=true;renderListening();};
+ const r=new SR();recognizer=r;diag('starting');r.lang='en-US';r.continuous=true;r.interimResults=true;r.maxAlternatives=1;
+ r.onstart=()=>{if(recognizer!==r)return;microphoneActive=true;diag('active');renderListening();};
  r.onresult=e=>{
    if(recognizer!==r)return;
    for(let i=e.resultIndex;i<e.results.length;i++){
      const result=e.results[i],text=String(result[0]?.transcript||'').trim();
      if(!text)continue;
      const evaluation=window.GelatoVoiceTurns?.evaluate?.(text,result[0]?.confidence,{wakeRequired:true});
-     if(evaluation?.kind==='ignored'||!result.isFinal)continue;
+     if(evaluation?.kind==='ignored'){if(['tts-echo','post-tts-echo'].includes(evaluation.reason))diag('echo-ignored');continue}if(!result.isFinal)continue;
      const command=window.GelatoProactiveCommands?.parse?.(text,'Hey Gelato');
      if(command==='start'){if(!listening)void setListening(true);return;}
      if(command==='stop'){if(listening)void setListening(false,{keepWake:true});return;}
      if(command==='off'){void microphoneOff();return;}
-     if(evaluation?.kind==='interrupt'){window.GelatoVoiceTurns?.interrupt?.('timeclock-barge-in');continue;}
+     if(evaluation?.kind==='interrupt'){window.GelatoVoiceTurns?.interrupt?.('timeclock-barge-in');diag('barge-in');continue;}
      if(!listening||!/^hey\s+gelato\b/i.test(text))continue;
      if(!haveVoice()){
        void microphoneOff();
@@ -138,24 +139,24 @@ function startContinuous(){
    }
  };
  r.onerror=e=>{
-   if(recognizer!==r)return;
+   if(recognizer!==r)return;diag('error',{error:String(e.error||'unknown')});
    if(['not-allowed','service-not-allowed','audio-capture'].includes(e.error)){
-     stopContinuous();listening=false;wakeStandby=false;stopProactive();
+     stopContinuous();listening=false;wakeStandby=false;stopProactive();diag('blocked',{error:String(e.error||'unknown')});
      renderListening();status('Microphone blocked: '+e.error+'. Check browser permissions.');
    }else if(!['no-speech','aborted'].includes(e.error))status('Listening: '+e.error);
  };
  r.onend=()=>{
    if(recognizer!==r)return;
-   microphoneActive=false;renderListening();
+   microphoneActive=false;diag('ended');renderListening();
    if((listening||wakeStandby)&&!document.hidden)
-     setTimeout(()=>{if(recognizer===r&&(listening||wakeStandby)&&!document.hidden){try{r.start()}catch{}}},650);
+     setTimeout(()=>{if(recognizer===r&&(listening||wakeStandby)&&!document.hidden){try{diag('retry');r.start()}catch{diag('failed',{error:'start-failed'});listening=false;wakeStandby=false;stopProactive();stopContinuous();}}},650);
  };
- try{r.start();return true;}catch(error){stopContinuous();toast(error.message);return false;}
+ try{r.start();return true;}catch(error){diag('failed',{error:'start-failed'});stopContinuous();toast(error.message);return false;}
 }
 function stopContinuous(){
  if(recognizer){const old=recognizer;recognizer=null;old.onend=null;old.onerror=null;old.onresult=null;
    try{if(typeof old.abort==='function')old.abort();else old.stop();}catch{}}
- microphoneActive=false;renderListening();
+ microphoneActive=false;diag('off');renderListening();
 }
 function startProactive(){stopProactive();pollProactive();proactiveTimer=setInterval(pollProactive,45000)}function stopProactive(){if(proactiveTimer)clearInterval(proactiveTimer);proactiveTimer=null}
 async function pollProactive(){if(!listening||!C.canProactive||sharedAgentAvailable())return;try{const d=await json('api/proactive-agent.php');for(const ev of d.events||[]){status('Gelato: '+ev.message);if(voiceAlertsEnabled)speak(ev.message)}}catch(e){console.warn('Proactive Agent',e)}}

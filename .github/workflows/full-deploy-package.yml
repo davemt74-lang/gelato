@@ -11,6 +11,8 @@ on:
       - 'js/training-workspace-voice.js'
       - 'js/voice-turn-taking.js'
       - 'js/proactive-listening-commands.js'
+      - 'js/voice-diagnostics.js'
+      - 'tests/voice-diagnostics.test.js'
       - 'tests/proactive-listening-commands.test.js'
       - 'tests/proactive-global-listening.test.js'
       - 'tests/proactive-listening-contract.php'
@@ -209,6 +211,8 @@ jobs:
           php tests/proactive-listening-contract.php
           node --check js/proactive-listening-commands.js
           node --check js/global-agent.js
+          node --check js/voice-diagnostics.js
+          node tests/voice-diagnostics.test.js
           node --check js/timeclock-voice.js
           node tests/proactive-listening-commands.test.js
           node tests/proactive-global-listening.test.js
