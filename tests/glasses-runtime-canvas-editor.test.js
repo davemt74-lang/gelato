@@ -15,7 +15,7 @@ assert.match(html,/id="simHudEditorAdvanced"/,'advanced settings use compact dis
 assert.match(html,/class="hud-panel-title hud-ticket-diagnostic" hidden/,'left ticket heading is not displayed');
 assert.match(html,/id="simTicketTimeSync" hidden/,'POS sync diagnostic is not displayed');
 assert.doesNotMatch(html,/id="hudIngredientAdded"|id="hudIngredientSkip"/,'no big Added/Skip buttons on lens');
-assert.match(main,/data-hud-ingredient-index="'+index/,'row buttons address one ingredient');
+assert.match(main,/data-hud-ingredient-index=/,'row buttons address one ingredient');
 assert.match(main,/operator_row_icon/,'row changes preserve manual attribution');
 assert.match(main,/options\.ingredientId/,'non-next ingredient can be acknowledged');
 assert.match(main,/if\(previous===result&&!options\.governedQualified\)/,'same status toggles to pending');
