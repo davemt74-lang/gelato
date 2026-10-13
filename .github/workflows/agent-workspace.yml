@@ -9,6 +9,14 @@ on:
       - 'api/workspace-workforce.php'
       - 'api/workspace-workforce-agent.php'
       - 'includes/agent-workspace-core.php'
+      - 'includes/agent-voice-conversation.php'
+      - 'includes/kds-spoken-orders.php'
+      - 'js/kds-spoken-orders.js'
+      - 'tests/kds-natural-order-voice.php'
+      - 'tests/kds-natural-order-voice.test.js'
+      - 'tests/agent-verified-voice-greetings.php'
+      - 'tests/agent-natural-voice-history-contract.php'
+      - 'docs/AGENT-VOICE-PERSONALIZATION-HISTORY.md'
       - 'includes/workspace-workforce-core.php'
       - 'js/global-agent.js'
       - 'js/voice-turn-taking.js'
@@ -40,6 +48,14 @@ on:
       - 'api/workspace-workforce.php'
       - 'api/workspace-workforce-agent.php'
       - 'includes/agent-workspace-core.php'
+      - 'includes/agent-voice-conversation.php'
+      - 'includes/kds-spoken-orders.php'
+      - 'js/kds-spoken-orders.js'
+      - 'tests/kds-natural-order-voice.php'
+      - 'tests/kds-natural-order-voice.test.js'
+      - 'tests/agent-verified-voice-greetings.php'
+      - 'tests/agent-natural-voice-history-contract.php'
+      - 'docs/AGENT-VOICE-PERSONALIZATION-HISTORY.md'
       - 'includes/workspace-workforce-core.php'
       - 'js/global-agent.js'
       - 'js/voice-turn-taking.js'
@@ -166,6 +182,10 @@ jobs:
           node tests/training-workspace-voice.test.js
           php tests/voice-barge-in-contract.php
           node tests/voice-turn-taking.test.js
+          php tests/agent-verified-voice-greetings.php
+          php tests/agent-natural-voice-history-contract.php
+          php tests/kds-natural-order-voice.php
+          node tests/kds-natural-order-voice.test.js
       - name: Verify upgrader idempotence
         run: |
           php <<'PHP'
