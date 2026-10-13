@@ -10,6 +10,7 @@ require_once __DIR__.'/glasses-handoff.php';
 require_once __DIR__.'/glasses-vision-models.php';
 require_once __DIR__.'/glasses-vision-profiles.php';
 require_once __DIR__.'/glasses-hardware-runtime.php';
+require_once __DIR__.'/glasses-employee-runtimes.php';
 require_once __DIR__.'/glasses-frame-pipeline.php';
 require_once __DIR__.'/glasses-device-health.php';
 require_once __DIR__.'/glasses-runtime-recovery.php';
@@ -265,6 +266,9 @@ function glasses_simulator_dispatch(PDO $pdo,array $user,array $in): array
         'validation.evaluate','handoff.expo','vision.shadow_report','vision.shadow_complete'
     ],true);
     $device=glasses_simulator_device($pdo,$user,(string)($in['devicePublicId']??''),$write);
+    // Runtime IDs are device-bound and never grant the selected employee's privileges.
+    $runtimePublicId=trim((string)($in['runtimePublicId']??''));
+    if($runtimePublicId!=='')glasses_employee_runtime_assert_binding($pdo,$user,$runtimePublicId,$device);
 
     if(in_array($action,['kds.ticket.action','kds.item.transition','kds.item.note'],true)){
         if(!kds_ready($pdo))throw new DomainException('Kitchen Display is not configured.');
