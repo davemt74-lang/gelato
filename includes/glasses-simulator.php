@@ -16,6 +16,86 @@ require_once __DIR__.'/glasses-runtime-recovery.php';
 require_once __DIR__.'/glasses-runtime-soak.php';
 require_once __DIR__.'/glasses-cook-ux.php';
 
+/** A read-only virtual display for a location or KDS station; no hardware pairing. */
+function glasses_simulator_virtual_devices(PDO $pdo,array $user): array
+{
+    if(!app_has_permission('glasses.view',$user))return [];
+    $org=(int)$user['organization_id'];
+    $q=$pdo->prepare("SELECT id,name FROM locations WHERE organization_id=? AND status='active' ORDER BY id");
+    $q->execute([$org]);
+    $out=[];
+    foreach($q->fetchAll(PDO::FETCH_ASSOC) as $location){
+        $id=(int)$location['id'];
+        if(!operational_location_allowed($pdo,$user,'glasses.view',$id))continue;
+        $base=[
+            'displayName'=>'Browser preview · All stations',
+            'platform'=>'browser_preview','status'=>'active','locationId'=>$id,
+            'locationName'=>(string)$location['name'],
+            'stationPublicId'=>null,'stationName'=>'All kitchen stations',
+            'simulatorWritable'=>false,'virtualPreview'=>true
+        ];
+        $out[]=['publicId'=>'preview:'.$id.':all']+$base;
+        $stations=$pdo->prepare("SELECT public_id,name FROM kds_stations WHERE organization_id=? AND location_id=? AND status='active' ORDER BY name,id");
+        $stations->execute([$org,$id]);
+        foreach($stations->fetchAll(PDO::FETCH_ASSOC) as $station){
+            $out[]=[
+                'publicId'=>'preview:'.$id.':'.(string)$station['public_id'],
+                'displayName'=>'Browser preview · '.(string)$station['name'],
+                'stationPublicId'=>(string)$station['public_id'],
+                'stationName'=>(string)$station['name']
+            ]+$base;
+        }
+    }
+    return $out;
+}
+function glasses_simulator_preview_device(PDO $pdo,array $user,string $publicId,bool $write): array
+{
+    if($write)throw new DomainException('Browser preview is read-only. Select a paired device with glasses.manage and kds.update for build actions.');
+    // Resolve exclusively against currently authorized active stations. Never
+    // trust location/station names encoded in a browser supplied device ID.
+    foreach(glasses_simulator_virtual_devices($pdo,$user) as $candidate){
+        if(hash_equals((string)$candidate['publicId'],$publicId)){
+            $stationId=null;
+            if(!empty($candidate['stationPublicId'])){
+                $station=glasses_station($pdo,(int)$user['organization_id'],(int)$candidate['locationId'],(string)$candidate['stationPublicId']);
+                $stationId=(int)$station['id'];
+            }
+            return [
+                'id'=>0,'organization_id'=>(int)$user['organization_id'],
+                'location_id'=>(int)$candidate['locationId'],'station_id'=>$stationId,
+                'station_public_id'=>$candidate['stationPublicId'],
+                'station_name'=>$candidate['stationName'],'location_name'=>$candidate['locationName'],
+                'public_id'=>$publicId,'display_name'=>$candidate['displayName'],
+                'status'=>'active','revoked_at'=>null,'virtual_preview'=>true,
+            ];
+        }
+    }
+    throw new DomainException('Browser preview is no longer available at this location or station.');
+}
+/** Live KDS projection; no hardware token, mutation, or build-session assignment. */
+function glasses_simulator_preview_work(PDO $pdo,array $device): array
+{
+    $org=(int)$device['organization_id'];$locationId=(int)$device['location_id'];
+    $stationId=$device['station_public_id']?:null;
+    $board=kds_production_board($pdo,$org,$locationId,$stationId,false);
+    $items=[];
+    foreach((array)$board['items'] as $row)$items[]=glasses_work_item($pdo,$org,$row);
+    $focus=glasses_work_focus_index($items);
+    $fingerprint=array_map(static fn(array $i)=>[
+        $i['kdsItemPublicId'],$i['status'],$i['ticket'],$i['posLine']
+    ],$items);
+    return [
+        'device'=>['publicId'=>$device['public_id'],'virtualPreview'=>true],
+        'virtualPreview'=>true,'readOnly'=>true,'assignmentRequired'=>false,
+        'location'=>$board['location'],
+        'station'=>['publicId'=>$stationId,'name'=>$device['station_name']],
+        'items'=>$items,'focusItem'=>$focus!==null?$items[$focus]:null,
+        'metrics'=>$board['metrics'],
+        'revision'=>hash('sha256',json_encode($fingerprint,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)),
+        'pollAfterMs'=>1500,
+    ];
+}
+
 function glasses_simulator_can_write(array $user): bool
 {
     return app_has_permission('glasses.manage',$user) && app_has_permission('kds.update',$user);
@@ -25,7 +105,7 @@ function glasses_simulator_devices(PDO $pdo,array $user): array
 {
     if(!app_has_permission('glasses.view',$user))return [];
     $org=(int)$user['organization_id'];
-    $out=[];
+    $out=glasses_simulator_virtual_devices($pdo,$user);
     foreach(glasses_devices($pdo,$org) as $device){
         if((string)($device['status']??'')!=='active')continue;
         $locationId=(int)($device['locationId']??0);
@@ -41,6 +121,7 @@ function glasses_simulator_devices(PDO $pdo,array $user): array
 function glasses_simulator_device(PDO $pdo,array $user,string $publicId,bool $write=false): array
 {
     $publicId=trim($publicId);
+    if(str_starts_with($publicId,'preview:'))return glasses_simulator_preview_device($pdo,$user,$publicId,$write);
     if($publicId==='')throw new InvalidArgumentException('Choose a glasses device.');
     $org=(int)$user['organization_id'];
     $row=glasses_device_row($pdo,$org,$publicId,false);
@@ -119,7 +200,7 @@ function glasses_simulator_dispatch(PDO $pdo,array $user,array $in): array
     }
 
     if($action==='work'){
-        return ['work'=>glasses_current_work($pdo,$device)];
+        return ['work'=>!empty($device['virtual_preview'])?glasses_simulator_preview_work($pdo,$device):glasses_current_work($pdo,$device)];
     }
 
     if($action==='build.start'){
