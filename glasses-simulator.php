@@ -172,7 +172,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
             <strong id="hudCookAlertMessage">Correct the issue before continuing.</strong>
           </div>
           <div class="hud-card hud-build-card">
-            <div class="hud-panel-title"><small>BUILDING</small><span id="hudBuildTicket">#1</span></div>
+            <div class="hud-panel-title"><small id="hudBuildMode">RECIPE PREVIEW</small><span id="hudBuildTicket">#1</span></div>
             <strong id="hudBuildItem">Select a KDS item</strong>
             <div class="hud-current-instruction" id="hudCurrentInstruction" aria-live="polite">Choose an order to view its recipe</div>
             <span id="hudBuildMeta">Table 12 · Regular</span>
