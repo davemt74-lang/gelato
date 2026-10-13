@@ -50,7 +50,7 @@
       videoTrack?.addEventListener?.('ended',()=>{if(s.stream===stream)stop(slot,{reason:'DEVICE DISCONNECTED'});},{once:true});
       setStatus(slot,'ready','LIVE · '+(videoTrack?.label||'Camera '+slot));
     }catch(e){
-      if(stream&&!s.stream)stream.getTracks().forEach(t=>t.stop());
+      if(stream){stream.getTracks().forEach(t=>t.stop());if(s.stream===stream){s.stream=null;s.video.srcObject=null;s.video.hidden=true;s.preview.hidden=false;}}
       const name=String(e?.name||'');
       setStatus(slot,'failed',/NotAllowed|Security/.test(name)?'Permission denied. Allow this camera in the browser.':
         /NotFound|Overconstrained/.test(name)?'Device unavailable. Refresh the camera list.':
