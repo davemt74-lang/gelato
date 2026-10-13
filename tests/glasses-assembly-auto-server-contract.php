@@ -24,6 +24,10 @@ foreach([
   "minimumConfidence",
   "trackingId",
   "requestedThreshold",
+  "glasses_current_work(",
+  "kds_public_id",
+  "menuMatches!==1",
+  "canonicalName",
   "max(0.90",
   "glasses.view",
 ] as $term){
