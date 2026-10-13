@@ -39,7 +39,7 @@ const nodes={hudOrders:{querySelectorAll(){return [span];}},simTicketTimeSync:{t
 const item={timing:{posOpenAgeSeconds:126}};
 const state={mode:'live',ticketSyncAt:1000,work:{items:[item]}};
 const ctx={state,Math,Number,String,Date,performance:{now:()=>clock},document:{hidden:false},
-  orderItems:()=>state.work.items,$:id=>nodes[id]};
+  orderItems:()=>state.work.items,visibleKdsTickets:()=>state.work.items.map(item=>({items:[item]})),$:id=>nodes[id]};
 vm.runInNewContext(web.slice(start,end)+'\nthis.getElapsed=elapsedLabel;this.tick=tickLiveTicketTimers;',ctx);
 assert.equal(ctx.getElapsed(item,0),'02:06','POS ticket uses DB elapsed seconds');
 clock=3000;ctx.tick();

@@ -13,6 +13,10 @@
   const setNote=(slot,message)=>{const node=$('camConfigMessage'+slot);if(node)node.textContent=message;};
   const cfg=()=>window.GELATO_GLASSES_SIMULATOR||{};
   function isEnabled(slot){return state.ready&&state.slots.get(slot)?.saved?.enabled===true;}
+  function announceConfig(){
+    window.dispatchEvent(new CustomEvent('gelato-camera-configuration-changed',
+      {detail:{locationId:state.locationId,slots:Array.from(state.slots.values()).map(x=>({slot:x.saved.slot,enabled:state.ready&&x.saved.enabled===true}))}}));
+  }
   function stop(slot){
     if(slot===1)window.GelatoGlassesPrimaryCamera?.stop?.();
     else window.GelatoGlassesMultiCamera?.stop?.(slot);
@@ -145,7 +149,7 @@
     if(!Number.isInteger(locationId)||locationId<1){
       state.ready=false;state.locationId=null;stopAll();
       for(let i=1;i<=MAX;i++)render(i);
-      return;
+      announceConfig();return;
     }
     if(state.locationId!==locationId)stopAll();
     const epoch=++state.seq;
@@ -165,10 +169,12 @@
         target.saved=copy(remote);target.draft=copy(remote);render(remote.slot);
       }
       const badge=$('simCameraConfigHealth');if(badge)badge.textContent='CONFIG LOADED';
+      announceConfig();
     }catch(error){
       state.ready=false;state.canManage=false;
       const badge=$('simCameraConfigHealth');if(badge)badge.textContent='UPGRADE / SETUP NEEDED';
       for(let i=1;i<=MAX;i++){render(i);setNote(i,error.message||'Configuration unavailable.');}
+      announceConfig();
     }
   }
   async function save(slot){
@@ -192,10 +198,11 @@
         render(next.slot);
       }
       setNote(slot,'Saved to restaurant location · camera '+slot+' · '+(record.saved.enabled?'ON':'OFF'));
+      announceConfig();
       return true;
     }catch(error){
       // Never revive capture after a rejected write: default to off and require reload.
-      stop(slot);record.draft.enabled=false;record.saved.enabled=false;render(slot);
+      stop(slot);record.draft.enabled=false;record.saved.enabled=false;render(slot);announceConfig();
       setNote(slot,'Save failed: '+error.message+'. Camera remains OFF. Reload settings before retrying.');
       return false;
     }

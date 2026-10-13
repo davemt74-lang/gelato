@@ -17,6 +17,7 @@
       panels[key].hidden=key!==name;
     }
     if(focus)buttons[name].focus();
+    window.dispatchEvent(new CustomEvent('gelato-glasses-tab-select',{detail:{tab:name}}));
   }
   function onKeys(e){
     const pos=order.indexOf(active);
@@ -54,16 +55,13 @@
       }
       if(!previous)result.textContent='Select Run Certification to test this browser microphone. No audio is recorded or stored.';
     }
-    const live=$('simOverviewVoiceStatus');
-    const remote=window.GelatoVoicePresence?.snapshot?.().remote||[];
-    const another=remote.find(peer=>peer.active);
-    if(live)live.textContent=r.microphoneActive?'Glasses mic active · Listening':
-      r.enabled?'Glasses mic '+(r.state==='starting'?'starting':r.state==='recovering'?'recovering':'paused')+
-      (another?' · Another Gelato tab also listening':''):
-      another?'Glasses mic off · '+(another.source==='global-agent'?'Global Agent':another.source==='timeclock'?'Time Clock':'Glasses')+' mic active in another tab':
-      'Glasses mic off · Click Enable Voice';
-    const input=$('simVoicePermissionNote');
-    if(input)input.textContent='Microphone permission allows access; it does not mean this page is capturing audio.';
+    const dot=$('sgvVoiceStatusDot');
+    if(dot){
+      const status=r.microphoneActive?'active':r.enabled?'pending':'off';
+      dot.dataset.state=status;
+      const tab=$('sgv-tab-voice');
+      if(tab)tab.setAttribute('aria-label','Voice · '+(status==='active'?'microphone listening':status==='pending'?'voice enabled but not listening':'microphone off'));
+    }
 
   }
   async function certify(){
@@ -85,7 +83,20 @@
     const tabs=document.createElement('div');tabs.className='sgv-tabs';tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label','Glasses simulator controls');
     const container=document.createElement('div');container.className='sgv-tab-contents';
     for(const name of order){
-      const button=document.createElement('button');button.type='button';button.id='sgv-tab-'+name;button.textContent=labels[name];
+      const button=document.createElement('button');button.type='button';button.id='sgv-tab-'+name;
+      if(name==='voice'){
+        const label=document.createElement('span');label.textContent=labels[name];
+        const dot=document.createElement('span');dot.className='sgv-voice-dot';dot.id='sgvVoiceStatusDot';
+        dot.setAttribute('aria-hidden','true');dot.dataset.state='off';
+        button.append(label,dot);
+      }else if(name==='camera'){
+        const label=document.createElement('span');label.textContent=labels[name];
+        const count=document.createElement('span');count.id='sgvCameraEnabledCount';
+        count.className='sgv-camera-active-count';count.textContent='0';count.setAttribute('aria-hidden','true');
+        const unread=document.createElement('span');unread.id='sgvCameraUnreadDot';
+        unread.className='sgv-camera-unread-dot';unread.setAttribute('aria-hidden','true');unread.hidden=true;
+        button.append(label,count,unread);
+      }else button.textContent=labels[name];
       button.setAttribute('role','tab');button.setAttribute('aria-controls','sgv-panel-'+name);
       button.addEventListener('click',()=>select(name));
       button.addEventListener('keydown',onKeys);
@@ -96,12 +107,15 @@
     }
     rail.prepend(container);rail.prepend(tabs);
     const overview=section('overview'),voice=section('voice');
-    const intro=document.createElement('div');intro.className='sgv-intro';
-    intro.innerHTML='<strong>Live glasses display</strong><span>Live KDS updates are permission-scoped; glasses build validation still requires a paired device.</span><span id="simOverviewVoiceStatus" role="status" aria-live="polite">Checking microphone…</span><span id="simVoicePermissionNote">Browser permission is not an active microphone session.</span>';
-    overview.appendChild(intro);
-    // Preserve existing IDs, listeners and live objects: move nodes, never clone.
-    move(stage.querySelector('.sim-status-row'),overview);
-    move($('simLiveGuide'),overview);
+    // Full live status remains available under Runtime, not in the operator Overview.
+    move(stage.querySelector('.sim-status-row'),section('runtime'));
+    move($('simLiveGuide'),section('runtime'));
+    const transcript=document.createElement('div');
+    transcript.className='sgv-live-transcript';transcript.id='simLiveTranscript';
+    transcript.setAttribute('role','status');transcript.setAttribute('aria-live','polite');
+    transcript.innerHTML='<span class="sgv-transcript-label">VOICE INPUT</span>'+
+      '<span id="simVoiceTranscriptText">Enable voice to show recognized commands here</span>';
+    overview.appendChild(transcript);
     const nav=stage.querySelector('.sim-navigation-panel');
     if(nav){
       const groups=Array.from(nav.querySelectorAll(':scope > .sim-navigation-group'));
@@ -111,6 +125,18 @@
       if(voiceGroup)move(voiceGroup,voiceBlock);
       move($('simVoiceFeedback'),voiceBlock);
         voice.appendChild(voiceBlock);
+      // Kitchen controls are available under the glasses at all times.
+      // Keep additional note/ticket actions accessible, not duplicated onscreen.
+      const advanced=document.createElement('details');
+      advanced.className='sgv-advanced-kds';
+      const summary=document.createElement('summary');
+      summary.textContent='More KDS actions & notes';
+      advanced.appendChild(summary);
+      for(const group of groups){
+        if(group.classList.contains('sim-kitchen-commands')||group.classList.contains('sim-kitchen-note'))
+          advanced.appendChild(group);
+      }
+      nav.appendChild(advanced);
       move(nav,overview);
     }
     const diagnostics=document.createElement('section');diagnostics.className='console-card sgv-voice-cert';
@@ -134,7 +160,8 @@
     const cards=Array.from(rail.querySelectorAll('.console-card')).filter(card=>card!==diagnostics&&card!==voice.querySelector('.sgv-voice-controls'));
     for(const card of cards){
       const id=card.id||'';
-      const group=id==='simControlAuditPanel'||card.querySelector('#consoleItem')||card.querySelector('#exceptions')?'overview':
+      const group=id==='simControlAuditPanel'?'runtime':
+        card.querySelector('#consoleItem')?'overview':
         card.classList.contains('camera-card')||card.classList.contains('calibration-card')?'camera':
         card.classList.contains('hardware-runtime-card')||card.classList.contains('device-health-card')||
           card.classList.contains('runtime-recovery-card')?'runtime':'build';
@@ -142,6 +169,25 @@
     }
     // Legacy advanced wrapper was an organization aid, not a feature. Its cards are moved intact.
     rail.querySelector('#simAdvancedSettings')?.remove();
+    // Default the long engineering gate report to collapsed during normal cooking.
+    const audit=$('simAuditDetails');if(audit)audit.open=false;
+    const cameraUI=event=>{
+      const summary=event?.detail||window.GelatoCameraWorkspace?.sessionStatus?.()||{};
+      const enabled=Number(summary.enabledCount??summary.enabled?.filter(Boolean)?.length??0);
+      const unread=Number(summary.unreadPhotos??summary.unread?.reduce((a,b)=>a+b,0)??0);
+      const badge=$('sgvCameraEnabledCount'),marker=$('sgvCameraUnreadDot');
+      if(badge)badge.textContent=String(enabled);
+      if(marker)marker.hidden=unread===0;
+      const tab=$('sgv-tab-camera');
+      if(tab){
+        tab.classList.toggle('has-unread',unread>0);
+        tab.setAttribute('aria-label','Camera · '+enabled+' active camera'+(enabled===1?'':'s')+
+          (unread?' · '+unread+' unread new photo'+(unread===1?'':'s'):''));
+      }
+    };
+    window.addEventListener('gelato-camera-session-updated',cameraUI);
+    window.addEventListener('gelato-camera-configuration-changed',cameraUI);
+    cameraUI();
     window.addEventListener('gelato-glasses-voice-device-change',voiceUI);
     window.addEventListener('gelato-voice-presence-change',voiceUI);
     window.addEventListener('gelato-glasses-voice-status',voiceUI);

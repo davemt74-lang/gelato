@@ -4,6 +4,49 @@
   const S={active:'camera1',locationId:0,photos:[],menu:[],local:[],busy:false,seq:0};
   const $=id=>document.getElementById(id);
   const controls={};
+  // Counts are scoped to the current page/location session; never infer "new" from
+  // historical gallery rows or re-fetches. Unread clears when its camera is viewed.
+  const session={locationId:null,photoKeys:new Set(),count:[0,0,0,0,0,0],unread:[0,0,0,0,0,0]};
+  function resetPhotoSession(locationId){
+    session.locationId=locationId;session.photoKeys.clear();
+    session.count.fill(0);session.unread.fill(0);
+    updateCameraBadges();
+  }
+  function updateCameraBadges(){
+    const config=window.GelatoCameraConfiguration;
+    const enabled=Array.from({length:5},(_,i)=>config?.isEnabled?.(i+1)===true);
+    for(let slot=1;slot<=5;slot++){
+      const button=controls['camera'+slot]?.button;
+      if(!button)continue;
+      const dot=button.querySelector('.gc-camera-status-dot');
+      const number=button.querySelector('.gc-session-new-count');
+      if(dot)dot.dataset.state=enabled[slot-1]?'enabled':'disabled';
+      if(number)number.textContent=String(session.count[slot]);
+      button.classList.toggle('has-unread',session.unread[slot]>0);
+      button.setAttribute('aria-label','Camera '+slot+
+        (enabled[slot-1]?' enabled':' disabled')+
+        ' · '+session.count[slot]+' new photo'+(session.count[slot]===1?'':'s')+' this session'+
+        (session.unread[slot]?' · '+session.unread[slot]+' unread':''));
+    }
+    const unread=session.unread.slice(1).reduce((a,b)=>a+b,0);
+    window.dispatchEvent(new CustomEvent('gelato-camera-session-updated',{detail:{
+      enabledCount:enabled.filter(Boolean).length,
+      unreadPhotos:unread,
+      sessionPhotos:session.count.slice(1).reduce((a,b)=>a+b,0)
+    }}));
+  }
+  function countSessionPhoto(photo){
+    const slot=Number(photo?.slot),loc=Number(photo?.locationId);
+    if(!Number.isInteger(slot)||slot<1||slot>5||!loc)return;
+    if(session.locationId!==loc)resetPhotoSession(loc);
+    const key=slot+':'+String(photo?.capturedAt||'')+':'+String(photo?.url||'');
+    if(session.photoKeys.has(key))return;
+    session.photoKeys.add(key);
+    session.count[slot]++;
+    if(S.active!=='camera'+slot||window.GelatoGlassesTabs?.active!=='camera')session.unread[slot]++;
+    updateCameraBadges();
+  }
+
   const api='api/glasses-camera-photo-library.php';
   const mediaApi='api/glasses-vision-media.php';
   const core=()=>window.GELATO_GLASSES_SIMULATOR||{};
@@ -13,10 +56,13 @@
   function select(name){
     if(!controls[name])return;
     S.active=name;
+    if(/^camera[1-5]$/.test(name))session.unread[Number(name.slice(-1))]=0;
     for(const [key,c] of Object.entries(controls)){
       c.button.setAttribute('aria-selected',key===name?'true':'false');
       c.button.tabIndex=key===name?0:-1;c.pane.hidden=key!==name;
     }
+    updateCameraBadges();
+    window.dispatchEvent(new CustomEvent('gelato-camera-tab-select',{detail:{tab:name}}));
   }
   function feedback(msg){text('gcTrainingFeedback',msg);}
   function canSave(){return core().canManageMedia===true&&S.locationId>0;}
@@ -216,7 +262,13 @@
     const panes=document.createElement('div');panes.className='gc-camera-panels';
     shell.append(nav,panes);panel.prepend(shell);
     for(let slot=1;slot<=5;slot++){
-      const name='camera'+slot,button=document.createElement('button');button.type='button';button.textContent='Camera '+slot;
+      const name='camera'+slot,button=document.createElement('button');button.type='button';
+      const label=document.createElement('span');label.textContent='Camera '+slot;
+      const dot=document.createElement('span');dot.className='gc-camera-status-dot';
+      dot.dataset.state='disabled';dot.setAttribute('aria-hidden','true');
+      const counter=document.createElement('span');counter.className='gc-session-new-count';
+      counter.textContent='0';counter.setAttribute('aria-hidden','true');
+      button.append(label,dot,counter);
       button.id='gcTab'+slot;button.setAttribute('role','tab');button.setAttribute('aria-controls','gcPane'+slot);
       const view=document.createElement('section');view.id='gcPane'+slot;view.className='gc-camera-panel';
       view.setAttribute('role','tabpanel');view.setAttribute('aria-labelledby',button.id);view.hidden=true;
@@ -285,9 +337,22 @@
     train.prepend(block);
     $('gcTrainingPhoto').addEventListener('change',()=>{const p=selected();if(p)setTraining(p);});
     $('gcSaveTraining').addEventListener('click',()=>void saveTraining());
-    window.addEventListener('gelato-camera-photo-captured',event=>{void addLocal(event.detail?.photo);});
-    window.addEventListener('gelato-glasses-location-change',()=>{void refresh();});
+    window.addEventListener('gelato-camera-photo-captured',event=>{
+      const photo=event.detail?.photo;
+      countSessionPhoto(photo);
+      void addLocal(photo);
+    });
+    window.addEventListener('gelato-camera-configuration-changed',updateCameraBadges);
+    window.addEventListener('gelato-glasses-tab-select',event=>{
+      if(event.detail?.tab==='camera')select(S.active);
+    });
+    window.addEventListener('gelato-glasses-location-change',event=>{
+      const locationId=Number(event.detail?.locationId||0);
+      if(session.locationId!==locationId)resetPhotoSession(locationId);
+      void refresh();
+    });
     const freeze=document.querySelectorAll('[data-freeze]');freeze.forEach(b=>b.addEventListener('click',()=>select('training')));
+    resetPhotoSession(Number(window.GelatoCameraConfiguration?.locationId||0));
     select('camera1');void refresh();
   }
   async function persistOrderPhoto(photo,menuItemId,{optIn=false}={}){
@@ -320,7 +385,10 @@
   window.GelatoCameraWorkspace={mount,select,refresh,persistOrderPhoto,
     referenceMatches:(photo,menuItemId)=>metric()?.compare?.(photo?.fingerprint?.hash||photo?.hash,
       S.photos.filter(p=>p.isReference&&p.menuItemId===menuItemId),{slot:photo?.slot})||[],
-    getSavedPhotos:slot=>S.photos.filter(p=>p.slot===slot),status:()=>({active:S.active,locationId:S.locationId,photos:S.photos.length,local:S.local.length})};
+    getSavedPhotos:slot=>S.photos.filter(p=>p.slot===slot),
+    sessionStatus:()=>({counts:session.count.slice(1),unread:session.unread.slice(1),
+      enabled:Array.from({length:5},(_,i)=>window.GelatoCameraConfiguration?.isEnabled?.(i+1)===true)}),
+    status:()=>({active:S.active,locationId:S.locationId,photos:S.photos.length,local:S.local.length})};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});
   else mount();
 })();

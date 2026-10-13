@@ -102,6 +102,13 @@ on:
       - 'tests/glasses-simulator-csrf.test.js'
       - 'tests/glasses-live-kds-commands.test.js'
       - 'tests/glasses-hud-manual-voice-parity.test.js'
+      - 'tests/glasses-operator-hud-ux.test.js'
+      - 'assets/js/glasses-user-display-preferences.js'
+      - 'api/glasses-user-preferences.php'
+      - 'database/20261213_glasses_user_display_preferences.sql'
+      - 'tests/glasses-session-camera-badges.test.js'
+      - 'tests/glasses-user-display-preferences-contract.php'
+      - 'tests/glasses-hud-voice-contract.php'
       - 'tests/glasses-live-kds-contract.php'
       - 'assets/css/glasses-web-simulator.css'
       - 'tests/glasses-live-virtual-preview-contract.php'
@@ -269,6 +276,13 @@ jobs:
             tests/glasses-simulator-csrf.test.js
             tests/glasses-live-kds-commands.test.js
             tests/glasses-hud-manual-voice-parity.test.js
+            tests/glasses-operator-hud-ux.test.js
+            assets/js/glasses-user-display-preferences.js
+            api/glasses-user-preferences.php
+            database/20261213_glasses_user_display_preferences.sql
+            tests/glasses-session-camera-badges.test.js
+            tests/glasses-user-display-preferences-contract.php
+            tests/glasses-hud-voice-contract.php
             tests/glasses-live-kds-contract.php
             includes/glasses-simulator.php
             tests/glasses-live-virtual-preview-contract.php
@@ -342,6 +356,9 @@ jobs:
           node --check assets/js/glasses-camera-runtime.js
           node tests/glasses-camera-runtime.test.js
           node --check assets/js/glasses-camera-workspace.js
+          node --check assets/js/glasses-user-display-preferences.js
+          php -l api/glasses-user-preferences.php
+          php tests/glasses-user-display-preferences-contract.php
           node --check assets/js/glasses-production-photo-flow.js
           node --check assets/js/glasses-customer-photo-notifications.js
           node tests/glasses-customer-photo-notifications.test.js
@@ -376,6 +393,8 @@ jobs:
           node tests/glasses-simulator-csrf.test.js
           node tests/glasses-live-kds-commands.test.js
           node tests/glasses-hud-manual-voice-parity.test.js
+          node tests/glasses-operator-hud-ux.test.js
+          node tests/glasses-session-camera-badges.test.js
           php tests/glasses-live-kds-contract.php
           node --check assets/js/glasses-web-simulator.js
           node --check assets/js/glasses-pos-kds-test.js

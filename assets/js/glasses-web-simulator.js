@@ -49,7 +49,7 @@ async function api(action,payload={}){
 }
 const LIVE_SYNC_BASE_MS=1500;
 const LIVE_SYNC_MAX_BACKOFF_MS=10000;
-const RUNTIME_RECOVERY_KEY='gelato.webGlassesSimulator.runtimeRecovery.v1';
+const RUNTIME_RECOVERY_KEY='gelato.webGlassesSimulator.runtimeRecovery.v1'+':u'+String(cfg.userId||0);
 const RUNTIME_FRESH_BARRIER_MS=750;
 function recoveryStored(){
   try{return JSON.parse(localStorage.getItem(RUNTIME_RECOVERY_KEY)||'null');}catch{return null;}
@@ -288,7 +288,7 @@ async function downloadDeviceDiagnostics(){
     a.href=url;a.download='gelato-glasses-diagnostics-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);log('HEALTH','Diagnostic bundle exported.');
   }catch(e){log('ERROR',e.message);}
 }
-const LIVE_DEVICE_KEY='gelato.webGlassesSimulator.selectedDisplay.v2';
+const LIVE_DEVICE_KEY='gelato.webGlassesSimulator.selectedDisplay.v2'+':u'+String(cfg.userId||0);
 async function loadDevices(){
   try{
     const r=await fetch(cfg.api,{credentials:'same-origin',cache:'no-store'});
@@ -310,7 +310,7 @@ async function loadDevices(){
     log('ERROR',e.message);setSyncBadge('error','SETUP ERROR');
   }
 }
-const CAMERA_PREF_KEY='gelato.webGlassesSimulator.cameraPrefs.v1';
+const CAMERA_PREF_KEY='gelato.webGlassesSimulator.cameraPrefs.v1'+':u'+String(cfg.userId||0);
 function cameraSupported(){return !!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia);}
 function cameraPrefs(){try{return JSON.parse(localStorage.getItem(CAMERA_PREF_KEY)||'{}');}catch{return {};}}
 function saveCameraPrefs(){
@@ -1134,7 +1134,7 @@ function startVisionRuntime(){
 
 function mockBuild(){return {publicId:'build-mock-1',status:'active',kdsItemPublicId:'kds-mock-1',kdsStatus:'queued',context:{itemName:'Club Sandwich + Fries',buildDefinition:{steps:mock.work.focusItem.recipeSource.recipe.instructions.map((text,i)=>({stepKey:'step-'+(i+1),order:i+1,text,componentKeys:[]}))}},summary:{required:mock.components.length,confirmed:0,verify:0,unexpected:0,accounted:false,currentComponentKey:mock.components[0].componentKey},components:structuredClone(mock.components)};}
 function selectedItem(){const items=state.work?.items||[];if(state.selectedKdsItemPublicId){const chosen=items.find(x=>x.kdsItemPublicId===state.selectedKdsItemPublicId);if(chosen)return chosen;}return state.work?.focusItem||items[0]||null;}
-function deriveSteps(){const item=selectedItem();const fromBuild=state.build?.context?.buildDefinition?.steps;if(Array.isArray(fromBuild)&&fromBuild.length)return fromBuild.map(x=>typeof x==='string'?x:(x.text||x.label||''));const rx=item?.recipeSource?.recipe?.instructions;return Array.isArray(rx)&&rx.length?rx:['Load work','Build item','Validate','Send to Expo'];}
+function deriveSteps(){const item=selectedItem();const fromBuild=state.build?.context?.buildDefinition?.steps;if(Array.isArray(fromBuild)&&fromBuild.length)return fromBuild.map(x=>typeof x==='string'?x:(x.text||x.label||''));const rx=item?.recipeSource?.recipe?.instructions;return Array.isArray(rx)&&rx.length?rx:['Recipe steps unavailable — see the KDS item details'];}
 function itemName(){return selectedItem()?.posLine?.name||state.build?.context?.itemName||'No focused item';}
 function currentComponent(){return state.build?.components?.find(c=>!c.optional&&!['confirmed','ignored'].includes(c.status))||null;}
 function orderItems(){const items=state.work?.items||[];return items.length?items:(state.work?.focusItem?[state.work.focusItem]:[]);}
@@ -1164,9 +1164,9 @@ function tickLiveTicketTimers(){
   const age=Number.isFinite(state.ticketSyncAt)?(reference-state.ticketSyncAt)/1000:Infinity;
   const freshness=$('simTicketTimeSync');
   if(freshness)freshness.textContent=age<8?'POS TIME · SYNCED':age<20?'POS TIME · DELAYED':'POS TIME · STALE';
-  const items=orderItems().slice(0,5);
+  const tickets=visibleKdsTickets();
   const spans=$('hudOrders')?.querySelectorAll?.('[data-pos-ticket-clock]')||[];
-  spans.forEach((span,index)=>{if(items[index])span.textContent=elapsedLabel(items[index],index);});
+  spans.forEach((span,index)=>{if(tickets[index])span.textContent=elapsedLabel(tickets[index].items[0],index);});
 }
 function renderTopStatus(){
   const now=new Date(),live=state.mode==='live';
@@ -1176,10 +1176,39 @@ function renderTopStatus(){
   $('hudConnectivity').textContent=live?(state.device?.virtualPreview?'WEB · LIVE':'DEVICE · LIVE'):'SIM · LOCAL';
   $('hudBattery').textContent=state.device?.virtualPreview?'BROWSER':(live?'BATTERY N/A':'SIM');
 }
+/* Short KDS 1–8 slots, grouped by stable POS check ID; not long POS numbers. */
+function visibleKdsTickets(){
+  const groups=new Map();
+  for(const item of orderItems()){
+    const key=item.ticket?.checkPublicId||item.kdsItemPublicId;
+    if(!key)continue;
+    if(!groups.has(key)){
+      if(groups.size>=8)continue;
+      groups.set(key,{key,items:[]});
+    }
+    groups.get(key).items.push(item);
+  }
+  return Array.from(groups.values());
+}
+function kdsSlotForItem(item){
+  if(!item)return null;
+  const key=item.ticket?.checkPublicId||item.kdsItemPublicId;
+  const idx=visibleKdsTickets().findIndex(group=>group.key===key);
+  return idx>=0?idx+1:null;
+}
 function renderOrdersQueue(item){
-  const items=orderItems();
-  $('hudOrdersCount').textContent=String(items.length);
-  $('hudOrders').innerHTML=items.slice(0,5).map((x,i)=>'<div class="hud-order-row '+(x.kdsItemPublicId===item?.kdsItemPublicId?'active':'')+'"><span class="ticket">#'+escapeHtml(x.ticket?.checkNumber||String(i+1).padStart(3,'0'))+'</span><span class="item">'+escapeHtml(x.posLine?.name||'Kitchen item')+'</span><span class="age" data-pos-ticket-clock="1">'+escapeHtml(elapsedLabel(x,i))+'</span></div>').join('')||'<span class="sim-muted">No active orders</span>';
+  const tickets=visibleKdsTickets();
+  $('hudOrdersCount').textContent=String(tickets.length);
+  $('hudOrders').innerHTML=tickets.map((group,i)=>{
+    const active=group.items.some(x=>x.kdsItemPublicId===item?.kdsItemPublicId);
+    const focus=active?item:group.items[0];
+    const count=group.items.length;
+    return '<button type="button" class="hud-order-row '+(active?'active':'')+'" data-kds-order-slot="'+(i+1)+'" aria-label="Select KDS order '+(i+1)+'">'+
+      '<span class="ticket">#'+(i+1)+'</span><span class="item">'+escapeHtml(focus.posLine?.name||'Kitchen item')+
+      (count>1?' +'+(count-1):'')+'</span><span class="age" data-pos-ticket-clock="'+(i+1)+'">'+
+      escapeHtml(elapsedLabel(group.items[0],i))+'</span></button>';
+  }).join('')||'<span class="sim-muted">No active orders</span>';
+  $('hudOrdersRegion').classList.toggle('hud-queue-empty',tickets.length===0);
 }
 function buildProgressIndex(steps,comps){
   const confirmed=comps.filter(c=>c.status==='confirmed'||(c.optional&&c.status==='ignored')).length;
@@ -1188,12 +1217,14 @@ function buildProgressIndex(steps,comps){
   return Math.min(steps.length-1,Math.floor((confirmed/Math.max(1,comps.length))*steps.length));
 }
 function renderBuildRail(item,steps,comps){
-  $('hudBuildTicket').textContent='#'+(item?.ticket?.checkNumber||'—');
-  $('hudBuildItem').textContent=itemName();
+  $('hudBuildMode').textContent=state.build?'ACTIVE BUILD':item?.status==='in_progress'?'BUILD RECIPE':item?.status==='queued'?'QUEUED · RECIPE':'RECIPE PREVIEW';
+  $('hudBuildTicket').textContent=kdsSlotForItem(item)?'#'+kdsSlotForItem(item):'—';
+  $('hudBuildItem').textContent=item?.posLine?.name||state.build?.context?.itemName||'Choose a KDS item';
   const meta=[item?.ticket?.tableName||item?.ticket?.serviceMode,item?.posLine?.optionName,item?.posLine?.specialInstructions].filter(Boolean);
-  $('hudBuildMeta').textContent=meta.join(' · ')||'No modifiers';
+  $('hudBuildMeta').textContent=meta.join(' · ')||'';
   const idx=state.build?buildProgressIndex(steps,comps):Math.min(Math.max(0,state.previewStepIndex||0),Math.max(0,steps.length-1));
-  $('hudBuildSteps').innerHTML=steps.slice(0,8).map((s,i)=>'<li class="'+(i<idx?'done':i===idx?'current':'')+'">'+escapeHtml(s)+'</li>').join('');
+  $('hudCurrentInstruction').textContent=item?'Step '+(idx+1)+' of '+steps.length+' · '+(steps[idx]||'Review KDS item'):'Choose an item to view its build';
+  $('hudBuildSteps').innerHTML=steps.length>1?steps.slice(idx,idx+4).map((step,i)=>'<li class="'+(i===0?'current':'')+'">'+escapeHtml(step)+'</li>').join(''):'';
 }
 function renderValidationPanel(comps,validation){
   const unexpected=comps.filter(c=>c.status==='unexpected').length;
@@ -1205,7 +1236,8 @@ function renderValidationPanel(comps,validation){
   $('hudValidationCount').textContent=accounted+' / '+required+' accounted';
   $('hudValidationMissing').textContent=String(missing);
   $('hudValidationUnexpected').textContent=String(unexpected);
-  $('hudValidationDetail').textContent=!state.build?'Read-only overview · no build session started':(validation?.summary?.next?.message||validation?.status||'Build in progress');
+  $('hudValidationDetail').textContent=!state.build?'Recipe preview only — ingredient verification requires a governed build':(validation?.summary?.next?.message||validation?.status||'Build in progress');
+  $('validationCard').hidden=!state.build;
   $('validationCard').className='hud-card hud-validation-panel '+stateName.toLowerCase();
 }
 function renderNextInstruction(comp,validation){
@@ -1412,7 +1444,30 @@ async function handoff(){try{
 function resetSimulator(){stopShadowModel('build_reset');unloadGovernedVisionModel('build_reset');state.build=null;state.validation=null;state.selectedKdsItemPublicId='';clearTemporalRuntime();clearCameraTarget();$('detectionLayer').innerHTML='';log('SYSTEM','Simulator build state reset; POS/KDS records were not changed.');refreshWork();}
 $('modeSelect').addEventListener('change',async e=>{stopAutoPlay();stopLiveStationSync('idle');await unloadGovernedVisionModel('build_reset');state.mode=e.target.value;state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;clearTemporalRuntime();state.syncFingerprint='';log('MODE','Switched to '+state.mode+'.');if(state.mode==='live'){if(state.device?.virtualPreview){state.recovery.state='ready';renderRuntimeRecovery();startLiveStationSync();}else{enterRecovery('recovering','live_mode_selected');await resumeRuntimeRecovery('live_mode_selected');}}else{state.recovery.state='ready';state.recovery.suppressAutomatic=false;state.recovery.lastReason='mock_runtime_ready';renderRuntimeRecovery();await refreshWork();}});
 $('deviceSelect').addEventListener('change',async e=>{stopLiveStationSync('idle');await unloadGovernedVisionModel('build_reset');state.device=state.devices.find(x=>x.publicId===e.target.value)||null;if(state.device)localStorage.setItem(LIVE_DEVICE_KEY,state.device.publicId);window.dispatchEvent(new CustomEvent('gelato-glasses-location-change',{detail:{locationId:state.device?.locationId||null}}));state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;clearTemporalRuntime();state.syncFingerprint='';if(state.mode==='live'&&state.device){if(state.device.virtualPreview){state.recovery.state='ready';renderRuntimeRecovery();startLiveStationSync();}else{enterRecovery('recovering','device_changed');await resumeRuntimeRecovery('device_changed');}}else render();});
-$('workItemSelect').addEventListener('change',e=>{state.selectedKdsItemPublicId=e.target.value;state.previewStepIndex=0;state.validation=null;render();});
+/* Selecting a kitchen item goes directly to the recipe/build view; no extra load step.
+ * Live build writes require a paired writable device and an already started KDS item. */
+async function focusKitchenItem(publicId,{autoBegin=true}={}){
+  if(state.build)return {ok:false,message:'Finish the active build before selecting another item.'};
+  const next=orderItems().find(x=>x.kdsItemPublicId===publicId);
+  if(!next)return {ok:false,message:'KDS selection is stale. Refresh your orders.'};
+  state.selectedKdsItemPublicId=next.kdsItemPublicId;
+  state.previewStepIndex=0;state.validation=null;render();
+  if(autoBegin&&state.mode==='mock'){await startBuild();return {ok:true,message:'Mock build started.'};}
+  if(autoBegin&&state.mode==='live'&&state.device?.simulatorWritable&&next.status==='in_progress'){
+    await startBuild();return {ok:true,message:'Governed build requested for selected item.'};
+  }
+  return {ok:true,message:'Selected recipe displayed. '+(state.device?.virtualPreview?
+    'Browser preview does not certify ingredient observations.':
+    next.status==='queued'?'Item is queued: start it in KDS to authorize live build evidence.':
+    'Live build evidence requires an authorized session.')};
+}
+$('hudOrders').addEventListener('click',event=>{
+  const button=event.target.closest('[data-kds-order-slot]');if(!button)return;
+  const group=visibleKdsTickets()[Number(button.dataset.kdsOrderSlot)-1];if(!group)return;
+  const current=selectedItem(),next=group.items.find(x=>x.kdsItemPublicId===current?.kdsItemPublicId)||group.items[0];
+  void focusKitchenItem(next.kdsItemPublicId);
+});
+$('workItemSelect').addEventListener('change',e=>{void focusKitchenItem(e.target.value);});
 $('refreshWork').addEventListener('click',refreshWork);$('startBuild').addEventListener('click',startBuild);$('resetSimulator').addEventListener('click',resetSimulator);$('injectUnexpected').addEventListener('click',injectUnexpected);$('evaluateBuild').addEventListener('click',validate);$('autoPlayBuild').addEventListener('click',toggleAutoPlay);$('nextDetection').addEventListener('click',playNextMockDetection);$('lowConfidenceDetection').addEventListener('click',injectLowConfidenceDetection);$('completeMockBuild').addEventListener('click',completeMockScenario);$('handoffExpo').addEventListener('click',handoff);$('clearLog').addEventListener('click',()=>{state.logs=[];renderLog();});
 $('sceneSourceSelect').addEventListener('change',async e=>{state.cameraSource=e.target.value;if(state.cameraSource==='camera'){await startCamera();}else{stopCamera();$('sceneImage').hidden=!$('sceneImage').src;$('scenePlaceholder').hidden=!!$('sceneImage').src;}});
 $('startCamera').addEventListener('click',startCamera);$('stopCamera').addEventListener('click',()=>stopCamera());$('captureFrame').addEventListener('click',captureCameraFrame);$('clearCameraTarget').addEventListener('click',clearCameraTarget);$('submitCameraTarget').addEventListener('click',submitCameraTargetObservation);
@@ -1469,8 +1524,8 @@ document.addEventListener('visibilitychange',()=>{if(state.cameraTrack){state.ca
 window.addEventListener('offline',()=>{enterRecovery('disconnected','network_lost',{stopSync:true});setSyncBadge('error','OFFLINE');});
 window.addEventListener('online',()=>{if(state.mode==='live'&&state.device?.virtualPreview){state.recovery.networkFault=false;startLiveStationSync();}else if(state.mode==='live'&&state.device)resumeRuntimeRecovery('network_restored');});
 window.addEventListener('beforeunload',()=>{saveRecoveryResume();stopVisionRuntime('idle');stopLiveStationSync('idle');if(state.browserModel.session&&typeof state.browserModel.session.release==='function')state.browserModel.session.release();if(state.shadowModel.session&&typeof state.shadowModel.session.release==='function')state.shadowModel.session.release();});
-const FRAME_MODE_KEY='gelato.webGlassesSimulator.frameMode.v1';
-const OPTICAL_MASK_KEY='gelato.webGlassesSimulator.opticalMask.v1';
+const FRAME_MODE_KEY='gelato.webGlassesSimulator.frameMode.v1'+':u'+String(cfg.userId||0);
+const OPTICAL_MASK_KEY='gelato.webGlassesSimulator.opticalMask.v1'+':u'+String(cfg.userId||0);
 let frameMode=['svg','image','none'].includes(localStorage.getItem(FRAME_MODE_KEY))?localStorage.getItem(FRAME_MODE_KEY):'svg';
 let opticalMaskEnabled=localStorage.getItem(OPTICAL_MASK_KEY)!=='0';
 function applyFrameMode(){
@@ -1494,8 +1549,8 @@ bindLocalImage('sceneFile','sceneImage',()=>{$('scenePlaceholder').hidden=true;}
 bindLocalImage('glassesFile','glassesImage',()=>{frameMode='image';localStorage.setItem(FRAME_MODE_KEY,frameMode);applyFrameMode();});
 $('componentControls').addEventListener('click',e=>{const b=e.target.closest('[data-detect]');if(b)detect(b.dataset.detect);});
 
-const CAL_KEY='gelato.webGlassesSimulator.calibration.v1';
-const PRESET_KEY='gelato.webGlassesSimulator.presets.v1';
+const CAL_KEY='gelato.webGlassesSimulator.calibration.v1'+':u'+String(cfg.userId||0);
+const PRESET_KEY='gelato.webGlassesSimulator.presets.v1'+':u'+String(cfg.userId||0);
 const calibrationDefaults={
   opacity:100,brightness:100,scale:100,safeWidth:80,safeHeight:66,
   leftEyeX:0,leftEyeY:0,rightEyeX:0,rightEyeY:0,
@@ -1547,6 +1602,7 @@ function applyCalibration(){
   for(const [name,r] of Object.entries(calibration.regions)){const el=$(name);if(!el)continue;el.style.setProperty('--region-x',r.x+'%');el.style.setProperty('--region-y',r.y+'%');el.style.setProperty('--region-w',r.w+'%');el.style.setProperty('--region-h',r.h+'%');}
   const controls={hudOpacity:['opacity','%'],hudBrightness:['brightness','%'],hudScale:['scale','%'],safeWidth:['safeWidth','%'],safeHeight:['safeHeight','%'],leftEyeX:['leftEyeX','%'],leftEyeY:['leftEyeY','%'],rightEyeX:['rightEyeX','%'],rightEyeY:['rightEyeY','%']};
   $('rightWidth').value=String(calibration.regions.hudRight.w);$('rightWidthValue').textContent=String(Math.round(calibration.regions.hudRight.w))+'%';
+  $('leftWidth').value=String(calibration.regions.hudOrdersRegion.w);$('leftWidthValue').textContent=String(Math.round(calibration.regions.hudOrdersRegion.w))+'%';
   for(const [id,[key,suffix]] of Object.entries(controls)){if($(id)){$(id).value=String(calibration[key]);$(id+'Value').textContent=String(calibration[key])+suffix;}}
 }
 function setCalibrationEnabled(enabled){
@@ -1572,6 +1628,11 @@ function factoryCalibration(){calibration=deepClone(calibrationDefaults);saveCal
 for(const [id,key] of Object.entries({hudOpacity:'opacity',hudBrightness:'brightness',hudScale:'scale',safeWidth:'safeWidth',safeHeight:'safeHeight',leftEyeX:'leftEyeX',leftEyeY:'leftEyeY',rightEyeX:'rightEyeX',rightEyeY:'rightEyeY'})){
   $(id).addEventListener('input',e=>{calibration[key]=Number(e.target.value);saveCalibration();});
 }
+$('leftWidth').addEventListener('input',e=>{
+  const region=calibration.regions.hudOrdersRegion;
+  region.w=clamp(Number(e.target.value),12,Math.min(50,100-region.x));
+  saveCalibration();
+});
 $('rightWidth').addEventListener('input',e=>{
   const region=calibration.regions.hudRight,oldRight=region.x+region.w;
   region.w=clamp(Number(e.target.value),15,55);
@@ -1773,6 +1834,55 @@ window.GelatoGlassesNavigation={dispatch:simulatorNavigation,context:()=>({
   step:(state.previewStepIndex||0)+1,virtual:!!state.device?.virtualPreview,
   locationId:state.device?.locationId||null,stationPublicId:state.device?.stationPublicId||null
 })};
+window.GelatoGlassesDisplayPreferences={
+  ready:false,
+  snapshot:()=>({
+    mode:state.mode,devicePublicId:state.device?.publicId||'',
+    frameMode,opticalMask:opticalMaskEnabled,
+    cameraResolution:$('cameraResolution').value,cameraFit:$('cameraFit').value,
+    cameraMirror:$('cameraMirror').checked,
+    calibration:deepClone(normalizeCalibration(calibration)),
+    activeTab:window.GelatoGlassesTabs?.active||'overview',
+    activeCameraTab:window.GelatoCameraWorkspace?.status?.().active||'camera1',
+    voiceReplies:!!$('simVoiceReplies').checked
+  }),
+  apply:async prefs=>{
+    if(!prefs||typeof prefs!=='object')return;
+    if(prefs.calibration&&typeof prefs.calibration==='object'){
+      calibration=normalizeCalibration(prefs.calibration);
+      saveCalibration();
+    }
+    if(typeof prefs.opticalMask==='boolean'){
+      opticalMaskEnabled=prefs.opticalMask;
+      localStorage.setItem(OPTICAL_MASK_KEY,opticalMaskEnabled?'1':'0');
+    }
+    if(['svg','none'].includes(prefs.frameMode)){
+      frameMode=prefs.frameMode;
+      localStorage.setItem(FRAME_MODE_KEY,frameMode);
+    }
+    applyFrameMode();
+    if(['640x480','1280x720','1920x1080'].includes(prefs.cameraResolution))
+      $('cameraResolution').value=prefs.cameraResolution;
+    if(['cover','contain'].includes(prefs.cameraFit))$('cameraFit').value=prefs.cameraFit;
+    if(typeof prefs.cameraMirror==='boolean')$('cameraMirror').checked=prefs.cameraMirror;
+    applyCameraPresentation();
+    if(typeof prefs.voiceReplies==='boolean')$('simVoiceReplies').checked=prefs.voiceReplies;
+    if(prefs.devicePublicId&&state.devices.some(d=>d.publicId===prefs.devicePublicId)&&
+       state.device?.publicId!==prefs.devicePublicId){
+      $('deviceSelect').value=prefs.devicePublicId;
+      $('deviceSelect').dispatchEvent(new Event('change'));
+    }
+    if(['overview','voice','camera','runtime','build'].includes(prefs.activeTab))
+      window.GelatoGlassesTabs?.select?.(prefs.activeTab);
+    if(['camera1','camera2','camera3','camera4','camera5','training'].includes(prefs.activeCameraTab))
+      window.GelatoCameraWorkspace?.select?.(prefs.activeCameraTab);
+    // This restores UI selection only. Never starts microphone, camera capture or KDS writes.
+    if(prefs.mode==='mock'&&state.mode==='live'){
+      $('modeSelect').value='mock';
+      $('modeSelect').dispatchEvent(new Event('change'));
+    }
+  }
+};
 window.GelatoGlassesPrimaryCamera={stop:()=>stopCamera('disabled'),active:()=>!!state.cameraStream};
-(async()=>{await loadDevices();const cp=cameraPrefs();if(cp.resolution)$('cameraResolution').value=cp.resolution;if(cp.fit)$('cameraFit').value=cp.fit;$('cameraMirror').checked=!!cp.mirror;applyCameraPresentation();await enumerateCameras();if(!cameraSupported())setCameraHealth('error','UNSUPPORTED');refreshPresets();applyCalibration();render();if(state.device){startLiveStationSync();}else{setSyncBadge('error','NO DISPLAY');}setInterval(renderTopStatus,30000);setInterval(tickLiveTicketTimers,1000);renderRuntimeRecovery();refreshDeviceHealth();setInterval(refreshDeviceHealth,5000);const savedResume=recoveryStored();if(savedResume?.devicePublicId&&state.device?.publicId===savedResume.devicePublicId&&!state.device.virtualPreview){resumeRuntimeRecovery('app_restart_resume');}log('SYSTEM','Simulator ready. Pizza Line Reference HUD loaded.');})();
+(async()=>{await loadDevices();window.GelatoGlassesDisplayPreferences.ready=true;window.dispatchEvent(new CustomEvent('gelato-glasses-preferences-ready'));const cp=cameraPrefs();if(cp.resolution)$('cameraResolution').value=cp.resolution;if(cp.fit)$('cameraFit').value=cp.fit;$('cameraMirror').checked=!!cp.mirror;applyCameraPresentation();await enumerateCameras();if(!cameraSupported())setCameraHealth('error','UNSUPPORTED');refreshPresets();applyCalibration();render();if(state.device){startLiveStationSync();}else{setSyncBadge('error','NO DISPLAY');}setInterval(renderTopStatus,30000);setInterval(tickLiveTicketTimers,1000);renderRuntimeRecovery();refreshDeviceHealth();setInterval(refreshDeviceHealth,5000);const savedResume=recoveryStored();if(savedResume?.devicePublicId&&state.device?.publicId===savedResume.devicePublicId&&!state.device.virtualPreview){resumeRuntimeRecovery('app_restart_resume');}log('SYSTEM','Simulator ready. Pizza Line Reference HUD loaded.');})();
 })();
