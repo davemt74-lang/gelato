@@ -12,7 +12,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <title>Web Glasses Simulator · Gelato</title>
 <link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20261013-live1">
 <link rel="stylesheet" href="assets/css/glasses-simulator-hud-ux.css?v=20261013-voice1">
-<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-device1">
+<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-kds2">
 </head>
 <body>
 <header class="sim-topbar">
@@ -57,6 +57,20 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
         <button id="simNavNextItem" type="button" title="Next KDS item">Next Item →</button>
         <button id="simNavItemAdded" type="button" title="Preview-only acknowledgement; never changes KDS">Item Added ✓</button>
         <button id="simNavRepeat" type="button" title="Repeat current item and instruction">Repeat</button>
+      </div>
+      <div class="sim-navigation-group sim-kitchen-commands" aria-label="Live kitchen workflow controls">
+        <button type="button" data-glasses-command="start_order">Start Ticket</button>
+        <button type="button" data-glasses-command="start_item">Start Item</button>
+        <button type="button" data-glasses-command="ready_item">Item Ready</button>
+        <button type="button" data-glasses-command="ready_order">Ticket Ready</button>
+        <button type="button" data-glasses-command="finish_order">Finish Ticket</button>
+        <button type="button" data-glasses-command="hold_order">Hold Ticket</button>
+        <button type="button" data-glasses-command="fire_order">Fire Ticket</button>
+        <button type="button" data-glasses-command="item_added">Note Added</button>
+      </div>
+      <div class="sim-navigation-group sim-kitchen-note">
+        <label for="simItemNoteInput">Item note <input id="simItemNoteInput" type="text" maxlength="250" autocomplete="off" placeholder="Ingredient or change added"></label>
+        <span id="simKitchenCommandStatus" class="sim-muted" role="status" aria-live="polite">Checking KDS permissions…</span>
       </div>
       <div class="sim-navigation-group">
         <button id="simVoiceToggle" class="sim-nav-voice-button" type="button" aria-pressed="false">Enable Voice</button>
@@ -179,12 +193,22 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
         <div id="datasetAnnotationLayer" class="dataset-annotation-layer"></div>
       </section>
     </div>
+    <nav id="simGlassesQuickActions" class="sim-glasses-quick-actions" aria-label="On-glasses manual kitchen controls">
+      <button type="button" data-glasses-command="start_order" title="Start queued ticket items">Start Ticket</button>
+      <button type="button" data-glasses-command="start_item">Start Item</button>
+      <button type="button" data-glasses-command="previous_item">← Item</button>
+      <button type="button" data-glasses-command="next_item">Next Item →</button>
+      <button type="button" data-glasses-command="ready_item">Item Ready</button>
+      <button type="button" data-glasses-command="ready_order">Ticket Ready</button>
+      <button type="button" data-glasses-command="finish_order" class="sim-quick-finish">Finish Ticket</button>
+      <button type="button" data-glasses-command="item_added">Note Added</button>
+    </nav>
   </section>
 
   <aside class="sim-console">
     <section class="console-card sim-audit-panel" id="simControlAuditPanel">
       <div class="console-heading"><div><small>SIMULATOR READINESS</small><strong>What is working and why controls are unavailable</strong></div><span id="simAuditBadge">CHECKING</span></div>
-      <p class="calibration-note">Live browser preview loads on arrival without pairing glasses. It shows POS/KDS tickets but does not alter the kitchen. Camera, model-training, and build/Expo buttons enable only when their actual prerequisites are met.</p>
+      <p class="calibration-note">Live POS/KDS tickets load without physical glasses. Authorized kitchen actions update real KDS, while build validation still requires a paired device. Mock mode never writes kitchen data.</p>
       <details id="simAuditDetails" open><summary>Show control readiness and missing requirements</summary><div id="simControlAudit" class="sim-control-audit">Checking controls…</div></details>
     </section>
     <section class="console-card hardware-runtime-card">
@@ -423,9 +447,9 @@ window.GELATO_GLASSES_SIMULATOR={
 </script>
 <script src="assets/js/glasses-v10-soak-harness.js?v=20260929-v10-5"></script>
 <script src="assets/js/glasses-v10-cook-ux-harness.js?v=20260929-v10-6"></script>
-<script src="assets/js/glasses-web-simulator.js?v=20261013-live1"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20261013-kds2"></script>
 <script src="assets/js/glasses-voice-device.js?v=20261013-device1"></script>
-<script src="assets/js/glasses-simulator-voice.js?v=20261013-device1"></script>
+<script src="assets/js/glasses-simulator-voice.js?v=20261013-kds2"></script>
 <script src="assets/js/glasses-simulator-tabs.js?v=20261013-device1"></script>
 </body>
 </html>
