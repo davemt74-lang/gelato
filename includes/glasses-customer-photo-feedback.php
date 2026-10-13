@@ -2,6 +2,21 @@
 declare(strict_types=1);
 require_once __DIR__.'/glasses-customer-photo-notifications.php';
 
+/** Pair only exact KDS item IDs; never infer identity from photo time/menu. */
+function glasses_customer_photo_group_by_item(array $photos):array
+{
+    $groups=[];
+    foreach($photos as $photo){
+        $itemKey=trim((string)($photo['kdsItemPublicId']??''));
+        $stage=(string)($photo['stage']??'');
+        if($itemKey===''||!in_array($stage,['pre_oven','post_oven'],true))continue;
+        if(!isset($groups[$itemKey]))$groups[$itemKey]=[
+            'name'=>(string)($photo['itemName']??'Pizza'),'pre_oven'=>null,'post_oven'=>null
+        ];
+        $groups[$itemKey][$stage]=$photo;
+    }
+    return $groups;
+}
 function glasses_customer_photo_feedback_ready(PDO $pdo):bool
 {
     $q=$pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE()
