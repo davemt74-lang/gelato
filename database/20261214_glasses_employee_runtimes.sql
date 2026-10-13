@@ -7,6 +7,7 @@ CREATE TABLE glasses_employee_runtimes (
  device_id BIGINT UNSIGNED NOT NULL,
  employee_user_id BIGINT UNSIGNED NOT NULL,
  wearer_assignment_id BIGINT UNSIGNED NOT NULL,
+ wearer_assignment_created TINYINT UNSIGNED NOT NULL DEFAULT 0,
  status VARCHAR(20) NOT NULL DEFAULT 'active',
  active_slot TINYINT UNSIGNED NULL DEFAULT 1,
  started_by BIGINT UNSIGNED NULL,

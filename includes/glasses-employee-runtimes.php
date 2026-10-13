@@ -183,7 +183,9 @@ function glasses_employee_runtime_create(PDO $pdo,array $user,string $devicePubl
         $q->execute([$org,(int)$device['id']]);$wearer=$q->fetch(PDO::FETCH_ASSOC);
         if($wearer&&(int)$wearer['user_id']!==$employeeId)
             throw new DomainException('This device is already assigned to another wearer in Vision Lab. Release that assignment first.');
+        $createdWearer=false;
         if(!$wearer){
+            $createdWearer=true;
             $identity=glasses_vision_lab_assign_device($pdo,$org,$devicePublicId,$employeeId,'operator','manual',(int)$user['id']);
             $q=$pdo->prepare("SELECT id,public_id,user_id FROM glasses_user_device_assignments WHERE organization_id=? AND public_id=?");
             $q->execute([$org,(string)$identity['publicId']]);$wearer=$q->fetch(PDO::FETCH_ASSOC);
@@ -191,9 +193,9 @@ function glasses_employee_runtime_create(PDO $pdo,array $user,string $devicePubl
         $publicId=glasses_public_id('runtime');
         try{
             $pdo->prepare("INSERT INTO glasses_employee_runtimes
-              (organization_id,public_id,device_id,employee_user_id,wearer_assignment_id,status,active_slot,started_by,last_seen_at)
-              VALUES (?,?,?,?,?,'active',1,?,NOW(6))")
-              ->execute([$org,$publicId,(int)$device['id'],$employeeId,(int)$wearer['id'],(int)$user['id']]);
+              (organization_id,public_id,device_id,employee_user_id,wearer_assignment_id,wearer_assignment_created,status,active_slot,started_by,last_seen_at)
+              VALUES (?,?,?,?,?,?,'active',1,?,NOW(6))")
+              ->execute([$org,$publicId,(int)$device['id'],$employeeId,(int)$wearer['id'],$createdWearer?1:0,(int)$user['id']]);
         }catch(PDOException $e){
             if((string)$e->getCode()==='23000')
                 throw new DomainException('This employee or device has already been assigned to a runtime.');
@@ -221,10 +223,13 @@ function glasses_employee_runtime_end(PDO $pdo,array $user,string $publicId): ar
             $pdo->prepare("UPDATE glasses_employee_runtimes SET status='ended',active_slot=NULL,ended_at=NOW(6),ended_by=?,updated_at=NOW(6)
               WHERE organization_id=? AND id=? AND status='active'")
               ->execute([(int)$user['id'],(int)$user['organization_id'],(int)$row['id']]);
-            // Release only the exact wearer record bound to this runtime.
-            $pdo->prepare("UPDATE glasses_user_device_assignments SET released_at=COALESCE(released_at,NOW(6)),
-              release_reason=COALESCE(release_reason,'runtime_ended') WHERE organization_id=? AND id=? AND released_at IS NULL")
-              ->execute([(int)$user['organization_id'],(int)$row['wearer_assignment_id']]);
+            // Do not silently release a wearer assignment that already existed
+            // in Vision Lab before this runtime was created.
+            if((int)$row['wearer_assignment_created']===1){
+                $pdo->prepare("UPDATE glasses_user_device_assignments SET released_at=COALESCE(released_at,NOW(6)),
+                  release_reason=COALESCE(release_reason,'runtime_ended') WHERE organization_id=? AND id=? AND released_at IS NULL")
+                  ->execute([(int)$user['organization_id'],(int)$row['wearer_assignment_id']]);
+            }
             glasses_device_event($pdo,(int)$user['organization_id'],(int)$row['device_id'],
               'runtime_employee_released',(int)$row['location_id'],
               $row['station_id']!==null?(int)$row['station_id']:null,

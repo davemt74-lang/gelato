@@ -15,6 +15,8 @@ $sql=(string)file_get_contents($root.'/database/20261214_glasses_employee_runtim
 runtimeCheck(str_contains($sql,'UNIQUE KEY uq_glasses_runtime_live_device'),'one active runtime per physical glasses');
 runtimeCheck(str_contains($sql,'UNIQUE KEY uq_glasses_runtime_live_employee'),'one active runtime per employee');
 runtimeCheck(str_contains($sql,'wearer_assignment_id'),'reuse canonical Vision Lab wearer records');
+runtimeCheck(str_contains($sql,'wearer_assignment_created'),'track whether the runtime owns the wearer record');
+runtimeCheck(str_contains($php,"if((int)$"."row['wearer_assignment_created']===1)"),'do not release preexisting wearer assignment when runtime ends');
 runtimeCheck(str_contains($php,"require_once __DIR__.'/glasses-vision-lab.php'"),'must reuse Vision Lab wearable assignment history');
 runtimeCheck(str_contains($php,"require_once __DIR__.'/glasses-training-identity.php'"),'must use V11 training programs and sessions');
 runtimeCheck(str_contains($php,"glasses_vision_lab_assign_device("),'must attach runtime to existing Vision Lab device identity');
