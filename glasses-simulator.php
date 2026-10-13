@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require __DIR__.'/includes/bootstrap.php';
+require_once __DIR__.'/includes/admin-control-core.php';
 $user=app_require_auth();
 if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR glasses permission required.');}
 ?><!doctype html>
@@ -11,12 +12,13 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <title>Web Glasses Simulator · Gelato</title>
 <link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20261013-live1">
 <link rel="stylesheet" href="assets/css/glasses-simulator-hud-ux.css?v=20261013-voice1">
+<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-device1">
 </head>
 <body>
 <header class="sim-topbar">
   <div>
     <strong>Gelato Web Glasses Simulator</strong>
-    <span>POS + KDS + AR build projection</span>
+    <span>Live AR glasses preview</span>
   </div>
   <div class="sim-top-actions">
     <label>Mode <select id="modeSelect"><option value="live" selected>Live Gelato</option><option value="mock">Mock Demo</option></select></label>
@@ -28,8 +30,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
     <label>Frame <select id="frameModeSelect"><option value="svg">SVG</option><option value="image">Uploaded</option><option value="none">None</option></select></label>
     <label class="mask-toggle"><input id="opticalMaskToggle" type="checkbox" checked> Lens mask</label>
     <button id="calibrationToggle" type="button" aria-pressed="false">Calibrate</button>
-    <a href="kds.php">KDS</a>
-    <a href="pos.php">POS</a>
+    <?php if(admin_control_allowed($user)):?><a href="admin.php" class="sim-admin-link">ADMIN</a><?php endif;?>
   </div>
 </header>
 
@@ -423,6 +424,8 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-v10-soak-harness.js?v=20260929-v10-5"></script>
 <script src="assets/js/glasses-v10-cook-ux-harness.js?v=20260929-v10-6"></script>
 <script src="assets/js/glasses-web-simulator.js?v=20261013-live1"></script>
-<script src="assets/js/glasses-simulator-voice.js?v=20261013-voice1"></script>
+<script src="assets/js/glasses-voice-device.js?v=20261013-device1"></script>
+<script src="assets/js/glasses-simulator-voice.js?v=20261013-device1"></script>
+<script src="assets/js/glasses-simulator-tabs.js?v=20261013-device1"></script>
 </body>
 </html>
