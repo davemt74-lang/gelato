@@ -203,4 +203,8 @@ if ($adminControlAllowed) {
     $html = str_replace('<body>', '<body class="gelato-admin-tech-theme">', $html);
 }
 $html = str_replace('</body>', "  <script src=\"js/workspace-shell-sync.js?v=20261013-nav1\"></script>\n</body>", $html);
+// Training owns its visible chat/voice controls. Load after all inline
+// page handlers, and after the Admin theme so the user bubble keeps contrast.
+$html = str_replace('</head>', "  <link rel=\"stylesheet\" href=\"css/training-workspace-chat.css?v=20261013-training1\">\n</head>", $html);
+$html = str_replace('</body>', "  <script src=\"js/training-workspace-voice.js?v=20261013-training1\"></script>\n</body>", $html);
 echo $html;
