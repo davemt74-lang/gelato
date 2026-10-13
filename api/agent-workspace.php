@@ -24,6 +24,8 @@ if($_SERVER['REQUEST_METHOD']==='GET'){
     }
     if($action==='thread'){$id=trim((string)($_GET['id']??''));app_json_response(['ok'=>true,'thread'=>gaw_thread($pdo,$org,$uid,$id),'messages'=>gaw_messages($pdo,$org,$uid,$id,220)]);}
     if($action==='threads')app_json_response(['ok'=>true,'threads'=>gaw_threads($pdo,$org,$uid,80)]);
+    if($action==='history_threads'){$offset=max(0,(int)($_GET['offset']??0));app_json_response(['ok'=>true]+gaw_history_threads($pdo,$org,$uid,$offset,80));}
+    if($action==='history_page'){$id=trim((string)($_GET['id']??''));$before=max(0,(int)($_GET['before']??0));app_json_response(['ok'=>true]+gaw_history_page($pdo,$org,$uid,$id,$before,80));}
     app_json_response(['ok'=>false,'message'=>'Unsupported Agent Workspace action.'],422);
 }
 if($_SERVER['REQUEST_METHOD']!=='POST'){header('Allow: GET, POST');app_json_response(['ok'=>false,'message'=>'Method not allowed.'],405);}
