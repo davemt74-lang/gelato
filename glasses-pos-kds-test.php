@@ -23,11 +23,11 @@ $canKds = app_has_permission('kds.view', $user);
   <div class="workflow-top-actions"><a href="pos.php" target="_blank" rel="noopener">Open POS ↗</a><a href="kds.php" target="_blank" rel="noopener">Open KDS ↗</a><a href="glasses-simulator.php" target="_blank" rel="noopener" class="primary">Open Glasses Simulator ↗</a></div>
 </header>
 <main class="workflow-shell">
-  <div class="workflow-banner" role="note"><strong>Two different simulator modes</strong><p><b>Mock</b> shows a sample Club Sandwich + Fries build. It never reads or changes POS/KDS. For a real test order, switch the simulator to <b>Live Gelato</b>, choose an active glasses device on the same kitchen station, and let the order route through KDS. Live actions can change build/KDS state when authorized; use a test order.</p></div>
+  <div class="workflow-banner" role="note"><strong>Two different simulator modes</strong><p><b>Mock</b> shows a sample Club Sandwich + Fries build. It never reads or changes POS/KDS. The glasses simulator opens in <b>Live Gelato</b> automatically, showing the selected location's KDS tickets through a virtual browser display—<b>no real glasses or pairing required</b>. Only orders sent to KDS will appear; choose a station or use All stations. Live actions can change build/KDS state when authorized; use a test order.</p></div>
   <ol class="workflow-steps">
     <li><b>1 · POS</b><span>Place a test ticket for your intended location.</span></li>
     <li><b>2 · KDS</b><span>Confirm the order arrived at the kitchen station.</span></li>
-    <li><b>3 · GLASSES</b><span>Select Live Gelato and the station's active glasses device; pick the queued item.</span></li>
+    <li><b>3 · GLASSES</b><span>Live Gelato opens automatically with All stations. Select the queued item, or narrow to the appropriate station.</span></li>
   </ol>
   <nav class="workflow-tabs" aria-label="Choose an application panel">
     <button type="button" data-view-target="all" aria-pressed="true">All panels</button>
@@ -57,7 +57,7 @@ $canKds = app_has_permission('kds.view', $user);
       <iframe src="glasses-simulator.php" title="Gelato AR glasses simulator, switch from Mock to Live Gelato for real orders" loading="eager" referrerpolicy="same-origin" allow="camera"></iframe>
     </section>
   </div>
-  <p class="workflow-footnote">This workspace embeds the actual POS, KDS and Glasses pages in the same authenticated origin; it does not copy or fake live orders. If a panel is too narrow for its controls, select <b>Focus</b> or <b>Full page</b>. Newly routed KDS work is normally polled by the glasses simulator about every 1.5 seconds while Live mode is active and visible.</p>
+  <p class="workflow-footnote">This workspace embeds the actual POS, KDS and Glasses pages in the same authenticated origin; it does not copy or fake live orders. If a panel is too narrow for its controls, select <b>Focus</b> or <b>Full page</b>. Newly routed KDS work, including additional sent items on existing tickets, is polled by the live glasses preview about every 1.5 seconds while visible. Real device pairing is needed only for write-enabled build actions.</p>
 </main>
 <script src="assets/js/glasses-pos-kds-test.js?v=20261013-test1"></script>
 </body>
