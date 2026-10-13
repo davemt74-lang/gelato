@@ -1203,8 +1203,7 @@ function renderOrdersQueue(item){
     return '<button type="button" role="tab" aria-selected="'+(active?'true':'false')+
       '" class="hud-ticket-tab '+(active?'active':'')+'" data-kds-order-slot="'+(i+1)+
       '" aria-label="KDS ticket '+(i+1)+', '+g.items.length+' items">'+
-      '<span class="ticket">#'+(i+1)+'</span><span class="ticket-progress">'+finished+'/'+g.items.length+
-      '</span><span class="age" data-pos-ticket-clock="'+(i+1)+'">'+escapeHtml(elapsedLabel(g.items[0],i))+'</span></button>';
+      '<span class="ticket">#'+(i+1)+'</span></button>';
   }).join('');
   const items=selected?.items.map((line,index)=>{
     const summary=ingredientSummary(line),active=line.kdsItemPublicId===item?.kdsItemPublicId;
