@@ -462,6 +462,14 @@ final class UpgradeService
             $sql = $normalized;
         }
 
+        // Reconcile the historical v11 multi-action ALTER independently. The
+        // original migration stays byte-for-byte unchanged for checksum tracking.
+        if (preg_match('/^ALTER\\s+TABLE\\s+`?glasses_vision_sample_reviews`?\\s+DROP\\s+INDEX\\s+uq_glasses_vision_sample_review_user\\b/i', $sql) === 1
+            && str_contains($sql, 'fk_glasses_vision_sample_review_correction')) {
+            self::reconcileAnnotationReviewAlter($pdo);
+            return;
+        }
+
         try {
             $pdo->exec($sql);
         } catch (PDOException $error) {
@@ -469,6 +477,41 @@ final class UpgradeService
                 return;
             }
             throw $error;
+        }
+    }
+
+    /** Replay the v11 review-table change safely after interrupted DDL. */
+    private static function reconcileAnnotationReviewAlter(PDO $pdo): void
+    {
+        $table = 'glasses_vision_sample_reviews';
+        $exists = static function (string $kind, string $name) use ($pdo, $table): bool {
+            $queries = [
+                'column' => 'SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=? AND column_name=?',
+                'index' => 'SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema=DATABASE() AND table_name=? AND index_name=?',
+                'fk' => "SELECT COUNT(*) FROM information_schema.table_constraints WHERE table_schema=DATABASE() AND table_name=? AND constraint_name=? AND constraint_type='FOREIGN KEY'",
+            ];
+            $query = $pdo->prepare($queries[$kind]);
+            $query->execute([$table, $name]);
+            return (int)$query->fetchColumn() > 0;
+        };
+        if (!$exists('column', 'correction_id')) {
+            $pdo->exec('ALTER TABLE glasses_vision_sample_reviews ADD COLUMN correction_id BIGINT UNSIGNED NULL AFTER sample_id');
+        }
+        if (!$exists('column', 'correction_scope_id')) {
+            $pdo->exec('ALTER TABLE glasses_vision_sample_reviews ADD COLUMN correction_scope_id BIGINT UNSIGNED GENERATED ALWAYS AS (COALESCE(correction_id,0)) STORED AFTER correction_id');
+        }
+        // Preserve the old uniqueness invariant until its replacement exists.
+        if (!$exists('index', 'uq_glasses_vision_sample_review_scope_user')) {
+            $pdo->exec('ALTER TABLE glasses_vision_sample_reviews ADD UNIQUE KEY uq_glasses_vision_sample_review_scope_user (sample_id,correction_scope_id,reviewer_user_id)');
+        }
+        if (!$exists('index', 'idx_glasses_vision_sample_review_correction')) {
+            $pdo->exec('ALTER TABLE glasses_vision_sample_reviews ADD KEY idx_glasses_vision_sample_review_correction (organization_id,correction_id,created_at)');
+        }
+        if (!$exists('fk', 'fk_glasses_vision_sample_review_correction')) {
+            $pdo->exec('ALTER TABLE glasses_vision_sample_reviews ADD CONSTRAINT fk_glasses_vision_sample_review_correction FOREIGN KEY (correction_id) REFERENCES glasses_vision_annotation_corrections(id) ON DELETE CASCADE');
+        }
+        if ($exists('index', 'uq_glasses_vision_sample_review_user')) {
+            $pdo->exec('ALTER TABLE glasses_vision_sample_reviews DROP INDEX uq_glasses_vision_sample_review_user');
         }
     }
 
