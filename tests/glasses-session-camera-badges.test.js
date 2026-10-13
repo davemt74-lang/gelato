@@ -55,7 +55,7 @@ const context={window:windows,document:{getElementById:id=>elements[id]||null},
   CustomEvent:class{constructor(type,opt){this.type=type;this.detail=opt.detail;}},
   Set,Map,Number,Array,String,JSON,RegExp,
   controls:{},S:{active:'camera1'},$:(id)=>elements[id]};
-const boilerplate="const controls={};const S={active:'camera1'};const $=id=>document.getElementById(id);";
+const boilerplate="const controls={};const S={active:'camera1'};";
 vm.runInNewContext(boilerplate+code+'\nthis.__test={countSessionPhoto,resetPhotoSession,select,session,updateCameraBadges};',context);
 const policy=context.__test;
 for(let slot=1;slot<=5;slot++){
