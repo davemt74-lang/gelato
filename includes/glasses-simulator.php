@@ -15,7 +15,6 @@ require_once __DIR__.'/glasses-device-health.php';
 require_once __DIR__.'/glasses-runtime-recovery.php';
 require_once __DIR__.'/glasses-runtime-soak.php';
 require_once __DIR__.'/glasses-cook-ux.php';
-require_once __DIR__.'/online-order-lifecycle.php';
 
 /** A read-only virtual display for a location or KDS station; no hardware pairing. */
 function glasses_simulator_virtual_devices(PDO $pdo,array $user): array
@@ -160,6 +159,7 @@ function glasses_simulator_build_payload(PDO $pdo,array $device,string $sessionP
  * may update only scoped, authenticated kitchen state, never fabricate vision evidence. */
 function glasses_simulator_kds_command(PDO $pdo,array $user,array $device,array $in): array
 {
+    require_once __DIR__.'/online-order-lifecycle.php';
     $org=(int)$user['organization_id'];
     $uid=(int)$user['id'];
     $locationId=(int)$device['location_id'];
