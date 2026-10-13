@@ -70,6 +70,7 @@ jobs:
             tests/deployment-navigation-verification-contract.php
             tests/static-workspace-entry-contract.php
             tests/mysql-conditional-add-column-compatibility.php
+            tests/mysql-foreign-key-diagnostics.php
             includes/UpgradeService.php
             deployment-check.php
             pos.php
@@ -96,6 +97,7 @@ jobs:
           php tests/deployment-navigation-verification-contract.php
           php tests/static-workspace-entry-contract.php
           php tests/mysql-conditional-add-column-compatibility.php
+          php tests/mysql-foreign-key-diagnostics.php
           php tests/role-permission-enforcement-contract.php
           php tests/universal-admin-page-shell-contract.php
 
