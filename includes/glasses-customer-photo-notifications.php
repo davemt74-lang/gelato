@@ -136,7 +136,7 @@ function glasses_customer_photo_notify_once(PDO $pdo,int $org,int $onlineOrderId
           JOIN glasses_vision_training_media m ON m.id=p.media_id AND m.organization_id=p.organization_id
             AND m.status='active' AND (m.retention_until IS NULL OR m.retention_until>NOW(6))
           JOIN online_orders oo ON oo.pos_check_id=k.check_id AND oo.organization_id=s.organization_id
-            AND oo.location_id=s.location_id
+            AND oo.location_id=s.location_id AND oo.id=share.online_order_id
           WHERE share.organization_id=? AND share.online_order_id=? AND share.revoked_at IS NULL
             AND s.status='confirmed' AND s.stage='post_oven' AND s.camera_slot=3
             AND k.status<>'cancelled' AND oo.status<>'cancelled'");
@@ -258,6 +258,9 @@ function glasses_customer_photo_visible(PDO $pdo,int $org,int $customerId,string
             AND s.stage='post_oven' AND s.camera_slot=3
         JOIN kds_order_items k ON k.id=s.kds_item_id AND k.organization_id=s.organization_id
             AND k.status<>'cancelled'
+        JOIN online_orders linked_order ON linked_order.organization_id=share.organization_id
+            AND linked_order.id=share.online_order_id AND linked_order.pos_check_id=k.check_id
+            AND linked_order.location_id=share.location_id
         JOIN pos_check_items i ON i.id=k.pos_check_item_id AND i.organization_id=k.organization_id
         JOIN glasses_camera_photo_library p ON p.id=s.photo_library_id AND p.organization_id=s.organization_id
             AND p.location_id=share.location_id AND p.id=share.photo_library_id AND p.status='active'
