@@ -93,6 +93,17 @@ function glasses_customer_photo_staff_snapshot(PDO $pdo,array $user,int $locatio
         'canManage'=>app_has_permission('glasses.manage',$user),
         'photos'=>glasses_customer_photo_share_candidates($pdo,$org,$locationId)];
 }
+/** Decision-only policy; no photo is delivered unless every independent gate passes. */
+function glasses_customer_photo_delivery_gate(array $flags):string
+{
+    if(!in_array((string)($flags['orderStatus']??''),['ready','kitchen_complete','completed'],true))
+        return 'order_not_ready';
+    if(empty($flags['locationEnabled']))return 'location_off';
+    if(empty($flags['customerOptedIn']))return 'customer_not_opted_in';
+    if(!empty($flags['alreadyNotified']))return 'already_notified';
+    if((int)($flags['approvedPhotos']??0)<1)return 'no_approved_photos';
+    return 'eligible';
+}
 function glasses_customer_photo_notify_once(PDO $pdo,int $org,int $onlineOrderId,?int $actorId=null):array
 {
     if(!glasses_customer_photo_ready($pdo))return ['sent'=>false,'reason'=>'upgrade_pending'];
@@ -103,7 +114,8 @@ function glasses_customer_photo_notify_once(PDO $pdo,int $org,int $onlineOrderId
         $q->execute([$org,$onlineOrderId]);$order=$q->fetch(PDO::FETCH_ASSOC);
         if(!$order)return ['sent'=>false,'reason'=>'order_missing'];
         $status=(string)$order['status'];
-        if(!in_array($status,['ready','kitchen_complete','completed'],true))
+        if(glasses_customer_photo_delivery_gate(['orderStatus'=>$status,'locationEnabled'=>true,
+             'customerOptedIn'=>true,'approvedPhotos'=>1])!=='eligible')
             return ['sent'=>false,'reason'=>'order_not_ready'];
         $location=(int)$order['location_id'];$customer=(int)$order['customer_id'];
         if(!glasses_customer_photo_location_enabled($pdo,$org,$location))
@@ -129,7 +141,10 @@ function glasses_customer_photo_notify_once(PDO $pdo,int $org,int $onlineOrderId
             AND s.status='confirmed' AND s.stage='post_oven' AND s.camera_slot=3
             AND k.status<>'cancelled' AND oo.status<>'cancelled'");
         $items->execute([$org,$onlineOrderId]);
-        if((int)$items->fetchColumn()<1)return ['sent'=>false,'reason'=>'no_approved_photos'];
+        $count=(int)$items->fetchColumn();
+        $gate=glasses_customer_photo_delivery_gate(['orderStatus'=>$status,
+            'locationEnabled'=>true,'customerOptedIn'=>true,'approvedPhotos'=>$count]);
+        if($gate!=='eligible')return ['sent'=>false,'reason'=>$gate];
         $message=customer_inbox_send_direct($pdo,$org,$customer,[
             'messageType'=>'order_update',
             'locationId'=>$location,
