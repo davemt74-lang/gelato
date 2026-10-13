@@ -109,6 +109,9 @@
     // Full live status remains available under Runtime, not in the operator Overview.
     move(stage.querySelector('.sim-status-row'),section('runtime'));
     move($('simLiveGuide'),section('runtime'));
+    // Device and station are per-employee runtime settings, not global HUD controls.
+    move(document.querySelector('.glasses-runtime-toolbar'),section('runtime'));
+    move(document.querySelector('.glasses-runtime-training-controls'),section('runtime'));
     const transcript=document.createElement('div');
     transcript.className='sgv-live-transcript';transcript.id='simLiveTranscript';
     transcript.setAttribute('role','status');transcript.setAttribute('aria-live','polite');

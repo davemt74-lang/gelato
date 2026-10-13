@@ -654,3 +654,34 @@ html,body{max-width:100%;overflow-x:hidden}
 .git-studio input[type=checkbox]{accent-color:#71ed99;flex:none}
 .git-studio #gitFeedback[data-error="1"]{color:#ffb2a0}
 @media(max-width:560px){.git-source-grid{grid-template-columns:1fr}}
+
+/* Every assigned headset has its own station and employee controls under Runtime. */
+.sgv-tabbed-console #sgv-panel-runtime .glasses-runtime-toolbar,
+.sgv-tabbed-console #sgv-panel-runtime .glasses-runtime-training-controls{
+ display:flex;flex-wrap:wrap;align-items:end;gap:8px;padding:12px;
+ background:#10231a;border:1px solid #315542;border-radius:9px;margin:7px 0;
+}
+.sgv-tabbed-console #sgv-panel-runtime .glasses-runtime-toolbar label,
+.sgv-tabbed-console #sgv-panel-runtime .glasses-runtime-training-controls label{
+ display:flex;flex-direction:column;gap:5px;font-size:10px;color:#c8ebd4;min-width:115px;flex:1 1 125px;
+}
+.sgv-tabbed-console #sgv-panel-runtime .glasses-runtime-toolbar select,
+.sgv-tabbed-console #sgv-panel-runtime .glasses-runtime-training-controls select{
+ width:100%;min-width:0;max-width:none;
+}
+#glassesRuntimeSaveStation[data-dirty="1"]{background:#197d43;border-color:#52d789;color:#fff}
+
+/* Existing Vision Lab operator-feedback queue; shown only under Camera > Training. */
+.gal-studio{display:grid;gap:9px;padding:12px;margin:8px 0 12px;
+ background:#11271e;border:1px solid #355d42;border-radius:8px;color:#dff8e5}
+.gal-head small{display:block;color:#89c4a5;font:700 9px/1.4 system-ui;letter-spacing:.08em}
+.gal-head strong{display:block;font:750 14px/1.5 system-ui}
+.gal-studio p{margin:0;font-size:11px;line-height:1.5;color:#acc8b5}
+.gal-studio .gal-context{background:#102219;color:#c7f3d5;padding:7px;border-radius:5px;font:650 11px/1.4 system-ui}
+.gal-studio label{display:grid;gap:5px;color:#b9ddc8;font:650 11px/1.4 system-ui}
+.gal-studio input,.gal-studio select{width:100%;min-width:0;padding:8px;border-radius:5px;
+ background:#071c13;color:#edfef1;border:1px solid #41634e}
+.gal-studio button{border:1px solid #489a68;background:#1b7040;padding:9px;border-radius:5px;
+ color:#fff;font:750 11px/1.3 system-ui}
+.gal-studio button:disabled{opacity:.4;cursor:not-allowed}
+.gal-studio #galFeedback[data-error="1"]{color:#ffb4a3}

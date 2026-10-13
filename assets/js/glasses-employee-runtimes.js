@@ -2,7 +2,7 @@
 /* Section 266: operator-assigned runtimes. Each opened URL has its own isolated
  * browser camera, inference worker, checklist, audio and recovery state. */
 const cfg=window.GELATO_GLASSES_SIMULATOR||{},byId=id=>document.getElementById(id);
-let catalog={schemaReady:false,runtimes:[],employees:[]},bound=null,devices=[],mounted=false,lost=false;
+let catalog={schemaReady:false,runtimes:[],employees:[],stations:[]},bound=null,devices=[],mounted=false,lost=false;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const status=(s,error=false)=>{const e=byId('glassesRuntimeStatus');if(e){e.textContent=s;e.dataset.error=error?'1':'0';}};
 async function json(url,options={}){
@@ -28,6 +28,10 @@ function render(){
  select.value=cfg.runtimePublicId||(choices.some(x=>x.publicId===previous)?previous:'');
  if(cfg.runtimePublicId)select.value=cfg.runtimePublicId;
  const chosen=choices.find(r=>r.publicId===select.value)||null;
+ const deviceSelect=byId('deviceSelect');
+ if(chosen&&deviceSelect){deviceSelect.value=chosen.devicePublicId;deviceSelect.disabled=true;}
+ else if(deviceSelect&&!cfg.runtimePublicId)deviceSelect.disabled=false;
+ renderStation(chosen);
  renderTraining(chosen);
  employee.innerHTML='<option value="">Assign employee…</option>'+
    (catalog.employees||[]).map(e=>'<option value="'+e.id+'">'+esc(e.displayName)+(e.employeeNumber?' · '+esc(e.employeeNumber):'')+'</option>').join('');
@@ -44,6 +48,27 @@ function render(){
    (chosen?'Assigned: '+chosen.employeeName+' · '+chosen.deviceName:'Choose paired glasses and an employee'));
 }
 
+function selectedDevice(chosen=null){
+ return chosen?devices.find(d=>d.publicId===chosen.devicePublicId):
+   devices.find(d=>d.publicId===byId('deviceSelect')?.value);
+}
+function renderStation(chosen){
+ const field=byId('glassesRuntimeStation'),button=byId('glassesRuntimeSaveStation');
+ if(!field)return;
+ const device=selectedDevice(chosen),locationId=chosen?.locationId||device?.locationId||null;
+ const prior=field.value,assigned=chosen?.stationPublicId||device?.stationPublicId||'';
+ const stations=(catalog.stations||[]).filter(s=>Number(s.locationId)===Number(locationId));
+ field.innerHTML='<option value="">'+(locationId?'Choose kitchen station…':'Choose glasses first…')+'</option>'+
+   stations.map(s=>'<option value="'+esc(s.publicId)+'">'+esc(s.name)+'</option>').join('');
+ const allowed=v=>stations.some(s=>s.publicId===v);
+ field.value=chosen?(allowed(assigned)?assigned:''):(allowed(prior)?prior:allowed(assigned)?assigned:'');
+ field.disabled=!locationId||!(catalog.employees||[]).length||(cfg.runtimePublicId&&!bound);
+ const changed=!!chosen&&!!field.value&&field.value!==assigned;
+ button.disabled=!changed;button.dataset.dirty=changed?'1':'0';
+ const create=byId('glassesRuntimeNew');
+ if(!chosen)create.disabled=!!cfg.runtimePublicId||!device||!!device.virtualPreview||!field.value||
+   !(catalog.employees||[]).length||!catalog.schemaReady||!byId('glassesRuntimeEmployee').value;
+}
 function renderTraining(chosen){
  const training=byId('glassesRuntimeTrainingSelect');
  if(!training)return;
@@ -70,14 +95,44 @@ function mount(){
  if(mounted)return;mounted=true;
  const select=byId('glassesRuntimeSelect');
  select.addEventListener('change',render);
+ byId('deviceSelect').addEventListener('change',()=>renderStation(catalog.runtimes?.find(r=>r.publicId===select.value)||null));
+ byId('glassesRuntimeEmployee').addEventListener('change',()=>{
+   if(!select.value)renderStation(null);
+ });
+ byId('glassesRuntimeStation').addEventListener('change',()=>{
+   const chosen=catalog.runtimes?.find(r=>r.publicId===select.value)||null;
+   const station=byId('glassesRuntimeStation').value;
+   const changed=!!chosen&&!!station&&station!==chosen.stationPublicId;
+   byId('glassesRuntimeSaveStation').disabled=!changed;
+   byId('glassesRuntimeSaveStation').dataset.dirty=changed?'1':'0';
+   if(!chosen)byId('glassesRuntimeNew').disabled=!station||!selectedDevice()||
+     !byId('glassesRuntimeEmployee').value||!!cfg.runtimePublicId;
+ });
+ byId('glassesRuntimeSaveStation').addEventListener('click',async()=>{
+   const selected=catalog.runtimes?.find(r=>r.publicId===select.value)||null;
+   const stationPublicId=byId('glassesRuntimeStation').value;
+   if(!selected||!stationPublicId)return;
+   if(!window.confirm('Move '+selected.deviceName+' to this kitchen station? Its open runtime will reload with new tickets.'))return;
+   try{
+     const result=await post('runtime.station_update',{runtimePublicId:selected.publicId,stationPublicId});
+     const device=devices.find(d=>d.publicId===selected.devicePublicId);
+     if(device){device.stationPublicId=result.runtime.stationPublicId;device.stationName=result.runtime.stationName;}
+     if(cfg.runtimePublicId===selected.publicId){window.location.reload();return;}
+     await refresh();status('Station saved · '+result.runtime.deviceName+' · '+result.runtime.stationName);
+   }catch(error){status(error.message,true);}
+ });
  byId('glassesRuntimeTrainingSelect').addEventListener('change',()=>renderTraining(catalog.runtimes?.find(r=>r.publicId===select.value)||null));
  byId('glassesRuntimeNew').addEventListener('click',async()=>{
    const device=devices.find(d=>d.publicId===byId('deviceSelect')?.value);
    const employeeId=Number(byId('glassesRuntimeEmployee').value);
+   const stationPublicId=byId('glassesRuntimeStation').value;
    if(!device||device.virtualPreview){status('Select a paired physical glasses device in the Device list.',true);return;}
    if(!Number.isSafeInteger(employeeId)||employeeId<1){status('Choose an active employee first.',true);return;}
+   if(!(catalog.stations||[]).some(s=>s.publicId===stationPublicId&&Number(s.locationId)===Number(device.locationId))){
+     status('Select an active station at this glasses device location.',true);return;
+   }
    try{
-     const d=await post('runtime.create',{devicePublicId:device.publicId,employeeUserId:employeeId});
+     const d=await post('runtime.create',{devicePublicId:device.publicId,employeeUserId:employeeId,stationPublicId});
      await refresh();select.value=d.runtime.publicId;render();
      status('Created · '+d.runtime.employeeName+'. Click Open to launch isolated runtime.');
    }catch(e){status(e.message,true);}
@@ -119,7 +174,11 @@ function mount(){
 async function heartbeat(){
  if(!bound||lost)return;
  try{
-   await post('runtime.heartbeat',{runtimePublicId:bound.publicId,devicePublicId:bound.devicePublicId});
+   const result=await post('runtime.heartbeat',{runtimePublicId:bound.publicId,devicePublicId:bound.devicePublicId});
+   if(result.runtime?.stationPublicId!==bound.stationPublicId){
+     lost=true;status('Station updated. Reloading assigned glasses workspace.');
+     window.location.reload();return;
+   }
  }catch(e){
    if(lost)return;lost=true;status('Runtime stopped: '+e.message,true);
    document.documentElement.classList.add('glasses-runtime-revoked');
@@ -140,5 +199,5 @@ async function bootstrap(currentDevices){
  setInterval(heartbeat,15000);
  return bound;
 }
-window.GelatoGlassesRuntimes={bootstrap,refresh,binding:()=>bound};
+window.GelatoGlassesRuntimes={bootstrap,refresh,binding:()=>bound,syncDevices(next){devices=next||[];render();}};
 })();

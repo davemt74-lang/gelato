@@ -30,6 +30,7 @@ function glasses_employee_runtime_public(array $row): array
         'locationId'=>(int)$row['location_id'],
         'locationName'=>(string)$row['location_name'],
         'stationName'=>$row['station_name']??null,
+        'stationPublicId'=>$row['station_public_id']??null,
         'stationId'=>$row['station_id']!==null?(int)$row['station_id']:null,
         'status'=>(string)$row['status'],
         'lastSeenAt'=>$row['last_seen_at']??null,
@@ -47,7 +48,7 @@ function glasses_employee_runtime_row(PDO $pdo,array $user,string $publicId,bool
     $org=(int)$user['organization_id'];
     $sql="SELECT r.*,d.public_id device_public_id,d.display_name device_display_name,
         d.location_id,d.station_id,d.status device_status,d.revoked_at device_revoked_at,
-        l.name location_name,s.name station_name,u.display_name employee_display_name,
+        l.name location_name,s.name station_name,s.public_id station_public_id,u.display_name employee_display_name,
         a.public_id wearer_assignment_public_id,a.released_at wearer_released_at,
         u.status employee_status,u.archived_at employee_archived_at,om.status membership_status
       FROM glasses_employee_runtimes r
@@ -88,7 +89,7 @@ function glasses_employee_runtime_catalog(PDO $pdo,array $user): array
     $org=(int)$user['organization_id'];
     $q=$pdo->prepare("SELECT r.public_id,r.device_id,r.employee_user_id,r.status,r.started_at,r.last_seen_at,
       d.public_id device_public_id,d.display_name device_display_name,d.location_id,d.station_id,
-      l.name location_name,s.name station_name,u.display_name employee_display_name,
+      l.name location_name,s.name station_name,s.public_id station_public_id,u.display_name employee_display_name,
       a.public_id wearer_assignment_public_id
       FROM glasses_employee_runtimes r
       JOIN glasses_devices d ON d.id=r.device_id AND d.organization_id=r.organization_id
@@ -147,11 +148,26 @@ function glasses_employee_runtime_catalog(PDO $pdo,array $user): array
         ],array_values(array_filter($q->fetchAll(PDO::FETCH_ASSOC),static fn(array $s):bool=>
             isset($visibleEmployees[(int)$s['user_id']])&&isset($visibleDeviceIds[(int)$s['device_id']]))));
     }
+    $stations=[];
+    if(app_has_permission('glasses.manage',$user)){
+        $q=$pdo->prepare("SELECT s.id,s.public_id,s.location_id,s.name,l.name location_name
+          FROM kds_stations s JOIN locations l ON l.id=s.location_id AND l.organization_id=s.organization_id
+          WHERE s.organization_id=? AND s.status='active'
+          ORDER BY l.name,s.name,s.id");
+        $q->execute([$org]);
+        foreach($q->fetchAll(PDO::FETCH_ASSOC) as $station){
+            if(!operational_location_allowed($pdo,$user,'glasses.manage',(int)$station['location_id']))continue;
+            $stations[]=['id'=>(int)$station['id'],'publicId'=>(string)$station['public_id'],
+                'locationId'=>(int)$station['location_id'],'name'=>(string)$station['name'],
+                'locationName'=>(string)$station['location_name']];
+        }
+    }
     return ['schemaReady'=>true,'runtimes'=>$runtimes,'employees'=>$employees,
+        'stations'=>$stations,
         'trainingAssignments'=>$trainingAssignments,'activeTrainingSessions'=>$activeSessions];
 }
 
-function glasses_employee_runtime_create(PDO $pdo,array $user,string $devicePublicId,int $employeeId): array
+function glasses_employee_runtime_create(PDO $pdo,array $user,string $devicePublicId,int $employeeId,string $stationPublicId=''): array
 {
     if(!glasses_employee_runtimes_ready($pdo))
         throw new DomainException('Glasses runtimes are not installed; run upgrade.php.');
@@ -159,7 +175,7 @@ function glasses_employee_runtime_create(PDO $pdo,array $user,string $devicePubl
         throw new DomainException('Glasses management permission is required to assign employees.');
     if($employeeId<1)throw new InvalidArgumentException('Select an employee.');
     $org=(int)$user['organization_id'];
-    return glasses_transaction($pdo,static function()use($pdo,$user,$org,$devicePublicId,$employeeId):array{
+    return glasses_transaction($pdo,static function()use($pdo,$user,$org,$devicePublicId,$employeeId,$stationPublicId):array{
         $device=glasses_device_row($pdo,$org,$devicePublicId,true);
         $locationId=(int)$device['location_id'];
         if($device['status']!=='active'||$device['revoked_at']!==null)
@@ -189,6 +205,15 @@ function glasses_employee_runtime_create(PDO $pdo,array $user,string $devicePubl
             $identity=glasses_vision_lab_assign_device($pdo,$org,$devicePublicId,$employeeId,'operator','manual',(int)$user['id']);
             $q=$pdo->prepare("SELECT id,public_id,user_id FROM glasses_user_device_assignments WHERE organization_id=? AND public_id=?");
             $q->execute([$org,(string)$identity['publicId']]);$wearer=$q->fetch(PDO::FETCH_ASSOC);
+        }
+        if($stationPublicId==='')throw new InvalidArgumentException('Select a kitchen station for each glasses runtime.');
+        $station=glasses_station($pdo,$org,$locationId,$stationPublicId);
+        if(!$station)throw new InvalidArgumentException('Choose an active kitchen station for this location.');
+        if((int)($device['station_id']??0)!==(int)$station['id']){
+            $pdo->prepare("UPDATE glasses_devices SET station_id=?,updated_at=NOW(6) WHERE organization_id=? AND id=?")
+              ->execute([(int)$station['id'],$org,(int)$device['id']]);
+            glasses_device_event($pdo,$org,(int)$device['id'],'runtime_station_assigned',$locationId,(int)$station['id'],
+                ['stationPublicId'=>$stationPublicId,'source'=>'employee_runtime'],(int)$user['id']);
         }
         $publicId=glasses_public_id('runtime');
         try{
@@ -288,4 +313,41 @@ function glasses_employee_runtime_training_end(PDO $pdo,array $user,string $runt
         (string)($context['runtimePublicId']??'')!==$runtimePublicId)
         throw new DomainException('Training session does not belong to this runtime.');
     return glasses_training_session_end($pdo,$org,$sessionPublicId,$status,'ended_from_glasses_runtime',(int)$user['id']);
+}
+
+/**
+ * Change an assigned glasses station using existing glasses_devices.station_id.
+ * Must be idle so no governed builds or V11 supervised sessions inherit a new station.
+ */
+function glasses_employee_runtime_station_update(PDO $pdo,array $user,string $runtimePublicId,string $stationPublicId): array
+{
+    if(!app_has_permission('glasses.manage',$user))
+        throw new DomainException('Glasses management permission is required to change stations.');
+    if(trim($stationPublicId)==='')
+        throw new InvalidArgumentException('Choose a kitchen station. End the runtime to unassign its device.');
+    return glasses_transaction($pdo,static function()use($pdo,$user,$runtimePublicId,$stationPublicId):array{
+        $row=glasses_employee_runtime_row($pdo,$user,$runtimePublicId,true);
+        $org=(int)$user['organization_id'];$locationId=(int)$row['location_id'];
+        $device=glasses_device_row($pdo,$org,(string)$row['device_public_id'],true);
+        glasses_employee_runtime_assert_binding($pdo,$user,$runtimePublicId,$device);
+        if(!operational_location_allowed($pdo,$user,'glasses.manage',$locationId)||
+           !operational_location_allowed($pdo,$user,'kds.view',$locationId))
+            throw new DomainException('Not authorized to change glasses stations at this location.');
+        $station=glasses_station($pdo,$org,$locationId,trim($stationPublicId));
+        if(!$station)throw new InvalidArgumentException('Choose an active KDS station for this device location.');
+        if((int)($row['station_id']??0)===(int)$station['id'])
+            return glasses_employee_runtime_public($row);
+        $q=$pdo->prepare("SELECT 1 FROM glasses_training_sessions WHERE organization_id=? AND device_id=? AND status='active' LIMIT 1");
+        $q->execute([$org,(int)$row['device_id']]);
+        if($q->fetchColumn())throw new DomainException('Finish or interrupt active employee training before switching the station.');
+        $q=$pdo->prepare("SELECT 1 FROM glasses_build_sessions WHERE organization_id=? AND device_id=? AND status='active' LIMIT 1");
+        $q->execute([$org,(int)$row['device_id']]);
+        if($q->fetchColumn())throw new DomainException('Finish or cancel the current build before switching the station.');
+        $pdo->prepare("UPDATE glasses_devices SET station_id=?,updated_at=NOW(6) WHERE organization_id=? AND id=? AND status='active'")
+          ->execute([(int)$station['id'],$org,(int)$row['device_id']]);
+        glasses_device_event($pdo,$org,(int)$row['device_id'],'runtime_station_changed',$locationId,(int)$station['id'],
+          ['runtimePublicId'=>$runtimePublicId,'oldStationPublicId'=>$row['station_public_id']??null,
+            'stationPublicId'=>$stationPublicId,'employeeUserId'=>(int)$row['employee_user_id']],(int)$user['id']);
+        return glasses_employee_runtime_public(glasses_employee_runtime_row($pdo,$user,$runtimePublicId));
+    });
 }

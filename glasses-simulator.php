@@ -12,7 +12,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <title>Web Glasses Simulator · Gelato</title>
 <link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20261013-live1">
 <link rel="stylesheet" href="assets/css/glasses-simulator-hud-ux.css?v=20261013-voice1">
-<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-267">
+<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-268">
 </head>
 <body>
 <header class="sim-topbar">
@@ -22,7 +22,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
   </div>
   <div class="sim-top-actions">
     <label>Mode <select id="modeSelect"><option value="live" selected>Live Gelato</option><option value="mock">Mock Demo</option></select></label>
-    <label>Device <select id="deviceSelect"><option value="">Finding live kitchen displays…</option></select></label>
+
     <button id="refreshWork" type="button">Refresh work</button>
     <label>Scene <select id="sceneSourceSelect"><option value="image">Image</option><option value="camera">Browser Camera</option></select></label>
     <label class="asset-load" id="sceneFileLabel">Scene Image <input id="sceneFile" type="file" accept="image/*"></label>
@@ -36,6 +36,9 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 
 <div class="glasses-runtime-toolbar" aria-label="Multiple assigned employee glasses runtimes">
     <label>Runtime <select id="glassesRuntimeSelect" aria-label="Glasses runtime"><option value="">New runtime…</option></select></label>
+    <label id="glassesRuntimeDeviceGroup">Glasses device <select id="deviceSelect" aria-label="Paired glasses device"><option value="">Finding live displays…</option></select></label>
+    <label>Kitchen station <select id="glassesRuntimeStation" aria-label="Kitchen station for selected glasses"><option value="">Choose station…</option></select></label>
+    <button id="glassesRuntimeSaveStation" type="button" title="Save this station to the selected employee glasses runtime">Save Station</button>
     <label>Assign employee <select id="glassesRuntimeEmployee" aria-label="Assign employee to glasses runtime"><option value="">Loading staff…</option></select></label>
     <button id="glassesRuntimeNew" type="button" title="Assign employee to selected paired glasses">New</button>
     <button id="glassesRuntimeOpen" type="button" title="Open isolated glasses runtime">Open</button>
@@ -486,20 +489,21 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-v10-cook-ux-harness.js?v=20260929-v10-6"></script>
 <script src="js/voice-session-presence.js?v=20261013-presence1"></script>
 <script src="assets/js/glasses-item-assembly.js?v=20261013-265"></script>
-<script src="assets/js/glasses-employee-runtimes.js?v=20261013-266multi"></script>
+<script src="assets/js/glasses-employee-runtimes.js?v=20261013-268"></script>
 <script src="assets/js/glasses-assembly-recognition.js?v=20261013-266"></script>
 <script src="assets/js/glasses-hud-notifications.js?v=20261013-266a"></script>
-<script src="assets/js/glasses-web-simulator.js?v=20261013-266a"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20261013-268"></script>
 <script src="assets/js/glasses-voice-device.js?v=20261013-device1"></script>
 <script src="assets/js/glasses-simulator-voice.js?v=20261013-266a"></script>
 <script src="assets/js/glasses-multicamera.js?v=20261013-multi1"></script>
 <script src="assets/js/glasses-camera-config.js?v=20261013-hud264"></script>
 <script src="assets/js/glasses-camera-runtime.js?v=20261013-261"></script>
-<script src="assets/js/glasses-simulator-tabs.js?v=20261013-267"></script>
+<script src="assets/js/glasses-simulator-tabs.js?v=20261013-268"></script>
 <script src="assets/js/glasses-camera-similarity.js?v=20261013-ref258"></script>
 <script src="assets/js/glasses-camera-workspace.js?v=20261013-267"></script>
 <script src="assets/js/glasses-ingredient-training-plan.js?v=20261013-267"></script>
 <script src="assets/js/glasses-ingredient-training-studio.js?v=20261013-267"></script>
+<script src="assets/js/glasses-assembly-learning.js?v=20261013-268"></script>
 <script src="assets/js/glasses-production-photo-flow.js?v=20261013-261"></script>
 <script src="assets/js/glasses-user-display-preferences.js?v=20261013-hud264"></script>
 <script src="assets/js/glasses-customer-photo-notifications.js?v=20261013-photo260"></script>

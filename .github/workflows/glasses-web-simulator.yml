@@ -10,6 +10,12 @@ on:
       - 'assets/js/glasses-web-simulator.js'
       - 'assets/js/glasses-hud-notifications.js'
       - 'assets/js/glasses-employee-runtimes.js'
+      - 'assets/js/glasses-assembly-learning.js'
+      - 'api/glasses-assembly-learning.php'
+      - 'includes/glasses-assembly-learning.php'
+      - 'tests/glasses-assembly-learning-contract.test.js'
+      - 'tests/glasses-runtime-station-contract.test.js'
+      - 'docs/GLASSES-SECTION268-REUSE-AUDIT.md'
       - 'includes/glasses-employee-runtimes.php'
       - 'database/20261214_glasses_employee_runtimes.sql'
       - 'tests/glasses-hud-notifications.test.js'
@@ -139,6 +145,11 @@ jobs:
           node --check assets/js/glasses-web-simulator.js
           node --check assets/js/glasses-hud-notifications.js
           node --check assets/js/glasses-employee-runtimes.js
+          node tests/glasses-runtime-station-contract.test.js
+          node --check assets/js/glasses-assembly-learning.js
+          node tests/glasses-assembly-learning-contract.test.js
+          php -l includes/glasses-assembly-learning.php
+          php -l api/glasses-assembly-learning.php
           node --check assets/js/glasses-item-assembly.js
           node --check assets/js/glasses-simulator-voice.js
           node --check assets/js/glasses-voice-device.js

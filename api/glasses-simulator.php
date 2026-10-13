@@ -54,7 +54,10 @@ try{
     app_verify_request_csrf($in);
     $action=trim((string)($in['action']??''));
     if($action==='runtime.create'){
-        $result=['runtime'=>glasses_employee_runtime_create($pdo,$user,(string)($in['devicePublicId']??''),(int)($in['employeeUserId']??0))];
+        $result=['runtime'=>glasses_employee_runtime_create($pdo,$user,(string)($in['devicePublicId']??''),(int)($in['employeeUserId']??0),(string)($in['stationPublicId']??''))];
+    }elseif($action==='runtime.station_update'){
+        $result=['runtime'=>glasses_employee_runtime_station_update($pdo,$user,
+          (string)($in['runtimePublicId']??''),(string)($in['stationPublicId']??''))];
     }elseif($action==='runtime.end'){
         $result=['runtime'=>glasses_employee_runtime_end($pdo,$user,(string)($in['runtimePublicId']??''))];
     }elseif($action==='runtime.training_start'){
