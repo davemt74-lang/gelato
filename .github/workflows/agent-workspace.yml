@@ -20,6 +20,8 @@ on:
       - 'includes/workspace-workforce-core.php'
       - 'js/global-agent.js'
       - 'js/proactive-listening-commands.js'
+      - 'js/voice-diagnostics.js'
+      - 'tests/voice-diagnostics.test.js'
       - 'tests/proactive-listening-commands.test.js'
       - 'tests/proactive-global-listening.test.js'
       - 'tests/proactive-listening-contract.php'
@@ -118,6 +120,8 @@ jobs:
           php -l tests/agent-workspace-contract.php
           php -l tests/workspace-dynamic-agent-canvas-contract.php
           node --check js/global-agent.js
+          node --check js/voice-diagnostics.js
+          node tests/voice-diagnostics.test.js
           node --check js/proactive-listening-commands.js
           node --check js/voice-turn-taking.js
           php -l tests/voice-barge-in-contract.php
