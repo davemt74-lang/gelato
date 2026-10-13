@@ -66,7 +66,7 @@
       const sharpnessPart=Math.min(1,sharpness/.11);
       const qualityScore=Math.max(0,Math.min(100,Math.round(100*(exposure*.3+contrastPart*.3+sharpnessPart*.4))));
       return {hash:hex,qualityScore,brightnessMean:Number(brightness.toFixed(5)),
-        contrastMean:Number(contrast.toFixed(5)),blurScore:Number(sharpness.toFixed(5)),
+        contrastMean:Number(contrast.toFixed(5)),blurScore:Number((sharpness*400).toFixed(5)),
         width:bitmap.width,height:bitmap.height};
     }finally{bitmap.close?.();}
   }
