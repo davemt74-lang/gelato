@@ -17,15 +17,26 @@ function setPreview(blob){
  const image=$('gitPreview');image.src=objectUrl||'';image.hidden=!objectUrl;
  draftBox=null;paint();
 }
+function imageContentRect(){
+ const image=$('gitPreview'),canvas=$('gitBox');
+ if(!image?.naturalWidth||!image?.naturalHeight||!canvas)return null;
+ const rect=image.getBoundingClientRect(),target=canvas.getBoundingClientRect();
+ const scale=Math.min(rect.width/image.naturalWidth,rect.height/image.naturalHeight);
+ const w=image.naturalWidth*scale,h=image.naturalHeight*scale;
+ return {x:rect.left-target.left+(rect.width-w)/2,
+   y:rect.top-target.top+(rect.height-h)/2,width:w,height:h};
+}
 function paint(){
- const frame=$('gitBox'),image=$('gitPreview');if(!frame||!image)return;
- const rect=image.getBoundingClientRect();
- frame.width=Math.max(1,Math.round(rect.width));frame.height=Math.max(1,Math.round(rect.height));
- const ctx=frame.getContext('2d');ctx.clearRect(0,0,frame.width,frame.height);
- const box=draftBox;if(!box)return;
+ const canvas=$('gitBox');if(!canvas)return;
+ const rect=canvas.getBoundingClientRect();
+ canvas.width=Math.max(1,Math.round(rect.width));canvas.height=Math.max(1,Math.round(rect.height));
+ const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);
+ const region=imageContentRect();
+ if(!draftBox||!region)return;
  ctx.fillStyle='rgba(71,220,123,.14)';ctx.strokeStyle='#7dffaf';ctx.lineWidth=2;
- ctx.fillRect(box.x*frame.width,box.y*frame.height,box.width*frame.width,box.height*frame.height);
- ctx.strokeRect(box.x*frame.width,box.y*frame.height,box.width*frame.width,box.height*frame.height);
+ const x=region.x+draftBox.x*region.width,y=region.y+draftBox.y*region.height;
+ const w=draftBox.width*region.width,h=draftBox.height*region.height;
+ ctx.fillRect(x,y,w,h);ctx.strokeRect(x,y,w,h);
 }
 function captured(){
  const currentLocation=Number(catalog?.locationId||0);
@@ -43,7 +54,7 @@ function selectPhoto(){
  file=null;$('gitFile').value='';
  selectedPhotoKey=$('gitCapturedPhoto').value;
  const photo=captured().find(x=>x.key===selectedPhotoKey);
- if(photo){$('gitCamera').value=String(photo.slot);setPreview(photo.blob);note('Camera photo selected. Draw the ingredient box if this is a positive phase.');}
+ if(photo){setPreview(photo.blob);note('Camera '+photo.slot+' photo selected. Draw the ingredient box if this is a positive phase.');}
  else setPreview(null);
 }
 function drawMenu(){
@@ -69,7 +80,8 @@ function updatePhase(){
 function render(){
  const valid=!!catalog&&!active;
  const el=$('gitContainer');if(!el)return;
- el.hidden=!valid;
+ el.hidden=false;
+ $('gitSubmit').disabled=!valid;
  $('gitRuntime').textContent=valid?catalog.employeeName+' · '+catalog.programName:'';
  $('gitSession').textContent=valid?'Supervised session · '+catalog.sessionPublicId:'';
  drawMenu();
@@ -80,7 +92,7 @@ function render(){
 }
 async function reload(){
  const runtime=cfg.runtimePublicId;
- if(!runtime){active=true;catalog=null;$('gitContainer').hidden=true;note('Open an assigned employee glasses runtime and start its V11 training session.');return;}
+ if(!runtime){active=true;catalog=null;render();note('Open an assigned employee glasses runtime and start its V11 training session.');return;}
  try{
    const response=await fetch('api/glasses-ingredient-training.php?runtimePublicId='+encodeURIComponent(runtime),{credentials:'same-origin',cache:'no-store'});
    const result=await response.json().catch(()=>({}));
@@ -88,21 +100,23 @@ async function reload(){
    if(/^[0-9a-f]{64}$/i.test(result.csrfToken||''))cfg.csrf=result.csrfToken;
    active=false;catalog=result.catalog;render();
    note('Ready: capture each ingredient in several phases; all uploads require review.');
- }catch(error){active=true;catalog=null;$('gitContainer').hidden=true;note(error.message||'Training unavailable',true);}
+ }catch(error){active=true;catalog=null;render();note(error.message||'Training unavailable',true);}
 }
 function pointerCoord(e){
- const box=$('gitBox'),rect=box.getBoundingClientRect();
- return {x:Math.max(0,Math.min(1,(e.clientX-rect.left)/Math.max(rect.width,1))),
-   y:Math.max(0,Math.min(1,(e.clientY-rect.top)/Math.max(rect.height,1)))};
+ const canvas=$('gitBox'),bounds=canvas.getBoundingClientRect(),region=imageContentRect();
+ if(!region)return null;
+ return {x:Math.max(0,Math.min(1,(e.clientX-bounds.left-region.x)/region.width)),
+   y:Math.max(0,Math.min(1,(e.clientY-bounds.top-region.y)/region.height))};
 }
 function markStart(e){
  if(!$('gitPreview').src||!choose()?.guide.positive)return;
- e.preventDefault();const p=pointerCoord(e);pointer={id:e.pointerId,x:p.x,y:p.y};
+ e.preventDefault();const p=pointerCoord(e);if(!p)return;
+ pointer={id:e.pointerId,x:p.x,y:p.y};
  $('gitBox').setPointerCapture(e.pointerId);
 }
 function markMove(e){
  if(!pointer||pointer.id!==e.pointerId)return;
- const p=pointerCoord(e);
+ const p=pointerCoord(e);if(!p)return;
  draftBox={x:Math.min(p.x,pointer.x),y:Math.min(p.y,pointer.y),
    width:Math.abs(p.x-pointer.x),height:Math.abs(p.y-pointer.y)};
  paint();
@@ -168,7 +182,7 @@ function mount(){
  '<label class="git-optin"><input id="gitConsent" type="checkbox"> I approve private Vision Lab storage and human review. No automatic training.</label>'+
  '<button id="gitSubmit" type="button" class="git-save">Submit sample for review</button>'+
  '<p id="gitFeedback" role="status" aria-live="polite">Start an active employee training session to begin.</p>';
- const panel=$('sgv-panel-camera');panel.append(root);
+ const panel=$('gcPaneTraining')||$('sgv-panel-camera');panel.prepend(root);
  const phases=$('gitPhase');phases.add(new Option('Select capture phase…',''));
  for(const p of plan.PHASES)phases.add(new Option(p.name,p.id));
  $('gitMenu').addEventListener('change',updateIngredient);
@@ -180,6 +194,7 @@ function mount(){
    if(file&&!['image/jpeg','image/png','image/webp'].includes(file.type)){note('Use a JPEG, PNG, or WebP photo.',true);file=null;}
    setPreview(file);if(file)note('Local uploaded file selected; camera source will be marked as file upload.');
  });
+ $('gitPreview').addEventListener('load',paint);
  const box=$('gitBox');box.addEventListener('pointerdown',markStart);box.addEventListener('pointermove',markMove);
  box.addEventListener('pointerup',markEnd);box.addEventListener('pointercancel',()=>{pointer=null;});
  $('gitClearBox').addEventListener('click',()=>{draftBox=null;paint();});
