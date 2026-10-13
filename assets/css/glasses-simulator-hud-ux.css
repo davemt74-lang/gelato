@@ -93,3 +93,14 @@
 .sim-advanced-settings[open]>summary{list-style:disclosure-open}
 .sim-advanced-body{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;padding-top:10px;min-width:0}
 .sim-advanced-body>.console-card{min-width:0}
+
+/* Avoid device-selector overflow on 320–390px phones. */
+.sim-top-actions{min-width:0;max-width:100%}
+.sim-top-actions label{min-width:0;max-width:100%}
+.sim-top-actions select{min-width:0;max-width:100%}
+@media(max-width:640px){
+ .sim-topbar{min-width:0;max-width:100%;flex-wrap:wrap;align-items:flex-start}
+ .sim-top-actions{width:100%;min-width:0;justify-content:flex-start}
+ .sim-top-actions label:has(#deviceSelect){width:100%;flex-wrap:wrap}
+ .sim-top-actions #deviceSelect{flex:1 1 0;width:calc(100% - 46px);min-width:0;max-width:100%}
+}
