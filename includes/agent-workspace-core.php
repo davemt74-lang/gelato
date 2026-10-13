@@ -52,6 +52,42 @@ function gaw_messages(PDO $pdo,int $org,int $userId,string $threadPublicId,int $
     return $rows;
 }
 
+/**
+ * Complete per-user history, including archived threads, via stable cursor
+ * pagination. No other employee's messages are exposed by this API.
+ */
+function gaw_history_threads(PDO $pdo,int $org,int $userId,int $offset=0,int $limit=80):array
+{
+    $offset=max(0,min(1000000,$offset));$limit=max(1,min(100,$limit));
+    $q=$pdo->prepare("SELECT c.public_id,c.title,c.status,c.primary_channel,c.last_message_at,c.created_at,c.updated_at,c.archived_at,(SELECT COUNT(*) FROM agent_messages m WHERE m.conversation_id=c.id) message_count FROM agent_conversations c WHERE c.organization_id=? AND c.user_id=? ORDER BY COALESCE(c.last_message_at,c.created_at) DESC,c.id DESC LIMIT {$limit} OFFSET {$offset}");
+    $q->execute([$org,$userId]);$rows=$q->fetchAll(PDO::FETCH_ASSOC);
+    return ['threads'=>$rows,'nextOffset'=>count($rows)===$limit?$offset+$limit:null];
+}
+function gaw_history_page(PDO $pdo,int $org,int $userId,string $publicId,int $beforeId=0,int $limit=80):array
+{
+    $q=$pdo->prepare("SELECT id,public_id,title,archived_at FROM agent_conversations WHERE organization_id=? AND user_id=? AND public_id=? LIMIT 1");
+    $q->execute([$org,$userId,$publicId]);
+    $thread=$q->fetch(PDO::FETCH_ASSOC);
+    if(!$thread)throw new InvalidArgumentException('Agent conversation not found.');
+    $limit=max(1,min(150,$limit));
+    $sql="SELECT id,public_id,role,channel,content,skill,tool_name,voice_event_public_id,structured_json,sources_json,created_at FROM agent_messages WHERE organization_id=? AND conversation_id=?";
+    $args=[$org,(int)$thread['id']];
+    if($beforeId>0){$sql.=' AND id<?';$args[]=$beforeId;}
+    $sql.=" ORDER BY id DESC LIMIT ".($limit+1);
+    $q=$pdo->prepare($sql);$q->execute($args);$rows=$q->fetchAll(PDO::FETCH_ASSOC);
+    $more=count($rows)>$limit;
+    if($more)array_pop($rows);
+    $cursor=$more&&$rows?(int)end($rows)['id']:null;
+    $rows=array_reverse($rows);
+    foreach($rows as &$row){
+        $row['structured']=$row['structured_json']?json_decode((string)$row['structured_json'],true):null;
+        $row['sources']=$row['sources_json']?json_decode((string)$row['sources_json'],true):[];
+        unset($row['id'],$row['structured_json'],$row['sources_json']);
+    }
+    return ['thread'=>['public_id'=>$thread['public_id'],'title'=>$thread['title'],'archived_at'=>$thread['archived_at']],
+        'messages'=>$rows,'nextBeforeId'=>$cursor,'hasMore'=>$more];
+}
+
 function gaw_append(PDO $pdo,int $org,int $userId,string $threadPublicId,string $role,string $content,array $meta=[]): array
 {
     $thread=gaw_thread($pdo,$org,$userId,$threadPublicId);
