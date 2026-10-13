@@ -13,8 +13,8 @@ if(!app_has_permission('kds.view',$user)){http_response_code(403);exit('Kitchen 
 <div class="keys"><b>← → ↑ ↓</b> select · <b>Enter / B</b> bump · <b>R</b> recall last · <b>H</b> history · <b>Esc</b> exit</div><div class="toast hidden" id="toast"></div>
 <script>window.KDS_CONFIG={csrf:<?=json_encode(app_csrf_token(),JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT)?>,canUpdate:<?=app_has_permission('kds.update',$user)?'true':'false'?>,dashboardUrl:'kds-dashboard.php'};</script>
 <script src="js/agent-page-context.js?v=20260915-context3"></script>
-<script src="js/kds-agent-context.js?v=20261013-slots1"></script>
+<script src="js/kds-agent-context.js?v=20261013-global2"></script>
 <script src="js/global-agent.js?v=20260915-kds-voice1"></script>
-<script src="js/kds-agent-sidebar.js?v=20261013-slots1"></script>
-<script src="js/kds.js?v=20261013-slots1"></script>
-<script src="js/kds-voice-listener.js?v=20261013-mic1"></script></body></html>
+<script src="js/kds-agent-sidebar.js?v=20261013-global2"></script>
+<script src="js/kds.js?v=20261013-global2"></script>
+<script src="js/kds-voice-listener.js?v=20261013-global2"></script></body></html>
