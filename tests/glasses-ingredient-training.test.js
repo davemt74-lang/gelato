@@ -31,6 +31,11 @@ assert.match(policy.validate({...valid,phase:'negative',bbox:valid.bbox}),/must 
 assert.equal(policy.validate({...valid,phase:'negative',bbox:null}),'','Negative image has no fake positive annotation');
 assert.ok(!policy.PHASES.some(p=>p.id.includes('recipe')),'training steps are not kitchen preparation recipes');
 assert.match(studio,/GelatoCameraWorkspace\?\.getCapturedPhotos/,'reuse existing photo captures');
+assert.match(studio,/const panel=\$\('gcPaneTraining'\)\|\|\$\('sgv-panel-camera'\)/,'reuse current Camera Training subtab');
+assert.match(studio,/imageContentRect\(\)/,'overlay must use actual visible image geometry, not the entire panel');
+assert.match(studio,/naturalWidth/,'preserve image aspect and normalization');
+assert.doesNotMatch(studio,/\$\('gitCamera'\)/,'do not reference a non-existent camera selector');
+
 assert.match(studio,/GelatoCameraSimilarity\?\.fingerprint/,'reuse existing quality fingerprint');
 assert.match(studio,/reviewRequired:true/,'all captures require human review');
 assert.match(studio,/consentBasis:'training_media_opt_in'/,'opt in only');
