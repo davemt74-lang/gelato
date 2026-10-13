@@ -39,7 +39,7 @@ CREATE TABLE glasses_order_photo_shares (
   CONSTRAINT fk_gphoto_share_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
   CONSTRAINT fk_gphoto_share_location FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE,
   CONSTRAINT fk_gphoto_share_order FOREIGN KEY (online_order_id) REFERENCES online_orders(id) ON DELETE CASCADE,
-  CONSTRAINT fk_gphoto_share_stage FOREIGN KEY (stage_id) REFERENCES glasses_order_photo_stages(id),
+  CONSTRAINT fk_gphoto_share_stage FOREIGN KEY (stage_id) REFERENCES glasses_order_photo_stages(id) ON DELETE CASCADE,
   CONSTRAINT fk_gphoto_share_photo FOREIGN KEY (photo_library_id) REFERENCES glasses_camera_photo_library(id),
   CONSTRAINT fk_gphoto_share_approved FOREIGN KEY (approved_by) REFERENCES users(id),
   CONSTRAINT fk_gphoto_share_revoked FOREIGN KEY (revoked_by) REFERENCES users(id) ON DELETE SET NULL
