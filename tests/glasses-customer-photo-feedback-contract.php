@@ -6,7 +6,7 @@ function expectFeedback(bool $ok,string $what):void {
 }
 $v=glasses_customer_photo_feedback_validate(5,"  Excellent photo  ");
 expectFeedback($v['rating']===5&&$v['comment']==='Excellent photo','valid review trimmed');
-for($n of [-1,0,6,20]){
+foreach([-1,0,6,20] as $n){
  try{glasses_customer_photo_feedback_validate($n,'bad');throw new RuntimeException('accepted invalid rating');}
  catch(InvalidArgumentException){}
 }
