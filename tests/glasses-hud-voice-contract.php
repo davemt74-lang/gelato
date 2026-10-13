@@ -26,7 +26,10 @@ hudAssert(str_contains($js,'function simulatorNavigation(action,options={})'),'n
 hudAssert(str_contains($js,"action==='item_added'"),'ingredient acknowledgement command missing');
 hudAssert(str_contains($js,"POS and ingredient verification were not changed."),'item added must disclose read-only behavior');
 hudAssert(str_contains($js,"if(state.build)return {ok:false,message:'Finish the active glasses build before changing the kitchen workflow."),'avoid false live build confirmations');
-hudAssert(str_contains($js,"state.device?.virtualPreview?'WEB · LIVE'"),'virtual display must not claim Bluetooth hardware');
+hudAssert(!str_contains($page,'id="hudConnectivity"') && !str_contains($page,'id="hudBattery"') && !str_contains($page,'id="hudRuntimeState"'),
+    'operator glasses must not project simulator status, fake battery or browser hardware labels');
+hudAssert(str_contains($js,'state.device?.virtualPreview') && str_contains($page,'id="runtimeRecoveryState"'),
+    'real virtual-device state and recovery diagnostics remain available outside the on-lens operator view');
 hudAssert(!str_contains($js,"' · 74°F'"),'fabricated temperature removed');
 hudAssert(!str_contains($js,"'87%'"),'fabricated battery removed');
 hudAssert(str_contains($js,"window.GelatoGlassesVoiceUI?.refresh?.();"),'voice HUD must update after KDS refresh');

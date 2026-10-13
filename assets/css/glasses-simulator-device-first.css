@@ -551,3 +551,48 @@ html,body{max-width:100%;overflow-x:hidden}
   color:#e3ffeb;border-radius:6px;font:800 10px/1.2 system-ui;padding:7px 3px;cursor:pointer}
 #glassesStage .hud-ingredient-actions button:disabled{opacity:.36;cursor:not-allowed}
 @media(prefers-reduced-motion:reduce){#glassesStage .hud-ticket-tab{transition:none}}
+
+/* Section 266: tiny ticket-slot tabs and discreet ingredient actions. */
+#glassesStage .hud-ticket-tabs{gap:3px;flex-wrap:wrap}
+#glassesStage .hud-ticket-tab{flex:0 0 24px;min-width:24px;max-width:24px;width:24px;height:24px;min-height:24px;padding:0;border-radius:4px;display:inline-flex;align-items:center;justify-content:center}
+#glassesStage .hud-ticket-tab .ticket{font-size:11px;line-height:1}
+#glassesStage .hud-ticket-tab .ticket-progress,#glassesStage .hud-ticket-tab .age{display:none!important}
+#glassesStage .hud-ingredient-actions{display:flex;justify-content:flex-end;gap:4px}
+#glassesStage .hud-ingredient-actions button{flex:0 1 auto;width:auto;min-width:36px;min-height:21px;padding:3px 7px;border-radius:4px;font:700 9px/1.15 system-ui}
+#glassesStage .hud-assembly-ingredient.suggested{border-left-color:#8ddcff;background:rgba(70,149,180,.11)}
+#glassesStage .hud-assembly-ingredient .ingredient-result{white-space:nowrap}
+
+/* Section 266: operator runtime management sits outside the projected lens. */
+.glasses-runtime-toolbar,.glasses-runtime-training-controls{display:flex;align-items:center;gap:7px;padding:7px 13px;flex-wrap:wrap;background:#0a1714;color:#e0f7e7;border-bottom:1px solid rgba(105,184,143,.24);font:500 12px/1.3 system-ui}
+.glasses-runtime-toolbar select,.glasses-runtime-training-controls select{max-width:230px;min-width:120px;padding:5px 6px;border-radius:5px;background:#102821;color:#ecfff1;border:1px solid #426d59}
+.glasses-runtime-toolbar button,.glasses-runtime-training-controls button{font:650 11px/1.1 system-ui;padding:5px 9px;border:1px solid #426d59;border-radius:5px;color:#e5fae9;background:#18442d}
+.glasses-runtime-toolbar button:disabled,.glasses-runtime-training-controls button:disabled{opacity:.4;cursor:not-allowed}
+#glassesRuntimeStatus[data-error="1"]{color:#ffb99b}
+#glassesRuntimeStatus,#glassesRuntimeTrainingStatus{font-size:10px;flex:1;min-width:130px}
+.glasses-runtime-training-controls a{color:#92eabc;text-decoration:underline}
+.glasses-runtime-revoked #glassesStage,.glasses-runtime-revoked #simGlassesQuickActions{pointer-events:none;opacity:.40}
+@media(max-width:660px){.glasses-runtime-toolbar,.glasses-runtime-training-controls{gap:5px;padding:5px 7px}.glasses-runtime-toolbar select,.glasses-runtime-training-controls select{max-width:145px;min-width:85px}}
+
+/* Section 266: compact on-lens notice outside the ingredient and ticket rails. */
+#glassesStage .glasses-hud-notification{
+  position:absolute;left:34%;bottom:12%;width:32%;z-index:20;pointer-events:none;
+  min-width:0;max-width:340px;border:1px solid rgba(135,222,186,.78);
+  border-left:3px solid #8ddcff;border-radius:6px;padding:6px 9px;
+  background:rgba(5,24,21,.96);color:#ecfff5;
+  box-shadow:0 3px 18px rgba(0,0,0,.62);font:600 10px/1.3 system-ui;
+}
+#glassesStage .glasses-hud-notification[hidden]{display:none!important}
+#glassesStage .glasses-hud-notification[data-severity="success"]{border-left-color:#92f6a1}
+#glassesStage .glasses-hud-notification[data-severity="warning"]{border-left-color:#ffd378}
+#glassesStage .glasses-hud-notification[data-severity="blocking"]{border-left-color:#ff938c;border-color:rgba(255,147,140,.7)}
+#glassesStage .glasses-hud-notice-header{display:flex;justify-content:space-between;gap:5px;align-items:baseline}
+#glassesStage .glasses-hud-notice-header b{font-size:11px}
+#glassesStage #glassesHudNotificationMeta{font-size:8px;color:#b2d6c5;text-align:right}
+#glassesStage .glasses-hud-notice-message{font-size:10px;overflow-wrap:anywhere;margin-top:3px}
+.hud-notification-settings-card .hud-voice-caption{margin:4px 0 9px;font-size:11px;color:#abcab4}
+.hud-voice-toggle-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+.hud-voice-toggle{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px;
+  font:650 11px/1.2 system-ui;color:#dffbe5;border:1px solid #36553f;border-radius:6px;background:#102018}
+.hud-voice-toggle input{accent-color:#87e5a6;flex-shrink:0;width:16px;height:16px}
+@media(max-width:680px){#glassesStage .glasses-hud-notification{left:29%;width:39%;bottom:10%;padding:4px 6px;font-size:9px}
+  .hud-voice-toggle-grid{grid-template-columns:1fr}}

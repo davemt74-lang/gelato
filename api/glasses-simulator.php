@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/glasses-simulator.php';
+require_once __DIR__.'/../includes/glasses-employee-runtimes.php';
 
 $user=app_require_auth();
 $pdo=app_pdo();
@@ -16,8 +17,13 @@ try{
     if($_SERVER['REQUEST_METHOD']==='GET'){
         header('Cache-Control: no-store, max-age=0');
         $action=trim((string)($_GET['action']??'devices'));
+        if($action==='runtimes'){
+            app_json_response(['ok'=>true,'csrfToken'=>app_csrf_token()]+glasses_employee_runtime_catalog($pdo,$user));
+        }
         if($action==='work'){
             $device=glasses_simulator_device($pdo,$user,(string)($_GET['devicePublicId']??''),false);
+            $runtimePublicId=trim((string)($_GET['runtimePublicId']??''));
+            if($runtimePublicId!=='')glasses_employee_runtime_assert_binding($pdo,$user,$runtimePublicId,$device);
             app_json_response([
                 'ok'=>true,
                 'work'=>glasses_simulator_work_with_notes($pdo,$device),
@@ -46,7 +52,20 @@ try{
 
     $in=app_json_input();
     app_verify_request_csrf($in);
-    $result=glasses_simulator_dispatch($pdo,$user,$in);
+    $action=trim((string)($in['action']??''));
+    if($action==='runtime.create'){
+        $result=['runtime'=>glasses_employee_runtime_create($pdo,$user,(string)($in['devicePublicId']??''),(int)($in['employeeUserId']??0))];
+    }elseif($action==='runtime.end'){
+        $result=['runtime'=>glasses_employee_runtime_end($pdo,$user,(string)($in['runtimePublicId']??''))];
+    }elseif($action==='runtime.training_start'){
+        $result=['session'=>glasses_employee_runtime_training_start($pdo,$user,(string)($in['runtimePublicId']??''),(string)($in['assignmentPublicId']??''))];
+    }elseif($action==='runtime.training_end'){
+        $result=['session'=>glasses_employee_runtime_training_end($pdo,$user,(string)($in['runtimePublicId']??''),(string)($in['sessionPublicId']??''),(string)($in['status']??''))];
+    }elseif($action==='runtime.heartbeat'){
+        $result=['runtime'=>glasses_employee_runtime_heartbeat($pdo,$user,(string)($in['runtimePublicId']??''),(string)($in['devicePublicId']??''))];
+    }else{
+        $result=glasses_simulator_dispatch($pdo,$user,$in);
+    }
     app_json_response(['ok'=>true]+$result);
 }catch(DomainException $e){
     app_json_response(['ok'=>false,'message'=>$e->getMessage()],403);
