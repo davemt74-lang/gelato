@@ -1169,7 +1169,7 @@ function render(){
       : !state.device
         ? '<strong>SETUP NEEDED</strong> · No accessible location or station. Contact an administrator about glasses.view and KDS routing.'
         : noHardware
-          ? '<strong>LIVE BROWSER PREVIEW</strong> · No physical glasses needed. '+count+' current KDS items · '+escapeHtml(state.device.locationName||'Restaurant')+' / '+escapeHtml(state.device.stationName||'All stations')+'. Read-only: select a real paired device to enable live build or Expo actions.'
+          ? '<strong>LIVE BROWSER PREVIEW</strong> · No physical glasses needed. '+count+' current KDS items · '+escapeHtml(state.device.locationName||'Restaurant')+' / '+escapeHtml(state.device.stationName||'All stations')+'. Only orders sent to KDS appear. Read-only: select a real paired device to enable live build or Expo actions.'
           : '<strong>LIVE DEVICE</strong> · '+count+' current KDS items. Live build and Expo actions require glasses.manage, kds.update and a routed station.';
     guide.innerHTML=message;
   }
@@ -1233,7 +1233,7 @@ function render(){
     const all=[...document.querySelectorAll('button[id]')].filter(b=>!b.classList.contains('region-handle')&&b.id!=='simAuditDetails');
     const disabled=all.filter(b=>b.disabled),ready=all.length-disabled.length;
     badge.textContent=ready+' READY · '+disabled.length+' CONFIGURATION-DEPENDENT';
-    audit.innerHTML=all.map(b=>'<div class="sim-control-audit-item" data-state="'+(b.disabled?'disabled':'ready')+'"><strong>'+escapeHtml(b.textContent.trim().replace(/\\s+/g,' ')||b.id)+'</strong><span>'+escapeHtml(b.disabled?(b.title||'Prerequisite not yet ready.'):'Ready to use'+(b.title&&b.title!=='Available'?' · '+b.title:''))+'</span></div>').join('');
+    audit.innerHTML=all.map(b=>'<div class="sim-control-audit-item" data-state="'+(b.disabled?'disabled':'ready')+'"><strong>'+escapeHtml(b.textContent.trim().replace(/\s+/g,' ')||b.id)+'</strong><span>'+escapeHtml(b.disabled?(b.title||'Prerequisite not yet ready.'):'Ready to use'+(b.title&&b.title!=='Available'?' · '+b.title:''))+'</span></div>').join('');
   }
 }
 function flashDetection(component,options={}){
