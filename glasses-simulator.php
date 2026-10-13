@@ -12,7 +12,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <title>Web Glasses Simulator · Gelato</title>
 <link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20261013-live1">
 <link rel="stylesheet" href="assets/css/glasses-simulator-hud-ux.css?v=20261013-voice1">
-<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-266a">
+<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-267">
 </head>
 <body>
 <header class="sim-topbar">
@@ -495,9 +495,11 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-multicamera.js?v=20261013-multi1"></script>
 <script src="assets/js/glasses-camera-config.js?v=20261013-hud264"></script>
 <script src="assets/js/glasses-camera-runtime.js?v=20261013-261"></script>
-<script src="assets/js/glasses-simulator-tabs.js?v=20261013-266a"></script>
+<script src="assets/js/glasses-simulator-tabs.js?v=20261013-267"></script>
 <script src="assets/js/glasses-camera-similarity.js?v=20261013-ref258"></script>
-<script src="assets/js/glasses-camera-workspace.js?v=20261013-hud264"></script>
+<script src="assets/js/glasses-camera-workspace.js?v=20261013-267"></script>
+<script src="assets/js/glasses-ingredient-training-plan.js?v=20261013-267"></script>
+<script src="assets/js/glasses-ingredient-training-studio.js?v=20261013-267"></script>
 <script src="assets/js/glasses-production-photo-flow.js?v=20261013-261"></script>
 <script src="assets/js/glasses-user-display-preferences.js?v=20261013-hud264"></script>
 <script src="assets/js/glasses-customer-photo-notifications.js?v=20261013-photo260"></script>
