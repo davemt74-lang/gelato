@@ -1217,6 +1217,7 @@ function buildProgressIndex(steps,comps){
   return Math.min(steps.length-1,Math.floor((confirmed/Math.max(1,comps.length))*steps.length));
 }
 function renderBuildRail(item,steps,comps){
+  $('hudBuildMode').textContent=state.build?'ACTIVE BUILD':item?.status==='in_progress'?'BUILD RECIPE':item?.status==='queued'?'QUEUED · RECIPE':'RECIPE PREVIEW';
   $('hudBuildTicket').textContent=kdsSlotForItem(item)?'#'+kdsSlotForItem(item):'—';
   $('hudBuildItem').textContent=item?.posLine?.name||state.build?.context?.itemName||'Choose a KDS item';
   const meta=[item?.ticket?.tableName||item?.ticket?.serviceMode,item?.posLine?.optionName,item?.posLine?.specialInstructions].filter(Boolean);
