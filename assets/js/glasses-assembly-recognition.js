@@ -16,7 +16,7 @@ function evaluate(input){
   const components=(input.build.components||[]).filter(c=>normalize(c.displayName)===wanted);
   if(!wanted||components.length!==1){outcome.reason='Unique ingredient-to-build mapping required';return outcome;}
   const component=components[0];
-  const matches=(input.tracks||[]).filter(t=>t&&t.present===true&&t.stable===true&&
+  const matches=(input.tracks||[]).filter(t=>t&&t.present===true&&t.stable===true&&t.profileMatched===true&&
     String(t.componentKey||'')===String(component.componentKey||'')&&
     normalize(t.label)===normalize(component.displayName)&&
     Number(t.frames||0)>=4&&
@@ -34,7 +34,7 @@ function evaluate(input){
   if(component.status!=='confirmed'||!Number.isFinite(Number(component.confidence))||Number(component.confidence)<Math.max(.90,threshold)){
     outcome.reason='Waiting for confirmed governed build evidence';return outcome;
   }
-  if(!t.trackId||!input.modelSha256){outcome.reason='Traceable model and track evidence required';return outcome;}
+  if(!t.submitted||!t.trackId||!input.modelSha256){outcome.reason='Traceable model and track evidence required';return outcome;}
   outcome.status='qualified';outcome.automatic=true;outcome.reason='Confirmed governed build component and fresh stable camera match';
   return outcome;
 }
