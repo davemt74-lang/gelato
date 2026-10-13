@@ -51,6 +51,27 @@ function glasses_assembly_auto_observation_validate(PDO $pdo,array $device,array
             (string)($m['normalizedLabel']??'')===$label
             &&(string)($m['componentKey']??'')===$componentKey));
     if(count($matches)!==1)throw new DomainException('Detector label lacks one approved mapping to this build component.');
+    // Recipes are preparation instructions; automatic recognition is restricted
+    // to the selected item's actual menu assembly ingredients.
+    $session=glasses_build_session_row($pdo,(int)$device['organization_id'],$buildSessionPublicId);
+    glasses_build_assert_device_session($device,$session);
+    $work=glasses_current_work($pdo,$device);
+    $item=null;
+    foreach((array)($work['items']??[]) as $workItem){
+        if((string)($workItem['kdsItemPublicId']??'')===(string)$session['kds_public_id']){
+            $item=$workItem;break;
+        }
+    }
+    if(!$item||(string)($item['status']??'')!=='in_progress')
+        throw new DomainException('Automatic observations require the currently active KDS item on this station.');
+    $menuMatches=0;
+    foreach((array)($item['menu']['ingredients']??[]) as $ingredient){
+        $canonical=glasses_vision_normalize_label((string)($ingredient['canonicalName']??$ingredient['name']??''));
+        if($canonical!==''&&$canonical===glasses_vision_normalize_label((string)$matches[0]['displayName']))
+            $menuMatches++;
+    }
+    if($menuMatches!==1)
+        throw new DomainException('Automatic observation component must uniquely match a configured menu assembly ingredient.');
     $floor=max(0.90,$threshold,(float)($matches[0]['minimumConfidence']??0));
     if($confidence<$floor||$confidence>1.0)
         throw new DomainException('Automatic observation is below the governed ingredient confidence floor.');
