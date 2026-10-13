@@ -51,6 +51,7 @@ function enterRecovery(stateName,reason,{stopSync=false}={}){
   if(stopSync)stopLiveStationSync('idle');renderRuntimeRecovery();
 }
 async function rehydrateCanonicalBuild(){
+  if(state.device?.virtualPreview)return false; // Live preview never starts or resumes a kitchen build.
   const saved=recoveryStored(),candidateSession=saved?.devicePublicId===state.device?.publicId?saved?.buildSessionPublicId:null;
   if(candidateSession){
     try{
@@ -1190,6 +1191,8 @@ function render(){
   renderTemporalPanel();
   $('handoffExpo').disabled=validation?.status!=='ready_for_finishing'||(visionMode()==='automatic'&&!state.temporalGate?.ready)||(live&&!automaticObservationsAllowed());
   $('startBuild').disabled=!!build||!item||(live&&(!state.device||!state.device.simulatorWritable));
+  $('injectUnexpected').disabled=!build||(live&&(!state.device||!state.device.simulatorWritable));
+  $('evaluateBuild').disabled=!build||(live&&(!state.device||!state.device.simulatorWritable));
   $('autoPlayBuild').disabled=live;
   $('nextDetection').disabled=live;
   $('lowConfidenceDetection').disabled=live;
@@ -1201,6 +1204,8 @@ function render(){
     lowConfidenceDetection:'Mock-only demonstration. Switch Mode to Mock.',
     completeMockBuild:'Mock-only demonstration. Switch Mode to Mock.',
     handoffExpo:'Requires a validated active build, explicit confirmation and authorized KDS update.',
+    injectUnexpected:'Start a build first; live observations require a paired device and write authority.',
+    evaluateBuild:'Start a build first; browser preview does not modify kitchen state.',
     startCamera:'Requires browser camera permission (HTTPS).',
     captureFrame:'Start the camera first.',
     loadVisionModel:'Requires an active build, governed model assignment and authorized package.',
@@ -1235,8 +1240,8 @@ async function refreshWork(){
       setSyncBadge('paused','SYNC OFF');log('MOCK','Loaded sample POS/KDS work.');render();return;
     }
     if(!state.device)throw new Error('No accessible display. Check location and glasses.view permission.');
-    await syncLiveStationWork(false);
-    log('LIVE','Refreshed current KDS station work.');
+    await syncLiveStationWork(true);
+    if(state.syncErrors)log('ERROR','Refresh failed. Check the SYNC RETRY badge and event log.');
   }catch(e){log('ERROR',e.message);}
 }
 async function startBuild(){try{await stopShadowModel('build_reset');await unloadGovernedVisionModel('build_reset');clearTemporalRuntime();if(state.mode==='mock'){state.build=mockBuild();state.validation=null;log('MOCK','Started mock build session.');render();return;}const item=selectedItem();if(!item)throw new Error('No selected KDS item.');const d=await api('build.start',{kdsItemPublicId:item.kdsItemPublicId,sourceRevision:state.work.revision});state.build=d.buildSession;state.validation=null;saveRecoveryResume();state.recovery.state='ready';state.recovery.suppressAutomatic=false;state.recovery.lastReason='build_session_active';renderRuntimeRecovery();log('LIVE','Started build '+state.build.publicId+' against real KDS item.');render();}catch(e){log('ERROR',e.message);}}
@@ -1331,9 +1336,9 @@ $('stopCookVision')?.addEventListener('click',()=>stopCookVision('button'));
 $('resumeCookVision')?.addEventListener('click',resumeCookVision);
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!e.repeat){e.preventDefault();stopCookVision('escape_key');}});
 for(const id of ['frameQueueMax','frameMaxAge','frameInferenceTimeout','frameDropPolicy'])$(id)?.addEventListener('change',renderFramePipelineMetrics);
-document.addEventListener('visibilitychange',()=>{if(state.cameraTrack){state.cameraTrack.enabled=!document.hidden;setCameraHealth(document.hidden?'paused':'ready',document.hidden?'PAUSED':'READY');}if(document.hidden){saveRecoveryResume();enterRecovery('recovering','app_backgrounded',{stopSync:true});}else if(state.mode==='live'&&state.device){resumeRuntimeRecovery('app_resumed');}else if(state.cameraStream){startVisionRuntime();}});
+document.addEventListener('visibilitychange',()=>{if(state.cameraTrack){state.cameraTrack.enabled=!document.hidden;setCameraHealth(document.hidden?'paused':'ready',document.hidden?'PAUSED':'READY');}if(document.hidden){saveRecoveryResume();enterRecovery('recovering','app_backgrounded',{stopSync:true});}else if(state.mode==='live'&&state.device?.virtualPreview){state.recovery.state='ready';state.recovery.suppressAutomatic=false;renderRuntimeRecovery();startLiveStationSync();}else if(state.mode==='live'&&state.device){resumeRuntimeRecovery('app_resumed');}else if(state.cameraStream){startVisionRuntime();}});
 window.addEventListener('offline',()=>{enterRecovery('disconnected','network_lost',{stopSync:true});setSyncBadge('error','OFFLINE');});
-window.addEventListener('online',()=>{if(state.mode==='live'&&state.device)resumeRuntimeRecovery('network_restored');});
+window.addEventListener('online',()=>{if(state.mode==='live'&&state.device?.virtualPreview){state.recovery.networkFault=false;startLiveStationSync();}else if(state.mode==='live'&&state.device)resumeRuntimeRecovery('network_restored');});
 window.addEventListener('beforeunload',()=>{saveRecoveryResume();stopVisionRuntime('idle');stopLiveStationSync('idle');if(state.browserModel.session&&typeof state.browserModel.session.release==='function')state.browserModel.session.release();if(state.shadowModel.session&&typeof state.shadowModel.session.release==='function')state.shadowModel.session.release();});
 const FRAME_MODE_KEY='gelato.webGlassesSimulator.frameMode.v1';
 const OPTICAL_MASK_KEY='gelato.webGlassesSimulator.opticalMask.v1';
