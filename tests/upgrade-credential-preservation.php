@@ -16,14 +16,14 @@ function credentialAssert(bool $condition, string $message): void {
 $db = new CredentialGuardTestPdo();
 $forbidden = [
     "UPDATE users SET password_hash='compromised' WHERE id=1;",
-    "UPDATE \`users\` SET locked_until = NOW() WHERE id=1;",
+    "UPDATE `users` SET locked_until = NOW() WHERE id=1;",
     "INSERT INTO users(email,password_hash) VALUES ('a@b.c','bad');",
     "REPLACE INTO users(id,email,password_hash) VALUES (1,'a@b.c','bad');",
     "DELETE FROM users WHERE id=1;",
     "TRUNCATE TABLE users;",
     "DROP TABLE IF EXISTS users;",
     "ALTER TABLE users MODIFY COLUMN password_hash VARCHAR(10);",
-    "UPDATE \`gelato_ci\`.\`users\` SET password_hash='bad' WHERE id=1;",
+    "UPDATE `gelato_ci`.`users` SET password_hash='bad' WHERE id=1;",
 ];
 foreach ($forbidden as $sql) {
     $before = count($db->executed);
