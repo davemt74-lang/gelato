@@ -23,6 +23,18 @@ on:
       - 'js/kds-agent-sidebar.js'
       - 'js/kds-agent-context.js'
       - 'js/kds-voice-listener.js'
+      - 'includes/agent-voice-conversation.php'
+      - 'includes/kds-spoken-orders.php'
+      - 'js/kds-spoken-orders.js'
+      - 'tests/kds-natural-order-voice.php'
+      - 'tests/kds-natural-order-voice.test.js'
+      - 'tests/agent-verified-voice-greetings.php'
+      - 'tests/agent-natural-voice-history-contract.php'
+      - 'docs/AGENT-VOICE-PERSONALIZATION-HISTORY.md'
+      - 'js/global-add-canvas.js'
+      - 'js/global-agent.js'
+      - 'api/agent-workspace.php'
+      - 'includes/agent-workspace-core.php'
       - 'tests/kds-slot-voice-contract.php'
       - 'tests/kds-slot-voice.test.js'
       - 'includes/kds-slot-references.php'
@@ -136,6 +148,13 @@ jobs:
             glasses-simulator.php
             kds.php
             js/kds-voice-listener.js
+            includes/agent-voice-conversation.php
+            includes/kds-spoken-orders.php
+            js/kds-spoken-orders.js
+            tests/kds-natural-order-voice.php
+            tests/kds-natural-order-voice.test.js
+            tests/agent-verified-voice-greetings.php
+            tests/agent-natural-voice-history-contract.php
             tests/kds-slot-voice-contract.php
             tests/kds-slot-voice.test.js
             includes/kds-slot-references.php
@@ -193,6 +212,13 @@ jobs:
           php -l includes/kds-slot-references.php
           node --check js/kds-voice-listener.js
           node tests/kds-slot-voice.test.js
+          php tests/kds-natural-order-voice.php
+          node tests/kds-natural-order-voice.test.js
+          php tests/agent-verified-voice-greetings.php
+          php tests/agent-natural-voice-history-contract.php
+          php -l includes/agent-voice-conversation.php
+          php -l includes/kds-spoken-orders.php
+          node --check js/kds-spoken-orders.js
           node --check assets/js/glasses-simulator-voice.js
           node tests/glasses-voice-navigation.test.js
           node --check assets/js/glasses-web-simulator.js
