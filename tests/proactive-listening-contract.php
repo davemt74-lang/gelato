@@ -1,0 +1,38 @@
+<?php
+declare(strict_types=1);
+$root=dirname(__DIR__);
+function proactiveAssert(bool $ok,string $message):void{if(!$ok)throw new RuntimeException('Proactive listening: '.$message);}
+$api=(string)file_get_contents($root.'/api/proactive-agent.php');
+$global=(string)file_get_contents($root.'/js/global-agent.js');
+$timeclock=(string)file_get_contents($root.'/js/timeclock-voice.js');
+$page=(string)file_get_contents($root.'/timeclock.php');
+$loader=(string)file_get_contents($root.'/js/global-add-canvas.js');
+$parser=(string)file_get_contents($root.'/js/proactive-listening-commands.js');
+proactiveAssert(str_contains($api,"action']??'')==='preferences'"),'read-only preferences GET action exists');
+proactiveAssert(str_contains($api,"microphoneActive'=>false"),'server cannot claim mic actively captures on restored preference');
+proactiveAssert(str_contains($api,"proactive_agent_preferences WHERE organization_id=? AND user_id=?"),'saved settings scoped to authenticated user');
+proactiveAssert(str_contains($api,'app_verify_request_csrf($in)'),'mutations require CSRF');
+proactiveAssert(str_contains($api,'listening_enabled=VALUES(listening_enabled)'),'persisted preference update remains database-backed');
+proactiveAssert(str_contains($global,'loadListeningPreference()'),'global Agent hydrates saved listening');
+proactiveAssert(str_contains($global,'microphoneActive:S.micActive'),'UI reports actual mic runtime');
+proactiveAssert(str_contains($global,'wakeStandby:S.wakeStandby'),'wake-only mode surfaced in status');
+proactiveAssert(str_contains($global,"await verifyVoice()"),'start and wake activation require existing enrolled identity verification');
+proactiveAssert(str_contains($global,"function parseListeningCommand"),'voice controls parsed before Agent message dispatch');
+proactiveAssert(str_contains($global,'keepWake:true'),'wake-only Stop Listening remains distinct from mic off');
+proactiveAssert(str_contains($global,'keepWake:false'),'hard microphone stop supported');
+proactiveAssert(str_contains($global,"loadListeningPreference"),'restore without starting recognition');
+proactiveAssert(str_contains($global,'S.proactiveVoiceEnabled&&has'),'spoken proactive alerts respect saved user preference');
+proactiveAssert(str_contains($global,'status')&&str_contains($global,"agent.proactive"),'permissions preserved');
+proactiveAssert(str_contains($timeclock,"function sharedAgentAvailable()"),'Time Clock reuses global Agent microphone');
+proactiveAssert(str_contains($timeclock,"window.GelatoGlobalAgent.setListening"),'no duplicate Time Clock microphone for global-capable account');
+proactiveAssert(str_contains($timeclock,'loadProactivePreferences()'),'Time Clock restores saved prefs without activation');
+proactiveAssert(str_contains($timeclock,"window.addEventListener('gelato-agent-listening-change'"),'Time Clock reflects actual Global Agent status');
+proactiveAssert(str_contains($timeclock,"voiceAlertsEnabled"),'proactive speaking preference retained');
+proactiveAssert(str_contains($timeclock,"stopContinuous();stopProactive()"),'local microphone and polling stopped when global owns runtime');
+proactiveAssert(str_contains($page,'id="proactiveListeningStatus"')&&str_contains($page,'aria-live="polite"'),'visible accessible status');
+proactiveAssert(str_contains($page,'id="listeningToggle"')&&str_contains($page,'id="wakeStandbyToggle"')&&str_contains($page,'id="microphoneOff"'),'explicit user controls');
+proactiveAssert(str_contains($page,'js/proactive-listening-commands.js?v=20261013-listening1'),'shared parser loaded on Time Clock');
+proactiveAssert(str_contains($loader,'proactive-listening-commands.js'),'Agent footer also loads controls');
+proactiveAssert(str_contains($parser,"wake-required")===false,'command parser does not attempt biometric enrollment');
+proactiveAssert(!str_contains($parser,'getUserMedia'),'parser itself never captures audio');
+echo "proactive-listening-contract=ok\n";

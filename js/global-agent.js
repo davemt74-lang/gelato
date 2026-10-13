@@ -13,6 +13,11 @@
     voiceUntil: 0,
     verifiedSpeaker: null,
     listening: false,
+    savedListening: false,
+    wakeStandby: false,
+    micActive: false,
+    proactiveVoiceEnabled: true,
+    wakePhrase: 'Hey Gelato',
     lastBargeIn: 0,
     rec: null,
     poll: null,
@@ -52,6 +57,9 @@
       #gelato-agent-bar button,#gelato-agent-bar a{width:42px;height:42px;border:0;border-radius:13px;background:#efefe9;display:grid;place-items:center;text-decoration:none;color:#161816;cursor:pointer;font-weight:900;position:relative}
       #gelato-agent-bar .ga-send{background:#171b1a;color:#fff}
       #gelato-agent-bar .ga-listen.on{background:#d94a2b;color:#fff;animation:gaPulse 1.6s infinite}
+      #gelato-agent-bar .ga-listen.wake{background:#fff1db;color:#573e14}
+      #gelato-agent-bar #gaMicOff{background:#fae2d9;color:#7b311b}
+      #gelato-agent-voice-state{font:700 10px/1.4 Inter,system-ui,sans-serif;padding:4px 8px;color:#345847}
       #gelato-agent-status{position:fixed;left:50%;bottom:72px;transform:translateX(-50%);z-index:2147482999;max-width:min(800px,calc(100% - 34px));background:#171b1a;color:#fff;padding:9px 12px;border-radius:12px;font:600 11px/1.4 Inter,system-ui,sans-serif;display:none;box-shadow:0 12px 32px rgba(0,0,0,.18)}
       #gelato-agent-dot{width:8px;height:8px;border-radius:50%;background:#777;position:absolute;right:4px;top:4px}
       #gelato-agent-dot.on{background:#35a36f}
@@ -67,7 +75,8 @@
     document.body.insertAdjacentHTML('beforeend', `
       <div id="gelato-agent-status" role="status"></div>
       <div id="gelato-agent-bar" aria-label="Gelato Restaurant Agent">
-        <button class="ga-listen" id="gaListen" title="Listening Mode"><span>◉</span><i id="gelato-agent-dot"></i></button>
+        <button class="ga-listen" id="gaListen" title="Start Listening" aria-label="Start Listening"><span>◉</span><i id="gelato-agent-dot"></i></button>
+        <button id="gaMicOff" title="Microphone Off" aria-label="Microphone Off">◼</button>
         <button id="gaMic" title="Talk once or interrupt speech">🎙</button>
         <button id="gaInterrupt" title="Stop Gelato speaking" aria-label="Stop Agent speech">■</button>
         <textarea id="gaInput" rows="1" placeholder="Ask Gelato about prep, inventory, schedules, catering, wholesale, equipment…"></textarea>
@@ -85,7 +94,8 @@
     });
     q('gaMic').onclick = talkOnce;
     q('gaInterrupt').onclick = () => interruptSpeech('button');
-    q('gaListen').onclick = () => setListening(!S.listening);
+    q('gaListen').onclick = () => setListening(!S.listening,{keepWake:S.listening});
+    q('gaMicOff').onclick = () => setListening(false,{keepWake:false});
   }
 
   function status(text, milliseconds = 0) {
@@ -308,103 +318,195 @@
     }
   }
 
-  async function setListening(on) {
-    if (on) {
-      try {
-        await verifyVoice();
-      } catch (error) {
-        status(error.message, 4500);
-        return;
-      }
-      if (!has('agent.proactive')) {
-        status('Your account does not have proactive Agent permission.', 4500);
-        return;
-      }
-    }
-
-    try {
-      await post('api/proactive-agent.php', {
-        action: 'preferences',
-        listeningEnabled: on,
-        proactiveVoiceEnabled: on,
-        wakePhrase: 'Hey Gelato',
-      });
-      S.listening = on;
-      document.getElementById('gaListen')?.classList.toggle('on', on);
-      window.dispatchEvent(new CustomEvent('gelato-agent-listening-change', {detail: {listening: on}}));
-      if (on) {
-        startContinuous();
-        startPoll();
-        status('Listening Mode on. Say “Hey Gelato…”', 3000);
-      } else {
-        stopContinuous();
-        stopPoll();
-        status('Listening Mode off.', 1800);
-      }
-    } catch (error) {
-      status(error.message, 4500);
-    }
+  function parseListeningCommand(text){
+    const external=window.GelatoProactiveCommands?.parse?.(text,S.wakePhrase);
+    if(external)return external;
+    // Do not depend on dynamic script insertion order for a security-sensitive
+    // wake-only command. These are the only recognized start/stop controls.
+    const phrase=String(text||'').toLowerCase().replace(/[.,!?;:]/g,' ').replace(/\\s+/g,' ').trim();
+    if(!phrase.startsWith('hey gelato '))return null;
+    const command=phrase.slice('hey gelato '.length);
+    if(/^(start listening|resume listening|enable listening)( please)?$/.test(command))return 'start';
+    if(/^(stop listening|pause listening)( please)?$/.test(command))return 'stop';
+    if(/^(microphone off|turn off microphone|stop microphone|mic off)( please)?$/.test(command))return 'off';
+    return null;
   }
-
-  function startContinuous() {
-    stopContinuous();
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      status('Continuous speech recognition is not supported.', 4000);
-      return;
+  function listeningState(){
+    return window.GelatoProactiveCommands?.display?.({
+      saved:S.savedListening,active:S.listening&&S.micActive,
+      wake:S.wakeStandby&&S.micActive,hidden:document.hidden
+    })||{code:S.listening?'listening':'off',label:S.listening?'Listening':'Microphone off'};
+  }
+  function renderListening(){
+    const state=listeningState(),button=document.getElementById('gaListen');
+    button?.classList.toggle('on',S.listening&&S.micActive);
+    button?.classList.toggle('wake',S.wakeStandby&&!S.listening);
+    if(button){
+      button.title=S.listening?'Stop Listening · keep wake standby':S.savedListening?'Resume saved Listening':'Start Listening';
+      button.setAttribute('aria-label',button.title);
+      button.setAttribute('aria-pressed',S.listening?'true':'false');
     }
-
-    S.rec = new SpeechRecognition();
-    const activeRec=S.rec;
-    S.rec.lang = 'en-US';
-    S.rec.continuous = true;
-    S.rec.interimResults = true;
-    S.rec.onresult = (event) => {
-      for (let index = event.resultIndex; index < event.results.length; index++) {
-        const result=event.results[index];
-        const text = result[0].transcript.trim();
-        const evaluation=window.GelatoVoiceTurns?.evaluate?.(text,result[0].confidence,{wakeRequired:true});
+    window.dispatchEvent(new CustomEvent('gelato-agent-listening-change',{
+      detail:{listening:S.listening,microphoneActive:S.micActive,
+        wakeStandby:S.wakeStandby,savedListening:S.savedListening,
+        proactiveVoiceEnabled:S.proactiveVoiceEnabled,
+        code:state.code,label:state.label,message:state.message||''}
+    }));
+  }
+  async function loadListeningPreference(){
+    if(!has('agent.proactive'))return;
+    try{
+      const data=await req('api/proactive-agent.php?action=preferences');
+      S.savedListening=!!Number(data.preferences?.listening_enabled||0);
+      S.proactiveVoiceEnabled=!!Number(data.preferences?.proactive_voice_enabled||0);
+      S.wakePhrase=String(data.preferences?.wake_phrase||'Hey Gelato');
+      // Persisted intent != active browser mic. Never start on load.
+      S.listening=false;S.wakeStandby=false;S.micActive=false;
+      renderListening();
+    }catch(error){status('Could not restore saved listening preference: '+error.message,4000);}
+  }
+  async function enableWakeStandby(){
+    if(!has('agent.proactive')){status('Proactive Agent permission required.',3500);return false;}
+    if(!(window.SpeechRecognition||window.webkitSpeechRecognition)){
+      status('This browser cannot start wake-word recognition.',3500);return false;
+    }
+    try{
+      if(!(S.voiceEventId&&Date.now()<S.voiceUntil))stopContinuous();
+      await verifyVoice();
+    }catch(error){status(error.message||'Voice verification required.',4000);return false;}
+    S.listening=false;S.wakeStandby=true;
+    stopPoll();
+    const started=S.rec?true:startContinuous();
+    if(!started){S.wakeStandby=false;renderListening();return false;}
+    status('Wake standby · microphone active. Say “Hey Gelato, start listening”.',4500);
+    renderListening();return true;
+  }
+  async function updateProactiveVoice(enabled){
+    if(!has('agent.proactive'))return false;
+    try{
+      const data=await post('api/proactive-agent.php',{
+        action:'preferences',listeningEnabled:S.savedListening,
+        proactiveVoiceEnabled:!!enabled,wakePhrase:S.wakePhrase
+      });
+      S.proactiveVoiceEnabled=!!Number(data.preferences?.proactive_voice_enabled??Number(!!enabled));
+      renderListening();return true;
+    }catch(error){status(error.message,3500);return false;}
+  }
+  async function setListening(on,{keepWake=false}={}){
+    if(on){
+      if(!has('agent.proactive')){
+        status('Your account does not have proactive Agent permission.',4500);
+        return false;
+      }
+      if(!(window.SpeechRecognition||window.webkitSpeechRecognition)){
+        status('Speech recognition is unavailable. Microphone remains off.',4500);
+        return false;
+      }
+      try{
+        if(!(S.voiceEventId&&Date.now()<S.voiceUntil))stopContinuous();
+        await verifyVoice();
+      }catch(error){status(error.message||'Please verify your enrolled voice.',4500);renderListening();return false;}
+    }
+    try{
+      const data=await post('api/proactive-agent.php',{
+        action:'preferences',listeningEnabled:!!on,
+        proactiveVoiceEnabled:S.proactiveVoiceEnabled,wakePhrase:S.wakePhrase
+      });
+      S.savedListening=!!Number(data.preferences?.listening_enabled??Number(!!on));
+      S.listening=!!on;
+      S.wakeStandby=!!(keepWake||on);
+      if(on){
+        if(!S.rec)startContinuous();
+        startPoll();
+        status('Listening active. Say “Hey Gelato, stop listening” to enter wake standby.',4500);
+      }else{
+        stopPoll();
+        if(keepWake&&S.rec){
+          status('Wake standby. Say “Hey Gelato, start listening”, or Microphone Off.',4500);
+        }else{
+          stopContinuous();S.wakeStandby=false;
+          status('Microphone off. Saved listening preference is off.',3000);
+        }
+      }
+      renderListening();
+      return true;
+    }catch(error){status(error.message,4500);return false;}
+  }
+  function startContinuous(){
+    const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!SpeechRecognition||document.hidden||(!S.listening&&!S.wakeStandby))return false;
+    stopContinuous();
+    const activeRec=new SpeechRecognition();S.rec=activeRec;
+    activeRec.lang='en-US';activeRec.continuous=true;activeRec.interimResults=true;
+    activeRec.onstart=()=>{if(S.rec!==activeRec)return;S.micActive=true;renderListening();};
+    activeRec.onresult=event=>{
+      if(S.rec!==activeRec)return;
+      for(let index=event.resultIndex;index<event.results.length;index++){
+        const result=event.results[index],text=String(result[0]?.transcript||'').trim();
+        const evaluation=window.GelatoVoiceTurns?.evaluate?.(text,result[0]?.confidence,{wakeRequired:true});
+        if(evaluation?.kind==='ignored')continue;
+        // Evaluate explicit stop/start controls before generic speech barge-in.
+        // "Hey Gelato stop listening" must update the saved preference,
+        // not merely silence the current text-to-speech response.
+        const command=result.isFinal?parseListeningCommand(text):null;
+        if(command){
+          if(command==='start'&&!S.listening){
+            void setListening(true);
+          }else if(command==='stop'&&S.listening){
+            void setListening(false,{keepWake:true});
+          }else if(command==='off'){
+            void setListening(false,{keepWake:false});
+          }
+          return;
+        }
         if(evaluation?.kind==='interrupt'){
           S.lastBargeIn=Date.now();
           interruptSpeech('voice-barge-in');
-          status('Voice interruption heard. Agent stopped.');return;
+          status('Gelato stopped speaking.',2200);
+          continue;
         }
-        if(Date.now()-S.lastBargeIn<1300&&/^(?:hey\s+gelato\s+)?(?:stop|stop speaking|interrupt)\b/i.test(text))continue;
-        if (!result.isFinal) continue;
-        if (evaluation?.kind==='ignored')continue;
-        if (/^hey\s+gelato\b/i.test(text)) {
+        if(!result.isFinal||!S.listening||Date.now()-S.lastBargeIn<1300)continue;
+        if(/^hey\s+gelato\b/i.test(text)){
           if(evaluation?.interrupt)interruptSpeech('voice-barge-in');
-          if (Date.now() >= S.voiceUntil) {
-            setListening(false);
-            status('Voice check expired. Re-enable Listening Mode.', 4500);
+          if(Date.now()>=S.voiceUntil){
+            void setListening(false,{keepWake:false});
+            status('Voice check expired. Click Start Listening to verify again.',4500);
             return;
           }
-          window.dispatchEvent(new CustomEvent('gelato-agent-voice-transcript', {detail: {text}}));
-          send(text, true);
+          window.dispatchEvent(new CustomEvent('gelato-agent-voice-transcript',{detail:{text}}));
+          void send(text,true);
         }
       }
     };
-    S.rec.onerror = (event) => {
-      if (S.rec!==activeRec)return;
-      if (!['no-speech', 'aborted'].includes(event.error)) status('Listening: ' + event.error, 3000);
+    activeRec.onerror=event=>{
+      if(S.rec!==activeRec)return;
+      const error=String(event.error||'unknown');
+      if(['not-allowed','service-not-allowed','audio-capture'].includes(error)){
+        stopContinuous();S.listening=false;S.wakeStandby=false;stopPoll();
+        status('Microphone blocked: '+error+'. Check browser settings.',5000);
+        renderListening();return;
+      }
+      if(!['no-speech','aborted'].includes(error))status('Listening: '+error,3000);
     };
-    S.rec.onend = () => {
-      if (S.rec!==activeRec)return;
-      if (S.listening && !document.hidden) {
-        setTimeout(() => {if(S.listening&&S.rec===activeRec){try{activeRec.start()}catch{}}}, 650);
+    activeRec.onend=()=>{
+      if(S.rec!==activeRec)return;
+      S.micActive=false;renderListening();
+      if((S.listening||S.wakeStandby)&&!document.hidden){
+        setTimeout(()=>{if(S.rec===activeRec&&(S.listening||S.wakeStandby)&&!document.hidden){try{activeRec.start();}catch{}}},650);
       }
     };
-    if(document.hidden){status('Agent microphone paused · tab hidden.');return;}
-    try { S.rec.start(); } catch {}
+    try{activeRec.start();return true;}catch(error){
+      stopContinuous();status('Could not start microphone: '+(error.message||'unavailable'),3500);
+      renderListening();return false;
+    }
   }
-
-  function stopContinuous() {
-    if (!S.rec) return;
-    try {
-      S.rec.onend = null;
-      S.rec.stop();
-    } catch {}
-    S.rec = null;
+  function stopContinuous(){
+    if(S.rec){
+      const old=S.rec;S.rec=null;
+      old.onend=null;old.onresult=null;old.onerror=null;
+      try{if(typeof old.abort==='function')old.abort();else old.stop?.();}catch{}
+    }
+    S.micActive=false;renderListening();
   }
 
   async function poll() {
@@ -426,7 +528,7 @@
             threadId: S.thread,
           },
         }));
-        if (has('voice.agent')) speak(event.message);
+        if (S.proactiveVoiceEnabled&&has('voice.agent')) speak(event.message);
       }
     } catch {}
   }
@@ -454,6 +556,7 @@
       S.permissions = data.permissions || [];
       S.user = data.user || null;
       mount();
+      await loadListeningPreference();
       window.dispatchEvent(new CustomEvent('gelato-agent-ready', {
         detail: {threadId: S.thread, user: S.user},
       }));
@@ -463,14 +566,18 @@
   }
 
   document.addEventListener('visibilitychange',()=>{
-    if(document.hidden){stopContinuous();if(S.listening)status('Agent microphone paused · tab hidden.');}
-    else if(S.listening)startContinuous();
+    if(document.hidden){stopContinuous();if(S.listening||S.wakeStandby)status('Microphone paused · tab hidden.');}
+    else if(S.listening||S.wakeStandby)startContinuous();
   });
   window.addEventListener('beforeunload',()=>{stopContinuous();interruptSpeech('page-unload');});
 
   window.GelatoGlobalAgent = {
     send,
     setListening,
+    loadListeningPreference,
+    updateProactiveVoice,
+    enableWakeStandby,
+    get listeningStatus(){return {...listeningState(),savedListening:S.savedListening,listenActive:S.listening,microphoneActive:S.micActive,wakeStandby:S.wakeStandby};},
     talkOnce,
     interruptSpeech,
     identifySpeaker,

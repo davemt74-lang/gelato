@@ -11,4 +11,18 @@ $fakeEvent=tv_public_id('voice');$badVoice=false;try{tv_clock_in($pdo,$org,$uid,
 $clock2=tv_clock_in($pdo,$org,$uid,$uid,'manual');tv_ok(($clock2['status']??'')==='open','manual clock-in failed',12);$snapshot=tv_self_snapshot($pdo,$org,$uid);tv_ok(!empty($snapshot['clock']),'self snapshot did not include active clock',13);$summary=tv_daily_summary($pdo,$org,$today);tv_ok($summary['actualMinutes']>=0&&$summary['scheduledShifts']>=1,'labor summary failed',14);$events=(int)$pdo->query("SELECT COUNT(*) FROM attendance_events WHERE organization_id={$org}")->fetchColumn();tv_ok($events>=5,'attendance event history missing',15);
 $other=[];for($i=24;$i>=1;$i--)$other[]=$i/100;$no=tv_voice_match($pdo,$org,$uid,$other,false);tv_ok(!$no['matched'],'dissimilar voice unexpectedly matched',16);
 $pdo->prepare("INSERT INTO proactive_agent_preferences (organization_id,user_id,listening_enabled,proactive_voice_enabled) VALUES (?,?,1,1)")->execute([$org,$uid]);tv_ok((int)$pdo->query("SELECT listening_enabled FROM proactive_agent_preferences WHERE organization_id={$org} AND user_id={$uid}")->fetchColumn()===1,'proactive preferences failed',17);
+
+$preference=$pdo->prepare('SELECT listening_enabled,proactive_voice_enabled,wake_phrase FROM proactive_agent_preferences WHERE organization_id=? AND user_id=?');
+$preference->execute([$org,$uid]);$saved=$preference->fetch(PDO::FETCH_ASSOC);
+tv_ok((int)$saved['listening_enabled']===1&&$saved['wake_phrase']==='Hey Gelato','saved listening preference must survive subsequent database queries',20);
+$pdo->prepare('UPDATE proactive_agent_preferences SET listening_enabled=0,proactive_voice_enabled=1 WHERE organization_id=? AND user_id=?')->execute([$org,$uid]);
+$preference->execute([$org,$uid]);$paused=$preference->fetch(PDO::FETCH_ASSOC);
+tv_ok((int)$paused['listening_enabled']===0&&(int)$paused['proactive_voice_enabled']===1,'Stop Listening and Speak Alerts are independent saved preferences',21);
+$pdo->prepare("INSERT INTO users (email,password_hash,first_name,last_name,display_name,status) VALUES ('second-voice@example.test','x','Second','Employee','Second Employee','active')")->execute();
+$otherUser=(int)$pdo->lastInsertId();
+$pdo->prepare('INSERT INTO proactive_agent_preferences (organization_id,user_id,listening_enabled,proactive_voice_enabled) VALUES (?,?,1,0)')->execute([$org,$otherUser]);
+$preference->execute([$org,$otherUser]);$otherSaved=$preference->fetch(PDO::FETCH_ASSOC);
+tv_ok((int)$otherSaved['listening_enabled']===1&&(int)$otherSaved['proactive_voice_enabled']===0,'second user has separate saved listening state',22);
+$preference->execute([$org,$uid]);$self=$preference->fetch(PDO::FETCH_ASSOC);
+tv_ok((int)$self['listening_enabled']===0&&(int)$self['proactive_voice_enabled']===1,'other user settings cannot mutate the current user',23);
 echo "voiceMatch={$match['confidence']} attendanceEvents={$events} scheduledMinutes={$summary['scheduledMinutes']} actualMinutes={$summary['actualMinutes']}\n";
