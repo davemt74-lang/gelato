@@ -143,11 +143,18 @@ function glasses_ingredient_training_capture(PDO $pdo,array $user,array $input):
             ||($mission['station_id']!==null&&(int)$mission['station_id']!==(int)$device['station_id']))
             throw new DomainException('Vision Lab training mission is not assigned to this employee and station.');
     }
+    $source=(string)($input['source']??'');
+    if(!in_array($source,['runtime_camera','file_upload'],true))
+        throw new InvalidArgumentException('Select an existing camera capture or uploaded training photo.');
     $slot=(int)($input['cameraSlot']??0);
-    if($slot<1||$slot>5)throw new InvalidArgumentException('Select a real enabled camera slot.');
-    $check=$pdo->prepare("SELECT enabled FROM glasses_camera_locations WHERE organization_id=? AND location_id=? AND slot=? LIMIT 1");
-    $check->execute([$org,(int)$device['location_id'],$slot]);
-    if(!(bool)$check->fetchColumn())throw new DomainException('Camera slot is not enabled for this location.');
+    if($source==='runtime_camera'){
+        if($slot<1||$slot>5)throw new InvalidArgumentException('Select camera slot 1–5.');
+        $check=$pdo->prepare("SELECT enabled FROM glasses_camera_locations WHERE organization_id=? AND location_id=? AND slot=? LIMIT 1");
+        $check->execute([$org,(int)$device['location_id'],$slot]);
+        if(!(bool)$check->fetchColumn())throw new DomainException('Camera slot is not enabled for this location.');
+    }elseif($slot!==0){
+        throw new InvalidArgumentException('Uploaded training files must not claim a live camera slot.');
+    }
     // Any identity, canonical label, capture timestamp and mission are server-derived.
     $fingerprint=is_array($input['fingerprint']??null)?$input['fingerprint']:[];
     $in=[
@@ -176,6 +183,7 @@ function glasses_ingredient_training_capture(PDO $pdo,array $user,array $input):
             'locationId'=>(int)$device['location_id'],
             'stationId'=>$device['station_id']!==null?(int)$device['station_id']:null,
             'cameraSlot'=>$slot,
+            'imageSource'=>$source,
             'menuItemId'=>(int)$menu['id'],
             'ingredientKey'=>$ingredient['key'],
             'ingredientName'=>$ingredient['name'],
