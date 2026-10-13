@@ -9,7 +9,7 @@ $js=(string)file_get_contents($root.'/assets/js/glasses-web-simulator.js');
 $voice=(string)file_get_contents($root.'/assets/js/glasses-simulator-voice.js');
 $css=(string)file_get_contents($root.'/assets/css/glasses-simulator-hud-ux.css');
 hudAssert(str_contains($page,'assets/css/glasses-simulator-hud-ux.css?v=20261013-voice1'),'HUD stylesheet must be loaded after base simulator CSS');
-hudAssert(str_contains($page,'assets/js/glasses-simulator-voice.js?v=20261013-device1'),'voice module must load after simulator');
+hudAssert(str_contains($page,'assets/js/glasses-simulator-voice.js?v=20261013-kds2'),'voice module must load after simulator');
 foreach(['simViewHudOnly','simViewGlasses','simNavNext','simNavPrevious','simNavNextItem','simNavPreviousItem','simNavItemAdded','simNavRepeat','simVoiceToggle','simVoiceReplies','simVoiceHelp','simVoiceFeedback','simNavFeedback','simNavContext'] as $id)
     hudAssert(str_contains($page,'id="'.$id.'"'),'missing accessible control '.$id);
 hudAssert(str_contains($css,'.sim-stage-panel{position:sticky')&&str_contains($css,'.glasses-stage{flex:none;min-height:460px'),'stage must not stretch to match long diagnostics');
@@ -22,10 +22,10 @@ hudAssert(str_contains($voice,'normalizePhrase'),'voice command parser required'
 hudAssert(str_contains($voice,'organizeControls()'),'diagnostics should not displace live work');
 hudAssert(str_contains($voice,'simAdvancedSettings'),'advanced settings preserved and collapsible');
 hudAssert(str_contains($js,'window.GelatoGlassesNavigation={dispatch:simulatorNavigation'),'voice cannot bypass shared navigation dispatch');
-hudAssert(str_contains($js,'function simulatorNavigation(action)'),'navigation must be implemented');
+hudAssert(str_contains($js,'function simulatorNavigation(action,options={})'),'navigation must be implemented');
 hudAssert(str_contains($js,"action==='item_added'"),'ingredient acknowledgement command missing');
-hudAssert(str_contains($js,"KDS was not changed."),'item added must disclose read-only behavior');
-hudAssert(str_contains($js,"if(state.build)return {ok:false,message:'Ingredient confirmation requires evidence."),'avoid false live build confirmations');
+hudAssert(str_contains($js,"POS and ingredient verification were not changed."),'item added must disclose read-only behavior');
+hudAssert(str_contains($js,"if(state.build)return {ok:false,message:'Finish the active glasses build before changing the kitchen workflow."),'avoid false live build confirmations');
 hudAssert(str_contains($js,"state.device?.virtualPreview?'WEB · LIVE'"),'virtual display must not claim Bluetooth hardware');
 hudAssert(!str_contains($js,"' · 74°F'"),'fabricated temperature removed');
 hudAssert(!str_contains($js,"'87%'"),'fabricated battery removed');
