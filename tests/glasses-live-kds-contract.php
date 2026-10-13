@@ -14,10 +14,10 @@ $check(str_contains($api,'glasses_simulator_work_with_notes($pdo,$device)'),'Liv
 foreach(['kds.ticket.action','kds.item.transition','kds.item.note'] as $action)
   $check(str_contains($src,"'".$action."'"),'Missing action '.$action);
 $check(str_contains($src,"app_has_permission('kds.view'")&&str_contains($src,"app_has_permission('kds.update'"),'Both KDS view and update required');
-$check(str_contains($src,"operational_location_allowed($pdo,$user,'kds.update',$locationId)"),'Kitchen writes must be location-scoped');
-$check(str_contains($src,"(int)$"."item['location_id']!==$"."locationId"),'Cross-location items must be forbidden');
-$check(str_contains($src,"(int)$"."item['station_id']!==$"."stationId"),'Cross-station items must be forbidden');
-$check(str_contains($src,"hash_equals($"."expected,(string)$"."item['status'])"),'Client must supply the current item status as a stale-state guard');
+$check(str_contains($src,'operational_location_allowed($pdo,$user,\'kds.update\',$locationId)'),'Kitchen writes must be location-scoped');
+$check(str_contains($src,'(int)$item[\'location_id\']!==$locationId'),'Cross-location items must be forbidden');
+$check(str_contains($src,'(int)$item[\'station_id\']!==$stationId'),'Cross-station items must be forbidden');
+$check(str_contains($src,'hash_equals($expected,(string)$item[\'status\'])'),'Client must supply the current item status as a stale-state guard');
 $check(str_contains($src,'kds_production_ticket_action('),'Ticket start/ready/bump must use canonical KDS transitions');
 $check(str_contains($src,'kds_transition('),'Item start/ready must use canonical KDS transitions');
 $check(str_contains($src,"'glasses_item_note'"),'Added item must be a persisted operator note');
