@@ -14,7 +14,7 @@ assert.match(flow,/consumeCapture\?\.\(step\.slot\)/);
 assert.match(flow,/manual confirmation|Confirm pizza identity manually/);
 assert.match(workspace,/referenceMatches/);
 assert.ok(!/inbox_send|pos_check.*UPDATE|build\.observe/.test(runtime),'runtime must not perform downstream writes');
-let clock=1000,shade=0;
+let clock=1000,shade=-60;
 const fakeDate=class extends Date {static now(){return clock;}};
 const ui={hidden:false,readyState:'loading',addEventListener(){},getElementById(){return null;},
   createElement(){return{width:0,height:0,getContext(){return {drawImage(){},getImageData(){
@@ -46,9 +46,9 @@ assert.equal(engine.policy(2).trainedPizzaDetection,false);
   assert.equal(await engine.start(2),true);
   assert.equal(engine.status(2).desired,true);
   assert.equal(engine.status(2).active,true);
-  await engine.poll();clock+=1500;shade=120;await engine.poll();
+  await engine.poll();clock+=1500;shade=0;await engine.poll();
   assert.equal(engine.status(2).activity,'moving','large scene change captured');
-  shade=120;clock+=2000;await engine.poll();
+  shade=0;clock+=2000;await engine.poll();
   clock+=1500;await engine.poll();
   assert.equal(engine.policy(2).sceneCandidate,true,'stable scene and quality become candidate');
   assert.equal(engine.consumeCapture(2),true);
