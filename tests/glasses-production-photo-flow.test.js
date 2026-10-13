@@ -17,7 +17,7 @@ assert.match(backend,/operational_location_allowed\(\$pdo,\$user,'kds\.view',\$l
 assert.match(backend,/kds_item\(\$pdo,\$org,\$v\['public'\],true\)/);
 assert.match(backend,/photo_library_id/);
 assert.match(backend,/if\(!\$row\|\|\$row\['status'\]!=='active'\|\|\(int\)\$row\['camera_slot'\]!==\$slot\)/);
-assert.match(backend,/glasses\.order_photo_\.\$status/);
+assert.ok(backend.includes("'glasses.order_photo_'.$status"),'stage confirmation or bypass is audited');
 assert.match(backend,/bypassReason/);
 assert.match(backend,/WHERE organization_id=\? AND kds_item_id=\? AND stage=\? FOR UPDATE/);
 assert.match(sql,/UNIQUE KEY uq_order_photo_stage \(organization_id,kds_item_id,stage\)/);
