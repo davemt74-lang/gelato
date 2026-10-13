@@ -17,6 +17,7 @@
       panels[key].hidden=key!==name;
     }
     if(focus)buttons[name].focus();
+    window.dispatchEvent(new CustomEvent('gelato-glasses-tab-select',{detail:{tab:name}}));
   }
   function onKeys(e){
     const pos=order.indexOf(active);
@@ -54,16 +55,13 @@
       }
       if(!previous)result.textContent='Select Run Certification to test this browser microphone. No audio is recorded or stored.';
     }
-    const live=$('simOverviewVoiceStatus');
-    const remote=window.GelatoVoicePresence?.snapshot?.().remote||[];
-    const another=remote.find(peer=>peer.active);
-    if(live)live.textContent=r.microphoneActive?'Glasses mic active · Listening':
-      r.enabled?'Glasses mic '+(r.state==='starting'?'starting':r.state==='recovering'?'recovering':'paused')+
-      (another?' · Another Gelato tab also listening':''):
-      another?'Glasses mic off · '+(another.source==='global-agent'?'Global Agent':another.source==='timeclock'?'Time Clock':'Glasses')+' mic active in another tab':
-      'Glasses mic off · Click Enable Voice';
-    const input=$('simVoicePermissionNote');
-    if(input)input.textContent='Microphone permission allows access; it does not mean this page is capturing audio.';
+    const dot=$('sgvVoiceStatusDot');
+    if(dot){
+      const status=r.microphoneActive?'active':r.enabled?'pending':'off';
+      dot.dataset.state=status;
+      const tab=$('sgv-tab-voice');
+      if(tab)tab.setAttribute('aria-label','Voice · '+(status==='active'?'microphone listening':status==='pending'?'voice enabled but not listening':'microphone off'));
+    }
 
   }
   async function certify(){
@@ -85,7 +83,13 @@
     const tabs=document.createElement('div');tabs.className='sgv-tabs';tabs.setAttribute('role','tablist');tabs.setAttribute('aria-label','Glasses simulator controls');
     const container=document.createElement('div');container.className='sgv-tab-contents';
     for(const name of order){
-      const button=document.createElement('button');button.type='button';button.id='sgv-tab-'+name;button.textContent=labels[name];
+      const button=document.createElement('button');button.type='button';button.id='sgv-tab-'+name;
+      if(name==='voice'){
+        const label=document.createElement('span');label.textContent=labels[name];
+        const dot=document.createElement('span');dot.className='sgv-voice-dot';dot.id='sgvVoiceStatusDot';
+        dot.setAttribute('aria-hidden','true');dot.dataset.state='off';
+        button.append(label,dot);
+      }else button.textContent=labels[name];
       button.setAttribute('role','tab');button.setAttribute('aria-controls','sgv-panel-'+name);
       button.addEventListener('click',()=>select(name));
       button.addEventListener('keydown',onKeys);
@@ -96,12 +100,15 @@
     }
     rail.prepend(container);rail.prepend(tabs);
     const overview=section('overview'),voice=section('voice');
-    const intro=document.createElement('div');intro.className='sgv-intro';
-    intro.innerHTML='<strong>Live glasses display</strong><span>Live KDS updates are permission-scoped; glasses build validation still requires a paired device.</span><span id="simOverviewVoiceStatus" role="status" aria-live="polite">Checking microphone…</span><span id="simVoicePermissionNote">Browser permission is not an active microphone session.</span>';
-    overview.appendChild(intro);
-    // Preserve existing IDs, listeners and live objects: move nodes, never clone.
-    move(stage.querySelector('.sim-status-row'),overview);
-    move($('simLiveGuide'),overview);
+    // Full live status remains available under Runtime, not in the operator Overview.
+    move(stage.querySelector('.sim-status-row'),section('runtime'));
+    move($('simLiveGuide'),section('runtime'));
+    const transcript=document.createElement('div');
+    transcript.className='sgv-live-transcript';transcript.id='simLiveTranscript';
+    transcript.setAttribute('role','status');transcript.setAttribute('aria-live','polite');
+    transcript.innerHTML='<span class="sgv-transcript-label">VOICE INPUT</span>'+
+      '<span id="simVoiceTranscriptText">Enable voice to show recognized commands here</span>';
+    overview.appendChild(transcript);
     const nav=stage.querySelector('.sim-navigation-panel');
     if(nav){
       const groups=Array.from(nav.querySelectorAll(':scope > .sim-navigation-group'));
