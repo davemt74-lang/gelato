@@ -84,3 +84,12 @@
  .glasses-stage.frame-none .hud-panel-title small,
  .glasses-stage.frame-none .hud-panel-title>span{font-size:9px}
 }
+
+/* Everyday workflow first; advanced V10/V11 work remains discoverable. */
+.sim-console{display:flex;flex-direction:column;align-items:stretch;gap:10px}
+.sim-console>.console-card,.sim-console>.sim-advanced-settings{flex:0 0 auto}
+.sim-advanced-settings{border:1px solid #345044;border-radius:12px;background:#101c16;padding:10px;min-width:0}
+.sim-advanced-settings>summary{list-style:disclosure-closed;cursor:pointer;font:750 12px/1.5 system-ui,sans-serif;color:#b6e5c9;padding:8px}
+.sim-advanced-settings[open]>summary{list-style:disclosure-open}
+.sim-advanced-body{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;padding-top:10px;min-width:0}
+.sim-advanced-body>.console-card{min-width:0}
