@@ -44,12 +44,15 @@ const commands={
 for(const [phrase,want] of Object.entries(commands)){
   assert.equal(parse(phrase),want,'phrase '+phrase);
 }
-for(const [id,command] of [['simNavNext','next'],['simNavNextItem','next_item'],['simNavItemAdded','ingredient_added'],['simNavPrevious','previous']]){
-  elt(id).fire('click');assert.equal(actions.at(-1),command);
-}
+const page=fs.readFileSync('glasses-simulator.php','utf8');
+for(const id of ['simNavNext','simNavPrevious','simNavNextItem','simNavPreviousItem','simNavItemAdded','simNavRepeat','simViewHudOnly','simViewGlasses'])
+  assert.ok(!page.includes('id="'+id+'"'),'obsolete duplicated sidebar button removed: '+id);
+for(const command of ['next','previous','next_item','previous_item','ingredient_added','repeat'])
+  assert.equal(typeof parse(command),'string','voice navigation preserved: '+command);
+elt('simVoiceHelp').fire('click');assert.equal(actions.at(-1),'help');
 assert.equal(elt('simNavContext').textContent,'Test Pizza · Step 2 · Preview only');
 assert.equal(elt('simVoiceToggle').disabled,true,'missing SpeechRecognition must disable microphone but preserve buttons');
 assert.equal(elt('simVoiceToggle').disabled,true,'unsupported browser must not expose a broken mic');
-assert.equal(elt('simVoiceFeedback').textContent,'Handled previous','manual navigation updates the live instruction feedback');
+assert.equal(elt('simVoiceFeedback').textContent,'Handled help','voice help still sends through shared dispatcher');
 assert.ok(!/\bfetch\s*\(|XMLHttpRequest|navigator\.sendBeacon/.test(source),'voice navigation may not write directly to POS/KDS');
 console.log('glasses-voice-navigation=ok');
