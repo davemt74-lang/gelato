@@ -22,7 +22,10 @@ function stop(slot,reason='stopped'){
 }
 async function start(slot){
   const s=row(slot);
-  if(document.hidden||!conf()?.isEnabled?.(slot)){s.state='disabled';return false;}
+  if(document.hidden||!conf()?.isEnabled?.(slot)){
+    if(!conf()?.isEnabled?.(slot)&&conf()?.isStreaming?.(slot))stop(slot,'disabled');
+    s.state='disabled';return false;
+  }
   if(slot===1){s.state=conf()?.isStreaming?.(1)?'ready':'manual_start_required';return s.state==='ready';}
   s.desired=true;s.state='starting';
   try{
@@ -92,7 +95,7 @@ async function poll(){
   if(!location)return;
   for(let slot=1;slot<=5;slot++){
     const s=row(slot);
-    if(!conf()?.isEnabled?.(slot)){if(s.desired)stop(slot,'disabled');continue;}
+    if(!conf()?.isEnabled?.(slot)){if(s.desired||conf()?.isStreaming?.(slot))stop(slot,'disabled');continue;}
     const active=!!conf()?.isStreaming?.(slot);
     if(active){
       if(s.state!=='ready')s.state='ready';
@@ -107,7 +110,7 @@ async function poll(){
 }
 function policy(slot) {
   const s=row(slot);
-  return {cameraReady:!!conf()?.isStreaming?.(slot),sceneCandidate:!!s.ready,
+  return {cameraReady:!!conf()?.isEnabled?.(slot)&&!!conf()?.isStreaming?.(slot),sceneCandidate:!!s.ready&&!!conf()?.isEnabled?.(slot),
     quality:s.quality,activity:s.activity,confidence:s.detectorConfidence,
     source:'scene_activity_heuristic',trainedPizzaDetection:false};
 }
