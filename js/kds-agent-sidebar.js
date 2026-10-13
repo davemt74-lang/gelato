@@ -79,8 +79,8 @@
         <header class="kds-agent-head"><div class="kds-agent-title"><span class="kds-agent-logo">✦</span><span><strong>Gelato Voice Agent</strong><small>KDS · voice-only kitchen assistant</small></span></div><button class="kds-agent-close" id="kdsAgentClose" type="button" aria-label="Close Agent">×</button></header>
         <div class="kds-agent-body">
           <div class="kds-agent-context" id="kdsAgentContext"><strong>Kitchen context</strong><br>Waiting for the live KDS board…</div>
-          <section class="kds-agent-voice"><button class="kds-agent-mic" id="kdsAgentMic" type="button" aria-label="Ask Gelato by voice">🎙</button><strong>Tap and speak</strong><p>Say “Read order 1”, “Repeat order 4”, “Read all orders”, or ask about stations and special instructions. Order 1–8 means the visible KDS card position, not the POS ticket number.</p></section>
-          <button class="kds-agent-toggle" id="kdsAgentListen" type="button" aria-pressed="false"><span><strong>Hands-free “Hey Gelato”</strong><small>Say Hey Gelato, then read order 1–8 or ask a kitchen question.</small></span><span class="kds-agent-switch" aria-hidden="true"></span></button><button class="kds-agent-toggle" id="kdsAgentAlways" type="button" aria-pressed="false"><span><strong>Always-on listening</strong><small>After you enable the mic, listen for order commands without the wake phrase while this KDS tab is active.</small></span><span class="kds-agent-switch" aria-hidden="true"></span></button><div class="kds-agent-mic-status" id="kdsAgentMicStatus" role="status" aria-live="polite" data-state="off"><span class="kds-agent-mic-led"></span><strong>MIC OFF</strong><span id="kdsAgentMicMessage">Select a voice mode to begin.</span></div>
+          <section class="kds-agent-voice"><button class="kds-agent-mic" id="kdsAgentMic" type="button" aria-label="Ask Gelato by voice">🎙</button><strong>Tap and speak</strong><p>Say “Read order 1”, “Repeat order 4”, “Read all orders”, or ask about stations and special instructions. Order numbers continue across pages: 1–8 on page 1, 9–16 on page 2, and so on. They are separate from POS ticket numbers.</p></section>
+          <button class="kds-agent-toggle" id="kdsAgentListen" type="button" aria-pressed="false"><span><strong>Hands-free “Hey Gelato”</strong><small>Say Hey Gelato, then read any active order number (for example, order 12).</small></span><span class="kds-agent-switch" aria-hidden="true"></span></button><button class="kds-agent-toggle" id="kdsAgentAlways" type="button" aria-pressed="false"><span><strong>Always-on listening</strong><small>After you enable the mic, listen for order commands without the wake phrase while this KDS tab is active.</small></span><span class="kds-agent-switch" aria-hidden="true"></span></button><div class="kds-agent-mic-status" id="kdsAgentMicStatus" role="status" aria-live="polite" data-state="off"><span class="kds-agent-mic-led"></span><strong>MIC OFF</strong><span id="kdsAgentMicMessage">Select a voice mode to begin.</span></div>
           <button class="kds-agent-toggle" id="kdsAgentAnnounce" type="button" aria-pressed="false"><span><strong>Voice new-order announcements</strong><small>Read each new kitchen order—and later fired additions to that order—as it arrives.</small></span><span class="kds-agent-switch" aria-hidden="true"></span></button>
           <button class="kds-agent-quick" id="kdsAgentReadOrders" type="button">🔊 Read active orders now</button>
           <div class="kds-agent-status" id="kdsAgentStatus">Connecting to Gelato Agent…</div>
@@ -193,7 +193,7 @@
     setStatus('Gelato is reading the live KDS board…');
     try {
       const answer=window.GelatoKdsVoice?.readAll?.()||'Kitchen orders have not loaded yet.';
-      queueSpeech(answer);setStatus('Reading visible Order 1–8 references.','good');
+      queueSpeech(answer);setStatus('Reading all active KDS order references, including other pages.','good');
     } catch (error) {
       setStatus(error?.message || 'Gelato could not read the current orders.', 'bad');
     } finally {
@@ -213,8 +213,7 @@
   function ticketAnnouncement(ticket, addedItems = null) {
     const items = Array.isArray(addedItems) ? addedItems : (ticket.items || []);
     const update = Array.isArray(addedItems);
-    const page=window.GelatoKdsSlots?.snapshot?.().page||0;
-    const current=(state.lastBoard?.tickets||[]).slice(page*8,(page+1)*8);
+    const current=state.lastBoard?.tickets||[];
     const slot=current.findIndex(t=>String(t.checkPublicId)===String(ticket.checkPublicId));
     const prefix=slot>=0?'Order '+(slot+1)+', ticket '+clean(ticket.checkNumber,80):'Ticket '+clean(ticket.checkNumber,80);
     const parts = [update ? 'Updated '+prefix : 'New '+prefix];
@@ -227,9 +226,20 @@
   }
 
   function queueSpeech(text) {
-    const message = clean(text, 1800);
+    const message = clean(text, 60000);
     if (!message || !canVoiceOutput() || !window.speechSynthesis) return;
-    state.voiceQueue.push(message);
+    // Queue short utterances so 'read all orders' continues beyond page 1
+    // without browsers silently truncating a very long speech payload.
+    let remaining=message;
+    while(remaining.length){
+      if(remaining.length<=800){state.voiceQueue.push(remaining);break;}
+      let at=remaining.lastIndexOf('. ',800);
+      if(at<280)at=remaining.lastIndexOf(' ',800);
+      if(at<1)at=800;
+      else at+=1;
+      state.voiceQueue.push(remaining.slice(0,at).trim());
+      remaining=remaining.slice(at).trim();
+    }
     pumpSpeech();
   }
 
@@ -331,7 +341,7 @@
     renderState();
   });
   window.addEventListener('gelato-kds-voice-answer',(event)=>{
-    const text=clean(event.detail?.text,1800);
+    const text=clean(event.detail?.text,60000);
     if(!text)return;
     const card=document.getElementById('kdsAgentAnswer');
     if(card){card.hidden=false;card.querySelector('.copy').textContent=text;}
