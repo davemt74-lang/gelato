@@ -144,6 +144,34 @@
     feedback(value==='none'?'HUD-only view. Orders and current instructions now fill the preview.':'Glasses-outline view selected.');
     refresh();
   }
+  function organizeControls(){
+    const aside=document.querySelector('.sim-console');
+    if(!aside)return;
+    const work=$('consoleItem')?.closest('.console-card');
+    const audit=$('simControlAuditPanel');
+    const vision=$('componentControls')?.closest('.console-card');
+    const exceptions=$('exceptions')?.closest('.console-card');
+    const event=$('eventLog')?.closest('.console-card');
+    // Kitchen workflow comes first. Advanced experimental and calibration
+    // controls remain available but do not bury live work under 12 panels.
+    for(const card of [event,exceptions,vision,audit,work].filter(Boolean)){
+      aside.insertBefore(card,aside.firstChild);
+    }
+    const primary=new Set([work,audit,vision,exceptions,event]);
+    const advanced=[...aside.querySelectorAll(':scope > .console-card')].filter(card=>!primary.has(card));
+    if(advanced.length&&!$('simAdvancedSettings')){
+      const details=document.createElement('details');
+      details.id='simAdvancedSettings';
+      details.className='sim-advanced-settings';
+      const summary=document.createElement('summary');
+      summary.textContent='Advanced settings · Vision, calibration, models, diagnostics ('+advanced.length+')';
+      const body=document.createElement('div');
+      body.className='sim-advanced-body';
+      details.append(summary,body);
+      advanced.forEach(card=>body.appendChild(card));
+      aside.appendChild(details);
+    }
+  }
   const commands=[
     ['simNavNext','next'],['simNavPrevious','previous'],
     ['simNavNextItem','next_item'],['simNavPreviousItem','previous_item'],
@@ -159,6 +187,7 @@
   });
   window.addEventListener('beforeunload',()=>{if(enabled)stopVoice();if('speechSynthesis' in window)window.speechSynthesis.cancel();});
   window.GelatoGlassesVoiceUI={refresh,normalizePhrase,dispatch};
+  organizeControls();
   updateVoiceButton();
   refresh();
   feedback(Recognition?'Voice off. Click Enable Voice to allow microphone access.':'Speech recognition unavailable here; navigation buttons are ready.');
