@@ -89,6 +89,13 @@
         const dot=document.createElement('span');dot.className='sgv-voice-dot';dot.id='sgvVoiceStatusDot';
         dot.setAttribute('aria-hidden','true');dot.dataset.state='off';
         button.append(label,dot);
+      }else if(name==='camera'){
+        const label=document.createElement('span');label.textContent=labels[name];
+        const count=document.createElement('span');count.id='sgvCameraEnabledCount';
+        count.className='sgv-camera-active-count';count.textContent='0';count.setAttribute('aria-hidden','true');
+        const unread=document.createElement('span');unread.id='sgvCameraUnreadDot';
+        unread.className='sgv-camera-unread-dot';unread.setAttribute('aria-hidden','true');unread.hidden=true;
+        button.append(label,count,unread);
       }else button.textContent=labels[name];
       button.setAttribute('role','tab');button.setAttribute('aria-controls','sgv-panel-'+name);
       button.addEventListener('click',()=>select(name));
@@ -163,6 +170,23 @@
     rail.querySelector('#simAdvancedSettings')?.remove();
     // Default the long engineering gate report to collapsed during normal cooking.
     const audit=$('simAuditDetails');if(audit)audit.open=false;
+    const cameraUI=event=>{
+      const summary=event?.detail||window.GelatoCameraWorkspace?.sessionStatus?.()||{};
+      const enabled=Number(summary.enabledCount??summary.enabled?.filter(Boolean)?.length??0);
+      const unread=Number(summary.unreadPhotos??summary.unread?.reduce((a,b)=>a+b,0)??0);
+      const badge=$('sgvCameraEnabledCount'),marker=$('sgvCameraUnreadDot');
+      if(badge)badge.textContent=String(enabled);
+      if(marker)marker.hidden=unread===0;
+      const tab=$('sgv-tab-camera');
+      if(tab){
+        tab.classList.toggle('has-unread',unread>0);
+        tab.setAttribute('aria-label','Camera · '+enabled+' active camera'+(enabled===1?'':'s')+
+          (unread?' · '+unread+' unread new photo'+(unread===1?'':'s'):''));
+      }
+    };
+    window.addEventListener('gelato-camera-session-updated',cameraUI);
+    window.addEventListener('gelato-camera-configuration-changed',cameraUI);
+    cameraUI();
     window.addEventListener('gelato-glasses-voice-device-change',voiceUI);
     window.addEventListener('gelato-voice-presence-change',voiceUI);
     window.addEventListener('gelato-glasses-voice-status',voiceUI);
