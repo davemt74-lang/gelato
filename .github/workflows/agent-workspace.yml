@@ -11,6 +11,9 @@ on:
       - 'includes/agent-workspace-core.php'
       - 'includes/workspace-workforce-core.php'
       - 'js/global-agent.js'
+      - 'js/voice-turn-taking.js'
+      - 'tests/voice-turn-taking.test.js'
+      - 'tests/voice-barge-in-contract.php'
       - 'js/agent-canvas.js'
       - 'js/dynamic-agent-canvas.js'
       - 'workspace.php'
@@ -39,6 +42,9 @@ on:
       - 'includes/agent-workspace-core.php'
       - 'includes/workspace-workforce-core.php'
       - 'js/global-agent.js'
+      - 'js/voice-turn-taking.js'
+      - 'tests/voice-turn-taking.test.js'
+      - 'tests/voice-barge-in-contract.php'
       - 'js/agent-canvas.js'
       - 'js/dynamic-agent-canvas.js'
       - 'workspace.php'
@@ -88,6 +94,8 @@ jobs:
           php -l tests/agent-workspace-contract.php
           php -l tests/workspace-dynamic-agent-canvas-contract.php
           node --check js/global-agent.js
+          node --check js/voice-turn-taking.js
+          php -l tests/voice-barge-in-contract.php
           node --check js/agent-canvas.js
           node --check js/dynamic-agent-canvas.js
           node --check js/training-workspace-voice.js
@@ -156,6 +164,8 @@ jobs:
         run: |
           php tests/training-chat-voice-contract.php
           node tests/training-workspace-voice.test.js
+          php tests/voice-barge-in-contract.php
+          node tests/voice-turn-taking.test.js
       - name: Verify upgrader idempotence
         run: |
           php <<'PHP'
