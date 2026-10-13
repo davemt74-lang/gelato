@@ -17,7 +17,7 @@ function glasses_order_photo_auth(PDO $pdo,array $user,int $locationId,bool $wri
 }
 function glasses_order_photo_candidates(PDO $pdo,array $user,int $locationId):array {
     $org=(int)$user['organization_id'];
-    $q=$pdo->prepare("SELECT k.id,k.public_id,k.status,k.menu_item_id,k.station_id,
+    $q=$pdo->prepare("SELECT k.id,k.public_id,k.status,i.menu_item_id,k.station_id,
         c.public_id check_public_id,c.check_number,i.item_name_snapshot,i.special_instructions,i.quantity,
         mi.name menu_item_name
         FROM kds_order_items k
@@ -100,13 +100,16 @@ function glasses_order_photo_action(PDO $pdo,array $user,int $locationId,array $
             (string)$configured['role']!==$v['stage']))
             throw new DomainException('The correct stage camera must be on and assigned to this production stage.');
         if($v['action']==='confirm'){
+            $menu=$pdo->prepare('SELECT menu_item_id FROM pos_check_items WHERE organization_id=? AND id=? LIMIT 1');
+            $menu->execute([$org,(int)$item['pos_check_item_id']]);
+            $expectedMenuId=(int)$menu->fetchColumn();
             $photo=$pdo->prepare("SELECT p.id,p.camera_slot,p.status,p.menu_item_id FROM glasses_camera_photo_library p
                  JOIN glasses_vision_training_media m ON m.id=p.media_id AND m.organization_id=p.organization_id AND m.status='active'
                  WHERE p.organization_id=? AND p.location_id=? AND p.id=? LIMIT 1 FOR UPDATE");
             $photo->execute([$org,$locationId,$v['photoLibraryId']]);$row=$photo->fetch(PDO::FETCH_ASSOC);
             if(!$row||$row['status']!=='active'||(int)$row['camera_slot']!==$slot)
                 throw new DomainException('Select a saved photo from the correct camera and restaurant location.');
-            if($row['menu_item_id']!==null&&(int)$row['menu_item_id']!==(int)$item['menu_item_id'])
+            if($row['menu_item_id']!==null&&(int)$row['menu_item_id']!==$expectedMenuId)
                 throw new DomainException('Photo belongs to a different menu item; review its training assignment.');
             $assigned=$pdo->prepare("SELECT s.id FROM glasses_order_photo_stages s
                 WHERE s.organization_id=? AND s.photo_library_id=? AND (s.kds_item_id<>? OR s.stage<>?) LIMIT 1");
