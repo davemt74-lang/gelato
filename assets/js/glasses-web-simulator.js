@@ -1458,6 +1458,18 @@ function applyCalibration(){
   stage.style.setProperty('--safe-width',calibration.safeWidth+'%');stage.style.setProperty('--safe-height',calibration.safeHeight+'%');
   stage.style.setProperty('--left-eye-x',calibration.leftEyeX+'%');stage.style.setProperty('--left-eye-y',calibration.leftEyeY+'%');
   stage.style.setProperty('--right-eye-x',calibration.rightEyeX+'%');stage.style.setProperty('--right-eye-y',calibration.rightEyeY+'%');
+  // Position the actual left/right HUD independently, not only the editing
+  // guides. Use stage-sized pixel offsets so ±20 corresponds to a noticeable
+  // ±10% adjustment of the full lens surface on every responsive size.
+  const width=Math.max(1,stage.clientWidth||stage.getBoundingClientRect?.().width||1);
+  const height=Math.max(1,stage.clientHeight||stage.getBoundingClientRect?.().height||1);
+  for(const side of ['left','right']){
+    stage.style.setProperty('--'+side+'-eye-shift-x',
+      (Math.round(width*calibration[side+'EyeX']/200*10)/10)+'px');
+    stage.style.setProperty('--'+side+'-eye-shift-y',
+      (Math.round(height*calibration[side+'EyeY']/200*10)/10)+'px');
+  }
+
   for(const [name,r] of Object.entries(calibration.regions)){const el=$(name);if(!el)continue;el.style.setProperty('--region-x',r.x+'%');el.style.setProperty('--region-y',r.y+'%');el.style.setProperty('--region-w',r.w+'%');el.style.setProperty('--region-h',r.h+'%');}
   const controls={hudOpacity:['opacity','%'],hudBrightness:['brightness','%'],hudScale:['scale','%'],safeWidth:['safeWidth','%'],safeHeight:['safeHeight','%'],leftEyeX:['leftEyeX','%'],leftEyeY:['leftEyeY','%'],rightEyeX:['rightEyeX','%'],rightEyeY:['rightEyeY','%']};
   for(const [id,[key,suffix]] of Object.entries(controls)){if($(id)){$(id).value=String(calibration[key]);$(id+'Value').textContent=String(calibration[key])+suffix;}}
@@ -1513,6 +1525,12 @@ function bindRegionEditor(regionName){
 }
 bindRegionEditor('hudRight');bindRegionEditor('hudStatus');bindRegionEditor('hudOrdersRegion');
 refreshPresets();applyCalibration();applyFrameMode();
+// Recompute stage-relative stereo offsets after a responsive resize or tab change.
+if(typeof ResizeObserver==='function'){
+  const glassesCalibrationObserver=new ResizeObserver(()=>applyCalibration());
+  glassesCalibrationObserver.observe($('glassesStage'));
+}else window.addEventListener('resize',applyCalibration);
+
 $('exceptions').addEventListener('click',e=>{const b=e.target.closest('[data-resolve]');if(b)resolveUnexpected(b.dataset.resolve);});
 
 /** Live POS ticket/KDS controls are routed through one authorized server dispatcher.
