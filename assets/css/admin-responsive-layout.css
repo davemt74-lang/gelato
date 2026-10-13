@@ -1,0 +1,80 @@
+/* Gelato admin layout audit: right gutters, shrinkable columns and mobile Vision Lab.
+ * Loaded after page-specific CSS by the canonical admin shell. */
+body.gelato-universal-admin-page { min-width:0; max-width:100%; }
+body.gelato-universal-admin-page :is(.admin-shell,.admin-page,.content,.main){ min-width:0;max-width:100%; }
+.admin-control .admin-shell { width:min(1460px,calc(100% - 40px)); max-width:100%;margin-inline:auto; }
+.admin-shell,.admin-shell>*,.admin-shell :is(.admin-panel,.admin-module,.admin-grid,.admin-grid>*,.admin-hero>*,.admin-stack>*,.admin-table-wrap){min-width:0;max-width:100%}
+.admin-grid.equal,.admin-health-grid {grid-template-columns:repeat(2,minmax(0,1fr))}
+.admin-shell :is(pre,code,.admin-panel,.admin-module){overflow-wrap:anywhere}
+.admin-shell :is(input,select,textarea,img,video,canvas){max-width:100%}
+@media(max-width:1250px){
+ .admin-grid,.admin-grid.equal,.admin-hero{grid-template-columns:minmax(0,1fr)}
+}
+@media(max-width:780px){
+ .admin-control .admin-shell{width:min(1460px,calc(100% - 24px))}
+}
+@media(max-width:580px){
+ .admin-health-grid{grid-template-columns:minmax(0,1fr)}
+ .admin-shell :is(.admin-panel,.admin-module){padding-inline:max(12px,env(safe-area-inset-left))}
+}
+/* Vision Lab: every panel and nested grid may shrink inside the sidebar canvas. */
+.vl-shell,.vl-shell>*,.vl-hero>*,.vl-grid>*,.vl-panel,.vl-panel>*,
+.vl-panel article>*,.vl-head>*,.vl-intel-columns>*,.vl-qa-columns>*,
+.vl-balance-columns>*,.vl-media-library article>* {min-width:0;max-width:100%}
+.vl-hero{grid-template-columns:minmax(0,1.4fr) minmax(0,.6fr)}
+.vl-grid,.vl-intel-columns,.vl-balance-columns,.vl-qa-columns{grid-template-columns:repeat(2,minmax(0,1fr))}
+.vl-head{flex-wrap:wrap}
+.vl-panel article{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto auto}
+.vl-panel :is(pre,code,p,small,strong,.vl-head h2){overflow-wrap:anywhere}
+.vl-panel :is(input,select,textarea,img,video,canvas){max-width:100%}
+.vl-table{min-width:0;max-width:100%;overflow-x:auto;overscroll-behavior-x:contain}
+.vl-table table{width:100%;min-width:0!important;table-layout:fixed}
+.vl-table th,.vl-table td{white-space:normal;overflow-wrap:anywhere;word-break:normal}
+/* Other vision sections share the same responsive admin canvas. */
+.gvo-shell,.gvo-shell>*,.gvo-hero>*,.gvo-grid>*,.gvo-panel,.gvo-panel>*,
+.gvm-shell,.gvm-shell>*,.gvm-hero>*,.gvm-top-grid>*,.gvm-panel,.gvm-panel>*,
+.gvp-shell,.gvp-shell>*,.gvp-hero>*,.gvp-layout>*,.gvp-panel,.gvp-panel>*{
+ min-width:0;max-width:100%;
+}
+.gvo-grid,.gvm-top-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.gvo-table-wrap,.gvm-table-wrap,.gvp-table-wrap{max-width:100%;min-width:0;overflow-x:auto}
+:is(.gvo-panel,.gvm-panel,.gvp-panel) :is(pre,code,p,small,strong){overflow-wrap:anywhere}
+@media(max-width:1260px){
+ .vl-hero,.vl-grid,.vl-intel-columns,.vl-balance-columns,.vl-qa-columns,
+ .gvo-grid,.gvo-hero,.gvm-top-grid,.gvm-hero,.gvp-layout,.gvp-hero{
+  grid-template-columns:minmax(0,1fr);
+ }
+ .vl-active-learning article,.vl-media-library article,.vl-training-releases article{
+  grid-template-columns:repeat(2,minmax(0,1fr));
+ }
+}
+@media(max-width:780px){
+ .vl-shell{padding:18px 12px 42px}
+ .vl-panel{padding:14px}
+ .vl-panel article,.vl-datasets article,.vl-active-learning article,
+ .vl-media-library article,.vl-training-releases article{grid-template-columns:minmax(0,1fr)}
+ /* Tables convert to readable stacked records, not horizontal scrolling. */
+ :is(.vl-table,.gvo-table-wrap,.gvm-table-wrap,.gvp-table-wrap){overflow-x:visible;max-width:100%}
+ :is(.vl-table,.gvo-table-wrap,.gvm-table-wrap,.gvp-table-wrap) table,
+ :is(.vl-table,.gvo-table-wrap,.gvm-table-wrap,.gvp-table-wrap) tbody,
+ :is(.vl-table,.gvo-table-wrap,.gvm-table-wrap,.gvp-table-wrap) tr{
+  display:block;width:100%;min-width:0!important;max-width:100%;
+ }
+ :is(.vl-table,.gvo-table-wrap,.gvm-table-wrap,.gvp-table-wrap) thead{display:none}
+ :is(.vl-table,.gvo-table-wrap,.gvm-table-wrap,.gvp-table-wrap) tbody tr{
+  margin:0 0 12px;padding:9px 12px;border:1px solid #dedbd4;border-radius:12px;background:#fff
+ }
+ :is(.vl-table,.gvo-table-wrap,.gvm-table-wrap,.gvp-table-wrap) tbody td{
+  display:grid;grid-template-columns:minmax(80px,36%) minmax(0,1fr);gap:12px;
+  min-width:0!important;max-width:100%;width:100%;
+  padding:9px 0!important;border-bottom:1px solid #eceae4!important;
+  white-space:normal!important;overflow-wrap:anywhere;text-align:left
+ }
+ :is(.vl-table,.gvo-table-wrap,.gvm-table-wrap,.gvp-table-wrap) tbody td:last-child{border-bottom:0!important}
+ :is(.vl-table,.gvo-table-wrap,.gvm-table-wrap,.gvp-table-wrap) tbody td::before{
+  content:attr(data-label);display:block;font-size:10px;font-weight:800;
+  text-transform:uppercase;letter-spacing:.03em;color:#747a74;white-space:normal
+ }
+ :is(.vl-table,.gvo-table-wrap,.gvm-table-wrap,.gvp-table-wrap) tbody td[colspan]{display:block}
+ :is(.vl-table,.gvo-table-wrap,.gvm-table-wrap,.gvp-table-wrap) tbody td[colspan]::before{display:none}
+}
