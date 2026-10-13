@@ -258,7 +258,7 @@
   const commands=[
     ['simNavNext','next'],['simNavPrevious','previous'],
     ['simNavNextItem','next_item'],['simNavPreviousItem','previous_item'],
-    ['simNavItemAdded','item_added'],['simNavRepeat','repeat']
+    ['simNavItemAdded','ingredient_added'],['simNavRepeat','repeat']
   ];
   for(const [id,command] of commands)$(id)?.addEventListener('click',()=>dispatch(command));
   // HUD overlay buttons and voice use the same action dispatcher and permissions.
