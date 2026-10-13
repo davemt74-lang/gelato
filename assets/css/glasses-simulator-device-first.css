@@ -596,3 +596,36 @@ html,body{max-width:100%;overflow-x:hidden}
 .hud-voice-toggle input{accent-color:#87e5a6;flex-shrink:0;width:16px;height:16px}
 @media(max-width:680px){#glassesStage .glasses-hud-notification{left:29%;width:39%;bottom:10%;padding:4px 6px;font-size:9px}
   .hud-voice-toggle-grid{grid-template-columns:1fr}}
+
+/* Section 267: one green camera count badge instead of separate dot plus badge. */
+.sgv-tabbed-console .sgv-camera-active-count,
+.sgv-tabbed-console .gc-session-new-count{
+  min-width:22px;height:21px;padding:2px 6px;border-radius:6px;
+  display:inline-flex;align-items:center;justify-content:center;
+  background:#273830;border:1px solid #526259;color:#fff!important;
+  font:850 11px/1 system-ui;box-shadow:none;
+}
+.sgv-tabbed-console .sgv-camera-active-count[data-state="active"],
+.sgv-tabbed-console .gc-session-new-count[data-state="active"]{
+  background:#149444;border-color:#32df6c;color:#fff!important;
+}
+.sgv-tabbed-console .sgv-camera-unread-dot,
+.sgv-tabbed-console .gc-camera-status-dot{display:none!important}
+/* All six camera tabs fit the sidebar without a horizontal scrollbar. */
+.sgv-tabbed-console .gc-camera-tabs{
+  display:grid;grid-template-columns:repeat(6,minmax(0,1fr));
+  gap:3px;overflow:visible!important;scrollbar-width:none;
+  padding:5px 3px 7px;position:relative;
+}
+.sgv-tabbed-console .gc-camera-tabs [role="tab"]{
+  min-width:0!important;max-width:100%;padding:8px 2px;
+  gap:2px;flex-direction:column;white-space:normal;font-size:9px;
+}
+.sgv-tabbed-console #sgv-panel-camera{
+  overflow-y:auto;overflow-x:hidden;scrollbar-width:none;
+}
+.sgv-tabbed-console #sgv-panel-camera::-webkit-scrollbar,
+.sgv-tabbed-console .gc-camera-tabs::-webkit-scrollbar{display:none}
+@media(max-width:680px){
+  .sgv-tabbed-console .gc-camera-tabs [role="tab"]{min-width:0!important;font-size:8px;padding:7px 1px}
+}
