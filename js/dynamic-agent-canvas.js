@@ -124,7 +124,7 @@
     window.GelatoGlobalAgent?.selectThread?.(state.activeThread);
     await refreshThreadsAndMessages();
   }
-  async function refreshThreadsAndMessages() {const list=await json('api/agent-workspace.php?action=threads');renderThreads(list.threads||[]);if(state.activeThread){const data=await json('api/agent-workspace.php?action=thread&id='+encodeURIComponent(state.activeThread));renderMessages(data.messages||[]);const h=document.querySelector('.gda-head h2');if(h)h.textContent=data.thread?.title||'Gelato Agent';}}
+  async function refreshThreadsAndMessages() {if(state.historyMode)return;const list=await json('api/agent-workspace.php?action=threads');renderThreads(list.threads||[]);if(state.activeThread){const data=await json('api/agent-workspace.php?action=thread&id='+encodeURIComponent(state.activeThread));renderMessages(data.messages||[]);const h=document.querySelector('.gda-head h2');if(h)h.textContent=data.thread?.title||'Gelato Agent';}}
   function updateHistoryControls(){
     const toggle=document.querySelector('.gda-history-toggle'),more=document.querySelector('.gda-history-more'),older=document.querySelector('.gda-load-older');
     if(toggle)toggle.textContent=state.historyMode?'Return to active conversations':'Full chat history';
@@ -136,7 +136,7 @@
     state.historyOffset=0;state.historyNextOffset=null;state.historyThreads=[];
     state.historyMessages=[];state.historyCursor=null;
     if(state.historyMode)await loadMoreHistoryThreads();
-    else await refreshThreadsAndMessages();
+    else {const active=await json('api/agent-workspace.php?action=threads');state.activeThread=window.GelatoGlobalAgent?.threadId||active.threads?.[0]?.public_id||'';await refreshThreadsAndMessages();}
     updateHistoryControls();
   }
   async function loadMoreHistoryThreads(){
@@ -170,7 +170,7 @@
     updateHistoryControls();
   }
   async function loadOlderMessages(){await loadHistoryPage(false);}
-  async function newThread() {if(!window.GelatoGlobalAgent)return;const bootstrap=await json('api/agent-workspace.php?action=bootstrap');const response=await json('api/agent-workspace.php',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':bootstrap.csrf},body:JSON.stringify({action:'new_thread',csrf_token:bootstrap.csrf})});state.activeThread=response.thread.public_id;window.GelatoGlobalAgent.selectThread(state.activeThread);await refreshThreadsAndMessages();document.querySelector('.gda-input')?.focus();}
+  async function newThread() {if(!window.GelatoGlobalAgent)return;if(state.historyMode){state.historyMode=false;updateHistoryControls();}const bootstrap=await json('api/agent-workspace.php?action=bootstrap');const response=await json('api/agent-workspace.php',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':bootstrap.csrf},body:JSON.stringify({action:'new_thread',csrf_token:bootstrap.csrf})});state.activeThread=response.thread.public_id;window.GelatoGlobalAgent.selectThread(state.activeThread);await refreshThreadsAndMessages();document.querySelector('.gda-input')?.focus();}
 
   function open(options={}) {
     if(!isWorkspacePage()){openDrawer(options);return;}
