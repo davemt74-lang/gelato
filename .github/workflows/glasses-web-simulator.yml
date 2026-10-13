@@ -18,6 +18,10 @@ on:
       - 'assets/css/glasses-simulator-hud-ux.css'
       - 'tests/glasses-hud-voice-contract.php'
       - 'tests/glasses-voice-navigation.test.js'
+      - 'tests/glasses-simulator-csrf.test.js'
+      - 'tests/glasses-live-kds-commands.test.js'
+      - 'tests/glasses-hud-manual-voice-parity.test.js'
+      - 'tests/glasses-live-kds-contract.php'
       - 'tests/glasses-web-simulator-contract.php'
       - 'tests/glasses-live-virtual-preview-contract.php'
       - 'docs/GLASSES-WEB-SIMULATOR.md'
@@ -46,6 +50,7 @@ jobs:
           php -l tests/glasses-live-virtual-preview-contract.php
           php -l tests/glasses-hud-voice-contract.php
           php -l tests/glasses-device-tabs-contract.php
+          php -l tests/glasses-live-kds-contract.php
 
       - name: JavaScript syntax
         run: |
@@ -60,6 +65,10 @@ jobs:
         run: |
           php tests/glasses-hud-voice-contract.php
           node tests/glasses-voice-navigation.test.js
+          node tests/glasses-simulator-csrf.test.js
+          node tests/glasses-live-kds-commands.test.js
+          node tests/glasses-hud-manual-voice-parity.test.js
+          php tests/glasses-live-kds-contract.php
           node tests/glasses-voice-device.test.js
           node tests/glasses-voice-recovery.test.js
           php tests/glasses-device-tabs-contract.php
