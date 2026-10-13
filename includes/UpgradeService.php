@@ -518,8 +518,9 @@ final class UpgradeService
         } else {
             $mode = strtoupper((string)($scope['extra'] ?? ''));
             $expression = (string)($scope['generation_expression'] ?? '');
-            if (!preg_match('/COALESCE\\s*\\(\\s*`?correction_id`?\\s*,\\s*0\\s*\\)/i', $expression)) {
-                throw new RuntimeException('Unexpected correction_scope_id expression; leaving the existing column unchanged.');
+            $normalizedExpression = strtolower((string)preg_replace('/[^a-z0-9_,]/i', '', $expression));
+            if ($normalizedExpression !== 'coalescecorrection_id,0') {
+                throw new RuntimeException('Unexpected correction_scope_id expression: ' . substr($expression, 0, 200) . '; existing column unchanged.');
             }
             if (str_contains($mode, 'STORED GENERATED')) {
                 // A single atomic ALTER replaces the indexed generated column;
