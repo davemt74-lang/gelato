@@ -22,7 +22,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
   </div>
   <div class="sim-top-actions">
     <label>Mode <select id="modeSelect"><option value="live" selected>Live Gelato</option><option value="mock">Mock Demo</option></select></label>
-    <label>Device <select id="deviceSelect"><option value="">Finding live kitchen displays…</option></select></label>
+
     <button id="refreshWork" type="button">Refresh work</button>
     <label>Scene <select id="sceneSourceSelect"><option value="image">Image</option><option value="camera">Browser Camera</option></select></label>
     <label class="asset-load" id="sceneFileLabel">Scene Image <input id="sceneFile" type="file" accept="image/*"></label>
@@ -36,6 +36,9 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 
 <div class="glasses-runtime-toolbar" aria-label="Multiple assigned employee glasses runtimes">
     <label>Runtime <select id="glassesRuntimeSelect" aria-label="Glasses runtime"><option value="">New runtime…</option></select></label>
+    <label id="glassesRuntimeDeviceGroup">Glasses device <select id="deviceSelect" aria-label="Paired glasses device"><option value="">Finding live displays…</option></select></label>
+    <label>Kitchen station <select id="glassesRuntimeStation" aria-label="Kitchen station for selected glasses"><option value="">Choose station…</option></select></label>
+    <button id="glassesRuntimeSaveStation" type="button" title="Save this station to the selected employee glasses runtime">Save Station</button>
     <label>Assign employee <select id="glassesRuntimeEmployee" aria-label="Assign employee to glasses runtime"><option value="">Loading staff…</option></select></label>
     <button id="glassesRuntimeNew" type="button" title="Assign employee to selected paired glasses">New</button>
     <button id="glassesRuntimeOpen" type="button" title="Open isolated glasses runtime">Open</button>
