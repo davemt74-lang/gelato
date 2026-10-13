@@ -3,6 +3,7 @@ declare(strict_types=1);
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/operational-access.php';
 require_once __DIR__.'/../includes/kds-production.php';
+require_once __DIR__.'/../includes/kds-slot-references.php';
 
 $user=app_require_auth();
 $pdo=app_pdo();
@@ -200,15 +201,14 @@ try{
     if(preg_match('/\b(?:read|repeat|describe|what(?:\x27s| is)?(?: on| in)?|status(?: of)?|tell me about)\s+(?:the\s+)?(?:order|slot)\s*(?:number\s*|#\s*)?([1-9]\d*)\b/u',$normalized,$slotMatch)){
         $slot=(int)$slotMatch[1];
         $all=is_array($context['allSlots']??null)?$context['allSlots']:[];
-        $referenced=$all[$slot-1]??null;
-        $current=$tickets[$slot-1]??null;
-        if(!$current){
+        $resolved=kds_resolve_order_reference($tickets,$all,$slot);
+        if($resolved['status']==='empty'||$resolved['status']==='invalid'){
             app_json_response(['ok'=>true,'skill'=>'kds.slot_empty','answer'=>'Order '.$slot.' is not active. This station has '.count($tickets).' active orders across '.max(1,(int)ceil(count($tickets)/8)).' page(s).','data'=>['slot'=>$slot,'total'=>count($tickets)],'sources'=>['Kitchen Display → Active Orders']]);
         }
-        if(!is_array($referenced)||((int)($referenced['slot']??0))!==$slot
-          ||(string)($referenced['checkPublicId']??'')!==(string)$current['checkPublicId']){
+        if($resolved['status']==='stale'){
             app_json_response(['ok'=>true,'skill'=>'kds.slot_changed','answer'=>'Order '.$slot.' changed position since your KDS display refreshed. Refresh the order list and ask again.','data'=>['slot'=>$slot],'sources'=>['Kitchen Display → Active Orders']]);
         }
+        $current=$resolved['ticket'];
         $current['orderReference']=$slot;
         app_json_response(['ok'=>true,'skill'=>'kds.order_reference','answer'=>'Order '.$slot.', '.kda_ticket_detail($current,true),'data'=>['slot'=>$slot,'ticket'=>$current],'sources'=>['Kitchen Display → Active Orders']]);
     }
