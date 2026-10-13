@@ -21,7 +21,7 @@ const ui={hidden:false,readyState:'loading',addEventListener(){},getElementById(
     const data=new Uint8ClampedArray(20*20*4);
     for(let i=0;i<400;i++){const v=(i%2===0?120:185)+shade;data[i*4]=v;data[i*4+1]=v;data[i*4+2]=v;data[i*4+3]=255;}
     return {data};
-  }}};}}};
+  }}}}}};
 const events=[],device={
   active:false,configured:true,
   isEnabled(slot){return this.configured&&slot===2;},
