@@ -3,14 +3,20 @@ declare(strict_types=1);
 
 require __DIR__ . '/includes/bootstrap.php';
 
-const ADMIN_RECOVERY_KEY_HASH = '44306c84e8a891787d8c08006616a9ac0f03123ad1449497dac6dc5ef77c9e01';
-
 if (!app_has_config()) {
     http_response_code(503);
     exit('Application configuration is unavailable.');
 }
 
 $config = app_config();
+// Disabled unless explicitly configured with a fresh SHA-256 of an owner-held key.
+// A one-time emergency overlay may supply its own value without changing SQL.
+$recoveryHash = strtolower(trim((string)($config['security']['admin_recovery_key_sha256'] ?? '')));
+if (preg_match('/^[a-f0-9]{64}$/', $recoveryHash) !== 1) {
+    http_response_code(404);
+    exit('Admin recovery is not enabled. Use forgot-password.php or an authorized one-time recovery package.');
+}
+
 date_default_timezone_set((string)($config['app']['timezone'] ?? 'UTC'));
 app_boot_session();
 
@@ -35,7 +41,7 @@ $adminStatement = $pdo->query(
        ON r.id = ur.role_id
      WHERE u.archived_at IS NULL
        AND u.status = 'active'
-       AND (r.is_owner_role = 1 OR r.slug = 'super_admin')
+       AND (r.is_owner_role = 1 OR (r.slug = 'super_admin' AND r.is_system_role = 1))
      ORDER BY r.is_owner_role DESC, u.id ASC
      LIMIT 1"
 );
@@ -44,13 +50,13 @@ $admin = $adminStatement->fetch() ?: null;
 $consumedStatement = $pdo->prepare(
     "SELECT id FROM password_reset_tokens WHERE token_hash = :token_hash LIMIT 1"
 );
-$consumedStatement->execute(['token_hash' => ADMIN_RECOVERY_KEY_HASH]);
+$consumedStatement->execute(['token_hash' => $recoveryHash]);
 $alreadyUsed = (bool)$consumedStatement->fetchColumn();
 
 $error = null;
 $success = false;
 $key = (string)($_POST['recovery_key'] ?? '');
-$keyValid = $key !== '' && hash_equals(ADMIN_RECOVERY_KEY_HASH, hash('sha256', $key));
+$keyValid = $key !== '' && hash_equals($recoveryHash, hash('sha256', $key));
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'reset') {
     $password = (string)($_POST['password'] ?? '');
@@ -76,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             $check = $pdo->prepare(
                 "SELECT id FROM password_reset_tokens WHERE token_hash = :token_hash LIMIT 1 FOR UPDATE"
             );
-            $check->execute(['token_hash' => ADMIN_RECOVERY_KEY_HASH]);
+            $check->execute(['token_hash' => $recoveryHash]);
             if ($check->fetchColumn()) {
                 throw new RuntimeException('This one-time recovery key has already been used.');
             }
@@ -106,7 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                     (:user_id, :token_hash, '2099-12-31 23:59:59.000000', NOW(6))"
             )->execute([
                 'user_id' => (int)$admin['id'],
-                'token_hash' => ADMIN_RECOVERY_KEY_HASH,
+                'token_hash' => $recoveryHash,
             ]);
 
             app_audit(
@@ -187,7 +193,7 @@ try {
       <?php elseif (!$admin): ?>
         <div class="recovery-bad">No active owner or Super Admin account could be found.</div>
       <?php else: ?>
-        <div class="recovery-note">Resetting access for <strong><?= app_escape((string)$admin['email']) ?></strong>. After this succeeds, remove this file from production on the next deploy.</div>
+        <div class="recovery-note">Resetting access for <strong><?= app_escape((string)$admin['email']) ?></strong>. After resetting, remove any temporary recovery overlay from production.</div>
         <?php if ($error): ?><div class="recovery-bad"><?= app_escape($error) ?></div><?php endif; ?>
         <form method="post" autocomplete="off">
           <input type="hidden" name="csrf_token" value="<?= app_escape(app_csrf_token()) ?>">
