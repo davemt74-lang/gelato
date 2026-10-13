@@ -164,8 +164,7 @@ function liveWorkFingerprint(work){
     table:x.ticket?.tableName||'',service:x.ticket?.serviceMode||'',
     name:x.posLine?.name||'',option:x.posLine?.optionName||'',
     qty:x.posLine?.quantity??null,special:x.posLine?.specialInstructions||'',
-    modifiers:(x.posLine?.modifiers||[]).map(m=>m.name||m.label||String(m)),
-    posOpenSeconds:x.timing?.posOpenAgeSeconds??null
+    modifiers:(x.posLine?.modifiers||[]).map(m=>m.name||m.label||String(m))
   }));
   return JSON.stringify({revision:work?.revision||'',station:work?.station?.publicId||'',focus:work?.focusItem?.kdsItemPublicId||'',items});
 }
@@ -615,6 +614,42 @@ function exportDatasetZip(){
   entries.push({name:'data.yaml',data:yaml},{name:'gelato-manifest.json',data:JSON.stringify(manifest,null,2)+'\n'},{name:'README.txt',data:'Gelato local vision training dataset\nFormat: YOLO object detection\nImages and labels were captured in the Web Glasses Simulator.\nNo POS/KDS/build state is modified by dataset capture.\n'});
   const blob=zipStore(entries),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='gelato-vision-dataset-'+new Date().toISOString().replace(/[:.]/g,'-')+'.zip';a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);log('DATASET','Exported '+state.dataset.samples.length+' YOLO training sample(s).');
 }
+
+/* Explicitly reviewed auxiliary-camera samples enter the existing local
+ * dataset. This API cannot submit POS/KDS or ingredient evidence. */
+async function acceptReviewedAuxiliaryFrame(frame,annotations,{slot}={}){
+  if(!frame||!Number.isFinite(frame.width)||!Number.isFinite(frame.height)||frame.width<1||frame.height<1)
+    throw new Error('Capture a valid camera frame first.');
+  if(!Number.isInteger(slot)||slot<2||slot>5)throw new Error('Invalid auxiliary camera slot.');
+  if(!Array.isArray(annotations)||annotations.length<1||annotations.length>100)
+    throw new Error('Review and label at least one visible object before adding this sample.');
+  const valid=annotations.map(item=>{
+    const label=String(item?.label||'').trim().slice(0,80),b=item?.bbox||{};
+    if(!label||!Number.isFinite(b.x)||!Number.isFinite(b.y)||!Number.isFinite(b.width)||!Number.isFinite(b.height)||
+      b.width<=0||b.height<=0||b.x<0||b.y<0||b.x+b.width>1.001||b.y+b.height>1.001)
+      throw new Error('A label or bounding box is invalid. Correct it before saving.');
+    return {label,bbox:{x:b.x,y:b.y,width:b.width,height:b.height}};
+  });
+  const blob=await canvasToBlob(frame,'image/jpeg',.92);
+  if(!blob)throw new Error('Could not encode the reviewed training sample.');
+  const bytes=new Uint8Array(await blob.arrayBuffer()),index=state.dataset.samples.length+1;
+  const features=datasetVisualFeatures(frame);
+  const capturedAt=new Date().toISOString();
+  state.dataset.samples.push({
+    index,width:frame.width,height:frame.height,bytes,annotations:valid,capturedAt,
+    buildPublicId:null,station:null,captureGroup:'aux-camera-'+slot+'-'+Date.now().toString(36),
+    burstIndex:0,features,detectorConfidence:null,mediaPublicId:null,samplePublicId:null,
+    trainingCameraSlot:slot,reviewed:true
+  });
+  renderDatasetAnnotations();renderDatasetClassOptions();
+  log('TRAINING','Reviewed Camera '+slot+' sample #'+index+' added locally with '+valid.length+' object(s).');
+  return {index,annotations:valid.length};
+}
+window.GelatoGlassesTraining={
+  acceptReviewedAuxiliaryFrame,
+  get sampleCount(){return state.dataset.samples.length;},
+  get activePrimaryDeviceId(){return state.cameraTrack?.getSettings?.().deviceId||'';}
+};
 
 const VISION_TRACK_TTL_MS=1800;
 const VISION_STABLE_FRAMES=3;
