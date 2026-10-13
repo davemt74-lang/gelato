@@ -501,8 +501,42 @@ final class UpgradeService
         if (!$exists('column', 'correction_id')) {
             $pdo->exec('ALTER TABLE glasses_vision_sample_reviews ADD COLUMN correction_id BIGINT UNSIGNED NULL AFTER sample_id');
         }
-        if (!$exists('column', 'correction_scope_id')) {
-            $pdo->exec('ALTER TABLE glasses_vision_sample_reviews ADD COLUMN correction_scope_id BIGINT UNSIGNED GENERATED ALWAYS AS (COALESCE(correction_id,0)) STORED AFTER correction_id');
+        // MySQL prohibits ON DELETE CASCADE on a base column of a STORED
+        // generated column (correction_scope_id depends on correction_id).
+        // VIRTUAL preserves the calculated scope and its unique index while
+        // allowing the required cascading foreign key. Historical SQL stays
+        // untouched, including its recorded checksum.
+        $scopeInfo = $pdo->prepare(
+            'SELECT extra,generation_expression FROM information_schema.columns '
+            . 'WHERE table_schema=DATABASE() AND table_name=? AND column_name=?'
+        );
+        $scopeInfo->execute([$table, 'correction_scope_id']);
+        $scope = $scopeInfo->fetch(PDO::FETCH_ASSOC);
+        $virtualDefinition = 'correction_scope_id BIGINT UNSIGNED GENERATED ALWAYS AS (COALESCE(correction_id,0)) VIRTUAL';
+        if ($scope === false) {
+            $pdo->exec('ALTER TABLE glasses_vision_sample_reviews ADD COLUMN ' . $virtualDefinition . ' AFTER correction_id');
+        } else {
+            $mode = strtoupper((string)($scope['extra'] ?? ''));
+            $expression = (string)($scope['generation_expression'] ?? '');
+            if (!preg_match('/COALESCE\\s*\\(\\s*`?correction_id`?\\s*,\\s*0\\s*\\)/i', $expression)) {
+                throw new RuntimeException('Unexpected correction_scope_id expression; leaving the existing column unchanged.');
+            }
+            if (str_contains($mode, 'STORED GENERATED')) {
+                // A single atomic ALTER replaces the indexed generated column;
+                // no intermediate schema is exposed if MySQL rejects the DDL.
+                // The old unique key is retained until the new key is ready.
+                $indexed = $exists('index', 'uq_glasses_vision_sample_review_scope_user');
+                $alter = [];
+                if ($indexed) $alter[] = 'DROP INDEX uq_glasses_vision_sample_review_scope_user';
+                $alter[] = 'DROP COLUMN correction_scope_id';
+                $alter[] = 'ADD COLUMN ' . $virtualDefinition . ' AFTER correction_id';
+                if ($indexed) {
+                    $alter[] = 'ADD UNIQUE KEY uq_glasses_vision_sample_review_scope_user (sample_id,correction_scope_id,reviewer_user_id)';
+                }
+                $pdo->exec('ALTER TABLE glasses_vision_sample_reviews ' . implode(', ', $alter));
+            } elseif (!str_contains($mode, 'VIRTUAL GENERATED')) {
+                throw new RuntimeException('Unexpected correction_scope_id column type; leaving the existing column unchanged.');
+            }
         }
         // Preserve the old uniqueness invariant until its replacement exists.
         if (!$exists('index', 'uq_glasses_vision_sample_review_scope_user')) {
