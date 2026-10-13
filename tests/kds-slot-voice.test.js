@@ -14,7 +14,8 @@ const win={
     snapshot:()=>({locationId:1,stationPublicId:'',page:0,slots:[{slot:1,checkPublicId:'T-A',checkNumber:'5001'},{slot:4,checkPublicId:'T-D',checkNumber:'9009'}]}),
     read:(n)=>n===4?{ok:true,text:'Order 4, ticket 9009. 2 Breakfast Pizzas, add bacon.'}:n===1?{ok:true,text:'Order 1, ticket 5001. 1 Cheese Pizza.'}:{ok:false,text:'Order '+n+' is empty on this page.'}
   },
-  dispatchEvent:(event)=>{events.push(event);}
+  dispatchEvent:(event)=>{events.push(event);},
+  addEventListener:(event,callback)=>{listeners['window:'+event]=callback;}
 };
 const doc={hidden:false,addEventListener:(type,cb)=>listeners[type]=cb};
 const store=new Map();
