@@ -27,7 +27,7 @@ assert.match(backend,/reviewRequired'=>true/,'human review');
 assert.match(backend,/eventKey|hash\('sha256'/,'repeat-event deduplication');
 assert.match(backend,/\(string\)\$e->getCode\(\)!=='23000'/,'concurrent unique-key conflict handling');
 assert.match(backend,/operatorUserId'=>(int)\$runtime\['employee_user_id'\]/,'per-employee context');
-assert.match(backend,/actor.*\(int\)\$user\['id'\]/s,'authenticated actor audited');
+assert.match(backend,/app_audit\(\$pdo,\$org,\(int\)\$user\['id'\]/,'authenticated actor audited');
 assert.match(ui,/galFeedbackType/);
 assert.match(ui,/galIngredient/);
 assert.match(ui,/api\/glasses-assembly-learning.php/);
