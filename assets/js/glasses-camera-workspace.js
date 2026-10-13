@@ -18,10 +18,12 @@
     for(let slot=1;slot<=5;slot++){
       const button=controls['camera'+slot]?.button;
       if(!button)continue;
-      const dot=button.querySelector('.gc-camera-status-dot');
-      const number=button.querySelector('.gc-session-new-count');
-      if(dot)dot.dataset.state=enabled[slot-1]?'enabled':'disabled';
-      if(number)number.textContent=String(session.count[slot]);
+      const badge=button.querySelector('.gc-session-new-count');
+      if(badge){
+        badge.textContent=String(session.count[slot]);
+        badge.dataset.state=enabled[slot-1]?'active':'off';
+        badge.setAttribute('aria-label',session.count[slot]+' new photos; camera '+(enabled[slot-1]?'active':'inactive'));
+      }
       button.classList.toggle('has-unread',session.unread[slot]>0);
       button.setAttribute('aria-label','Cam '+slot+
         (enabled[slot-1]?' enabled':' disabled')+
@@ -264,11 +266,10 @@
     for(let slot=1;slot<=5;slot++){
       const name='camera'+slot,button=document.createElement('button');button.type='button';
       const label=document.createElement('span');label.textContent='Cam '+slot;
-      const dot=document.createElement('span');dot.className='gc-camera-status-dot';
-      dot.dataset.state='disabled';dot.setAttribute('aria-hidden','true');
       const counter=document.createElement('span');counter.className='gc-session-new-count';
-      counter.textContent='0';counter.setAttribute('aria-hidden','true');
-      button.append(label,dot,counter);
+      counter.textContent='0';counter.dataset.state='off';
+      counter.setAttribute('aria-label','0 new photos; camera inactive');
+      button.append(label,counter);
       button.id='gcTab'+slot;button.setAttribute('role','tab');button.setAttribute('aria-controls','gcPane'+slot);
       const view=document.createElement('section');view.id='gcPane'+slot;view.className='gc-camera-panel';
       view.setAttribute('role','tabpanel');view.setAttribute('aria-labelledby',button.id);view.hidden=true;
