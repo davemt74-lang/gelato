@@ -11,6 +11,7 @@
     busy: false,
     voiceEventId: '',
     voiceUntil: 0,
+    verifiedSpeaker: null,
     listening: false,
     lastBargeIn: 0,
     rec: null,
@@ -134,7 +135,7 @@
     status('Gelato is checking your restaurant context…');
 
     try {
-      await append('user', text, {
+      const submitted = await append('user', text, {
         channel: voice ? 'voice' : 'text',
         voiceEventId: voice ? S.voiceEventId : '',
       });
@@ -171,7 +172,10 @@
         };
       }
 
-      const answer = result.answer || result.reply || 'Done.';
+      const baseAnswer = result.answer || result.reply || 'Done.';
+      // Only a fresh server-verified speaker can receive a spoken name greeting.
+      const greeting=voice&&submitted?.greeting?.text?String(submitted.greeting.text):'';
+      const answer=greeting?greeting+' '+baseAnswer:baseAnswer;
       const agentMessage = await append('agent', answer, {
         channel: voice ? 'voice' : 'text',
         skill: result.skill || route.domain,
@@ -255,37 +259,39 @@
     return vector;
   }
 
-  async function verifyVoice() {
-    if (!(has('voice.self') || has('voice.agent'))) throw new Error('Voice recognition is not enabled for this account.');
-    if (S.voiceEventId && Date.now() < S.voiceUntil) return true;
-
-    status('Voice check… speak naturally for a few seconds.');
-    const features = await captureFeatures();
-    const data = await post('api/voice-identity.php', {action: 'verify', features});
-    if (!data.match?.matched || !data.match?.sessionUserMatch) throw new Error('Voice did not match your enrolled profile.');
-
-    S.voiceEventId = data.match.eventId;
-    S.voiceUntil = Date.now() + 14 * 60 * 1000;
-    document.getElementById('gelato-agent-dot')?.classList.add('on');
-    status(`Voice recognized as ${S.user?.firstName || 'you'}.`, 2200);
-    return true;
+  async function identifySpeaker({allowRoster=false,force=false}={}) {
+    if(!has('voice.agent'))throw new Error('Voice recognition permission is not enabled for this account.');
+    if(!force&&S.verifiedSpeaker&&Date.now()<S.verifiedSpeaker.verifiedUntil
+      &&(!allowRoster||S.verifiedSpeaker.rosterChecked))return S.verifiedSpeaker;
+    status('Checking the enrolled voice sample… speak naturally for a few seconds.');
+    const features=await captureFeatures();
+    const rosterChecked=Boolean(allowRoster&&has('voice.manage'));
+    const data=await post('api/voice-identity.php',{action:'verify',features,matchAny:rosterChecked});
+    if(!data.match?.matched)throw new Error('Voice did not match an enrolled, active profile.');
+    const match=data.match;
+    const identity={
+      eventId:String(match.eventId||''),userId:Number(match.userId||0),
+      name:String(match.displayName||S.user?.name||''),
+      sessionUserMatch:Boolean(match.sessionUserMatch),
+      verifiedUntil:Date.now()+13*60*1000,rosterChecked
+    };
+    S.verifiedSpeaker=identity;
+    // A manager recognizing a different employee must never gain that
+    // employee's permissions or authenticate as them in the global Agent.
+    if(identity.sessionUserMatch){
+      S.voiceEventId=identity.eventId;
+      S.voiceUntil=identity.verifiedUntil;
+    }
+    status('Voice recognized: '+identity.name+'.',2700);
+    window.dispatchEvent(new CustomEvent('gelato-verified-speaker',{detail:identity}));
+    return identity;
   }
-
-  function speechOnce() {
-    return new Promise((resolve, reject) => {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SpeechRecognition) {
-        reject(new Error('Browser speech recognition is not available.'));
-        return;
-      }
-      const recognizer = new SpeechRecognition();
-      recognizer.lang = 'en-US';
-      recognizer.interimResults = false;
-      recognizer.continuous = false;
-      recognizer.onresult = (event) => resolve([...event.results].map((row) => row[0].transcript).join(' '));
-      recognizer.onerror = (event) => reject(new Error('Speech recognition: ' + event.error));
-      recognizer.start();
-    });
+  async function verifyVoice() {
+    if(S.voiceEventId&&Date.now()<S.voiceUntil)return true;
+    const speaker=await identifySpeaker({allowRoster:false,force:true});
+    if(!speaker.sessionUserMatch)throw new Error('Voice identity differs from the signed-in user.');
+    document.getElementById('gelato-agent-dot')?.classList.add('on');
+    return true;
   }
 
   async function talkOnce() {
@@ -467,6 +473,8 @@
     setListening,
     talkOnce,
     interruptSpeech,
+    identifySpeaker,
+    get verifiedSpeaker(){return S.verifiedSpeaker&&Date.now()<S.verifiedSpeaker.verifiedUntil?S.verifiedSpeaker:null;},
     selectThread,
     get threadId() { return S.thread; },
     get user() { return S.user; },

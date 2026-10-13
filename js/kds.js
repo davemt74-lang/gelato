@@ -57,13 +57,8 @@ window.GelatoKdsSlots={
     const entry=Number.isSafeInteger(slot)&&slot>0?allOrderSlots()[slot-1]:null;
     if(!entry)return {ok:false,text:'Order '+number+' is not active at this KDS station. There are '+allOrderSlots().length+' active orders.'};
     const ticket=entry.ticket;
-    const items=(ticket.items||[]).map(item=>{
-      let phrase=fmtQty(item.quantity)+' '+String(item.item_name_snapshot||'item');
-      if(item.option_name_snapshot)phrase+=' '+String(item.option_name_snapshot);
-      if(item.special_instructions)phrase+='. Special instruction: '+String(item.special_instructions);
-      return phrase;
-    });
-    return {ok:true,text:'Order '+slot+', ticket '+String(ticket.checkNumber||'')+(ticket.tableName?', table '+ticket.tableName:'')+'. '+items.join('. ')+'.',checkPublicId:entry.checkPublicId};
+    const natural=window.GelatoKdsSpeech?.ticket?.(ticket,slot);
+    return {ok:true,text:natural||('Order '+slot+', ticket '+String(ticket.checkNumber||'')+'.'),checkPublicId:entry.checkPublicId};
   }
 };
 function selectedTicket(){return (S.data?.board?.tickets||[]).find(t=>String(t.checkPublicId)===String(S.selectedTicketId))||null}

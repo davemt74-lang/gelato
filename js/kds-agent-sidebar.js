@@ -83,6 +83,11 @@
           <section class="kds-agent-voice"><button class="kds-agent-mic" id="kdsAgentMic" type="button" aria-label="Ask Gelato by voice">🎙</button><strong>Tap and speak</strong><p>Say “Read order 1”, “Repeat order 4”, “Read all orders”, or ask about stations and special instructions. Order numbers continue across pages: 1–8 on page 1, 9–16 on page 2, and so on. They are separate from POS ticket numbers.</p></section>
           <button class="kds-agent-toggle" id="kdsAgentListen" type="button" aria-pressed="false"><span><strong>Hands-free “Hey Gelato”</strong><small>Say Hey Gelato, then read any active order number (for example, order 12).</small></span><span class="kds-agent-switch" aria-hidden="true"></span></button><button class="kds-agent-toggle" id="kdsAgentAlways" type="button" aria-pressed="false"><span><strong>Always-on listening</strong><small>After you enable the mic, listen for order commands without the wake phrase while this KDS tab is active.</small></span><span class="kds-agent-switch" aria-hidden="true"></span></button><div class="kds-agent-mic-status" id="kdsAgentMicStatus" role="status" aria-live="polite" data-state="off"><span class="kds-agent-mic-led"></span><strong>MIC OFF</strong><span id="kdsAgentMicMessage">Select a voice mode to begin.</span></div>
           <button class="kds-agent-toggle" id="kdsAgentAnnounce" type="button" aria-pressed="false"><span><strong>Voice new-order announcements</strong><small>Read each new kitchen order—and later fired additions to that order—as it arrives.</small></span><span class="kds-agent-switch" aria-hidden="true"></span></button>
+          <section class="kds-agent-card" aria-label="Verified speaker">
+            <div class="eyebrow">Speaker recognition · existing enrolled voice samples</div>
+            <button class="kds-agent-quick" id="kdsRecognizeSpeaker" type="button">🎙 Recognize speaker</button>
+            <div id="kdsSpeakerStatus" role="status" aria-live="polite" class="kds-voice-help">Not verified. Order commands still work without a name. Per-user history is recorded only after a successful voice match.</div>
+          </section>
           <button class="kds-agent-quick" id="kdsAgentReadOrders" type="button">🔊 Read active orders now</button>
           <button class="kds-agent-quick kds-interrupt" id="kdsAgentStopSpeaking" type="button" aria-label="Stop Gelato speaking">■ Stop speaking / Interrupt</button>
           <section class="kds-agent-card kds-voice-profile" aria-label="Kitchen microphone and voice profile">
@@ -108,6 +113,7 @@
     document.getElementById('kdsAgentAlways')?.addEventListener('click', toggleAlways);
     document.getElementById('kdsAgentAnnounce')?.addEventListener('click', toggleAnnouncements);
     document.getElementById('kdsAgentReadOrders')?.addEventListener('click', readOrdersNow);
+    document.getElementById('kdsRecognizeSpeaker')?.addEventListener('click',recognizeSpeaker);
     document.getElementById('kdsAgentStopSpeaking')?.addEventListener('click',()=>{
       state.voiceQueue=[];state.speaking=false;
       window.GelatoVoiceTurns?.interrupt?.('kds-button');
@@ -208,6 +214,27 @@
     if(!started)setStatus('Microphone unavailable. Check browser permissions and the MIC status below.','warn');
   }
 
+  async function recognizeSpeaker(){
+    if(!state.ready)return;
+    const button=document.getElementById('kdsRecognizeSpeaker'),label=document.getElementById('kdsSpeakerStatus');
+    const engine=window.GelatoKdsVoice;
+    const priorMode=engine?.mode||'off';
+    button.disabled=true;if(label)label.textContent='Checking enrolled voice profile… speak naturally for a few seconds.';
+    if(priorMode!=='off')engine.setMode('off'); // release mic before acoustic sample capture
+    try{
+      const matched=await window.GelatoGlobalAgent?.identifySpeaker?.({allowRoster:true,force:true});
+      if(!matched)throw new Error('Voice identification is unavailable on this account.');
+      const labelName=clean(matched.name||'enrolled user',80);
+      if(label)label.textContent='Verified speaker: '+labelName+'. Voice orders now attach to this user’s timestamped Agent history for up to 13 minutes.';
+      setStatus('Welcome, '+labelName+'. Your kitchen voice session is ready.','good');
+    }catch(error){
+      if(label)label.textContent='Speaker not verified: '+clean(error?.message||'try again',130)+'. No employee name or history will be attached.';
+      setStatus('Voice identity could not be confirmed. Read-only kitchen commands remain available.','warn');
+    }finally{
+      button.disabled=false;
+      if(priorMode!=='off')engine?.setMode?.(priorMode);
+    }
+  }
   function toggleListening() {
     if (!state.ready) return;
     window.GelatoKdsVoice?.setMode?.(state.listenMode==='wake'?'off':'wake');
@@ -247,6 +274,7 @@
   }
 
   function ticketItemPhrase(item) {
+    if(window.GelatoKdsSpeech?.item)return window.GelatoKdsSpeech.item(item);
     const qty = fmtQty(item.quantity);
     let phrase = `${qty} ${clean(item.item_name_snapshot, 120)}`;
     if (item.option_name_snapshot) phrase += ` ${clean(item.option_name_snapshot, 80)}`;
@@ -266,7 +294,7 @@
     if (!update && Number(ticket.guestCount || 0) > 0) parts.push(`${Number(ticket.guestCount)} guests`);
     const header = parts.join(', ');
     const itemText = items.map(ticketItemPhrase).join('. ');
-    return `${header}. ${itemText}.`;
+    return window.GelatoKdsSpeech?.ticket?.(ticket,slot>=0?slot+1:null,{update,items})||`${header}. ${itemText}.`;
   }
 
   function queueSpeech(text) {

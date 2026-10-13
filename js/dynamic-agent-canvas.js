@@ -6,6 +6,7 @@
     open: false,
     mounted: false,
     activeThread: '',
+    historyMode:false,historyOffset:0,historyNextOffset:null,historyThreads:[],historyMessages:[],historyCursor:null,
     loading: false,
     lastFocus: null,
     previousOverflow: '',
@@ -42,7 +43,7 @@
       .gda-shell{height:100%;display:grid;grid-template-columns:260px minmax(0,1fr);overflow:hidden}
       .gda-side{border-right:1px solid #dfdfd9;background:#f4f4f0;padding:18px;display:flex;flex-direction:column;gap:14px;min-width:0}
       .gda-brand{display:flex;align-items:center;gap:10px}.gda-orb{width:38px;height:38px;border-radius:13px;display:grid;place-items:center;background:#151815;color:#fff;font-weight:900}.gda-brand strong{font-size:14px}.gda-brand span{display:block;color:#777a74;font-size:10px;margin-top:2px}
-      .gda-new{height:40px;border:1px solid #d6d6d0;border-radius:12px;background:#fff;color:#151815;font-weight:800;cursor:pointer}.gda-thread-list{display:grid;gap:6px;overflow:auto;min-height:0}.gda-thread{display:block;width:100%;border:0;border-radius:11px;padding:10px;background:transparent;text-align:left;cursor:pointer;color:#30322f}.gda-thread:hover,.gda-thread.active{background:#fff;box-shadow:0 4px 14px rgba(20,20,18,.06)}.gda-thread strong{display:block;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.gda-thread small{display:block;margin-top:4px;color:#858781;font-size:9px}
+      .gda-new{height:40px;border:1px solid #d6d6d0;border-radius:12px;background:#fff;color:#151815;font-weight:800;cursor:pointer}.gda-thread-list{display:grid;gap:6px;overflow:auto;min-height:0}.gda-thread{display:block;width:100%;border:0;border-radius:11px;padding:10px;background:transparent;text-align:left;cursor:pointer;color:#30322f}.gda-thread:hover,.gda-thread.active{background:#fff;box-shadow:0 4px 14px rgba(20,20,18,.06)}.gda-history-toggle,.gda-history-more,.gda-load-older{background:#eef5ef;color:#18452c;border:1px solid #b9d0c0;border-radius:10px;padding:8px 10px;font-size:11px;font-weight:800;cursor:pointer}.gda-history-toggle,.gda-history-more{width:100%}.gda-load-older{margin:10px auto 0;max-width:220px}.gda-time{display:block;margin-top:6px;font-size:10px;color:#718276}.gda-thread strong{display:block;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.gda-thread small{display:block;margin-top:4px;color:#858781;font-size:9px}
       .gda-main{min-width:0;min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr) auto;background:rgba(255,255,255,.7)}
       .gda-head{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:17px 24px;border-bottom:1px solid #e2e2dc;background:rgba(255,255,255,.88)}.gda-head-copy{min-width:0}.gda-eyebrow{font-size:9px;letter-spacing:.12em;text-transform:uppercase;font-weight:900;color:#ef6540}.gda-head h2{margin:4px 0 0;font-size:18px}.gda-context{margin-top:4px;color:#777a74;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.gda-close{width:38px;height:38px;border:1px solid #d8d8d2;border-radius:12px;background:#fff;color:#151815;font-size:22px;cursor:pointer}
       .gda-messages{overflow:auto;padding:28px clamp(18px,4vw,54px);scroll-behavior:smooth}.gda-message{max-width:900px;margin:0 auto 18px;display:flex;gap:10px;align-items:flex-start}.gda-message.user{justify-content:flex-end}.gda-avatar{width:31px;height:31px;border-radius:10px;display:grid;place-items:center;background:#ef6540;color:#fff;font-size:11px;font-weight:900;flex:0 0 31px}.gda-message.user .gda-avatar{order:2;background:#151815}.gda-bubble{max-width:min(760px,86%);padding:13px 15px;border:1px solid #dfdfd9;border-radius:16px;background:#fff;box-shadow:0 5px 18px rgba(20,20,18,.04);font-size:13px;line-height:1.55;white-space:pre-wrap}.gda-message.user .gda-bubble{background:#151815;color:#fff;border-color:#151815}.gda-source-row{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}.gda-source{border:1px solid #d9e2ec;background:#f4f8fc;color:#355f89;border-radius:999px;padding:3px 7px;font-size:9px;font-weight:800}.gda-empty{max-width:760px;margin:15vh auto 0;text-align:center;color:#777a74}.gda-empty strong{display:block;color:#151815;font-size:24px;letter-spacing:-.03em}.gda-empty p{line-height:1.6}
@@ -82,9 +83,9 @@
     installStyles();removeLegacyCanvasButton();
     const root=document.createElement('section');root.id='gelato-dynamic-agent';
     root.setAttribute('role','dialog');root.setAttribute('aria-modal','true');root.setAttribute('aria-label','Gelato Agent chat canvas');
-    root.innerHTML=`<div class="gda-shell"><aside class="gda-side"><div class="gda-brand"><div class="gda-orb">G</div><div><strong>Gelato Agent</strong><span>Main restaurant brain</span></div></div><button class="gda-new" type="button">+ New conversation</button><div class="gda-thread-list"></div></aside><main class="gda-main"><header class="gda-head"><div class="gda-head-copy"><div class="gda-eyebrow">Dynamic Agent Canvas</div><h2>Gelato Agent</h2><div class="gda-context"></div></div><button class="gda-close" type="button" aria-label="Close Agent canvas">×</button></header><div class="gda-messages"></div><div class="gda-compose"><div class="gda-status"></div><div class="gda-voice-settings"><label>Background <select class="gda-voice-environment" aria-label="Voice background profile"><option value="quiet">Quiet</option><option value="standard">Normal</option><option value="noisy">Busy kitchen / TV</option></select></label><label>Gelato voice <select class="gda-speaking-voice" aria-label="Speaking voice"><option value="">System default</option></select></label></div><div class="gda-compose-box"><textarea class="gda-input" rows="1" placeholder="Ask Gelato about this page, staff, schedules, menus, sales, operations…"></textarea><button class="gda-tool" type="button" title="Talk once">🎙</button><button class="gda-interrupt" type="button" title="Stop speaking" aria-label="Interrupt Agent speech">■</button><button class="gda-send" type="button" title="Send">↑</button></div></div></main></div>`;
+    root.innerHTML=`<div class="gda-shell"><aside class="gda-side"><div class="gda-brand"><div class="gda-orb">G</div><div><strong>Gelato Agent</strong><span>Main restaurant brain</span></div></div><button class="gda-new" type="button">+ New conversation</button><div class="gda-thread-list"></div><button class="gda-history-toggle" type="button">Full chat history</button><button class="gda-history-more" type="button" hidden>Load older conversations</button></aside><main class="gda-main"><header class="gda-head"><div class="gda-head-copy"><div class="gda-eyebrow">Dynamic Agent Canvas</div><h2>Gelato Agent</h2><div class="gda-context"></div></div><button class="gda-close" type="button" aria-label="Close Agent canvas">×</button></header><button class="gda-load-older" type="button" hidden>↑ Load earlier messages</button><div class="gda-messages"></div><div class="gda-compose"><div class="gda-status"></div><div class="gda-voice-settings"><label>Background <select class="gda-voice-environment" aria-label="Voice background profile"><option value="quiet">Quiet</option><option value="standard">Normal</option><option value="noisy">Busy kitchen / TV</option></select></label><label>Gelato voice <select class="gda-speaking-voice" aria-label="Speaking voice"><option value="">System default</option></select></label></div><div class="gda-compose-box"><textarea class="gda-input" rows="1" placeholder="Ask Gelato about this page, staff, schedules, menus, sales, operations…"></textarea><button class="gda-tool" type="button" title="Talk once">🎙</button><button class="gda-interrupt" type="button" title="Stop speaking" aria-label="Interrupt Agent speech">■</button><button class="gda-send" type="button" title="Send">↑</button></div></div></main></div>`;
     document.body.appendChild(root);
-    root.querySelector('.gda-close').addEventListener('click',close);root.querySelector('.gda-new').addEventListener('click',newThread);root.querySelector('.gda-send').addEventListener('click',submit);root.querySelector('.gda-tool').addEventListener('click',()=>window.GelatoGlobalAgent?.talkOnce?.());root.querySelector('.gda-interrupt').addEventListener('click',()=>window.GelatoGlobalAgent?.interruptSpeech?.('agent-canvas-button'));setupVoiceSettings(root);root.querySelector('.gda-input').addEventListener('keydown',(event)=>{if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();submit();}});root.addEventListener('click',(event)=>{const thread=event.target.closest('[data-gda-thread]');if(thread)openThread(thread.dataset.gdaThread);});state.mounted=true;
+    root.querySelector('.gda-close').addEventListener('click',close);root.querySelector('.gda-history-toggle').addEventListener('click',toggleFullHistory);root.querySelector('.gda-history-more').addEventListener('click',loadMoreHistoryThreads);root.querySelector('.gda-load-older').addEventListener('click',loadOlderMessages);root.querySelector('.gda-new').addEventListener('click',newThread);root.querySelector('.gda-send').addEventListener('click',submit);root.querySelector('.gda-tool').addEventListener('click',()=>window.GelatoGlobalAgent?.talkOnce?.());root.querySelector('.gda-interrupt').addEventListener('click',()=>window.GelatoGlobalAgent?.interruptSpeech?.('agent-canvas-button'));setupVoiceSettings(root);root.querySelector('.gda-input').addEventListener('keydown',(event)=>{if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();submit();}});root.addEventListener('click',(event)=>{const thread=event.target.closest('[data-gda-thread]');if(thread)openThread(thread.dataset.gdaThread);});state.mounted=true;
   }
 
   function mountDrawer() {
@@ -102,7 +103,7 @@
   async function json(url,opt={}) {const response=await fetch(url,{cache:'no-store',headers:{Accept:'application/json',...(opt.headers||{})},...opt});const data=await response.json().catch(()=>({ok:false,message:'Invalid Agent response.'}));if(!response.ok||!data.ok)throw new Error(data.message||'Agent request failed.');return data;}
   function setStatus(text='') {const n=document.querySelector('.gda-status');if(n)n.textContent=text;}
   function renderThreads(threads=[]) {const list=document.querySelector('.gda-thread-list');if(!list)return;list.innerHTML=threads.length?threads.map(t=>`<button class="gda-thread ${t.public_id===state.activeThread?'active':''}" type="button" data-gda-thread="${esc(t.public_id)}"><strong>${esc(t.title||'Conversation')}</strong><small>${Number(t.message_count||0)} messages · ${esc(fmt(t.last_message_at||t.created_at))}</small></button>`).join(''):'<div class="gda-empty"><p>No conversations yet.</p></div>';}
-  function renderMessages(messages=[]) {const root=document.querySelector('.gda-messages');if(!root)return;if(!messages.length){root.innerHTML='<div class="gda-empty"><strong>Ask from anywhere.</strong><p>The page you were using is still open underneath this canvas. Gelato keeps the same conversation, permissions, and restaurant context.</p></div>';return;}root.innerHTML=messages.map(m=>`<article class="gda-message ${m.role==='user'?'user':'agent'}"><div class="gda-avatar">${m.role==='user'?'Y':'G'}</div><div class="gda-bubble">${esc(m.content)}${Array.isArray(m.sources)&&m.sources.length?`<div class="gda-source-row">${m.sources.map(s=>`<span class="gda-source">${esc(s)}</span>`).join('')}</div>`:''}</div></article>`).join('');root.scrollTop=root.scrollHeight;}
+  function renderMessages(messages=[]) {const root=document.querySelector('.gda-messages');if(!root)return;if(!messages.length){root.innerHTML='<div class="gda-empty"><strong>Ask from anywhere.</strong><p>The page you were using is still open underneath this canvas. Gelato keeps the same conversation, permissions, and restaurant context.</p></div>';return;}root.innerHTML=messages.map(m=>`<article class="gda-message ${m.role==='user'?'user':'agent'}"><div class="gda-avatar">${m.role==='user'?'Y':'G'}</div><div class="gda-bubble">${esc(m.content)}<span class="gda-time">${esc(fmt(m.created_at||m.createdAt))} · ${esc(m.channel||'text')}</span>${Array.isArray(m.sources)&&m.sources.length?`<div class="gda-source-row">${m.sources.map(s=>`<span class="gda-source">${esc(s)}</span>`).join('')}</div>`:''}</div></article>`).join('');root.scrollTop=root.scrollHeight;}
   function renderDrawerMessages(messages=[]) {const root=document.querySelector('.gar-messages');if(!root)return;const recent=messages.slice(-8);if(!recent.length&&!state.drawerPending){root.innerHTML='<div class="gar-empty">Ask Gelato from the chat bar. Responses stay here while you keep working on this page.</div>';return;}root.innerHTML=recent.map(m=>`<article class="gar-message ${m.role==='user'?'user':'agent'}"><div class="gar-avatar">${m.role==='user'?'Y':'G'}</div><div class="gar-bubble">${esc(m.content)}${Array.isArray(m.sources)&&m.sources.length?`<div class="gar-sources">${m.sources.map(s=>`<span class="gar-source">${esc(s)}</span>`).join('')}</div>`:''}</div></article>`).join('');if(state.drawerPending)root.insertAdjacentHTML('beforeend','<div class="gar-pending"><span class="gar-pulse"></span><span>Gelato is checking the restaurant context…</span></div>');root.scrollTop=root.scrollHeight;}
 
   async function refresh() {
@@ -116,9 +117,60 @@
     try{const bootstrap=await json('api/agent-workspace.php?action=bootstrap');state.activeThread=window.GelatoGlobalAgent?.threadId||state.activeThread||bootstrap.activeThread||'';if(!state.activeThread){renderDrawerMessages([]);return;}const thread=await json('api/agent-workspace.php?action=thread&id='+encodeURIComponent(state.activeThread));renderDrawerMessages(thread.messages||[]);}
     finally{state.drawerLoading=false;if(state.drawerRefreshQueued){state.drawerRefreshQueued=false;await refreshDrawer();}}
   }
-  async function openThread(id) {if(!id)return;state.activeThread=String(id);window.GelatoGlobalAgent?.selectThread?.(state.activeThread);await refreshThreadsAndMessages();}
-  async function refreshThreadsAndMessages() {const list=await json('api/agent-workspace.php?action=threads');renderThreads(list.threads||[]);if(state.activeThread){const data=await json('api/agent-workspace.php?action=thread&id='+encodeURIComponent(state.activeThread));renderMessages(data.messages||[]);const h=document.querySelector('.gda-head h2');if(h)h.textContent=data.thread?.title||'Gelato Agent';}}
-  async function newThread() {if(!window.GelatoGlobalAgent)return;const bootstrap=await json('api/agent-workspace.php?action=bootstrap');const response=await json('api/agent-workspace.php',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':bootstrap.csrf},body:JSON.stringify({action:'new_thread',csrf_token:bootstrap.csrf})});state.activeThread=response.thread.public_id;window.GelatoGlobalAgent.selectThread(state.activeThread);await refreshThreadsAndMessages();document.querySelector('.gda-input')?.focus();}
+  async function openThread(id) {
+    if(!id)return;
+    state.activeThread=String(id);
+    if(state.historyMode){await loadHistoryPage(true);return;}
+    window.GelatoGlobalAgent?.selectThread?.(state.activeThread);
+    await refreshThreadsAndMessages();
+  }
+  async function refreshThreadsAndMessages() {if(state.historyMode)return;const list=await json('api/agent-workspace.php?action=threads');renderThreads(list.threads||[]);if(state.activeThread){const data=await json('api/agent-workspace.php?action=thread&id='+encodeURIComponent(state.activeThread));renderMessages(data.messages||[]);const h=document.querySelector('.gda-head h2');if(h)h.textContent=data.thread?.title||'Gelato Agent';}}
+  function updateHistoryControls(){
+    const toggle=document.querySelector('.gda-history-toggle'),more=document.querySelector('.gda-history-more'),older=document.querySelector('.gda-load-older');
+    if(toggle)toggle.textContent=state.historyMode?'Return to active conversations':'Full chat history';
+    if(more)more.hidden=!state.historyMode||state.historyNextOffset===null;
+    if(older)older.hidden=!state.historyMode||state.historyCursor===null;
+  }
+  async function toggleFullHistory(){
+    state.historyMode=!state.historyMode;
+    state.historyOffset=0;state.historyNextOffset=null;state.historyThreads=[];
+    state.historyMessages=[];state.historyCursor=null;
+    if(state.historyMode)await loadMoreHistoryThreads();
+    else {const active=await json('api/agent-workspace.php?action=threads');state.activeThread=window.GelatoGlobalAgent?.threadId||active.threads?.[0]?.public_id||'';await refreshThreadsAndMessages();}
+    updateHistoryControls();
+  }
+  async function loadMoreHistoryThreads(){
+    if(!state.historyMode)return;
+    const offset=state.historyNextOffset===null&&state.historyThreads.length?null:state.historyNextOffset??0;
+    if(offset===null)return;
+    const data=await json('api/agent-workspace.php?action=history_threads&offset='+offset);
+    state.historyThreads.push(...(data.threads||[]));
+    state.historyNextOffset=data.nextOffset;
+    renderThreads(state.historyThreads);
+    updateHistoryControls();
+    if(!state.historyMessages.length&&state.historyThreads.length){
+      state.activeThread=state.historyThreads[0].public_id;
+      await loadHistoryPage(true);
+    }
+  }
+  async function loadHistoryPage(reset=false){
+    if(!state.activeThread)return;
+    if(reset){state.historyMessages=[];state.historyCursor=null;}
+    const before=reset?0:state.historyCursor;
+    if(!reset&&!before)return;
+    const root=document.querySelector('.gda-messages'),previousHeight=root?.scrollHeight||0,previousTop=root?.scrollTop||0;
+    const url='api/agent-workspace.php?action=history_page&id='+encodeURIComponent(state.activeThread)+(before?'&before='+before:'');
+    const page=await json(url);
+    state.historyMessages=reset?(page.messages||[]):[...(page.messages||[]),...state.historyMessages];
+    state.historyCursor=page.nextBeforeId;
+    renderMessages(state.historyMessages);
+    if(!reset&&root)root.scrollTop=root.scrollHeight-previousHeight+previousTop;
+    const title=document.querySelector('.gda-head h2');
+    if(title)title.textContent=(page.thread?.title||'Gelato Agent')+(page.thread?.archived_at?' (archived)':'');
+    updateHistoryControls();
+  }
+  async function loadOlderMessages(){await loadHistoryPage(false);}
+  async function newThread() {if(!window.GelatoGlobalAgent)return;if(state.historyMode){state.historyMode=false;updateHistoryControls();}const bootstrap=await json('api/agent-workspace.php?action=bootstrap');const response=await json('api/agent-workspace.php',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':bootstrap.csrf},body:JSON.stringify({action:'new_thread',csrf_token:bootstrap.csrf})});state.activeThread=response.thread.public_id;window.GelatoGlobalAgent.selectThread(state.activeThread);await refreshThreadsAndMessages();document.querySelector('.gda-input')?.focus();}
 
   function open(options={}) {
     if(!isWorkspacePage()){openDrawer(options);return;}

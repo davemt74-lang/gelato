@@ -34,7 +34,8 @@
     const response=await fetch('api/kds-agent.php',{
       method:'POST',cache:'no-store',credentials:'same-origin',
       headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-Token':window.KDS_CONFIG?.csrf||''},
-      body:JSON.stringify({csrf_token:window.KDS_CONFIG?.csrf||'',message,pageContext:{
+      body:JSON.stringify({csrf_token:window.KDS_CONFIG?.csrf||'',message,
+        voiceEventId:window.GelatoGlobalAgent?.verifiedSpeaker?.eventId||'',pageContext:{
         module:'kds',locationId:ctx.locationId,stationPublicId:ctx.stationPublicId,
         checkPublicId:'',visiblePage:ctx.page,visibleSlots:ctx.slots,allSlots:ctx.allSlots
       }})
@@ -55,12 +56,17 @@
     const slot=phrase.match(/\b(?:order|slot)\s*(?:number\s*|#\s*)?([1-9]\d*)\b/);
     let answer;
     if(slot && /^(?:read|repeat|tell me|what|what s|whats|show|status|check|order|ticket|slot)\b/.test(phrase)){
-      answer=readSlot(slot[1]);
+      try{answer=await askKitchen('read order '+slot[1]);}
+      catch(error){answer=readSlot(slot[1]);status('warn','Live voice history unavailable: '+(error.message||'server not responding'));}
     } else if(/^(?:read|repeat|list|tell me)\s+(?:all\s+)?(?:the\s+)?(?:active\s+|current\s+)?orders?\b/.test(phrase)){
-      answer=readAll();
+      try{answer=await askKitchen('read all orders');}
+      catch(error){answer=readAll();status('warn','Using local kitchen readout: '+(error.message||'server not responding'));}
     } else if(/^(?:status|kitchen status|how many orders)\b/.test(phrase)){
-      const current=snapshot();const count=current.allSlots?.length||0;
-      answer=count+' active orders across '+Math.max(1,Math.ceil(count/8))+' KDS page(s), eight displayed at a time. '+(count?'Say read any order number from 1 to '+count+'.':'Waiting for kitchen orders.');
+      try{answer=await askKitchen('kitchen status');}
+      catch(error){const current=snapshot(),count=current.allSlots?.length||0;
+        answer=count+' active KDS orders, eight visible per page. '+(count?'Say read any order number from 1 to '+count+'.':'Waiting for kitchen orders.');
+        status('warn','Kitchen API unavailable; read-only local status shown.');
+      }
     } else if(/^(?:help|commands|what can i say)\b/.test(phrase)){
       answer='Say read order 1, repeat order 12, read all orders, or kitchen status. Orders are numbered across all KDS pages, eight per screen. Hands-free mode also recognizes Hey Gelato.';
     } else if(/^(?:stop listening|turn off voice|microphone off)\b/.test(phrase)){
