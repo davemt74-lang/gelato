@@ -69,6 +69,13 @@ on:
       - 'assets/js/glasses-camera-runtime.js'
       - 'tests/glasses-camera-runtime.test.js'
       - 'assets/js/glasses-camera-workspace.js'
+      - 'assets/js/glasses-ingredient-training-plan.js'
+      - 'assets/js/glasses-ingredient-training-studio.js'
+      - 'includes/glasses-ingredient-training.php'
+      - 'api/glasses-ingredient-training.php'
+      - 'tests/glasses-ingredient-training.test.js'
+      - 'tests/glasses-ingredient-training-contract.php'
+      - 'docs/GLASSES-SECTION267-INGREDIENT-TRAINING-ACCEPTANCE.md'
       - 'assets/js/glasses-production-photo-flow.js'
       - 'api/glasses-photo-notifications.php'
       - 'includes/glasses-customer-photo-notifications.php'
@@ -367,6 +374,9 @@ jobs:
           node --check assets/js/glasses-camera-runtime.js
           node tests/glasses-camera-runtime.test.js
           node --check assets/js/glasses-camera-workspace.js
+          node --check assets/js/glasses-ingredient-training-plan.js
+          node --check assets/js/glasses-ingredient-training-studio.js
+          node tests/glasses-ingredient-training.test.js
           node --check assets/js/glasses-user-display-preferences.js
           php -l api/glasses-user-preferences.php
           php tests/glasses-user-display-preferences-contract.php
@@ -411,6 +421,10 @@ jobs:
           php tests/glasses-employee-runtime-contract.php
           node tests/glasses-hud-notifications.test.js
           node tests/glasses-session-camera-badges.test.js
+          php -l includes/glasses-ingredient-training.php
+          php -l api/glasses-ingredient-training.php
+          php -l tests/glasses-ingredient-training-contract.php
+          php tests/glasses-ingredient-training-contract.php
           php tests/glasses-live-kds-contract.php
           node --check assets/js/glasses-web-simulator.js
           node --check assets/js/glasses-hud-notifications.js
