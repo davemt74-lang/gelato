@@ -25,9 +25,10 @@ function render(){
  const choices=catalog.runtimes||[];
  select.innerHTML=(cfg.runtimePublicId?'':'<option value="">New runtime…</option>')+
    choices.map(r=>'<option value="'+esc(r.publicId)+'">'+esc(r.employeeName)+' · '+esc(r.deviceName)+'</option>').join('');
- select.value=cfg.runtimePublicId||choices.some(x=>x.publicId===previous)?(cfg.runtimePublicId||previous):'';
+ select.value=cfg.runtimePublicId||(choices.some(x=>x.publicId===previous)?previous:'');
  if(cfg.runtimePublicId)select.value=cfg.runtimePublicId;
  const chosen=choices.find(r=>r.publicId===select.value)||null;
+ renderTraining(chosen);
  employee.innerHTML='<option value="">Assign employee…</option>'+
    (catalog.employees||[]).map(e=>'<option value="'+e.id+'">'+esc(e.displayName)+(e.employeeNumber?' · '+esc(e.employeeNumber):'')+'</option>').join('');
  if(chosen&&!(catalog.employees||[]).some(e=>e.id===chosen.employeeUserId))
@@ -42,10 +43,32 @@ function render(){
    (bound?'ACTIVE · '+bound.employeeName:'RUNTIME NOT AVAILABLE'):
    (chosen?'Assigned: '+chosen.employeeName+' · '+chosen.deviceName:'Choose paired glasses and an employee'));
 }
+
+function renderTraining(chosen){
+ const training=byId('glassesRuntimeTrainingSelect');
+ if(!training)return;
+ const old=training.value;
+ const assignments=(catalog.trainingAssignments||[]).filter(a=>chosen&&a.employeeUserId===chosen.employeeUserId&&
+   (a.deviceId==null||a.deviceId===chosen.deviceId));
+ const active=(catalog.activeTrainingSessions||[]).find(s=>chosen&&s.employeeUserId===chosen.employeeUserId&&s.deviceId===chosen.deviceId)||null;
+ training.innerHTML='<option value="">Choose assigned program…</option>'+
+   assignments.map(a=>'<option value="'+esc(a.publicId)+'">'+esc(a.programName)+' · '+esc(a.mode)+' · '+esc(a.status)+'</option>').join('');
+ training.value=assignments.some(a=>a.publicId===old)?old:(active?.assignmentPublicId||'');
+ const privileged=(catalog.employees||[]).length>0,inside=!!cfg.runtimePublicId&&!!bound&&!lost;
+ training.disabled=!inside||!!active||!privileged;
+ byId('glassesRuntimeTrainingStart').disabled=!inside||!!active||!privileged||!training.value;
+ byId('glassesRuntimeTrainingEnd').disabled=!inside||!active||!privileged;
+ const label=byId('glassesRuntimeTrainingStatus');
+ if(label)label.textContent=active
+   ?'ACTIVE · Existing V11 training session '+active.publicId
+   :assignments.length?'Existing V11 training assignments available; select a program to start.'
+      :'No eligible training assignment. Assign one through Vision Lab.';
+}
 function mount(){
  if(mounted)return;mounted=true;
  const select=byId('glassesRuntimeSelect');
  select.addEventListener('change',render);
+ byId('glassesRuntimeTrainingSelect').addEventListener('change',()=>renderTraining(catalog.runtimes?.find(r=>r.publicId===select.value)||null));
  byId('glassesRuntimeNew').addEventListener('click',async()=>{
    const device=devices.find(d=>d.publicId===byId('deviceSelect')?.value);
    const employeeId=Number(byId('glassesRuntimeEmployee').value);
@@ -56,6 +79,27 @@ function mount(){
      await refresh();select.value=d.runtime.publicId;render();
      status('Created · '+d.runtime.employeeName+'. Click Open to launch isolated runtime.');
    }catch(e){status(e.message,true);}
+ });
+ byId('glassesRuntimeTrainingStart').addEventListener('click',async()=>{
+   const chosen=catalog.runtimes?.find(r=>r.publicId===select.value);
+   if(!cfg.runtimePublicId||!bound||!chosen||chosen.publicId!==bound.publicId)return;
+   const assignmentPublicId=byId('glassesRuntimeTrainingSelect').value;
+   if(!assignmentPublicId)return;
+   try{
+     const result=await post('runtime.training_start',{runtimePublicId:bound.publicId,assignmentPublicId});
+     await refresh();const label=byId('glassesRuntimeTrainingStatus');
+     if(label)label.textContent='Started existing training session '+result.session.public_id;
+   }catch(e){const label=byId('glassesRuntimeTrainingStatus');if(label)label.textContent=e.message;}
+ });
+ byId('glassesRuntimeTrainingEnd').addEventListener('click',async()=>{
+   if(!cfg.runtimePublicId||!bound)return;
+   const active=(catalog.activeTrainingSessions||[]).find(s=>s.employeeUserId===bound.employeeUserId&&s.deviceId===bound.deviceId);
+   if(!active)return;
+   if(!window.confirm('Mark this existing training session complete? Cancel to leave it active.'))return;
+   try{
+     await post('runtime.training_end',{runtimePublicId:bound.publicId,sessionPublicId:active.publicId,status:'completed'});
+     await refresh();
+   }catch(e){const label=byId('glassesRuntimeTrainingStatus');if(label)label.textContent=e.message;}
  });
  byId('glassesRuntimeOpen').addEventListener('click',()=>{
    const id=select.value;
