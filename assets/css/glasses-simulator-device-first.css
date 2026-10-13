@@ -401,3 +401,115 @@ html,body{max-width:100%;overflow-x:hidden}
 #glassesStage .hud-orders-left .hud-order-row{pointer-events:auto}
 #glassesStage.frame-none .hud-order-row .age{grid-column:auto!important}
 #glassesStage .hud-validation-panel:not([hidden]){display:grid}
+
+
+/* HUD 264 — unified, compact kitchen control system and live voice input. */
+.sgv-tabbed-console .sgv-tabs{
+  display:flex;align-items:stretch;justify-content:space-between;gap:5px;
+  border-bottom:1px solid rgba(109,170,127,.25);
+}
+.sgv-tabbed-console .sgv-tabs [role="tab"]{
+  min-width:0;display:inline-flex;align-items:center;justify-content:center;
+  flex:1 1 0;gap:6px;font-weight:800;font-size:11px;
+  border:1px solid transparent;border-bottom:2px solid transparent;
+  background:transparent;color:#a9cabb;border-radius:8px 8px 0 0;
+  padding:10px 5px;transition:background-color .14s,border-color .14s,color .14s;
+}
+.sgv-tabbed-console .sgv-tabs [role="tab"][aria-selected="true"]{
+  background:#1b4530;color:#f3fff6;border-bottom-color:#78e5a3;
+}
+.sgv-tabbed-console .sgv-tabs [role="tab"]:hover{background:#173626;color:#e2fbe7}
+.sgv-tabbed-console .sgv-tabs [role="tab"]:focus-visible,
+.sgv-tabbed-console .gc-camera-tabs [role="tab"]:focus-visible,
+.sgv-tabbed-console button:focus-visible{outline:2px solid #b1ffd0;outline-offset:2px}
+.sgv-voice-dot,.gc-camera-status-dot{
+  display:inline-block;flex:0 0 9px;width:9px;height:9px;
+  border-radius:50%;background:#5b6b61;box-shadow:0 0 0 1px rgba(255,255,255,.12);
+}
+.sgv-voice-dot[data-state="active"],
+.gc-camera-status-dot[data-state="enabled"]{
+  background:#4dfb8b;box-shadow:0 0 0 1px #215c35,0 0 7px rgba(73,250,130,.65);
+}
+.sgv-voice-dot[data-state="pending"]{background:#f5c45d;box-shadow:0 0 6px #c39148}
+.sgv-camera-active-count,.gc-session-new-count{
+  min-width:21px;height:19px;padding:1px 5px;display:inline-flex;
+  justify-content:center;align-items:center;border-radius:7px;
+  background:#1c5334;border:1px solid #4fbd73;color:#d1ffe0;
+  font-size:10px;line-height:1;font-weight:850;font-variant-numeric:tabular-nums;
+}
+.sgv-camera-unread-dot{
+  display:inline-block;flex:0 0 6px;width:6px;height:6px;
+  background:#4afa80;border-radius:50%;
+}
+.sgv-camera-unread-dot[hidden]{display:none!important}
+@keyframes gc-new-photo-pulse{
+  0%,100%{box-shadow:0 0 0 0 rgba(39,240,107,.05);border-color:rgba(39,240,107,.5)}
+  50%{box-shadow:0 0 0 3px rgba(39,240,107,.28),0 0 13px rgba(39,240,107,.6);border-color:#55ff9a}
+}
+.sgv-tabbed-console .sgv-tabs [role="tab"].has-unread,
+.sgv-tabbed-console .gc-camera-tabs [role="tab"].has-unread{
+  animation:gc-new-photo-pulse 1.4s ease-in-out infinite;
+}
+.sgv-tabbed-console .gc-camera-tabs{
+  display:flex;gap:5px;overflow-x:auto;scrollbar-width:thin;padding:4px 2px 7px;
+}
+.sgv-tabbed-console .gc-camera-tabs [role="tab"]{
+  display:inline-flex;gap:5px;align-items:center;justify-content:center;
+  flex:1 0 auto;min-width:92px;padding:9px 7px;
+  border:1px solid #315940;border-radius:9px;
+  background:#0f2419;color:#c6ead3;font-size:10px;font-weight:780;
+}
+.sgv-tabbed-console .gc-camera-tabs [role="tab"][aria-selected="true"]{
+  background:#205438;border-color:#64c888;color:#eafff1;
+}
+.sgv-tabbed-console .gc-camera-tabs [role="tab"]:hover{background:#244c35}
+.sgv-tabbed-console .sim-navigation-panel .sim-navigation-group button,
+.sgv-tabbed-console .console-card button,
+.sgv-tabbed-console .gc-capture-button,
+.sgv-tabbed-console .sgv-advanced-kds button,
+.sim-stage-panel .sim-glasses-quick-actions button{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-height:36px;min-width:0;white-space:normal;
+  border:1px solid #45815c;border-radius:9px;
+  background:linear-gradient(165deg,#27583a,#183e2a);
+  color:#eafff1;padding:8px 11px;
+  font-size:11px;font-family:inherit;font-weight:800;line-height:1.25;
+  text-align:center;cursor:pointer;
+  transition:background-color .15s,border-color .15s,transform .15s;
+}
+.sgv-tabbed-console .sim-navigation-panel .sim-navigation-group button:hover:not(:disabled),
+.sgv-tabbed-console .console-card button:hover:not(:disabled),
+.sgv-tabbed-console .gc-capture-button:hover:not(:disabled),
+.sim-stage-panel .sim-glasses-quick-actions button:hover:not(:disabled){
+  background:linear-gradient(165deg,#347d50,#1d5436);border-color:#7ae6a1;
+}
+.sgv-tabbed-console button:disabled,.sim-stage-panel .sim-glasses-quick-actions button:disabled{
+  opacity:.42;cursor:not-allowed;filter:saturate(.48);box-shadow:none;
+}
+.sgv-tabbed-console .sim-nav-voice-button[aria-pressed="true"]{
+  background:#266b41;border-color:#78f3a8;
+}
+.sgv-live-transcript{
+  display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:10px;
+  min-height:38px;padding:9px 11px;margin:0 0 8px;
+  border:1px solid #2f6746;border-radius:9px;
+  background:#101e17;color:#d3f8df;
+}
+.sgv-live-transcript .sgv-transcript-label{
+  color:#77cda0;font-size:9px;font-weight:900;letter-spacing:.08em;white-space:nowrap;
+}
+.sgv-live-transcript #simVoiceTranscriptText{
+  font-size:11px;line-height:1.4;overflow-wrap:anywhere;
+}
+.sgv-user-preferences .inline-actions{display:flex;align-items:center;gap:8px}
+.sgv-user-preferences [data-state="saved"]{color:#83e7a7}
+.sgv-user-preferences [data-state="error"]{color:#ffbba7}
+@media(prefers-reduced-motion:reduce){
+  .sgv-tabbed-console .sgv-tabs [role="tab"].has-unread,
+  .sgv-tabbed-console .gc-camera-tabs [role="tab"].has-unread{animation:none!important}
+}
+@media(max-width:680px){
+  .sgv-tabbed-console .sgv-tabs [role="tab"]{font-size:10px;gap:4px;padding:9px 3px}
+  .sgv-tabbed-console .gc-camera-tabs [role="tab"]{min-width:95px}
+  .sgv-live-transcript{grid-template-columns:1fr;gap:3px}
+}
