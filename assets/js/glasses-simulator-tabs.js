@@ -111,6 +111,18 @@
       if(voiceGroup)move(voiceGroup,voiceBlock);
       move($('simVoiceFeedback'),voiceBlock);
         voice.appendChild(voiceBlock);
+      // Kitchen controls are available under the glasses at all times.
+      // Keep additional note/ticket actions accessible, not duplicated onscreen.
+      const advanced=document.createElement('details');
+      advanced.className='sgv-advanced-kds';
+      const summary=document.createElement('summary');
+      summary.textContent='More KDS actions & notes';
+      advanced.appendChild(summary);
+      for(const group of groups){
+        if(group.classList.contains('sim-kitchen-commands')||group.classList.contains('sim-kitchen-note'))
+          advanced.appendChild(group);
+      }
+      nav.appendChild(advanced);
       move(nav,overview);
     }
     const diagnostics=document.createElement('section');diagnostics.className='console-card sgv-voice-cert';
@@ -142,6 +154,8 @@
     }
     // Legacy advanced wrapper was an organization aid, not a feature. Its cards are moved intact.
     rail.querySelector('#simAdvancedSettings')?.remove();
+    // Default the long engineering gate report to collapsed during normal cooking.
+    const audit=$('simAuditDetails');if(audit)audit.open=false;
     window.addEventListener('gelato-glasses-voice-device-change',voiceUI);
     window.addEventListener('gelato-voice-presence-change',voiceUI);
     window.addEventListener('gelato-glasses-voice-status',voiceUI);
