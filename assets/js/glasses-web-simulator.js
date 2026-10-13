@@ -1567,6 +1567,10 @@ async function kitchenCommand(action,{spoken=false}={}){
   if(state.build)return {ok:false,message:'Finish the active glasses build before changing the kitchen workflow.'};
   if(state.kitchenBusy)return {ok:false,message:'A kitchen action is already being processed.'};
   const ticket=item.ticket?.checkPublicId||'';
+  const matching=orderItems().filter(x=>x.ticket?.checkPublicId===ticket);
+  const matchingByStatus=status=>matching.filter(x=>x.status===status);
+  if(action==='finish_order'&&(!matching.length||matching.some(x=>x.status!=='ready')))
+    return {ok:false,message:'All ticket items must be marked Ready before finishing at Expo.'};
   if(action==='finish_order'){
     if(state.device?.stationPublicId)return {ok:false,message:'Choose All stations / Expo before finishing a ticket.'};
     const confirmation=state.finishConfirmation,now=Date.now();
@@ -1576,10 +1580,6 @@ async function kitchenCommand(action,{spoken=false}={}){
         ': all active items must be Ready. Press Finish Ticket or repeat “finish order” within 12 seconds.'};
     }
   }else state.finishConfirmation=null;
-  const matching=orderItems().filter(x=>x.ticket?.checkPublicId===ticket);
-  const matchingByStatus=(status)=>matching.filter(x=>x.status===status);
-  if(action==='finish_order'&&(!matching.length||matching.some(x=>x.status!=='ready')))
-    return {ok:false,message:'All ticket items must be marked Ready before finishing at Expo.'};
   let note='',data={};
   if(action==='item_added'){
     const input=$('simItemNoteInput');
