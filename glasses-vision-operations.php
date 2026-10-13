@@ -35,5 +35,5 @@ $boot=['apiUrl'=>'api/glasses-vision-operations.php','catalog'=>$catalog];
 <section class="gvo-panel gvo-links"><div><div class="admin-eyebrow">Governed Actions</div><h2>Open the source workspace</h2></div><a class="admin-button dark" href="glasses-vision-models.php">Model rollout &amp; remediation</a><a class="admin-button" href="glasses-calibration-studio.php">Station calibration</a><a class="admin-button" href="glasses-learning.php">Vision learning</a><a class="admin-button" href="glasses-vision-profiles.php">Label profiles</a></section>
 </main>
 <script>window.GELATO_VISION_OPERATIONS=<?=json_encode($boot,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE|JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT)?>;</script>
-<script src="assets/js/glasses-vision-operations.js?v=20260928-1"></script><script src="js/universal-admin-page-shell.js?v=20260915-2"></script>
+<script src="assets/js/glasses-vision-operations.js?v=20260928-1"></script><script src="js/universal-admin-page-shell.js?v=20261012-ui1"></script>
 </body></html>
