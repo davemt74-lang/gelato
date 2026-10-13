@@ -27,9 +27,31 @@ function speak(n){
   if(!phrase)return;
   window.GelatoGlassesVoiceUI?.speakNotification?.(phrase);
 }
+/**
+ * Keep visual notices inside the left eye, immediately below the movable
+ * ticket panel. Measure rendered geometry so calibration/presets/eye offsets,
+ * responsive sizing and dragging cannot strand a toast between the lenses.
+ */
+function positionUnderLeftTickets(){
+  const notice=$('glassesHudNotification'),tickets=$('hudOrdersRegion'),projection=$('lensProjection');
+  if(!notice||!tickets||!projection||notice.hidden)return;
+  const parent=projection.getBoundingClientRect(),box=tickets.getBoundingClientRect();
+  if(!parent.width||!parent.height||!box.width)return;
+  const scaleX=projection.clientWidth/parent.width||1,scaleY=projection.clientHeight/parent.height||1;
+  const width=Math.min(box.width*scaleX,projection.clientWidth*.46);
+  const left=Math.max(0,Math.min((box.left-parent.left)*scaleX,projection.clientWidth-width));
+  const rawTop=(box.bottom-parent.top)*scaleY+6;
+  const height=notice.offsetHeight||45;
+  // Prefer below the left tickets. If the display is dragged near the bottom,
+  // clamp the alert within its lens rather than shifting it into the center.
+  const maxTop=Math.max(0,projection.clientHeight-height-5);
+  const top=Math.min(rawTop,maxTop);
+  notice.style.left=left+'px';notice.style.top=Math.max(0,top)+'px';
+  notice.style.bottom='auto';notice.style.width=width+'px';
+}
 function render(){
   const root=$('glassesHudNotification');if(!root)return;
-  if(!active){root.hidden=true;root.textContent='';return;}
+  if(!active){root.hidden=true;return;}
   const title=$('glassesHudNotificationTitle'),msg=$('glassesHudNotificationMessage'),meta=$('glassesHudNotificationMeta');
   root.hidden=false;root.dataset.severity=active.severity;
   if(title)title.textContent=active.ticketNumber
@@ -39,6 +61,7 @@ function render(){
   if(meta)meta.textContent=active.ticketNumber
     ?[String(active.serviceMode||'').replaceAll('_',' ').toUpperCase(),String(active.ticketStatus||'').toUpperCase(),String(active.stationName||'').toUpperCase()].filter(Boolean).join(' · ')
     :(active.event||'').replaceAll('.',' ').toUpperCase();
+  positionUnderLeftTickets();
 }
 function advance(){
   if(timer){clearTimeout(timer);timer=null;}
@@ -161,7 +184,7 @@ function clear(){
   queue=[];active=null;if(timer){clearTimeout(timer);timer=null;}render();
 }
 createControls();
-window.GelatoGlassesHudNotifications={publish,announceTicket,transitioned,stateByTicket,
+window.GelatoGlassesHudNotifications={publish,announceTicket,transitioned,stateByTicket,positionUnderLeftTickets,
   setVoice,voiceSettings:()=>({...settings}),voiceEligible,history:()=>history.slice(),clear,
   eventForCommand:action=>STATUS_EVENTS[action]||null,qualifiedCommandEvent};
 })();
