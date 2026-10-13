@@ -106,10 +106,16 @@
     }
     rail.prepend(container);rail.prepend(tabs);
     const overview=section('overview'),voice=section('voice');
-    // Full live status remains available under Runtime, not in the operator Overview.
-    move(stage.querySelector('.sim-status-row'),section('runtime'));
-    move($('simLiveGuide'),section('runtime'));
+    // Internal live/POS/KDS state remains available to simulator logic, but
+    // engineering telemetry must not occupy the employee runtime settings.
+    const telemetry=document.createElement('div');
+    telemetry.id='sgvRuntimeTelemetry';telemetry.hidden=true;
+    telemetry.setAttribute('aria-hidden','true');
+    move(stage.querySelector('.sim-status-row'),telemetry);
+    move($('simLiveGuide'),telemetry);
+    section('runtime').appendChild(telemetry);
     // Device and station are per-employee runtime settings, not global HUD controls.
+    move($('glassesRuntimeTabs'),section('runtime'));
     move(document.querySelector('.glasses-runtime-toolbar'),section('runtime'));
     move(document.querySelector('.glasses-runtime-training-controls'),section('runtime'));
     const transcript=document.createElement('div');
