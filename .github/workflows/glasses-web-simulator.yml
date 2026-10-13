@@ -13,6 +13,7 @@ on:
       - 'includes/glasses-employee-runtimes.php'
       - 'database/20261214_glasses_employee_runtimes.sql'
       - 'tests/glasses-hud-notifications.test.js'
+      - 'tests/glasses-employee-runtime-contract.php'
       - 'docs/GLASSES-HUD-NOTIFICATIONS-SECTION266-ACCEPTANCE.md'
       - 'assets/js/glasses-item-assembly.js'
       - 'tests/glasses-ticket-ingredient-assembly.test.js'
@@ -118,6 +119,8 @@ jobs:
           php -l tests/glasses-camera-locations-contract.php
           php -l includes/glasses-simulator.php
           php -l includes/glasses-employee-runtimes.php
+          php -l tests/glasses-employee-runtime-contract.php
+          php tests/glasses-employee-runtime-contract.php
           php -l tests/glasses-web-simulator-contract.php
           php -l tests/glasses-live-virtual-preview-contract.php
           php -l tests/glasses-hud-voice-contract.php

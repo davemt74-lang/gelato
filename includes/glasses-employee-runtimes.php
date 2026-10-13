@@ -30,6 +30,7 @@ function glasses_employee_runtime_public(array $row): array
         'locationId'=>(int)$row['location_id'],
         'locationName'=>(string)$row['location_name'],
         'stationName'=>$row['station_name']??null,
+        'stationId'=>$row['station_id']!==null?(int)$row['station_id']:null,
         'status'=>(string)$row['status'],
         'lastSeenAt'=>$row['last_seen_at']??null,
         'startedAt'=>$row['started_at']??null,
@@ -85,8 +86,8 @@ function glasses_employee_runtime_catalog(PDO $pdo,array $user): array
     if(!glasses_employee_runtimes_ready($pdo))
         return ['schemaReady'=>false,'runtimes'=>[],'employees'=>[]];
     $org=(int)$user['organization_id'];
-    $q=$pdo->prepare("SELECT r.public_id,r.employee_user_id,r.status,r.started_at,r.last_seen_at,
-      d.public_id device_public_id,d.display_name device_display_name,d.location_id,
+    $q=$pdo->prepare("SELECT r.public_id,r.device_id,r.employee_user_id,r.status,r.started_at,r.last_seen_at,
+      d.public_id device_public_id,d.display_name device_display_name,d.location_id,d.station_id,
       l.name location_name,s.name station_name,u.display_name employee_display_name,
       a.public_id wearer_assignment_public_id
       FROM glasses_employee_runtimes r
@@ -94,8 +95,10 @@ function glasses_employee_runtime_catalog(PDO $pdo,array $user): array
       JOIN locations l ON l.id=d.location_id AND l.organization_id=r.organization_id
       LEFT JOIN kds_stations s ON s.id=d.station_id AND s.organization_id=r.organization_id
       JOIN users u ON u.id=r.employee_user_id
+      JOIN organization_memberships om ON om.organization_id=r.organization_id AND om.user_id=r.employee_user_id AND om.status='active'
       JOIN glasses_user_device_assignments a ON a.id=r.wearer_assignment_id AND a.organization_id=r.organization_id
-      WHERE r.organization_id=? AND r.status='active' AND d.status='active'
+      WHERE r.organization_id=? AND r.status='active' AND r.active_slot=1 AND d.status='active'
+        AND d.revoked_at IS NULL AND u.status='active' AND u.archived_at IS NULL AND a.released_at IS NULL
       ORDER BY r.started_at ASC,r.id ASC");
     $q->execute([$org]);
     $runtimes=[];
@@ -108,8 +111,10 @@ function glasses_employee_runtime_catalog(PDO $pdo,array $user): array
         ?glasses_training_employee_catalog($pdo,$org):[];
     $trainingAssignments=[];
     $activeSessions=[];
+    $visibleEmployees=array_fill_keys(array_column($runtimes,'employeeUserId'),true);
+    $visibleDeviceIds=array_fill_keys(array_column($runtimes,'deviceId'),true);
     if(glasses_training_ready($pdo)){
-        $q=$pdo->prepare("SELECT a.public_id,a.user_id,a.device_id,a.mode,a.status,
+        $q=$pdo->prepare("SELECT a.public_id,a.user_id,a.device_id,a.location_id,a.station_id,a.mode,a.status,
             p.name program_name,p.public_id program_public_id
           FROM glasses_training_assignments a
           JOIN glasses_training_programs p ON p.id=a.program_id
@@ -117,10 +122,13 @@ function glasses_employee_runtime_catalog(PDO $pdo,array $user): array
             AND p.status='active' ORDER BY p.name,a.id");
         $q->execute([$org]);
         foreach($q->fetchAll(PDO::FETCH_ASSOC) as $row){
+            if(!isset($visibleEmployees[(int)$row['user_id']]))continue;
             $trainingAssignments[]=[
                 'publicId'=>(string)$row['public_id'],
                 'employeeUserId'=>(int)$row['user_id'],
                 'deviceId'=>$row['device_id']!==null?(int)$row['device_id']:null,
+                'locationId'=>$row['location_id']!==null?(int)$row['location_id']:null,
+                'stationId'=>$row['station_id']!==null?(int)$row['station_id']:null,
                 'programName'=>(string)$row['program_name'],
                 'programPublicId'=>(string)$row['program_public_id'],
                 'mode'=>(string)$row['mode'],'status'=>(string)$row['status']
@@ -136,7 +144,8 @@ function glasses_employee_runtime_catalog(PDO $pdo,array $user): array
             'employeeUserId'=>(int)$r['user_id'],
             'deviceId'=>(int)$r['device_id'],
             'assignmentPublicId'=>(string)$r['assignment_public_id']
-        ],$q->fetchAll(PDO::FETCH_ASSOC));
+        ],array_values(array_filter($q->fetchAll(PDO::FETCH_ASSOC),static fn(array $s):bool=>
+            isset($visibleEmployees[(int)$s['user_id']])&&isset($visibleDeviceIds[(int)$s['device_id']]))));
     }
     return ['schemaReady'=>true,'runtimes'=>$runtimes,'employees'=>$employees,
         'trainingAssignments'=>$trainingAssignments,'activeTrainingSessions'=>$activeSessions];

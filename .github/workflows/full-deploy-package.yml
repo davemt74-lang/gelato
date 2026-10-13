@@ -57,6 +57,7 @@ on:
       - 'includes/glasses-employee-runtimes.php'
       - 'database/20261214_glasses_employee_runtimes.sql'
       - 'tests/glasses-hud-notifications.test.js'
+      - 'tests/glasses-employee-runtime-contract.php'
       - 'docs/GLASSES-HUD-NOTIFICATIONS-SECTION266-ACCEPTANCE.md'
       - 'assets/js/glasses-item-assembly.js'
       - 'tests/glasses-ticket-ingredient-assembly.test.js'
@@ -406,6 +407,8 @@ jobs:
           node tests/glasses-operator-hud-ux.test.js
           node tests/glasses-ticket-ingredient-assembly.test.js
           php -l includes/glasses-employee-runtimes.php
+          php -l tests/glasses-employee-runtime-contract.php
+          php tests/glasses-employee-runtime-contract.php
           node tests/glasses-hud-notifications.test.js
           node tests/glasses-session-camera-badges.test.js
           php tests/glasses-live-kds-contract.php

@@ -49,7 +49,9 @@ function renderTraining(chosen){
  if(!training)return;
  const old=training.value;
  const assignments=(catalog.trainingAssignments||[]).filter(a=>chosen&&a.employeeUserId===chosen.employeeUserId&&
-   (a.deviceId==null||a.deviceId===chosen.deviceId));
+   (a.deviceId==null||a.deviceId===chosen.deviceId)&&
+   (a.locationId==null||a.locationId===chosen.locationId)&&
+   (a.stationId==null||a.stationId===chosen.stationId));
  const active=(catalog.activeTrainingSessions||[]).find(s=>chosen&&s.employeeUserId===chosen.employeeUserId&&s.deviceId===chosen.deviceId)||null;
  training.innerHTML='<option value="">Choose assigned program…</option>'+
    assignments.map(a=>'<option value="'+esc(a.publicId)+'">'+esc(a.programName)+' · '+esc(a.mode)+' · '+esc(a.status)+'</option>').join('');
