@@ -71,6 +71,11 @@ assert.equal(n.transitioned([copy('in_progress')],[copy('held')])[0].event,'tick
 assert.equal(n.transitioned([copy('held')],[copy('queued')])[0].event,'ticket.resumed');
 assert.equal(n.transitioned([copy('in_progress')],[copy('ready')])[0].event,'ticket.ready');
 assert.equal(n.transitioned([copy('ready')],[]).length,0,'disappearance never implies finished');
+n.clear();now+=8000;
+n.setVoice('info',false);
+const beforeTicketSpeech=spoken.length;
+n.announceTicket('ticket.started',ticket);
+assert.equal(spoken.length,beforeTicketSpeech+1,'ticket started voice setting overrides general information speech category');
 assert.equal(n.eventForCommand('finish_order'),'ticket.finished');
 assert.equal(n.eventForCommand('hold_order'),'ticket.paused');
 assert.equal(n.eventForCommand('fire_order'),'ticket.resumed');

@@ -16,7 +16,7 @@ try{const saved=JSON.parse(localStorage.getItem(STORAGE)||'{}');
   for(const key of Object.keys(DEFAULTS))if(typeof saved[key]==='boolean')settings[key]=saved[key];
 }catch{}
 function voiceEligible(n){
-  if(!settings[n.severity]||n.event in TICKETS&&!settings[n.event])return false;
+  if(Object.hasOwn(TICKETS,n.event) ? !settings[n.event] : !settings[n.severity])return false;
   if(n.spokenFromVoice||document.hidden||document.documentElement.classList.contains('glasses-runtime-revoked'))return false;
   if(!$('simVoiceReplies')?.checked)return false;
   return window.GelatoGlassesVoiceUI?.status?.().enabled===true;
@@ -84,7 +84,7 @@ function setVoice(key,enabled){
 function createControls(){
   const root=$('glassesHudNotificationVoiceSettings');if(!root)return;
   const options=[...Object.entries(CATEGORY),...Object.entries(TICKETS)];
-  root.innerHTML='<p class="hud-voice-caption">Speak only while Voice and Speak replies are enabled. Visual notices remain on.</p>'+
+  root.innerHTML='<p class="hud-voice-caption">Speak only with Voice + Speak replies on. Ticket voices are independent of severity settings; all notices stay visible.</p>'+
     '<div class="hud-voice-toggle-grid">'+options.map(([id,name])=>
       '<label class="hud-voice-toggle"><span>'+escape(name)+'</span><input type="checkbox" data-hud-speech="'+escape(id)+'"'+(settings[id]?' checked':'')+' aria-label="Speak '+escape(name)+' notifications"></label>'
     ).join('')+'</div>';
