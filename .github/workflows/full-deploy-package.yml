@@ -3,6 +3,15 @@ name: Full Deploy Package
 on:
   push:
     branches: [main]
+  pull_request:
+    paths:
+      - 'workspace.php'
+      - 'js/workspace-shell-sync.js'
+      - 'js/admin-shell-consolidation.js'
+      - 'css/admin-tech-theme.css'
+      - 'tests/static-workspace-entry-contract.php'
+      - 'tests/workspace-admin-sidebar-dedupe-contract.php'
+      - '.github/workflows/full-deploy-package.yml'
   workflow_dispatch:
 
 permissions:
