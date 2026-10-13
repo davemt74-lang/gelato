@@ -466,7 +466,11 @@ final class UpgradeService
         // original migration stays byte-for-byte unchanged for checksum tracking.
         if (preg_match('/^ALTER\\s+TABLE\\s+`?glasses_vision_sample_reviews`?\\s+DROP\\s+INDEX\\s+uq_glasses_vision_sample_review_user\\b/i', $sql) === 1
             && str_contains($sql, 'fk_glasses_vision_sample_review_correction')) {
-            self::reconcileAnnotationReviewAlter($pdo);
+            try {
+                self::reconcileAnnotationReviewAlter($pdo);
+            } catch (PDOException $error) {
+                throw self::explainForeignKeyFailure($pdo, $sql, $error);
+            }
             return;
         }
 
@@ -476,7 +480,7 @@ final class UpgradeService
             if ($allowAlreadyAppliedDdl && self::isAlreadyAppliedDdlError($error, $sql)) {
                 return;
             }
-            throw $error;
+            throw self::explainForeignKeyFailure($pdo, $sql, $error);
         }
     }
 
@@ -513,6 +517,63 @@ final class UpgradeService
         if ($exists('index', 'uq_glasses_vision_sample_review_user')) {
             $pdo->exec('ALTER TABLE glasses_vision_sample_reviews DROP INDEX uq_glasses_vision_sample_review_user');
         }
+    }
+
+    /** Explain FK failures using unprivileged, read-only schema metadata. */
+    private static function explainForeignKeyFailure(PDO $pdo, string $sql, PDOException $error): PDOException
+    {
+        $driverCode = (int)($error->errorInfo[1] ?? 0);
+        if (!in_array($driverCode, [1005, 1215, 1822, 3780], true)
+            || stripos($sql, 'FOREIGN KEY') === false) {
+            return $error;
+        }
+        $diagnoses = [];
+        try {
+            preg_match('/^(?:CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?|ALTER\s+TABLE\s+)[\x60]?([A-Za-z0-9_]+)[\x60]?/i', $sql, $target);
+            $childTable = $target[1] ?? 'unknown';
+            $pattern = '/CONSTRAINT\s+[\x60]?([A-Za-z0-9_]+)[\x60]?\s+FOREIGN\s+KEY\s*\(\s*[\x60]?([A-Za-z0-9_]+)[\x60]?\s*\)\s+REFERENCES\s+[\x60]?([A-Za-z0-9_]+)[\x60]?\s*\(\s*[\x60]?([A-Za-z0-9_]+)[\x60]?\s*\)/i';
+            preg_match_all($pattern, $sql, $matches, PREG_SET_ORDER);
+            $columns = $pdo->prepare('SELECT column_type, collation_name FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=? AND column_name=?');
+            $tables = $pdo->prepare('SELECT engine FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?');
+            foreach ($matches as $match) {
+                [, $constraint, $childColumn, $parentTable, $parentColumn] = $match;
+                $tables->execute([$parentTable]);
+                $engine = $tables->fetchColumn();
+                if ($engine === false) {
+                    $diagnoses[] = "$constraint: missing referenced table $parentTable";
+                    continue;
+                }
+                if (strcasecmp((string)$engine, 'InnoDB') !== 0) {
+                    $diagnoses[] = "$constraint: referenced table $parentTable is $engine, not InnoDB";
+                }
+                $columns->execute([$parentTable, $parentColumn]);
+                $parent = $columns->fetch(PDO::FETCH_ASSOC);
+                if (!is_array($parent)) {
+                    $diagnoses[] = "$constraint: missing $parentTable.$parentColumn";
+                    continue;
+                }
+                $columns->execute([$childTable, $childColumn]);
+                $child = $columns->fetch(PDO::FETCH_ASSOC);
+                if (is_array($child)) {
+                    if (strcasecmp((string)$child['column_type'], (string)$parent['column_type']) !== 0
+                        || ($child['collation_name'] !== null && $child['collation_name'] !== $parent['collation_name'])) {
+                        $diagnoses[] = "$constraint: $childTable.$childColumn ({$child['column_type']}) differs from $parentTable.$parentColumn ({$parent['column_type']})";
+                    }
+                } elseif (preg_match('/(?:^|[,\n])\s*[\x60]?' . preg_quote($childColumn, '/') . '[\x60]?\s+((?:BIGINT|INT|SMALLINT|MEDIUMINT|TINYINT)(?:\s*\(\d+\))?(?:\s+UNSIGNED)?)/i', $sql, $definition)) {
+                    $declared = strtolower(preg_replace('/\s+/', ' ', trim($definition[1])));
+                    $actual = strtolower(preg_replace('/\s+/', ' ', trim((string)$parent['column_type'])));
+                    if ($declared !== $actual) {
+                        $diagnoses[] = "$constraint: migration defines $childTable.$childColumn as $declared, but $parentTable.$parentColumn is $actual";
+                    }
+                }
+            }
+        } catch (Throwable) {
+            return $error; // Never mask the original database error.
+        }
+        $detail = $diagnoses
+            ? implode('; ', array_slice(array_unique($diagnoses), 0, 8))
+            : 'Column definitions appear compatible; check index and constraint definitions';
+        return new PDOException($error->getMessage() . ' [FK preflight: ' . $detail . ']', 0, $error);
     }
 
     private static function isAlreadyAppliedDdlError(PDOException $error, string $sql): bool
