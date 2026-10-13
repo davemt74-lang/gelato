@@ -756,3 +756,24 @@ html,body{max-width:100%;overflow-x:hidden}
  .sim-hud-editor-advanced-body .preset-actions{grid-template-columns:repeat(2,minmax(0,1fr))}
  .sim-stage-panel.hud-layout-editing{min-height:630px!important;height:auto!important}
 }
+
+/* Section HUD edit: position notifications under the draggable LEFT lens ticket rail,
+   not between the two eyes. JS aligns to measured projection/ticket geometry. */
+#glassesStage .glasses-hud-notification{
+ left:1%;top:39%;bottom:auto;width:23%;max-width:none;
+ background:#051d14!important;color:#ffffff!important;
+ border:1px solid #a0ecc0;border-left:4px solid #b6ebff;
+ border-radius:6px;padding:7px 8px;font:700 11px/1.4 system-ui;
+ box-shadow:0 3px 14px rgba(0,0,0,.75);text-shadow:none;
+ overflow-wrap:anywhere;z-index:21;box-sizing:border-box;
+}
+#glassesStage .glasses-hud-notice-header{display:flex;gap:4px;flex-wrap:wrap;align-items:start}
+#glassesStage .glasses-hud-notice-header b{color:#ffffff!important;font-size:11px;font-weight:850}
+#glassesStage .glasses-hud-notice-message{font:700 11px/1.4 system-ui;color:#ffffff!important;
+ margin-top:4px;letter-spacing:0;text-shadow:none;overflow-wrap:anywhere}
+#glassesStage #glassesHudNotificationMeta{font:700 9px/1.25 system-ui;
+ color:#ddfbe5!important;text-align:left;max-width:100%;overflow-wrap:anywhere}
+@media(max-width:680px){
+ #glassesStage .glasses-hud-notification{bottom:auto;max-width:none;padding:6px 6px;font-size:10px}
+ #glassesStage .glasses-hud-notice-message{font-size:10px}
+}
