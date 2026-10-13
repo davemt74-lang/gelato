@@ -3,20 +3,20 @@ declare(strict_types=1);
 
 require __DIR__ . '/includes/bootstrap.php';
 
-// Disabled unless explicitly configured with a fresh SHA-256 of an owner-held key.
-// A one-time emergency overlay may supply its own value without changing SQL.
-$recoveryHash = strtolower(trim((string)(app_config()['security']['admin_recovery_key_sha256'] ?? '')));
-if (preg_match('/^[a-f0-9]{64}$/', $recoveryHash) !== 1) {
-    http_response_code(404);
-    exit('Admin recovery is not enabled. Use forgot-password.php or an authorized one-time recovery package.');
-}
-
 if (!app_has_config()) {
     http_response_code(503);
     exit('Application configuration is unavailable.');
 }
 
 $config = app_config();
+// Disabled unless explicitly configured with a fresh SHA-256 of an owner-held key.
+// A one-time emergency overlay may supply its own value without changing SQL.
+$recoveryHash = strtolower(trim((string)($config['security']['admin_recovery_key_sha256'] ?? '')));
+if (preg_match('/^[a-f0-9]{64}$/', $recoveryHash) !== 1) {
+    http_response_code(404);
+    exit('Admin recovery is not enabled. Use forgot-password.php or an authorized one-time recovery package.');
+}
+
 date_default_timezone_set((string)($config['app']['timezone'] ?? 'UTC'));
 app_boot_session();
 
