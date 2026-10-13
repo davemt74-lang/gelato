@@ -20,6 +20,11 @@ on:
       - 'api/glasses-photo-notifications.php'
       - 'includes/glasses-customer-photo-notifications.php'
       - 'database/20261211_section260_customer_photo_notifications.sql'
+      - 'database/20261212_section262_customer_photo_feedback.sql'
+      - 'includes/glasses-customer-photo-feedback.php'
+      - 'assets/css/customer-photo-gallery.css'
+      - 'tests/glasses-customer-photo-feedback-contract.php'
+      - 'tests/glasses-customer-photo-gallery.test.js'
       - 'customer-order-photos.php'
       - 'customer-order-photo.php'
       - 'assets/js/glasses-customer-photo-notifications.js'
@@ -82,6 +87,8 @@ jobs:
           php -l api/glasses-order-photo-stages.php
           php -l api/glasses-photo-notifications.php
           php -l includes/glasses-customer-photo-notifications.php
+          php -l includes/glasses-customer-photo-feedback.php
+          php -l tests/glasses-customer-photo-feedback-contract.php
           php -l customer-order-photos.php
           php -l customer-order-photo.php
           php -l customer-account.php
@@ -129,6 +136,8 @@ jobs:
           node tests/glasses-camera-photo-library.test.js
           node tests/glasses-production-photo-flow.test.js
           node tests/glasses-customer-photo-notifications.test.js
+          node tests/glasses-customer-photo-gallery.test.js
+          php tests/glasses-customer-photo-feedback-contract.php
           php tests/glasses-customer-photo-policy.php
           php tests/glasses-order-photo-stages-contract.php
           php tests/glasses-camera-photo-library-contract.php
