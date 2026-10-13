@@ -206,5 +206,5 @@ $html = str_replace('</body>', "  <script src=\"js/workspace-shell-sync.js?v=202
 // Training owns its visible chat/voice controls. Load after all inline
 // page handlers, and after the Admin theme so the user bubble keeps contrast.
 $html = str_replace('</head>', "  <link rel=\"stylesheet\" href=\"css/training-workspace-chat.css?v=20261013-training1\">\n</head>", $html);
-$html = str_replace('</body>', "  <script src=\"js/voice-turn-taking.js?v=20261013-turn1\"></script>\n  <script src=\"js/training-workspace-voice.js?v=20261013-barge1\"></script>\n</body>", $html);
+$html = str_replace('</body>', "  <script src=\"js/voice-turn-taking.js?v=20261013-turn1\"></script>\n  <script src=\"js/proactive-listening-commands.js?v=20261013-listening1\"></script>\n  <script src=\"js/training-workspace-voice.js?v=20261013-barge1\"></script>\n</body>", $html);
 echo $html;
