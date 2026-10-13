@@ -49,7 +49,7 @@ async function api(action,payload={}){
 }
 const LIVE_SYNC_BASE_MS=1500;
 const LIVE_SYNC_MAX_BACKOFF_MS=10000;
-const RUNTIME_RECOVERY_KEY='gelato.webGlassesSimulator.runtimeRecovery.v1';
+const RUNTIME_RECOVERY_KEY='gelato.webGlassesSimulator.runtimeRecovery.v1'+':u'+String(cfg.userId||0);
 const RUNTIME_FRESH_BARRIER_MS=750;
 function recoveryStored(){
   try{return JSON.parse(localStorage.getItem(RUNTIME_RECOVERY_KEY)||'null');}catch{return null;}
@@ -288,7 +288,7 @@ async function downloadDeviceDiagnostics(){
     a.href=url;a.download='gelato-glasses-diagnostics-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);log('HEALTH','Diagnostic bundle exported.');
   }catch(e){log('ERROR',e.message);}
 }
-const LIVE_DEVICE_KEY='gelato.webGlassesSimulator.selectedDisplay.v2';
+const LIVE_DEVICE_KEY='gelato.webGlassesSimulator.selectedDisplay.v2'+':u'+String(cfg.userId||0);
 async function loadDevices(){
   try{
     const r=await fetch(cfg.api,{credentials:'same-origin',cache:'no-store'});
@@ -310,7 +310,7 @@ async function loadDevices(){
     log('ERROR',e.message);setSyncBadge('error','SETUP ERROR');
   }
 }
-const CAMERA_PREF_KEY='gelato.webGlassesSimulator.cameraPrefs.v1';
+const CAMERA_PREF_KEY='gelato.webGlassesSimulator.cameraPrefs.v1'+':u'+String(cfg.userId||0);
 function cameraSupported(){return !!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia);}
 function cameraPrefs(){try{return JSON.parse(localStorage.getItem(CAMERA_PREF_KEY)||'{}');}catch{return {};}}
 function saveCameraPrefs(){
@@ -1524,8 +1524,8 @@ document.addEventListener('visibilitychange',()=>{if(state.cameraTrack){state.ca
 window.addEventListener('offline',()=>{enterRecovery('disconnected','network_lost',{stopSync:true});setSyncBadge('error','OFFLINE');});
 window.addEventListener('online',()=>{if(state.mode==='live'&&state.device?.virtualPreview){state.recovery.networkFault=false;startLiveStationSync();}else if(state.mode==='live'&&state.device)resumeRuntimeRecovery('network_restored');});
 window.addEventListener('beforeunload',()=>{saveRecoveryResume();stopVisionRuntime('idle');stopLiveStationSync('idle');if(state.browserModel.session&&typeof state.browserModel.session.release==='function')state.browserModel.session.release();if(state.shadowModel.session&&typeof state.shadowModel.session.release==='function')state.shadowModel.session.release();});
-const FRAME_MODE_KEY='gelato.webGlassesSimulator.frameMode.v1';
-const OPTICAL_MASK_KEY='gelato.webGlassesSimulator.opticalMask.v1';
+const FRAME_MODE_KEY='gelato.webGlassesSimulator.frameMode.v1'+':u'+String(cfg.userId||0);
+const OPTICAL_MASK_KEY='gelato.webGlassesSimulator.opticalMask.v1'+':u'+String(cfg.userId||0);
 let frameMode=['svg','image','none'].includes(localStorage.getItem(FRAME_MODE_KEY))?localStorage.getItem(FRAME_MODE_KEY):'svg';
 let opticalMaskEnabled=localStorage.getItem(OPTICAL_MASK_KEY)!=='0';
 function applyFrameMode(){
@@ -1549,8 +1549,8 @@ bindLocalImage('sceneFile','sceneImage',()=>{$('scenePlaceholder').hidden=true;}
 bindLocalImage('glassesFile','glassesImage',()=>{frameMode='image';localStorage.setItem(FRAME_MODE_KEY,frameMode);applyFrameMode();});
 $('componentControls').addEventListener('click',e=>{const b=e.target.closest('[data-detect]');if(b)detect(b.dataset.detect);});
 
-const CAL_KEY='gelato.webGlassesSimulator.calibration.v1';
-const PRESET_KEY='gelato.webGlassesSimulator.presets.v1';
+const CAL_KEY='gelato.webGlassesSimulator.calibration.v1'+':u'+String(cfg.userId||0);
+const PRESET_KEY='gelato.webGlassesSimulator.presets.v1'+':u'+String(cfg.userId||0);
 const calibrationDefaults={
   opacity:100,brightness:100,scale:100,safeWidth:80,safeHeight:66,
   leftEyeX:0,leftEyeY:0,rightEyeX:0,rightEyeY:0,
@@ -1834,6 +1834,55 @@ window.GelatoGlassesNavigation={dispatch:simulatorNavigation,context:()=>({
   step:(state.previewStepIndex||0)+1,virtual:!!state.device?.virtualPreview,
   locationId:state.device?.locationId||null,stationPublicId:state.device?.stationPublicId||null
 })};
+window.GelatoGlassesDisplayPreferences={
+  ready:false,
+  snapshot:()=>({
+    mode:state.mode,devicePublicId:state.device?.publicId||'',
+    frameMode,opticalMask:opticalMaskEnabled,
+    cameraResolution:$('cameraResolution').value,cameraFit:$('cameraFit').value,
+    cameraMirror:$('cameraMirror').checked,
+    calibration:deepClone(normalizeCalibration(calibration)),
+    activeTab:window.GelatoGlassesTabs?.active||'overview',
+    activeCameraTab:window.GelatoCameraWorkspace?.status?.().active||'camera1',
+    voiceReplies:!!$('simVoiceReplies').checked
+  }),
+  apply:async prefs=>{
+    if(!prefs||typeof prefs!=='object')return;
+    if(prefs.calibration&&typeof prefs.calibration==='object'){
+      calibration=normalizeCalibration(prefs.calibration);
+      saveCalibration();
+    }
+    if(typeof prefs.opticalMask==='boolean'){
+      opticalMaskEnabled=prefs.opticalMask;
+      localStorage.setItem(OPTICAL_MASK_KEY,opticalMaskEnabled?'1':'0');
+    }
+    if(['svg','none'].includes(prefs.frameMode)){
+      frameMode=prefs.frameMode;
+      localStorage.setItem(FRAME_MODE_KEY,frameMode);
+    }
+    applyFrameMode();
+    if(['640x480','1280x720','1920x1080'].includes(prefs.cameraResolution))
+      $('cameraResolution').value=prefs.cameraResolution;
+    if(['cover','contain'].includes(prefs.cameraFit))$('cameraFit').value=prefs.cameraFit;
+    if(typeof prefs.cameraMirror==='boolean')$('cameraMirror').checked=prefs.cameraMirror;
+    applyCameraPresentation();
+    if(typeof prefs.voiceReplies==='boolean')$('simVoiceReplies').checked=prefs.voiceReplies;
+    if(prefs.devicePublicId&&state.devices.some(d=>d.publicId===prefs.devicePublicId)&&
+       state.device?.publicId!==prefs.devicePublicId){
+      $('deviceSelect').value=prefs.devicePublicId;
+      $('deviceSelect').dispatchEvent(new Event('change'));
+    }
+    if(['overview','voice','camera','runtime','build'].includes(prefs.activeTab))
+      window.GelatoGlassesTabs?.select?.(prefs.activeTab);
+    if(['camera1','camera2','camera3','camera4','camera5','training'].includes(prefs.activeCameraTab))
+      window.GelatoCameraWorkspace?.select?.(prefs.activeCameraTab);
+    // This restores UI selection only. Never starts microphone, camera capture or KDS writes.
+    if(prefs.mode==='mock'&&state.mode==='live'){
+      $('modeSelect').value='mock';
+      $('modeSelect').dispatchEvent(new Event('change'));
+    }
+  }
+};
 window.GelatoGlassesPrimaryCamera={stop:()=>stopCamera('disabled'),active:()=>!!state.cameraStream};
-(async()=>{await loadDevices();const cp=cameraPrefs();if(cp.resolution)$('cameraResolution').value=cp.resolution;if(cp.fit)$('cameraFit').value=cp.fit;$('cameraMirror').checked=!!cp.mirror;applyCameraPresentation();await enumerateCameras();if(!cameraSupported())setCameraHealth('error','UNSUPPORTED');refreshPresets();applyCalibration();render();if(state.device){startLiveStationSync();}else{setSyncBadge('error','NO DISPLAY');}setInterval(renderTopStatus,30000);setInterval(tickLiveTicketTimers,1000);renderRuntimeRecovery();refreshDeviceHealth();setInterval(refreshDeviceHealth,5000);const savedResume=recoveryStored();if(savedResume?.devicePublicId&&state.device?.publicId===savedResume.devicePublicId&&!state.device.virtualPreview){resumeRuntimeRecovery('app_restart_resume');}log('SYSTEM','Simulator ready. Pizza Line Reference HUD loaded.');})();
+(async()=>{await loadDevices();window.GelatoGlassesDisplayPreferences.ready=true;window.dispatchEvent(new CustomEvent('gelato-glasses-preferences-ready'));const cp=cameraPrefs();if(cp.resolution)$('cameraResolution').value=cp.resolution;if(cp.fit)$('cameraFit').value=cp.fit;$('cameraMirror').checked=!!cp.mirror;applyCameraPresentation();await enumerateCameras();if(!cameraSupported())setCameraHealth('error','UNSUPPORTED');refreshPresets();applyCalibration();render();if(state.device){startLiveStationSync();}else{setSyncBadge('error','NO DISPLAY');}setInterval(renderTopStatus,30000);setInterval(tickLiveTicketTimers,1000);renderRuntimeRecovery();refreshDeviceHealth();setInterval(refreshDeviceHealth,5000);const savedResume=recoveryStored();if(savedResume?.devicePublicId&&state.device?.publicId===savedResume.devicePublicId&&!state.device.virtualPreview){resumeRuntimeRecovery('app_restart_resume');}log('SYSTEM','Simulator ready. Pizza Line Reference HUD loaded.');})();
 })();
