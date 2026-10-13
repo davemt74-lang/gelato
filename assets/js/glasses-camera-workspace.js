@@ -23,8 +23,13 @@
   function idOf(photo){return photo?.id?'remote:'+photo.id:'local:'+photo?.capturedAt+':'+photo?.slot;}
   function qualityLabel(photo){
     if(photo?.fingerprint?.qualityScore!==undefined)return photo.fingerprint.qualityScore+'/100';
-    const q=photo?.quality?.state||'unscored';
-    return q==='good'?'PASS · Vision Lab':q==='poor'?'CHECK · Quality warning':q==='warning'?'REVIEW · Vision Lab':'Not scored';
+    const q=photo?.quality||{},brightness=Number(q.brightness),contrast=Number(q.contrast),blur=Number(q.blur);
+    if(Number.isFinite(brightness)&&Number.isFinite(contrast)&&Number.isFinite(blur)&&q.brightness!==null&&q.contrast!==null&&q.blur!==null){
+      const exposure=Math.max(0,1-Math.abs(brightness-.52)/.52);
+      const score=Math.round(100*(exposure*.3+Math.min(1,contrast/.17)*.3+Math.min(1,(blur/400)/.11)*.4));
+      return score+'/100 · '+(q.state||'review');
+    }
+    return q.state?'Vision Lab: '+q.state:'Not scored';
   }
   function match(photo){
     const hash=photo?.fingerprint?.hash||photo?.hash;
@@ -182,7 +187,8 @@
       }else{
         if(!$('gcConsent').checked)throw new Error('Explicitly opt into private Vision Lab photo storage first.');
         const fingerprint=photo.fingerprint||await metric().fingerprint(photo.blob);
-        const upload=await post(mediaApi,{action:'upload',consentBasis:'training_media_opt_in',
+        const upload=photo.uploadedMediaPublicId?{media:{publicId:photo.uploadedMediaPublicId}}:
+          await post(mediaApi,{action:'upload',consentBasis:'training_media_opt_in',
           imageBase64:await bytes64(photo.blob),annotations:[],
           perceptualHash:fingerprint.hash,brightnessMean:fingerprint.brightnessMean,
           contrastMean:fingerprint.contrastMean,blurScore:fingerprint.blurScore,
@@ -192,6 +198,7 @@
             locationId:photo.locationId,productionStage:photo.role,reviewRequired:true}});
         const mediaPublicId=upload.media?.publicId;
         if(!mediaPublicId)throw new Error('Vision Lab did not return a saved media reference.');
+        photo.uploadedMediaPublicId=mediaPublicId;
         await post(api,{action:'register',locationId:S.locationId,slot:photo.slot,
           mediaPublicId,menuItemId:menuId,isReference,rating,note});
         S.local=S.local.filter(x=>x!==photo);
