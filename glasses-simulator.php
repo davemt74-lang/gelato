@@ -12,7 +12,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <title>Web Glasses Simulator · Gelato</title>
 <link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20261013-live1">
 <link rel="stylesheet" href="assets/css/glasses-simulator-hud-ux.css?v=20261013-voice1">
-<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-266multi">
+<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-266a">
 </head>
 <body>
 <header class="sim-topbar">
@@ -93,8 +93,8 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
         <button id="simVoiceHelp" type="button">Commands ?</button>
       </div>
       <div class="sim-voice-feedback" id="simVoiceFeedback" role="status" aria-live="polite">Voice off</div>
-      <div id="simNavContext" class="sim-nav-command-examples" aria-live="polite">Loading orders…</div>
-      <span class="sim-nav-command-examples">Say: “start ticket” · “next item” · “item ready” · “note added” · “finish ticket” · “status”</span>
+      <div id="simNavContext" class="sim-nav-command-examples" hidden>Loading orders…</div>
+
     </nav>
     <div class="glasses-stage" id="glassesStage">
       <div class="scene-placeholder">
@@ -158,11 +158,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
           <button class="region-handle region-move" type="button" tabindex="-1" aria-hidden="true">MOVE</button>
           <button class="region-handle region-resize" type="button" tabindex="-1" aria-hidden="true">↘</button>
           <div class="hud-clock"><strong id="hudClock">10:24</strong><span id="hudStatusTemp">HOT LINE · 74°F</span></div>
-          <div class="hud-system">
-            <span id="hudRuntimeState">READY</span>
-            <span id="hudConnectivity">BT · LIVE</span>
-            <span id="hudBattery">87%</span>
-          </div>
+
         </div>
 
         <aside class="hud-orders-left editable-region" id="hudOrdersRegion" data-region="hudOrdersRegion">
@@ -205,6 +201,10 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
           </div>
         </aside>
 
+        <div id="glassesHudNotification" class="glasses-hud-notification" role="status" aria-live="polite" aria-atomic="true" hidden>
+          <div class="glasses-hud-notice-header"><b id="glassesHudNotificationTitle"></b><span id="glassesHudNotificationMeta"></span></div>
+          <div id="glassesHudNotificationMessage" class="glasses-hud-notice-message"></div>
+        </div>
         <output id="simNavFeedback" class="sim-nav-feedback" role="status" aria-live="polite" hidden></output>
         <div id="detectionLayer" class="detection-layer"></div>
         <div id="visionDetectionLayer" class="vision-detection-layer"></div>
@@ -224,6 +224,10 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
   </section>
 
   <aside class="sim-console">
+    <section class="console-card hud-notification-settings-card" id="glassesHudNotificationSettingsCard">
+      <div class="console-heading"><div><small>HUD NOTIFICATIONS</small><strong>Voice by notification type</strong></div></div>
+      <div id="glassesHudNotificationVoiceSettings"></div>
+    </section>
     <section class="console-card sim-audit-panel" id="simControlAuditPanel">
       <div class="console-heading"><div><small>SIMULATOR READINESS</small><strong>What is working and why controls are unavailable</strong></div><span id="simAuditBadge">CHECKING</span></div>
       <p class="calibration-note">Live POS/KDS tickets load without physical glasses. Authorized kitchen actions update real KDS, while build validation still requires a paired device. Mock mode never writes kitchen data.</p>
@@ -497,13 +501,14 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-item-assembly.js?v=20261013-265"></script>
 <script src="assets/js/glasses-employee-runtimes.js?v=20261013-266multi"></script>
 <script src="assets/js/glasses-assembly-recognition.js?v=20261013-266"></script>
-<script src="assets/js/glasses-web-simulator.js?v=20261013-265"></script>
+<script src="assets/js/glasses-hud-notifications.js?v=20261013-266a"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20261013-266a"></script>
 <script src="assets/js/glasses-voice-device.js?v=20261013-device1"></script>
-<script src="assets/js/glasses-simulator-voice.js?v=20261013-265"></script>
+<script src="assets/js/glasses-simulator-voice.js?v=20261013-266a"></script>
 <script src="assets/js/glasses-multicamera.js?v=20261013-multi1"></script>
 <script src="assets/js/glasses-camera-config.js?v=20261013-hud264"></script>
 <script src="assets/js/glasses-camera-runtime.js?v=20261013-261"></script>
-<script src="assets/js/glasses-simulator-tabs.js?v=20261013-hud264"></script>
+<script src="assets/js/glasses-simulator-tabs.js?v=20261013-266a"></script>
 <script src="assets/js/glasses-camera-similarity.js?v=20261013-ref258"></script>
 <script src="assets/js/glasses-camera-workspace.js?v=20261013-hud264"></script>
 <script src="assets/js/glasses-production-photo-flow.js?v=20261013-261"></script>
