@@ -290,7 +290,34 @@
     const freeze=document.querySelectorAll('[data-freeze]');freeze.forEach(b=>b.addEventListener('click',()=>select('training')));
     select('camera1');void refresh();
   }
-  window.GelatoCameraWorkspace={mount,select,refresh,status:()=>({active:S.active,locationId:S.locationId,photos:S.photos.length,local:S.local.length})};
+  async function persistOrderPhoto(photo,menuItemId,{optIn=false}={}){
+    if(!canSave())throw new Error('Camera photo storage requires glasses.manage at this location.');
+    if(!photo||photo.locationId!==S.locationId)throw new Error('Photo belongs to another location.');
+    if(photo.id)return {id:photo.id,mediaPublicId:photo.mediaPublicId};
+    if(!optIn)throw new Error('Check the private Vision Lab storage consent before attaching a photo.');
+    if(!Number.isInteger(menuItemId)||menuItemId<1)throw new Error('Select an item with an active menu ID.');
+    if(!photo.blob)throw new Error('Capture a photo from the active camera first.');
+    const fingerprints=photo.fingerprint||await metric().fingerprint(photo.blob);
+    if(!photo.uploadedMediaPublicId){
+      const upload=await post(mediaApi,{action:'upload',consentBasis:'training_media_opt_in',
+        imageBase64:await bytes64(photo.blob),annotations:[],
+        perceptualHash:fingerprints.hash,brightnessMean:fingerprints.brightnessMean,
+        contrastMean:fingerprints.contrastMean,blurScore:fingerprints.blurScore,
+        capturedAt:photo.capturedAt.slice(0,19).replace('T',' '),retentionDays:365,
+        metadata:{source:'camera_stage_gallery',cameraSlot:photo.slot,
+          locationId:photo.locationId,productionStage:photo.role,reviewRequired:true}
+      });
+      photo.uploadedMediaPublicId=upload.media?.publicId;
+      if(!photo.uploadedMediaPublicId)throw new Error('Vision Lab did not return a saved media ID.');
+    }
+    const response=await post(api,{action:'register',locationId:S.locationId,slot:photo.slot,
+      mediaPublicId:photo.uploadedMediaPublicId,menuItemId,isReference:false,rating:null,note:'Production photo candidate'});
+    const id=response.result?.id;
+    if(!Number.isInteger(id)||id<1)throw new Error('Camera gallery registration was not confirmed.');
+    photo.id=id;photo.mediaPublicId=photo.uploadedMediaPublicId;
+    return {id,mediaPublicId:photo.uploadedMediaPublicId};
+  }
+  window.GelatoCameraWorkspace={mount,select,refresh,persistOrderPhoto,getSavedPhotos:slot=>S.photos.filter(p=>p.slot===slot),status:()=>({active:S.active,locationId:S.locationId,photos:S.photos.length,local:S.local.length})};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});
   else mount();
 })();
