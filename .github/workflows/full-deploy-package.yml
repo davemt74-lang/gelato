@@ -69,6 +69,8 @@ on:
       - 'tests/glasses-ticket-ingredient-assembly.test.js'
       - 'assets/js/glasses-assembly-recognition.js'
       - 'tests/glasses-assembly-recognition-269.test.js'
+      - 'includes/glasses-assembly-auto-gate.php'
+      - 'tests/glasses-assembly-auto-server-contract.php'
       - 'docs/GLASSES-SECTION269-GOVERNED-ASSEMBLY-ACCEPTANCE.md'
       - 'assets/js/glasses-simulator-voice.js'
       - 'assets/js/glasses-voice-device.js'
@@ -427,6 +429,9 @@ jobs:
           node tests/glasses-ticket-ingredient-assembly.test.js
           node --check assets/js/glasses-assembly-recognition.js
           node tests/glasses-assembly-recognition-269.test.js
+          php -l includes/glasses-assembly-auto-gate.php
+          php -l tests/glasses-assembly-auto-server-contract.php
+          php tests/glasses-assembly-auto-server-contract.php
           php -l includes/glasses-employee-runtimes.php
           php -l tests/glasses-employee-runtime-contract.php
           php tests/glasses-employee-runtime-contract.php
