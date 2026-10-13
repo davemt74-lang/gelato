@@ -12,7 +12,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <title>Web Glasses Simulator · Gelato</title>
 <link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20261013-live1">
 <link rel="stylesheet" href="assets/css/glasses-simulator-hud-ux.css?v=20261013-voice1">
-<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-order259">
+<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-photo260">
 </head>
 <body>
 <header class="sim-topbar">
@@ -483,5 +483,6 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-camera-similarity.js?v=20261013-ref258"></script>
 <script src="assets/js/glasses-camera-workspace.js?v=20261013-ref258"></script>
 <script src="assets/js/glasses-production-photo-flow.js?v=20261013-order259"></script>
+<script src="assets/js/glasses-customer-photo-notifications.js?v=20261013-photo260"></script>
 </body>
 </html>

@@ -224,6 +224,13 @@ function online_order_lifecycle_sync(PDO $pdo,int $organizationId,string $checkP
             }catch(Throwable){}
         }
 
+        // This uses the same transactional Inbox delivery system as standard
+        // ready updates. It never sends a photo unless all independent gates pass.
+        if(in_array($next,['ready','kitchen_complete','completed'],true)){
+            require_once __DIR__.'/glasses-customer-photo-notifications.php';
+            $photoDelivery=glasses_customer_photo_notify_safe(
+                $pdo,$organizationId,(int)$state['online_order_id'],$actorUserId);
+        }
         if($owns)$pdo->commit();
         $state['order_status']=$next;
         $state['display_status']=online_order_lifecycle_display_status($next);
