@@ -1288,6 +1288,7 @@ function renderOrdersQueue(item){
   $('hudOrders').innerHTML='<div class="hud-ticket-tabs" role="tablist" aria-label="Occupied KDS tickets">'+tabs+'</div>'+
     (selected?'<div class="hud-ticket-item-list" aria-label="Items on selected ticket">'+items+'</div>':'<span class="sim-muted">No active KDS tickets</span>');
   $('hudOrdersRegion').classList.toggle('hud-queue-empty',tickets.length===0);
+  window.GelatoGlassesHudNotifications?.positionUnderLeftTickets?.();
 }
 function buildProgressIndex(steps,comps){
   const confirmed=comps.filter(c=>c.status==='confirmed'||(c.optional&&c.status==='ignored')).length;
@@ -1428,16 +1429,21 @@ function renderBuildRail(item){
     !list.length?'No assembly ingredients configured — update Menu Manager':
     summary.complete?'Ingredients accounted for · '+summary.accounted+'/'+summary.total:
     summary.accounted+'/'+summary.total+' accounted · '+(next?.name||'Choose ingredient');
-  $('hudBuildSteps').innerHTML=list.map(ingredient=>{
+  $('hudBuildSteps').innerHTML=list.map((ingredient,index)=>{
     const status=actions[ingredient.id]||'pending',active=ingredient.id===next?.id;
+    const disabled=!!state.build;
+    const mark=(kind,symbol,label)=>'<button type="button" class="hud-ingredient-mark '+kind+
+      (status===kind?' selected':'')+'" data-hud-ingredient-action="'+kind+
+      '" data-hud-ingredient-index="'+index+'" aria-label="'+label+' '+escapeHtml(ingredient.name)+
+      '" aria-pressed="'+(status===kind?'true':'false')+'" title="'+label+' '+escapeHtml(ingredient.name)+
+      (disabled?' · governed build controls ingredient verification':'')+
+      '"'+(disabled?' disabled':'')+'>'+symbol+'</button>';
     return '<li class="hud-assembly-ingredient '+status+(active?' current':'')+'">'+
-      '<span class="ingredient-state">'+(status==='added'?'✓':status==='skipped'?'↷':active?'●':'○')+'</span>'+
+      '<span class="ingredient-state" aria-hidden="true">'+(status==='added'?'✓':status==='skipped'?'−':active?'●':'○')+'</span>'+
       '<span class="ingredient-name">'+escapeHtml(ingredient.name)+(ingredient.optional?' · optional':'')+'</span>'+
-      '<span class="ingredient-result">'+(status==='added'?'Added':status==='skipped'?'Skipped':'')+'</span></li>';
+      '<span class="ingredient-row-actions" role="group" aria-label="Record '+escapeHtml(ingredient.name)+'">'+
+        mark('added','✓','Mark added')+mark('skipped','−','Skip')+'</span></li>';
   }).join('');
-  for(const key of ['hudIngredientAdded','hudIngredientSkip']){
-    const el=$(key);if(el)el.disabled=!next||!!state.build;
-  }
 }
 function renderValidationPanel(comps,validation){
   const unexpected=comps.filter(c=>c.status==='unexpected').length;
@@ -1703,11 +1709,25 @@ function acknowledgeIngredient(result,options={}){
        !autoAssemblyOptIn)
       return {ok:false,message:'Governed camera evidence is not current. No ingredient acknowledged.'};
   }
-  const ingredient=currentAssemblyIngredient(item);
-  if(!ingredient)return {ok:false,message:ingredientSummary(item).complete?
+  const ingredients=assembly()?.ingredientsFor(item)||[];
+  const ingredient=options.ingredientId
+    ?ingredients.find(entry=>entry.id===options.ingredientId)
+    :currentAssemblyIngredient(item);
+  if(!ingredient)return {ok:false,message:options.ingredientId?
+    'Ingredient selection changed. Please refresh the ticket.':ingredientSummary(item).complete?
     'All ingredients are accounted for on this item.':'No configured assembly ingredients found. Update this menu item in Menu Manager.'};
   const actions=itemActions(item.kdsItemPublicId);
-  if(['added','skipped'].includes(actions[ingredient.id]))return {ok:false,message:'Ingredient was already accounted for.'};
+  const previous=actions[ingredient.id]||'pending';
+  // Row icons are reversible, unlike model-confirmed backend observations.
+  if(previous===result&&!options.governedQualified){
+    delete actions[ingredient.id];
+    assemblySources.delete(item.kdsItemPublicId+'|'+ingredient.id);
+    ingredientCursor.set(item.kdsItemPublicId,ingredient.id);
+    render();
+    return {ok:true,message:ingredient.name+' reset to pending. Official KDS status unchanged.'};
+  }
+  if(previous!=='pending'&&options.governedQualified)
+    return {ok:false,message:'Previously accounted ingredient cannot be overwritten by automatic detection.'};
   actions[ingredient.id]=result;
   assemblySources.set(item.kdsItemPublicId+'|'+ingredient.id,{
     source:options.source||'operator',modelSha256:options.evidence?.modelSha256||null,
@@ -1753,11 +1773,15 @@ $('hudConfirmSuggestion')?.addEventListener('click',()=>{
 $('hudRejectSuggestion')?.addEventListener('click',rejectAssemblySuggestion);
 $('visionAssemblyAutoOptIn')?.addEventListener('change',event=>setAutoAssemblyOptIn(event.target.checked));
 $('hudRight').addEventListener('click',event=>{
-  const action=event.target.closest('[data-hud-ingredient-action]')?.dataset.hudIngredientAction;
-  if(action==='added'||action==='skipped'){
-    const outcome=acknowledgeIngredient(action);
-    const target=$('simNavigationStatus');if(target)target.textContent=outcome.message;
-  }
+  const button=event.target.closest('[data-hud-ingredient-action]');
+  if(!button||calibrationEnabled)return;
+  const action=button.dataset.hudIngredientAction;
+  if(action!=='added'&&action!=='skipped')return;
+  const index=Number(button.dataset.hudIngredientIndex);
+  const item=selectedItem(),ingredients=item?assembly()?.ingredientsFor(item)||[]:[];
+  if(!Number.isSafeInteger(index)||index<0||index>=ingredients.length)return;
+  const outcome=acknowledgeIngredient(action,{ingredientId:ingredients[index].id,source:'operator_row_icon'});
+  const target=$('simNavigationStatus');if(target)target.textContent=outcome.message;
 });
 $('workItemSelect').addEventListener('change',e=>{void focusKitchenItem(e.target.value);});
 $('refreshWork').addEventListener('click',refreshWork);$('startBuild').addEventListener('click',startBuild);$('resetSimulator').addEventListener('click',resetSimulator);$('injectUnexpected').addEventListener('click',injectUnexpected);$('evaluateBuild').addEventListener('click',validate);$('autoPlayBuild').addEventListener('click',toggleAutoPlay);$('nextDetection').addEventListener('click',playNextMockDetection);$('lowConfidenceDetection').addEventListener('click',injectLowConfidenceDetection);$('completeMockBuild').addEventListener('click',completeMockScenario);$('handoffExpo').addEventListener('click',handoff);$('clearLog').addEventListener('click',()=>{state.logs=[];renderLog();});
@@ -1894,15 +1918,26 @@ function applyCalibration(){
   for(const [name,r] of Object.entries(calibration.regions)){const el=$(name);if(!el)continue;el.style.setProperty('--region-x',r.x+'%');el.style.setProperty('--region-y',r.y+'%');el.style.setProperty('--region-w',r.w+'%');el.style.setProperty('--region-h',r.h+'%');}
   const controls={hudOpacity:['opacity','%'],hudBrightness:['brightness','%'],hudScale:['scale','%'],safeWidth:['safeWidth','%'],safeHeight:['safeHeight','%'],leftEyeX:['leftEyeX','%'],leftEyeY:['leftEyeY','%'],rightEyeX:['rightEyeX','%'],rightEyeY:['rightEyeY','%']};
   $('rightWidth').value=String(calibration.regions.hudRight.w);$('rightWidthValue').textContent=String(Math.round(calibration.regions.hudRight.w))+'%';
+  window.GelatoGlassesHudNotifications?.positionUnderLeftTickets?.();
   $('leftWidth').value=String(calibration.regions.hudOrdersRegion.w);$('leftWidthValue').textContent=String(Math.round(calibration.regions.hudOrdersRegion.w))+'%';
   for(const [id,[key,suffix]] of Object.entries(controls)){if($(id)){$(id).value=String(calibration[key]);$(id+'Value').textContent=String(calibration[key])+suffix;}}
 }
 function setCalibrationEnabled(enabled){
-  calibrationEnabled=!!enabled;$('glassesStage').classList.toggle('calibrating',calibrationEnabled);
-  $('calibrationToggle').setAttribute('aria-pressed',calibrationEnabled?'true':'false');
-  $('calibrationToggle').textContent=calibrationEnabled?'Lock layout':'Calibrate';
+  calibrationEnabled=!!enabled;
+  $('glassesStage').classList.toggle('calibrating',calibrationEnabled);
+  $('glassesStage').closest('.sim-stage-panel')?.classList.toggle('hud-layout-editing',calibrationEnabled);
+  const toggle=$('calibrationToggle'),dock=$('simHudEditorDock'),tools=$('simHudEditorToolbar');
+  toggle.setAttribute('aria-pressed',calibrationEnabled?'true':'false');
+  toggle.setAttribute('aria-expanded',calibrationEnabled?'true':'false');
+  toggle.textContent=calibrationEnabled?'Finish editing':'Edit display';
+  dock.dataset.editing=calibrationEnabled?'true':'false';
+  tools.hidden=!calibrationEnabled;
   $('calibrationState').textContent=calibrationEnabled?'EDITING':'LOCKED';
-  log('CALIBRATION',calibrationEnabled?'Layout editing enabled.':'Layout locked.');
+  $('simHudEditorScope').textContent=(cfg.runtimePublicId?'Saved for this glasses runtime':'Preview layout · open runtime to isolate device')+
+    (calibrationEnabled?' · Drag the left or right display':'');
+  if(calibrationEnabled)$('hudOrdersRegion').querySelector('.region-move')?.focus();
+  applyCalibration();
+  log('CALIBRATION',calibrationEnabled?'Lens layout editing enabled.':'Lens layout saved and locked.');
 }
 function refreshPresets(){
   const names=Object.keys(presets).sort((a,b)=>a.localeCompare(b));
@@ -1938,24 +1973,61 @@ $('resetCalibration').addEventListener('click',factoryCalibration);
 $('presetSelect').addEventListener('change',e=>loadPreset(e.target.value));
 
 function bindRegionEditor(regionName){
-  const el=$(regionName),stage=$('glassesStage'),move=el.querySelector('.region-move'),resize=el.querySelector('.region-resize');
-  const begin=(event,kind)=>{
-    if(!calibrationEnabled)return;
+  const el=$(regionName),projection=$('lensProjection');
+  const move=el.querySelector('.region-move'),resize=el.querySelector('.region-resize');
+  if(!el||!projection||!move||!resize)return;
+  const keyboard=(event,kind)=>{
+    if(!calibrationEnabled||!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key))return;
     event.preventDefault();event.stopPropagation();
-    const pointer=event.touches?event.touches[0]:event;
-    const stageRect=stage.getBoundingClientRect(),startX=pointer.clientX,startY=pointer.clientY,start=deepClone(calibration.regions[regionName]);
+    const r=calibration.regions[regionName],step=event.shiftKey?5:1;
+    const delta=(event.key==='ArrowLeft'||event.key==='ArrowUp')?-step:step;
+    const horizontal=event.key==='ArrowLeft'||event.key==='ArrowRight';
+    if(kind==='move'){
+      if(horizontal)r.x=clamp(r.x+delta,0,100-r.w);
+      else r.y=clamp(r.y+delta,0,100-r.h);
+    }else{
+      if(horizontal)r.w=clamp(r.w+delta,8,100-r.x);
+      else r.h=clamp(r.h+delta,8,100-r.y);
+    }
+    saveCalibration();
+  };
+  const begin=(event,kind)=>{
+    if(!calibrationEnabled||event.button>0)return;
+    event.preventDefault();event.stopPropagation();
+    const rect=projection.getBoundingClientRect(),width=Math.max(1,rect.width),height=Math.max(1,rect.height);
+    const startX=event.clientX,startY=event.clientY,start=deepClone(calibration.regions[regionName]);
     const onMove=e=>{
-      const p=e.touches?e.touches[0]:e,dx=(p.clientX-startX)/stageRect.width*100,dy=(p.clientY-startY)/stageRect.height*100,r=calibration.regions[regionName];
-      if(kind==='move'){r.x=clamp(start.x+dx,0,100-start.w);r.y=clamp(start.y+dy,0,100-start.h);}
-      else{r.w=clamp(start.w+dx,8,100-r.x);r.h=clamp(start.h+dy,8,100-r.y);}
+      if(e.pointerId!==event.pointerId)return;
+      const dx=(e.clientX-startX)/width*100,dy=(e.clientY-startY)/height*100;
+      const r=calibration.regions[regionName];
+      if(kind==='move'){
+        r.x=clamp(start.x+dx,0,100-r.w);
+        r.y=clamp(start.y+dy,0,100-r.h);
+      }else{
+        r.w=clamp(start.w+dx,8,100-r.x);
+        r.h=clamp(start.h+dy,8,100-r.y);
+      }
       applyCalibration();
     };
-    const end=()=>{window.removeEventListener('pointermove',onMove);window.removeEventListener('pointerup',end);window.removeEventListener('touchmove',onMove);window.removeEventListener('touchend',end);saveCalibration();log('CALIBRATION','Updated '+regionName+' region.');};
-    window.addEventListener('pointermove',onMove);window.addEventListener('pointerup',end,{once:true});
-    window.addEventListener('touchmove',onMove,{passive:false});window.addEventListener('touchend',end,{once:true});
+    const end=()=>{
+      window.removeEventListener('pointermove',onMove);
+      window.removeEventListener('pointerup',end);
+      window.removeEventListener('pointercancel',end);
+      saveCalibration();
+      log('CALIBRATION','Updated '+regionName+' for '+(cfg.runtimePublicId||'preview')+'.');
+    };
+    window.addEventListener('pointermove',onMove);
+    window.addEventListener('pointerup',end,{once:true});
+    window.addEventListener('pointercancel',end,{once:true});
   };
-  move.addEventListener('pointerdown',e=>begin(e,'move'));move.addEventListener('touchstart',e=>begin(e,'move'),{passive:false});
-  resize.addEventListener('pointerdown',e=>begin(e,'resize'));resize.addEventListener('touchstart',e=>begin(e,'resize'),{passive:false});
+  // Header drag works in addition to the Move handle; normal kitchen clicks are
+  // left alone when Edit Mode is off.
+  const header=el.querySelector(':scope > .hud-panel-title')||el.querySelector('.hud-card .hud-panel-title');
+  move.addEventListener('pointerdown',e=>begin(e,'move'));
+  resize.addEventListener('pointerdown',e=>begin(e,'resize'));
+  if(header)header.addEventListener('pointerdown',e=>begin(e,'move'));
+  move.addEventListener('keydown',e=>keyboard(e,'move'));
+  resize.addEventListener('keydown',e=>keyboard(e,'resize'));
 }
 bindRegionEditor('hudRight');bindRegionEditor('hudStatus');bindRegionEditor('hudOrdersRegion');
 refreshPresets();applyCalibration();applyFrameMode();

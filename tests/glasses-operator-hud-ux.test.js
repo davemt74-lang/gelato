@@ -8,7 +8,8 @@ assert.match(page,/id="leftWidth" type="range"/);
 assert.match(page,/id="leftWidthValue"/);
 assert.match(page,/id="hudCurrentInstruction"/);
 assert.match(page,/id="hudBuildMode"/);
-assert.match(page,/ACTIVE KDS TICKETS/);
+assert.match(page,/class="hud-panel-title hud-ticket-diagnostic" hidden/,'ticket count heading hidden from left lens');
+assert.match(page,/id="simTicketTimeSync" hidden/,'ticket sync text hidden from left lens');
 assert.match(src,/calibration\.regions\.hudOrdersRegion\.w/);
 assert.match(src,/\$\('leftWidth'\)\.addEventListener\('input'/);
 assert.match(src,/saveCalibration\(\)/);
@@ -58,7 +59,7 @@ const ctx={Map,Array,Math,Number,String,JSON,
   itemActions:()=>({}),
   orderItems:()=>queue,elapsedLabel:()=> '03:25',selectedItem:()=>selection,
   escapeHtml:val=>String(val).replace(/[&<>"]/g,''),
-  $:id=>nodes[id]};
+  $:id=>nodes[id],window:{GelatoGlassesHudNotifications:{positionUnderLeftTickets(){}}}};
 vm.runInNewContext(blocks+'\nthis.visibleKdsTickets=visibleKdsTickets;this.kdsSlotForItem=kdsSlotForItem;this.renderOrdersQueue=renderOrdersQueue;',ctx);
 const ticket=(id,check,line)=>({kdsItemPublicId:id,ticket:{checkPublicId:check,checkNumber:'269014-ABCDEFGHIJ'+check},posLine:{name:line}});
 queue=[ticket('a','orderA','Pepperoni'),ticket('b','orderA','Garlic'),ticket('c','orderB','Cheese')];

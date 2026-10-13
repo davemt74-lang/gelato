@@ -693,3 +693,87 @@ html,body{max-width:100%;overflow-x:hidden}
 #glassesStage #hudConfirmSuggestion[hidden],#glassesStage #hudRejectSuggestion[hidden]{display:none!important}
 #glassesStage .hud-ingredient-actions button#hudConfirmSuggestion,
 #glassesStage .hud-ingredient-actions button#hudRejectSuggestion{font-size:9px;padding:3px 5px;min-width:0}
+
+/* Runtime HUD canvas edit mode: top toolbar is the only layout control surface.
+   The existing per-user/per-runtime CAL_KEY and PRESET_KEY remain authoritative. */
+.sim-stage-panel{display:flex!important;flex-direction:column;gap:6px}
+.sim-stage-panel #glassesStage{height:auto!important;flex:1 1 auto;min-height:0!important}
+.sim-stage-panel.hud-layout-editing{min-height:640px!important}
+.sim-hud-editor-dock{position:relative;z-index:30;display:grid;gap:7px;
+ border:1px solid #2e513d;border-radius:9px;padding:6px 9px;
+ background:#0d1912;flex:none;min-width:0}
+.sim-hud-editor-heading{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+.sim-hud-editor-scope{font:650 10px/1.35 system-ui;color:#b0cbb8}
+.sim-hud-edit-toggle{font:800 11px/1.25 system-ui;min-height:28px;cursor:pointer;
+ background:#1a5634;color:#e8fff0;border:1px solid #42935e;border-radius:6px;padding:5px 12px}
+.sim-hud-editor-dock[data-editing="true"] .sim-hud-edit-toggle{background:#9ee8b8;color:#123520}
+.sim-hud-editor-toolbar:not([hidden]){display:grid;gap:8px}
+.sim-hud-editor-toolbar[hidden]{display:none!important}
+.sim-hud-editor-primary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px}
+.sim-hud-editor-primary label{display:grid;grid-template-columns:minmax(0,1fr) auto;
+ gap:3px;align-items:center;font:700 9px/1.3 system-ui;color:#ccf4d9;min-width:0}
+.sim-hud-editor-primary label span{grid-column:1/-1}
+.sim-hud-editor-primary input[type="range"]{width:100%;min-width:0;accent-color:#77eba3}
+.sim-hud-editor-primary output{font:750 10px/1.2 system-ui;min-width:34px;text-align:right;color:#a9ffcb}
+.sim-hud-editor-advanced{border-top:1px solid #2d4736;padding-top:6px}
+.sim-hud-editor-advanced summary{font:750 10px/1.4 system-ui;cursor:pointer;color:#b4e9c7}
+.sim-hud-editor-advanced-body{display:grid;gap:10px;padding:10px 2px 3px;
+ border:0;background:transparent}
+.sim-hud-editor-advanced-body .calibration-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+.sim-hud-editor-advanced-body .preset-actions{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto}
+.sim-hud-editor-advanced-body input,
+.sim-hud-editor-advanced-body select{min-width:0}
+#glassesStage.calibrating .hud-orders-left,
+#glassesStage.calibrating .hud-right-build{cursor:grab;touch-action:none}
+#glassesStage.calibrating .region-move{top:1px!important;left:1px!important;cursor:grab!important}
+#glassesStage.calibrating .region-resize{touch-action:none}
+#glassesStage.calibrating .editable-region > .hud-panel-title{cursor:grab;touch-action:none}
+#glassesStage.calibrating .hud-build-card > .hud-panel-title{cursor:grab;touch-action:none}
+#glassesStage.calibrating .hud-ingredient-row-actions{pointer-events:none}
+#glassesStage .hud-ticket-diagnostic{display:none!important}
+/* Individual ingredients get unobtrusive right-hand Added ✓ and Skip − icons. */
+#glassesStage .hud-assembly-ingredient{display:flex;align-items:center;gap:4px;
+  padding:3px 2px;text-decoration:none;min-width:0}
+#glassesStage .hud-assembly-ingredient.skipped .ingredient-name{text-decoration:line-through;opacity:.78}
+#glassesStage .hud-assembly-ingredient .ingredient-name{flex:1;min-width:0}
+#glassesStage .hud-ingredient-row-actions{margin-left:auto;display:inline-flex;
+ align-items:center;gap:2px;flex:none;pointer-events:auto}
+#glassesStage .hud-ingredient-mark{display:inline-grid;place-items:center;
+ flex:none;width:17px;height:17px;min-width:17px;padding:0;border-radius:3px;
+ font:900 11px/1 system-ui;cursor:pointer;color:#a9c6b3;
+ background:rgba(5,23,14,.52);border:1px solid rgba(139,205,159,.30);
+ text-shadow:none;pointer-events:auto}
+#glassesStage .hud-ingredient-mark.added.selected{background:#187940;color:#f5fff8;border-color:#79e2a1}
+#glassesStage .hud-ingredient-mark.skipped.selected{background:#746331;color:#fff5cb;border-color:#e7ce80}
+#glassesStage .hud-ingredient-mark:disabled{opacity:.32;cursor:not-allowed}
+#glassesStage .hud-ingredient-mark:focus-visible{outline:2px solid #b0ffd1;outline-offset:1px}
+#glassesStage .hud-ingredient-mark:hover:not(:disabled){border-color:#b9ffd1;background:#245438}
+#glassesStage .hud-ingredient-actions:has(> button[hidden]:first-child){display:none}
+@media(max-width:960px){.sim-hud-editor-primary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){
+ .sim-hud-editor-primary{gap:6px}
+ .sim-hud-editor-advanced-body .calibration-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .sim-hud-editor-advanced-body .preset-actions{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .sim-stage-panel.hud-layout-editing{min-height:630px!important;height:auto!important}
+}
+
+/* Section HUD edit: position notifications under the draggable LEFT lens ticket rail,
+   not between the two eyes. JS aligns to measured projection/ticket geometry. */
+#glassesStage .glasses-hud-notification{
+ left:1%;top:39%;bottom:auto;width:23%;max-width:none;
+ background:#051d14!important;color:#ffffff!important;
+ border:1px solid #a0ecc0;border-left:4px solid #b6ebff;
+ border-radius:6px;padding:7px 8px;font:700 11px/1.4 system-ui;
+ box-shadow:0 3px 14px rgba(0,0,0,.75);text-shadow:none;
+ overflow-wrap:anywhere;z-index:21;box-sizing:border-box;
+}
+#glassesStage .glasses-hud-notice-header{display:flex;gap:4px;flex-wrap:wrap;align-items:start}
+#glassesStage .glasses-hud-notice-header b{color:#ffffff!important;font-size:11px;font-weight:850}
+#glassesStage .glasses-hud-notice-message{font:700 11px/1.4 system-ui;color:#ffffff!important;
+ margin-top:4px;letter-spacing:0;text-shadow:none;overflow-wrap:anywhere}
+#glassesStage #glassesHudNotificationMeta{font:700 9px/1.25 system-ui;
+ color:#ddfbe5!important;text-align:left;max-width:100%;overflow-wrap:anywhere}
+@media(max-width:680px){
+ #glassesStage .glasses-hud-notification{bottom:auto;max-width:none;padding:6px 6px;font-size:10px}
+ #glassesStage .glasses-hud-notice-message{font-size:10px}
+}

@@ -12,7 +12,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <title>Web Glasses Simulator · Gelato</title>
 <link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20261013-live1">
 <link rel="stylesheet" href="assets/css/glasses-simulator-hud-ux.css?v=20261013-voice1">
-<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-268">
+<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-hud-edit2">
 </head>
 <body>
 <header class="sim-topbar">
@@ -29,7 +29,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
     <label class="asset-load">Glasses <input id="glassesFile" type="file" accept="image/*"></label>
     <label>Frame <select id="frameModeSelect"><option value="svg">SVG</option><option value="image">Uploaded</option><option value="none">None</option></select></label>
     <label class="mask-toggle"><input id="opticalMaskToggle" type="checkbox" checked> Lens mask</label>
-    <button id="calibrationToggle" type="button" aria-pressed="false">Calibrate</button>
+    
     <?php if(admin_control_allowed($user)):?><a href="admin.php" class="sim-admin-link">ADMIN</a><?php endif;?>
   </div>
 </header>
@@ -86,6 +86,48 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
       <div id="simNavContext" class="sim-nav-command-examples" hidden>Loading orders…</div>
 
     </nav>
+    <div class="sim-hud-editor-dock" id="simHudEditorDock" data-editing="false">
+      <div class="sim-hud-editor-heading">
+        <button id="calibrationToggle" class="sim-hud-edit-toggle" type="button" aria-pressed="false"
+          aria-controls="simHudEditorToolbar" aria-expanded="false">Edit display</button>
+        <span class="sim-hud-editor-scope" id="simHudEditorScope" role="status">Current glasses layout</span>
+      </div>
+      <section id="simHudEditorToolbar" class="sim-hud-editor-toolbar" aria-label="Glass lens layout editor" hidden>
+        <div class="sim-hud-editor-primary" role="group" aria-label="Left and right lens adjustments">
+          <label><span>Opacity</span><input id="hudOpacity" type="range" min="20" max="100" value="100"><output id="hudOpacityValue">100%</output></label>
+          <label><span>Brightness</span><input id="hudBrightness" type="range" min="50" max="180" value="100"><output id="hudBrightnessValue">100%</output></label>
+          <label><span>Left width</span><input id="leftWidth" type="range" min="12" max="50" value="23"><output id="leftWidthValue">23%</output></label>
+          <label><span>Right width</span><input id="rightWidth" type="range" min="15" max="55" value="29"><output id="rightWidthValue">29%</output></label>
+        </div>
+        <details class="sim-hud-editor-advanced" id="simHudEditorAdvanced">
+          <summary>Advanced layout and presets</summary>
+          <section id="calibrationPanel" class="calibration-card sim-hud-editor-advanced-body">
+            <div class="console-heading">
+              <div><small>RUNTIME PROJECTION</small><strong>Saved layout calibration</strong></div>
+              <span id="calibrationState">LOCKED</span>
+            </div>
+            <div class="calibration-grid">
+              <label><span>HUD scale</span><input id="hudScale" type="range" min="60" max="140" value="100"><output id="hudScaleValue">100%</output></label>
+              <label><span>Safe area width</span><input id="safeWidth" type="range" min="45" max="95" value="80"><output id="safeWidthValue">80%</output></label>
+              <label><span>Safe area height</span><input id="safeHeight" type="range" min="35" max="90" value="66"><output id="safeHeightValue">66%</output></label>
+              <label><span>Left eye X</span><input id="leftEyeX" type="range" min="-20" max="20" value="0"><output id="leftEyeXValue">0%</output></label>
+              <label><span>Left eye Y</span><input id="leftEyeY" type="range" min="-20" max="20" value="0"><output id="leftEyeYValue">0%</output></label>
+              <label><span>Right eye X</span><input id="rightEyeX" type="range" min="-20" max="20" value="0"><output id="rightEyeXValue">0%</output></label>
+              <label><span>Right eye Y</span><input id="rightEyeY" type="range" min="-20" max="20" value="0"><output id="rightEyeYValue">0%</output></label>
+            </div>
+            <label class="preset-row"><span>LAYOUT PRESET</span><select id="presetSelect"></select></label>
+            <div class="preset-actions">
+              <input id="presetName" maxlength="48" placeholder="Preset name">
+              <button id="savePreset" type="button">Save preset</button>
+              <button id="deletePreset" type="button">Delete</button>
+              <button id="resetCalibration" type="button">Factory</button>
+            </div>
+            <p class="calibration-note">Drag the left or right panel heading to move. Drag ↘ to resize.
+              Use arrow keys on Move/Resize handles (Alt+arrows to resize).</p>
+          </section>
+        </details>
+      </section>
+    </div>
     <div class="glasses-stage" id="glassesStage">
       <div class="scene-placeholder">
         <img id="sceneImage" alt="" hidden>
@@ -145,25 +187,25 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 
       <section class="lens-projection" id="lensProjection" aria-label="Simulated on-lens projection">
         <div class="hud-topbar editable-region" id="hudStatus" data-region="hudStatus">
-          <button class="region-handle region-move" type="button" tabindex="-1" aria-hidden="true">MOVE</button>
-          <button class="region-handle region-resize" type="button" tabindex="-1" aria-hidden="true">↘</button>
+          <button class="region-handle region-move" type="button" aria-label="Move HUD status" title="Drag or use arrow keys">MOVE</button>
+          <button class="region-handle region-resize" type="button" aria-label="Resize display" title="Drag or use Alt+arrow keys">↘</button>
           <div class="hud-clock"><strong id="hudClock">10:24</strong><span id="hudStatusTemp">HOT LINE · 74°F</span></div>
 
         </div>
 
         <aside class="hud-orders-left editable-region" id="hudOrdersRegion" data-region="hudOrdersRegion">
-          <button class="region-handle region-move" type="button" tabindex="-1" aria-hidden="true">MOVE</button>
-          <button class="region-handle region-resize" type="button" tabindex="-1" aria-hidden="true">↘</button>
-          <div class="hud-panel-title"><small>ACTIVE KDS TICKETS</small><span id="hudOrdersCount">0</span></div>
-          <div class="sim-ticket-time-sync" id="simTicketTimeSync">POS TIME · WAITING</div>
+          <button class="region-handle region-move" type="button" aria-label="Move Left ticket display" title="Drag or use arrow keys">MOVE</button>
+          <button class="region-handle region-resize" type="button" aria-label="Resize display" title="Drag or use Alt+arrow keys">↘</button>
+          <div class="hud-panel-title hud-ticket-diagnostic" hidden aria-hidden="true"><small>ACTIVE KDS TICKETS</small><span id="hudOrdersCount">0</span></div>
+          <div class="sim-ticket-time-sync hud-ticket-diagnostic" id="simTicketTimeSync" hidden aria-hidden="true">POS TIME · WAITING</div>
           <div id="hudOrders" class="hud-orders-list" aria-label="Active KDS ticket tabs and item lists"></div>
         </aside>
 
         <div id="hudCenterClear" class="hud-center-clear" aria-hidden="true"></div>
 
         <aside class="hud-right-build editable-region" id="hudRight" data-region="hudRight">
-          <button class="region-handle region-move" type="button" tabindex="-1" aria-hidden="true">MOVE</button>
-          <button class="region-handle region-resize" type="button" tabindex="-1" aria-hidden="true">↘</button>
+          <button class="region-handle region-move" type="button" aria-label="Move Right ingredient display" title="Drag or use arrow keys">MOVE</button>
+          <button class="region-handle region-resize" type="button" aria-label="Resize display" title="Drag or use Alt+arrow keys">↘</button>
           <div class="hud-card hud-next-card" id="hudNextRegion" data-region="hudNextRegion">
             <div class="hud-panel-title"><small>NEXT</small><span id="hudNextTarget">Target ingredient</span></div>
             <strong id="hudNextCenter">Add Toasted Bread</strong>
@@ -179,8 +221,10 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
             <span id="hudBuildMeta">Table 12 · Regular</span>
             <ul id="hudBuildSteps" class="hud-build-steps" aria-label="Ingredients for selected item"></ul>
             <div id="hudAssemblySuggestion" class="hud-assembly-suggestion" role="status" hidden></div>
-            <div class="hud-ingredient-actions"><button type="button" data-hud-ingredient-action="added" id="hudIngredientAdded">Added ✓</button><button type="button" data-hud-ingredient-action="skipped" id="hudIngredientSkip">Skip ↷</button>
-            <button type="button" id="hudConfirmSuggestion" disabled hidden>Confirm ✓</button><button type="button" id="hudRejectSuggestion" disabled hidden>Reject</button></div>
+            <div class="hud-ingredient-actions">
+              <button type="button" id="hudConfirmSuggestion" disabled hidden>Confirm suggestion ✓</button>
+              <button type="button" id="hudRejectSuggestion" disabled hidden>Reject suggestion</button>
+            </div>
           </div>
           <div class="hud-card hud-validation-panel" id="validationCard">
             <div class="hud-panel-title"><small>INGREDIENT VALIDATION</small><span id="hudValidationState">BUILDING</span></div>
@@ -277,30 +321,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
       <div id="cookUxMetrics" class="vision-metrics">center clear · current item · next step · warnings · rework · handoff</div>
       <p class="calibration-note">STOP cancels automatic observations and clears transient vision state. Resume is explicit. Handoff remains a separate human-confirmed action.</p>
     </section>
-    <section class="console-card calibration-card" id="calibrationPanel">
-      <div class="console-heading"><div><small>PROJECTION CALIBRATION</small><strong>Lens layout & display tuning</strong></div><span id="calibrationState">LOCKED</span></div>
-      <div class="calibration-grid">
-        <label><span>HUD opacity</span><input id="hudOpacity" type="range" min="20" max="100" value="100"><output id="hudOpacityValue">100%</output></label>
-        <label><span>Brightness</span><input id="hudBrightness" type="range" min="50" max="180" value="100"><output id="hudBrightnessValue">100%</output></label>
-        <label><span>HUD scale</span><input id="hudScale" type="range" min="60" max="140" value="100"><output id="hudScaleValue">100%</output></label>
-        <label><span>Safe area width</span><input id="safeWidth" type="range" min="45" max="95" value="80"><output id="safeWidthValue">80%</output></label>
-        <label><span>Safe area height</span><input id="safeHeight" type="range" min="35" max="90" value="66"><output id="safeHeightValue">66%</output></label>
-        <label><span>Left eye X</span><input id="leftEyeX" type="range" min="-20" max="20" value="0"><output id="leftEyeXValue">0%</output></label>
-        <label><span>Left eye Y</span><input id="leftEyeY" type="range" min="-20" max="20" value="0"><output id="leftEyeYValue">0%</output></label>
-        <label><span>Right eye X</span><input id="rightEyeX" type="range" min="-20" max="20" value="0"><output id="rightEyeXValue">0%</output></label>
-        <label><span>Right eye Y</span><input id="rightEyeY" type="range" min="-20" max="20" value="0"><output id="rightEyeYValue">0%</output></label>
-        <label><span>Left HUD width</span><input id="leftWidth" type="range" min="12" max="50" value="23"><output id="leftWidthValue">23%</output></label>
-        <label><span>Right HUD width</span><input id="rightWidth" type="range" min="15" max="55" value="29"><output id="rightWidthValue">29%</output></label>
-      </div>
-      <label class="preset-row"><span>LAYOUT PRESET</span><select id="presetSelect"></select></label>
-      <div class="preset-actions">
-        <input id="presetName" maxlength="48" placeholder="Preset name">
-        <button id="savePreset" type="button">Save</button>
-        <button id="deletePreset" type="button">Delete</button>
-        <button id="resetCalibration" type="button">Factory</button>
-      </div>
-      <p class="calibration-note">Enable Calibrate, then drag the MOVE handle or resize from ↘. Presets are saved only in this browser.</p>
-    </section>
+
     <section class="console-card camera-card">
       <div class="console-heading"><div><small>BROWSER CAMERA</small><strong>Vision preview source</strong></div><span id="cameraHealth">OFF</span></div>
       <label class="work-picker"><span>CAMERA</span><select id="cameraDeviceSelect"><option value="">Default camera</option></select></label>
@@ -495,8 +516,8 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-item-assembly.js?v=20261013-265"></script>
 <script src="assets/js/glasses-employee-runtimes.js?v=20261013-268"></script>
 <script src="assets/js/glasses-assembly-recognition.js?v=20261013-266"></script>
-<script src="assets/js/glasses-hud-notifications.js?v=20261013-266a"></script>
-<script src="assets/js/glasses-web-simulator.js?v=20261013-268"></script>
+<script src="assets/js/glasses-hud-notifications.js?v=20261013-hud-edit2"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20261013-hud-edit2"></script>
 <script src="assets/js/glasses-voice-device.js?v=20261013-device1"></script>
 <script src="assets/js/glasses-simulator-voice.js?v=20261013-266a"></script>
 <script src="assets/js/glasses-multicamera.js?v=20261013-multi1"></script>
