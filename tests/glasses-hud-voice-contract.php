@@ -16,7 +16,7 @@ hudAssert(str_contains($css,'.sim-stage-panel{position:sticky')&&str_contains($c
 hudAssert(str_contains($css,'.glasses-stage.frame-none .lens-projection{inset:0!important'),'frameless mode must fill HUD stage');
 hudAssert(str_contains($css,'@media(max-width:640px)'),'HUD must support narrow phones');
 hudAssert(str_contains($voice,'SpeechRecognition||window.webkitSpeechRecognition'),'feature detection required');
-hudAssert(str_contains($voice,"recognizer.lang='en-US'"),'voice locale required');
+hudAssert(str_contains($voice,"active.lang='en-US'"),'voice locale required');
 hudAssert(str_contains($voice,'stopVoice()'),'voice must have explicit stop');
 hudAssert(str_contains($voice,'normalizePhrase'),'voice command parser required');
 hudAssert(str_contains($voice,'organizeControls()'),'diagnostics should not displace live work');
