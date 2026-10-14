@@ -23,6 +23,7 @@ $check($state('1.1.0',['minimumVersion'=>null,'targetVersion'=>null])==='unmanag
 $api=(string)file_get_contents($root.'/api/glasses-software.php');
 $core=(string)file_get_contents($root.'/includes/glasses-software.php');
 $page=(string)file_get_contents($root.'/glasses-simulator.php');
+$fleet=(string)file_get_contents($root.'/glasses-fleet.php');
 $tabs=(string)file_get_contents($root.'/assets/js/glasses-simulator-tabs.js');
 $js=(string)file_get_contents($root.'/assets/js/glasses-software-manager.js');
 $schema=(string)file_get_contents($root.'/database/20261216_glasses_software_policies.sql');
@@ -33,8 +34,9 @@ $check(str_contains($core,'revision=revision+1')&&str_contains($core,'FOR UPDATE
 $check(str_contains($core,"event_type<>'heartbeat'"),'safe bounded diagnostic listing');
 $check(!str_contains($core,'token_hash'),'secret device tokens excluded');
 $check(str_contains($schema,'UNIQUE KEY uq_glasses_software_scope'),'one policy per location/platform');
-$check(str_contains($page,'id="glassesSoftwareManager"')&&str_contains($tabs,"move($('glassesSoftwareManager')"),'Runtime tab integration');
+$check(str_contains($fleet,'id="glassesSoftwareManager"')&&!str_contains($page,'id="glassesSoftwareManager"')
+ && !str_contains($tabs,"move($('glassesSoftwareManager')"),'software console belongs to dedicated fleet page');
 $check(str_contains($js,'textContent')&&str_contains($js,'credentials:'),'safe UI and authorized request');
 $check(!str_contains($js,'innerHTML'),'remote data never inserted as HTML');
-$check(str_contains($js,"manual_only")===false && str_contains($page,'does not install'),'no unsupported native updater');
+$check(str_contains($js,"manual_only")===false && str_contains($fleet,'not installed'),'no unsupported native updater');
 echo "PASS Section 275 software manager contracts (24 assertions)\n";
