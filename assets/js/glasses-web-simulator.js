@@ -919,7 +919,8 @@ async function pollReadonlyIngredientFrame(epoch){
    const focused=detections.filter(d=>names.has(normalized(d.label)));
    if(window.GelatoMediaPipeHandsRuntime?.isActive())
      window.GelatoMediaPipeHandsRuntime.setObjects(focused,{
-       modelSha256:readonlyIngredient.verifiedSha256
+       modelSha256:readonlyIngredient.verifiedSha256,
+       kdsItemPublicId:itemKey
      });
    readonlyIngredient.frameSeq++;
    if(readonlyIngredient.frameSeq%16===1)
@@ -1292,7 +1293,8 @@ async function deliverVisionInference(frame,raw,started){
       // read-only KDS inference evidence. One producer owns held-object frames.
       if(readonlyIngredient.status!=='ready')
         window.GelatoMediaPipeHandsRuntime.setObjects(detections.filter(d=>!core.isHand(d)),{
-          modelSha256:state.browserModel.verifiedSha256||null
+          modelSha256:state.browserModel.verifiedSha256||null,
+          kdsItemPublicId:selectedItem()?.kdsItemPublicId||null
         });
     }else if(!window.GelatoMediaPipeHandsRuntime){
       // Backward-compatible ONNX path if the optional detector is not loaded.

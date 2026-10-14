@@ -96,6 +96,9 @@ vm.runInNewContext(code.slice(start,end)+
  assert.match(code,/if\(readonlyIngredient\.status!=='ready'\)/);
  assert.match(code,/window\.GelatoMediaPipeHandsRuntime\.setObjects\(focused/);
  assert.match(code,/modelSha256:readonlyIngredient\.verifiedSha256/);
+ assert.match(code,/kdsItemPublicId:itemKey/);
+ const mediapipe=fs.readFileSync('assets/js/glasses-mediapipe-hands.js','utf8');
+ assert.match(mediapipe,/otherItemId===scope\.activeItem\?\.kdsItemPublicId/,'stale ticket objects blocked in MediaPipe publisher');
  assert.match(ui,/glassesReadonlyModelLoad/);
  assert.match(ui,/glasses-vision-models\.php/);
  assert.match(hand,/minFrames=3/);
