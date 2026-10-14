@@ -16,7 +16,7 @@ const elements={
  cameraVideo:{videoWidth:1280,videoHeight:720}
 };
 const $=id=>elements[id];
-const item={kdsItemPublicId:'item-one',status:'in_progress',
+const item={kdsItemPublicId:'item-one',status:'in_progress',ticket:{checkPublicId:'check-one',checkNumber:'100'},
  menu:{ingredients:[{name:'Sauce'},{name:'Mozzarella'}]}};
 let focus=item,sessions=0,inference=0;
 const state={cameraStream:{},device:{publicId:'preview:1:all'},mode:'live',work:{items:[item]}};
