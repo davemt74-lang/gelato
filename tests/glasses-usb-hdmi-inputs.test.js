@@ -11,6 +11,8 @@ const docs=fs.readFileSync('docs/GLASSES-SECTION281-LIVE-MEDIAPIPE-HANDS.md','ut
 assert.match(page,/id="cameraDeviceSelect"/);
 assert.match(page,/USB \/ HDMI CAMERA INPUT/);
 assert.match(page,/id="refreshCameraInputs"/);
+assert.match(page,/id="allowCameraDiscovery"/);
+assert.match(app,/function requestCameraDiscoveryAccess\(\)/);
 assert.match(page,/id="cameraInputStatus"/);
 assert.match(page,/HDMI capture adapter/);
 assert.match(app,/navigator\.mediaDevices\?\.addEventListener\?\.\('devicechange'/);
@@ -35,16 +37,18 @@ let connected=[
 const picker={value:'',_html:''};
 Object.defineProperty(picker,'innerHTML',{get(){return this._html;},set(text){this._html=text;this.value='';}});
 const notice={textContent:'',dataset:{}};
+const scanButton={disabled:false};
+let consentProbeCount=0,consentProbeStopped=0;
 const state={cameraDevices:[]};
 const context={
  state,navigator:{mediaDevices:{enumerateDevices:async()=>connected}},
  cameraSupported:()=>true,cameraPrefs:()=>({deviceId:saved}),
- $:key=>key==='cameraDeviceSelect'?picker:key==='cameraInputStatus'?notice:null,
+ $:key=>key==='cameraDeviceSelect'?picker:key==='cameraInputStatus'?notice:key==='allowCameraDiscovery'?scanButton:null,
  escapeHtml:value=>String(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'),
  Error
 };
 vm.createContext(context);
-vm.runInContext(app.slice(start,end)+'\nthis.refresh=enumerateCameras;',context);
+vm.runInContext(app.slice(start,end)+'\nthis.refresh=enumerateCameras;this.scan=requestCameraDiscoveryAccess;',context);
 
 async function run(){
  await context.refresh();
@@ -71,6 +75,35 @@ async function run(){
  picker.value='usb-device';saved='usb-device';
  await context.refresh();
  assert.equal(picker.value,'usb-device','switching back to USB still works');
+
+ // Refresh remains passive. Explicit permission scan enumerates visible
+ // sources while a temporary capture stream is alive, then releases it.
+ let permitted=false;
+ context.navigator.mediaDevices.enumerateDevices=async()=>permitted?connected:[
+   {kind:'videoinput',deviceId:'',label:''}
+ ];
+ context.navigator.mediaDevices.getUserMedia=async options=>{
+   assert.equal(options.video,true);
+   assert.equal(options.audio,false);
+   consentProbeCount++;permitted=true;
+   return {getTracks:()=>[{stop(){consentProbeStopped++;permitted=false;}}]};
+ };
+ saved='';picker.value='';
+ await context.refresh();
+ assert.equal(consentProbeCount,0,'plain refresh never requests a camera stream');
+ assert.equal(state.cameraDevices.length,0,'hidden device is not fabricated into the picker');
+ assert.match(notice.textContent,/Allow Camera Access/i);
+ await context.scan();
+ assert.equal(consentProbeCount,1,'permission scan is explicitly user-initiated');
+ assert.equal(consentProbeStopped,1,'temporary video track always released');
+ assert.equal(scanButton.disabled,false,'scan button re-enabled');
+ assert.match(picker.innerHTML,/HDMI Capture/,'scan reveals HDMI input while permission probe is live');
+
+ context.navigator.mediaDevices.getUserMedia=async()=>{const e=new Error('denied');e.name='NotAllowedError';throw e;};
+ await context.scan();
+ assert.equal(scanButton.disabled,false,'permission errors restore scan button');
+ assert.equal(notice.dataset.state,'error');
+ assert.match(notice.textContent,/denied/i);
 
  console.log('glasses-usb-hdmi-inputs=ok');
 }
