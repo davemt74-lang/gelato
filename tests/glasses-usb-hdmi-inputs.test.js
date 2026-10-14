@@ -21,7 +21,7 @@ assert.match(page,/HDMI capture adapter/);
 assert.match(app,/navigator\.mediaDevices\?\.addEventListener\?\.\('devicechange'/);
 assert.match(app,/getUserMedia\(\{video:videoConstraints,audio:false\}\)/);
 assert.match(app,/videoConstraints\.deviceId=\{exact:deviceId\}/);
-assert.match(app,/savedId&&!state\.cameraDevices\.some\(d=>d\.deviceId===savedId\)/);
+assert.match(app,/savedId&&!state\.cameraSelectableSources\.some\(d=>d\.key===savedId\)/);
 assert.match(app,/id="cameraMeta"|\$\('cameraMeta'\)/);
 assert.match(aux,/enumerateDevices\(\)/);
 assert.match(aux,/getUserMedia\(\{video:\{deviceId:\{exact:id\}/);
@@ -42,9 +42,9 @@ Object.defineProperty(picker,'innerHTML',{get(){return this._html;},set(text){th
 const notice={textContent:'',dataset:{}};
 const scanButton={disabled:false};
 let consentProbeCount=0,consentProbeStopped=0;
-const state={cameraDevices:[]};
+const state={cameraDevices:[],cameraSelectableSources:[]};
 const context={
- state,navigator:{mediaDevices:{enumerateDevices:async()=>connected}},
+ state,window:{GelatoGlassesCameraSources:null},navigator:{mediaDevices:{enumerateDevices:async()=>connected}},
  cameraSupported:()=>true,cameraPrefs:()=>({deviceId:saved}),
  $:key=>key==='cameraDeviceSelect'?picker:key==='cameraInputStatus'?notice:key==='allowCameraDiscovery'?scanButton:null,
  escapeHtml:value=>String(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'),

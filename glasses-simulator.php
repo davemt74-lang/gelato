@@ -136,6 +136,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
       <div class="scene-placeholder">
         <img id="sceneImage" alt="" hidden>
         <video id="cameraVideo" class="camera-video" autoplay muted playsinline hidden></video>
+        <div id="glassesPovAimGuide" class="glasses-pov-aim-guide" hidden aria-hidden="true"><span></span></div>
         <canvas id="cameraCaptureCanvas" hidden></canvas>
         <div class="scene-copy" id="scenePlaceholder" aria-hidden="true"></div>
       </div>
@@ -330,7 +331,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
     </section>
 
     <section class="console-card camera-card">
-      <div class="console-heading"><div><small>BROWSER CAMERA</small><strong>Vision preview source</strong></div><span id="cameraHealth">OFF</span></div>
+      <div class="console-heading"><div><small>GLASSES POV · CAMERA 1</small><strong>First-person vision source</strong></div><span id="cameraHealth">OFF</span></div>
       <label class="work-picker"><span>USB / HDMI CAMERA INPUT</span><select id="cameraDeviceSelect"><option value="">Default camera</option></select></label>
       <div class="inline-actions">
         <button type="button" id="refreshCameraInputs">Refresh Camera Inputs</button>
@@ -354,6 +355,15 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
         <button id="clearCameraTarget" type="button" disabled>Clear Target</button>
       </div>
       <div class="camera-meta" id="cameraMeta"><span>No active camera stream.</span></div>
+      <section class="glasses-pov-calibration" aria-label="First-person camera calibration">
+        <div class="console-heading"><div><small>SECTION 284 · POV CALIBRATION</small><strong>First-person framing &amp; image quality</strong></div></div>
+        <p class="calibration-note">Camera 1 follows the wearer's head direction. The center guide is visual alignment only; it does not claim eye-gaze tracking or identify ingredients.</p>
+        <div class="inline-actions">
+          <label><input id="glassesPovShowAimGuide" type="checkbox"> Show center aiming guide</label>
+          <button id="glassesPovCheckFrame" type="button">Check POV Frame</button>
+        </div>
+        <p id="glassesPovCalibrationStatus" class="calibration-note" role="status" aria-live="polite">Start Camera 1, aim at the preparation surface and check lighting, contrast and detail.</p>
+      </section>
       <section id="glassesHandTracking" class="glasses-hand-tracking" aria-label="Hands and held ingredient tracking">
         <header><strong>Live hands · object-in-hand training</strong><small>Camera 1 / selected glasses runtime</small></header>
         <div class="glasses-hand-detector-control">
@@ -564,9 +574,11 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-held-ingredient-evidence.js?v=20261014-282"></script>
 <script src="assets/js/glasses-mediapipe-hands.js?v=20261014-282"></script>
 <script src="assets/js/glasses-mediapipe-hands-ui.js?v=20261014-281"></script>
-<script src="assets/js/glasses-web-simulator.js?v=20261014-readonly283"></script>
+<script src="assets/js/glasses-camera-sources.js?v=20261014-284a"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20261014-284camera"></script>
 <script src="assets/js/glasses-voice-device.js?v=20261013-device1"></script>
 <script src="assets/js/glasses-simulator-voice.js?v=20261014-kds-completion"></script>
+<script src="assets/js/glasses-pov-calibration.js?v=20261014-284b"></script>
 <script src="assets/js/glasses-hand-tracker-ui.js?v=20261014-282"></script>
 <script src="assets/js/glasses-multicamera.js?v=20261013-multi1"></script>
 <script src="assets/js/glasses-camera-config.js?v=20261014-cam-runtime-split"></script>

@@ -47,3 +47,4 @@ for(let slot=1;slot<=5;slot++)assert.equal(cfg.isEnabled(slot),false,'fail close
 assert.equal(cfg.status().ready,false,'script load cannot activate cameras');
 console.log('section257-camera-client-and-permission-contract=ok');
 require('./glasses-usb-hdmi-inputs.test.js');
+require('./glasses-section284-pov-sdk-sources.test.js');

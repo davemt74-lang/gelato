@@ -1,4 +1,4 @@
-name: Release Camera Capture Discovery Fix
+name: Release Gelato Section 284
 
 on:
   workflow_run:
@@ -19,12 +19,12 @@ jobs:
           && github.event.workflow_run.head_repository.full_name == 'davemt74-lang/gelato' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Skip once USB and HDMI release exists
+      - name: Skip once Section 284 release exists
         id: already
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view gelato-camera-discovery-fix --repo davemt74-lang/gelato >/dev/null 2>&1; then
+          if gh release view gelato-section-284 --repo davemt74-lang/gelato >/dev/null 2>&1; then
             echo 'exists=true' >> "$GITHUB_OUTPUT"
           else
             echo 'exists=false' >> "$GITHUB_OUTPUT"
@@ -62,6 +62,9 @@ jobs:
           unzip -Z1 gelato-full-deploy.zip | grep -Fx 'assets/vendor/mediapipe/hand_landmarker.task'
           unzip -Z1 gelato-full-deploy.zip | grep -Fx 'glasses-simulator.php'
           unzip -Z1 gelato-full-deploy.zip | grep -Fx 'tests/glasses-usb-hdmi-inputs.test.js'
+          unzip -Z1 gelato-full-deploy.zip | grep -Fx 'assets/js/glasses-camera-sources.js'
+          unzip -Z1 gelato-full-deploy.zip | grep -Fx 'assets/js/glasses-pov-calibration.js'
+          unzip -Z1 gelato-full-deploy.zip | grep -Fx 'tests/glasses-section284-pov-sdk-sources.test.js'
           if unzip -Z1 gelato-full-deploy.zip | grep -Eq '^(config\.php|\.env|uploads/|storage/)'; then
             echo 'Private live config/state unexpectedly included.' >&2
             exit 1
@@ -74,10 +77,10 @@ jobs:
           EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
-          gh release create gelato-camera-discovery-fix \
+          gh release create gelato-section-284 \
             payload/gelato-full-deploy.zip \
             payload/gelato-full-deploy.sha256 \
             --repo davemt74-lang/gelato \
             --target "$EXPECTED_SHA" \
-            --title 'Gelato — USB and HDMI Camera Discovery Fix' \
-            --notes 'Full certified deployment ZIP. USB webcams remain supported alongside Windows-recognized HDMI capture devices. Adds an explicit permission scan and improved input diagnostics. Extract into the app root, preserve existing configuration/uploads/storage, then run upgrade.php. Hardware detection in Windows and Chrome is still required for HDMI.'
+            --title 'Gelato — Section 284 Glasses POV and SDK-ready Sources' \
+            --notes 'Full certified deployment ZIP for Section 284: opt-in AIR3 camera source boundary, local head-direction POV calibration, read-only Agent source context, and labeled training sample provenance. USB/HDMI and stationary Cameras 2–5 remain supported. AIR3 proprietary SDK and physical glasses verification are still pending. Extract into the app root and preserve existing configuration/uploads/storage; run upgrade.php if instructed by the installer.'

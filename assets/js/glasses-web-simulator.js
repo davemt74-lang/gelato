@@ -1,7 +1,7 @@
 (()=>{'use strict';
 const cfg=window.GELATO_GLASSES_SIMULATOR||{};
 const $=id=>document.getElementById(id);
-const state={mode:'live',devices:[],device:null,work:null,selectedKdsItemPublicId:'',build:null,validation:null,seq:1,logs:[],autoPlayTimer:null,syncTimer:null,syncBusy:false,syncErrors:0,reconnectCount:0,syncFingerprint:'',syncAbort:null,syncEpoch:0,lastSyncAt:null,cameraStream:null,cameraTrack:null,cameraTarget:null,cameraDevices:[],cameraSource:'image',visionMode:'manual',visionTimer:null,visionBusy:false,visionFrameSeq:0,visionLastAt:0,visionLatencyMs:0,visionFps:0,visionDetections:[],visionTracks:new Map(),visionSubmitted:new Set(),visionAdapter:null,temporalTracks:new Map(),temporalEvents:[],temporalSequence:[],temporalViolations:[],temporalValidationBusy:false,temporalValidationFingerprint:'',temporalReadySince:0,temporalGate:null,browserModel:{status:'idle',session:null,assignment:null,profile:null,config:null,package:null,verifiedSha256:null,loadEpoch:0},dataset:{annotations:[],samples:[],drag:null,frozen:false,captureGroup:null,burstSeq:0,uploading:false},activeLearning:{enabled:true,candidates:[],capturing:false,lastCaptureByKey:new Map(),maxQueue:30,cooldownMs:10000},shadowModel:{status:'idle',session:null,assignment:null,config:null,package:null,verifiedSha256:null,runPublicId:null,summary:null,frameSeq:0,busy:false},hardwareRuntime:null,stationSoakReport:null,cookUx:{stopped:false,preview:null,acceptance:null,handoffArmed:false},recovery:{state:'ready',attempt:0,epoch:0,networkFault:false,suppressAutomatic:false,freshBarrierUntil:0,lastReason:'runtime_ready',timer:null},framePipeline:{queue:[],worker:false,epoch:0,nextSeq:0,currentAbort:null,metrics:{acceptedFrames:0,processedFrames:0,droppedFrames:0,staleFrames:0,timedOutFrames:0,cancelledFrames:0,failedFrames:0,queueDepth:0,maxObservedQueueDepth:0,lastProcessedSequence:0}}};
+const state={mode:'live',devices:[],device:null,work:null,selectedKdsItemPublicId:'',build:null,validation:null,seq:1,logs:[],autoPlayTimer:null,syncTimer:null,syncBusy:false,syncErrors:0,reconnectCount:0,syncFingerprint:'',syncAbort:null,syncEpoch:0,lastSyncAt:null,cameraStream:null,cameraTrack:null,cameraTarget:null,cameraDevices:[],cameraSelectableSources:[],cameraInput:null,cameraSource:'image',visionMode:'manual',visionTimer:null,visionBusy:false,visionFrameSeq:0,visionLastAt:0,visionLatencyMs:0,visionFps:0,visionDetections:[],visionTracks:new Map(),visionSubmitted:new Set(),visionAdapter:null,temporalTracks:new Map(),temporalEvents:[],temporalSequence:[],temporalViolations:[],temporalValidationBusy:false,temporalValidationFingerprint:'',temporalReadySince:0,temporalGate:null,browserModel:{status:'idle',session:null,assignment:null,profile:null,config:null,package:null,verifiedSha256:null,loadEpoch:0},dataset:{annotations:[],samples:[],drag:null,frozen:false,captureGroup:null,burstSeq:0,uploading:false},activeLearning:{enabled:true,candidates:[],capturing:false,lastCaptureByKey:new Map(),maxQueue:30,cooldownMs:10000},shadowModel:{status:'idle',session:null,assignment:null,config:null,package:null,verifiedSha256:null,runPublicId:null,summary:null,frameSeq:0,busy:false},hardwareRuntime:null,stationSoakReport:null,cookUx:{stopped:false,preview:null,acceptance:null,handoffArmed:false},recovery:{state:'ready',attempt:0,epoch:0,networkFault:false,suppressAutomatic:false,freshBarrierUntil:0,lastReason:'runtime_ready',timer:null},framePipeline:{queue:[],worker:false,epoch:0,nextSeq:0,currentAbort:null,metrics:{acceptedFrames:0,processedFrames:0,droppedFrames:0,staleFrames:0,timedOutFrames:0,cancelledFrames:0,failedFrames:0,queueDepth:0,maxObservedQueueDepth:0,lastProcessedSequence:0}}};
 const assembly=()=>window.GelatoGlassesItemAssembly;
 const assemblyProgress=new Map(),ingredientCursor=new Map(),assemblySources=new Map();
 const AUTO_ASSEMBLY_KEY='gelato.glasses.autoAssembly.v1:u'+String(cfg.userId||0)+':rt'+String(cfg.runtimePublicId||'default');
@@ -292,7 +292,9 @@ function rawDeviceHealthSnapshot(){
   const fm=state.framePipeline.metrics||{},track=state.cameraTrack?.getSettings?.()||{},cameraState=$('cameraHealth')?.dataset?.state||'off';
   const modelPackage=state.browserModel.package||{},adapterId=state.visionAdapter?.id||$('visionAdapterSelect')?.value||'fixture';
   return {
-    camera:{state:cameraState==='ready'?'ready':cameraState,source:state.cameraSource||null,width:track.width||null,height:track.height||null},
+    camera:{state:cameraState==='ready'?'ready':cameraState,source:state.cameraSource||null,width:track.width||null,height:track.height||null,
+      sourceKind:state.cameraInput?.kind||null,perspective:state.cameraInput?.perspective||null,
+      sdkAdapterId:state.cameraInput?.adapterId||null},
     framePipeline:{...fm,fps:state.visionFps||0,latencyMs:state.visionLatencyMs||0},
     inference:{state:state.framePipeline.worker?'running':(visionMode()==='manual'?'idle':'ready'),adapterId,runtime:adapterId==='onnx'?'onnx':'fixture',lastError:state.logs.find(x=>x.type==='VISION')?.msg||null},
     model:{detectorName:state.browserModel.assignment?.detectorName||modelPackage.detectorName||null,packagePublicId:modelPackage.publicId||state.browserModel.assignment?.packagePublicId||null,artifactSha256:state.browserModel.verifiedSha256||null,status:state.browserModel.status||'idle'},
@@ -379,28 +381,36 @@ async function enumerateCameras(){
     return;
   }
   const epoch=++cameraEnumerationEpoch;
-  const requested=picker.value||state.cameraTrack?.getSettings?.()?.deviceId||cameraPrefs().deviceId||'';
+  const requested=picker.value||state.cameraInput?.key||state.cameraTrack?.getSettings?.()?.deviceId||cameraPrefs().deviceId||'';
   try{
     const devices=await navigator.mediaDevices.enumerateDevices();
+    let sdkSources=[],sdkError=null;
+    try{sdkSources=await (window.GelatoGlassesCameraSources?.listSdkSources?.()||[]);}
+    catch(e){sdkError=e;}
     if(epoch!==cameraEnumerationEpoch)return;
     const video=devices.filter(d=>d.kind==='videoinput');
     state.cameraDevices=video.filter(d=>d.deviceId);
+    state.cameraSelectableSources=state.cameraDevices.map((d,i)=>({key:d.deviceId,kind:'browser',
+      label:d.label||('Video input '+(i+1)),perspective:'glasses_pov'})).concat(sdkSources);
     picker.innerHTML='<option value="">Default camera</option>'+state.cameraDevices.map((d,i)=>
-      '<option value="'+escapeHtml(d.deviceId)+'">'+escapeHtml(d.label||('Video input '+(i+1)+' (permission may be needed)'))+'</option>').join('');
-    if(requested&&state.cameraDevices.some(d=>d.deviceId===requested)){
+      '<option value="'+escapeHtml(d.deviceId)+'">'+escapeHtml(d.label||('Video input '+(i+1)+' (permission may be needed)'))+'</option>').join('')+
+      sdkSources.map(d=>'<option value="'+escapeHtml(d.key)+'">Glasses · '+escapeHtml(d.label)+'</option>').join('');
+    if(requested&&state.cameraSelectableSources.some(d=>d.key===requested)){
       picker.value=requested;
     }else if(requested){
       // Disconnected capture sources must not be silently replaced by other hardware.
       picker.value='';
-      cameraInputNote('Saved USB/HDMI video input is unavailable. Reconnect it, allow camera access and scan again; never switch sources silently.','warning');
+      cameraInputNote('Saved Camera 1 input (USB, HDMI or glasses SDK) is unavailable. Reconnect it, allow camera access and scan again; never switch sources silently.','warning');
       return;
     }
-    if(!video.length){
-      cameraInputNote('Chrome reports 0 video inputs. First check the adapter in Windows Camera. HDMI must connect through a Windows-recognized VIDEO CAPTURE device, not a computer HDMI output port.','warning');
+    if(sdkError){
+      cameraInputNote('Glasses SDK discovery failed ('+String(sdkError?.name||'adapter_error')+'). Browser cameras remain available; check the SDK connection.','warning');
+    }else if(!video.length&&!sdkSources.length){
+      cameraInputNote('No camera inputs found. Browser USB/HDMI sources require Windows recognition; AIR3 glasses appear here only after a real SDK adapter connects.','warning');
     }else if(video.some(d=>!d.deviceId||!d.label)){
       cameraInputNote(video.length+' video input(s) reported, but Chrome is hiding some camera labels/IDs. Click Allow Camera Access & Scan to request permission and list USB/HDMI capture sources.','warning');
     }else{
-      cameraInputNote(state.cameraDevices.length+' video input(s) visible: '+state.cameraDevices.map(d=>d.label).join(' · ')+'. HDMI capture hardware may be named USB Video, Video Capture or similar.','ready');
+      cameraInputNote(state.cameraSelectableSources.length+' video input(s) visible: '+state.cameraSelectableSources.map(d=>d.label).join(' · ')+'. Only connected SDK cameras appear; USB and HDMI capture devices remain supported.','ready');
     }
   }catch(error){
     if(epoch!==cameraEnumerationEpoch)return;
@@ -452,7 +462,12 @@ function stopCamera(reason='stopped'){
   stopVisionRuntime(reason);
   if(state.cameraStream)state.cameraStream.getTracks().forEach(t=>t.stop());
   state.dataset.frozen=false;state.dataset.drag=null;state.dataset.annotations=[];state.dataset.captureGroup=null;state.dataset.burstSeq=0;renderDatasetAnnotations();
-  state.cameraStream=null;state.cameraTrack=null;
+  const previousCameraInput=state.cameraInput;
+  state.cameraStream=null;state.cameraTrack=null;state.cameraInput=null;
+  if(previousCameraInput)window.dispatchEvent(new CustomEvent('gelato-glasses-camera-source-change',{detail:{
+    slot:1,connected:false,perspective:'glasses_pov',sourceKind:previousCameraInput.kind,
+    adapterId:previousCameraInput.adapterId,reason,capturedAt:new Date().toISOString()
+  }}));
   const video=$('cameraVideo');video.srcObject=null;video.hidden=true;
   window.GelatoMediaPipeHandsRuntime?.stop(reason==='error'?'error':'ready');
   void unloadReadonlyIngredientModel('Camera stopped. Start Camera 1 to resume ingredient recognition.');
@@ -465,29 +480,44 @@ async function startCamera(){
   if(!cameraSupported()){setCameraHealth('error','UNSUPPORTED');log('CAMERA','Browser camera API is unavailable.');return;}
   const deviceId=$('cameraDeviceSelect').value;
   const savedId=cameraPrefs().deviceId||'';
-  if(!deviceId&&savedId&&!state.cameraDevices.some(d=>d.deviceId===savedId)){
+  if(!deviceId&&savedId&&!state.cameraSelectableSources.some(d=>d.key===savedId)){
     setCameraHealth('error','INPUT MISSING');
-    cameraInputNote('Saved USB/HDMI input unavailable. Reconnect and refresh, or explicitly choose another input.','warning');
+    cameraInputNote('Saved Camera 1 input unavailable. Reconnect the USB/HDMI camera or glasses SDK, then refresh or choose another input.','warning');
     return;
   }
   stopCamera();
   const epoch=cameraStartEpoch;
   const [w,h]=($('cameraResolution').value||'1280x720').split('x').map(Number);
   const videoConstraints={width:{ideal:w},height:{ideal:h},frameRate:{ideal:30,max:30}};
-  if(deviceId)videoConstraints.deviceId={exact:deviceId};else videoConstraints.facingMode={ideal:'environment'};
+  const sdkSource=!!window.GelatoGlassesCameraSources?.isSdkSource?.(deviceId);
+  const selected=state.cameraSelectableSources.find(d=>d.key===deviceId)||null;
+  if(deviceId&&!sdkSource)videoConstraints.deviceId={exact:deviceId};else if(!sdkSource)videoConstraints.facingMode={ideal:'environment'};
   setCameraHealth('starting','STARTING');
   try{
-    const stream=await navigator.mediaDevices.getUserMedia({video:videoConstraints,audio:false});
+    const stream=sdkSource
+      ?await window.GelatoGlassesCameraSources.openSdkStream(deviceId,videoConstraints)
+      :await navigator.mediaDevices.getUserMedia({video:videoConstraints,audio:false});
     if(epoch!==cameraStartEpoch||document.hidden||window.GelatoCameraConfiguration?.isEnabled(1)!==true){stream.getTracks().forEach(t=>t.stop());return;}
     state.cameraStream=stream;state.cameraTrack=stream.getVideoTracks()[0]||null;
+    state.cameraInput={key:deviceId||state.cameraTrack?.getSettings?.()?.deviceId||'',
+      label:selected?.label||state.cameraTrack?.label||'Default camera',
+      kind:sdkSource?'sdk':'browser',adapterId:sdkSource?'air3.vendor.v1':null,
+      perspective:'glasses_pov',slot:1};
     const video=$('cameraVideo');video.srcObject=stream;video.hidden=false;await video.play();
     if(epoch!==cameraStartEpoch||document.hidden||window.GelatoCameraConfiguration?.isEnabled(1)!==true){stopCamera('disabled');return;}
     $('sceneImage').hidden=true;$('scenePlaceholder').hidden=true;
     $('startCamera').disabled=true;$('stopCamera').disabled=false;$('captureFrame').disabled=false;
     state.cameraSource='camera';$('sceneSourceSelect').value='camera';applyCameraPresentation();await enumerateCameras();
     const settings=state.cameraTrack?.getSettings?.()||{};
-    $('cameraMeta').innerHTML='<span>'+escapeHtml(state.cameraTrack?.label||'Camera')+'</span><span>'+escapeHtml(String(settings.width||w))+'×'+escapeHtml(String(settings.height||h))+' · '+escapeHtml(String(Math.round(settings.frameRate||30)))+' fps</span>';
-    setCameraHealth('ready','READY');log('CAMERA','Browser camera preview started.');startVisionRuntime();
+    $('cameraMeta').innerHTML='<span>'+escapeHtml(state.cameraInput?.label||state.cameraTrack?.label||'Camera')+'</span><span>'+escapeHtml(String(settings.width||w))+'×'+escapeHtml(String(settings.height||h))+' · '+escapeHtml(String(Math.round(settings.frameRate||30)))+' fps</span>';
+    setCameraHealth('ready','READY');log('CAMERA',(sdkSource?'Glasses SDK':'Browser')+' camera preview started.');startVisionRuntime();
+    window.dispatchEvent(new CustomEvent('gelato-glasses-camera-source-change',{detail:{
+      slot:1,perspective:'glasses_pov',sourceKind:state.cameraInput.kind,
+      adapterId:state.cameraInput.adapterId,sourceLabel:state.cameraInput.label,
+      stationPublicId:state.work?.station?.publicId||null,
+      kdsItemPublicId:state.selectedKdsItemPublicId||null,
+      capturedAt:new Date().toISOString()
+    }}));
     // Camera consent has already been granted by the user's Start Camera action.
     // Hand detection runs independently of recipe/build inference settings.
     void window.GelatoMediaPipeHandsRuntime?.start(video,()=>{
@@ -645,8 +675,12 @@ async function uploadDatasetSamples(){
   let uploaded=0;
   try{
     for(const sample of pending){
-      const settings=sample.trainingCameraSlot?{}:(state.cameraTrack?.getSettings?.()||{});
-      const payload={action:'upload',csrf_token:cfg.csrf,consentBasis:'training_media_opt_in',retentionDays:Number($('datasetRetentionDays')?.value||365),imageBase64:bytesToBase64(sample.bytes),annotations:sample.annotations,capturedAt:sample.capturedAt,devicePublicId:state.device?.publicId||null,buildSessionPublicId:sample.buildPublicId||null,captureGroup:sample.captureGroup||null,burstIndex:sample.burstIndex,perceptualHash:sample.features?.perceptualHash||null,brightnessMean:sample.features?.brightnessMean,contrastMean:sample.features?.contrastMean,blurScore:sample.features?.blurScore,distanceBucket:$('datasetDistanceBucket')?.value||null,occlusionBucket:$('datasetOcclusionBucket')?.value||null,pose:{pitch:$('datasetCameraPitch')?.value!==''?Number($('datasetCameraPitch').value):null,yaw:$('datasetCameraYaw')?.value!==''?Number($('datasetCameraYaw').value):null,roll:$('datasetCameraRoll')?.value!==''?Number($('datasetCameraRoll').value):null},camera:{facing:settings.facingMode||null,deviceKey:settings.deviceId||null,width:settings.width||sample.width,height:settings.height||sample.height,fps:settings.frameRate||null},detectorConfidence:sample.detectorConfidence,metadata:{source:sample.trainingCameraSlot?'web_glasses_aux_training':'web_glasses_simulator',cameraSlot:sample.trainingCameraSlot||1,reviewed:!!sample.reviewed,localSampleIndex:sample.index}};
+      // Use the settings recorded with the sample, never a subsequently selected camera.
+      const settings=sample.cameraSettings||{};
+      const payload={action:'upload',csrf_token:cfg.csrf,consentBasis:'training_media_opt_in',retentionDays:Number($('datasetRetentionDays')?.value||365),imageBase64:bytesToBase64(sample.bytes),annotations:sample.annotations,capturedAt:sample.capturedAt,devicePublicId:state.device?.publicId||null,buildSessionPublicId:sample.buildPublicId||null,captureGroup:sample.captureGroup||null,burstIndex:sample.burstIndex,perceptualHash:sample.features?.perceptualHash||null,brightnessMean:sample.features?.brightnessMean,contrastMean:sample.features?.contrastMean,blurScore:sample.features?.blurScore,distanceBucket:$('datasetDistanceBucket')?.value||null,occlusionBucket:$('datasetOcclusionBucket')?.value||null,pose:{pitch:$('datasetCameraPitch')?.value!==''?Number($('datasetCameraPitch').value):null,yaw:$('datasetCameraYaw')?.value!==''?Number($('datasetCameraYaw').value):null,roll:$('datasetCameraRoll')?.value!==''?Number($('datasetCameraRoll').value):null},camera:{facing:settings.facingMode||null,deviceKey:settings.deviceId||null,width:settings.width||sample.width,height:settings.height||sample.height,fps:settings.frameRate||null},detectorConfidence:sample.detectorConfidence,metadata:{source:sample.trainingCameraSlot?'web_glasses_aux_training':'web_glasses_simulator',cameraSlot:sample.trainingCameraSlot||1,reviewed:!!sample.reviewed,localSampleIndex:sample.index,
+          cameraPerspective:sample.cameraInput?.perspective|| (sample.trainingCameraSlot?'stationary':'glasses_pov'),
+          cameraSourceKind:sample.cameraInput?.kind|| (sample.trainingCameraSlot?'browser':'unknown'),
+          cameraAdapterId:sample.cameraInput?.adapterId||null}};
       const r=await fetch(cfg.mediaApi,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload)}),d=await r.json().catch(()=>({ok:false,message:'Invalid media response.'}));
       if(!r.ok||!d.ok)throw new Error(d.message||'Training media upload failed.');
       sample.mediaPublicId=d.media.publicId;sample.samplePublicId=d.media.samplePublicId;uploaded++;$('datasetUploadState').textContent='Uploaded '+uploaded+'/'+pending.length;
@@ -662,7 +696,9 @@ async function captureDatasetSample(){
   const annotations=state.dataset.annotations.map(a=>({label:a.label,bbox:{...a.bbox}}));
   if(!state.dataset.captureGroup)state.dataset.captureGroup='websim-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7);
   const features=datasetVisualFeatures(canvas),burstIndex=state.dataset.burstSeq++;const confidences=(state.visionDetections||[]).map(d=>Number(d.confidence)).filter(Number.isFinite);const detectorConfidence=confidences.length?confidences.reduce((a,b)=>a+b,0)/confidences.length:null;
-  state.dataset.samples.push({index,width:canvas.width,height:canvas.height,bytes,annotations,capturedAt:new Date().toISOString(),buildPublicId:state.build?.publicId||null,station:state.work?.station?.name||null,captureGroup:state.dataset.captureGroup,burstIndex,features,detectorConfidence,mediaPublicId:null,samplePublicId:null});
+  state.dataset.samples.push({index,width:canvas.width,height:canvas.height,bytes,annotations,capturedAt:new Date().toISOString(),buildPublicId:state.build?.publicId||null,station:state.work?.station?.name||null,cameraInput:state.cameraInput?{...state.cameraInput}:null,
+    cameraSettings:{...(state.cameraTrack?.getSettings?.()||{})},
+    captureGroup:state.dataset.captureGroup,burstIndex,features,detectorConfidence,mediaPublicId:null,samplePublicId:null});
   state.dataset.annotations=[];renderDatasetAnnotations();log('DATASET','Captured labeled sample #'+index+' with '+annotations.length+' box(es) · dHash '+features.perceptualHash+'.');
 }
 
@@ -747,7 +783,9 @@ function exportDatasetZip(){
   if(!classes.length){log('DATASET','At least one positively labeled class is required before YOLO export.');return;}
   const activeLearningSamples=state.dataset.samples.filter(s=>s.activeLearning);
   const reviewCounts=activeLearningSamples.reduce((acc,s)=>{const key=s.activeLearning.reviewOutcome||'unknown';acc[key]=(acc[key]||0)+1;return acc;},{});
-  const manifest={schema:'gelato.vision_training_dataset.v1',createdAt:new Date().toISOString(),format:'yolo_detection',sampleCount:state.dataset.samples.length,classCount:classes.length,classes:classes.map((name,index)=>({index,name,slug:datasetSlug(name)})),activeLearning:{schema:'gelato.vision_active_learning.v1',reviewedSampleCount:activeLearningSamples.length,reviewOutcomes:reviewCounts},samples:state.dataset.samples.map(s=>({index:s.index,width:s.width,height:s.height,annotations:s.annotations.length,capturedAt:s.capturedAt,buildPublicId:s.buildPublicId,captureGroup:s.captureGroup||null,burstIndex:s.burstIndex??null,station:s.station,activeLearning:s.activeLearning||null,trainingCameraSlot:s.trainingCameraSlot||1,reviewed:!!s.reviewed}))};
+  const manifest={schema:'gelato.vision_training_dataset.v1',createdAt:new Date().toISOString(),format:'yolo_detection',sampleCount:state.dataset.samples.length,classCount:classes.length,classes:classes.map((name,index)=>({index,name,slug:datasetSlug(name)})),activeLearning:{schema:'gelato.vision_active_learning.v1',reviewedSampleCount:activeLearningSamples.length,reviewOutcomes:reviewCounts},samples:state.dataset.samples.map(s=>({index:s.index,width:s.width,height:s.height,annotations:s.annotations.length,capturedAt:s.capturedAt,buildPublicId:s.buildPublicId,captureGroup:s.captureGroup||null,burstIndex:s.burstIndex??null,station:s.station,activeLearning:s.activeLearning||null,trainingCameraSlot:s.trainingCameraSlot||1,cameraSourceKind:s.cameraInput?.kind||'browser',
+    cameraPerspective:s.cameraInput?.perspective||(s.trainingCameraSlot?'stationary':'glasses_pov'),
+    cameraAdapterId:s.cameraInput?.adapterId||null,reviewed:!!s.reviewed}))};
   entries.push({name:'data.yaml',data:yaml},{name:'gelato-manifest.json',data:JSON.stringify(manifest,null,2)+'\n'},{name:'README.txt',data:'Gelato local vision training dataset\nFormat: YOLO object detection\nImages and labels were captured in the Web Glasses Simulator.\nNo POS/KDS/build state is modified by dataset capture.\n'});
   const blob=zipStore(entries),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='gelato-vision-dataset-'+new Date().toISOString().replace(/[:.]/g,'-')+'.zip';a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);log('DATASET','Exported '+state.dataset.samples.length+' YOLO training sample(s).');
 }
@@ -776,7 +814,7 @@ async function acceptReviewedAuxiliaryFrame(frame,annotations,{slot}={}){
     index,width:frame.width,height:frame.height,bytes,annotations:valid,capturedAt,
     buildPublicId:null,station:null,captureGroup:'aux-camera-'+slot+'-'+Date.now().toString(36),
     burstIndex:0,features,detectorConfidence:null,mediaPublicId:null,samplePublicId:null,
-    trainingCameraSlot:slot,reviewed:true
+    trainingCameraSlot:slot,cameraInput:{kind:'browser',perspective:'stationary',adapterId:null,slot},reviewed:true
   });
   renderDatasetAnnotations();renderDatasetClassOptions();
   log('TRAINING','Reviewed Camera '+slot+' sample #'+index+' added locally with '+valid.length+' object(s).');
@@ -2093,6 +2131,11 @@ $('cameraDeviceSelect').addEventListener('change',async()=>{saveCameraPrefs();if
  $('refreshCameraInputs').addEventListener('click',()=>void enumerateCameras());
  $('allowCameraDiscovery').addEventListener('click',()=>void requestCameraDiscoveryAccess());
  navigator.mediaDevices?.addEventListener?.('devicechange',()=>void enumerateCameras());
+ window.addEventListener('gelato-glasses-camera-sources-change',()=>{
+   if(state.cameraInput?.kind==='sdk'&&!window.GelatoGlassesCameraSources?.isVendorInstalled?.())
+     stopCamera('error');
+   void enumerateCameras();
+ });
 $('cameraResolution').addEventListener('change',async()=>{saveCameraPrefs();if(state.cameraStream)await startCamera();});
 $('cameraManualTarget').addEventListener('change',e=>{$('glassesStage').classList.toggle('camera-targeting',e.target.checked);if(!e.target.checked)clearCameraTarget();});
 $('visionMode').addEventListener('change',()=>{clearAssemblySuggestion();state.visionMode=visionMode();startVisionRuntime();});
@@ -2547,7 +2590,9 @@ window.GelatoGlassesAssemblyContext={current:()=>{
     devicePublicId:state.device?.publicId||'',
     stationPublicId:state.device?.stationPublicId||'',
     ingredients:assembly()?.ingredientsFor(item)||[],
-    currentIngredientId:currentAssemblyIngredient(item)?.id||''
+    currentIngredientId:currentAssemblyIngredient(item)?.id||'',
+    cameraLive:!!state.cameraStream,cameraSourceKind:state.cameraInput?.kind||null,
+    cameraPerspective:state.cameraInput?.perspective||null
   };
 }};
 window.GelatoGlassesNavigation={dispatch:simulatorNavigation,
@@ -2560,7 +2605,9 @@ window.GelatoGlassesNavigation={dispatch:simulatorNavigation,
   context:()=>({
   mode:state.mode,items:orderItems().length,item:selectedItem()?.posLine?.name||null,
   step:(state.previewStepIndex||0)+1,virtual:!!state.device?.virtualPreview,
-  locationId:state.device?.locationId||null,stationPublicId:state.device?.stationPublicId||null
+  locationId:state.device?.locationId||null,stationPublicId:state.device?.stationPublicId||null,
+  cameraLive:!!state.cameraStream,cameraSourceKind:state.cameraInput?.kind||null,
+  cameraPerspective:state.cameraInput?.perspective||null
 })};
 window.GelatoGlassesDisplayPreferences={
   ready:false,
@@ -2617,7 +2664,8 @@ window.GelatoGlassesDisplayPreferences={
     }
   }
 };
-window.GelatoGlassesPrimaryCamera={stop:()=>stopCamera('disabled'),active:()=>!!state.cameraStream};
+window.GelatoGlassesPrimaryCamera={stop:()=>stopCamera('disabled'),active:()=>!!state.cameraStream,
+  source:()=>state.cameraInput?{...state.cameraInput}:null};
 window.GelatoGlassesAssemblyRecognitionRuntime={
   decision:()=>assemblyRecognitionDecision(),sources:()=>new Map(assemblySources),
   confirm:confirmAssemblySuggestion,reject:rejectAssemblySuggestion,
