@@ -70,7 +70,7 @@ assert.match(page,/id="hudOrders"[\s\S]*id="hudTicketCompletion"/,'ticket action
 assert.match(page,/data-glasses-command="finish_order"/,'same delegated button handler as voice');
 assert.match(css,/#glassesStage \.hud-ticket-completion/,'projection-safe left-lens styling');
 assert.match(voice,/return 'finish_order'/,'existing finish voice command reused');
-assert.match(voice,/confirm \(?:finish\|complete\)/,'explicit spoken confirmation alias');
+assert.ok(voice.includes('confirm (?:finish|complete)'), 'explicit spoken confirmation alias');
 assert.match(server,/kds_production_ticket_action\(/,'same KDS dispatcher used for physical and browser preview');
 assert.match(kds,/Only Expo \/ All can bump a completed kitchen ticket/,'server checks Expo');
 assert.match(kds,/All fired items in this ticket must be Ready/,'server verifies each item Ready');
