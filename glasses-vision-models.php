@@ -76,7 +76,8 @@ $boot=[
         <label><span>Model name</span><input id="gvmModelName" maxlength="160" placeholder="sandwich-detector"></label>
         <label><span>Model version</span><input id="gvmModelVersion" maxlength="80" placeholder="2.1.0"></label>
         <label><span>Runtime</span><select id="gvmRuntime"><option value="onnx">ONNX</option><option value="tflite">TensorFlow Lite</option><option value="unity_barracuda">Unity Barracuda</option><option value="vendor">Vendor runtime</option></select></label>
-        <label><span>Platform</span><input id="gvmPlatform" maxlength="40" value="inmo_air3"></label>
+        <label><span>Platform</span><input id="gvmPlatform" maxlength="40" value="inmo_air3">
+          <small>Use <code>browser_preview</code> for KDS-only Camera 1 ingredient inference. Native AIR3 packages stay separate.</small></label>
         <label><span>Artifact bytes</span><input id="gvmBytes" type="number" min="1" step="1" placeholder="Optional"></label>
         <label class="wide"><span>HTTPS artifact URL</span><input id="gvmUrl" type="url" maxlength="1000" placeholder="https://models.example.com/model.onnx"></label>
         <label class="wide"><span>Artifact SHA-256</span><input id="gvmSha" maxlength="64" spellcheck="false" placeholder="64 hexadecimal characters"></label>

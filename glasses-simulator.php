@@ -370,6 +370,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
             <button id="glassesReadonlyModelUnload" type="button" disabled>Unload</button>
           </div>
           <p id="glassesReadonlyModelStatus" role="status" aria-live="polite">No approved browser ingredient model loaded. Register and activate one under Vision Models.</p>
+          <p class="sim-muted">No active model? <a href="glasses-vision-models.php">Manage approved model rollouts</a>, or open Training &amp; Corrections to collect reviewed ingredient examples. Approved browser ONNX models are read-only until you explicitly load one.</p>
           <ol id="glassesHeldSuggestions" aria-live="polite"></ol>
           <div class="inline-actions">
             <button id="glassesCaptureHeldObject" type="button">Capture Hand / Ingredient Example</button>

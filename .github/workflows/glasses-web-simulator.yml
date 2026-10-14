@@ -18,6 +18,10 @@ on:
       - 'includes/glasses-simulator.php'
       - 'assets/css/glasses-web-simulator.css'
       - 'assets/js/glasses-web-simulator.js'
+      - 'includes/glasses-vision-models.php'
+      - 'tests/glasses-readonly-ingredient-inference.test.js'
+      - 'tests/glasses-readonly-ingredient-contract.php'
+      - 'docs/GLASSES-SECTION283-READONLY-INGREDIENT-INFERENCE.md'
       - 'assets/js/glasses-mediapipe-hands.js'
       - 'assets/js/glasses-held-ingredient-evidence.js'
       - 'tests/glasses-held-ingredient-evidence.test.js'
@@ -167,6 +171,8 @@ jobs:
           php -l includes/glasses-camera-locations.php
           php -l tests/glasses-camera-locations-contract.php
           php -l includes/glasses-simulator.php
+          php -l includes/glasses-vision-models.php
+          php tests/glasses-readonly-ingredient-contract.php
           php -l includes/glasses-employee-runtimes.php
           php -l tests/glasses-employee-runtime-contract.php
           php tests/glasses-employee-runtime-contract.php
@@ -231,6 +237,7 @@ jobs:
           node tests/glasses-mediapipe-hands.test.js
           node --check assets/js/glasses-held-ingredient-evidence.js
           node tests/glasses-held-ingredient-evidence.test.js
+          node tests/glasses-readonly-ingredient-inference.test.js
           node tests/glasses-kds-left-lens-completion.test.js
           node tests/glasses-hud-manual-voice-parity.test.js
           node tests/glasses-operator-hud-ux.test.js
