@@ -22,6 +22,9 @@ on:
       - 'assets/js/glasses-cross-camera-evidence.js'
       - 'assets/js/glasses-placement-review.js'
       - 'assets/js/glasses-ingredient-progression.js'
+      - 'assets/js/glasses-placement-reliability.js'
+      - 'assets/js/glasses-placement-reliability-ui.js'
+      - 'tests/glasses-section285d5-reliability.test.js'
       - 'assets/js/glasses-ingredient-progression-ui.js'
       - 'tests/glasses-section285d4-progression.test.js'
       - 'tests/glasses-section285d4-php-contract.php'
@@ -260,6 +263,9 @@ jobs:
           node --check assets/js/glasses-ingredient-progression.js
           node --check assets/js/glasses-ingredient-progression-ui.js
           node tests/glasses-section285d4-progression.test.js
+          node --check assets/js/glasses-placement-reliability.js
+          node --check assets/js/glasses-placement-reliability-ui.js
+          node tests/glasses-section285d5-reliability.test.js
           php -l includes/glasses-simulator.php
           php tests/glasses-section285d4-php-contract.php
           node --check assets/js/glasses-placement-review-ui.js

@@ -1119,3 +1119,11 @@ html,body{max-width:100%;overflow-x:hidden}
 .glasses-ingredient-progression button{min-height:35px}
 .glasses-ingredient-progression button:disabled{opacity:.52;cursor:not-allowed}
 .glasses-ingredient-progression ol{font-size:11px;margin:0;padding-left:20px;max-height:180px;overflow:auto}
+
+/* 285D5: compact, read-only field reliability reporting panel. */
+.glasses-placement-reliability{border:1px solid #49665b;background:rgba(12,31,23,.56);border-radius:9px;padding:10px;display:grid;gap:8px}
+.glasses-placement-reliability p{margin:0;line-height:1.45;font-size:12px}
+.glasses-placement-reliability .inline-actions{display:flex;flex-wrap:wrap;align-items:flex-end;gap:7px}
+.glasses-placement-reliability label{display:grid;gap:3px;font-size:12px;min-width:140px}
+.glasses-placement-reliability select{padding:7px;color:inherit;background:#172b21;border:1px solid #638779;border-radius:6px}
+.glasses-placement-reliability button{max-width:100%;white-space:normal}
