@@ -11,9 +11,9 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Web Glasses Simulator · Gelato</title>
 <link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20261013-live1">
-<link rel="stylesheet" href="assets/css/glasses-runtime-workspace.css?v=276fix1">
 <link rel="stylesheet" href="assets/css/glasses-simulator-hud-ux.css?v=20261013-voice1">
 <link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-hud273">
+<link rel="stylesheet" href="assets/css/glasses-runtime-workspace.css?v=276fix2">
 </head>
 <body>
 <header class="sim-topbar">
