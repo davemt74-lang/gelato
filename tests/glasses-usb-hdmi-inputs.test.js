@@ -21,7 +21,7 @@ assert.match(page,/HDMI capture adapter/);
 assert.match(app,/navigator\.mediaDevices\?\.addEventListener\?\.\('devicechange'/);
 assert.match(app,/getUserMedia\(\{video:videoConstraints,audio:false\}\)/);
 assert.match(app,/videoConstraints\.deviceId=\{exact:deviceId\}/);
-assert.match(app,/savedId&&!state\.cameraDevices\.some\(d=>d\.deviceId===savedId\)/);
+assert.match(app,/savedId&&!state\.cameraSelectableSources\.some\(d=>d\.key===savedId\)/);
 assert.match(app,/id="cameraMeta"|\$\('cameraMeta'\)/);
 assert.match(aux,/enumerateDevices\(\)/);
 assert.match(aux,/getUserMedia\(\{video:\{deviceId:\{exact:id\}/);
