@@ -51,7 +51,11 @@ jobs:
         run: |
           set -euo pipefail
           cd payload
-          sha256sum --check gelato-full-deploy.sha256
+          # The CI-generated checksum records its runner's absolute path;
+          # validate the digest against our actual downloaded asset instead.
+          expected="$(awk 'NR==1 { print $1 }' gelato-full-deploy.sha256)"
+          [[ "$expected" =~ ^[a-fA-F0-9]{64}$ ]]
+          printf '%s  %s\n' "$expected" 'gelato-full-deploy.zip' | sha256sum --check -
           unzip -tq gelato-full-deploy.zip
           actual="$(unzip -p gelato-full-deploy.zip DEPLOY_SHA.txt | tr -d '\r\n')"
           test "$actual" = "$EXPECTED_SHA"
