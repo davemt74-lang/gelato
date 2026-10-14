@@ -32,9 +32,12 @@ try{
             if(!$grant||(int)$grant['created_by']!==$uid||
                 !operational_location_allowed($pdo,$user,'glasses.manage',(int)$grant['location_id']))
                 throw new DomainException('Pairing request not available.');
+            $q=$pdo->prepare("SELECT (expires_at>NOW(6)) FROM glasses_pairing_grants
+              WHERE organization_id=? AND id=? LIMIT 1");
+            $q->execute([$org,(int)$grant['id']]);
+            $notExpired=(bool)$q->fetchColumn();
             $state=$grant['device_public_id']!==null?'paired':
-                ($grant['consumed_at']!==null?'consumed':
-                 (strtotime((string)$grant['expires_at'])<=time()?'expired':'pending'));
+                ($grant['consumed_at']!==null?'consumed':($notExpired?'pending':'expired'));
             app_json_response(['ok'=>true,'pairing'=>[
                 'state'=>$state,'devicePublicId'=>$grant['device_public_id'],
                 'deviceName'=>$grant['device_name']
@@ -58,6 +61,16 @@ try{
     $in=app_json_input();
     app_verify_request_csrf($in);
     $action=(string)($in['action']??'');
+
+    if($action==='pairing.cancel'){
+        $id=trim((string)($in['pairingPublicId']??''));
+        if($id===''||strlen($id)>80)throw new InvalidArgumentException('Choose a pairing request.');
+        $q=$pdo->prepare("UPDATE glasses_pairing_grants SET consumed_at=NOW(6)
+          WHERE organization_id=? AND public_id=? AND created_by=? AND consumed_at IS NULL
+            AND paired_device_id IS NULL AND expires_at>NOW(6)");
+        $q->execute([$org,$id,$uid]);
+        app_json_response(['ok'=>true,'cancelled'=>$q->rowCount()===1]);
+    }
 
     if($action==='pairing.create'){
         $locationId=(int)($in['locationId']??0);

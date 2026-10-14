@@ -9,23 +9,29 @@ const txt=(id,s)=>{const e=byId(id);if(e)e.textContent=String(s);};
 function selectedRuntime(){return (catalog.runtimes||[]).find(r=>r.publicId===(byId('glassesRuntimeSelect')?.value||cfg.runtimePublicId))||null;}
 function showPhysical(){
  const rt=selectedRuntime(),d=physical.find(d=>d.publicId===(rt?.devicePublicId||byId('deviceSelect')?.value));
- const age=d?.lastSeenAt?Math.max(0,(Date.now()-Date.parse(d.lastSeenAt))/1000):Infinity;
+ const age=typeof d?.heartbeatAgeSeconds==='number'?d.heartbeatAgeSeconds:Infinity;
  txt('glassesConnectionBadge',!d?'No device selected':d.status!=='active'||d.revokedAt?'Revoked':age<=60?'Physical glasses online':'Paired · Offline');
  txt('glassesConnectionHardware',d?d.displayName+' · '+(d.hardwareIdentifier||d.publicId):'Select a physical device');
  txt('glassesConnectionSoftware',d?.appVersion?'Gelato AR '+d.appVersion:'Version not reported');
- txt('glassesConnectionProfile',rt?rt.employeeName+(rt.profileConfirmedAt?' · Confirmed':' · Not confirmed'):'No employee assigned');
+ txt('glassesConnectionProfile',rt?rt.employeeName+(rt.profileConfirmedAt?' · Confirmed in browser':' · Awaiting sign-in'):'No employee assigned');
  txt('glassesConnectionLastSeen',d?.lastSeenAt?new Date(d.lastSeenAt).toLocaleString():'No device heartbeat');
  const confirm=byId('glassesConnectionConfirm');if(confirm)confirm.hidden=!(cfg.runtimePublicId&&rt&&!rt.profileConfirmedAt);
  const pair=byId('glassesConnectionPair');if(pair)pair.hidden=!!cfg.runtimePublicId||!(catalog.employees||[]).length;
 }
 async function refreshPhysical(){const d=await json(adminApi);physical=d.devices||[];showPhysical();}
 function endPair(){if(pairTimer)clearInterval(pairTimer);pairTimer=null;pairing=null;byId('glassesPairPanel').hidden=true;txt('glassesPairCode','');}
+async function cancelPair(){
+ const id=pairing?.id;endPair();if(!id)return;
+ try{await json(adminApi,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':cfg.csrf},
+   body:JSON.stringify({action:'pairing.cancel',csrf_token:cfg.csrf,pairingPublicId:id})});msg('Pairing code cancelled.');}
+ catch(e){msg('Pairing code hidden. It expires automatically. '+e.message);}
+}
 async function pollPair(){
  if(!pairing)return;
  if(Date.now()>=pairing.until){endPair();msg('Pairing code expired.');return;}
  try{
   const r=await json(adminApi+'?action=pairing.status&pairingPublicId='+encodeURIComponent(pairing.id));
-  if(r.pairing.state==='paired'){endPair();await refreshPhysical();await refresh();msg('Glasses paired. Assign an employee and station.');}
+  if(r.pairing.state==='paired'){endPair();msg('Glasses paired. Reloading available devices.');window.location.reload();}
   else if(r.pairing.state!=='pending'){endPair();msg('Pairing ended.');}
  }catch(e){msg(e.message);}
 }
@@ -188,7 +194,7 @@ function mount(){
   const station=(catalog.stations||[]).find(s=>s.publicId===byId('glassesRuntimeStation')?.value);
   const locationId=station?.locationId||dev?.locationId;
   if(!locationId){msg('Select a station or a paired device for the restaurant location first.');return;}
-  endPair();
+  await cancelPair();
   try{
    const r=await json(adminApi,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':cfg.csrf},
     body:JSON.stringify({action:'pairing.create',csrf_token:cfg.csrf,locationId,stationPublicId:station?.publicId||null,ttlMinutes:10})});
@@ -197,7 +203,7 @@ function mount(){
    msg('One-time pairing code ready.');pairTimer=setInterval(pollPair,3000);
   }catch(e){msg(e.message);}
  });
- byId('glassesPairCancel').addEventListener('click',endPair);
+ byId('glassesPairCancel').addEventListener('click',cancelPair);
  byId('deviceSelect').addEventListener('change',()=>renderStation(catalog.runtimes?.find(r=>r.publicId===select.value)||null));
  byId('glassesRuntimeEmployee').addEventListener('change',()=>{
    if(!select.value)renderStation(null);
@@ -289,7 +295,7 @@ async function heartbeat(){
  }
 }
 async function bootstrap(currentDevices){
- devices=currentDevices||[];mount();await refresh();await refreshPhysical();
+ devices=currentDevices||[];mount();await refresh();try{await refreshPhysical();}catch(e){msg('Connection diagnostics unavailable: '+e.message);}
  if(!cfg.runtimePublicId)return null;
  bound=catalog.runtimes?.find(r=>r.publicId===cfg.runtimePublicId)||null;
  if(!bound||!devices.some(d=>d.publicId===bound.devicePublicId&&!d.virtualPreview)){

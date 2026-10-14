@@ -106,6 +106,11 @@ function glasses_device_public(array $row): array
         'systemVersion'=>$row['system_version'],
         'capabilities'=>json_decode((string)($row['capabilities_json']??'null'),true),
         'lastSeenAt'=>$row['last_seen_at'],
+        'heartbeatAgeSeconds'=>isset($row['heartbeat_age_seconds'])&&$row['heartbeat_age_seconds']!==null
+            ?max(0,(int)$row['heartbeat_age_seconds']):null,
+        'deviceOnline'=>isset($row['heartbeat_age_seconds'])&&$row['heartbeat_age_seconds']!==null
+            &&(int)$row['heartbeat_age_seconds']>=0&&(int)$row['heartbeat_age_seconds']<=60
+            &&$row['status']==='active'&&$row['revoked_at']===null,
         'pairedAt'=>$row['paired_at'],
         'revokedAt'=>$row['revoked_at'],
     ];
@@ -113,7 +118,8 @@ function glasses_device_public(array $row): array
 
 function glasses_device_row(PDO $pdo,int $org,string $publicId,bool $forUpdate=false): array
 {
-    $sql="SELECT d.*,l.name location_name,s.public_id station_public_id,s.name station_name
+    $sql="SELECT d.*,TIMESTAMPDIFF(SECOND,d.last_seen_at,NOW(6)) heartbeat_age_seconds,
+        l.name location_name,s.public_id station_public_id,s.name station_name
         FROM glasses_devices d
         JOIN locations l ON l.id=d.location_id AND l.organization_id=d.organization_id
         LEFT JOIN kds_stations s ON s.id=d.station_id AND s.organization_id=d.organization_id
@@ -216,7 +222,8 @@ function glasses_heartbeat(PDO $pdo,array $device,array $input=[]): array
 
 function glasses_devices(PDO $pdo,int $org,?int $locationId=null): array
 {
-    $sql="SELECT d.*,l.name location_name,s.public_id station_public_id,s.name station_name
+    $sql="SELECT d.*,TIMESTAMPDIFF(SECOND,d.last_seen_at,NOW(6)) heartbeat_age_seconds,
+        l.name location_name,s.public_id station_public_id,s.name station_name
         FROM glasses_devices d
         JOIN locations l ON l.id=d.location_id AND l.organization_id=d.organization_id
         LEFT JOIN kds_stations s ON s.id=d.station_id AND s.organization_id=d.organization_id
