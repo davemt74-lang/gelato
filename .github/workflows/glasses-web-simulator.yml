@@ -4,6 +4,12 @@ on:
   pull_request:
     paths:
       - 'glasses-simulator.php'
+      - 'api/glasses-software.php'
+      - 'includes/glasses-software.php'
+      - 'assets/js/glasses-software-manager.js'
+      - 'assets/css/glasses-software-manager.css'
+      - 'database/20261216_glasses_software_policies.sql'
+      - 'tests/glasses-software-manager-contract.php'
       - 'api/glasses-simulator.php'
       - 'includes/glasses-simulator.php'
       - 'assets/css/glasses-web-simulator.css'
@@ -144,6 +150,10 @@ jobs:
           php tests/glasses-employee-runtime-contract.php
           php -l tests/glasses-connection-manager-contract.php
           php tests/glasses-connection-manager-contract.php
+          php -l includes/glasses-software.php
+          php -l api/glasses-software.php
+          php -l tests/glasses-software-manager-contract.php
+          php tests/glasses-software-manager-contract.php
           php -l tests/glasses-web-simulator-contract.php
           php -l tests/glasses-live-virtual-preview-contract.php
           php -l tests/glasses-hud-voice-contract.php
@@ -155,6 +165,7 @@ jobs:
           node --check assets/js/glasses-web-simulator.js
           node --check assets/js/glasses-hud-notifications.js
           node --check assets/js/glasses-employee-runtimes.js
+          node --check assets/js/glasses-software-manager.js
           node tests/glasses-runtime-station-contract.test.js
           node tests/glasses-runtime-tab-preferences.test.js
           node --check assets/js/glasses-assembly-learning.js

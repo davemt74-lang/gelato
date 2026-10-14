@@ -1,0 +1,34 @@
+.glasses-software-manager{margin:0 0 12px;padding:12px;border-radius:12px;border:1px solid #304e40;background:#111c17;color:#eaf4ed;min-width:0}
+.glasses-software-header{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.glasses-software-header>div{display:grid;gap:3px}
+.glasses-software-header small{color:#94b8a1;font-size:10px;letter-spacing:.08em}
+.glasses-software-header strong{font-size:13px}
+.glasses-software-manager button{background:#293d31;color:#eaf5ed;border:1px solid #4d6c56;border-radius:7px;padding:6px 10px;font-size:12px;cursor:pointer}
+.glasses-software-manager button:disabled{opacity:.48;cursor:not-allowed}
+.glasses-software-pick{display:flex;gap:12px;align-items:center;margin:12px 0;font-size:12px}
+.glasses-software-pick select{min-width:0;max-width:100%;width:300px}
+.glasses-software-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.glasses-software-stats>div{border:1px solid #304638;border-radius:8px;padding:9px;min-width:0}
+.glasses-software-stats small{display:block;color:#9fbeaa;font-size:10px;margin-bottom:4px}
+.glasses-software-stats strong{display:block;font-size:12px;overflow-wrap:anywhere}
+#glassesSoftwareStatus[data-state=below_minimum]{color:#ffaf94}
+#glassesSoftwareStatus[data-state=update_recommended]{color:#f9d184}
+#glassesSoftwareStatus[data-state=current]{color:#a6f0c1}
+.glasses-software-note{margin:10px 0;color:#b9cabb;font-size:11px;line-height:1.5}
+.glasses-software-policy{border-top:1px solid #354c3a;padding-top:10px;margin-top:10px}
+.glasses-software-policy>strong{display:block;font-size:12px}
+.glasses-software-policy-inputs{display:grid;grid-template-columns:1fr 1fr 1.5fr auto;align-items:end;gap:8px;margin-top:8px}
+.glasses-software-policy-inputs label{display:grid;gap:4px;font-size:11px;color:#c3d6c8;min-width:0}
+.glasses-software-policy-inputs input{width:100%;min-width:0;background:#192921;border:1px solid #3b5946;border-radius:6px;color:#f0faf2;padding:7px 8px}
+.glasses-software-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0}
+#glassesSoftwareNotice{font-size:11px;color:#b1cbb9}
+#glassesSoftwareEvents{max-height:210px;overflow:auto;border:1px solid #33493a;border-radius:7px;padding:10px;margin:10px 0;font-size:11px}
+#glassesSoftwareEvents ul{padding-left:18px}
+.glasses-fleet-details{border-top:1px solid #35483b;padding-top:10px;font-size:12px}
+.glasses-fleet-details summary{cursor:pointer}
+.glasses-fleet-scroll{overflow:auto;max-height:260px;margin-top:10px}
+.glasses-fleet-scroll table{width:100%;border-collapse:collapse}
+.glasses-fleet-scroll th,.glasses-fleet-scroll td{text-align:left;padding:8px;border-bottom:1px solid #304438;white-space:nowrap}
+.glasses-fleet-scroll tr[data-selected="1"]{background:#203a2b}
+@media(max-width:860px){.glasses-software-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.glasses-software-policy-inputs{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:480px){.glasses-software-stats,.glasses-software-policy-inputs{grid-template-columns:minmax(0,1fr)}.glasses-software-pick{display:grid}.glasses-software-pick select{width:100%}}

@@ -12,6 +12,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <title>Web Glasses Simulator · Gelato</title>
 <link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20261013-live1">
 <link rel="stylesheet" href="assets/css/glasses-runtime-connections.css?v=274">
+<link rel="stylesheet" href="assets/css/glasses-software-manager.css?v=275">
 <link rel="stylesheet" href="assets/css/glasses-simulator-hud-ux.css?v=20261013-voice1">
 <link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-hud273">
 </head>
@@ -54,6 +55,38 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
  <div id="glassesPairPanel" hidden><p>Enter this one-time code in the Gelato application running on the physical glasses. Pairing is separate from employee assignment.</p>
   <strong id="glassesPairCode"></strong> <button type="button" id="glassesPairCancel">Close</button>
  </div>
+</section>
+<section id="glassesSoftwareManager" class="glasses-software-manager" aria-label="Glasses software and fleet health">
+ <div class="glasses-software-header">
+  <div><small>SOFTWARE & DEVICES</small><strong>Fleet health and update readiness</strong></div>
+  <button id="glassesSoftwareRefresh" type="button">Refresh fleet</button>
+ </div>
+ <label class="glasses-software-pick">Inspect glasses <select id="glassesSoftwareDevice"><option value="">Loading glasses…</option></select></label>
+ <div class="glasses-software-stats">
+  <div><small>Connection</small><strong id="glassesSoftwareOnline">Not selected</strong></div>
+  <div><small>Application</small><strong id="glassesSoftwareVersion">Not reported</strong></div>
+  <div><small>Compatibility</small><strong id="glassesSoftwareStatus">No policy</strong></div>
+  <div><small>Assigned runtime</small><strong id="glassesSoftwareRuntime">None</strong></div>
+ </div>
+ <p class="glasses-software-note">Version policies are advisory. Gelato does not install or push glasses software; native AIR3 updates require vendor SDK integration.</p>
+ <div id="glassesSoftwarePolicy" class="glasses-software-policy" hidden>
+  <strong>Restaurant software policy</strong>
+  <div class="glasses-software-policy-inputs">
+   <label>Minimum version <input id="glassesSoftwareMinimum" placeholder="e.g. 1.2.0" maxlength="48"></label>
+   <label>Target version <input id="glassesSoftwareTarget" placeholder="e.g. 1.3.0" maxlength="48"></label>
+   <label>Notes <input id="glassesSoftwareNotes" placeholder="Update instructions" maxlength="240"></label>
+   <button type="button" id="glassesSoftwareSave">Save policy</button>
+  </div>
+ </div>
+ <div class="glasses-software-actions">
+  <button id="glassesSoftwareDiagnostics" type="button">Device diagnostics</button>
+  <span id="glassesSoftwareNotice" role="status" aria-live="polite"></span>
+ </div>
+ <div id="glassesSoftwareEvents" hidden aria-label="Recent device events"></div>
+ <details class="glasses-fleet-details">
+  <summary>All visible paired glasses <span id="glassesFleetCount"></span></summary>
+  <div class="glasses-fleet-scroll"><table><thead><tr><th>Device / location</th><th>Software</th><th>Connection</th><th>Runtime</th><th></th></tr></thead><tbody id="glassesFleetRows"></tbody></table></div>
+ </details>
 </section>
 <div class="glasses-runtime-toolbar" aria-label="Multiple assigned employee glasses runtimes">
     <label id="glassesRuntimeSelectLabel">Runtime <select id="glassesRuntimeSelect" aria-label="Glasses runtime"><option value="">New runtime…</option></select></label>
@@ -529,6 +562,7 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="js/voice-session-presence.js?v=20261013-presence1"></script>
 <script src="assets/js/glasses-item-assembly.js?v=20261013-265"></script>
 <script src="assets/js/glasses-employee-runtimes.js?v=20261013-runtime274"></script>
+<script src="assets/js/glasses-software-manager.js?v=20261013-275"></script>
 <script src="assets/js/glasses-assembly-recognition.js?v=20261013-266"></script>
 <script src="assets/js/glasses-hud-notifications.js?v=20261013-hud-edit2"></script>
 <script src="assets/js/glasses-web-simulator.js?v=20261013-hud273"></script>
@@ -537,7 +571,7 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-multicamera.js?v=20261013-multi1"></script>
 <script src="assets/js/glasses-camera-config.js?v=20261013-hud264"></script>
 <script src="assets/js/glasses-camera-runtime.js?v=20261013-261"></script>
-<script src="assets/js/glasses-simulator-tabs.js?v=20261013-runtime274"></script>
+<script src="assets/js/glasses-simulator-tabs.js?v=20261013-runtime275"></script>
 <script src="assets/js/glasses-camera-similarity.js?v=20261013-ref258"></script>
 <script src="assets/js/glasses-camera-workspace.js?v=20261013-267"></script>
 <script src="assets/js/glasses-ingredient-training-plan.js?v=20261013-267"></script>

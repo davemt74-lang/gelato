@@ -116,6 +116,7 @@
     section('runtime').appendChild(telemetry);
     // Device and station are per-employee runtime settings, not global HUD controls.
     move($('glassesConnectionManager'),section('runtime'));
+    move($('glassesSoftwareManager'),section('runtime'));
     move($('glassesRuntimeTabs'),section('runtime'));
     move(document.querySelector('.glasses-runtime-toolbar'),section('runtime'));
     move(document.querySelector('.glasses-runtime-training-controls'),section('runtime'));

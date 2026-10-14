@@ -125,6 +125,7 @@ function render(){
  renderStation(chosen);
  renderTraining(chosen);
  showPhysical();
+ window.GelatoGlassesSoftware?.followRuntime?.();
  byId('glassesRuntimeNew').disabled=!!cfg.runtimePublicId||!!chosen||!catalog.schemaReady||
    !(catalog.employees||[]).length||!selectedDevice()||!!selectedDevice()?.virtualPreview||
    !byId('glassesRuntimeStation')?.value||!employee.value;
@@ -308,5 +309,5 @@ async function bootstrap(currentDevices){
  setInterval(heartbeat,15000);
  return bound;
 }
-window.GelatoGlassesRuntimes={bootstrap,refresh,binding:()=>bound,syncDevices(next){devices=next||[];render();}};
+window.GelatoGlassesRuntimes={bootstrap,refresh,binding:()=>bound,selected:()=>selectedRuntime(),syncDevices(next){devices=next||[];render();}};
 })();
