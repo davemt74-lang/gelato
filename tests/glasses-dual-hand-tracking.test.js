@@ -39,7 +39,7 @@ assert.equal(core.ingredientCandidates(null).length,0);
 assert.equal(core.isHand({label:'pepperoni'}),false);
 assert.equal(core.isHand({label:'hand'}),true);
 assert.equal(core.validBox({x:.93,y:.8,width:.1,height:.15}),false);
-assert.throws(()=>t.step([],0,item,{}),/timestamp order/i);
+assert.throws(()=>t.step([],0,item,{}),/timestamps must increase/i);
 const stage=fs.readFileSync('glasses-simulator.php','utf8');
 const ui=fs.readFileSync('assets/js/glasses-hand-tracker-ui.js','utf8');
 const main=fs.readFileSync('assets/js/glasses-web-simulator.js','utf8');
