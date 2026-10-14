@@ -9,6 +9,13 @@ let autoAssemblyOptIn=false;
 try{autoAssemblyOptIn=localStorage.getItem(AUTO_ASSEMBLY_KEY)==='1';}catch{}
 let assemblySuggestion=null,assemblySuggestionSignature='',assemblyEpoch=0;
 const rejectedAssemblyTracks=new Set();
+const readonlyIngredient={status:'idle',session:null,config:null,package:null,
+  verifiedSha256:null,epoch:0,timer:null,busy:false,frameSeq:0,devicePublicId:''};
+function readonlyStatus(message,error=false){
+ const el=$('glassesReadonlyModelStatus');if(el){el.textContent=message;el.dataset.state=error?'error':readonlyIngredient.status;}
+ if($('glassesReadonlyModelLoad'))$('glassesReadonlyModelLoad').disabled=readonlyIngredient.status==='loading';
+ if($('glassesReadonlyModelUnload'))$('glassesReadonlyModelUnload').disabled=readonlyIngredient.status==='idle';
+}
 function clearAssemblySuggestion(){assemblySuggestion=null;assemblySuggestionSignature='';assemblyEpoch++;}
 function setAutoAssemblyOptIn(value){
   autoAssemblyOptIn=!!value;
@@ -32,7 +39,7 @@ const SIM_READ_ONLY_ACTIONS=new Set([
   'hardware.frame_pipeline','hardware.runtime','hardware.frame.prepare',
   'hardware.display.prepare','hardware.input.prepare','hardware.model.prepare',
   'work','build.get','validation.get','vision.model_assignment','vision.profile',
-  'vision.shadow_assignment'
+  'vision.shadow_assignment','vision.ingredient_readonly_assignment'
 ]);
 async function refreshSimulatorCsrf(){
   const r=await fetch(cfg.api,{method:'GET',credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}});
@@ -374,6 +381,7 @@ function stopCamera(reason='stopped'){
   state.cameraStream=null;state.cameraTrack=null;
   const video=$('cameraVideo');video.srcObject=null;video.hidden=true;
   window.GelatoMediaPipeHandsRuntime?.stop(reason==='error'?'error':'ready');
+  void unloadReadonlyIngredientModel('Camera stopped. Start Camera 1 to resume ingredient recognition.');
   $('startCamera').disabled=false;$('stopCamera').disabled=true;$('captureFrame').disabled=true;
   setCameraHealth(reason==='error'?'error':'off',reason==='error'?'ERROR':'OFF');
   if(state.cameraSource==='camera')$('scenePlaceholder').hidden=false;
@@ -850,15 +858,121 @@ async function createVerifiedOnnxSession(pkg,statusCb=()=>{}){
   if(!config.input.name||!config.output.name){if(typeof session.release==='function')await session.release();throw new Error('ONNX model input/output names could not be resolved.');}
   return {session,config,digest};
 }
-async function inferOnnxModel(model,frame){
+async function inferOnnxModel(model,frame,{readonly=false}={}){
   if(model.status!=='ready'||!model.session||!model.config)throw new Error('ONNX model is not ready.');
   const ort=await ensureOrtWeb(),tensor=preprocessOnnxFrame(frame.video,model.config,ort),result=await model.session.run({[model.config.input.name]:tensor});
   const output=result[model.config.output.name];if(!output)throw new Error('Configured ONNX detector output was not returned.');
   return decodeYoloV8(output,model.config).map(raw=>{
-    // A hand label can be observed independently from ingredient/build mappings.
-    // Keep it in-memory for the hand UI, never as an ingredient component.
+    // The separately authorized read-only browser package uses its registered
+    // immutable class labels. It NEVER passes through build observations.
+    if(readonly)return raw;
     return window.GelatoHandTracker?.isHand(raw)?{...raw,kind:'hand'}:applyVisionProfile(raw);
   }).filter(Boolean);
+}
+async function unloadReadonlyIngredientModel(message='Read-only ingredient model unloaded.'){
+  readonlyIngredient.epoch++;
+  if(readonlyIngredient.timer!==null){clearTimeout(readonlyIngredient.timer);readonlyIngredient.timer=null;}
+  const session=readonlyIngredient.session;
+  readonlyIngredient.session=null;readonlyIngredient.config=null;readonlyIngredient.package=null;
+  readonlyIngredient.verifiedSha256=null;readonlyIngredient.devicePublicId='';
+  readonlyIngredient.status='idle';readonlyIngredient.busy=false;readonlyIngredient.frameSeq=0;
+  window.GelatoMediaPipeHandsRuntime?.setObjects([],{}); 
+  readonlyStatus(message);
+  try{await session?.release?.();}catch(e){log('MODEL','Read-only model session release: '+String(e?.message||e));}
+}
+function scheduleReadonlyIngredientFrame(epoch){
+ if(epoch!==readonlyIngredient.epoch||readonlyIngredient.status!=='ready')return;
+ readonlyIngredient.timer=setTimeout(()=>void pollReadonlyIngredientFrame(epoch),400);
+}
+async function pollReadonlyIngredientFrame(epoch){
+ if(epoch!==readonlyIngredient.epoch||readonlyIngredient.status!=='ready')return;
+ const item=selectedItem();
+ // No fixture detections and no KDS/build mutations. Model inference requires a
+ // visible camera, the same authorized device, and a real active KDS item.
+ const active=item&&['queued','in_progress'].includes(item.status)&&
+   state.cameraStream&&!document.hidden&&state.mode==='live'&&
+   readonlyIngredient.devicePublicId===state.device?.publicId;
+ if(!active){
+   if(readonlyIngredient.devicePublicId!==state.device?.publicId){
+     await unloadReadonlyIngredientModel('Device or station changed; reload the approved model.');
+     return;
+   }
+   scheduleReadonlyIngredientFrame(epoch);return;
+ }
+ if(readonlyIngredient.busy){scheduleReadonlyIngredientFrame(epoch);return;}
+ const options=window.GelatoHeldIngredientEvidence?.choices?.(
+   item,{...itemActions(item.kdsItemPublicId)})||[];
+ if(!options.length){window.GelatoMediaPipeHandsRuntime?.setObjects([],{});scheduleReadonlyIngredientFrame(epoch);return;}
+ const itemKey=item.kdsItemPublicId,deviceKey=state.device?.publicId,now=Date.now();
+ const video=$('cameraVideo');
+ if(!video?.videoWidth||!video?.videoHeight){scheduleReadonlyIngredientFrame(epoch);return;}
+ readonlyIngredient.busy=true;
+ try{
+   // Reuse the existing verified ONNX/Yolo decoder, NOT the governed build
+   // adapter (which can submit build observations).
+   const frame={video},detections=await inferOnnxModel(readonlyIngredient,frame,{readonly:true});
+   if(epoch!==readonlyIngredient.epoch||Date.now()-now>900||
+      !state.cameraStream||document.hidden||
+      selectedItem()?.kdsItemPublicId!==itemKey||state.device?.publicId!==deviceKey)return;
+   const names=new Set(options.map(x=>x.canonical));
+   const normalized=window.GelatoHeldIngredientEvidence?.normalize||((x)=>String(x).toLowerCase());
+   const focused=detections.filter(d=>names.has(normalized(d.label)));
+   if(window.GelatoMediaPipeHandsRuntime?.isActive())
+     window.GelatoMediaPipeHandsRuntime.setObjects(focused,{
+       modelSha256:readonlyIngredient.verifiedSha256
+     });
+   readonlyIngredient.frameSeq++;
+   if(readonlyIngredient.frameSeq%16===1)
+     readonlyStatus('Read-only model active · '+options.length+
+       ' active KDS ingredient candidates · '+focused.length+' current detections.');
+ }catch(e){
+   if(epoch!==readonlyIngredient.epoch)return;
+   log('MODEL','Read-only ingredient recognition stopped: '+String(e?.message||e));
+   await unloadReadonlyIngredientModel('Ingredient model inference failed: '+String(e?.message||e));
+   return;
+ }finally{
+   if(epoch===readonlyIngredient.epoch){
+     readonlyIngredient.busy=false;scheduleReadonlyIngredientFrame(epoch);
+   }
+ }
+}
+async function loadReadonlyIngredientModel(){
+ const detector=String($('glassesReadonlyDetector')?.value||'').trim();
+ if(!detector)throw new Error('Enter the approved ingredient detector name.');
+ if(!state.cameraStream)throw new Error('Start Camera 1 before loading ingredient recognition.');
+ if(state.mode!=='live'||!state.device)throw new Error('Select a live KDS display first.');
+ // Remove any prior model and wait for its WASM session to be released.
+ await unloadReadonlyIngredientModel('Loading approved read-only ingredient model…');
+ const epoch=readonlyIngredient.epoch,deviceKey=state.device.publicId;
+ readonlyIngredient.status='loading';readonlyStatus('Checking approved rollout for '+detector+'…');
+ try{
+   const result=await api('vision.ingredient_readonly_assignment',{detectorName:detector});
+   if(epoch!==readonlyIngredient.epoch||state.device?.publicId!==deviceKey)return;
+   const assignment=result.assignment;
+   if(assignment?.mode!=='read_only'||assignment?.action!=='apply'||
+      !assignment?.compatibility?.compatible||!assignment?.package)
+     throw new Error('No approved browser ingredient model: '+String(assignment?.reason||'rollout unavailable'));
+   const pkg=assignment.package;
+   if(pkg.runtimeType!=='onnx'||pkg.platform!=='browser_preview'||
+      pkg.status!=='ready'||pkg.metadata?.browserInference?.schema!=='gelato.browser_onnx_detector.v1')
+     throw new Error('Approved model is not a supported browser ONNX detector.');
+   // This helper verifies registered SHA-256 and byte size before session use.
+   const loaded=await createVerifiedOnnxSession(pkg,(_,note)=>readonlyStatus(note));
+   if(epoch!==readonlyIngredient.epoch||state.device?.publicId!==deviceKey){
+     await loaded.session.release?.();return;
+   }
+   Object.assign(readonlyIngredient,{
+     status:'ready',session:loaded.session,config:loaded.config,
+     package:pkg,verifiedSha256:loaded.digest,devicePublicId:deviceKey
+   });
+   readonlyStatus('Verified '+pkg.modelName+' '+pkg.modelVersion+
+     ' · KDS read-only inference. No automatic ingredient or ticket updates.');
+   scheduleReadonlyIngredientFrame(epoch);
+ }catch(e){
+   if(epoch===readonlyIngredient.epoch){
+     readonlyIngredient.status='error';readonlyStatus(String(e?.message||e),true);
+   }
+ }
 }
 function setShadowStatus(status,message){
   state.shadowModel.status=status;const el=$('shadowModelStatus');if(el){el.dataset.state=status;el.innerHTML='<strong>'+escapeHtml(status.toUpperCase())+'</strong><span>'+escapeHtml(message||'')+'</span>';}
@@ -2423,6 +2537,14 @@ window.GelatoGlassesAssemblyRecognitionRuntime={
   setAutoOptIn:setAutoAssemblyOptIn
 };
 if($('visionAssemblyAutoOptIn'))$('visionAssemblyAutoOptIn').checked=autoAssemblyOptIn;
+$('glassesReadonlyModelLoad')?.addEventListener('click',()=>void loadReadonlyIngredientModel());
+$('glassesReadonlyModelUnload')?.addEventListener('click',()=>void unloadReadonlyIngredientModel());
+window.addEventListener('pagehide',()=>void unloadReadonlyIngredientModel('Page closed.'));
+window.GelatoReadOnlyIngredientRuntime={
+  status:()=>readonlyIngredient.status,
+  model:()=>readonlyIngredient.package?.publicId||null,
+  unload:unloadReadonlyIngredientModel
+};
 window.addEventListener('gelato-glasses-runtime-revoked',()=>{
   stopLiveStationSync('runtime_revoked');stopVisionRuntime('runtime_revoked');stopCamera('runtime_revoked');
   state.recovery.suppressAutomatic=true;state.recovery.state='blocked';state.build=null;state.validation=null;
