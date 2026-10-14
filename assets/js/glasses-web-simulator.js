@@ -1014,7 +1014,7 @@ async function unloadReadonlyIngredientModel(message='Read-only ingredient model
   if(readonlyIngredient.auxTimer!=null){clearTimeout(readonlyIngredient.auxTimer);readonlyIngredient.auxTimer=null;}
   window.GelatoSharedCameraRecognitionRuntime?.reset?.();
   window.GelatoCrossCameraEvidenceRuntime?.reset?.();
-  window.dispatchEvent(new CustomEvent('gelato-glasses-placement-reset',{detail:{reason:'model_unloaded'}}));
+  window.GelatoPlacementReviewUI?.reset?.();
   renderSharedCameraRecognitionStatus();
   const session=readonlyIngredient.session;
   resetProductionFocusEvidence();
