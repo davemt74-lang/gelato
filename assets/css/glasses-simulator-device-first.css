@@ -1011,3 +1011,6 @@ html,body{max-width:100%;overflow-x:hidden}
 .gc-glasses-runtime-camera .gc-gallery-section{min-width:0}
 .gc-glasses-runtime-camera .gc-advanced summary{cursor:pointer}
 
+
+/* Empty auxiliary source holder is retained for listeners, never shown as another camera panel. */
+#gcPaneTraining>.sim-multicamera[hidden]{display:none!important}

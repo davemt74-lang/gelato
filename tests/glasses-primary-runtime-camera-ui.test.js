@@ -26,5 +26,8 @@ assert.match(primary,/window\.GelatoCameraWorkspace\?\.status\?\.\(\)\.active\|\
 assert.match(page,/Camera 2–5 have independent system-camera previews/,'system camera roles described accurately');
 assert.match(styling,/grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/,'four cameras and Training have five tabs');
 assert.doesNotMatch(workspace,/if\(slot===1\)view\.appendChild\(card\)/,'primary camera no longer inserted into system-camera tabs');
-assert.doesNotMatch(workspace,/if\(originalDataset\)train\.appendChild\(originalDataset\)/,'glasses dataset tools are not moved to system cameras'); 
+assert.doesNotMatch(workspace,/if\(originalDataset\)train\.appendChild\(originalDataset\)/,'glasses dataset tools are not moved to system cameras');
+assert.match(workspace,/train\.appendChild\(auxReview\)/,'auxiliary freeze-label review stays in Camera > Training');
+assert.match(workspace,/train\.appendChild\(refresh\)/,'system camera device refresh stays accessible');
+assert.match(styling,/#gcPaneTraining>\.sim-multicamera\[hidden\]\{display:none!important\}/,'duplicate empty camera panel is hidden'); 
 console.log('glasses-primary-runtime-camera-split=ok');
