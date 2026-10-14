@@ -17,7 +17,8 @@
     audit:audit.map(x=>({...x})),automaticEnabled:false,cameraVerified:false,
     kdsStatusChanged:false};}
   function reset(){epoch++;pending=null;/* Preserve an in-flight audit lock until its promise settles. */}
-  function scope(c){return [c?.devicePublicId,c?.stationPublicId,c?.locationId,c?.item?.kdsItemPublicId,c?.modelSha256].join('|');}
+  function scope(c){return [c?.devicePublicId,c?.stationPublicId,c?.locationId,c?.item?.kdsItemPublicId,c?.item?.ticket?.checkPublicId,c?.modelSha256,
+    c?.cameraSourceId,c?.cameraStreamId].join('|');}
   function eligible(receipt,c){
    if(!receipt||receipt.decision!=='confirm'||receipt.operatorConfirmed!==true||
       receipt.cameraPlacementVerified!==false||receipt.ingredientAdded!==false||
@@ -27,7 +28,9 @@
       c.hidden||!c.permissions?.kdsUpdate||!c.permissions?.glassesView||
       !c.devicePublicId||!c.stationPublicId||!c.locationId||
       !/^[a-f0-9]{64}$/i.test(String(c.modelSha256||''))||
-      !c.item?.kdsItemPublicId||!c.item?.ticket?.checkPublicId||c.item.status!=='in_progress')
+      !c.item?.kdsItemPublicId||!c.item?.ticket?.checkPublicId||c.item.status!=='in_progress'||
+      (c.cameraSourceId!==undefined&&!c.cameraSourceId)||
+      (c.cameraStreamId!==undefined&&!c.cameraStreamId))
     return {error:'permission_or_scope_not_ready'};
    if(receipt.itemPublicId!==c.item.kdsItemPublicId)return {error:'different_ticket'};
    const ingredientName=normalize(receipt.label);

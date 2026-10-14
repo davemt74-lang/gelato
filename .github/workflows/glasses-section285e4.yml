@@ -1,0 +1,28 @@
+name: Glasses Section 285E4 Approval Source Guards
+on:
+  pull_request:
+    paths:
+      - 'assets/js/glasses-ingredient-progression.js'
+      - 'assets/js/glasses-web-simulator.js'
+      - 'tests/glasses-section285e4-source-guard.test.js'
+      - '.github/workflows/glasses-section285e4.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'assets/js/glasses-ingredient-progression.js'
+      - 'assets/js/glasses-web-simulator.js'
+      - 'tests/glasses-section285e4-source-guard.test.js'
+      - '.github/workflows/glasses-section285e4.yml'
+jobs:
+  source-guard:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check assets/js/glasses-ingredient-progression.js && node --check assets/js/glasses-web-simulator.js
+      - run: node --test tests/glasses-section285e4-source-guard.test.js
+      - run: node tests/glasses-section285d4-progression.test.js
