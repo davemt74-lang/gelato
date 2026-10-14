@@ -369,32 +369,79 @@ function cameraInputNote(message,level='ready'){
   const target=$('cameraInputStatus');
   if(target){target.textContent=message;target.dataset.state=level;}
 }
+let cameraEnumerationEpoch=0,cameraDiscoveryBusy=false;
 async function enumerateCameras(){
   const picker=$('cameraDeviceSelect');
   if(!cameraSupported()||!navigator.mediaDevices.enumerateDevices){
     picker.innerHTML='<option value="">Camera API unavailable</option>';
-    cameraInputNote('USB webcams and HDMI capture devices require browser camera access over HTTPS or localhost.','error');
+    cameraInputNote('Browser camera API unavailable. Open Gelato using HTTPS or localhost, then check Chrome camera settings.','error');
     return;
   }
-  const requested=picker.value||cameraPrefs().deviceId||'';
+  const epoch=++cameraEnumerationEpoch;
+  const requested=picker.value||state.cameraTrack?.getSettings?.()?.deviceId||cameraPrefs().deviceId||'';
   try{
     const devices=await navigator.mediaDevices.enumerateDevices();
-    state.cameraDevices=devices.filter(d=>d.kind==='videoinput'&&d.deviceId);
+    if(epoch!==cameraEnumerationEpoch)return;
+    const video=devices.filter(d=>d.kind==='videoinput');
+    state.cameraDevices=video.filter(d=>d.deviceId);
     picker.innerHTML='<option value="">Default camera</option>'+state.cameraDevices.map((d,i)=>
-      '<option value="'+escapeHtml(d.deviceId)+'">'+escapeHtml(d.label||('Video input '+(i+1)))+'</option>').join('');
+      '<option value="'+escapeHtml(d.deviceId)+'">'+escapeHtml(d.label||('Video input '+(i+1)+' (permission may be needed)'))+'</option>').join('');
     if(requested&&state.cameraDevices.some(d=>d.deviceId===requested)){
       picker.value=requested;
     }else if(requested){
-      // Never silently replace a previously selected USB or HDMI input.
+      // Disconnected capture sources must not be silently replaced by other hardware.
       picker.value='';
-      cameraInputNote('Previously selected USB/HDMI input is unavailable. Reconnect it, refresh inputs or choose another camera.','warning');
+      cameraInputNote('Saved USB/HDMI video input is not currently available. Reconnect it, allow camera access and scan again; never switch sources silently.','warning');
       return;
     }
-    cameraInputNote(state.cameraDevices.length+' video input(s) found. USB webcams and HDMI capture adapters appear together; select the correct device.','ready');
+    if(!video.length){
+      cameraInputNote('Chrome reports 0 video inputs. First check the adapter in Windows Camera. HDMI must connect through a Windows-recognized VIDEO CAPTURE device, not a computer HDMI output port.','warning');
+    }else if(video.some(d=>!d.deviceId||!d.label)){
+      cameraInputNote(video.length+' video input(s) reported, but Chrome is hiding some camera labels/IDs. Click Allow Camera Access & Scan to request permission and list USB/HDMI capture sources.','warning');
+    }else{
+      cameraInputNote(state.cameraDevices.length+' video input(s) visible: '+state.cameraDevices.map(d=>d.label).join(' · ')+'. HDMI capture hardware may be named USB Video, Video Capture or similar.','ready');
+    }
   }catch(error){
+    if(epoch!==cameraEnumerationEpoch)return;
     state.cameraDevices=[];
     picker.innerHTML='<option value="">Cannot list camera inputs</option>';
-    cameraInputNote('Camera list unavailable. Check permission, reconnect USB/HDMI capture and refresh inputs.','error');
+    cameraInputNote('Camera enumeration failed ('+String(error?.name||'unknown')+'). Check Chrome site permissions, HTTPS and Windows camera privacy settings.','error');
+  }
+}
+async function requestCameraDiscoveryAccess(){
+  if(cameraDiscoveryBusy)return;
+  const button=$('allowCameraDiscovery');
+  cameraDiscoveryBusy=true;
+  if(button)button.disabled=true;
+  let probe=null,problem=null;
+  try{
+    if(!cameraSupported())throw Object.assign(new Error('Browser camera access requires HTTPS or localhost.'),{name:'NotSupportedError'});
+    // This user-initiated scan opens an ephemeral video track ONLY to reveal
+    // Chrome's gated camera-device metadata. No preview, upload or recording.
+    // It never starts MediaPipe, an ingredient model or any KDS action.
+    cameraInputNote('Requesting permission to inspect USB / HDMI camera inputs…','loading');
+    if(!state.cameraStream){
+      probe=await navigator.mediaDevices.getUserMedia({video:true,audio:false});
+    }
+  }catch(error){
+    problem=error;
+  }finally{
+    // Always release the temporary stream, including on enumeration failures.
+    if(probe)for(const track of probe.getTracks())track.stop();
+    await enumerateCameras();
+    if(problem){
+      const name=String(problem?.name||'CameraError');
+      const detail=name==='NotAllowedError'||name==='PermissionDeniedError'?
+        'Camera access denied. Allow the Gelato site in Chrome camera permissions and check Windows Camera Privacy settings.':
+        name==='NotFoundError'||name==='DevicesNotFoundError'?
+        'No video capture input available to Chrome. Verify the HDMI capture adapter appears in Windows Camera or Device Manager.':
+        name==='NotReadableError'||name==='TrackStartError'?
+        'The camera could not be opened. Close Windows Camera, OBS or other software using the capture device and try again.':
+        'Camera access failed ('+name+'). Check HTTPS, browser permission and capture hardware.';
+      cameraInputNote(detail,'error');
+    }
+    cameraDiscoveryBusy=false;
+    if(button)button.disabled=false;
   }
 }
 let cameraStartEpoch=0;
@@ -2042,6 +2089,7 @@ $('startCamera').addEventListener('click',startCamera);$('stopCamera').addEventL
 $('cameraFit').addEventListener('change',applyCameraPresentation);$('cameraMirror').addEventListener('change',applyCameraPresentation);
 $('cameraDeviceSelect').addEventListener('change',async()=>{saveCameraPrefs();if(state.cameraStream)await startCamera();});
  $('refreshCameraInputs').addEventListener('click',()=>void enumerateCameras());
+ $('allowCameraDiscovery').addEventListener('click',()=>void requestCameraDiscoveryAccess());
  navigator.mediaDevices?.addEventListener?.('devicechange',()=>void enumerateCameras());
 $('cameraResolution').addEventListener('change',async()=>{saveCameraPrefs();if(state.cameraStream)await startCamera();});
 $('cameraManualTarget').addEventListener('change',e=>{$('glassesStage').classList.toggle('camera-targeting',e.target.checked);if(!e.target.checked)clearCameraTarget();});
