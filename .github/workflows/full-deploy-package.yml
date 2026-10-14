@@ -52,6 +52,10 @@ on:
       - 'api/glasses-simulator.php'
       - 'includes/glasses-simulator.php'
       - 'assets/js/glasses-web-simulator.js'
+      - 'includes/glasses-vision-models.php'
+      - 'tests/glasses-readonly-ingredient-inference.test.js'
+      - 'tests/glasses-readonly-ingredient-contract.php'
+      - 'docs/GLASSES-SECTION283-READONLY-INGREDIENT-INFERENCE.md'
       - 'assets/js/glasses-mediapipe-hands.js'
       - 'assets/js/glasses-held-ingredient-evidence.js'
       - 'tests/glasses-held-ingredient-evidence.test.js'
@@ -479,6 +483,8 @@ jobs:
           node tests/glasses-mediapipe-hands.test.js
           node --check assets/js/glasses-held-ingredient-evidence.js
           node tests/glasses-held-ingredient-evidence.test.js
+          node tests/glasses-readonly-ingredient-inference.test.js
+          php tests/glasses-readonly-ingredient-contract.php
           node --check assets/js/glasses-web-simulator.js
           node --check assets/js/glasses-hud-notifications.js
           node --check assets/js/glasses-employee-runtimes.js

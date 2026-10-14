@@ -12,7 +12,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <title>Web Glasses Simulator · Gelato</title>
 <link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20261013-live1">
 <link rel="stylesheet" href="assets/css/glasses-simulator-hud-ux.css?v=20261013-voice1">
-<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261014-held282">
+<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261014-readonly283">
 <link rel="stylesheet" href="assets/css/glasses-runtime-workspace.css?v=277refine">
 </head>
 <body>
@@ -362,6 +362,15 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
         <p id="glassesHandFocus" role="status" aria-live="polite">Select an active KDS item to focus recognition.</p>
         <section class="glasses-held-ingredient-review" aria-label="Held ingredient recognition and correction">
           <div class="gc-heading"><strong>Object in hand · Ingredient suggestions</strong><span id="glassesHeldModelStatus">Waiting for governed ingredient model</span></div>
+          <div class="glasses-readonly-inference-controls">
+            <label>Approved ingredient model
+              <input id="glassesReadonlyDetector" value="food-detector" maxlength="120" autocomplete="off" aria-label="Approved ingredient detector name">
+            </label>
+            <button id="glassesReadonlyModelLoad" type="button">Load Read-Only Model</button>
+            <button id="glassesReadonlyModelUnload" type="button" disabled>Unload</button>
+          </div>
+          <p id="glassesReadonlyModelStatus" role="status" aria-live="polite">No approved browser ingredient model loaded. Register and activate one under Vision Models.</p>
+          <p class="sim-muted">No active model? <a href="glasses-vision-models.php">Manage approved model rollouts</a>, or open Training &amp; Corrections to collect reviewed ingredient examples. Approved browser ONNX models are read-only until you explicitly load one.</p>
           <ol id="glassesHeldSuggestions" aria-live="polite"></ol>
           <div class="inline-actions">
             <button id="glassesCaptureHeldObject" type="button">Capture Hand / Ingredient Example</button>
@@ -550,7 +559,7 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-held-ingredient-evidence.js?v=20261014-282"></script>
 <script src="assets/js/glasses-mediapipe-hands.js?v=20261014-282"></script>
 <script src="assets/js/glasses-mediapipe-hands-ui.js?v=20261014-281"></script>
-<script src="assets/js/glasses-web-simulator.js?v=20261014-held282"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20261014-readonly283"></script>
 <script src="assets/js/glasses-voice-device.js?v=20261013-device1"></script>
 <script src="assets/js/glasses-simulator-voice.js?v=20261014-kds-completion"></script>
 <script src="assets/js/glasses-hand-tracker-ui.js?v=20261014-282"></script>

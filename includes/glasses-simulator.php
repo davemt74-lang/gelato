@@ -321,6 +321,13 @@ function glasses_simulator_dispatch(PDO $pdo,array $user,array $in): array
     if($action==='work'){
         return ['work'=>glasses_simulator_work_with_notes($pdo,$device)];
     }
+    if($action==='vision.ingredient_readonly_assignment'){
+        $detector=trim((string)($in['detectorName']??''));
+        if($detector==='')throw new InvalidArgumentException('Choose an ingredient detector.');
+        // Resolve the authenticated device/virtual KDS preview first. The
+        // function requires both scoped glasses.view and kds.view.
+        return ['assignment'=>glasses_vision_readonly_ingredient_assignment($pdo,$user,$device,$detector)];
+    }
 
     if($action==='build.start'){
         $kds=trim((string)($in['kdsItemPublicId']??''));

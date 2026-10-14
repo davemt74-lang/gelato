@@ -1069,3 +1069,11 @@ html,body{max-width:100%;overflow-x:hidden}
 .glasses-held-ingredient-review .inline-actions{display:flex;gap:8px;flex-wrap:wrap}
 .glasses-held-ingredient-review .inline-actions button{flex:1 1 180px;background:#205635;color:white;border:1px solid #52885d;padding:9px;border-radius:8px;cursor:pointer}
 .glasses-held-ingredient-review p{font-size:11px;line-height:1.5;margin:0;color:#c1d7c7}
+
+/* Section 283 — governed read-only ingredient inference controls in Runtime. */
+.glasses-readonly-inference-controls{display:flex;gap:8px;align-items:end;flex-wrap:wrap}
+.glasses-readonly-inference-controls label{display:grid;gap:5px;flex:1 1 190px;font-size:11px;color:#d0e8d8}
+.glasses-readonly-inference-controls input{width:100%;min-height:35px;border:1px solid #4c7762;border-radius:7px;background:#182d20;color:white;padding:7px}
+.glasses-readonly-inference-controls button{min-height:35px;border:1px solid #5b996b;border-radius:7px;background:#225536;color:#f1fff5;padding:7px 10px;cursor:pointer}
+.glasses-readonly-inference-controls button:disabled{opacity:.5;cursor:not-allowed}
+#glassesReadonlyModelStatus{font-size:11px;color:#bfe1ca;line-height:1.4}

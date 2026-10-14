@@ -394,12 +394,17 @@ function glasses_vision_model_rollout_create(PDO $pdo,int $org,array $input,int 
 
 function glasses_vision_model_rollout_conflict(PDO $pdo,int $org,array $rollout): bool
 {
-    $sql="SELECT COUNT(*) FROM glasses_vision_model_rollouts
-        WHERE organization_id=? AND detector_name=? AND id<>?
-          AND status IN ('active','paused')
-          AND location_id ".($rollout['location_id']===null?'IS NULL':'=?')."
-          AND station_id ".($rollout['station_id']===null?'IS NULL':'=?');
-    $args=[$org,(string)$rollout['detector_name'],(int)$rollout['id']];
+    // Rollout conflicts must be scoped by platform. A browser_preview rollout
+    // must not block the native AIR3 release of the same ingredient detector.
+    $sql="SELECT COUNT(*) FROM glasses_vision_model_rollouts r
+        JOIN glasses_vision_model_packages tp ON tp.id=r.target_package_id
+          AND tp.organization_id=r.organization_id
+        WHERE r.organization_id=? AND r.detector_name=? AND r.id<>?
+          AND tp.platform=?
+          AND r.status IN ('active','paused')
+          AND r.location_id ".($rollout['location_id']===null?'IS NULL':'=?')."
+          AND r.station_id ".($rollout['station_id']===null?'IS NULL':'=?');
+    $args=[$org,(string)$rollout['detector_name'],(int)$rollout['id'],(string)$rollout['target_platform']];
     if($rollout['location_id']!==null)$args[]=(int)$rollout['location_id'];
     if($rollout['station_id']!==null)$args[]=(int)$rollout['station_id'];
     $q=$pdo->prepare($sql);$q->execute($args);
@@ -1568,4 +1573,88 @@ function glasses_vision_model_catalog(PDO $pdo,array $user): array
         ],$locations),
         'stationsByLocation'=>$stations,
     ];
+}
+
+
+/**
+ * Read-only browser KDS inference assignment. Deliberately NOT a build session:
+ * no build_session_id foreign key, model activation, telemetry writes or kitchen writes.
+ * Only an active/rolled-back org-admin rollout and ready browser-preview ONNX
+ * package may be used. Normal build assignments remain unchanged.
+ */
+function glasses_vision_readonly_ingredient_assignment(
+    PDO $pdo,array $user,array $device,string $detectorName
+): array {
+    if(!app_has_permission('glasses.view',$user)||!app_has_permission('kds.view',$user))
+        throw new DomainException('Glasses and KDS view permissions are required for read-only recognition.');
+    $locationId=(int)$device['location_id'];
+    if(!operational_location_allowed($pdo,$user,'glasses.view',$locationId)||
+       !operational_location_allowed($pdo,$user,'kds.view',$locationId))
+        throw new DomainException('Read-only recognition is unavailable at this restaurant.');
+    if(!glasses_vision_models_ready($pdo))
+        throw new DomainException('Vision model rollout migrations are not installed.');
+
+    $detector=glasses_vision_normalize_detector($detectorName);
+    if($detector==='*')throw new InvalidArgumentException('Choose a specific ingredient detector.');
+    $hold=static fn(string $reason):array=>[
+        'schema'=>'gelato.readonly_ingredient_assignment.v1',
+        'mode'=>'read_only','detectorName'=>$detector,'action'=>'hold',
+        'reason'=>$reason,'selection'=>'hold','rollout'=>null,'package'=>null,
+        'compatibility'=>['compatible'=>false,'reasons'=>[$reason]]
+    ];
+    // The same detector can have separate AIR3 and browser_preview rollouts.
+    // Resolve a browser-specific rollout so native releases cannot shadow it.
+    $q=$pdo->prepare("SELECT r.public_id FROM glasses_vision_model_rollouts r
+       JOIN glasses_vision_model_packages tp ON tp.id=r.target_package_id
+         AND tp.organization_id=r.organization_id AND tp.platform='browser_preview'
+       WHERE r.organization_id=? AND r.detector_name=?
+         AND r.status IN ('active','paused','rolled_back')
+         AND (r.location_id IS NULL OR r.location_id=?)
+         AND (r.station_id IS NULL OR r.station_id=?)
+       ORDER BY CASE WHEN r.station_id IS NOT NULL THEN 2
+         WHEN r.location_id IS NOT NULL THEN 1 ELSE 0 END DESC,
+         r.updated_at DESC,r.id DESC LIMIT 1");
+    $q->execute([(int)$device['organization_id'],$detector,
+       $locationId,$device['station_id']!==null?(int)$device['station_id']:null]);
+    $rolloutId=$q->fetchColumn();
+    if(!$rolloutId)return $hold('no_active_browser_rollout');
+    $rollout=glasses_vision_model_rollout_row(
+       $pdo,(int)$device['organization_id'],(string)$rolloutId,false);
+    $status=(string)$rollout['status'];
+    if($status==='paused')return $hold('rollout_paused');
+
+    $bucket=glasses_vision_model_canary_bucket(
+        (string)$rollout['public_id'],(string)$device['public_id']);
+    $target=$status==='active'&&$bucket<(float)$rollout['canary_percent'];
+    $selection=$status==='rolled_back'?'rollback':($target?'target':'baseline');
+    $public=$status==='rolled_back'||!$target
+        ?(string)($rollout['baseline_public_id']??'')
+        :(string)($rollout['target_public_id']??'');
+    if($public==='')return $hold('no_selected_package');
+    $package=glasses_vision_model_package_row(
+        $pdo,(int)$device['organization_id'],$public,false);
+    $metadata=json_decode((string)($package['metadata_json']??'null'),true);
+    $browser=is_array($metadata)?($metadata['browserInference']??null):null;
+    $reasons=[];
+    if((string)$package['status']!=='ready')$reasons[]='package_not_ready';
+    if((string)$package['runtime_type']!=='onnx')$reasons[]='onnx_required';
+    if((string)$package['platform']!=='browser_preview')$reasons[]='browser_preview_package_required';
+    // A browser-preview package cannot claim compatibility with an unknown
+    // native SDK/app version. Admin must register a browser-specific artifact.
+    if($package['minimum_sdk_version']!==null||$package['minimum_app_version']!==null)
+        $reasons[]='native_version_floor_not_supported_in_browser';
+    if(!is_array($browser)||($browser['schema']??'')!=='gelato.browser_onnx_detector.v1'||
+       !is_array($browser['labels']??null)||!$browser['labels'])
+        $reasons[]='browser_inference_metadata_required';
+    $result=[
+        'schema'=>'gelato.readonly_ingredient_assignment.v1','mode'=>'read_only',
+        'detectorName'=>$detector,'action'=>$reasons?'hold':'apply',
+        'reason'=>$reasons?implode(',',$reasons):null,'selection'=>$selection,
+        'canaryBucket'=>$bucket,
+        'rollout'=>['publicId'=>(string)$rollout['public_id'],
+           'status'=>$status,'canaryPercent'=>(float)$rollout['canary_percent']],
+        'package'=>$reasons?null:glasses_vision_model_package_public($package),
+        'compatibility'=>['compatible'=>!$reasons,'reasons'=>$reasons],
+    ];
+    return $result;
 }
