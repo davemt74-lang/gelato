@@ -1,0 +1,14 @@
+.glasses-connection-manager{padding:12px;margin-bottom:12px;border:1px solid #35493b;border-radius:12px;background:#131d17;color:#ecf5ec;min-width:0}
+.glasses-connection-manager header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+#glassesConnectionBadge{font-size:11px;color:#b2cbb8}
+.glasses-connection-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.glasses-connection-grid>div{border:1px solid #304337;border-radius:8px;padding:9px;min-width:0}
+.glasses-connection-grid small{display:block;font-size:10px;color:#b2c4b6;margin-bottom:5px}
+.glasses-connection-grid strong{display:block;font-size:12px;overflow-wrap:anywhere}
+.glasses-connection-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px}
+.glasses-connection-actions button,#glassesPairCancel{background:#24372a;color:#edf5ee;border:1px solid #47624e;border-radius:6px;padding:7px 10px;cursor:pointer}
+#glassesConnectionMessage{font-size:11px;color:#b9cdbd}
+#glassesPairPanel{margin-top:12px;border-top:1px solid #324638;padding-top:10px}
+#glassesPairCode{display:block;letter-spacing:.18em;font-size:26px;overflow-wrap:anywhere;padding:8px 0}
+@media(max-width:850px){.glasses-connection-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:420px){.glasses-connection-grid{grid-template-columns:1fr}}

@@ -142,6 +142,8 @@ jobs:
           php -l includes/glasses-employee-runtimes.php
           php -l tests/glasses-employee-runtime-contract.php
           php tests/glasses-employee-runtime-contract.php
+          php -l tests/glasses-connection-manager-contract.php
+          php tests/glasses-connection-manager-contract.php
           php -l tests/glasses-web-simulator-contract.php
           php -l tests/glasses-live-virtual-preview-contract.php
           php -l tests/glasses-hud-voice-contract.php

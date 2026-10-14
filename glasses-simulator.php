@@ -11,6 +11,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Web Glasses Simulator · Gelato</title>
 <link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20261013-live1">
+<link rel="stylesheet" href="assets/css/glasses-runtime-connections.css?v=274">
 <link rel="stylesheet" href="assets/css/glasses-simulator-hud-ux.css?v=20261013-voice1">
 <link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-hud273">
 </head>
@@ -36,6 +37,24 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 
 <div id="glassesRuntimeTabs" class="glasses-runtime-tabs" role="tablist"
      aria-label="Assigned employee glasses runtimes" hidden></div>
+<section class="glasses-connection-manager" id="glassesConnectionManager" aria-label="Glasses connections">
+ <header><strong>Glasses Connection</strong><span role="status" id="glassesConnectionBadge">Checking…</span></header>
+ <div class="glasses-connection-grid">
+  <div><small>Physical glasses</small><strong id="glassesConnectionHardware">Not selected</strong></div>
+  <div><small>Gelato software</small><strong id="glassesConnectionSoftware">Unknown</strong></div>
+  <div><small>Employee profile</small><strong id="glassesConnectionProfile">Unassigned</strong></div>
+  <div><small>Device heartbeat</small><strong id="glassesConnectionLastSeen">None reported</strong></div>
+ </div>
+ <div class="glasses-connection-actions">
+  <button type="button" id="glassesConnectionPair">Pair new glasses</button>
+  <button type="button" id="glassesConnectionConfirm" hidden>Confirm my profile</button>
+  <button type="button" id="glassesConnectionRefresh">Refresh</button>
+  <span id="glassesConnectionMessage" role="status"></span>
+ </div>
+ <div id="glassesPairPanel" hidden><p>Enter this one-time code in the Gelato application running on the physical glasses. Pairing is separate from employee assignment.</p>
+  <strong id="glassesPairCode"></strong> <button type="button" id="glassesPairCancel">Close</button>
+ </div>
+</section>
 <div class="glasses-runtime-toolbar" aria-label="Multiple assigned employee glasses runtimes">
     <label id="glassesRuntimeSelectLabel">Runtime <select id="glassesRuntimeSelect" aria-label="Glasses runtime"><option value="">New runtime…</option></select></label>
     <label id="glassesRuntimeDeviceGroup">Glasses device <select id="deviceSelect" aria-label="Paired glasses device"><option value="">Finding live displays…</option></select></label>
@@ -509,7 +528,7 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-v10-cook-ux-harness.js?v=20260929-v10-6"></script>
 <script src="js/voice-session-presence.js?v=20261013-presence1"></script>
 <script src="assets/js/glasses-item-assembly.js?v=20261013-265"></script>
-<script src="assets/js/glasses-employee-runtimes.js?v=20261013-runtime272"></script>
+<script src="assets/js/glasses-employee-runtimes.js?v=20261013-runtime274"></script>
 <script src="assets/js/glasses-assembly-recognition.js?v=20261013-266"></script>
 <script src="assets/js/glasses-hud-notifications.js?v=20261013-hud-edit2"></script>
 <script src="assets/js/glasses-web-simulator.js?v=20261013-hud273"></script>
@@ -518,7 +537,7 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-multicamera.js?v=20261013-multi1"></script>
 <script src="assets/js/glasses-camera-config.js?v=20261013-hud264"></script>
 <script src="assets/js/glasses-camera-runtime.js?v=20261013-261"></script>
-<script src="assets/js/glasses-simulator-tabs.js?v=20261013-runtime272"></script>
+<script src="assets/js/glasses-simulator-tabs.js?v=20261013-runtime274"></script>
 <script src="assets/js/glasses-camera-similarity.js?v=20261013-ref258"></script>
 <script src="assets/js/glasses-camera-workspace.js?v=20261013-267"></script>
 <script src="assets/js/glasses-ingredient-training-plan.js?v=20261013-267"></script>

@@ -2,7 +2,39 @@
 /* Section 266: operator-assigned runtimes. Each opened URL has its own isolated
  * browser camera, inference worker, checklist, audio and recovery state. */
 const cfg=window.GELATO_GLASSES_SIMULATOR||{},byId=id=>document.getElementById(id);
-let catalog={schemaReady:false,runtimes:[],employees:[],stations:[]},bound=null,devices=[],mounted=false,lost=false;
+let catalog={schemaReady:false,runtimes:[],employees:[],stations:[]},bound=null,devices=[],mounted=false,lost=false,physical=[],pairing=null,pairTimer=null;
+const adminApi='api/glasses-admin.php';
+const msg=s=>{const e=byId('glassesConnectionMessage');if(e)e.textContent=s;};
+const txt=(id,s)=>{const e=byId(id);if(e)e.textContent=String(s);};
+function selectedRuntime(){return (catalog.runtimes||[]).find(r=>r.publicId===(byId('glassesRuntimeSelect')?.value||cfg.runtimePublicId))||null;}
+function showPhysical(){
+ const rt=selectedRuntime(),d=physical.find(d=>d.publicId===(rt?.devicePublicId||byId('deviceSelect')?.value));
+ const age=typeof d?.heartbeatAgeSeconds==='number'?d.heartbeatAgeSeconds:Infinity;
+ txt('glassesConnectionBadge',!d?'No device selected':d.status!=='active'||d.revokedAt?'Revoked':age<=60?'Physical glasses online':'Paired · Offline');
+ txt('glassesConnectionHardware',d?d.displayName+' · '+(d.hardwareIdentifier||d.publicId):'Select a physical device');
+ txt('glassesConnectionSoftware',d?.appVersion?'Gelato AR '+d.appVersion:'Version not reported');
+ txt('glassesConnectionProfile',rt?rt.employeeName+(rt.profileConfirmedAt?' · Confirmed in browser':' · Awaiting sign-in'):'No employee assigned');
+ txt('glassesConnectionLastSeen',d?.lastSeenAt?new Date(d.lastSeenAt).toLocaleString():'No device heartbeat');
+ const confirm=byId('glassesConnectionConfirm');if(confirm)confirm.hidden=!(cfg.runtimePublicId&&rt&&!rt.profileConfirmedAt);
+ const pair=byId('glassesConnectionPair');if(pair)pair.hidden=!!cfg.runtimePublicId||!cfg.canManageMedia;
+}
+async function refreshPhysical(){const d=await json(adminApi);physical=d.devices||[];showPhysical();}
+function endPair(){if(pairTimer)clearInterval(pairTimer);pairTimer=null;pairing=null;byId('glassesPairPanel').hidden=true;txt('glassesPairCode','');}
+async function cancelPair(){
+ const id=pairing?.id;endPair();if(!id)return;
+ try{await json(adminApi,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':cfg.csrf},
+   body:JSON.stringify({action:'pairing.cancel',csrf_token:cfg.csrf,pairingPublicId:id})});msg('Pairing code cancelled.');}
+ catch(e){msg('Pairing code hidden. It expires automatically. '+e.message);}
+}
+async function pollPair(){
+ if(!pairing)return;
+ if(Date.now()>=pairing.until){endPair();msg('Pairing code expired.');return;}
+ try{
+  const r=await json(adminApi+'?action=pairing.status&pairingPublicId='+encodeURIComponent(pairing.id));
+  if(r.pairing.state==='paired'){endPair();msg('Glasses paired. Reloading available devices.');window.location.reload();}
+  else if(r.pairing.state!=='pending'){endPair();msg('Pairing ended.');}
+ }catch(e){msg(e.message);}
+}
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const status=(s,error=false)=>{const e=byId('glassesRuntimeStatus');if(e){e.textContent=s;e.dataset.error=error?'1':'0';}};
 async function json(url,options={}){
@@ -92,6 +124,7 @@ function render(){
  employee.disabled=!!chosen||(catalog.employees||[]).length===0;
  renderStation(chosen);
  renderTraining(chosen);
+ showPhysical();
  byId('glassesRuntimeNew').disabled=!!cfg.runtimePublicId||!!chosen||!catalog.schemaReady||
    !(catalog.employees||[]).length||!selectedDevice()||!!selectedDevice()?.virtualPreview||
    !byId('glassesRuntimeStation')?.value||!employee.value;
@@ -150,6 +183,27 @@ function mount(){
  if(mounted)return;mounted=true;
  const select=byId('glassesRuntimeSelect');
  select.addEventListener('change',render);
+ byId('glassesConnectionRefresh').addEventListener('click',async()=>{try{await refreshPhysical();await refresh();msg('Connection status refreshed.');}catch(e){msg(e.message);}});
+ byId('glassesConnectionConfirm').addEventListener('click',async()=>{
+  if(!bound)return;
+  try{await post('runtime.profile_confirm',{runtimePublicId:bound.publicId});await refresh();msg('Profile confirmed for this runtime.');}
+  catch(e){msg(e.message);}
+ });
+ byId('glassesConnectionPair').addEventListener('click',async()=>{
+  const dev=selectedDevice(selectedRuntime());
+  const station=(catalog.stations||[]).find(s=>s.publicId===byId('glassesRuntimeStation')?.value);
+  const locationId=station?.locationId||dev?.locationId;
+  if(!locationId){msg('Select a station or a paired device for the restaurant location first.');return;}
+  await cancelPair();
+  try{
+   const r=await json(adminApi,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':cfg.csrf},
+    body:JSON.stringify({action:'pairing.create',csrf_token:cfg.csrf,locationId,stationPublicId:station?.publicId||null,ttlMinutes:10})});
+   pairing={id:r.pairing.publicId,until:Date.now()+r.pairing.expiresInSeconds*1000};
+   txt('glassesPairCode',r.pairing.pairingCode);byId('glassesPairPanel').hidden=false;
+   msg('One-time pairing code ready.');pairTimer=setInterval(pollPair,3000);
+  }catch(e){msg(e.message);}
+ });
+ byId('glassesPairCancel').addEventListener('click',cancelPair);
  byId('deviceSelect').addEventListener('change',()=>renderStation(catalog.runtimes?.find(r=>r.publicId===select.value)||null));
  byId('glassesRuntimeEmployee').addEventListener('change',()=>{
    if(!select.value)renderStation(null);
@@ -241,7 +295,7 @@ async function heartbeat(){
  }
 }
 async function bootstrap(currentDevices){
- devices=currentDevices||[];mount();await refresh();
+ devices=currentDevices||[];mount();await refresh();try{await refreshPhysical();}catch(e){msg('Connection diagnostics unavailable: '+e.message);}
  if(!cfg.runtimePublicId)return null;
  bound=catalog.runtimes?.find(r=>r.publicId===cfg.runtimePublicId)||null;
  if(!bound||!devices.some(d=>d.publicId===bound.devicePublicId&&!d.virtualPreview)){

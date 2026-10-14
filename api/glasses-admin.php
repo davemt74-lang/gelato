@@ -19,9 +19,35 @@ try{
         $locationId=(int)($_GET['locationId']??0);
         if($locationId>0&&!operational_location_allowed($pdo,$user,'glasses.view',$locationId))
             throw new DomainException('AR glasses access is not assigned at that restaurant location.');
+        if(($_GET['action']??'')==='pairing.status'){
+            if(!$canManage)throw new DomainException('Glasses management permission required.');
+            $id=trim((string)($_GET['pairingPublicId']??''));
+            if($id===''||strlen($id)>80)throw new InvalidArgumentException('Choose a pairing request.');
+            $q=$pdo->prepare("SELECT g.id,g.location_id,g.created_by,g.expires_at,g.consumed_at,
+                d.public_id device_public_id,d.display_name device_name
+              FROM glasses_pairing_grants g
+              LEFT JOIN glasses_devices d ON d.id=g.paired_device_id AND d.organization_id=g.organization_id
+              WHERE g.organization_id=? AND g.public_id=? LIMIT 1");
+            $q->execute([$org,$id]);$grant=$q->fetch(PDO::FETCH_ASSOC);
+            if(!$grant||(int)$grant['created_by']!==$uid||
+                !operational_location_allowed($pdo,$user,'glasses.manage',(int)$grant['location_id']))
+                throw new DomainException('Pairing request not available.');
+            $q=$pdo->prepare("SELECT (expires_at>NOW(6)) FROM glasses_pairing_grants
+              WHERE organization_id=? AND id=? LIMIT 1");
+            $q->execute([$org,(int)$grant['id']]);
+            $notExpired=(bool)$q->fetchColumn();
+            $state=$grant['device_public_id']!==null?'paired':
+                ($grant['consumed_at']!==null?'consumed':($notExpired?'pending':'expired'));
+            app_json_response(['ok'=>true,'pairing'=>[
+                'state'=>$state,'devicePublicId'=>$grant['device_public_id'],
+                'deviceName'=>$grant['device_name']
+            ]]);
+        }
+        // Device discovery must be filtered by the operator's location rights.
+        $devices=array_values(array_filter(glasses_devices($pdo,$org,$locationId>0?$locationId:null),
+          static fn(array $d):bool=>operational_location_allowed($pdo,$user,'glasses.view',(int)$d['locationId'])));
         app_json_response([
-            'ok'=>true,
-            'devices'=>glasses_devices($pdo,$org,$locationId>0?$locationId:null),
+            'ok'=>true,'devices'=>$devices,
             'permissions'=>['view'=>true,'manage'=>$canManage],
         ]);
     }
@@ -35,6 +61,16 @@ try{
     $in=app_json_input();
     app_verify_request_csrf($in);
     $action=(string)($in['action']??'');
+
+    if($action==='pairing.cancel'){
+        $id=trim((string)($in['pairingPublicId']??''));
+        if($id===''||strlen($id)>80)throw new InvalidArgumentException('Choose a pairing request.');
+        $q=$pdo->prepare("UPDATE glasses_pairing_grants SET consumed_at=NOW(6)
+          WHERE organization_id=? AND public_id=? AND created_by=? AND consumed_at IS NULL
+            AND paired_device_id IS NULL AND expires_at>NOW(6)");
+        $q->execute([$org,$id,$uid]);
+        app_json_response(['ok'=>true,'cancelled'=>$q->rowCount()===1]);
+    }
 
     if($action==='pairing.create'){
         $locationId=(int)($in['locationId']??0);
