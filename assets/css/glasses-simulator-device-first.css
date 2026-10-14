@@ -1057,3 +1057,15 @@ html,body{max-width:100%;overflow-x:hidden}
 .glasses-hand-detector-control button{border:1px solid #5b996b;border-radius:7px;background:#215334;color:#f1fff5;
  padding:7px 10px;min-height:33px;font-size:11px;cursor:pointer}
 .glasses-hand-detector-control button:disabled{opacity:.5;cursor:default}
+
+/* Section 282: inspectable, KDS-scoped held-object suggestions and training corrections. */
+.glasses-held-ingredient-review{border:1px solid #426b4d;border-radius:9px;padding:11px;display:grid;gap:9px;background:#132b1d;min-width:0}
+.glasses-held-ingredient-review>.gc-heading{display:flex;flex-wrap:wrap;gap:6px;justify-content:space-between;align-items:center}
+.glasses-held-ingredient-review .gc-heading strong{font-size:12px}
+.glasses-held-ingredient-review .gc-heading span{font-size:10px;color:#c2d6c8}
+.glasses-held-ingredient-review ol{margin:0;padding:0;list-style:none;display:grid;gap:6px}
+.glasses-held-ingredient-review li{display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap;font-size:11px;border:1px solid #37684c;background:#193b26;padding:8px;border-radius:6px}
+.glasses-held-ingredient-review li span{color:#a4ffc2;font-weight:700}
+.glasses-held-ingredient-review .inline-actions{display:flex;gap:8px;flex-wrap:wrap}
+.glasses-held-ingredient-review .inline-actions button{flex:1 1 180px;background:#205635;color:white;border:1px solid #52885d;padding:9px;border-radius:8px;cursor:pointer}
+.glasses-held-ingredient-review p{font-size:11px;line-height:1.5;margin:0;color:#c1d7c7}

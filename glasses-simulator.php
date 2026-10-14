@@ -12,7 +12,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <title>Web Glasses Simulator · Gelato</title>
 <link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20261013-live1">
 <link rel="stylesheet" href="assets/css/glasses-simulator-hud-ux.css?v=20261013-voice1">
-<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261014-mediapipe281">
+<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261014-held282">
 <link rel="stylesheet" href="assets/css/glasses-runtime-workspace.css?v=277refine">
 </head>
 <body>
@@ -360,6 +360,15 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
           <div id="glassesHandState2" data-state="ready"><strong>Hand 2</strong><span data-hand-status>READY</span><small data-hand-detail>Waiting for hand detector</small></div>
         </div>
         <p id="glassesHandFocus" role="status" aria-live="polite">Select an active KDS item to focus recognition.</p>
+        <section class="glasses-held-ingredient-review" aria-label="Held ingredient recognition and correction">
+          <div class="gc-heading"><strong>Object in hand · Ingredient suggestions</strong><span id="glassesHeldModelStatus">Waiting for governed ingredient model</span></div>
+          <ol id="glassesHeldSuggestions" aria-live="polite"></ol>
+          <div class="inline-actions">
+            <button id="glassesCaptureHeldObject" type="button">Capture Hand / Ingredient Example</button>
+            <button id="glassesReviewHeldObject" type="button">Open Training &amp; Corrections</button>
+          </div>
+          <p id="glassesHeldCaptureStatus" role="status" aria-live="polite">A hand is not proof of an ingredient. Labels appear only when a verified ingredient detector also recognizes a matching object near that hand across fresh model frames.</p>
+        </section>
         <p class="glasses-hand-tracking-help">Pretrained MediaPipe Hand Landmarker loads after you start Camera 1. Green tracks represent real hand detections; hands can leave and re-enter view. Held-ingredient labels need a separate ingredient model and are suggestions only. No camera starts automatically, no video is uploaded for hand detection, and no KDS state changes.</p>
       </section>
       <section class="sim-multicamera" id="simMultiCameraPanel" aria-labelledby="simMultiCameraTitle">
@@ -538,12 +547,13 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-assembly-recognition.js?v=20261013-266"></script>
 <script src="assets/js/glasses-hud-notifications.js?v=20261013-hud-edit2"></script>
 <script src="assets/js/glasses-hand-tracker.js?v=20261014-280"></script>
-<script src="assets/js/glasses-mediapipe-hands.js?v=20261014-281"></script>
+<script src="assets/js/glasses-held-ingredient-evidence.js?v=20261014-282"></script>
+<script src="assets/js/glasses-mediapipe-hands.js?v=20261014-282"></script>
 <script src="assets/js/glasses-mediapipe-hands-ui.js?v=20261014-281"></script>
-<script src="assets/js/glasses-web-simulator.js?v=20261014-mediapipe281"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20261014-held282"></script>
 <script src="assets/js/glasses-voice-device.js?v=20261013-device1"></script>
 <script src="assets/js/glasses-simulator-voice.js?v=20261014-kds-completion"></script>
-<script src="assets/js/glasses-hand-tracker-ui.js?v=20261014-280"></script>
+<script src="assets/js/glasses-hand-tracker-ui.js?v=20261014-282"></script>
 <script src="assets/js/glasses-multicamera.js?v=20261013-multi1"></script>
 <script src="assets/js/glasses-camera-config.js?v=20261014-cam-runtime-split"></script>
 <script src="assets/js/glasses-camera-runtime.js?v=20261013-261"></script>
