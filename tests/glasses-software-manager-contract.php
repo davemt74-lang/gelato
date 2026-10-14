@@ -1,0 +1,40 @@
+<?php
+declare(strict_types=1);
+$root=dirname(__DIR__);
+require_once $root.'/includes/glasses-software.php';
+$check=static function(bool $ok,string $reason):void{
+ if(!$ok){fwrite(STDERR,"FAIL Glasses Section 275: ".$reason."\n");exit(1);}
+};
+$version=['minimumVersion'=>'1.2.0','targetVersion'=>'1.4.0'];
+$state=static fn(?string $installed,?array $policy):string=>glasses_software_assess($installed,$policy)['state'];
+$check(glasses_software_version_valid('1.2.0'),'valid dotted version');
+$check(glasses_software_version_valid('0.10'),'two-component version allowed');
+$check(!glasses_software_version_valid('v1.2.3'),'prefix not silently accepted');
+$check(!glasses_software_version_valid('1.2.3-beta'),'prerelease not silently accepted');
+$check(!glasses_software_version_valid('1.2.3; DROP TABLE'),'unsafe input rejected');
+$check($state('1.1.9',$version)==='below_minimum','below minimum');
+$check($state('1.3.0',$version)==='update_recommended','target ahead');
+$check($state('1.4.0',$version)==='current','target met');
+$check($state('1.10.0',$version)==='current','numeric not lexical comparison');
+$check($state(null,$version)==='unreported','missing application version');
+$check($state('unknown',$version)==='unknown','unparseable version');
+$check($state('1.1.0',null)==='unmanaged','no fabricated compliance without policy');
+$check($state('1.1.0',['minimumVersion'=>null,'targetVersion'=>null])==='unmanaged','empty policy unmanaged');
+$api=(string)file_get_contents($root.'/api/glasses-software.php');
+$core=(string)file_get_contents($root.'/includes/glasses-software.php');
+$page=(string)file_get_contents($root.'/glasses-simulator.php');
+$tabs=(string)file_get_contents($root.'/assets/js/glasses-simulator-tabs.js');
+$js=(string)file_get_contents($root.'/assets/js/glasses-software-manager.js');
+$schema=(string)file_get_contents($root.'/database/20261216_glasses_software_policies.sql');
+$check(str_contains($api,'app_require_auth()')&&str_contains($api,'app_verify_request_csrf($in)'),'auth and CSRF');
+$check(str_contains($core,"operational_location_allowed("),'location scoped operations');
+$check(str_contains($core,"'glasses.manage'"),'management permission');
+$check(str_contains($core,'revision=revision+1')&&str_contains($core,'FOR UPDATE'),'concurrent policy revisions');
+$check(str_contains($core,"event_type<>'heartbeat'"),'safe bounded diagnostic listing');
+$check(!str_contains($core,'token_hash'),'secret device tokens excluded');
+$check(str_contains($schema,'UNIQUE KEY uq_glasses_software_scope'),'one policy per location/platform');
+$check(str_contains($page,'id="glassesSoftwareManager"')&&str_contains($tabs,"move($('glassesSoftwareManager')"),'Runtime tab integration');
+$check(str_contains($js,'textContent')&&str_contains($js,'credentials:'),'safe UI and authorized request');
+$check(!str_contains($js,'innerHTML'),'remote data never inserted as HTML');
+$check(str_contains($js,"manual_only")===false && str_contains($page,'does not install'),'no unsupported native updater');
+echo "PASS Section 275 software manager contracts (24 assertions)\n";

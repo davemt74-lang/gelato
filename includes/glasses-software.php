@@ -53,12 +53,12 @@ function glasses_software_fleet(PDO $pdo,array $user): array
     }
     $sessions=[];
     if(glasses_employee_runtimes_ready($pdo)){
-        $q=$pdo->prepare("SELECT r.device_id,r.public_id,u.display_name,r.last_seen_at
-          FROM glasses_employee_runtimes r JOIN users u ON u.id=r.employee_user_id
+        $q=$pdo->prepare("SELECT d.public_id device_public_id,r.public_id,u.display_name,r.last_seen_at
+          FROM glasses_employee_runtimes r JOIN glasses_devices d ON d.id=r.device_id AND d.organization_id=r.organization_id JOIN users u ON u.id=r.employee_user_id
           WHERE r.organization_id=? AND r.status='active' AND r.active_slot=1");
         $q->execute([$org]);
         foreach($q->fetchAll(PDO::FETCH_ASSOC) as $r)
-            $sessions[(int)$r['device_id']]=[
+            $sessions[(string)$r['device_public_id']]=[
                 'publicId'=>(string)$r['public_id'],
                 'employeeName'=>(string)$r['display_name'],
                 'lastSeenAt'=>$r['last_seen_at']
@@ -84,7 +84,7 @@ function glasses_software_fleet(PDO $pdo,array $user): array
           'heartbeatAgeSeconds'=>$d['heartbeatAgeSeconds']??null,
           'online'=>(bool)($d['deviceOnline']??false),
           'status'=>(string)$d['status'],
-          'runtime'=>$sessions[(int)$d['id']]??null,
+          'runtime'=>$sessions[(string)$d['publicId']]??null,
           'policy'=>$policy,
           'software'=>glasses_software_assess($d['appVersion']??null,$policy),
           'canManage'=>app_has_permission('glasses.manage',$user)
