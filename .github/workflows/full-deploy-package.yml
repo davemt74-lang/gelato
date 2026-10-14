@@ -55,6 +55,10 @@ on:
       - 'assets/js/glasses-shared-camera-recognition.js'
       - 'assets/js/glasses-cross-camera-evidence.js'
       - 'assets/js/glasses-placement-review.js'
+      - 'assets/js/glasses-ingredient-progression.js'
+      - 'assets/js/glasses-ingredient-progression-ui.js'
+      - 'tests/glasses-section285d4-progression.test.js'
+      - 'tests/glasses-section285d4-php-contract.php'
       - 'assets/js/glasses-placement-review-ui.js'
       - 'tests/glasses-section285d3-placement-review.test.js'
       - 'tests/glasses-section285d2-cross-camera-evidence.test.js'
@@ -500,6 +504,11 @@ jobs:
           node --check assets/js/glasses-shared-camera-recognition.js
           node --check assets/js/glasses-cross-camera-evidence.js
           node --check assets/js/glasses-placement-review.js
+          node --check assets/js/glasses-ingredient-progression.js
+          node --check assets/js/glasses-ingredient-progression-ui.js
+          node tests/glasses-section285d4-progression.test.js
+          php -l includes/glasses-simulator.php
+          php tests/glasses-section285d4-php-contract.php
           node --check assets/js/glasses-placement-review-ui.js
           node tests/glasses-section285d3-placement-review.test.js
           node tests/glasses-section285d2-cross-camera-evidence.test.js

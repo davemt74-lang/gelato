@@ -1111,3 +1111,11 @@ html,body{max-width:100%;overflow-x:hidden}
 .glasses-placement-zone label{display:grid;gap:4px;font-size:11px;min-width:64px;flex:1 1 65px}
 .glasses-placement-zone input{width:100%;min-width:0;padding:7px 6px;background:#14231a;border:1px solid #56735f;color:#e4ffe8;border-radius:6px}
 .glasses-placement-zone button{padding:8px 12px}
+
+/* 285D4 — explicitly governed placement checklist controls. */
+.glasses-ingredient-progression{padding:12px;border:1px solid #63745e;border-radius:9px;background:rgba(19,32,24,.76);display:grid;gap:8px}
+.glasses-ingredient-progression p{margin:0;font-size:12px;line-height:1.45}
+.glasses-ingredient-progression .inline-actions{display:flex;gap:8px;flex-wrap:wrap}
+.glasses-ingredient-progression button{min-height:35px}
+.glasses-ingredient-progression button:disabled{opacity:.52;cursor:not-allowed}
+.glasses-ingredient-progression ol{font-size:11px;margin:0;padding-left:20px;max-height:180px;overflow:auto}
