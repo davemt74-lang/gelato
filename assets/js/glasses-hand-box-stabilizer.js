@@ -34,7 +34,8 @@
      let smooth=box(t.bbox);
      if(!fresh){
       const c1=center(old.bbox),c2=center(t.bbox),delta=Math.hypot(c2.x-c1.x,c2.y-c1.y);
-      const gain=delta>.28?1:clamp(.25+(timestamp-old.at)/600+delta*1.7,.25,.94);
+      const age=timestamp-old.at;
+      const gain=delta>.28?1:clamp(.20+age/450+delta*2.2,.20,.95);
       smooth=mix(old.bbox,t.bbox,gain);
      }
      seen.set(t.slot,{trackId:t.trackId,bbox:smooth,at:timestamp,lastSeen:t.seen});
