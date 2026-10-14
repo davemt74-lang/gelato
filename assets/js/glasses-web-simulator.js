@@ -391,7 +391,7 @@ async function enumerateCameras(){
     }else if(requested){
       // Disconnected capture sources must not be silently replaced by other hardware.
       picker.value='';
-      cameraInputNote('Saved USB/HDMI video input is not currently available. Reconnect it, allow camera access and scan again; never switch sources silently.','warning');
+      cameraInputNote('Saved USB/HDMI video input is unavailable. Reconnect it, allow camera access and scan again; never switch sources silently.','warning');
       return;
     }
     if(!video.length){
