@@ -73,7 +73,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
     <div class="sim-live-guide" id="simLiveGuide" role="status" aria-live="polite"><strong>CONNECTING LIVE DISPLAY</strong> · Finding an authorized location and kitchen orders; no hardware required.</div>
     <nav class="sim-navigation-panel" aria-label="Simulator HUD and voice navigation">
       <div class="sim-navigation-group sim-kitchen-commands" aria-label="Live kitchen workflow controls">
-        <button type="button" data-glasses-command="start_order">Start Ticket</button>
+        <button type="button" data-glasses-command="start_order" title="Explicit KDS workflow status change; not required to use the glasses">Mark KDS Started</button>
         <button type="button" data-glasses-command="start_item">Start Item</button>
         <button type="button" data-glasses-command="ready_item">Item Ready</button>
         <button type="button" data-glasses-command="ready_order">Ticket Ready</button>
@@ -386,6 +386,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
             <button id="glassesReadonlyModelUnload" type="button" disabled>Unload</button>
           </div>
           <p id="glassesReadonlyModelStatus" role="status" aria-live="polite">No approved browser ingredient model loaded. Register and activate one under Vision Models.</p>
+          <p id="glassesAutoFocusStatus" class="calibration-note" role="status" aria-live="polite">Automatic ticket focus waits for an active paired runtime, verified ingredient model, and hand camera.</p>
           <p class="sim-muted">No active model? <a href="glasses-vision-models.php">Manage approved model rollouts</a>, or open Training &amp; Corrections to collect reviewed ingredient examples. Approved browser ONNX models are read-only until you explicitly load one.</p>
           <ol id="glassesHeldSuggestions" aria-live="polite"></ol>
           <div class="inline-actions">
@@ -569,6 +570,7 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="js/voice-session-presence.js?v=20261013-presence1"></script>
 <script src="assets/js/glasses-item-assembly.js?v=20261013-265"></script>
 <script src="assets/js/glasses-production-ticket-focus.js?v=20261014-285a"></script>
+<script src="assets/js/glasses-production-auto-focus.js?v=20261014-285b"></script>
 <script src="assets/js/glasses-employee-runtimes.js?v=20261013-runtime-refine277"></script>
 <script src="assets/js/glasses-assembly-recognition.js?v=20261013-266"></script>
 <script src="assets/js/glasses-hud-notifications.js?v=20261013-hud-edit2"></script>
@@ -577,9 +579,9 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-mediapipe-hands.js?v=20261014-282"></script>
 <script src="assets/js/glasses-mediapipe-hands-ui.js?v=20261014-281"></script>
 <script src="assets/js/glasses-camera-sources.js?v=20261014-284a"></script>
-<script src="assets/js/glasses-web-simulator.js?v=20261014-285a"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20261014-285b"></script>
 <script src="assets/js/glasses-voice-device.js?v=20261013-device1"></script>
-<script src="assets/js/glasses-simulator-voice.js?v=20261014-285a"></script>
+<script src="assets/js/glasses-simulator-voice.js?v=20261014-285b"></script>
 <script src="assets/js/glasses-pov-calibration.js?v=20261014-284b"></script>
 <script src="assets/js/glasses-hand-tracker-ui.js?v=20261014-282"></script>
 <script src="assets/js/glasses-multicamera.js?v=20261013-multi1"></script>
