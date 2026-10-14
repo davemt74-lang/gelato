@@ -99,7 +99,7 @@ function glasses_employee_runtime_catalog(PDO $pdo,array $user): array
     if(!glasses_employee_runtimes_ready($pdo))
         return ['schemaReady'=>false,'runtimes'=>[],'employees'=>[]];
     $org=(int)$user['organization_id'];
-    $q=$pdo->prepare("SELECT r.public_id,r.device_id,r.employee_user_id,r.status,r.started_at,r.last_seen_at,
+    $q=$pdo->prepare("SELECT r.public_id,r.device_id,r.employee_user_id,r.status,r.started_at,r.last_seen_at,r.profile_confirmed_at,
       d.public_id device_public_id,d.display_name device_display_name,d.location_id,d.station_id,
       d.last_seen_at device_last_seen_at,d.app_version device_app_version,
       d.sdk_version device_sdk_version,d.platform device_platform,
