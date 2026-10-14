@@ -292,7 +292,9 @@ function rawDeviceHealthSnapshot(){
   const fm=state.framePipeline.metrics||{},track=state.cameraTrack?.getSettings?.()||{},cameraState=$('cameraHealth')?.dataset?.state||'off';
   const modelPackage=state.browserModel.package||{},adapterId=state.visionAdapter?.id||$('visionAdapterSelect')?.value||'fixture';
   return {
-    camera:{state:cameraState==='ready'?'ready':cameraState,source:state.cameraSource||null,width:track.width||null,height:track.height||null},
+    camera:{state:cameraState==='ready'?'ready':cameraState,source:state.cameraSource||null,width:track.width||null,height:track.height||null,
+      sourceKind:state.cameraInput?.kind||null,perspective:state.cameraInput?.perspective||null,
+      sdkAdapterId:state.cameraInput?.adapterId||null},
     framePipeline:{...fm,fps:state.visionFps||0,latencyMs:state.visionLatencyMs||0},
     inference:{state:state.framePipeline.worker?'running':(visionMode()==='manual'?'idle':'ready'),adapterId,runtime:adapterId==='onnx'?'onnx':'fixture',lastError:state.logs.find(x=>x.type==='VISION')?.msg||null},
     model:{detectorName:state.browserModel.assignment?.detectorName||modelPackage.detectorName||null,packagePublicId:modelPackage.publicId||state.browserModel.assignment?.packagePublicId||null,artifactSha256:state.browserModel.verifiedSha256||null,status:state.browserModel.status||'idle'},
@@ -460,7 +462,12 @@ function stopCamera(reason='stopped'){
   stopVisionRuntime(reason);
   if(state.cameraStream)state.cameraStream.getTracks().forEach(t=>t.stop());
   state.dataset.frozen=false;state.dataset.drag=null;state.dataset.annotations=[];state.dataset.captureGroup=null;state.dataset.burstSeq=0;renderDatasetAnnotations();
+  const previousCameraInput=state.cameraInput;
   state.cameraStream=null;state.cameraTrack=null;state.cameraInput=null;
+  if(previousCameraInput)window.dispatchEvent(new CustomEvent('gelato-glasses-camera-source-change',{detail:{
+    slot:1,connected:false,perspective:'glasses_pov',sourceKind:previousCameraInput.kind,
+    adapterId:previousCameraInput.adapterId,reason,capturedAt:new Date().toISOString()
+  }}));
   const video=$('cameraVideo');video.srcObject=null;video.hidden=true;
   window.GelatoMediaPipeHandsRuntime?.stop(reason==='error'?'error':'ready');
   void unloadReadonlyIngredientModel('Camera stopped. Start Camera 1 to resume ingredient recognition.');
@@ -475,7 +482,7 @@ async function startCamera(){
   const savedId=cameraPrefs().deviceId||'';
   if(!deviceId&&savedId&&!state.cameraSelectableSources.some(d=>d.key===savedId)){
     setCameraHealth('error','INPUT MISSING');
-    cameraInputNote('Saved USB/HDMI input unavailable. Reconnect and refresh, or explicitly choose another input.','warning');
+    cameraInputNote('Saved Camera 1 input unavailable. Reconnect the USB/HDMI camera or glasses SDK, then refresh or choose another input.','warning');
     return;
   }
   stopCamera();
@@ -668,7 +675,8 @@ async function uploadDatasetSamples(){
   let uploaded=0;
   try{
     for(const sample of pending){
-      const settings=sample.trainingCameraSlot?{}:(state.cameraTrack?.getSettings?.()||{});
+      // Use the settings recorded with the sample, never a subsequently selected camera.
+      const settings=sample.cameraSettings||{};
       const payload={action:'upload',csrf_token:cfg.csrf,consentBasis:'training_media_opt_in',retentionDays:Number($('datasetRetentionDays')?.value||365),imageBase64:bytesToBase64(sample.bytes),annotations:sample.annotations,capturedAt:sample.capturedAt,devicePublicId:state.device?.publicId||null,buildSessionPublicId:sample.buildPublicId||null,captureGroup:sample.captureGroup||null,burstIndex:sample.burstIndex,perceptualHash:sample.features?.perceptualHash||null,brightnessMean:sample.features?.brightnessMean,contrastMean:sample.features?.contrastMean,blurScore:sample.features?.blurScore,distanceBucket:$('datasetDistanceBucket')?.value||null,occlusionBucket:$('datasetOcclusionBucket')?.value||null,pose:{pitch:$('datasetCameraPitch')?.value!==''?Number($('datasetCameraPitch').value):null,yaw:$('datasetCameraYaw')?.value!==''?Number($('datasetCameraYaw').value):null,roll:$('datasetCameraRoll')?.value!==''?Number($('datasetCameraRoll').value):null},camera:{facing:settings.facingMode||null,deviceKey:settings.deviceId||null,width:settings.width||sample.width,height:settings.height||sample.height,fps:settings.frameRate||null},detectorConfidence:sample.detectorConfidence,metadata:{source:sample.trainingCameraSlot?'web_glasses_aux_training':'web_glasses_simulator',cameraSlot:sample.trainingCameraSlot||1,reviewed:!!sample.reviewed,localSampleIndex:sample.index,
           cameraPerspective:sample.cameraInput?.perspective|| (sample.trainingCameraSlot?'stationary':'glasses_pov'),
           cameraSourceKind:sample.cameraInput?.kind|| (sample.trainingCameraSlot?'browser':'unknown'),
@@ -689,6 +697,7 @@ async function captureDatasetSample(){
   if(!state.dataset.captureGroup)state.dataset.captureGroup='websim-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7);
   const features=datasetVisualFeatures(canvas),burstIndex=state.dataset.burstSeq++;const confidences=(state.visionDetections||[]).map(d=>Number(d.confidence)).filter(Number.isFinite);const detectorConfidence=confidences.length?confidences.reduce((a,b)=>a+b,0)/confidences.length:null;
   state.dataset.samples.push({index,width:canvas.width,height:canvas.height,bytes,annotations,capturedAt:new Date().toISOString(),buildPublicId:state.build?.publicId||null,station:state.work?.station?.name||null,cameraInput:state.cameraInput?{...state.cameraInput}:null,
+    cameraSettings:{...(state.cameraTrack?.getSettings?.()||{})},
     captureGroup:state.dataset.captureGroup,burstIndex,features,detectorConfidence,mediaPublicId:null,samplePublicId:null});
   state.dataset.annotations=[];renderDatasetAnnotations();log('DATASET','Captured labeled sample #'+index+' with '+annotations.length+' box(es) · dHash '+features.perceptualHash+'.');
 }
@@ -2581,7 +2590,9 @@ window.GelatoGlassesAssemblyContext={current:()=>{
     devicePublicId:state.device?.publicId||'',
     stationPublicId:state.device?.stationPublicId||'',
     ingredients:assembly()?.ingredientsFor(item)||[],
-    currentIngredientId:currentAssemblyIngredient(item)?.id||''
+    currentIngredientId:currentAssemblyIngredient(item)?.id||'',
+    cameraLive:!!state.cameraStream,cameraSourceKind:state.cameraInput?.kind||null,
+    cameraPerspective:state.cameraInput?.perspective||null
   };
 }};
 window.GelatoGlassesNavigation={dispatch:simulatorNavigation,
@@ -2594,7 +2605,9 @@ window.GelatoGlassesNavigation={dispatch:simulatorNavigation,
   context:()=>({
   mode:state.mode,items:orderItems().length,item:selectedItem()?.posLine?.name||null,
   step:(state.previewStepIndex||0)+1,virtual:!!state.device?.virtualPreview,
-  locationId:state.device?.locationId||null,stationPublicId:state.device?.stationPublicId||null
+  locationId:state.device?.locationId||null,stationPublicId:state.device?.stationPublicId||null,
+  cameraLive:!!state.cameraStream,cameraSourceKind:state.cameraInput?.kind||null,
+  cameraPerspective:state.cameraInput?.perspective||null
 })};
 window.GelatoGlassesDisplayPreferences={
   ready:false,
