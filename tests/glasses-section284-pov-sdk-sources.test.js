@@ -1,0 +1,72 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const sourcesJs=fs.readFileSync('assets/js/glasses-camera-sources.js','utf8');
+const povJs=fs.readFileSync('assets/js/glasses-pov-calibration.js','utf8');
+const simulator=fs.readFileSync('assets/js/glasses-web-simulator.js','utf8');
+const page=fs.readFileSync('glasses-simulator.php','utf8');
+const css=fs.readFileSync('assets/css/glasses-simulator-device-first.css','utf8');
+assert.match(page,/glasses-camera-sources\.js[\s\S]*glasses-web-simulator\.js[\s\S]*glasses-pov-calibration\.js/,'load camera source registry before runtime');
+assert.match(page,/id="glassesPovCheckFrame"/);
+assert.match(page,/id="glassesPovAimGuide"/);
+assert.match(page,/id="glassesPovShowAimGuide"/);
+assert.match(css,/\.glasses-pov-aim-guide\[hidden\]/,'reticle should respect hidden state');
+assert.match(simulator,/window\.GelatoGlassesCameraSources\.openSdkStream\(deviceId,videoConstraints\)/);
+assert.match(simulator,/navigator\.mediaDevices\.getUserMedia\(\{video:videoConstraints,audio:false\}\)/,'browser input remains independently supported');
+assert.match(simulator,/GelatoMediaPipeHandsRuntime\?\.start\(video/,'MediaPipe uses the selected preview feed');
+assert.match(simulator,/cameraSourceKind:sample\.cameraInput\?\.kind/,'Vision Lab metadata includes camera provenance');
+assert.match(simulator,/cameraPerspective:s\.cameraInput\?\.perspective/,'local dataset manifest includes POV vs stationary identity');
+assert.match(simulator,/gelato-glasses-camera-source-change/,'publish read-only source context for Agent observers');
+const events=[];
+const host={dispatchEvent(e){events.push(e.type);}};
+const sandbox={window:host,Event:class{constructor(type){this.type=type;}},TypeError,Error,Set,encodeURIComponent,decodeURIComponent,Object,String,Array};
+vm.runInNewContext(sourcesJs,sandbox,{filename:'glasses-camera-sources.js'});
+const registry=host.GelatoGlassesCameraSources;
+assert.equal(registry.isVendorInstalled(),false,'must never fabricate vendor SDK availability');
+(async()=>{
+  assert.equal((await registry.listSdkSources()).length,0,'no glasses are discoverable before adapter installation');
+  let connected=true,opened=0,stopped=0;
+  const goodStream={getVideoTracks(){return [{}];},getTracks(){return [{stop(){stopped++;}}];}};
+  const adapter={adapterId:'air3.vendor.v1',async listSources(){return [
+    {id:'left lens 1',label:'AIR3 Primary',connected},
+    {id:'not-connected',label:'AIR3 Missing',connected:false},
+    {id:'left lens 1',label:'Duplicate',connected:true}
+  ];},async openStream(id,constraints){
+    assert.equal(id,'left lens 1');
+    assert.equal(constraints.audio,false);
+    opened++;return goodStream;
+  }};
+  assert.throws(()=>registry.registerVendorAdapter({adapterId:'unknown'}),/AIR3 adapter/);
+  registry.registerVendorAdapter(adapter);
+  assert.equal(registry.isVendorInstalled(),true);
+  let found=await registry.listSdkSources();
+  assert.equal(found.length,1,'only connected, unique real SDK cameras exposed');
+  assert.equal(found[0].label,'AIR3 Primary');
+  assert.equal(found[0].perspective,'glasses_pov');
+  assert.match(found[0].key,/^sdk:air3\.vendor\.v1:/);
+  assert.equal(registry.isSdkSource('browser-device-id'),false,'USB/HDMI device IDs remain browser sources');
+  await registry.openSdkStream(found[0].key,{width:{ideal:1280}});
+  assert.equal(opened,1);
+  assert.equal(stopped,0,'successful capture stream remains available until caller stops it');
+  connected=false;
+  await assert.rejects(()=>registry.openSdkStream(found[0].key,{}),/disconnected|unavailable/);
+  assert.equal(opened,1,'stale SDK camera must not reopen');
+  assert.equal(registry.unregisterVendorAdapter(adapter),true);
+  assert.equal(registry.isVendorInstalled(),false);
+  await assert.rejects(()=>registry.openSdkStream(found[0].key,{}),/not installed/);
+  assert.deepEqual(events,['gelato-glasses-camera-sources-change','gelato-glasses-camera-sources-change']);
+  const ctx={window:{},document:{readyState:'loading',addEventListener(){}},Math,Number,Float64Array,TypeError,Date,localStorage:{},String,Error};
+  vm.runInNewContext(povJs,ctx,{filename:'glasses-pov-calibration.js'});
+  const quality=ctx.window.GelatoGlassesPovCalibration.analyzePixels;
+  const make=(fn)=>{const buf=new Uint8ClampedArray(64*36*4);for(let i=0;i<64*36;i++){const v=fn(i);buf[i*4]=buf[i*4+1]=buf[i*4+2]=v;buf[i*4+3]=255;}return buf;};
+  const dark=quality(make(()=>12)),flat=quality(make(()=>120));
+  const detailed=quality(make(i=>(i%2?220:40)));
+  assert.equal(dark.quality,'review','underexposure rejected');
+  assert.match(dark.messages.join(' '),/dark/i);
+  assert.equal(flat.quality,'review','uniform blur/flat frames rejected');
+  assert.equal(detailed.quality,'ready','high-detail reasonably exposed video scores ready');
+  assert.equal(detailed.brightness,130);
+  assert.throws(()=>quality(new Uint8Array(9)),/Invalid captured frame/);
+  assert.ok(!/build\.observe|inbox_send|handoffExpo|fetch\(/.test(povJs),'POV calibration must not mutate remote evidence or KDS state');
+  assert.ok(!/build\.observe|fetch\(|getUserMedia\(/.test(sourcesJs),'SDK registry itself must not open cameras or write KDS');
+  console.log('section284-camera-source-sdk-boundary-pov-calibration-provenance=ok');
+})().catch(e=>{console.error(e);process.exitCode=1;});
