@@ -21,7 +21,7 @@ const ui=fs.readFileSync('assets/js/glasses-hand-tracker-ui.js','utf8');
 const html=fs.readFileSync('glasses-simulator.php','utf8');
 assert.doesNotMatch(source,/\bfetch\s*\(|getUserMedia|postMessage|localStorage|setInterval|setTimeout|kds\.|build\.observe/);
 assert.match(ui,/GelatoHandBoxStabilizer/);
-assert.match(ui,/visualBoxes=visual\.step\(current\.tracks,lastFrame\)/);
+assert.match(ui,/visualBoxes=visual\?visual\.step\(current\.tracks,lastFrame\)/);
 assert.match(ui,/for\(const t of visualBoxes\)/);
 assert.match(html,/glasses-hand-box-stabilizer\.js/);
 assert.match(html,/glasses-hand-tracker-ui\.js/);
