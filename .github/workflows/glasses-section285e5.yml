@@ -4,12 +4,18 @@ on:
     paths:
       - 'assets/js/glasses-field-readiness.js'
       - 'tests/glasses-section285e5-field-readiness.test.js'
+      - 'tests/glasses-section285e5-panel.test.js'
+      - 'assets/js/glasses-field-readiness-ui.js'
+      - 'glasses-simulator.php'
       - '.github/workflows/glasses-section285e5.yml'
   push:
     branches: [main]
     paths:
       - 'assets/js/glasses-field-readiness.js'
       - 'tests/glasses-section285e5-field-readiness.test.js'
+      - 'tests/glasses-section285e5-panel.test.js'
+      - 'assets/js/glasses-field-readiness-ui.js'
+      - 'glasses-simulator.php'
       - '.github/workflows/glasses-section285e5.yml'
 jobs:
   field-readiness:
@@ -21,6 +27,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --check assets/js/glasses-field-readiness.js
-      - run: node --test tests/glasses-section285e5-field-readiness.test.js
+      - run: node --check assets/js/glasses-field-readiness.js && node --check assets/js/glasses-field-readiness-ui.js
+      - run: node --test tests/glasses-section285e5-panel.test.js tests/glasses-section285e5-field-readiness.test.js
       - run: node tests/glasses-section285d5-reliability.test.js
