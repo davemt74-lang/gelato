@@ -1,0 +1,51 @@
+name: Publish Section 283 Single-ZIP Release
+
+on:
+  push:
+    branches:
+      - release/gelato-section283-single-zip
+    paths:
+      - .github/workflows/publish-section283-release.yml
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish-certified-package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download certified CI deployment ZIP
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p payload
+          gh run download 38603382461 --repo davemt74-lang/gelato --name gelato-full-deploy --dir payload
+          test -s payload/gelato-full-deploy.zip
+          test -s payload/gelato-full-deploy.sha256
+
+      - name: Verify unchanged Section 283 package
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd payload
+          echo '50931a61adde8b42f7817200cb4468b57f3fefeb689e0331856243144809307b  gelato-full-deploy.zip' | sha256sum --check -
+          unzip -tq gelato-full-deploy.zip
+          unzip -p gelato-full-deploy.zip DEPLOY_SHA.txt | grep -Fx '9bb2a47eda1fb68f65dddf6ce4648e92b2a29d9d'
+          for path in index.php upgrade.php assets/vendor/mediapipe/hand_landmarker.task; do
+            unzip -Z1 gelato-full-deploy.zip | grep -Fx "$path"
+          done
+          if unzip -Z1 gelato-full-deploy.zip | grep -Eq '^(config\.php|\.env|uploads/|storage/)'; then
+            echo 'Live private configuration or user data unexpectedly bundled.'
+            exit 1
+          fi
+          printf '%s\n' '50931a61adde8b42f7817200cb4468b57f3fefeb689e0331856243144809307b  gelato-full-deploy.zip' > gelato-full-deploy.sha256
+
+      - name: Publish single ZIP as direct GitHub Release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create gelato-section-283             payload/gelato-full-deploy.zip             payload/gelato-full-deploy.sha256             --repo davemt74-lang/gelato             --target 9bb2a47eda1fb68f65dddf6ce4648e92b2a29d9d             --title 'Gelato Section 283 — Full Deployment'             --notes 'Certified original deploy archive from successful workflow run 38603382461. Upload and extract gelato-full-deploy.zip directly into the application root, preserving live config.php, .env, uploads/, and storage/. Then run upgrade.php. Includes locally bundled MediaPipe hand tracking.'
