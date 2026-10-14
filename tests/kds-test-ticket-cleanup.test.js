@@ -13,7 +13,7 @@ assert.match(js,/t\.unrouted===t\.items\.length/,'only fully unrouted');
 assert.match(js,/t\.items\.every\(i=>!i\.station_public_id/,'no routed items');
 assert.match(js,/action:'check\.cancel'/,'existing POS endpoint');
 assert.match(js,/testCleanupOnly:true/,'request explicit protected cleanup');
-assert.match(pos,/const testCleanup=\(\$input\['testCleanupOnly'\]/,'server-only scoped test cleanup flag');
+assert.match(pos,/\$testCleanup=\(\$input\['testCleanupOnly'\]/,'server-only scoped test cleanup flag');
 assert.match(pos,/WHERE organization_id=\? AND check_id=\? AND status NOT IN \('completed','cancelled'\)/,'server rechecks active KDS rows');
 assert.match(pos,/ORDER BY id FOR UPDATE/,'server locks ticket rows against concurrent station reassignment');
 assert.match(pos,/This ticket is no longer entirely unrouted/,'routed ticket rejection');
