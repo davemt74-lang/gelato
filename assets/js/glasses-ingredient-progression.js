@@ -9,14 +9,14 @@
  const normalize=s=>String(s||'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim().replace(/\s+/g,' ');
  const TOKEN=/^[a-f0-9]{32}$/i;
  const nowMs=()=>Date.now();
- function create({now=nowMs,persist,applyChecklist,tokenFactory}={}){
+ function create({now=nowMs,persist,applyChecklist,tokenFactory,currentContext}={}){
   if(typeof persist!=='function'||typeof applyChecklist!=='function'||typeof tokenFactory!=='function')
    throw Error('Governed progression requires audit persistence and explicit action handlers.');
-  let pending=null,busy=false,audit=[],used=new Set(),lastApplied=null;
+  let pending=null,busy=false,audit=[],used=new Set(),lastApplied=null,epoch=0;
   function snapshot(){return {pending:pending?{...pending}:null,lastApplied:lastApplied?{...lastApplied}:null,busy,
     audit:audit.map(x=>({...x})),automaticEnabled:false,cameraVerified:false,
     kdsStatusChanged:false};}
-  function reset(){pending=null;busy=false;}
+  function reset(){epoch++;pending=null;/* Preserve an in-flight audit lock until its promise settles. */}
   function scope(c){return [c?.devicePublicId,c?.stationPublicId,c?.locationId,c?.item?.kdsItemPublicId,c?.modelSha256].join('|');}
   function eligible(receipt,c){
    if(!receipt||receipt.decision!=='confirm'||receipt.operatorConfirmed!==true||
@@ -69,7 +69,7 @@
    if(check.error||check.ingredient.id!==q.ingredientId){pending=null;
     return {ok:false,reason:check.error||'ingredient_changed'};}
    if(used.has(q.token))return {ok:false,reason:'already_applied'};
-   busy=true;
+   busy=true;const approvalEpoch=epoch;
    try{
     // Persist an authenticated, station-scoped, idempotent KDS audit event first.
     const recorded=await persist({action:'kds.item.ingredient_review',
@@ -78,6 +78,18 @@
     if(!recorded?.kdsResult?.noted||recorded.kdsResult.kdsItemPublicId!==q.itemPublicId)
      throw Error('KDS audit did not acknowledge this item');
     used.add(q.token);
+    const live=typeof currentContext==='function'?currentContext():context;
+    const fresh=eligible({decision:'confirm',operatorConfirmed:true,cameraPlacementVerified:false,
+      ingredientAdded:false,kdsChanged:false,reviewedAt:q.reviewedAt,
+      itemPublicId:q.itemPublicId,label:q.label},live);
+    if(approvalEpoch!==epoch||q.scope!==scope(live)||fresh.error||
+       fresh.ingredient.id!==q.ingredientId){
+      pending=null;audit.unshift({token:q.token,decision:'operator_confirmed',
+       itemPublicId:q.itemPublicId,ingredientId:q.ingredientId,at:now(),persisted:true,
+       checklistApplied:false,reason:'context_revoked_after_audit'});
+      audit=audit.slice(0,30);
+      return {ok:false,reason:'audited_but_context_revoked'};
+    }
     const applied=applyChecklist({ingredientId:q.ingredientId,itemPublicId:q.itemPublicId,
       source:'operator_placement_review',operatorConfirmed:true,reviewToken:q.token});
     const ok=applied?.ok===true;
@@ -102,7 +114,7 @@
    }
    const token=tokenFactory();
    if(!TOKEN.test(String(token||''))||used.has(token))return {ok:false,reason:'invalid_unique_token'};
-   busy=true;
+   busy=true;const undoEpoch=epoch;
    try{
      const result=await persist({action:'kds.item.ingredient_review',
        kdsItemPublicId:q.itemPublicId,expectedStatus:context.item.status,
@@ -111,6 +123,17 @@
      if(!result?.kdsResult?.noted||result.kdsResult.kdsItemPublicId!==q.itemPublicId)
        throw Error('KDS reversal audit did not acknowledge this item');
      used.add(token);
+     const live=typeof currentContext==='function'?currentContext():context;
+     if(undoEpoch!==epoch||scope(live)!==q.scope||
+        live?.item?.status!=='in_progress'||live?.actions?.[q.ingredientId]!=='added'||
+        !live?.permissions?.kdsUpdate||!live?.permissions?.glassesView||
+        !live?.runtimeBound||!live?.cameraLive||live?.hidden){
+       audit.unshift({token,referenceToken:q.reviewToken,decision:'operator_reversed',
+        itemPublicId:q.itemPublicId,ingredientId:q.ingredientId,at:now(),persisted:true,
+        checklistApplied:false,reason:'context_revoked_after_audit'});
+       audit=audit.slice(0,30);lastApplied=null;
+       return {ok:false,reason:'undo_audited_but_context_revoked'};
+     }
      const applied=applyChecklist({undo:true,ingredientId:q.ingredientId,itemPublicId:q.itemPublicId,
        operatorConfirmed:true,reviewToken:token});
      const ok=applied?.ok===true;
