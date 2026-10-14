@@ -2,39 +2,8 @@
 /* Section 266: operator-assigned runtimes. Each opened URL has its own isolated
  * browser camera, inference worker, checklist, audio and recovery state. */
 const cfg=window.GELATO_GLASSES_SIMULATOR||{},byId=id=>document.getElementById(id);
-let catalog={schemaReady:false,runtimes:[],employees:[],stations:[]},bound=null,devices=[],mounted=false,lost=false,physical=[],pairing=null,pairTimer=null;
-const adminApi='api/glasses-admin.php';
-const msg=s=>{const e=byId('glassesConnectionMessage');if(e)e.textContent=s;};
-const txt=(id,s)=>{const e=byId(id);if(e)e.textContent=String(s);};
-function selectedRuntime(){return (catalog.runtimes||[]).find(r=>r.publicId===(byId('glassesRuntimeSelect')?.value||cfg.runtimePublicId))||null;}
-function showPhysical(){
- const rt=selectedRuntime(),d=physical.find(d=>d.publicId===(rt?.devicePublicId||byId('deviceSelect')?.value));
- const age=typeof d?.heartbeatAgeSeconds==='number'?d.heartbeatAgeSeconds:Infinity;
- txt('glassesConnectionBadge',!d?'No device selected':d.status!=='active'||d.revokedAt?'Revoked':age<=60?'Physical glasses online':'Paired · Offline');
- txt('glassesConnectionHardware',d?d.displayName+' · '+(d.hardwareIdentifier||d.publicId):'Select a physical device');
- txt('glassesConnectionSoftware',d?.appVersion?'Gelato AR '+d.appVersion:'Version not reported');
- txt('glassesConnectionProfile',rt?rt.employeeName+(rt.profileConfirmedAt?' · Confirmed in browser':' · Awaiting sign-in'):'No employee assigned');
- txt('glassesConnectionLastSeen',d?.lastSeenAt?new Date(d.lastSeenAt).toLocaleString():'No device heartbeat');
- const confirm=byId('glassesConnectionConfirm');if(confirm)confirm.hidden=!(cfg.runtimePublicId&&rt&&!rt.profileConfirmedAt);
- const pair=byId('glassesConnectionPair');if(pair)pair.hidden=!!cfg.runtimePublicId||!cfg.canManageMedia;
-}
-async function refreshPhysical(){const d=await json(adminApi);physical=d.devices||[];showPhysical();}
-function endPair(){if(pairTimer)clearInterval(pairTimer);pairTimer=null;pairing=null;byId('glassesPairPanel').hidden=true;txt('glassesPairCode','');}
-async function cancelPair(){
- const id=pairing?.id;endPair();if(!id)return;
- try{await json(adminApi,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':cfg.csrf},
-   body:JSON.stringify({action:'pairing.cancel',csrf_token:cfg.csrf,pairingPublicId:id})});msg('Pairing code cancelled.');}
- catch(e){msg('Pairing code hidden. It expires automatically. '+e.message);}
-}
-async function pollPair(){
- if(!pairing)return;
- if(Date.now()>=pairing.until){endPair();msg('Pairing code expired.');return;}
- try{
-  const r=await json(adminApi+'?action=pairing.status&pairingPublicId='+encodeURIComponent(pairing.id));
-  if(r.pairing.state==='paired'){endPair();msg('Glasses paired. Reloading available devices.');window.location.reload();}
-  else if(r.pairing.state!=='pending'){endPair();msg('Pairing ended.');}
- }catch(e){msg(e.message);}
-}
+let catalog={schemaReady:false,runtimes:[],employees:[],stations:[]},bound=null,devices=[],mounted=false,lost=false;
+let adding=false;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const status=(s,error=false)=>{const e=byId('glassesRuntimeStatus');if(e){e.textContent=s;e.dataset.error=error?'1':'0';}};
 async function json(url,options={}){
@@ -53,63 +22,66 @@ async function refresh(){
 function renderRuntimeTabs(choices,current){
  const strip=byId('glassesRuntimeTabs'),label=byId('glassesRuntimeSelectLabel');
  if(!strip)return;
- const multi=choices.length>1;
- strip.hidden=!multi;
- if(label)label.hidden=multi;
+ strip.hidden=false;
+ if(label)label.hidden=true;
  strip.replaceChildren();
- if(!multi)return;
- const tabs=choices.map((runtime,i)=>({
-   id:runtime.publicId,name:'Glasses '+(i+1),
-   detail:runtime.employeeName+' · '+runtime.deviceName+
-     (runtime.stationName?' · '+runtime.stationName:''),
-   index:i+1
- }));
- if(!cfg.runtimePublicId)tabs.push({id:'',name:'New',detail:'Create another assigned glasses runtime',index:'+'});
- const select=byId('glassesRuntimeSelect');
+ // One preview workspace is visible before any saved glasses exist.
+ // Only successfully saved server runtimes become numbered glasses tabs.
+ const tabs=choices.length?choices.map((r,i)=>({id:r.publicId,name:'Glasses '+(i+1),
+   detail:r.employeeName+' · '+r.deviceName,number:i+1})):
+   [{id:'',name:'Glasses 1',detail:'Default browser preview · not paired',number:1}];
  const activate=id=>{
-   if(cfg.runtimePublicId){
-     // Each paired glasses session has its own isolated camera, voice, station
-     // and build state. Open another session instead of silently reassigning it.
-     if(!id||id===cfg.runtimePublicId)return;
-     const url=new URL(location.href);url.searchParams.set('runtime',id);
-     window.open(url.toString(),'_blank','noopener');
-     return;
+   if(adding){adding=false;byId('glassesRuntimeAddCancel').hidden=true;}
+   if(id&&id!==cfg.runtimePublicId){
+     const url=new URL(location.href);url.searchParams.delete('addRuntime');url.searchParams.set('runtime',id);
+     window.location.assign(url.toString());return;
    }
-   select.value=id;render();
+   if(!id&&cfg.runtimePublicId){
+     const url=new URL(location.href);url.searchParams.delete('runtime');url.searchParams.delete('addRuntime');
+     window.location.assign(url.toString());return;
+   }
+   const select=byId('glassesRuntimeSelect');select.value=id;render();
  };
- for(const [i,tab] of tabs.entries()){
-   const btn=document.createElement('button');btn.type='button';btn.setAttribute('role','tab');
-   const selected=(current===tab.id);
-   btn.setAttribute('aria-selected',selected?'true':'false');btn.tabIndex=selected?0:-1;
-   btn.setAttribute('aria-label',tab.name+' · '+tab.detail);
-   btn.title=tab.detail;btn.dataset.runtimeId=tab.id;
-   const number=document.createElement('span');number.textContent=String(tab.index);
+ for(const tab of tabs){
+   const button=document.createElement('button');button.type='button';button.setAttribute('role','tab');
+   button.setAttribute('aria-label',tab.name+' · '+tab.detail);button.title=tab.detail;
+   button.dataset.runtimeId=tab.id;button.setAttribute('aria-selected',!adding&&tab.id===current?'true':'false');
+   button.tabIndex=!adding&&tab.id===current?0:-1;
+   const number=document.createElement('span');number.textContent=String(tab.number);
    number.setAttribute('aria-hidden','true');
-   const name=document.createTextNode(tab.name);btn.append(number,name);
-   btn.addEventListener('click',()=>activate(tab.id));
-   btn.addEventListener('keydown',event=>{
-     const next=event.key==='ArrowRight'?i+1:event.key==='ArrowLeft'?i-1:
-       event.key==='Home'?0:event.key==='End'?tabs.length-1:-1;
-     if(next<0)return;
-     event.preventDefault();
-     const target=tabs[(next+tabs.length)%tabs.length];
-     if(!cfg.runtimePublicId)activate(target.id);
-     const sibling=Array.from(strip.querySelectorAll('[role="tab"]'))[(next+tabs.length)%tabs.length];
-     sibling?.focus();
-   });
-   strip.appendChild(btn);
+   button.append(number,document.createTextNode(tab.name));
+   button.addEventListener('click',()=>activate(tab.id));
+   strip.appendChild(button);
  }
+ const plus=document.createElement('button');plus.type='button';plus.className='glasses-runtime-add';
+ plus.textContent='+';plus.setAttribute('aria-label','Add glasses runtime');
+ plus.title='Configure and save another pair of glasses';plus.setAttribute('aria-pressed',adding?'true':'false');
+ plus.addEventListener('click',()=>{
+   if(!cfg.canManageMedia){status('Glasses management permission is required to add a device.',true);return;}
+   if(cfg.runtimePublicId){
+     const url=new URL(location.href);url.searchParams.delete('runtime');url.searchParams.set('addRuntime','1');
+     window.location.assign(url.toString());return;
+   }
+   adding=true;const select=byId('glassesRuntimeSelect');select.value='';
+   byId('deviceSelect').disabled=false;byId('deviceSelect').value='';
+   render();byId('deviceSelect').focus();
+ });
+ strip.appendChild(plus);
 }
 function render(){
  const select=byId('glassesRuntimeSelect'),employee=byId('glassesRuntimeEmployee');
  if(!select||!employee)return;
  const previous=select.value;
  const choices=catalog.runtimes||[];
- select.innerHTML=(cfg.runtimePublicId?'':'<option value="">New runtime…</option>')+
+ select.innerHTML='<option value="">Preview / Add glasses…</option>'+
    choices.map(r=>'<option value="'+esc(r.publicId)+'">'+esc(r.employeeName)+' · '+esc(r.deviceName)+'</option>').join('');
- select.value=cfg.runtimePublicId||(choices.some(x=>x.publicId===previous)?previous:'');
- if(cfg.runtimePublicId)select.value=cfg.runtimePublicId;
- const chosen=choices.find(r=>r.publicId===select.value)||null;
+ select.value=adding?'':cfg.runtimePublicId||(choices.some(x=>x.publicId===previous)?previous:choices[0]?.publicId||'');
+ const chosen=adding?null:choices.find(r=>r.publicId===select.value)||null;
+ byId('glassesRuntimeNew').hidden=!adding;
+ byId('glassesRuntimeAddCancel').hidden=!adding;
+ byId('glassesRuntimeOpen').hidden=true;
+ byId('glassesRuntimeEnd').hidden=!chosen;
+ byId('glassesRuntimeConfirm').hidden=!(cfg.runtimePublicId&&bound&&!bound.profileConfirmedAt);
  renderRuntimeTabs(choices,select.value);
  const deviceSelect=byId('deviceSelect');
  if(chosen&&deviceSelect){deviceSelect.value=chosen.devicePublicId;deviceSelect.disabled=true;}
@@ -124,17 +96,20 @@ function render(){
  employee.disabled=!!chosen||(catalog.employees||[]).length===0;
  renderStation(chosen);
  renderTraining(chosen);
- showPhysical();
- window.GelatoGlassesSoftware?.followRuntime?.();
- byId('glassesRuntimeNew').disabled=!!cfg.runtimePublicId||!!chosen||!catalog.schemaReady||
+ byId('glassesRuntimeNew').disabled=!adding||!!cfg.runtimePublicId||!!chosen||!catalog.schemaReady||
    !(catalog.employees||[]).length||!selectedDevice()||!!selectedDevice()?.virtualPreview||
    !byId('glassesRuntimeStation')?.value||!employee.value;
  byId('glassesRuntimeOpen').disabled=!chosen;
  byId('glassesRuntimeEnd').disabled=!chosen||(catalog.employees||[]).length===0;
- if(!catalog.schemaReady){status('Install the multi-runtime migration with upgrade.php.',true);return;}
+ if(!catalog.schemaReady){
+   status('Browser preview works without a saved runtime. Run upgrade.php to enable new glasses assignments.',true);
+   return;
+ }
  status(cfg.runtimePublicId?
-   (bound?'ACTIVE · '+bound.employeeName:'RUNTIME NOT AVAILABLE'):
-   (chosen?'Assigned: '+chosen.employeeName+' · '+chosen.deviceName:'Choose paired glasses and an employee'));
+   (bound?'Connected workspace · '+bound.employeeName:'Runtime assignment unavailable'):
+   (adding?'Choose a paired device, station and employee, then Save Runtime.':
+    chosen?'Saved glasses · '+chosen.employeeName+' · '+chosen.deviceName:
+       'Glasses 1 · Preview ready. Click + to add physical glasses.'));
 }
 
 function selectedDevice(chosen=null){
@@ -184,27 +159,18 @@ function mount(){
  if(mounted)return;mounted=true;
  const select=byId('glassesRuntimeSelect');
  select.addEventListener('change',render);
- byId('glassesConnectionRefresh').addEventListener('click',async()=>{try{await refreshPhysical();await refresh();msg('Connection status refreshed.');}catch(e){msg(e.message);}});
- byId('glassesConnectionConfirm').addEventListener('click',async()=>{
-  if(!bound)return;
-  try{await post('runtime.profile_confirm',{runtimePublicId:bound.publicId});await refresh();msg('Profile confirmed for this runtime.');}
-  catch(e){msg(e.message);}
+ byId('glassesRuntimeAddCancel').addEventListener('click',()=>{
+   adding=false;
+   const url=new URL(location.href);url.searchParams.delete('addRuntime');
+   if((catalog.runtimes||[]).length){url.searchParams.set('runtime',catalog.runtimes[0].publicId);window.location.assign(url.toString());return;}
+   render();
  });
- byId('glassesConnectionPair').addEventListener('click',async()=>{
-  const dev=selectedDevice(selectedRuntime());
-  const station=(catalog.stations||[]).find(s=>s.publicId===byId('glassesRuntimeStation')?.value);
-  const locationId=station?.locationId||dev?.locationId;
-  if(!locationId){msg('Select a station or a paired device for the restaurant location first.');return;}
-  await cancelPair();
-  try{
-   const r=await json(adminApi,{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':cfg.csrf},
-    body:JSON.stringify({action:'pairing.create',csrf_token:cfg.csrf,locationId,stationPublicId:station?.publicId||null,ttlMinutes:10})});
-   pairing={id:r.pairing.publicId,until:Date.now()+r.pairing.expiresInSeconds*1000};
-   txt('glassesPairCode',r.pairing.pairingCode);byId('glassesPairPanel').hidden=false;
-   msg('One-time pairing code ready.');pairTimer=setInterval(pollPair,3000);
-  }catch(e){msg(e.message);}
+ byId('glassesRuntimeConfirm').addEventListener('click',async()=>{
+   if(!bound)return;
+   try{await post('runtime.profile_confirm',{runtimePublicId:bound.publicId});await refresh();
+      status('Your profile is confirmed for this runtime.');}
+   catch(e){status(e.message,true);}
  });
- byId('glassesPairCancel').addEventListener('click',cancelPair);
  byId('deviceSelect').addEventListener('change',()=>renderStation(catalog.runtimes?.find(r=>r.publicId===select.value)||null));
  byId('glassesRuntimeEmployee').addEventListener('change',()=>{
    if(!select.value)renderStation(null);
@@ -243,8 +209,10 @@ function mount(){
    }
    try{
      const d=await post('runtime.create',{devicePublicId:device.publicId,employeeUserId:employeeId,stationPublicId});
-     await refresh();select.value=d.runtime.publicId;render();
-     status('Created · '+d.runtime.employeeName+'. Click Open to launch isolated runtime.');
+     await refresh();adding=false;select.value=d.runtime.publicId;render();
+     status('Runtime saved · '+d.runtime.employeeName+'. Opening your glasses workspace.');
+     const url=new URL(location.href);url.searchParams.delete('addRuntime');url.searchParams.set('runtime',d.runtime.publicId);
+     window.location.assign(url.toString());
    }catch(e){status(e.message,true);}
  });
  byId('glassesRuntimeTrainingStart').addEventListener('click',async()=>{
@@ -277,7 +245,11 @@ function mount(){
  byId('glassesRuntimeEnd').addEventListener('click',async()=>{
    const id=select.value,selected=catalog.runtimes?.find(r=>r.publicId===id);
    if(!selected||!window.confirm('End '+selected.employeeName+' on '+selected.deviceName+'? The open runtime will stop when its next heartbeat runs.'))return;
-   try{await post('runtime.end',{runtimePublicId:id});await refresh();status('Runtime ended. Device and employee available for reassignment.');}
+   try{
+     await post('runtime.end',{runtimePublicId:id});await refresh();
+     const url=new URL(location.href);url.searchParams.delete('runtime');url.searchParams.delete('addRuntime');
+     window.location.assign(url.toString());
+   }
    catch(e){status(e.message,true);}
  });
 }
@@ -296,8 +268,23 @@ async function heartbeat(){
  }
 }
 async function bootstrap(currentDevices){
- devices=currentDevices||[];mount();await refresh();try{await refreshPhysical();}catch(e){msg('Connection diagnostics unavailable: '+e.message);}
- if(!cfg.runtimePublicId)return null;
+ devices=currentDevices||[];mount();
+ adding=new URL(location.href).searchParams.get('addRuntime')==='1';
+ try{await refresh();}catch(e){
+   if(cfg.runtimePublicId)throw e;
+   catalog={schemaReady:false,runtimes:[],employees:[],stations:[]};
+   render();status('Glasses assignments unavailable: '+e.message+' · Preview remains usable.',true);
+ }
+ if(!cfg.runtimePublicId){
+   if(!adding && catalog.runtimes?.length){
+     const first=catalog.runtimes.find(r=>devices.some(d=>d.publicId===r.devicePublicId&&!d.virtualPreview));
+     if(first){
+       const url=new URL(location.href);url.searchParams.set('runtime',first.publicId);
+       window.location.replace(url.toString());return null;
+     }
+   }
+   return null;
+ }
  bound=catalog.runtimes?.find(r=>r.publicId===cfg.runtimePublicId)||null;
  if(!bound||!devices.some(d=>d.publicId===bound.devicePublicId&&!d.virtualPreview)){
    status('Assigned runtime is unavailable, revoked or not accessible. Return to the runtime manager.',true);
@@ -309,5 +296,5 @@ async function bootstrap(currentDevices){
  setInterval(heartbeat,15000);
  return bound;
 }
-window.GelatoGlassesRuntimes={bootstrap,refresh,binding:()=>bound,selected:()=>selectedRuntime(),syncDevices(next){devices=next||[];render();}};
+window.GelatoGlassesRuntimes={bootstrap,refresh,binding:()=>bound,selected:()=>catalog.runtimes?.find(r=>r.publicId===byId('glassesRuntimeSelect')?.value)||null,syncDevices(next){devices=next||[];render();}};
 })();

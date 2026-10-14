@@ -11,8 +11,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Web Glasses Simulator · Gelato</title>
 <link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20261013-live1">
-<link rel="stylesheet" href="assets/css/glasses-runtime-connections.css?v=274">
-<link rel="stylesheet" href="assets/css/glasses-software-manager.css?v=275">
+<link rel="stylesheet" href="assets/css/glasses-runtime-workspace.css?v=276fix1">
 <link rel="stylesheet" href="assets/css/glasses-simulator-hud-ux.css?v=20261013-voice1">
 <link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-hud273">
 </head>
@@ -38,66 +37,19 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 
 <div id="glassesRuntimeTabs" class="glasses-runtime-tabs" role="tablist"
      aria-label="Assigned employee glasses runtimes" hidden></div>
-<section class="glasses-connection-manager" id="glassesConnectionManager" aria-label="Glasses connections">
- <header><strong>Glasses Connection</strong><span role="status" id="glassesConnectionBadge">Checking…</span></header>
- <div class="glasses-connection-grid">
-  <div><small>Physical glasses</small><strong id="glassesConnectionHardware">Not selected</strong></div>
-  <div><small>Gelato software</small><strong id="glassesConnectionSoftware">Unknown</strong></div>
-  <div><small>Employee profile</small><strong id="glassesConnectionProfile">Unassigned</strong></div>
-  <div><small>Device heartbeat</small><strong id="glassesConnectionLastSeen">None reported</strong></div>
- </div>
- <div class="glasses-connection-actions">
-  <button type="button" id="glassesConnectionPair">Pair new glasses</button>
-  <button type="button" id="glassesConnectionConfirm" hidden>Confirm my profile</button>
-  <button type="button" id="glassesConnectionRefresh">Refresh</button>
-  <span id="glassesConnectionMessage" role="status"></span>
- </div>
- <div id="glassesPairPanel" hidden><p>Enter this one-time code in the Gelato application running on the physical glasses. Pairing is separate from employee assignment.</p>
-  <strong id="glassesPairCode"></strong> <button type="button" id="glassesPairCancel">Close</button>
- </div>
-</section>
-<section id="glassesSoftwareManager" class="glasses-software-manager" aria-label="Glasses software and fleet health">
- <div class="glasses-software-header">
-  <div><small>SOFTWARE & DEVICES</small><strong>Fleet health and update readiness</strong></div>
-  <button id="glassesSoftwareRefresh" type="button">Refresh fleet</button>
- </div>
- <label class="glasses-software-pick">Inspect glasses <select id="glassesSoftwareDevice"><option value="">Loading glasses…</option></select></label>
- <div class="glasses-software-stats">
-  <div><small>Connection</small><strong id="glassesSoftwareOnline">Not selected</strong></div>
-  <div><small>Application</small><strong id="glassesSoftwareVersion">Not reported</strong></div>
-  <div><small>Compatibility</small><strong id="glassesSoftwareStatus">No policy</strong></div>
-  <div><small>Assigned runtime</small><strong id="glassesSoftwareRuntime">None</strong></div>
- </div>
- <p class="glasses-software-note">Version policies are advisory. Gelato does not install or push glasses software; native AIR3 updates require vendor SDK integration.</p>
- <div id="glassesSoftwarePolicy" class="glasses-software-policy" hidden>
-  <strong>Restaurant software policy</strong>
-  <div class="glasses-software-policy-inputs">
-   <label>Minimum version <input id="glassesSoftwareMinimum" placeholder="e.g. 1.2.0" maxlength="48"></label>
-   <label>Target version <input id="glassesSoftwareTarget" placeholder="e.g. 1.3.0" maxlength="48"></label>
-   <label>Notes <input id="glassesSoftwareNotes" placeholder="Update instructions" maxlength="240"></label>
-   <button type="button" id="glassesSoftwareSave">Save policy</button>
-  </div>
- </div>
- <div class="glasses-software-actions">
-  <button id="glassesSoftwareDiagnostics" type="button">Device diagnostics</button>
-  <span id="glassesSoftwareNotice" role="status" aria-live="polite"></span>
- </div>
- <div id="glassesSoftwareEvents" hidden aria-label="Recent device events"></div>
- <details class="glasses-fleet-details">
-  <summary>All visible paired glasses <span id="glassesFleetCount"></span></summary>
-  <div class="glasses-fleet-scroll"><table><thead><tr><th>Device / location</th><th>Software</th><th>Connection</th><th>Runtime</th><th></th></tr></thead><tbody id="glassesFleetRows"></tbody></table></div>
- </details>
-</section>
-<div class="glasses-runtime-toolbar" aria-label="Multiple assigned employee glasses runtimes">
-    <label id="glassesRuntimeSelectLabel">Runtime <select id="glassesRuntimeSelect" aria-label="Glasses runtime"><option value="">New runtime…</option></select></label>
+<div class="glasses-runtime-toolbar" aria-label="Selected glasses workspace">
+    <label id="glassesRuntimeSelectLabel" hidden>Runtime <select id="glassesRuntimeSelect" aria-label="Glasses runtime"><option value="">Preview</option></select></label>
     <label id="glassesRuntimeDeviceGroup">Glasses device <select id="deviceSelect" aria-label="Paired glasses device"><option value="">Finding live displays…</option></select></label>
     <label>Kitchen station <select id="glassesRuntimeStation" aria-label="Kitchen station for selected glasses"><option value="">Choose station…</option></select></label>
     <button id="glassesRuntimeSaveStation" type="button" title="Save this station to the selected employee glasses runtime">Save Station</button>
     <label>Assign employee <select id="glassesRuntimeEmployee" aria-label="Assign employee to glasses runtime"><option value="">Loading staff…</option></select></label>
-    <button id="glassesRuntimeNew" type="button" title="Assign employee to selected paired glasses">New</button>
-    <button id="glassesRuntimeOpen" type="button" title="Open isolated glasses runtime">Open</button>
+    <button id="glassesRuntimeNew" type="button" hidden title="Create an assigned glasses runtime">Save Runtime</button>
+    <button id="glassesRuntimeAddCancel" type="button" hidden>Cancel</button>
+    <button id="glassesRuntimeOpen" type="button" hidden title="Open glasses runtime">Open</button>
+    <button id="glassesRuntimeConfirm" type="button" hidden>Confirm My Profile</button>
     <button id="glassesRuntimeEnd" type="button" title="End and release this glasses runtime">End</button>
-    <span id="glassesRuntimeStatus" role="status" aria-live="polite">Loading runtimes…</span>
+    <span id="glassesRuntimeStatus" role="status" aria-live="polite">Loading the glasses workspace…</span>
+    <a class="glasses-fleet-link" href="glasses-fleet.php">Manage devices</a>
 </div>
 <div class="glasses-runtime-training-controls" aria-label="Existing glasses training programs">
  <label>Assigned training <select id="glassesRuntimeTrainingSelect"><option value="">No training selected</option></select></label>
@@ -561,17 +513,16 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-v10-cook-ux-harness.js?v=20260929-v10-6"></script>
 <script src="js/voice-session-presence.js?v=20261013-presence1"></script>
 <script src="assets/js/glasses-item-assembly.js?v=20261013-265"></script>
-<script src="assets/js/glasses-employee-runtimes.js?v=20261013-runtime274"></script>
-<script src="assets/js/glasses-software-manager.js?v=20261013-275"></script>
+<script src="assets/js/glasses-employee-runtimes.js?v=20261013-runtime276fix"></script>
 <script src="assets/js/glasses-assembly-recognition.js?v=20261013-266"></script>
 <script src="assets/js/glasses-hud-notifications.js?v=20261013-hud-edit2"></script>
-<script src="assets/js/glasses-web-simulator.js?v=20261013-hud273"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20261013-runtime-restore"></script>
 <script src="assets/js/glasses-voice-device.js?v=20261013-device1"></script>
 <script src="assets/js/glasses-simulator-voice.js?v=20261013-266a"></script>
 <script src="assets/js/glasses-multicamera.js?v=20261013-multi1"></script>
 <script src="assets/js/glasses-camera-config.js?v=20261013-hud264"></script>
 <script src="assets/js/glasses-camera-runtime.js?v=20261013-261"></script>
-<script src="assets/js/glasses-simulator-tabs.js?v=20261013-runtime275"></script>
+<script src="assets/js/glasses-simulator-tabs.js?v=20261013-runtime276fix"></script>
 <script src="assets/js/glasses-camera-similarity.js?v=20261013-ref258"></script>
 <script src="assets/js/glasses-camera-workspace.js?v=20261013-267"></script>
 <script src="assets/js/glasses-ingredient-training-plan.js?v=20261013-267"></script>
