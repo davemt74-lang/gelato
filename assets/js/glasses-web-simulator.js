@@ -365,12 +365,37 @@ function applyCameraPresentation(){
   const video=$('cameraVideo');video.classList.toggle('fit-contain',$('cameraFit').value==='contain');
   video.classList.toggle('mirrored',$('cameraMirror').checked);saveCameraPrefs();
 }
+function cameraInputNote(message,level='ready'){
+  const target=$('cameraInputStatus');
+  if(target){target.textContent=message;target.dataset.state=level;}
+}
 async function enumerateCameras(){
-  if(!cameraSupported()){$('cameraDeviceSelect').innerHTML='<option value="">Camera API unavailable</option>';return;}
-  const devices=await navigator.mediaDevices.enumerateDevices();state.cameraDevices=devices.filter(d=>d.kind==='videoinput');
-  const saved=cameraPrefs().deviceId||'';
-  $('cameraDeviceSelect').innerHTML='<option value="">Default camera</option>'+state.cameraDevices.map((d,i)=>'<option value="'+escapeHtml(d.deviceId)+'">'+escapeHtml(d.label||('Camera '+(i+1)))+'</option>').join('');
-  if(saved&&state.cameraDevices.some(d=>d.deviceId===saved))$('cameraDeviceSelect').value=saved;
+  const picker=$('cameraDeviceSelect');
+  if(!cameraSupported()||!navigator.mediaDevices.enumerateDevices){
+    picker.innerHTML='<option value="">Camera API unavailable</option>';
+    cameraInputNote('USB webcams and HDMI capture devices require browser camera access over HTTPS or localhost.','error');
+    return;
+  }
+  const requested=picker.value||cameraPrefs().deviceId||'';
+  try{
+    const devices=await navigator.mediaDevices.enumerateDevices();
+    state.cameraDevices=devices.filter(d=>d.kind==='videoinput'&&d.deviceId);
+    picker.innerHTML='<option value="">Default camera</option>'+state.cameraDevices.map((d,i)=>
+      '<option value="'+escapeHtml(d.deviceId)+'">'+escapeHtml(d.label||('Video input '+(i+1)))+'</option>').join('');
+    if(requested&&state.cameraDevices.some(d=>d.deviceId===requested)){
+      picker.value=requested;
+    }else if(requested){
+      // Never silently replace a previously selected USB or HDMI input.
+      picker.value='';
+      cameraInputNote('Previously selected USB/HDMI input is unavailable. Reconnect it, refresh inputs or choose another camera.','warning');
+      return;
+    }
+    cameraInputNote(state.cameraDevices.length+' video input(s) found. USB webcams and HDMI capture adapters appear together; select the correct device.','ready');
+  }catch(error){
+    state.cameraDevices=[];
+    picker.innerHTML='<option value="">Cannot list camera inputs</option>';
+    cameraInputNote('Camera list unavailable. Check permission, reconnect USB/HDMI capture and refresh inputs.','error');
+  }
 }
 let cameraStartEpoch=0;
 function stopCamera(reason='stopped'){
@@ -389,9 +414,16 @@ function stopCamera(reason='stopped'){
 async function startCamera(){
   if(window.GelatoCameraConfiguration?.isEnabled(1)!==true){log('CAMERA','Camera 1 is off in location settings. Turn it on in the Camera tab.');return;}
   if(!cameraSupported()){setCameraHealth('error','UNSUPPORTED');log('CAMERA','Browser camera API is unavailable.');return;}
+  const deviceId=$('cameraDeviceSelect').value;
+  const savedId=cameraPrefs().deviceId||'';
+  if(!deviceId&&savedId&&!state.cameraDevices.some(d=>d.deviceId===savedId)){
+    setCameraHealth('error','INPUT MISSING');
+    cameraInputNote('Saved USB/HDMI input unavailable. Reconnect and refresh, or explicitly choose another input.','warning');
+    return;
+  }
   stopCamera();
   const epoch=cameraStartEpoch;
-  const [w,h]=($('cameraResolution').value||'1280x720').split('x').map(Number),deviceId=$('cameraDeviceSelect').value;
+  const [w,h]=($('cameraResolution').value||'1280x720').split('x').map(Number);
   const videoConstraints={width:{ideal:w},height:{ideal:h},frameRate:{ideal:30,max:30}};
   if(deviceId)videoConstraints.deviceId={exact:deviceId};else videoConstraints.facingMode={ideal:'environment'};
   setCameraHealth('starting','STARTING');
@@ -2009,6 +2041,8 @@ $('sceneSourceSelect').addEventListener('change',async e=>{state.cameraSource=e.
 $('startCamera').addEventListener('click',startCamera);$('stopCamera').addEventListener('click',()=>stopCamera());$('captureFrame').addEventListener('click',captureCameraFrame);$('clearCameraTarget').addEventListener('click',clearCameraTarget);$('submitCameraTarget').addEventListener('click',submitCameraTargetObservation);
 $('cameraFit').addEventListener('change',applyCameraPresentation);$('cameraMirror').addEventListener('change',applyCameraPresentation);
 $('cameraDeviceSelect').addEventListener('change',async()=>{saveCameraPrefs();if(state.cameraStream)await startCamera();});
+ $('refreshCameraInputs').addEventListener('click',()=>void enumerateCameras());
+ navigator.mediaDevices?.addEventListener?.('devicechange',()=>void enumerateCameras());
 $('cameraResolution').addEventListener('change',async()=>{saveCameraPrefs();if(state.cameraStream)await startCamera();});
 $('cameraManualTarget').addEventListener('change',e=>{$('glassesStage').classList.toggle('camera-targeting',e.target.checked);if(!e.target.checked)clearCameraTarget();});
 $('visionMode').addEventListener('change',()=>{clearAssemblySuggestion();state.visionMode=visionMode();startVisionRuntime();});
