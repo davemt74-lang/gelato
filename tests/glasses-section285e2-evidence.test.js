@@ -39,3 +39,27 @@ test('invalid geometry or unqualified model fails closed',()=>{let g=create(),c=
  c=context();c.modelSha256='';
  assert.equal(g.observe({context:c,frame:{}}).reason,'invalid_scope');
 });
+
+test('occluded and overlapping hands cannot create release suggestion',()=>{
+ let t=1000,g=create({now:()=>t}),c=context(),seq=0;
+ const step=(hands,objects)=>{const result=g.observe({context:c,frame:{seq:seq++,at:t,hands,objects}});t+=100;return result;};
+ for(let i=0;i<3;i++)step([hand(.12,.15)],[obj(.12,.15)]);
+ step([hand(.65,.65)],[obj(.65,.65)]);
+ const second={...hand(.66,.66),trackId:'handB'};
+ step([hand(.65,.65),second],[]);
+ assert.equal(step([hand(.65,.65),second],[]).suggestions.length,0);
+ assert.equal(step([hand(.65,.65)],[]).suggestions.length,0);
+});
+test('duplicate track IDs do not enable ambiguous placement',()=>{
+ let t=1000,g=create({now:()=>t}),c=context();
+ for(let i=0;i<4;i++){g.observe({context:c,frame:{seq:i,at:t,hands:[hand(.12,.15),hand(.12,.15)],objects:[obj(.12,.15)]}});t+=100;}
+ assert.equal(g.snapshot().length,0);
+});
+test('temporary missing hand invalidates old held context',()=>{
+ let t=1000,g=create({now:()=>t}),c=context(),seq=0;
+ const step=(hands,objects)=>{const r=g.observe({context:c,frame:{seq:seq++,at:t,hands,objects}});t+=100;return r;};
+ for(let i=0;i<3;i++)step([hand(.12,.15)],[obj(.12,.15)]);
+ step([],[]);step([hand(.65,.65)],[obj(.65,.65)]);
+ assert.equal(step([hand(.65,.65)],[]).suggestions.length,0);
+ assert.equal(step([hand(.65,.65)],[]).suggestions.length,0);
+});
