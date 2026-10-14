@@ -55,6 +55,9 @@ try{
     $action=trim((string)($in['action']??''));
     if($action==='runtime.create'){
         $result=['runtime'=>glasses_employee_runtime_create($pdo,$user,(string)($in['devicePublicId']??''),(int)($in['employeeUserId']??0),(string)($in['stationPublicId']??''))];
+    }elseif($action==='runtime.employee_update'){
+        $result=['runtime'=>glasses_employee_runtime_employee_update($pdo,$user,
+          (string)($in['runtimePublicId']??''),(int)($in['employeeUserId']??0))];
     }elseif($action==='runtime.profile_confirm'){
         $result=['runtime'=>glasses_employee_runtime_profile_confirm($pdo,$user,(string)($in['runtimePublicId']??''))];
     }elseif($action==='runtime.station_update'){

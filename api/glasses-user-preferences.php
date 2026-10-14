@@ -30,7 +30,7 @@ try{
     $settings=$input['settings']??null;
     if(!is_array($settings)||count($settings)>12)throw new InvalidArgumentException('Invalid simulator settings.');
     $keys=['mode','devicePublicId','frameMode','opticalMask','cameraResolution','cameraFit',
-        'cameraMirror','calibration','activeTab','activeCameraTab','voiceReplies'];
+        'cameraMirror','calibration','activeTab','activeCameraTab','voiceReplies','previewEmployeeUserId'];
     foreach($settings as $key=>$value)
         if(!in_array($key,$keys,true))throw new InvalidArgumentException('Unexpected setting: '.substr((string)$key,0,25));
     $enums=[
@@ -50,6 +50,21 @@ try{
     if(isset($settings['devicePublicId'])&&
         (!is_string($settings['devicePublicId'])||strlen($settings['devicePublicId'])>180))
         throw new InvalidArgumentException('Invalid display selection.');
+    // The browser preview is a training/UI association, not user authentication.
+    // Only a glasses manager can select another employee. A viewer may select self.
+    if(array_key_exists('previewEmployeeUserId',$settings) && $settings['previewEmployeeUserId']!==null){
+        $employeeId=$settings['previewEmployeeUserId'];
+        if(!is_int($employeeId)||$employeeId<1)
+            throw new InvalidArgumentException('Choose a valid active employee.');
+        if($employeeId!==$uid&&!app_has_permission('glasses.manage',$user))
+            throw new InvalidArgumentException('Cannot assign another employee to your preview.');
+        $staff=$pdo->prepare("SELECT COUNT(*) FROM organization_memberships m
+          JOIN users u ON u.id=m.user_id WHERE m.organization_id=? AND m.user_id=?
+          AND m.status='active' AND u.status='active' AND u.archived_at IS NULL");
+        $staff->execute([$org,$employeeId]);
+        if((int)$staff->fetchColumn()!==1)
+            throw new InvalidArgumentException('The selected employee is not active in this restaurant.');
+    }
     if(isset($settings['calibration'])){
         if(!is_array($settings['calibration'])||strlen((string)json_encode($settings['calibration']))>2200)
             throw new InvalidArgumentException('Calibration exceeds supported limits.');
