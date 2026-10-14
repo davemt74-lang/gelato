@@ -5,6 +5,7 @@
 #glassesRuntimeTabs button[aria-selected="true"]{background:#245638;border-color:#74ce93;color:#fff}
 #glassesRuntimeTabs button span{display:grid;place-items:center;background:#345a40;border-radius:5px;width:21px;height:21px;font-size:11px}
 #glassesRuntimeTabs .glasses-runtime-add{font-size:20px;min-width:38px;min-height:38px;justify-content:center;line-height:1}
+#glassesRuntimePairGroup[hidden],#glassesRuntimeDeviceGroup[hidden]{display:none!important}
 #glassesRuntimeTabs .glasses-runtime-add[aria-pressed="true"]{border-color:#83e3ac;background:#27593b}
 .glasses-runtime-toolbar{display:flex!important;flex-wrap:wrap;gap:8px;align-items:end;padding:12px;border:1px solid #304a37;background:#101c14;border-radius:10px}
 .glasses-runtime-toolbar label{min-width:0;flex:1 1 145px;display:grid;gap:5px}
@@ -17,13 +18,4 @@
 .glasses-runtime-advanced{border:1px solid #294737;border-radius:9px;padding:8px 10px;color:#c4dbcb}
 .glasses-runtime-advanced>summary{cursor:pointer;font-size:11px}
 .glasses-runtime-advanced:not([open])>.console-card{display:none!important}
-/* Match the lens aspect ratio rather than stretching a 16:9 HUD to viewport height. */
-@media(min-width:861px){
- .sim-layout{height:calc(100dvh - 64px)!important;min-height:0!important}
- .sim-stage-panel{height:auto!important;align-self:start!important;overflow:visible!important}
- .sim-stage-panel #glassesStage{height:auto!important;aspect-ratio:16/9!important;min-height:0!important}
-}
-@media(max-width:860px){
- .sim-stage-panel #glassesStage{aspect-ratio:16/9!important;height:auto!important;min-height:0!important}
- .sim-stage-panel{height:auto!important;min-height:0!important;overflow:visible!important}
-}
+/* Preserve the certified full-canvas glasses layout. */
