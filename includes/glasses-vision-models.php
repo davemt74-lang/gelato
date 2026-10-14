@@ -1597,8 +1597,24 @@ function glasses_vision_readonly_ingredient_assignment(
         'reason'=>$reason,'selection'=>'hold','rollout'=>null,'package'=>null,
         'compatibility'=>['compatible'=>false,'reasons'=>[$reason]]
     ];
-    $rollout=glasses_vision_model_matching_rollout($pdo,$device,$detector);
-    if(!$rollout)return $hold('no_active_rollout');
+    // The same detector can have separate AIR3 and browser_preview rollouts.
+    // Resolve a browser-specific rollout so native releases cannot shadow it.
+    $q=$pdo->prepare("SELECT r.public_id FROM glasses_vision_model_rollouts r
+       JOIN glasses_vision_model_packages tp ON tp.id=r.target_package_id
+         AND tp.organization_id=r.organization_id AND tp.platform='browser_preview'
+       WHERE r.organization_id=? AND r.detector_name=?
+         AND r.status IN ('active','paused','rolled_back')
+         AND (r.location_id IS NULL OR r.location_id=?)
+         AND (r.station_id IS NULL OR r.station_id=?)
+       ORDER BY CASE WHEN r.station_id IS NOT NULL THEN 2
+         WHEN r.location_id IS NOT NULL THEN 1 ELSE 0 END DESC,
+         r.updated_at DESC,r.id DESC LIMIT 1");
+    $q->execute([(int)$device['organization_id'],$detector,
+       $locationId,$device['station_id']!==null?(int)$device['station_id']:null]);
+    $rolloutId=$q->fetchColumn();
+    if(!$rolloutId)return $hold('no_active_browser_rollout');
+    $rollout=glasses_vision_model_rollout_row(
+       $pdo,(int)$device['organization_id'],(string)$rolloutId,false);
     $status=(string)$rollout['status'];
     if($status==='paused')return $hold('rollout_paused');
 
