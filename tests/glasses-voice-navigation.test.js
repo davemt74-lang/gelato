@@ -60,4 +60,5 @@ assert.match(elt('simVoiceFeedback').textContent,/Say next item/,'help is handle
 assert.ok(!/\bfetch\s*\(|XMLHttpRequest|navigator\.sendBeacon/.test(source),'voice navigation may not write directly to POS/KDS');
 require('./glasses-section285a-production-ticket-focus.test.js');
 require('./glasses-section285b-production-auto-focus.test.js');
+require('./glasses-section285b-live-focus-integration.test.js');
 console.log('glasses-voice-navigation=ok');
