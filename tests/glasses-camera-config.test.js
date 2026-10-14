@@ -46,3 +46,4 @@ assert.equal(cfg.MAX,5);
 for(let slot=1;slot<=5;slot++)assert.equal(cfg.isEnabled(slot),false,'fail closed until authorized configuration loaded');
 assert.equal(cfg.status().ready,false,'script load cannot activate cameras');
 console.log('section257-camera-client-and-permission-contract=ok');
+require('./glasses-usb-hdmi-inputs.test.js');

@@ -4,8 +4,7 @@ Camera 1 is the primary glasses-camera stream managed under the existing Runtime
 Once the operator clicks Start Camera, the browser lazily loads a pretrained
 MediaPipe Hand Landmarker and enables two real hand bounding boxes. No API key,
 new database table, hand-training session or separate camera permission is needed.
-Compatible iPhones exposed to Windows as ordinary webcams are treated
-identically to USB webcams.
+Camera 1 supports both USB webcams and HDMI camera feeds recognized by Windows as browser video inputs. An iPhone can supply HDMI video to a compatible Windows HDMI capture device (typically a UVC capture adapter); connecting only to a computer's HDMI output does not create a video input. Both sources appear in the existing Camera 1 device selector. Use Refresh Camera Inputs after connecting hardware. Camera 2–5 share this browser video-input mechanism.
 
 ## Detection and performance
 
@@ -48,6 +47,5 @@ node tests/glasses-dual-hand-tracking.test.js
 The existing camera, KDS, Runtime, HUD, Voice and vision regression suites
 and full deploy ZIP asset validation must pass on the same source revision.
 
-Field signoff requires Chrome/Windows and actual hands with the USB iPhone,
-including rapid hand re-entry, box alignment, local server MIME and frame rate.
+Field signoff requires Chrome/Windows with live USB-camera and iPhone-to-HDMI-capture feeds, including device enumeration, selected source persistence, disconnect/reconnect, rapid hand re-entry, box alignment, local server MIME and frame rate.
 CI simulation is not a substitute for physical testing or a native AIR3 SDK.
