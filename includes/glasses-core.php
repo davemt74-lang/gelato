@@ -173,7 +173,7 @@ function glasses_pair_device(PDO $pdo,string $pairingCode,array $device): array
             $event='paired';
         }
 
-        $pdo->prepare('UPDATE glasses_pairing_grants SET consumed_at=NOW(6) WHERE id=?')->execute([(int)$grant['id']]);
+        $pdo->prepare('UPDATE glasses_pairing_grants SET consumed_at=NOW(6),paired_device_id=? WHERE id=?')->execute([$deviceId,(int)$grant['id']]);
         glasses_device_event($pdo,$org,$deviceId,$event,$locationId,$grant['station_id']!==null?(int)$grant['station_id']:null,[
             'platform'=>$platform,'sdkVersion'=>$sdk,'appVersion'=>$app,'systemVersion'=>$system
         ],(int)$grant['created_by']);

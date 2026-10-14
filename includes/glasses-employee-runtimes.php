@@ -35,7 +35,16 @@ function glasses_employee_runtime_public(array $row): array
         'status'=>(string)$row['status'],
         'lastSeenAt'=>$row['last_seen_at']??null,
         'startedAt'=>$row['started_at']??null,
-        'wearerAssignmentPublicId'=>$row['wearer_assignment_public_id']??null
+        'wearerAssignmentPublicId'=>$row['wearer_assignment_public_id']??null,
+        'profileConfirmedAt'=>$row['profile_confirmed_at']??null,
+        'deviceLastSeenAt'=>$row['device_last_seen_at']??null,
+        'deviceHeartbeatAgeSeconds'=>isset($row['device_heartbeat_age_seconds'])&&$row['device_heartbeat_age_seconds']!==null
+            ?max(0,(int)$row['device_heartbeat_age_seconds']):null,
+        'deviceOnline'=>isset($row['device_heartbeat_age_seconds'])&&$row['device_heartbeat_age_seconds']!==null
+            &&(int)$row['device_heartbeat_age_seconds']>=0&&(int)$row['device_heartbeat_age_seconds']<=60,
+        'deviceAppVersion'=>$row['device_app_version']??null,
+        'deviceSdkVersion'=>$row['device_sdk_version']??null,
+        'devicePlatform'=>$row['device_platform']??null
     ];
 }
 
@@ -48,6 +57,9 @@ function glasses_employee_runtime_row(PDO $pdo,array $user,string $publicId,bool
     $org=(int)$user['organization_id'];
     $sql="SELECT r.*,d.public_id device_public_id,d.display_name device_display_name,
         d.location_id,d.station_id,d.status device_status,d.revoked_at device_revoked_at,
+        d.last_seen_at device_last_seen_at,d.app_version device_app_version,
+        d.sdk_version device_sdk_version,d.platform device_platform,
+        TIMESTAMPDIFF(SECOND,d.last_seen_at,NOW(6)) device_heartbeat_age_seconds,
         l.name location_name,s.name station_name,s.public_id station_public_id,u.display_name employee_display_name,
         a.public_id wearer_assignment_public_id,a.released_at wearer_released_at,
         u.status employee_status,u.archived_at employee_archived_at,om.status membership_status
@@ -89,6 +101,9 @@ function glasses_employee_runtime_catalog(PDO $pdo,array $user): array
     $org=(int)$user['organization_id'];
     $q=$pdo->prepare("SELECT r.public_id,r.device_id,r.employee_user_id,r.status,r.started_at,r.last_seen_at,
       d.public_id device_public_id,d.display_name device_display_name,d.location_id,d.station_id,
+      d.last_seen_at device_last_seen_at,d.app_version device_app_version,
+      d.sdk_version device_sdk_version,d.platform device_platform,
+      TIMESTAMPDIFF(SECOND,d.last_seen_at,NOW(6)) device_heartbeat_age_seconds,
       l.name location_name,s.name station_name,s.public_id station_public_id,u.display_name employee_display_name,
       a.public_id wearer_assignment_public_id
       FROM glasses_employee_runtimes r
@@ -272,6 +287,34 @@ function glasses_employee_runtime_heartbeat(PDO $pdo,array $user,string $publicI
       WHERE organization_id=? AND public_id=? AND status='active'")
       ->execute([(int)$user['organization_id'],$publicId]);
     return $runtime;
+}
+
+
+/**
+ * Only the authenticated assigned wearer may confirm the human profile.
+ * Manager assignment and a device token alone are not proof of employee identity.
+ * This browser confirmation is not biometric verification.
+ */
+function glasses_employee_runtime_profile_confirm(PDO $pdo,array $user,string $publicId): array
+{
+    return glasses_transaction($pdo,static function()use($pdo,$user,$publicId):array{
+        $row=glasses_employee_runtime_row($pdo,$user,$publicId,true);
+        if((int)$row['employee_user_id']!==(int)$user['id'])
+            throw new DomainException('Sign in as the assigned employee to confirm this runtime profile.');
+        if($row['status']!=='active'||(int)$row['active_slot']!==1||
+           $row['device_status']!=='active'||$row['device_revoked_at']!==null||
+           $row['employee_status']!=='active'||$row['employee_archived_at']!==null||
+           $row['membership_status']!=='active'||$row['wearer_released_at']!==null)
+            throw new DomainException('This glasses runtime is no longer active.');
+        $pdo->prepare("UPDATE glasses_employee_runtimes SET profile_confirmed_at=COALESCE(profile_confirmed_at,NOW(6))
+          WHERE organization_id=? AND id=? AND employee_user_id=? AND status='active'")
+          ->execute([(int)$user['organization_id'],(int)$row['id'],(int)$user['id']]);
+        glasses_device_event($pdo,(int)$user['organization_id'],(int)$row['device_id'],
+          'runtime_profile_confirmed',(int)$row['location_id'],
+          $row['station_id']!==null?(int)$row['station_id']:null,
+          ['runtimePublicId'=>$publicId,'employeeUserId'=>(int)$user['id']],(int)$user['id']);
+        return glasses_employee_runtime_public(glasses_employee_runtime_row($pdo,$user,$publicId));
+    });
 }
 
 /** Start an EXISTING assigned training program; never create a parallel program. */
