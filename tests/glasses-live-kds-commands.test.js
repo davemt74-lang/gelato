@@ -17,6 +17,7 @@ const ctx={state,$,Object,Date,String,Math,Set,JSON,
   orderItems:()=>state.work.items,
   deriveSteps:()=>['Add basil','Bake','Serve'],
   render:()=>{},
+  renderTicketCompletion:()=>{},
   syncLiveStationWork:async()=>true,
   log:(type,message)=>logs.push({type,message}),
   api:async(action,payload)=>{
