@@ -52,6 +52,9 @@ on:
       - 'api/glasses-simulator.php'
       - 'includes/glasses-simulator.php'
       - 'assets/js/glasses-web-simulator.js'
+      - 'assets/js/glasses-shared-camera-recognition.js'
+      - 'tests/glasses-section285c-shared-model.test.js'
+      - 'tests/glasses-section285c-live-inference.test.js'
       - 'includes/glasses-vision-models.php'
       - 'tests/glasses-readonly-ingredient-inference.test.js'
       - 'tests/glasses-readonly-ingredient-contract.php'
@@ -484,6 +487,9 @@ jobs:
           node --check assets/js/glasses-held-ingredient-evidence.js
           node tests/glasses-held-ingredient-evidence.test.js
           node tests/glasses-readonly-ingredient-inference.test.js
+          node --check assets/js/glasses-shared-camera-recognition.js
+          node tests/glasses-section285c-shared-model.test.js
+          node tests/glasses-section285c-live-inference.test.js
           php tests/glasses-readonly-ingredient-contract.php
           node --check assets/js/glasses-web-simulator.js
           node --check assets/js/glasses-hud-notifications.js

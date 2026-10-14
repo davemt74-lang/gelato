@@ -386,6 +386,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
             <button id="glassesReadonlyModelUnload" type="button" disabled>Unload</button>
           </div>
           <p id="glassesReadonlyModelStatus" role="status" aria-live="polite">No approved browser ingredient model loaded. Register and activate one under Vision Models.</p>
+          <p id="glassesSharedCameraInferenceStatus" class="calibration-note" role="status" aria-live="polite">Cameras 2–5 · select an approved model and start enabled camera feeds to recognize objects independently. No KDS changes.</p>
           <p id="glassesAutoFocusStatus" class="calibration-note" role="status" aria-live="polite">Automatic ticket focus waits for an active paired runtime, verified ingredient model, and hand camera.</p>
           <p class="sim-muted">No active model? <a href="glasses-vision-models.php">Manage approved model rollouts</a>, or open Training &amp; Corrections to collect reviewed ingredient examples. Approved browser ONNX models are read-only until you explicitly load one.</p>
           <ol id="glassesHeldSuggestions" aria-live="polite"></ol>
@@ -571,6 +572,7 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-item-assembly.js?v=20261013-265"></script>
 <script src="assets/js/glasses-production-ticket-focus.js?v=20261014-285a"></script>
 <script src="assets/js/glasses-production-auto-focus.js?v=20261014-285b"></script>
+<script src="assets/js/glasses-shared-camera-recognition.js?v=20261014-285c"></script>
 <script src="assets/js/glasses-employee-runtimes.js?v=20261013-runtime-refine277"></script>
 <script src="assets/js/glasses-assembly-recognition.js?v=20261013-266"></script>
 <script src="assets/js/glasses-hud-notifications.js?v=20261013-hud-edit2"></script>
@@ -579,7 +581,7 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-mediapipe-hands.js?v=20261014-282"></script>
 <script src="assets/js/glasses-mediapipe-hands-ui.js?v=20261014-281"></script>
 <script src="assets/js/glasses-camera-sources.js?v=20261014-284a"></script>
-<script src="assets/js/glasses-web-simulator.js?v=20261014-285b"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20261014-285c"></script>
 <script src="assets/js/glasses-voice-device.js?v=20261013-device1"></script>
 <script src="assets/js/glasses-simulator-voice.js?v=20261014-285b"></script>
 <script src="assets/js/glasses-pov-calibration.js?v=20261014-284b"></script>

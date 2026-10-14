@@ -26,7 +26,7 @@ function productionFocusNote(message,stateName='waiting'){
 }
 const rejectedAssemblyTracks=new Set();
 const readonlyIngredient={status:'idle',session:null,config:null,package:null,
-  verifiedSha256:null,epoch:0,timer:null,busy:false,frameSeq:0,devicePublicId:''};
+  verifiedSha256:null,epoch:0,timer:null,auxTimer:null,auxErrors:0,busy:false,frameSeq:0,devicePublicId:''};
 function readonlyStatus(message,error=false){
  if(typeof renderProductionReadiness==='function')renderProductionReadiness();
  const el=$('glassesReadonlyModelStatus');if(el){el.textContent=message;el.dataset.state=error?'error':readonlyIngredient.status;}
@@ -1011,12 +1011,15 @@ async function inferOnnxModel(model,frame,{readonly=false}={}){
 async function unloadReadonlyIngredientModel(message='Read-only ingredient model unloaded.'){
   readonlyIngredient.epoch++;
   if(readonlyIngredient.timer!==null){clearTimeout(readonlyIngredient.timer);readonlyIngredient.timer=null;}
+  if(readonlyIngredient.auxTimer!=null){clearTimeout(readonlyIngredient.auxTimer);readonlyIngredient.auxTimer=null;}
+  window.GelatoSharedCameraRecognitionRuntime?.reset?.();
+  renderSharedCameraRecognitionStatus();
   const session=readonlyIngredient.session;
   resetProductionFocusEvidence();
   productionFocusNote('Visual ticket focus waiting for an approved ingredient model.');
   readonlyIngredient.session=null;readonlyIngredient.config=null;readonlyIngredient.package=null;
   readonlyIngredient.verifiedSha256=null;readonlyIngredient.devicePublicId='';
-  readonlyIngredient.status='idle';readonlyIngredient.busy=false;readonlyIngredient.frameSeq=0;
+  readonlyIngredient.status='idle';readonlyIngredient.busy=false;readonlyIngredient.frameSeq=0;readonlyIngredient.auxErrors=0;
   window.GelatoMediaPipeHandsRuntime?.setObjects([],{}); 
   readonlyStatus(message);
   try{await session?.release?.();}catch(e){log('MODEL','Read-only model session release: '+String(e?.message||e));}
@@ -1098,10 +1101,92 @@ async function pollReadonlyIngredientFrame(epoch){
    }
  }
 }
+// Camera 2–5 read-only inference shares the same verified ONNX session and
+// guarded busy flag as Camera 1. No second model, no second permission grant.
+const sharedCameraRecognition=window.GelatoSharedCameraRecognition?.create?.({now:()=>Date.now()})||null;
+window.GelatoSharedCameraRecognitionRuntime=sharedCameraRecognition;
+function renderSharedCameraRecognitionStatus(){
+ const el=$('glassesSharedCameraInferenceStatus');if(!el)return;
+ const rows=sharedCameraRecognition?.status?.()||[];
+ const names=rows.filter(x=>x.state==='recognized').map(x=>'Cam '+x.slot+' '+x.count+' object(s)'+
+   (x.scope==='assigned_station'?' · station scoped':' · view only / unscoped'));
+ el.textContent=readonlyIngredient.status==='ready'?
+   'SHARED MODEL · '+(names.join(' | ')||'waiting for enabled stationary camera feeds')+
+     ' · observations only, no ingredient or KDS updates.':
+   'Cameras 2–5 · load an approved read-only model to enable shared recognition.';
+}
+function scheduleAuxiliaryRecognition(epoch){
+ if(epoch!==readonlyIngredient.epoch||readonlyIngredient.status!=='ready')return;
+ if(readonlyIngredient.auxTimer!=null)clearTimeout(readonlyIngredient.auxTimer);
+ readonlyIngredient.auxTimer=setTimeout(()=>void pollAuxiliaryRecognition(epoch),460);
+}
+async function pollAuxiliaryRecognition(epoch){
+ if(epoch!==readonlyIngredient.epoch||readonlyIngredient.status!=='ready')return;
+ readonlyIngredient.auxTimer=null;
+ const config=window.GelatoCameraConfiguration,aux=window.GelatoGlassesMultiCamera;
+ const model=readonlyIngredient,device=state.device;
+ if(!sharedCameraRecognition||document.hidden||state.mode!=='live'||!device||
+    model.devicePublicId!==device.publicId){
+   sharedCameraRecognition?.reset();renderSharedCameraRecognitionStatus();
+   scheduleAuxiliaryRecognition(epoch);return;
+ }
+ const source=sharedCameraRecognition.pick({configuration:config,multiCamera:aux,
+   locationId:device.locationId});
+ if(!source||model.busy){scheduleAuxiliaryRecognition(epoch);return;}
+ model.busy=true;const capturedAt=Date.now(),modelSha256=model.verifiedSha256,
+   deviceId=device.publicId,locationId=device.locationId;
+ try{
+   // Identical immutable ONNX package, preprocessor, decoder and model session
+   // used by Camera 1; only the source MediaStream/video element differs.
+   const detections=await inferOnnxModel(model,{video:source.video},{readonly:true});
+   const saved=config?.getSaved?.(source.slot);
+   if(epoch!==model.epoch||document.hidden||state.mode!=='live'||
+      model.status!=='ready'||model.devicePublicId!==deviceId||
+      model.verifiedSha256!==modelSha256||state.device?.publicId!==deviceId||
+      state.device?.locationId!==locationId||Date.now()-capturedAt>1600||
+      !saved?.enabled||!config?.isEnabled?.(source.slot)||
+      saved.revision!==source.revision||saved.stationPublicId!==source.stationPublicId||
+      aux?.video?.(source.slot)!==source.video||source.video.srcObject!==source.stream){
+     sharedCameraRecognition.clearSlot(source.slot);renderSharedCameraRecognitionStatus();return;
+   }
+   const observation=sharedCameraRecognition.accept({source,modelSha256,raw:detections,
+     devicePublicId:deviceId,locationId,currentStationPublicId:state.device?.stationPublicId||null,
+     capturedAt});
+   if(observation){
+     // Auxiliary cameras never feed glasses hands, automatic ticket focus,
+     // governed build observation or any POS/KDS mutation.
+     window.dispatchEvent(new CustomEvent('gelato-glasses-stationary-object-frame',
+       {detail:observation}));
+     model.auxErrors=0;renderSharedCameraRecognitionStatus();
+   }
+ }catch(error){
+   if(epoch!==model.epoch)return;
+   model.auxErrors=(model.auxErrors||0)+1;
+   sharedCameraRecognition.clearSlot(source.slot);
+   if(model.auxErrors>=3){
+     log('MODEL','Shared inference paused after 3 camera failures: '+String(error?.message||error));
+     await unloadReadonlyIngredientModel('Shared model inference failed; reload approved model.');
+     return;
+   }
+   log('VISION','Camera '+source.slot+' read-only inference failed: '+String(error?.message||error));
+ }finally{
+   if(epoch===model.epoch){model.busy=false;scheduleAuxiliaryRecognition(epoch);}
+ }
+}
+window.addEventListener('gelato-camera-configuration-changed',()=>{
+ sharedCameraRecognition?.reset();renderSharedCameraRecognitionStatus();
+});
+window.addEventListener('gelato-glasses-location-change',()=>{
+ sharedCameraRecognition?.reset();renderSharedCameraRecognitionStatus();
+});
+window.addEventListener('pagehide',()=>sharedCameraRecognition?.reset());
 async function loadReadonlyIngredientModel(){
  const detector=String($('glassesReadonlyDetector')?.value||'').trim();
  if(!detector)throw new Error('Enter the approved ingredient detector name.');
- if(!state.cameraStream)throw new Error('Start Camera 1 before loading ingredient recognition.');
+ if(!state.cameraStream&&!([2,3,4,5].some(slot=>
+   window.GelatoCameraConfiguration?.isEnabled?.(slot)&&
+   window.GelatoGlassesMultiCamera?.video?.(slot)?.videoWidth)))
+   throw new Error('Start Camera 1 or an enabled Camera 2–5 before loading ingredient recognition.');
  if(state.mode!=='live'||!state.device)throw new Error('Select a live KDS display first.');
  // Remove any prior model and wait for its WASM session to be released.
  await unloadReadonlyIngredientModel('Loading approved read-only ingredient model…');
@@ -1130,6 +1215,8 @@ async function loadReadonlyIngredientModel(){
    readonlyStatus('Verified '+pkg.modelName+' '+pkg.modelVersion+
      ' · KDS read-only inference. No automatic ingredient or ticket updates.');
    scheduleReadonlyIngredientFrame(epoch);
+   scheduleAuxiliaryRecognition(epoch);
+   renderSharedCameraRecognitionStatus();
  }catch(e){
    if(epoch===readonlyIngredient.epoch){
      readonlyIngredient.status='error';readonlyStatus(String(e?.message||e),true);
@@ -2731,6 +2818,7 @@ window.addEventListener('gelato-glasses-production-object-frame',event=>{
 window.addEventListener('gelato-glasses-runtime-revoked',resetProductionFocusEvidence);
 window.addEventListener('gelato-glasses-camera-source-change',resetProductionFocusEvidence);
 window.addEventListener('gelato-glasses-hand-reset',resetProductionFocusEvidence);
+// Stationary feeds are deliberately not subscribed to Camera 1 hand/ticket auto-focus.
 document.addEventListener('visibilitychange',()=>{if(document.hidden)resetProductionFocusEvidence();});
 window.GelatoGlassesNavigation={dispatch:simulatorNavigation,
   primaryCamera:()=>$('cameraVideo'),
@@ -2753,6 +2841,8 @@ window.GelatoGlassesNavigation={dispatch:simulatorNavigation,
   locationId:state.device?.locationId||null,stationPublicId:state.device?.stationPublicId||null,
   cameraLive:!!state.cameraStream,cameraSourceKind:state.cameraInput?.kind||null,
   cameraPerspective:state.cameraInput?.perspective||null,
+  stationaryRecognition:sharedCameraRecognition?.status?.().map(r=>({slot:r.slot,state:r.state,
+    count:r.count||0,scope:r.scope||'unscoped',stationPublicId:r.stationPublicId||null}))||[],
   automaticTicketFocus:!state.manualFocusLocked&&productionFocusEligible()?'evidence_available':
     state.manualFocusLocked?'manual_override':'awaiting_evidence',
   productionMode:window.GelatoProductionTicketFocus?.readiness?.({
