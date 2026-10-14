@@ -332,8 +332,11 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
     <section class="console-card camera-card">
       <div class="console-heading"><div><small>BROWSER CAMERA</small><strong>Vision preview source</strong></div><span id="cameraHealth">OFF</span></div>
       <label class="work-picker"><span>USB / HDMI CAMERA INPUT</span><select id="cameraDeviceSelect"><option value="">Default camera</option></select></label>
-      <div class="inline-actions"><button type="button" id="refreshCameraInputs">Refresh Camera Inputs</button></div>
-      <p class="calibration-note" id="cameraInputStatus" role="status" aria-live="polite">Choose a USB webcam or a Windows-recognized HDMI capture adapter. An HDMI output port alone cannot provide camera video to the browser.</p>
+      <div class="inline-actions">
+        <button type="button" id="refreshCameraInputs">Refresh Camera Inputs</button>
+        <button type="button" id="allowCameraDiscovery">Allow Camera Access &amp; Scan</button>
+      </div>
+      <p class="calibration-note" id="cameraInputStatus" role="status" aria-live="polite">Refresh lists browser-visible video devices. If HDMI is missing, click Allow Camera Access &amp; Scan to grant permission. An HDMI capture adapter must appear as a video input in Windows; ordinary HDMI output ports cannot receive it.</p>
       <div class="camera-grid">
         <label><span>Resolution</span><select id="cameraResolution"><option value="1280x720">1280×720</option><option value="1920x1080">1920×1080</option><option value="640x480">640×480</option></select></label>
         <label><span>Fit</span><select id="cameraFit"><option value="cover">Cover</option><option value="contain">Contain</option></select></label>
