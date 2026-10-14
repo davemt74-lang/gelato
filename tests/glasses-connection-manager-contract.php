@@ -17,9 +17,10 @@ $check(str_contains($client,"pairing.create"),'pairing UI');
 $check(str_contains($client,"runtime.profile_confirm"),'confirmation UI');
 $check(str_contains($page,"glassesConnectionManager"),'connection UI');
 $check(str_contains($sql,"paired_device_id"),'migration');
-echo "PASS Section 274 connection manager contracts\n";
 
 $check(str_contains($device,"heartbeat_age_seconds"),'database-calculated heartbeat age');
 $check(str_contains($client,"d.heartbeatAgeSeconds"),'UI uses database-calculated age');
 $check(str_contains($api,"pairing.cancel"),'cancel pairing endpoint');
 $check(str_contains($client,"window.location.reload()"),'fresh hardware appears after successful pairing');
+
+echo "PASS Section 274 connection manager contracts\n";
