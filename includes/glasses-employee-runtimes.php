@@ -96,10 +96,33 @@ function glasses_employee_runtime_assert_binding(PDO $pdo,array $user,string $pu
 
 function glasses_employee_runtime_catalog(PDO $pdo,array $user): array
 {
-    if(!glasses_employee_runtimes_ready($pdo))
-        return ['schemaReady'=>false,'runtimes'=>[],'employees'=>[]];
+    if(!glasses_employee_runtimes_ready($pdo)){
+        $org=(int)$user['organization_id'];
+        $employees=app_has_permission('glasses.manage',$user)
+            ?glasses_training_employee_catalog($pdo,$org):[];
+        $stations=[];
+        if(app_has_permission('glasses.manage',$user)){
+            $q=$pdo->prepare("SELECT s.public_id,s.location_id,s.name,l.name location_name
+              FROM kds_stations s JOIN locations l ON l.id=s.location_id AND l.organization_id=s.organization_id
+              WHERE s.organization_id=? AND s.status='active' ORDER BY l.name,s.name");
+            $q->execute([$org]);
+            foreach($q->fetchAll(PDO::FETCH_ASSOC) as $station){
+                if(!operational_location_allowed($pdo,$user,'glasses.manage',(int)$station['location_id']))continue;
+                $stations[]=['publicId'=>(string)$station['public_id'],
+                  'locationId'=>(int)$station['location_id'],'name'=>(string)$station['name'],
+                  'locationName'=>(string)$station['location_name']];
+            }
+        }
+        return ['schemaReady'=>false,'runtimes'=>[],'employees'=>$employees,
+            'stations'=>$stations,'trainingAssignments'=>[],'activeTrainingSessions'=>[]];
+    }
     $org=(int)$user['organization_id'];
-    $q=$pdo->prepare("SELECT r.public_id,r.device_id,r.employee_user_id,r.status,r.started_at,r.last_seen_at,r.profile_confirmed_at,
+    $q=$pdo->prepare("SELECT COUNT(*) FROM information_schema.columns
+       WHERE table_schema=DATABASE() AND table_name='glasses_employee_runtimes'
+       AND column_name='profile_confirmed_at'");
+    $q->execute();
+    $confirmedColumn=(int)$q->fetchColumn()===1?'r.profile_confirmed_at':'NULL AS profile_confirmed_at';
+    $q=$pdo->prepare("SELECT r.public_id,r.device_id,r.employee_user_id,r.status,r.started_at,r.last_seen_at,$confirmedColumn,
       d.public_id device_public_id,d.display_name device_display_name,d.location_id,d.station_id,
       d.last_seen_at device_last_seen_at,d.app_version device_app_version,
       d.sdk_version device_sdk_version,d.platform device_platform,
@@ -123,7 +146,7 @@ function glasses_employee_runtime_catalog(PDO $pdo,array $user): array
         $runtimes[]=glasses_employee_runtime_public($row);
     }
     // Reuse the canonical V11 training/employee directory; no duplicate roster.
-    $employees=app_has_permission('glasses.manage',$user) && glasses_training_ready($pdo)
+    $employees=app_has_permission('glasses.manage',$user)
         ?glasses_training_employee_catalog($pdo,$org):[];
     $trainingAssignments=[];
     $activeSessions=[];

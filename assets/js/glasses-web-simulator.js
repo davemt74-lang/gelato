@@ -320,7 +320,10 @@ async function loadDevices(){
     const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.message||'Device list failed.');
     if(/^[a-f0-9]{64}$/i.test(String(d.csrfToken||'')))cfg.csrf=d.csrfToken;
     state.hardwareRuntime=d.hardwareRuntime||null;renderHardwareRuntime();state.devices=d.devices||[];
-    const boundRuntime=await window.GelatoGlassesRuntimes?.bootstrap?.(state.devices);
+    // Runtime-management errors never destroy an otherwise working camera/KDS preview.
+    let boundRuntime=null;
+    try{boundRuntime=await window.GelatoGlassesRuntimes?.bootstrap?.(state.devices);}
+    catch(error){log('RUNTIME','Assignment catalog failed: '+error.message+'. Display discovery is still available.');}
     const preferred=localStorage.getItem(LIVE_DEVICE_KEY)||'';
     const device=(boundRuntime?state.devices.find(x=>x.publicId===boundRuntime.devicePublicId&&!x.virtualPreview):null)
       ||(!cfg.runtimePublicId&&state.devices.find(x=>x.publicId===preferred&&(x.virtualPreview||x.stationPublicId!==null)))
@@ -330,7 +333,8 @@ async function loadDevices(){
       +state.devices.map(x=>'<option value="'+escapeHtml(x.publicId)+'">'+escapeHtml(x.locationName||'Restaurant')+' · '+escapeHtml(x.displayName)+(x.virtualPreview?' (no hardware)':'')+'</option>').join('');
     state.device=device;
     $('deviceSelect').value=device?.publicId||'';
-    window.GelatoGlassesRuntimes?.syncDevices?.(state.devices);
+    try{window.GelatoGlassesRuntimes?.syncDevices?.(state.devices);}
+    catch(error){log('RUNTIME','Runtime controls unavailable: '+error.message);}
     window.dispatchEvent(new CustomEvent('gelato-glasses-location-change',{detail:{locationId:device?.locationId||null}}));
     log('SYSTEM',device?.virtualPreview?'Live browser preview selected — no physical glasses required.':'Loaded '+state.devices.length+' accessible displays.');
   }catch(e){
