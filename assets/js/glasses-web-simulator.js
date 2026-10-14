@@ -1922,6 +1922,17 @@ function applyCalibration(){
   $('leftWidth').value=String(calibration.regions.hudOrdersRegion.w);$('leftWidthValue').textContent=String(Math.round(calibration.regions.hudOrdersRegion.w))+'%';
   for(const [id,[key,suffix]] of Object.entries(controls)){if($(id)){$(id).value=String(calibration[key]);$(id+'Value').textContent=String(calibration[key])+suffix;}}
 }
+function sizeHudEditorToCanvas(){
+  const stage=$('glassesStage'),dock=$('simHudEditorDock');
+  if(!stage||!dock)return;
+  const width=stage.getBoundingClientRect().width||stage.clientWidth;
+  if(!width)return;
+  const narrow=width<=680;
+  // Limit the flyout to the canvas, NOT viewport width, because the Runtime/
+  // Camera sidebar changes the available stage width independently of viewport.
+  const available=Math.max(120,Math.floor(width-(narrow?20:60)));
+  dock.style.setProperty('--hud-editor-available',available+'px');
+}
 function setCalibrationEnabled(enabled){
   calibrationEnabled=!!enabled;
   $('glassesStage').classList.toggle('calibrating',calibrationEnabled);
@@ -1933,6 +1944,8 @@ function setCalibrationEnabled(enabled){
   toggle.title=calibrationEnabled?'Finish editing lens layout':'Edit lens display layout';
   dock.dataset.editing=calibrationEnabled?'true':'false';
   tools.hidden=!calibrationEnabled;
+  if(calibrationEnabled)sizeHudEditorToCanvas();
+  else $('simHudEditorAdvanced').open=false;
   $('calibrationState').textContent=calibrationEnabled?'EDITING':'LOCKED';
   $('simHudEditorScope').textContent=calibrationEnabled
     ?'Drag either panel to move it; drag its corner to resize. '+
@@ -1970,6 +1983,7 @@ $('rightWidth').addEventListener('input',e=>{
   saveCalibration();
 });
 $('calibrationToggle').addEventListener('click',()=>setCalibrationEnabled(!calibrationEnabled));
+window.addEventListener('resize',()=>{if(calibrationEnabled)sizeHudEditorToCanvas();});
 $('hudEditorDone').addEventListener('click',()=>{setCalibrationEnabled(false);$('calibrationToggle').focus();});
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'&&calibrationEnabled){setCalibrationEnabled(false);$('calibrationToggle').focus();}
