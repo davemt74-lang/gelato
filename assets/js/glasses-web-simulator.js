@@ -364,7 +364,7 @@ function setCameraHealth(stateName,label){
 function applyCameraPresentation(persist=true){
   const video=$('cameraVideo');video.classList.toggle('fit-contain',$('cameraFit').value==='contain');
   video.classList.toggle('mirrored',$('cameraMirror').checked);
-  if(persist===true)saveCameraPrefs();
+  if(persist!==false)saveCameraPrefs();
 }
 function cameraInputNote(message,level='ready'){
   const target=$('cameraInputStatus');
