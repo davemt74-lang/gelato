@@ -426,9 +426,10 @@ async function requestCameraDiscoveryAccess(){
   }catch(error){
     problem=error;
   }finally{
-    // Always release the temporary stream, including on enumeration failures.
-    if(probe)for(const track of probe.getTracks())track.stop();
-    await enumerateCameras();
+    // Enumerate while consented preview track is alive: one-time camera grants
+    // may hide device names again immediately after its tracks are stopped.
+    try{await enumerateCameras();}
+    finally{if(probe)for(const track of probe.getTracks())track.stop();}
     if(problem){
       const name=String(problem?.name||'CameraError');
       const detail=name==='NotAllowedError'||name==='PermissionDeniedError'?
