@@ -29,7 +29,7 @@ function createTracker({ttlMs=DEFAULT_TTL,lostMs=LOST_MS}={}){
    if(diff>.42+Math.min(.25,(time-old.seen)/ttlMs*.25))continue;
    const contrary=old.handedness&&obs.handedness&&old.handedness!==obs.handedness;
    if(contrary&&time-old.seen<lostMs)continue;
-   pairs.push({i,j,score:diff+(contrary?.40:0)+(time-old.seen)/ttlMs*.035});
+   pairs.push({i,j,score:diff+(contrary ? .40 : 0)+(time-old.seen)/ttlMs*.035});
   }
   // Two tracks: minimize global matching cost, not first-match greedily.
   const possibilities=[[],...pairs.map(p=>[p])];

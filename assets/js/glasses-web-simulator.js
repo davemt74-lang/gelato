@@ -847,7 +847,11 @@ async function inferOnnxModel(model,frame){
   if(model.status!=='ready'||!model.session||!model.config)throw new Error('ONNX model is not ready.');
   const ort=await ensureOrtWeb(),tensor=preprocessOnnxFrame(frame.video,model.config,ort),result=await model.session.run({[model.config.input.name]:tensor});
   const output=result[model.config.output.name];if(!output)throw new Error('Configured ONNX detector output was not returned.');
-  return decodeYoloV8(output,model.config).map(applyVisionProfile).filter(Boolean);
+  return decodeYoloV8(output,model.config).map(raw=>{
+    // A hand label can be observed independently from ingredient/build mappings.
+    // Keep it in-memory for the hand UI, never as an ingredient component.
+    return window.GelatoHandTracker?.isHand(raw)?{...raw,kind:'hand'}:applyVisionProfile(raw);
+  }).filter(Boolean);
 }
 function setShadowStatus(status,message){
   state.shadowModel.status=status;const el=$('shadowModelStatus');if(el){el.dataset.state=status;el.innerHTML='<strong>'+escapeHtml(status.toUpperCase())+'</strong><span>'+escapeHtml(message||'')+'</span>';}
@@ -1144,7 +1148,8 @@ async function deliverVisionInference(frame,raw,started){
   if(nowWall-frame.capturedAt>p.maxFrameAgeMs){m.staleFrames++;return;}
   if(frame.seq<=m.lastProcessedSequence){m.droppedFrames++;return;}
   const threshold=Number($('visionConfidenceThreshold')?.value||75)/100;
-  const uncertain=(raw||[]).filter(d=>d&&d.bbox&&d.confidence<threshold&&d.confidence>=Math.max(.2,threshold-.25));
+  const uncertain=(raw||[]).filter(d=>d&&d.bbox&&!window.GelatoHandTracker?.isHand(d)&&
+    d.confidence<threshold&&d.confidence>=Math.max(.2,threshold-.25));
   if(uncertain.length){
     captureHardExample('low_confidence',uncertain,{key:'low|'+uncertain.map(d=>d.componentKey||d.label).join(','),summary:'Below threshold: '+uncertain.map(d=>(d.label||d.componentKey)+' '+Math.round(d.confidence*100)+'%').join(', ')});
     const detection=uncertain[0];

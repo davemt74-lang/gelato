@@ -47,6 +47,7 @@ assert.match(stage,/id="glassesHandState1"/);
 assert.match(stage,/id="glassesHandState2"/);
 assert.match(stage,/id="glassesHandBoxes"/);
 assert.match(main,/const realModel=\$\('visionAdapterSelect'\)\?\.value==='onnx'/,'must be actual ONNX observations');
+assert.match(main,/window\.GelatoHandTracker\?\.isHand\(raw\)/,'ONNX hand labels survive ingredient profile mapping');
 assert.match(main,/filtered\.filter\(d=>!core\?\.isHand\(d\)\)/,'hands never become ingredient evidence');
 assert.match(main,/activeItem:item/,'KDS item drives candidate scope');
 assert.match(main,/gelato-glasses-hand-reset/,'stale hand tracks cleared on camera/vision stop');
