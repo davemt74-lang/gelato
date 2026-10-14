@@ -5,6 +5,7 @@ const state={mode:'live',devices:[],device:null,work:null,selectedKdsItemPublicI
 const assembly=()=>window.GelatoGlassesItemAssembly;
 const assemblyProgress=new Map(),ingredientCursor=new Map(),assemblySources=new Map();
 const AUTO_ASSEMBLY_KEY='gelato.glasses.autoAssembly.v1:u'+String(cfg.userId||0)+':rt'+String(cfg.runtimePublicId||'default');
+const PHYSICAL_PLACEMENT_CERTIFIED=false; // 285D4: never auto-acknowledge until field certification.
 let autoAssemblyOptIn=false;
 try{autoAssemblyOptIn=localStorage.getItem(AUTO_ASSEMBLY_KEY)==='1';}catch{}
 let assemblySuggestion=null,assemblySuggestionSignature='',assemblyEpoch=0;
@@ -2862,8 +2863,40 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden){resetProdu
 window.GelatoGlassesNavigation={dispatch:simulatorNavigation,
   primaryCamera:()=>$('cameraVideo'),
   handContext:()=>{
-    const item=selectedItem();
-    return {activeItem:item,actions:item?{...itemActions(item.kdsItemPublicId)}:{}};
+   const item=selectedItem();
+   return {activeItem:item,actions:item?{...itemActions(item.kdsItemPublicId)}:{}};
+  },
+  ingredientProgressionContext:()=>{
+   const item=selectedItem();
+   return {mode:state.mode,devicePublicId:state.device?.publicId||'',
+     stationPublicId:state.device?.stationPublicId||'',locationId:state.device?.locationId||null,
+     item,actions:item?{...itemActions(item.kdsItemPublicId)}:{},
+     modelSha256:readonlyIngredient.verifiedSha256||'',
+     runtimeBound:!!cfg.runtimePublicId&&!!window.GelatoGlassesRuntimes?.binding?.(),
+     cameraLive:!!state.cameraStream,modelReady:readonlyIngredient.status==='ready',
+     hidden:document.hidden,
+     permissions:{glassesView:!!cfg.runtimePublicId,kdsUpdate:!!state.device?.kitchenWritable}};
+  },
+  persistIngredientReview:input=>api('kds.item.ingredient_review',input),
+  applyReviewedIngredient:input=>{
+   const item=selectedItem(),key=item?.kdsItemPublicId+'|'+input?.ingredientId;
+   if(state.mode!=='live'||!cfg.runtimePublicId||!window.GelatoGlassesRuntimes?.binding?.()||
+      !state.device?.kitchenWritable||!state.cameraStream||document.hidden||
+      item?.kdsItemPublicId!==input?.itemPublicId||item?.status!=='in_progress')
+      return {ok:false,message:'Kitchen permission, camera, ticket or runtime changed.'};
+   if(!/^[a-f0-9]{32}$/i.test(String(input?.reviewToken||'')))
+      return {ok:false,message:'Invalid review token.'};
+   const ingredient=assembly()?.ingredientsFor(item).find(x=>x.id===input?.ingredientId);
+   if(!ingredient)return {ok:false,message:'Ingredient configuration changed.'};
+   const action=itemActions(item.kdsItemPublicId)[ingredient.id]||'pending';
+   const source=assemblySources.get(key);
+   if(input.undo){
+     if(action!=='added'||source?.source!=='operator_placement_review')
+       return {ok:false,message:'This operator-reviewed ingredient cannot be undone here.'};
+   }else if(action!=='pending')return {ok:false,message:'Ingredient has already been accounted for.'};
+   return acknowledgeIngredient('added',{ingredientId:ingredient.id,operatorConfirmed:true,
+     source:input.undo?'operator_placement_reversal':'operator_placement_review',
+     evidence:{reviewToken:input.reviewToken}});
   },
   cameraBoxToStage:normalizedBoxToStage,
   autoFocus:()=>({manualLocked:!!state.manualFocusLocked,
@@ -2882,6 +2915,7 @@ window.GelatoGlassesNavigation={dispatch:simulatorNavigation,
   cameraPerspective:state.cameraInput?.perspective||null,
   crossCameraEvidence:window.GelatoCrossCameraEvidenceRuntime?.summary?.(state.work?.items||[],Date.now())||null,
   placementReview:window.GelatoPlacementReviewUI?.summary?.()||null,
+  governedIngredientProgression:window.GelatoIngredientProgressionUI?.summary?.()||null,
   stationaryRecognition:sharedCameraRecognition?.status?.().map(r=>({slot:r.slot,state:r.state,
     count:r.count||0,scope:r.scope||'unscoped',stationPublicId:r.stationPublicId||null}))||[],
   automaticTicketFocus:!state.manualFocusLocked&&productionFocusEligible()?'evidence_available':

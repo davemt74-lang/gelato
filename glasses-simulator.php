@@ -413,6 +413,17 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
             <button id="glassesPlacementReject" type="button" disabled>Reject Hypothesis</button>
           </div>
           <p id="glassesPlacementReceipt" class="sim-muted" role="status" aria-live="polite">No operator review recorded.</p>
+            <section class="glasses-ingredient-progression" aria-label="Governed ingredient checklist progression">
+              <strong>285D4 · Operator-approved checklist</strong>
+              <p id="glassesProgressionStatus" role="status" aria-live="polite">Approve a fresh placement hypothesis to begin. KDS status never advances automatically.</p>
+              <div class="inline-actions">
+                <button id="glassesProgressionApply" type="button" disabled>Approve &amp; Mark Ingredient Added</button>
+                <button id="glassesProgressionDecline" type="button" disabled>Decline</button>
+                <button id="glassesProgressionUndo" type="button" disabled>Undo Last Approval</button>
+              </div>
+              <ol id="glassesProgressionAudit" aria-label="Session ingredient approval audit" aria-live="polite"></ol>
+              <p class="sim-muted">Every approval is recorded to the authorized KDS audit log. Ingredient checklist updates are operator-reported only; they never verify physical placement or mark items Ready.</p>
+            </section>
         </section>
         <p class="glasses-hand-tracking-help">Pretrained MediaPipe Hand Landmarker loads after you start Camera 1. Green tracks represent real hand detections; hands can leave and re-enter view. Held-ingredient labels need a separate ingredient model and are suggestions only. No camera starts automatically, no video is uploaded for hand detection, and no KDS state changes.</p>
       </section>
@@ -593,6 +604,7 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-shared-camera-recognition.js?v=20261014-285d2"></script>
 <script src="assets/js/glasses-cross-camera-evidence.js?v=20261014-285d2"></script>
 <script src="assets/js/glasses-placement-review.js?v=20261014-285d3"></script>
+<script src="assets/js/glasses-ingredient-progression.js?v=20261014-285d4"></script>
 <script src="assets/js/glasses-employee-runtimes.js?v=20261013-runtime-refine277"></script>
 <script src="assets/js/glasses-assembly-recognition.js?v=20261013-266"></script>
 <script src="assets/js/glasses-hud-notifications.js?v=20261013-hud-edit2"></script>
@@ -607,7 +619,8 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-pov-calibration.js?v=20261014-284b"></script>
 <script src="assets/js/glasses-hand-box-stabilizer.js?v=20261014-285d1"></script>
 <script src="assets/js/glasses-hand-tracker-ui.js?v=20261014-285d1"></script>
-<script src="assets/js/glasses-placement-review-ui.js?v=20261014-285d3"></script>
+<script src="assets/js/glasses-placement-review-ui.js?v=20261014-285d4"></script>
+<script src="assets/js/glasses-ingredient-progression-ui.js?v=20261014-285d4"></script>
 <script src="assets/js/glasses-multicamera.js?v=20261013-multi1"></script>
 <script src="assets/js/glasses-camera-config.js?v=20261014-cam-runtime-split"></script>
 <script src="assets/js/glasses-camera-runtime.js?v=20261013-261"></script>

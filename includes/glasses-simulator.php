@@ -186,7 +186,7 @@ function glasses_simulator_kds_command(PDO $pdo,array $user,array $device,array 
         ]);
         return ['kdsResult'=>$result];
     }
-    if(!in_array($action,['kds.item.transition','kds.item.note'],true))
+    if(!in_array($action,['kds.item.transition','kds.item.note','kds.item.ingredient_review'],true))
         throw new InvalidArgumentException('Unsupported kitchen command.');
     $itemPublicId=trim((string)($in['kdsItemPublicId']??''));
     if($itemPublicId==='')throw new InvalidArgumentException('Select a kitchen item.');
@@ -197,6 +197,74 @@ function glasses_simulator_kds_command(PDO $pdo,array $user,array $device,array 
     $expected=trim((string)($in['expectedStatus']??''));
     if($expected===''||!hash_equals($expected,(string)$item['status']))
         throw new InvalidArgumentException('Kitchen status changed. Refresh the live orders before retrying.');
+    // 285D4: ONLY an explicitly operator-approved, audit-only ingredient event.
+    // No recipe preparation, camera-only claim, automatic KDS status transition,
+    // component observation, or ticket finish is authorized by this route.
+    if($action==='kds.item.ingredient_review'){
+        if($expected!=='in_progress')
+            throw new InvalidArgumentException('Ingredient review requires an in-progress KDS item.');
+        $reviewToken=strtolower(trim((string)($in['reviewToken']??'')));
+        $ingredientId=trim((string)($in['ingredientId']??''));
+        $decision=(string)($in['decision']??'');
+        if(!preg_match('/^[a-f0-9]{32}$/D',$reviewToken)||$ingredientId===''||strlen($ingredientId)>160||
+            !in_array($decision,['operator_confirmed','operator_reversed'],true))
+            throw new InvalidArgumentException('Invalid operator approval or review idempotency key.');
+        $referenceToken=strtolower(trim((string)($in['referenceToken']??'')));
+        if($decision==='operator_reversed'&&!preg_match('/^[a-f0-9]{32}$/D',$referenceToken))
+            throw new InvalidArgumentException('A valid original approval is required to undo.');
+        // Verify the ingredient against live KDS menu assembly data, never recipe steps.
+        $work=glasses_current_work($pdo,$device);
+        $matches=array_values(array_filter((array)($work['items']??[]),
+            static fn(array $row):bool=>(string)($row['kdsItemPublicId']??'')===$itemPublicId));
+        if(count($matches)!==1)
+            throw new DomainException('The KDS item is no longer uniquely assigned to this station.');
+        $menu=(array)($matches[0]['menu']['ingredients']??[]);
+        $matching=[];
+        foreach($menu as $i=>$entry){
+            $key=(string)$i.':'.(string)($entry['canonicalName']??$entry['name']??'');
+            if(hash_equals($key,$ingredientId))$matching[]=$entry;
+        }
+        if(count($matching)!==1||trim((string)($matching[0]['name']??''))==='')
+            throw new InvalidArgumentException('Reviewed ingredient does not match this item menu configuration.');
+        $prefix='D4:'.$reviewToken.'|';
+        $note=$prefix.$ingredientId.'|'.$decision.'|'.($decision==='operator_reversed'?'revert:'.$referenceToken.'|':'').
+            'Operator report (not camera-verified). No KDS status change.';
+        $result=kds_transaction($pdo,function()use($pdo,$org,$itemPublicId,$expected,$note,$prefix,$ingredientId,$uid,$decision,$referenceToken):array{
+            $locked=kds_item($pdo,$org,$itemPublicId,true);
+            if((string)$locked['status']!==$expected)
+                throw new InvalidArgumentException('Kitchen item status changed during approval. Refresh and retry.');
+            $q=$pdo->prepare("SELECT note FROM kds_order_events WHERE organization_id=? AND kds_order_item_id=?
+                AND event_type='glasses_ingredient_review' AND note LIKE ? ORDER BY id DESC LIMIT 1");
+            $q->execute([$org,(int)$locked['id'],$prefix.'%']);
+            $prior=$q->fetchColumn();
+            if($prior!==false){
+                if(!str_starts_with((string)$prior,$prefix.$ingredientId.'|'))
+                    throw new InvalidArgumentException('Review token was already used for a different ingredient.');
+                if(!str_contains((string)$prior,'|'.$decision.'|'))
+                    throw new InvalidArgumentException('Review token was already used for a different decision.');
+                return ['duplicate'=>true];
+            }
+            if($decision==='operator_reversed'){
+                $q=$pdo->prepare("SELECT note FROM kds_order_events WHERE organization_id=? AND kds_order_item_id=?
+                  AND event_type='glasses_ingredient_review' AND note LIKE ? ORDER BY id DESC LIMIT 1");
+                $q->execute([$org,(int)$locked['id'],'D4:'.$referenceToken.'|'.$ingredientId.'|operator_confirmed|%']);
+                if($q->fetchColumn()===false)
+                    throw new InvalidArgumentException('The original operator approval was not found for this KDS item.');
+                $q->execute([$org,(int)$locked['id'],'%|revert:'.$referenceToken.'|%']);
+                if($q->fetchColumn()!==false)
+                    throw new InvalidArgumentException('The original operator approval was already reversed.');
+            }
+            kds_event($pdo,$org,(int)$locked['id'],'glasses_ingredient_review',$expected,$expected,$note,$uid);
+            return ['duplicate'=>false];
+        });
+        if(!$result['duplicate'])app_audit($pdo,$org,$uid,'glasses.operator_ingredient_review','kds_order_item',$itemPublicId,null,[
+            'locationId'=>$locationId,'station'=>$station,'ingredientId'=>$ingredientId,
+            'reviewToken'=>$reviewToken,'decision'=>$decision,'referenceToken'=>$referenceToken,
+            'cameraVerified'=>false,'kdsStatusChanged'=>false
+        ]);
+        return ['kdsResult'=>['kdsItemPublicId'=>$itemPublicId,'noted'=>true,
+            'duplicate'=>(bool)$result['duplicate'],'status'=>$expected,'kdsStatusChanged'=>false]];
+    }
     if($action==='kds.item.transition'){
         $to=trim((string)($in['status']??''));
         if(!in_array($to,['in_progress','ready'],true))
@@ -271,7 +339,7 @@ function glasses_simulator_dispatch(PDO $pdo,array $user,array $in): array
     $runtimePublicId=trim((string)($in['runtimePublicId']??''));
     if($runtimePublicId!=='')glasses_employee_runtime_assert_binding($pdo,$user,$runtimePublicId,$device);
 
-    if(in_array($action,['kds.ticket.action','kds.item.transition','kds.item.note'],true)){
+    if(in_array($action,['kds.ticket.action','kds.item.transition','kds.item.note','kds.item.ingredient_review'],true)){
         if(!kds_ready($pdo))throw new DomainException('Kitchen Display is not configured.');
         return glasses_simulator_kds_command($pdo,$user,$device,$in);
     }

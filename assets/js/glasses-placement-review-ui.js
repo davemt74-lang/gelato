@@ -58,6 +58,8 @@
  function review(decision){
   const candidate=engine.summary().candidate;if(!candidate)return;
   const result=engine.review({id:candidate.id,decision,context:ctx()});
+  if(result.ok&&decision==='confirm')
+   window.dispatchEvent(new CustomEvent('gelato-glasses-placement-reviewed',{detail:{receipt:result.receipt}}));
   lastDecision=result.ok?
    (decision==='confirm'?'Operator confirmed':'Operator rejected')+
    ' the '+result.receipt.label+' placement hypothesis · local review only; ingredient NOT Added.':
