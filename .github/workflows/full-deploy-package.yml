@@ -53,6 +53,9 @@ on:
       - 'includes/glasses-simulator.php'
       - 'assets/js/glasses-web-simulator.js'
       - 'assets/js/glasses-mediapipe-hands.js'
+      - 'assets/js/glasses-held-ingredient-evidence.js'
+      - 'tests/glasses-held-ingredient-evidence.test.js'
+      - 'docs/GLASSES-SECTION282-HELD-INGREDIENT-REVIEW.md'
       - 'assets/js/glasses-mediapipe-hands-ui.js'
       - 'tests/glasses-mediapipe-hands.test.js'
       - 'docs/GLASSES-SECTION281-LIVE-MEDIAPIPE-HANDS.md'
@@ -474,6 +477,8 @@ jobs:
           node --check assets/js/glasses-mediapipe-hands.js
           node --check assets/js/glasses-mediapipe-hands-ui.js
           node tests/glasses-mediapipe-hands.test.js
+          node --check assets/js/glasses-held-ingredient-evidence.js
+          node tests/glasses-held-ingredient-evidence.test.js
           node --check assets/js/glasses-web-simulator.js
           node --check assets/js/glasses-hud-notifications.js
           node --check assets/js/glasses-employee-runtimes.js
