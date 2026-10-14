@@ -30,6 +30,12 @@ const validPkg={runtimeType:'onnx',platform:'browser_preview',status:'ready',
  modelName:'Ingredient Model',modelVersion:'1.0',
  metadata:{browserInference:{schema:'gelato.browser_onnx_detector.v1'}}};
 const context={readonlyIngredient,state,window,document,$,
+ readonlyStatus:(message,error=false)=>{
+   elements.glassesReadonlyModelStatus.textContent=message;
+   elements.glassesReadonlyModelStatus.dataset.state=error?'error':readonlyIngredient.status;
+   elements.glassesReadonlyModelLoad.disabled=readonlyIngredient.status==='loading';
+   elements.glassesReadonlyModelUnload.disabled=readonlyIngredient.status==='idle';
+ },
  selectedItem:()=>focus,itemActions:()=>({}),log:()=>{},
  setTimeout:fn=>{timers.push(fn);return timers.length},clearTimeout:()=>{},
  api:async(name,data)=>{

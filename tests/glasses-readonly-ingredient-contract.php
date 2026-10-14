@@ -16,6 +16,7 @@ $assert(str_contains($body,"app_has_permission('glasses.view'")&&
 $assert(str_contains($body,"operational_location_allowed(\$pdo,\$user,'glasses.view'")&&
     str_contains($body,"operational_location_allowed(\$pdo,\$user,'kds.view'"),'scope checked');
 $assert(str_contains($body,"tp.platform='browser_preview'"),'browser rollout separate from AIR3');
+$assert(str_contains($server,'AND tp.platform=?'),'rollout conflicts isolated by model platform');
 $assert(str_contains($body,"r.status IN ('active','paused','rolled_back')"),'governed rollout required');
 $assert(str_contains($body,"if(\$status==='paused')"),'paused rollout held');
 $assert(str_contains($body,"package['status']!=='ready'"),'ready package required');

@@ -394,12 +394,17 @@ function glasses_vision_model_rollout_create(PDO $pdo,int $org,array $input,int 
 
 function glasses_vision_model_rollout_conflict(PDO $pdo,int $org,array $rollout): bool
 {
-    $sql="SELECT COUNT(*) FROM glasses_vision_model_rollouts
-        WHERE organization_id=? AND detector_name=? AND id<>?
-          AND status IN ('active','paused')
-          AND location_id ".($rollout['location_id']===null?'IS NULL':'=?')."
-          AND station_id ".($rollout['station_id']===null?'IS NULL':'=?');
-    $args=[$org,(string)$rollout['detector_name'],(int)$rollout['id']];
+    // Rollout conflicts must be scoped by platform. A browser_preview rollout
+    // must not block the native AIR3 release of the same ingredient detector.
+    $sql="SELECT COUNT(*) FROM glasses_vision_model_rollouts r
+        JOIN glasses_vision_model_packages tp ON tp.id=r.target_package_id
+          AND tp.organization_id=r.organization_id
+        WHERE r.organization_id=? AND r.detector_name=? AND r.id<>?
+          AND tp.platform=?
+          AND r.status IN ('active','paused')
+          AND r.location_id ".($rollout['location_id']===null?'IS NULL':'=?')."
+          AND r.station_id ".($rollout['station_id']===null?'IS NULL':'=?');
+    $args=[$org,(string)$rollout['detector_name'],(int)$rollout['id'],(string)$rollout['target_platform']];
     if($rollout['location_id']!==null)$args[]=(int)$rollout['location_id'];
     if($rollout['station_id']!==null)$args[]=(int)$rollout['station_id'];
     $q=$pdo->prepare($sql);$q->execute($args);
