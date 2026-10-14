@@ -1101,3 +1101,13 @@ html,body{max-width:100%;overflow-x:hidden}
 #glassesProductionStatus[data-state=observing]{color:#b5dac5}
 #glassesProductionStatus[data-state=paused],#glassesProductionStatus[data-state=unassigned]{color:#f8cb79}
 @media(max-width:760px){#glassesProductionStatus{max-width:100%;flex-basis:100%}.sim-status-row{flex-wrap:wrap}}
+
+/* Section 285D3: deliberate placement-zone calibration and local operator review. */
+.glasses-placement-review{padding:12px;border:1px solid #3a5943;border-radius:10px;background:rgba(18,38,27,.7);display:grid;gap:9px}
+.glasses-placement-review .gc-heading{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;justify-content:space-between}
+.glasses-placement-review .gc-heading small,.glasses-placement-review .sim-muted{color:#aec6b5}
+.glasses-placement-review p{margin:0;font-size:12px;line-height:1.5}
+.glasses-placement-zone{display:flex;flex-wrap:wrap;align-items:flex-end;gap:7px}
+.glasses-placement-zone label{display:grid;gap:4px;font-size:11px;min-width:64px;flex:1 1 65px}
+.glasses-placement-zone input{width:100%;min-width:0;padding:7px 6px;background:#14231a;border:1px solid #56735f;color:#e4ffe8;border-radius:6px}
+.glasses-placement-zone button{padding:8px 12px}

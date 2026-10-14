@@ -1014,6 +1014,7 @@ async function unloadReadonlyIngredientModel(message='Read-only ingredient model
   if(readonlyIngredient.auxTimer!=null){clearTimeout(readonlyIngredient.auxTimer);readonlyIngredient.auxTimer=null;}
   window.GelatoSharedCameraRecognitionRuntime?.reset?.();
   window.GelatoCrossCameraEvidenceRuntime?.reset?.();
+  window.GelatoPlacementReviewUI?.reset?.();
   renderSharedCameraRecognitionStatus();
   const session=readonlyIngredient.session;
   resetProductionFocusEvidence();
@@ -1079,7 +1080,10 @@ async function pollReadonlyIngredientFrame(epoch){
        kdsItemPublicId:itemKey
      });
    readonlyIngredient.frameSeq++;
-   if(productionFocusEligible())
+   // D3 may observe while a governed build is active; 285B auto-focus
+   // remains independently guarded and cannot change a locked ticket.
+   if(state.mode==='live'&&state.device?.stationPublicId&&
+      !state.device?.virtualPreview&&state.cameraStream)
      window.dispatchEvent(new CustomEvent('gelato-glasses-production-object-frame',{detail:{
        cameraSlot:1,sourceKind:state.cameraInput?.kind||'browser',
        devicePublicId:deviceKey,stationPublicId:state.device.stationPublicId,
@@ -2877,6 +2881,7 @@ window.GelatoGlassesNavigation={dispatch:simulatorNavigation,
   cameraLive:!!state.cameraStream,cameraSourceKind:state.cameraInput?.kind||null,
   cameraPerspective:state.cameraInput?.perspective||null,
   crossCameraEvidence:window.GelatoCrossCameraEvidenceRuntime?.summary?.(state.work?.items||[],Date.now())||null,
+  placementReview:window.GelatoPlacementReviewUI?.summary?.()||null,
   stationaryRecognition:sharedCameraRecognition?.status?.().map(r=>({slot:r.slot,state:r.state,
     count:r.count||0,scope:r.scope||'unscoped',stationPublicId:r.stationPublicId||null}))||[],
   automaticTicketFocus:!state.manualFocusLocked&&productionFocusEligible()?'evidence_available':
