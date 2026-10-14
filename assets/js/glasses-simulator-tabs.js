@@ -117,7 +117,15 @@
     // Device and station are per-employee runtime settings, not global HUD controls.
     move($('glassesRuntimeTabs'),section('runtime'));
     move(document.querySelector('.glasses-runtime-toolbar'),section('runtime'));
-    move(document.querySelector('.glasses-runtime-training-controls'),section('runtime'));
+    const training=document.querySelector('.glasses-runtime-training-controls');
+    if(training){
+      const trainingDetails=document.createElement('details');
+      trainingDetails.className='glasses-training-details';
+      const title=document.createElement('summary');
+      title.textContent='Assigned employee training';
+      trainingDetails.append(title,training);
+      section('camera').appendChild(trainingDetails);
+    }
     const transcript=document.createElement('div');
     transcript.className='sgv-live-transcript';transcript.id='simLiveTranscript';
     transcript.setAttribute('role','status');transcript.setAttribute('aria-live','polite');

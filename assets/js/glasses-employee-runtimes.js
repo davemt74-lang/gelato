@@ -78,6 +78,8 @@ function render(){
  const chosen=adding?null:choices.find(r=>r.publicId===select.value)||null;
  renderPairDevices();
  byId('glassesRuntimeDeviceGroup').hidden=adding;
+ byId('glassesRuntimeEmployeeGroup').hidden=!adding&&!chosen;
+ byId('glassesRuntimeSaveStation').hidden=!chosen;
  byId('glassesRuntimeNew').hidden=!adding;
  byId('glassesRuntimeAddCancel').hidden=!adding;
  byId('glassesRuntimeOpen').hidden=true;

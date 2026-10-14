@@ -43,7 +43,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
     <label id="glassesRuntimePairGroup" hidden>Glasses device <select id="glassesRuntimePairSelect" aria-label="Choose paired glasses"><option value="">Choose paired glasses…</option></select></label>
     <label>Kitchen station <select id="glassesRuntimeStation" aria-label="Kitchen station for selected glasses"><option value="">Choose station…</option></select></label>
     <button id="glassesRuntimeSaveStation" type="button" title="Save this station to the selected employee glasses runtime">Save Station</button>
-    <label>Assign employee <select id="glassesRuntimeEmployee" aria-label="Assign employee to glasses runtime"><option value="">Loading staff…</option></select></label>
+    <label id="glassesRuntimeEmployeeGroup" hidden>Employee profile <select id="glassesRuntimeEmployee" aria-label="Assign employee to glasses runtime"><option value="">Loading staff…</option></select></label>
     <button id="glassesRuntimeNew" type="button" hidden title="Create an assigned glasses runtime">Save Runtime</button>
     <button id="glassesRuntimeAddCancel" type="button" hidden>Cancel</button>
     <button id="glassesRuntimeOpen" type="button" hidden title="Open glasses runtime">Open</button>
