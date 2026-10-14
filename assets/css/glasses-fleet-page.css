@@ -1,0 +1,18 @@
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:#08130d;color:#eaf5ed;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.fleet-header{padding:22px clamp(14px,4vw,48px);border-bottom:1px solid #294334;background:#101d15}
+.fleet-header h1{margin:12px 0 5px;font-size:24px}.fleet-header p{margin:0;color:#b2c5b9;font-size:13px;line-height:1.5}
+.fleet-back{color:#b9e0c8;text-decoration:none;font-size:13px}
+.fleet-main{margin:24px auto;padding:0 14px 28px;max-width:1160px;display:grid;gap:18px}
+.fleet-panel,.glasses-software-manager{border:1px solid #315440;border-radius:14px;background:#111e16;padding:18px;color:#eaf5ed}
+.fleet-panel h2{font-size:18px;margin:0 0 8px}.fleet-panel h3{font-size:15px;margin:16px 0 8px}
+.fleet-panel p{font-size:13px;color:#bfcebf;line-height:1.6}.fleet-controls{display:flex;align-items:end;gap:10px;flex-wrap:wrap;margin:16px 0}
+.fleet-controls label{display:grid;gap:6px;min-width:175px;flex:1;font-size:12px}
+.fleet-controls input,.fleet-controls select,.glasses-software-manager select{font:inherit;color:#effaef;background:#1b2d20;border:1px solid #476b51;padding:9px;border-radius:8px;width:100%;min-width:0}
+.fleet-controls button,.fleet-panel button{font:inherit;background:#28583a;color:#f2fff4;border:1px solid #528963;border-radius:8px;min-height:38px;padding:8px 12px;cursor:pointer}
+.fleet-controls button:disabled{opacity:.45;cursor:not-allowed}
+.fleet-controls .fleet-danger{background:#492921;border-color:#8c5b50}
+#fleetPairPanel{background:#182c1d;border:1px solid #477554;border-radius:10px;padding:12px}
+#fleetPairPanel[hidden]{display:none!important}#fleetPairCode{display:block;font-size:26px;letter-spacing:.2em;overflow-wrap:anywhere;color:#d4ffe0}
+#fleetPairStatus,#fleetDeviceStatus{font-size:12px;overflow-wrap:anywhere}
+.glasses-software-manager{margin:0}.glasses-software-manager .glasses-software-header{align-items:flex-start}
+@media(min-width:950px){.fleet-main{grid-template-columns:minmax(350px,1fr) minmax(0,1.35fr)}}
