@@ -332,7 +332,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 
     <section class="console-card camera-card">
       <div class="console-heading"><div><small>GLASSES POV · CAMERA 1</small><strong>First-person vision source</strong></div><span id="cameraHealth">OFF</span></div>
-      <label class="work-picker"><span>GLASSES / USB / HDMI CAMERA INPUT</span><select id="cameraDeviceSelect"><option value="">Default camera</option></select></label>
+      <label class="work-picker"><span>USB / HDMI CAMERA INPUT</span><select id="cameraDeviceSelect"><option value="">Default camera</option></select></label>
       <div class="inline-actions">
         <button type="button" id="refreshCameraInputs">Refresh Camera Inputs</button>
         <button type="button" id="allowCameraDiscovery">Allow Camera Access &amp; Scan</button>
