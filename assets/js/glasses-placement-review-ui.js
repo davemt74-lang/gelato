@@ -3,6 +3,8 @@
  const factory=window.GelatoPlacementReview;
  if(!factory)return;
  const $=id=>document.getElementById(id),engine=factory.create({now:()=>Date.now()});
+ const motion=window.GelatoHandToFoodEvidence?.create?.({now:()=>Date.now()});
+ let motionNote='';
  let zone=null,lastHandAt=0,lastHands=[],lastDecision='',lastScope='';
  const settings=['glassesPlacementX','glassesPlacementY','glassesPlacementW','glassesPlacementH'];
  const validBox=factory.validBox;
@@ -31,13 +33,14 @@
     'UNCONFIGURED · Select a camera zone to enable read-only hypotheses.':
     c?'REVIEW REQUIRED · No ingredient or KDS change will occur.':
     'ZONE SET · Watching verified hand + ingredient observations. No automatic Added.';
+  if(status&&motionNote)status.textContent+=' · '+motionNote;
   if(accept)accept.disabled=!c;
   if(reject)reject.disabled=!c;
   const receipt=$('glassesPlacementReceipt');if(receipt&&lastDecision)receipt.textContent=lastDecision;
  }
  function reset({clearZone=false}={}){
-  engine.reset();lastHandAt=0;lastHands=[];lastScope='';lastDecision='';
-  if(clearZone)zone=null;
+  engine.reset();motion?.reset();motionNote='';lastHandAt=0;lastHands=[];lastScope='';lastDecision='';
+  if(clearZone){zone=null;cameraSignature='';cameraGeneration++;}
   render();
  }
  function setZone(){
@@ -78,6 +81,14 @@
   lastHands=(window.GelatoHandTrackingUI?.state?.().tracks||[]).filter(
     t=>t&&['tracking','identifying'].includes(t.status)).map(t=>({...t,bbox:{...t.bbox}}));
  }
+ let cameraSignature='',cameraGeneration=0;
+ function readonlyCameraGeneration(){
+   const stream=window.GelatoGlassesNavigation?.primaryCamera?.()?.srcObject;
+   const track=stream?.getVideoTracks?.()?.[0];
+   const signature=String(stream?.id||'')+'|'+String(track?.id||'');
+   if(signature!==cameraSignature){cameraSignature=signature;cameraGeneration++;motion?.reset();}
+   return cameraGeneration;
+ }
  function handleObjects(event){
   const d=event.detail||{},context=ctx();
   if(!context||d.cameraSlot!==1||d.devicePublicId!==context.devicePublicId||
@@ -91,6 +102,26 @@
   lastScope=signature;
   const observation=engine.observe({context,frame:{seq:d.seq,timestamp:d.timestamp,
     handTimestamp:lastHandAt,hands:lastHands,objects:d.objects||[]}});
+  // 285E2: independent review-only movement evidence on the same raw observations.
+  // Never substitute its hypotheses for the governed placement approval pathway.
+  if(motion&&context.item?.kdsItemPublicId&&context.item?.ticket?.checkPublicId){
+    const video=window.GelatoGlassesNavigation?.primaryCamera?.();
+    const stream=video?.srcObject,track=stream?.getVideoTracks?.()?.[0];
+    const sourceId=String(track?.getSettings?.()?.deviceId||track?.id||'');
+    const motionContext={stationPublicId:String(context.stationPublicId),
+      ticketPublicId:String(context.item.ticket.checkPublicId),
+      itemPublicId:String(context.item.kdsItemPublicId),cameraSlot:1,sourceId,
+      generation:readonlyCameraGeneration(),modelSha256:String(context.modelSha256),
+      zone:{...context.zone},expectedIngredients:context.item.menu.ingredients.map(
+        i=>String(i?.canonicalName||i?.name||'')).filter(Boolean)};
+    const outcome=motion.observe({context:motionContext,frame:{seq:d.seq,at:d.timestamp,
+      hands:lastHands,objects:d.objects||[]}});
+    if(outcome.suggestions.length){
+      motionNote='Potential hand-to-food placement; operator review required. No KDS change.';
+      window.dispatchEvent(new CustomEvent('gelato-glasses-hand-to-food-review',{
+        detail:{suggestions:outcome.suggestions,reviewOnly:true,kdsChanged:false}}));
+    }
+  }
   window.dispatchEvent(new CustomEvent('gelato-glasses-placement-observation',{detail:{
    frame:{seq:d.seq,frameAt:d.timestamp,handAt:lastHandAt,accepted:observation.accepted,
     reason:observation.reason,sourceSlot:1},candidate:observation.candidate||null
