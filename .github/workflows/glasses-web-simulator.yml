@@ -20,6 +20,8 @@ on:
       - 'assets/js/glasses-web-simulator.js'
       - 'assets/js/glasses-hud-notifications.js'
       - 'assets/js/glasses-employee-runtimes.js'
+      - 'tests/glasses-runtime-operator-refinement.test.js'
+      - 'tests/glasses-runtime-operator-refinement-contract.php'
       - 'assets/js/glasses-assembly-learning.js'
       - 'api/glasses-assembly-learning.php'
       - 'includes/glasses-assembly-learning.php'
@@ -153,6 +155,8 @@ jobs:
           php -l includes/glasses-employee-runtimes.php
           php -l tests/glasses-employee-runtime-contract.php
           php tests/glasses-employee-runtime-contract.php
+          php -l tests/glasses-runtime-operator-refinement-contract.php
+          php tests/glasses-runtime-operator-refinement-contract.php
           php -l tests/glasses-connection-manager-contract.php
           php tests/glasses-connection-manager-contract.php
           php -l includes/glasses-software.php
@@ -173,6 +177,7 @@ jobs:
           node --check assets/js/glasses-employee-runtimes.js
           node --check assets/js/glasses-software-manager.js
           node tests/glasses-runtime-station-contract.test.js
+          node tests/glasses-runtime-operator-refinement.test.js
           node tests/glasses-runtime-tab-preferences.test.js
           node --check assets/js/glasses-assembly-learning.js
           node tests/glasses-assembly-learning-contract.test.js

@@ -7,7 +7,7 @@ const simulator=fs.readFileSync('assets/js/glasses-web-simulator.js','utf8');
 const backend=fs.readFileSync('includes/glasses-employee-runtimes.php','utf8');
 const api=fs.readFileSync('api/glasses-simulator.php','utf8');
 const core=fs.readFileSync('includes/glasses-core.php','utf8');
-assert.match(page,/<label id="glassesRuntimeDeviceGroup" hidden>Live display <select id="deviceSelect"/);
+assert.match(page,/<label id="glassesRuntimeDeviceGroup" hidden>Internal display source <select id="deviceSelect"/);
 assert.match(page,/<label id="glassesRuntimePairGroup" hidden>Glasses device <select id="glassesRuntimePairSelect"/);
 assert.doesNotMatch(page,/<div class="sim-top-actions">[\s\S]*?<label>Device <select id="deviceSelect"/);
 assert.match(page,/id="glassesRuntimeStation"/);
@@ -16,7 +16,7 @@ assert.match(tabs,/move\(document\.querySelector\('\.glasses-runtime-toolbar'\),
 assert.match(tabs,/section\('camera'\)\.appendChild\(trainingDetails\)/,'employee training remains available in Camera');
 assert.match(runtime,/runtime\.station_update/);
 assert.match(runtime,/stationPublicId/);
-assert.match(runtime,/Number\(s\.locationId\)===Number\(locationId\)/);
+assert.match(runtime,/Number\(x\.locationId\)===Number\(locationId\)/);
 assert.match(runtime,/deviceSelect\.disabled=true/);
 assert.match(runtime,/glassesRuntimePairSelect/,'explicit paired-device assignment');
 assert.match(runtime,/result\.runtime\?\.stationPublicId!==bound\.stationPublicId/);
