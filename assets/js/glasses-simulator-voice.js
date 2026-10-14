@@ -34,6 +34,7 @@
     phrase=phrase.replace(/^(?:okay |ok |hey |gelato |glasses |please )+/g,'').trim();
     if(/^(?:stop (?:listening|voice)|turn (?:off|voice off)|microphone off)$/.test(phrase))return 'stop_voice';
     if(/^(?:help|commands|voice commands|what can i say)$/.test(phrase))return 'help';
+    if(/^(?:follow (?:the )?(?:activity|kitchen activity)|resume (?:automatic|auto) (?:ticket )?focus|automatic ticket focus)$/.test(phrase))return 'follow_activity';
     if(/^(?:start|begin|work on|prepare) (?:the )?(?:ticket|order)$/.test(phrase))return 'focus_ticket';
     if(/^(?:mark|set) (?:the )?(?:ticket|order) (?:as )?(?:started|in progress)$/.test(phrase))return 'start_order';
     const namedTicket=phrase.match(/^(?:(?:go to|switch to|select|open|show|focus|work on) (?:the )?)?(?:ticket|order)\s*#?\s*([0-9]{1,24})$/);
@@ -62,7 +63,7 @@
   function dispatch(command,{spoken=false}={}){
     if(command==='stop_voice'){stopVoice();flash('Voice listening stopped.');return;}
     if(command==='help'){
-      const message='Say start ticket to hear the current focus, next item, next ticket, previous ticket, go to ticket 104, mark ticket started for an explicit KDS transition, ingredient added, item ready, ticket ready, finish ticket twice to confirm, repeat, or status.';
+      const message='Say next item, next ticket, go to ticket 104, follow activity to resume automatic ticket selection, or mark ticket started for an explicit KDS status change. Start ticket reports your current focus. Finish ticket requires confirmation.';
       feedback(message);flash(message);if(spoken)announce(message);return;
     }
     const provider=nav();

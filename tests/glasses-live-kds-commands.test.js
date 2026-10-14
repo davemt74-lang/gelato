@@ -11,12 +11,13 @@ const state={mode:'live',device:{publicId:'preview:2:all',virtualPreview:true,ki
 const calls=[],logs=[],controls=[],note={value:'Extra basil added'};
 const $=id=>id==='simItemNoteInput'?note:id==='simKitchenCommandStatus'?{set textContent(v){}}:null;
 const ctx={state,$,Object,Date,String,Math,Set,JSON,
-  window:{prompt:()=>null},
-  document:{querySelectorAll:()=>controls},
+  window:{prompt:()=>null,addEventListener(){}},
+  document:{querySelectorAll:()=>controls,addEventListener(){}},
   selectedItem:()=>state.work.items.find(x=>x.kdsItemPublicId===state.selectedKdsItemPublicId)||state.work.items[0]||null,
   orderItems:()=>state.work.items,
   deriveSteps:()=>['Add basil','Bake','Serve'],
   render:()=>{},
+  resetProductionFocusEvidence:()=>{},
   renderTicketCompletion:()=>{},
   syncLiveStationWork:async()=>true,
   log:(type,message)=>logs.push({type,message}),
