@@ -39,9 +39,10 @@ function findByNumber(groups,raw){
  const item=preferredItem(matches[0]);
  return item?{ok:true,group:matches[0],item}:{ok:false,reason:'no_items'};
 }
-function readiness({mode,device,work,item,cameraLive,modelReady,recoveryState,hidden}={}){
+function readiness({mode,device,work,item,cameraLive,modelReady,recoveryState,hidden,assigned}={}){
  if(mode!=='live'||!device)return {state:'inactive',message:'Connect or select a live glasses runtime.'};
  if(device.virtualPreview)return {state:'preview',message:'Browser preview · not a paired glasses production runtime.'};
+ if(!assigned)return {state:'unassigned',message:'Choose an assigned employee glasses runtime to enable production assistance.'};
  if(hidden||recoveryState==='blocked'||recoveryState==='disconnected'||recoveryState==='recovering')
    return {state:'paused',message:'Production assistance paused until the runtime recovers.'};
  if(!work||!item)return {state:'waiting',message:'Connected · waiting for active station KDS work.'};
