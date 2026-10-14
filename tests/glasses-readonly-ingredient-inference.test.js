@@ -19,7 +19,7 @@ const $=id=>elements[id];
 const item={kdsItemPublicId:'item-one',status:'in_progress',
  menu:{ingredients:[{name:'Sauce'},{name:'Mozzarella'}]}};
 let focus=item,sessions=0,inference=0;
-const state={cameraStream:{},device:{publicId:'preview:1:all'},mode:'live'};
+const state={cameraStream:{},device:{publicId:'preview:1:all'},mode:'live',work:{items:[item]}};
 const readonlyIngredient={status:'idle',session:null,config:null,package:null,verifiedSha256:null,
  epoch:0,timer:null,busy:false,frameSeq:0,devicePublicId:''};
 const window={
@@ -30,6 +30,7 @@ const validPkg={runtimeType:'onnx',platform:'browser_preview',status:'ready',
  modelName:'Ingredient Model',modelVersion:'1.0',
  metadata:{browserInference:{schema:'gelato.browser_onnx_detector.v1'}}};
 const context={readonlyIngredient,state,window,document,$,
+ resetProductionFocusEvidence:()=>{},productionFocusNote:()=>{},productionFocusEligible:()=>false,
  readonlyStatus:(message,error=false)=>{
    elements.glassesReadonlyModelStatus.textContent=message;
    elements.glassesReadonlyModelStatus.dataset.state=error?'error':readonlyIngredient.status;
@@ -69,9 +70,10 @@ vm.runInNewContext(code.slice(start,end)+
  assert.equal(events.at(-1).objects[0].label,'Mozzarella');
  assert.equal(events.at(-1).meta.modelSha256,model);
  focus={...item,status:'completed'};
+ state.work.items=[focus];
  await context.runPoll(readonlyIngredient.epoch);
  assert.equal(inference,1,'completed KDS item cannot drive inference');
- focus=item;
+ focus=item;state.work.items=[item];
  state.device.publicId='preview:2:all';
  await context.runPoll(readonlyIngredient.epoch);
  assert.equal(readonlyIngredient.status,'idle','device changes revoke session');
