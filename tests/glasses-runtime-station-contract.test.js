@@ -13,7 +13,7 @@ assert.doesNotMatch(page,/<div class="sim-top-actions">[\s\S]*?<label>Device <se
 assert.match(page,/id="glassesRuntimeStation"/);
 assert.match(page,/id="glassesRuntimeSaveStation"/);
 assert.match(tabs,/move\(document\.querySelector\('\.glasses-runtime-toolbar'\),section\('runtime'\)\)/);
-assert.match(tabs,/section\('camera'\)\.appendChild\(trainingDetails\)/,'employee training remains available in Camera');
+assert.match(tabs,/section\('runtime'\)\.appendChild\(trainingDetails\)/,'employee training belongs with glasses Runtime');
 assert.match(runtime,/runtime\.station_update/);
 assert.match(runtime,/stationPublicId/);
 assert.match(runtime,/Number\(x\.locationId\)===Number\(locationId\)/);
