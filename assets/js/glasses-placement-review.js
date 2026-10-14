@@ -11,7 +11,7 @@
  const validBox=b=>b&&[b.x,b.y,b.width,b.height].every(Number.isFinite)&&
    b.x>=0&&b.y>=0&&b.width>0&&b.height>0&&b.x+b.width<=1.001&&b.y+b.height<=1.001;
  const center=b=>({x:b.x+b.width/2,y:b.y+b.height/2});
- const distance=(a,b)=>{const x=center(a),y=center(b);return Math.hypot(x.x-y.x,y.y-x.y);};
+ const distance=(a,b)=>{const x=center(a),y=center(b);return Math.hypot(x.x-y.x,x.y-y.y);};
  const inside=(b,zone)=>{const p=center(b);return p.x>=zone.x&&p.y>=zone.y&&
    p.x<=zone.x+zone.width&&p.y<=zone.y+zone.height;};
  const scopeId=c=>[c.devicePublicId,c.locationId,c.stationPublicId,
