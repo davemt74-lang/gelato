@@ -65,6 +65,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
     <div class="sim-status-row">
       <span id="connectionBadge" class="sim-badge">MOCK</span>
       <span id="stationBadge" class="sim-muted">Simulator station</span>
+      <span id="glassesProductionStatus" class="sim-muted" data-state="waiting" role="status" aria-live="polite">PRODUCTION WAITING · checking assigned runtime and KDS work</span>
       <span id="buildBadge" class="sim-muted">No active build</span>
       <span id="syncBadge" class="sim-sync-badge paused">SYNC PAUSED</span>
     </div>
@@ -256,7 +257,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
       </section>
     </div>
     <nav id="simGlassesQuickActions" class="sim-glasses-quick-actions" aria-label="On-glasses manual kitchen controls">
-      <button type="button" data-glasses-command="start_order" title="Start queued ticket items">Start Ticket</button>
+      <button type="button" data-glasses-command="start_order" title="Explicitly mark queued KDS ticket items as in progress; not required to start recognition">Mark KDS Started</button>
       <button type="button" data-glasses-command="start_item">Start Item</button>
       <button type="button" data-glasses-command="previous_item">← Item</button>
       <button type="button" data-glasses-command="next_item">Next Item →</button>
@@ -567,6 +568,7 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-v10-cook-ux-harness.js?v=20260929-v10-6"></script>
 <script src="js/voice-session-presence.js?v=20261013-presence1"></script>
 <script src="assets/js/glasses-item-assembly.js?v=20261013-265"></script>
+<script src="assets/js/glasses-production-ticket-focus.js?v=20261014-285a"></script>
 <script src="assets/js/glasses-employee-runtimes.js?v=20261013-runtime-refine277"></script>
 <script src="assets/js/glasses-assembly-recognition.js?v=20261013-266"></script>
 <script src="assets/js/glasses-hud-notifications.js?v=20261013-hud-edit2"></script>
@@ -575,9 +577,9 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-mediapipe-hands.js?v=20261014-282"></script>
 <script src="assets/js/glasses-mediapipe-hands-ui.js?v=20261014-281"></script>
 <script src="assets/js/glasses-camera-sources.js?v=20261014-284a"></script>
-<script src="assets/js/glasses-web-simulator.js?v=20261014-284camera"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20261014-285a"></script>
 <script src="assets/js/glasses-voice-device.js?v=20261013-device1"></script>
-<script src="assets/js/glasses-simulator-voice.js?v=20261014-kds-completion"></script>
+<script src="assets/js/glasses-simulator-voice.js?v=20261014-285a"></script>
 <script src="assets/js/glasses-pov-calibration.js?v=20261014-284b"></script>
 <script src="assets/js/glasses-hand-tracker-ui.js?v=20261014-282"></script>
 <script src="assets/js/glasses-multicamera.js?v=20261013-multi1"></script>

@@ -37,6 +37,9 @@ assert.ok(win.GelatoGlassesVoiceUI,'voice/UI module should install');
 const parse=win.GelatoGlassesVoiceUI.normalizePhrase;
 const commands={
   'next':'next','Next Step.':'next','next item':'next_item',
+  'next ticket':'next_ticket','next order':'next_ticket','previous ticket':'previous_ticket',
+  'go to ticket 104':'select_ticket:104','Gelato, select order #105':'select_ticket:105',
+  'start ticket':'focus_ticket','mark ticket started':'start_order',
   'previous item':'previous_item','item added':'ingredient_added','ingredient added':'ingredient_added','skip ingredient':'skip_ingredient','note added':'item_added',
   'repeat':'repeat','what is next':'repeat','status':'status',
   'stop listening':'stop_voice','help':'help'
@@ -55,4 +58,5 @@ assert.equal(elt('simVoiceToggle').disabled,true,'missing SpeechRecognition must
 assert.equal(elt('simVoiceToggle').disabled,true,'unsupported browser must not expose a broken mic');
 assert.match(elt('simVoiceFeedback').textContent,/Say start ticket/,'help is handled locally without a KDS mutation');
 assert.ok(!/\bfetch\s*\(|XMLHttpRequest|navigator\.sendBeacon/.test(source),'voice navigation may not write directly to POS/KDS');
+require('./glasses-section285a-production-ticket-focus.test.js');
 console.log('glasses-voice-navigation=ok');
