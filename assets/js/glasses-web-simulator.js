@@ -2821,12 +2821,13 @@ window.addEventListener('gelato-glasses-production-object-frame',event=>{
    }
  });
 });
-window.addEventListener('gelato-glasses-runtime-revoked',()=>{resetProductionFocusEvidence();crossCameraEvidence?.reset();});
-window.addEventListener('gelato-glasses-camera-source-change',()=>{resetProductionFocusEvidence();crossCameraEvidence?.reset();});
+window.addEventListener('gelato-glasses-runtime-revoked',()=>{resetProductionFocusEvidence();window.GelatoCrossCameraEvidenceRuntime?.reset?.();});
+window.addEventListener('gelato-glasses-camera-source-change',()=>{resetProductionFocusEvidence();window.GelatoCrossCameraEvidenceRuntime?.reset?.();});
 window.addEventListener('gelato-glasses-hand-reset',resetProductionFocusEvidence);
 // Section 285D2: class-level fusion is read-only; no ingredient or KDS writes.
 function fuseCameraEvent(detail,isStationary){
- if(!crossCameraEvidence||!detail||document.hidden||state.mode!=='live'||
+ const fusion=window.GelatoCrossCameraEvidenceRuntime;
+ if(!fusion||!detail||document.hidden||state.mode!=='live'||
     readonlyIngredient.status!=='ready'||state.device?.virtualPreview)return;
  const device=state.device,slot=Number(isStationary?detail.slot:detail.cameraSlot);
  if(!device?.publicId||!device.stationPublicId||!device.locationId||
@@ -2839,10 +2840,10 @@ function fuseCameraEvent(detail,isStationary){
     !cfg?.isEnabled?.(slot)||!video?.srcObject||
     saved.stationPublicId!==device.stationPublicId||
     Number(saved.revision||0)!==Number(detail.revision||0)){
-    crossCameraEvidence.clearSlot(slot);return;
+    fusion.clearSlot(slot);return;
   }
- }else if(slot!==1||!state.cameraStream){crossCameraEvidence.clearSlot(1);return;}
- const result=crossCameraEvidence.ingest({...detail,cameraSlot:slot},{
+ }else if(slot!==1||!state.cameraStream){fusion.clearSlot(1);return;}
+ const result=fusion.ingest({...detail,cameraSlot:slot},{
    devicePublicId:device.publicId,locationId:device.locationId,
    stationPublicId:device.stationPublicId,modelSha256:readonlyIngredient.verifiedSha256,
    items:state.work?.items||[]
@@ -2854,7 +2855,7 @@ window.addEventListener('gelato-glasses-production-object-frame',
 window.addEventListener('gelato-glasses-stationary-object-frame',
  e=>fuseCameraEvent(e.detail||{},true));
 // Stationary feeds are deliberately not subscribed to Camera 1 hand/ticket auto-focus.
-document.addEventListener('visibilitychange',()=>{if(document.hidden){resetProductionFocusEvidence();crossCameraEvidence?.reset();}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){resetProductionFocusEvidence();window.GelatoCrossCameraEvidenceRuntime?.reset?.();}});
 window.GelatoGlassesNavigation={dispatch:simulatorNavigation,
   primaryCamera:()=>$('cameraVideo'),
   handContext:()=>{
@@ -2876,7 +2877,7 @@ window.GelatoGlassesNavigation={dispatch:simulatorNavigation,
   locationId:state.device?.locationId||null,stationPublicId:state.device?.stationPublicId||null,
   cameraLive:!!state.cameraStream,cameraSourceKind:state.cameraInput?.kind||null,
   cameraPerspective:state.cameraInput?.perspective||null,
-  crossCameraEvidence:crossCameraEvidence?.summary?.(state.work?.items||[],Date.now())||null,
+  crossCameraEvidence:window.GelatoCrossCameraEvidenceRuntime?.summary?.(state.work?.items||[],Date.now())||null,
   stationaryRecognition:sharedCameraRecognition?.status?.().map(r=>({slot:r.slot,state:r.state,
     count:r.count||0,scope:r.scope||'unscoped',stationPublicId:r.stationPublicId||null}))||[],
   automaticTicketFocus:!state.manualFocusLocked&&productionFocusEligible()?'evidence_available':
