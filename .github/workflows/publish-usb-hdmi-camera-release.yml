@@ -1,4 +1,4 @@
-name: Release USB and HDMI Camera Deploy ZIP
+name: Release Camera Capture Discovery Fix
 
 on:
   workflow_run:
@@ -24,7 +24,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view gelato-usb-hdmi-inputs --repo davemt74-lang/gelato >/dev/null 2>&1; then
+          if gh release view gelato-camera-discovery-fix --repo davemt74-lang/gelato >/dev/null 2>&1; then
             echo 'exists=true' >> "$GITHUB_OUTPUT"
           else
             echo 'exists=false' >> "$GITHUB_OUTPUT"
@@ -74,10 +74,10 @@ jobs:
           EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
-          gh release create gelato-usb-hdmi-inputs \
+          gh release create gelato-camera-discovery-fix \
             payload/gelato-full-deploy.zip \
             payload/gelato-full-deploy.sha256 \
             --repo davemt74-lang/gelato \
             --target "$EXPECTED_SHA" \
-            --title 'Gelato — USB and HDMI Camera Inputs' \
-            --notes 'Full certified deployment ZIP. USB webcams remain supported, alongside HDMI video from Windows-recognized capture adapters. Extract into the app root, preserve existing configuration/uploads/storage, then run upgrade.php. Live iPhone HDMI capture field testing is still required.'
+            --title 'Gelato — USB and HDMI Camera Discovery Fix' \
+            --notes 'Full certified deployment ZIP. USB webcams remain supported alongside Windows-recognized HDMI capture devices. Adds an explicit permission scan and improved input diagnostics. Extract into the app root, preserve existing configuration/uploads/storage, then run upgrade.php. Hardware detection in Windows and Chrome is still required for HDMI.'
