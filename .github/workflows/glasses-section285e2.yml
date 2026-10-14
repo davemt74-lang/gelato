@@ -1,0 +1,31 @@
+name: Glasses Section 285E2 Hand-to-Food Evidence
+on:
+  pull_request:
+    paths:
+      - 'assets/js/glasses-hand-to-food-evidence.js'
+      - 'tests/glasses-section285e2-evidence.test.js'
+      - 'tests/glasses-section285e2-integration.test.js'
+      - 'assets/js/glasses-placement-review-ui.js'
+      - 'glasses-simulator.php'
+      - '.github/workflows/glasses-section285e2.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'assets/js/glasses-hand-to-food-evidence.js'
+      - 'tests/glasses-section285e2-evidence.test.js'
+      - 'tests/glasses-section285e2-integration.test.js'
+      - 'assets/js/glasses-placement-review-ui.js'
+      - 'glasses-simulator.php'
+      - '.github/workflows/glasses-section285e2.yml'
+jobs:
+  hand-to-food:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check assets/js/glasses-hand-to-food-evidence.js && node --check assets/js/glasses-placement-review-ui.js
+      - run: node --test tests/glasses-section285e2-integration.test.js tests/glasses-section285e2-evidence.test.js tests/glasses-section285d3-placement-review.test.js tests/glasses-section285d5-reliability.test.js
