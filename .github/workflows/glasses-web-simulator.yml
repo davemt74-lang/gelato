@@ -19,6 +19,9 @@ on:
       - 'assets/css/glasses-web-simulator.css'
       - 'assets/js/glasses-web-simulator.js'
       - 'assets/js/glasses-mediapipe-hands.js'
+      - 'assets/js/glasses-held-ingredient-evidence.js'
+      - 'tests/glasses-held-ingredient-evidence.test.js'
+      - 'docs/GLASSES-SECTION282-HELD-INGREDIENT-REVIEW.md'
       - 'assets/js/glasses-mediapipe-hands-ui.js'
       - 'tests/glasses-mediapipe-hands.test.js'
       - 'docs/GLASSES-SECTION281-LIVE-MEDIAPIPE-HANDS.md'
@@ -226,6 +229,8 @@ jobs:
           node --check assets/js/glasses-mediapipe-hands.js
           node --check assets/js/glasses-mediapipe-hands-ui.js
           node tests/glasses-mediapipe-hands.test.js
+          node --check assets/js/glasses-held-ingredient-evidence.js
+          node tests/glasses-held-ingredient-evidence.test.js
           node tests/glasses-kds-left-lens-completion.test.js
           node tests/glasses-hud-manual-voice-parity.test.js
           node tests/glasses-operator-hud-ux.test.js

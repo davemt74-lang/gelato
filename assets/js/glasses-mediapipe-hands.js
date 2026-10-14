@@ -42,7 +42,7 @@
     const onStatus=options.onStatus||(()=>{});
     const interval=Math.max(100,Math.min(333,Number(options.intervalMs)||125));
     let epoch=0,timer=null,detector=null,loaded=null,phase='ready',video=null,context=null;
-    let otherObjects=[],otherAt=0,lastFrame=-Infinity;
+    let otherObjects=[],otherAt=0,otherSeq=0,otherSha=null,lastFrame=-Infinity;
     function status(value,note=''){
       phase=value;onStatus(value,note);
     }
@@ -83,7 +83,8 @@
       const scope=typeof context==='function'?context()||{}:{};
       emit('gelato-glasses-hand-frame',{
         timestamp:now(),cameraReady:!!video,modelReady:true,hands,
-        objects:now()-otherAt<800?otherObjects:[],activeItem:scope.activeItem||null,
+        objects:now()-otherAt<900?otherObjects:[],objectTime:otherAt,objectSeq:otherSeq,
+        modelSha256:otherSha,activeItem:scope.activeItem||null,
         actions:scope.actions||{}
       });
     }
@@ -123,13 +124,14 @@
     function stop(reason='ready'){
       epoch++;
       if(timer!==null){cancelDelay(timer);timer=null;}
-      video=null;context=null;otherObjects=[];otherAt=0;lastFrame=-Infinity;
+      video=null;context=null;otherObjects=[];otherAt=0;otherSeq=0;otherSha=null;lastFrame=-Infinity;
       status(reason,reason==='ready'?'Ready when Camera 1 starts.':'');
       emit('gelato-glasses-hand-reset',{});
     }
-    function setObjects(objects){
+    function setObjects(objects,metadata={}){
       otherObjects=(Array.isArray(objects)?objects:[]).slice(0,16);
-      otherAt=now();
+      otherAt=now();otherSeq++;
+      otherSha=/^[a-f0-9]{64}$/i.test(String(metadata.modelSha256||''))?String(metadata.modelSha256):null;
     }
     function close(){stop('ready');detector?.close?.();detector=null;loaded=null;}
     return {start,stop,close,setObjects,status:()=>phase,isActive:()=>phase==='running',version:VERSION};

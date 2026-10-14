@@ -2,6 +2,8 @@
 const $=id=>document.getElementById(id);
 const core=window.GelatoHandTracker;if(!core)return;
 const tracker=core.createTracker();
+const held=window.GelatoHeldIngredientEvidence?.create?.()||null;
+let heldCandidates=[],lastModel='';
 let current={tracks:[{slot:1,status:'ready'},{slot:2,status:'ready'}],focused:[],activeItem:null};
 let lastFrame=0;
 const names=['Hand 1','Hand 2'];
@@ -16,9 +18,20 @@ function render(){
   if(status)status.textContent=live?'GREEN · '+(t.status==='identifying'?'IDENTIFYING':'TRACKING'):
    t.status==='lost'||t.status==='occluded'?'REACQUIRING':'READY';
   const detail=cell.querySelector('[data-hand-detail]');
-  if(detail)detail.textContent=t.object?
-    'In hand: '+t.object.label+' · '+Math.round(t.object.confidence*100)+'% (verify)':
-    live?'Looking for active-item ingredients':t.status==='lost'||t.status==='occluded'?'Hand temporarily out of view':'Waiting for hand detector';
+  const evidence=heldCandidates.find(r=>r.trackId===t.trackId);
+  if(detail)detail.textContent=evidence?
+    (evidence.status==='review'?'Review suggested: ':'Possible: ')+evidence.label+' · '+Math.round(evidence.confidence*100)+'% · '+evidence.frames+' distinct frames':
+    live?'Tracking hand · waiting for ingredient model evidence':t.status==='lost'||t.status==='occluded'?'Hand temporarily out of view':'Waiting for hand detector';
+ }
+ const model=$('glassesHeldModelStatus');
+ if(model)model.textContent=lastModel||'Ingredient recognition needs a verified governed ONNX model; hand tracking works independently.';
+ const suggestion=$('glassesHeldSuggestions');
+ if(suggestion){suggestion.replaceChildren();
+   for(const r of heldCandidates){
+     const line=node('li');line.appendChild(node('strong','Hand '+r.slot+' · '+r.label));
+     line.appendChild(node('span',r.status==='review'?'REVIEW · '+r.frames+' detections':'POSSIBLE · '+r.frames+' detections'));
+     suggestion.appendChild(line);
+   }
  }
  const title=$('glassesHandFocus');
  if(title)title.textContent=current.focused.length?
@@ -33,12 +46,13 @@ function render(){
   const box=node('div');box.className='glasses-hand-tracked-box';
   for(const [name,value] of Object.entries({left:map.left,top:map.top,width:map.width,height:map.height}))
     box.style[name]=(value*100)+'%';
-  box.appendChild(node('span',names[t.slot-1]+' · '+(t.object?'IDENTIFYING '+t.object.label:'TRACKING')));
+  const evidence=heldCandidates.find(r=>r.trackId===t.trackId);
+  box.appendChild(node('span',names[t.slot-1]+' · '+(evidence?(evidence.status==='review'?'REVIEW ':'POSSIBLE ')+evidence.label:'TRACKING')));
   layer.appendChild(box);
  }
 }
 function reset(){
- tracker.reset();lastFrame=0;
+ tracker.reset();held?.reset();heldCandidates=[];lastModel='';lastFrame=0;
  current={tracks:[{slot:1,status:'ready'},{slot:2,status:'ready'}],focused:[],activeItem:null};
  render();
 }
@@ -46,7 +60,13 @@ window.addEventListener('gelato-glasses-hand-frame',event=>{
  const d=event.detail||{};
  if(!d.cameraReady||!d.modelReady){reset();return;}
  lastFrame=Number(d.timestamp)||Date.now();
- current=tracker.step(d.hands||[],lastFrame,d.activeItem,d.actions||{},d.objects||[]);
+ current=tracker.step(d.hands||[],lastFrame,d.activeItem,d.actions||{},[]);
+ heldCandidates=held?.update({item:d.activeItem,actions:d.actions||{},tracks:current.tracks,
+   objects:d.objects||[],objectSeq:d.objectSeq,objectTime:d.objectTime,
+   modelSha256:d.modelSha256,now:lastFrame})||[];
+ lastModel=/^[a-f0-9]{64}$/i.test(String(d.modelSha256||''))?
+   'Verified ingredient model available · suggestions require three distinct detections and operator review.':
+   'Hand tracking active · governed ingredient model not loaded; capture and review examples to train recognition.';
  render();
 });
 window.addEventListener('gelato-glasses-hand-reset',reset);
@@ -56,5 +76,22 @@ window.setInterval?.(()=>{
  current=tracker.step([],Date.now(),null,{},[]);render();
 },250);
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',render,{once:true});else render();
-window.GelatoHandTrackingUI={reset,state:()=>current};
+window.GelatoHandTrackingUI={reset,state:()=>current,evidence:()=>heldCandidates.slice()};
+const capture=$('glassesCaptureHeldObject'),review=$('glassesReviewHeldObject');
+if(capture)capture.addEventListener('click',async()=>{
+  const note=$('glassesHeldCaptureStatus');
+  if(!current.activeItem){if(note)note.textContent='Select a live KDS item first.';return;}
+  if(!window.GelatoCameraConfiguration?.isEnabled?.(1)){
+    if(note)note.textContent='Enable Camera 1 in the Runtime camera settings before capturing.';return;
+  }
+  if(note)note.textContent='Capturing a local frame for human labeling…';
+  try{
+    const photo=await window.GelatoCameraConfiguration.capture(1);
+    if(note)note.textContent=photo?'Saved locally for review. Use Open Training to label the ingredient; uploading requires explicit consent.':'No photo captured; check the camera status.';
+  }catch(e){if(note)note.textContent='Capture failed: '+String(e?.message||e);}
+});
+if(review)review.addEventListener('click',()=>{
+  window.GelatoGlassesTabs?.select?.('camera');
+  window.GelatoCameraWorkspace?.select?.('training');
+});
 })();

@@ -1176,7 +1176,9 @@ async function deliverVisionInference(frame,raw,started){
     if(window.GelatoMediaPipeHandsRuntime?.isActive()){
       // Existing ingredient ONNX recognition may offer held-object candidates,
       // but it cannot overwrite real MediaPipe hand locations or identities.
-      window.GelatoMediaPipeHandsRuntime.setObjects(detections.filter(d=>!core.isHand(d)));
+      window.GelatoMediaPipeHandsRuntime.setObjects(detections.filter(d=>!core.isHand(d)),{
+        modelSha256:state.browserModel.verifiedSha256||null
+      });
     }else if(!window.GelatoMediaPipeHandsRuntime){
       // Backward-compatible ONNX path if the optional detector is not loaded.
       const item=selectedItem();
