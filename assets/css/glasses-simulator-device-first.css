@@ -1077,3 +1077,16 @@ html,body{max-width:100%;overflow-x:hidden}
 .glasses-readonly-inference-controls button{min-height:35px;border:1px solid #5b996b;border-radius:7px;background:#225536;color:#f1fff5;padding:7px 10px;cursor:pointer}
 .glasses-readonly-inference-controls button:disabled{opacity:.5;cursor:not-allowed}
 #glassesReadonlyModelStatus{font-size:11px;color:#bfe1ca;line-height:1.4}
+
+
+/* Section 284: local, non-interactive first-person camera alignment guide. */
+.scene-placeholder .glasses-pov-aim-guide{position:absolute;z-index:3;top:50%;left:50%;width:64px;height:64px;transform:translate(-50%,-50%);border:1px solid rgba(145,255,182,.7);border-radius:50%;box-shadow:0 0 0 2px rgba(4,22,11,.5);pointer-events:none}
+.scene-placeholder .glasses-pov-aim-guide[hidden]{display:none!important}
+.scene-placeholder .glasses-pov-aim-guide:before,.scene-placeholder .glasses-pov-aim-guide:after{content:"";position:absolute;background:rgba(145,255,182,.75)}
+.scene-placeholder .glasses-pov-aim-guide:before{width:1px;height:80px;left:50%;top:-8px}
+.scene-placeholder .glasses-pov-aim-guide:after{height:1px;width:80px;top:50%;left:-8px}
+.glasses-pov-calibration{display:grid;gap:8px;padding:10px;border:1px solid #294936;border-radius:10px;background:#101b14}
+.glasses-pov-calibration .inline-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.glasses-pov-calibration .inline-actions label{display:flex;align-items:center;gap:6px;font-size:11px}
+#glassesPovCalibrationStatus[data-state="review"],#glassesPovCalibrationStatus[data-state="warning"]{color:#ffd37b}
+#glassesPovCalibrationStatus[data-state="ready"]{color:#8ff0a9}
