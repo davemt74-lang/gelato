@@ -1030,3 +1030,20 @@ html,body{max-width:100%;overflow-x:hidden}
 #glassesStage .hud-ticket-completion button:focus-visible{outline:2px solid #ccffdb;outline-offset:2px}
 #glassesStage .hud-ticket-completion small{font:650 8px/1.4 system-ui;
  color:#c4d8c9;overflow-wrap:anywhere}
+
+/* Section 280: per-hand state is advisory. Primary Runtime owns camera 1. */
+.glasses-hand-tracking{display:grid;gap:9px;margin:10px 0;border:1px solid #426448;border-radius:9px;padding:11px;background:#10231a;color:#e8f5eb}
+.glasses-hand-tracking header{display:flex;gap:5px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.glasses-hand-tracking header strong{font-size:12px}.glasses-hand-tracking header small{font-size:10px;color:#bbd0c2}
+.glasses-hand-states{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.glasses-hand-states>div{display:grid;gap:5px;border-radius:8px;padding:11px;background:#1b2c22;border:1px solid #4a6550}
+.glasses-hand-states>div>strong{font-size:12px}.glasses-hand-states>div>[data-hand-status]{font-size:12px;font-weight:900;color:#c2dbc9}
+.glasses-hand-states>div>small{font-size:10px;color:#acc8b5;overflow-wrap:anywhere}
+.glasses-hand-states>div[data-state=active]{border-color:#63e58b;background:#124729}
+.glasses-hand-states>div[data-state=active]>[data-hand-status]{color:#adffc3}
+.glasses-hand-tracking p{margin:0;color:#c9dfcc;font-size:11px;line-height:1.5}
+.glasses-hand-tracking .glasses-hand-tracking-help{color:#a3b9a9}
+#glassesStage .glasses-hand-boxes{position:absolute;inset:0;z-index:14;pointer-events:none;overflow:hidden}
+#glassesStage .glasses-hand-tracked-box{position:absolute;outline:2px solid #5bff95;background:rgba(43,211,103,.10);border-radius:7px;pointer-events:none}
+#glassesStage .glasses-hand-tracked-box span{position:absolute;left:0;top:0;transform:translateY(-100%);font:bold 10px/1.3 system-ui;background:#144a2c;color:#d3ffe0;padding:3px 5px;border-radius:4px}
+@media(max-width:380px){.glasses-hand-states{grid-template-columns:minmax(0,1fr)}}

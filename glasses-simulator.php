@@ -12,7 +12,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <title>Web Glasses Simulator · Gelato</title>
 <link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20261013-live1">
 <link rel="stylesheet" href="assets/css/glasses-simulator-hud-ux.css?v=20261013-voice1">
-<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261014-kds-completion">
+<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261014-hand280">
 <link rel="stylesheet" href="assets/css/glasses-runtime-workspace.css?v=277refine">
 </head>
 <body>
@@ -250,6 +250,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
         <output id="simNavFeedback" class="sim-nav-feedback" role="status" aria-live="polite" hidden></output>
         <div id="detectionLayer" class="detection-layer"></div>
         <div id="visionDetectionLayer" class="vision-detection-layer"></div>
+        <div id="glassesHandBoxes" class="glasses-hand-boxes" aria-hidden="true"></div>
         <div id="datasetAnnotationLayer" class="dataset-annotation-layer"></div>
       </section>
     </div>
@@ -348,6 +349,15 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
         <button id="clearCameraTarget" type="button" disabled>Clear Target</button>
       </div>
       <div class="camera-meta" id="cameraMeta"><span>No active camera stream.</span></div>
+      <section id="glassesHandTracking" class="glasses-hand-tracking" aria-label="Hands and held ingredient tracking">
+        <header><strong>Live hands · object-in-hand training</strong><small>Camera 1 / selected glasses runtime</small></header>
+        <div class="glasses-hand-states">
+          <div id="glassesHandState1" data-state="ready"><strong>Hand 1</strong><span data-hand-status>READY</span><small data-hand-detail>Waiting for hand detector</small></div>
+          <div id="glassesHandState2" data-state="ready"><strong>Hand 2</strong><span data-hand-status>READY</span><small data-hand-detail>Waiting for hand detector</small></div>
+        </div>
+        <p id="glassesHandFocus" role="status" aria-live="polite">Select an active KDS item to focus recognition.</p>
+        <p class="glasses-hand-tracking-help">Green means an actual hand detection is being tracked; object labels remain suggestions for review. Hands may briefly disappear and reacquire their session track. A compatible ONNX hand detector must be loaded; no simulated detections or automatic KDS changes.</p>
+      </section>
       <section class="sim-multicamera" id="simMultiCameraPanel" aria-labelledby="simMultiCameraTitle">
         <header class="console-heading">
           <div><small>MULTI-CAMERA SOURCES</small><strong id="simMultiCameraTitle">System Cameras 2–5 · Independent training feeds</strong></div>
@@ -523,9 +533,11 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-employee-runtimes.js?v=20261013-runtime-refine277"></script>
 <script src="assets/js/glasses-assembly-recognition.js?v=20261013-266"></script>
 <script src="assets/js/glasses-hud-notifications.js?v=20261013-hud-edit2"></script>
-<script src="assets/js/glasses-web-simulator.js?v=20261014-kds-completion"></script>
+<script src="assets/js/glasses-hand-tracker.js?v=20261014-280"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20261014-hand280"></script>
 <script src="assets/js/glasses-voice-device.js?v=20261013-device1"></script>
 <script src="assets/js/glasses-simulator-voice.js?v=20261014-kds-completion"></script>
+<script src="assets/js/glasses-hand-tracker-ui.js?v=20261014-280"></script>
 <script src="assets/js/glasses-multicamera.js?v=20261013-multi1"></script>
 <script src="assets/js/glasses-camera-config.js?v=20261014-cam-runtime-split"></script>
 <script src="assets/js/glasses-camera-runtime.js?v=20261013-261"></script>
