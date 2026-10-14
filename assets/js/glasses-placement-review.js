@@ -54,7 +54,8 @@
    const eligible=new Map();
    for(const ingredient of context.item.menu.ingredients){
     const label=normalize(ingredient?.canonicalName||ingredient?.name);
-    if(!label||context.actions?.[String(context.item.menu.ingredients.indexOf(ingredient))+':'+String(ingredient?.canonicalName||ingredient?.name||'')]==='added')continue;
+    const action=context.actions?.[String(context.item.menu.ingredients.indexOf(ingredient))+':'+String(ingredient?.canonicalName||ingredient?.name||'')];
+    if(!label||action==='added'||action==='skipped')continue;
     eligible.set(label,(eligible.get(label)||0)+1);
    }
    const hands=(Array.isArray(frame.hands)?frame.hands:[]).filter(h=>
