@@ -14,6 +14,7 @@
   }
   function stop(slot,{reason='OFF',quiet=false}={}){
     const s=slots.get(slot);if(!s)return;
+    window.GelatoSharedCameraRecognitionRuntime?.clearSlot?.(slot);
     ++s.epoch;
     const stream=s.stream;s.stream=null;s.frozen=false;
     if(stream)for(const track of stream.getTracks())try{track.stop();}catch{}

@@ -23,6 +23,7 @@ const state={cameraStream:{},device:{publicId:'preview:1:all'},mode:'live',work:
 const readonlyIngredient={status:'idle',session:null,config:null,package:null,verifiedSha256:null,
  epoch:0,timer:null,busy:false,frameSeq:0,devicePublicId:''};
 const window={
+ addEventListener(){},
  GelatoMediaPipeHandsRuntime:{active:true,isActive:()=>true,setObjects:(objects,meta)=>events.push({objects,meta})},
  GelatoHeldIngredientEvidence:{choices:()=>[{canonical:'mozzarella'}],normalize:v=>String(v).toLowerCase()}
 };

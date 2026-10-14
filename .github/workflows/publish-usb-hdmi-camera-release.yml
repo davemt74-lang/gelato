@@ -1,4 +1,4 @@
-name: Release Gelato Section 285B
+name: Release Gelato Section 285C
 
 on:
   workflow_run:
@@ -19,12 +19,12 @@ jobs:
           && github.event.workflow_run.head_repository.full_name == 'davemt74-lang/gelato' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Skip once Section 285B release exists
+      - name: Skip once Section 285C release exists
         id: already
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view gelato-section-285b --repo davemt74-lang/gelato >/dev/null 2>&1; then
+          if gh release view gelato-section-285c --repo davemt74-lang/gelato >/dev/null 2>&1; then
             echo 'exists=true' >> "$GITHUB_OUTPUT"
           else
             echo 'exists=false' >> "$GITHUB_OUTPUT"
@@ -69,6 +69,9 @@ jobs:
           unzip -Z1 gelato-full-deploy.zip | grep -Fx 'tests/glasses-section285a-production-ticket-focus.test.js'
           unzip -Z1 gelato-full-deploy.zip | grep -Fx 'assets/js/glasses-production-auto-focus.js'
           unzip -Z1 gelato-full-deploy.zip | grep -Fx 'tests/glasses-section285b-production-auto-focus.test.js'
+          unzip -Z1 gelato-full-deploy.zip | grep -Fx 'assets/js/glasses-shared-camera-recognition.js'
+          unzip -Z1 gelato-full-deploy.zip | grep -Fx 'tests/glasses-section285c-shared-model.test.js'
+          unzip -Z1 gelato-full-deploy.zip | grep -Fx 'tests/glasses-section285c-live-inference.test.js'
           if unzip -Z1 gelato-full-deploy.zip | grep -Eq '^(config\.php|\.env|uploads/|storage/)'; then
             echo 'Private live config/state unexpectedly included.' >&2
             exit 1
@@ -81,10 +84,10 @@ jobs:
           EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
-          gh release create gelato-section-285b \
+          gh release create gelato-section-285c \
             payload/gelato-full-deploy.zip \
             payload/gelato-full-deploy.sha256 \
             --repo davemt74-lang/gelato \
             --target "$EXPECTED_SHA" \
-            --title 'Gelato — Section 285B Camera-Evidence Ticket Focus' \
-            --notes 'Section 285B certified full deployment: verified ONNX ingredient recognition plus live MediaPipe hand evidence can focus one uniquely matched station KDS ticket, with repeated-frame confidence, manual override, work/build isolation, disconnect fail-closed guards, and zero camera-driven POS or KDS mutations. No physical AIR3 SDK or camera-invariant detector is claimed. Preserve configuration, uploads, and storage during upgrade.'
+            --title 'Gelato — Section 285C Shared Stationary-Camera Recognition' \
+            --notes 'Section 285C shared camera recognition: one explicitly approved ONNX model session processes Camera 1 and active stationary Cameras 2–5; serialized inference, source-scoped observations, station assignment checks, fail-closed disconnect and model recovery. Stationary evidence is read-only, does not verify ingredient placement or mutate KDS. Genuine AIR3 SDK and real-kitchen accuracy qualification remain pending.'

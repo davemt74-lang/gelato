@@ -275,6 +275,7 @@
   }
   window.GelatoCameraConfiguration={MAX,isEnabled,stopAll,load,save,capture,
     isStreaming:slot=>!!cameraSource(slot)&&!!(cameraSource(slot)?.videoWidth),
+    getSaved:slot=>state.ready&&state.slots.has(slot)?copy(state.slots.get(slot).saved):null,
     getPhotos:slot=>state.photos.filter(p=>slot===undefined||p.slot===slot).slice(),
     get locationId(){return state.locationId;},
     status:()=>({locationId:state.locationId,ready:state.ready,slots:Array.from(state.slots.values()).map(x=>({slot:x.saved.slot,enabled:x.saved.enabled,role:x.saved.role}))})};
