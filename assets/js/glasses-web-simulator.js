@@ -1288,11 +1288,12 @@ async function deliverVisionInference(frame,raw,started){
   if(core){
     const detections=realModel?(raw||[]):[];
     if(window.GelatoMediaPipeHandsRuntime?.isActive()){
-      // Existing ingredient ONNX recognition may offer held-object candidates,
-      // but it cannot overwrite real MediaPipe hand locations or identities.
-      window.GelatoMediaPipeHandsRuntime.setObjects(detections.filter(d=>!core.isHand(d)),{
-        modelSha256:state.browserModel.verifiedSha256||null
-      });
+      // Never mix the governed build stream with independently approved
+      // read-only KDS inference evidence. One producer owns held-object frames.
+      if(readonlyIngredient.status!=='ready')
+        window.GelatoMediaPipeHandsRuntime.setObjects(detections.filter(d=>!core.isHand(d)),{
+          modelSha256:state.browserModel.verifiedSha256||null
+        });
     }else if(!window.GelatoMediaPipeHandsRuntime){
       // Backward-compatible ONNX path if the optional detector is not loaded.
       const item=selectedItem();
