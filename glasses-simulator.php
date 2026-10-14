@@ -643,7 +643,8 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-placement-reliability-ui.js?v=20261014-285d5"></script>
 <script src="assets/js/glasses-multicamera.js?v=20261013-multi1"></script>
 <script src="assets/js/glasses-camera-config.js?v=20261014-cam-runtime-split"></script>
-<script src="assets/js/glasses-camera-runtime.js?v=20261013-261"></script>
+<script src="assets/js/glasses-camera-calibration-gate.js?v=20261014-285e1"></script>
+<script src="assets/js/glasses-camera-runtime.js?v=20261014-285e1"></script>
 <script src="assets/js/glasses-simulator-tabs.js?v=20261014-cam-runtime-split"></script>
 <script src="assets/js/glasses-camera-similarity.js?v=20261013-ref258"></script>
 <script src="assets/js/glasses-camera-workspace.js?v=20261014-cam-runtime-split"></script>
