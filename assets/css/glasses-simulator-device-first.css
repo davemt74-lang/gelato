@@ -1045,6 +1045,8 @@ html,body{max-width:100%;overflow-x:hidden}
 .glasses-hand-tracking .glasses-hand-tracking-help{color:#a3b9a9}
 #glassesStage .glasses-hand-boxes{position:absolute;inset:0;z-index:14;pointer-events:none;overflow:hidden}
 #glassesStage .glasses-hand-tracked-box{position:absolute;outline:2px solid #5bff95;background:rgba(43,211,103,.10);border-radius:7px;pointer-events:none}
+#glassesStage .glasses-hand-tracked-box.is-reacquiring{outline:2px dashed #a4c7a7;background:rgba(43,211,103,.035);opacity:.65}
+#glassesStage .glasses-hand-tracked-box.is-reacquiring span{background:#304937;color:#deeedf}
 #glassesStage .glasses-hand-tracked-box span{position:absolute;left:0;top:0;transform:translateY(-100%);font:bold 10px/1.3 system-ui;background:#144a2c;color:#d3ffe0;padding:3px 5px;border-radius:4px}
 @media(max-width:380px){.glasses-hand-states{grid-template-columns:minmax(0,1fr)}}
 

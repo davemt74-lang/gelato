@@ -2,6 +2,8 @@
 const $=id=>document.getElementById(id);
 const core=window.GelatoHandTracker;if(!core)return;
 const tracker=core.createTracker();
+const visual=window.GelatoHandBoxStabilizer?.create?.()||null;
+let visualBoxes=[];
 const held=window.GelatoHeldIngredientEvidence?.create?.()||null;
 let heldCandidates=[],lastModel='';
 let current={tracks:[{slot:1,status:'ready'},{slot:2,status:'ready'}],focused:[],activeItem:null};
@@ -39,20 +41,20 @@ function render(){
    current.activeItem?'All configured ingredients accounted for':'Select an active KDS item to focus recognition';
  const layer=$('glassesHandBoxes');if(!layer)return;
  layer.replaceChildren();
- for(const t of current.tracks){
-  if(!t.bbox||!['tracking','identifying'].includes(t.status))continue;
+ for(const t of visualBoxes){
+  if(!t.bbox)continue;
   const map=window.GelatoGlassesNavigation?.cameraBoxToStage?.(t.bbox);
   if(!map)continue;
-  const box=node('div');box.className='glasses-hand-tracked-box';
+  const box=node('div');box.className='glasses-hand-tracked-box'+(t.held?' is-reacquiring':'');
   for(const [name,value] of Object.entries({left:map.left,top:map.top,width:map.width,height:map.height}))
     box.style[name]=(value*100)+'%';
-  const evidence=heldCandidates.find(r=>r.trackId===t.trackId);
-  box.appendChild(node('span',names[t.slot-1]+' · '+(evidence?(evidence.status==='review'?'REVIEW ':'POSSIBLE ')+evidence.label:'TRACKING')));
+  const evidence=t.held?null:heldCandidates.find(r=>r.trackId===t.trackId);
+  box.appendChild(node('span',names[t.slot-1]+' · '+(t.held?'REACQUIRING':evidence?(evidence.status==='review'?'REVIEW ':'POSSIBLE ')+evidence.label:'TRACKING')));
   layer.appendChild(box);
  }
 }
 function reset(){
- tracker.reset();held?.reset();heldCandidates=[];lastModel='';lastFrame=0;
+ tracker.reset();visual?.reset?.();visualBoxes=[];held?.reset();heldCandidates=[];lastModel='';lastFrame=0;
  current={tracks:[{slot:1,status:'ready'},{slot:2,status:'ready'}],focused:[],activeItem:null};
  render();
 }
@@ -61,6 +63,7 @@ window.addEventListener('gelato-glasses-hand-frame',event=>{
  if(!d.cameraReady||!d.modelReady){reset();return;}
  lastFrame=Number(d.timestamp)||Date.now();
  current=tracker.step(d.hands||[],lastFrame,d.activeItem,d.actions||{},[]);
+ visualBoxes=visual?visual.step(current.tracks,lastFrame):current.tracks.filter(t=>t.bbox&&['tracking','identifying'].includes(t.status));
  heldCandidates=held?.update({item:d.activeItem,actions:d.actions||{},tracks:current.tracks,
    objects:d.objects||[],objectSeq:d.objectSeq,objectTime:d.objectTime,
    modelSha256:d.modelSha256,now:lastFrame})||[];
@@ -73,7 +76,8 @@ window.addEventListener('gelato-glasses-hand-reset',reset);
 window.addEventListener('pagehide',reset);
 window.setInterval?.(()=>{
  if(!lastFrame||Date.now()-lastFrame<350)return;
- current=tracker.step([],Date.now(),null,{},[]);render();
+ const at=Date.now();current=tracker.step([],at,null,{},[]);
+ visualBoxes=visual?visual.step(current.tracks,at):[];render();
 },250);
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',render,{once:true});else render();
 window.GelatoHandTrackingUI={reset,state:()=>current,evidence:()=>heldCandidates.slice()};

@@ -64,6 +64,8 @@ on:
       - 'tests/glasses-held-ingredient-evidence.test.js'
       - 'docs/GLASSES-SECTION282-HELD-INGREDIENT-REVIEW.md'
       - 'assets/js/glasses-mediapipe-hands-ui.js'
+      - 'assets/js/glasses-hand-box-stabilizer.js'
+      - 'tests/glasses-section285d1-stabilization.test.js'
       - 'tests/glasses-mediapipe-hands.test.js'
       - 'docs/GLASSES-SECTION281-LIVE-MEDIAPIPE-HANDS.md'
       - 'assets/js/glasses-hud-notifications.js'
@@ -484,6 +486,9 @@ jobs:
           node --check assets/js/glasses-mediapipe-hands.js
           node --check assets/js/glasses-mediapipe-hands-ui.js
           node tests/glasses-mediapipe-hands.test.js
+          node --check assets/js/glasses-hand-tracker-ui.js
+          node --check assets/js/glasses-hand-box-stabilizer.js
+          node tests/glasses-section285d1-stabilization.test.js
           node --check assets/js/glasses-held-ingredient-evidence.js
           node tests/glasses-held-ingredient-evidence.test.js
           node tests/glasses-readonly-ingredient-inference.test.js
