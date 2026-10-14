@@ -34,7 +34,10 @@
     phrase=phrase.replace(/^(?:okay |ok |hey |gelato |glasses |please )+/g,'').trim();
     if(/^(?:stop (?:listening|voice)|turn (?:off|voice off)|microphone off)$/.test(phrase))return 'stop_voice';
     if(/^(?:help|commands|voice commands|what can i say)$/.test(phrase))return 'help';
-    if(/^(?:start|begin|work on|prepare) (?:the )?(?:ticket|order)$/.test(phrase))return 'start_order';
+    if(/^(?:start|begin|work on|prepare) (?:the )?(?:ticket|order)$/.test(phrase))return 'focus_ticket';
+    if(/^(?:mark|set) (?:the )?(?:ticket|order) (?:as )?(?:started|in progress)$/.test(phrase))return 'start_order';
+    const namedTicket=phrase.match(/^(?:(?:go to|switch to|select|open|show|focus|work on) (?:the )?)?(?:ticket|order)\s*#?\s*([0-9]{1,24})$/);
+    if(namedTicket)return 'select_ticket:'+namedTicket[1];
     if(/^(?:start|begin) (?:the )?(?:current )?item$/.test(phrase))return 'start_item';
     if(/^(?:mark )?(?:the )?(?:current )?item (?:ready|done|finished)$/.test(phrase))return 'ready_item';
     if(/^(?:mark )?(?:the )?(?:ticket|order) ready$/.test(phrase))return 'ready_order';
@@ -44,8 +47,10 @@
     if(/^(?:hold|pause) (?:the )?(?:ticket|order)$/.test(phrase))return 'hold_order';
     if(/^(?:fire|release) (?:the )?(?:ticket|order)$/.test(phrase))return 'fire_order';
     if(/^(?:note added|note ingredient added|i added an item)$/.test(phrase))return 'item_added';
-    if(/^(?:next (?:item|order|ticket)|skip (?:item|order|ticket)|following (?:item|order))$/.test(phrase))return 'next_item';
-    if(/^(?:previous (?:item|order|ticket)|last (?:item|order))$/.test(phrase))return 'previous_item';
+    if(/^(?:next|following) (?:ticket|order)$/.test(phrase))return 'next_ticket';
+    if(/^(?:previous|last) (?:ticket|order)$/.test(phrase))return 'previous_ticket';
+    if(/^(?:next|following|skip) item$/.test(phrase))return 'next_item';
+    if(/^(?:previous|last) item$/.test(phrase))return 'previous_item';
     if(/^(?:item added|ingredient added|added item|i added it|added|mark ingredient done)$/.test(phrase))return 'ingredient_added';
     if(/^(?:skip ingredient|skip topping|skip this ingredient|ingredient skipped)$/.test(phrase))return 'skip_ingredient';
     if(/^(?:next|next step|continue|move on|go forward)$/.test(phrase))return 'next';
@@ -57,7 +62,7 @@
   function dispatch(command,{spoken=false}={}){
     if(command==='stop_voice'){stopVoice();flash('Voice listening stopped.');return;}
     if(command==='help'){
-      const message='Say start ticket, start item, ingredient added, skip ingredient, next item, item ready, ticket ready, finish ticket twice to confirm, hold ticket, fire ticket, repeat, or status.';
+      const message='Say start ticket to hear the current focus, next item, next ticket, previous ticket, go to ticket 104, mark ticket started for an explicit KDS transition, ingredient added, item ready, ticket ready, finish ticket twice to confirm, repeat, or status.';
       feedback(message);flash(message);if(spoken)announce(message);return;
     }
     const provider=nav();
@@ -80,7 +85,7 @@
     feedback('Voice command received.','ready');
     const action=normalizePhrase(transcript);
     if(!action){
-      const message='Command not recognized. Try next, next item, item added, repeat, or status.';
+      const message='Command not recognized. Try next item, next ticket, go to ticket number, repeat, or status.';
       feedback(message,'error');flash(message);announce(message);return;
     }
     dispatch(action,{spoken:true});
