@@ -439,6 +439,22 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
                 <button type="button" id="glassesReliabilityExport">Export Aggregated Report</button>
                </div>
                <p id="glassesReliabilityLabelStatus" role="status" aria-live="polite">Labels are operator observations, not independently verified ground truth. Nothing uploads automatically.</p>
+               <section class="glasses-field-readiness" aria-label="Independent field evidence review">
+                <strong>Independent Field Trial Review · 285E5</strong>
+                <p class="sim-muted">An independent reviewer must adjudicate each trial against actual observed placement and camera behavior. Do not submit operator-only labels here. This local, temporary evaluation is never production certification.</p>
+                <div class="inline-actions">
+                 <label>Trial ID <input id="glassesFieldTrialId" type="text" maxlength="100" placeholder="Unique anonymized trial ID"></label>
+                 <label>Session <input id="glassesFieldSession" type="text" maxlength="100" placeholder="Anonymous session ID"></label>
+                 <label>Camera <select id="glassesFieldCamera"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></label>
+                 <label>Reviewed outcome <select id="glassesFieldOutcome"><option value="tp">True positive</option><option value="fp">False positive</option><option value="fn">Missed placement</option><option value="tn">True negative</option></select></label>
+                 <label>Latency (ms) <input id="glassesFieldLatency" type="number" min="0" max="30000" step="1" placeholder="Measured"></label>
+                 <label><input id="glassesFieldIndependent" type="checkbox"> Independently adjudicated against real observed ground truth</label>
+                 <button id="glassesFieldAdd" type="button">Add Reviewed Trial</button>
+                 <button id="glassesFieldReset" type="button">Clear Local Trials</button>
+                 <button id="glassesFieldExport" type="button">Export Aggregate Evaluation</button>
+                </div>
+                <p id="glassesFieldStatus" role="status" aria-live="polite">No independently reviewed field trials entered. Field certification required.</p>
+               </section>
               </section>
               <p class="sim-muted">Every approval is recorded to the authorized KDS audit log. Ingredient checklist updates are operator-reported only; they never verify physical placement or mark items Ready.</p>
             </section>
@@ -624,6 +640,8 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-placement-review.js?v=20261014-285d3"></script>
 <script src="assets/js/glasses-ingredient-progression.js?v=20261014-285d4"></script>
 <script src="assets/js/glasses-placement-reliability.js?v=20261014-285d5"></script>
+<script src="assets/js/glasses-field-readiness.js?v=20261014-285e5"></script>
+<script src="assets/js/glasses-field-readiness-ui.js?v=20261014-285e5"></script>
 <script src="assets/js/glasses-employee-runtimes.js?v=20261013-runtime-refine277"></script>
 <script src="assets/js/glasses-assembly-recognition.js?v=20261013-266"></script>
 <script src="assets/js/glasses-hud-notifications.js?v=20261013-hud-edit2"></script>
