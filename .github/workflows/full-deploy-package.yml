@@ -52,6 +52,10 @@ on:
       - 'api/glasses-simulator.php'
       - 'includes/glasses-simulator.php'
       - 'assets/js/glasses-web-simulator.js'
+      - 'assets/js/glasses-mediapipe-hands.js'
+      - 'assets/js/glasses-mediapipe-hands-ui.js'
+      - 'tests/glasses-mediapipe-hands.test.js'
+      - 'docs/GLASSES-SECTION281-LIVE-MEDIAPIPE-HANDS.md'
       - 'assets/js/glasses-hud-notifications.js'
       - 'assets/js/glasses-employee-runtimes.js'
       - 'assets/js/glasses-assembly-learning.js'
@@ -181,6 +185,26 @@ jobs:
             --exclude '.env' \
             --exclude 'uploads/' \
             --exclude 'storage/'
+
+          # Bundle the pinned pretrained hand detector in the deploy ZIP.
+          vendor_dir="$deploy_root/assets/vendor/mediapipe"
+          mkdir -p "$vendor_dir" "${RUNNER_TEMP}/gelato-mediapipe-src"
+          archive="$(npm pack @mediapipe/tasks-vision@0.10.32 --silent --pack-destination "${RUNNER_TEMP}")"
+          tar -xzf "${RUNNER_TEMP}/${archive}" -C "${RUNNER_TEMP}/gelato-mediapipe-src"
+          test -s "${RUNNER_TEMP}/gelato-mediapipe-src/package/vision_bundle.mjs"
+          cp "${RUNNER_TEMP}/gelato-mediapipe-src/package/vision_bundle.mjs" "$vendor_dir/vision_bundle.mjs"
+          cp -R "${RUNNER_TEMP}/gelato-mediapipe-src/package/wasm" "$vendor_dir/wasm"
+          curl --fail --location --retry 3 --max-time 90 --silent --show-error \
+            'https://raw.githubusercontent.com/google-ai-edge/mediapipe/master/LICENSE' \
+            --output "$vendor_dir/LICENSE"
+          curl --fail --location --retry 3 --max-time 120 --silent --show-error \
+            'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task' \
+            --output "$vendor_dir/hand_landmarker.task"
+          test "$(stat -c %s "$vendor_dir/hand_landmarker.task")" -gt 1000000
+          test -s "$vendor_dir/wasm/vision_wasm_internal.wasm"
+          node --check "$vendor_dir/vision_bundle.mjs"
+          sha256sum "$vendor_dir/vision_bundle.mjs" "$vendor_dir/hand_landmarker.task" \
+            > "$vendor_dir/ASSET-SHA256SUMS.txt"
 
           printf '%s\n' "${GITHUB_SHA}" > "$deploy_root/DEPLOY_SHA.txt"
           cat > "$deploy_root/DEPLOY_INSTRUCTIONS.txt" <<'EOF'
@@ -447,6 +471,9 @@ jobs:
           php -l tests/glasses-ingredient-training-contract.php
           php tests/glasses-ingredient-training-contract.php
           php tests/glasses-live-kds-contract.php
+          node --check assets/js/glasses-mediapipe-hands.js
+          node --check assets/js/glasses-mediapipe-hands-ui.js
+          node tests/glasses-mediapipe-hands.test.js
           node --check assets/js/glasses-web-simulator.js
           node --check assets/js/glasses-hud-notifications.js
           node --check assets/js/glasses-employee-runtimes.js
