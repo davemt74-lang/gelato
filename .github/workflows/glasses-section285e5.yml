@@ -1,0 +1,26 @@
+name: Glasses Section 285E5 Field Readiness
+on:
+  pull_request:
+    paths:
+      - 'assets/js/glasses-field-readiness.js'
+      - 'tests/glasses-section285e5-field-readiness.test.js'
+      - '.github/workflows/glasses-section285e5.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'assets/js/glasses-field-readiness.js'
+      - 'tests/glasses-section285e5-field-readiness.test.js'
+      - '.github/workflows/glasses-section285e5.yml'
+jobs:
+  field-readiness:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check assets/js/glasses-field-readiness.js
+      - run: node --test tests/glasses-section285e5-field-readiness.test.js
+      - run: node tests/glasses-section285d5-reliability.test.js
