@@ -47,6 +47,6 @@ vm.runInNewContext(js.slice(begin,end)+'\nthis.fit=sizeHudEditorToCanvas;',scope
 scope.fit();assert.equal(style.vars['--hud-editor-available'],'860px','desktop max width leaves space for gear and margin');
 width=560;scope.fit();assert.equal(style.vars['--hud-editor-available'],'540px','narrow canvas not viewport controls flyout');
 width=305;scope.fit();assert.equal(style.vars['--hud-editor-available'],'285px','phone flyout stays within canvas');
-assert.match(html,/glasses-simulator-device-first\.css\?v=20261014-hand280/,'cache-busted CSS');
-assert.match(html,/glasses-web-simulator\.js\?v=20261014-hand280/,'cache-busted JS');
+assert.match(html,/glasses-simulator-device-first\.css\?v=20261014-mediapipe281/,'cache-busted CSS');
+assert.match(html,/glasses-web-simulator\.js\?v=20261014-mediapipe281/,'cache-busted JS');
 console.log('section273-horizontal-hud-editor-contract=ok');

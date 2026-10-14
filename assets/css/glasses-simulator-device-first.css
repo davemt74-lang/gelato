@@ -1047,3 +1047,13 @@ html,body{max-width:100%;overflow-x:hidden}
 #glassesStage .glasses-hand-tracked-box{position:absolute;outline:2px solid #5bff95;background:rgba(43,211,103,.10);border-radius:7px;pointer-events:none}
 #glassesStage .glasses-hand-tracked-box span{position:absolute;left:0;top:0;transform:translateY(-100%);font:bold 10px/1.3 system-ui;background:#144a2c;color:#d3ffe0;padding:3px 5px;border-radius:4px}
 @media(max-width:380px){.glasses-hand-states{grid-template-columns:minmax(0,1fr)}}
+
+/* Section 281: live pretrained hand-detector lifecycle and retry controls. */
+.glasses-hand-detector-control{display:flex;gap:9px;align-items:center;justify-content:space-between;flex-wrap:wrap;
+ border:1px solid #35533e;background:#15291b;border-radius:8px;padding:7px 9px}
+.glasses-hand-detector-control span{font-size:11px;color:#c2dbc9;flex:1 1 200px;overflow-wrap:anywhere}
+.glasses-hand-detector-control span[data-state="running"]{color:#81ffac}
+.glasses-hand-detector-control span[data-state="error"]{color:#ffd1ac}
+.glasses-hand-detector-control button{border:1px solid #5b996b;border-radius:7px;background:#215334;color:#f1fff5;
+ padding:7px 10px;min-height:33px;font-size:11px;cursor:pointer}
+.glasses-hand-detector-control button:disabled{opacity:.5;cursor:default}

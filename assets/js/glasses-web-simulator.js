@@ -373,6 +373,7 @@ function stopCamera(reason='stopped'){
   state.dataset.frozen=false;state.dataset.drag=null;state.dataset.annotations=[];state.dataset.captureGroup=null;state.dataset.burstSeq=0;renderDatasetAnnotations();
   state.cameraStream=null;state.cameraTrack=null;
   const video=$('cameraVideo');video.srcObject=null;video.hidden=true;
+  window.GelatoMediaPipeHandsRuntime?.stop(reason==='error'?'error':'ready');
   $('startCamera').disabled=false;$('stopCamera').disabled=true;$('captureFrame').disabled=true;
   setCameraHealth(reason==='error'?'error':'off',reason==='error'?'ERROR':'OFF');
   if(state.cameraSource==='camera')$('scenePlaceholder').hidden=false;
@@ -398,6 +399,12 @@ async function startCamera(){
     const settings=state.cameraTrack?.getSettings?.()||{};
     $('cameraMeta').innerHTML='<span>'+escapeHtml(state.cameraTrack?.label||'Camera')+'</span><span>'+escapeHtml(String(settings.width||w))+'×'+escapeHtml(String(settings.height||h))+' · '+escapeHtml(String(Math.round(settings.frameRate||30)))+' fps</span>';
     setCameraHealth('ready','READY');log('CAMERA','Browser camera preview started.');startVisionRuntime();
+    // Camera consent has already been granted by the user's Start Camera action.
+    // Hand detection runs independently of recipe/build inference settings.
+    void window.GelatoMediaPipeHandsRuntime?.start(video,()=>{
+      const item=selectedItem();
+      return {activeItem:item,actions:item?{...itemActions(item.kdsItemPublicId)}:{}};
+    });
     state.cameraTrack?.addEventListener('ended',()=>{stopCamera('error');enterRecovery('recovering','camera_lost');log('CAMERA','Camera stream ended.');},{once:true});
   }catch(e){
     stopCamera('error');
@@ -1166,14 +1173,19 @@ async function deliverVisionInference(frame,raw,started){
   const realModel=$('visionAdapterSelect')?.value==='onnx'&&state.browserModel.status==='ready';
   if(core){
     const detections=realModel?(raw||[]):[];
-    const item=selectedItem();
-    window.dispatchEvent(new CustomEvent('gelato-glasses-hand-frame',{detail:{
-      timestamp:nowWall,cameraReady:!!state.cameraStream,modelReady:realModel,
-      hands:detections.filter(core.isHand),
-      objects:detections.filter(d=>!core.isHand(d)),
-      activeItem:item,
-      actions:item?{...itemActions(item.kdsItemPublicId)}:{}
-    }}));
+    if(window.GelatoMediaPipeHandsRuntime?.isActive()){
+      // Existing ingredient ONNX recognition may offer held-object candidates,
+      // but it cannot overwrite real MediaPipe hand locations or identities.
+      window.GelatoMediaPipeHandsRuntime.setObjects(detections.filter(d=>!core.isHand(d)));
+    }else if(!window.GelatoMediaPipeHandsRuntime){
+      // Backward-compatible ONNX path if the optional detector is not loaded.
+      const item=selectedItem();
+      window.dispatchEvent(new CustomEvent('gelato-glasses-hand-frame',{detail:{
+        timestamp:nowWall,cameraReady:!!state.cameraStream,modelReady:realModel,
+        hands:detections.filter(core.isHand),objects:detections.filter(d=>!core.isHand(d)),
+        activeItem:item,actions:item?{...itemActions(item.kdsItemPublicId)}:{}
+      }}));
+    }
   }
   // Hand labels are not ingredient components and must never reach kitchen
   // observation, temporal ingredient tracking, or KDS status transitions.
@@ -2336,6 +2348,11 @@ window.GelatoGlassesAssemblyContext={current:()=>{
   };
 }};
 window.GelatoGlassesNavigation={dispatch:simulatorNavigation,
+  primaryCamera:()=>$('cameraVideo'),
+  handContext:()=>{
+    const item=selectedItem();
+    return {activeItem:item,actions:item?{...itemActions(item.kdsItemPublicId)}:{}};
+  },
   cameraBoxToStage:normalizedBoxToStage,
   context:()=>({
   mode:state.mode,items:orderItems().length,item:selectedItem()?.posLine?.name||null,
