@@ -3,7 +3,10 @@ name: Publish Section 283 Single-ZIP Release
 on:
   push:
     branches:
-      - release/gelato-section283-single-zip
+      - main
+    paths:
+      - .github/workflows/publish-section283-release.yml
+  pull_request:
     paths:
       - .github/workflows/publish-section283-release.yml
   workflow_dispatch:
@@ -44,6 +47,7 @@ jobs:
           printf '%s\n' '50931a61adde8b42f7817200cb4468b57f3fefeb689e0331856243144809307b  gelato-full-deploy.zip' > gelato-full-deploy.sha256
 
       - name: Publish single ZIP as direct GitHub Release asset
+        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
