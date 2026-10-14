@@ -124,7 +124,7 @@
       const title=document.createElement('summary');
       title.textContent='Assigned employee training';
       trainingDetails.append(title,training);
-      section('camera').appendChild(trainingDetails);
+      section('runtime').appendChild(trainingDetails);
     }
     const transcript=document.createElement('div');
     transcript.className='sgv-live-transcript';transcript.id='simLiveTranscript';
@@ -179,7 +179,7 @@
       const id=card.id||'';
       const group=id==='simControlAuditPanel'?'runtime':
         card.querySelector('#consoleItem')?'overview':
-        card.classList.contains('camera-card')||card.classList.contains('calibration-card')?'camera':
+        card.classList.contains('camera-card')?'runtime':card.classList.contains('calibration-card')?'camera':
         card.classList.contains('hardware-runtime-card')||card.classList.contains('device-health-card')||
           card.classList.contains('runtime-recovery-card')?'runtime':'build';
       move(card,section(group));
@@ -203,8 +203,8 @@
     const audit=$('simAuditDetails');if(audit)audit.open=false;
     const cameraUI=event=>{
       const summary=event?.detail||window.GelatoCameraWorkspace?.sessionStatus?.()||{};
-      const enabled=Number(summary.enabledCount??summary.enabled?.filter(Boolean)?.length??0);
-      const unread=Number(summary.unreadPhotos??summary.unread?.reduce((a,b)=>a+b,0)??0);
+      const enabled=Number(summary.enabledCount??summary.enabled?.slice(1).filter(Boolean)?.length??0);
+      const unread=Number(summary.unreadPhotos??summary.unread?.slice(1).reduce((a,b)=>a+b,0)??0);
       const badge=$('sgvCameraEnabledCount');
       if(badge){badge.textContent=String(enabled);badge.dataset.state=enabled>0?'active':'off';badge.setAttribute('aria-label',enabled+' cameras active');}
       const tab=$('sgv-tab-camera');
