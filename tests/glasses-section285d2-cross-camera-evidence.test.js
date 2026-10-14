@@ -1,0 +1,51 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs');
+const {create}=require('../assets/js/glasses-cross-camera-evidence.js');
+let now=10000;
+const hash='c'.repeat(64);
+const ctx={devicePublicId:'device-1',locationId:7,stationPublicId:'prep',modelSha256:hash,items:[]};
+const det=(label='Mozzarella',confidence=.96)=>({label,confidence,bbox:{x:.1,y:.1,width:.2,height:.2}});
+const sample=(slot,at=now,objects=[det()],changes={})=>({
+ cameraSlot:slot,slot,sourceKind:slot===1?'hdmi':'stationary',
+ devicePublicId:'device-1',locationId:7,stationPublicId:'prep',modelSha256:hash,
+ scope:slot===1?'primary':'assigned_station',timestamp:at,capturedAt:at,objects,...changes
+});
+const engine=create({now:()=>now});
+const ingest=(s,c=ctx)=>engine.ingest(s,c);
+assert.equal(ingest(sample(1)).accepted,true);
+assert.equal(engine.summary().corroboratedClassCount,0,'gate1: one camera is never corroborated');
+now+=100;assert.equal(ingest(sample(2)).accepted,true);
+let evidence=engine.summary().evidence[0];
+assert.deepEqual(evidence.sourceSlots,[1,2],'gate2: independent cameras');
+assert.equal(evidence.status,'class_agreement_only');
+assert.equal(evidence.placementVerified,false);
+assert.equal(evidence.sameObjectVerified,false);
+now+=50;ingest(sample(2));assert.equal(engine.summary().evidence[0].cameraCount,2,'gate3: same-slot repeat not independent');
+assert.equal(ingest(sample(2)).reason,'duplicate_or_replay','gate4: replay');
+assert.equal(ingest(sample(3,now-1700)).reason,'stale_frame','gate5: stale frame');
+assert.equal(ingest(sample(3,now,[det()],{stationPublicId:'other'})).reason,'scope_mismatch','gate6: station');
+assert.equal(ingest(sample(3,now,[det()],{locationId:44})).reason,'scope_mismatch');
+assert.equal(ingest(sample(3,now,[det()],{modelSha256:'a'.repeat(64)})).reason,'scope_mismatch');
+assert.equal(ingest(sample(4,now,[det()],{scope:'unscoped'})).reason,'unscoped_camera','gate7: unscoped camera');
+now+=50;ingest(sample(3,now,[det('Basil')]));
+assert.equal(engine.summary().corroboratedClassCount,1,'gate8: different labels do not corroborate');
+const ticket=id=>({kdsItemPublicId:id,ticket:{checkPublicId:'ticket-'+id},status:'queued',menu:{ingredients:[{name:'Mozzarella'}]}});
+evidence=engine.summary([ticket('a'),ticket('b')]).evidence[0];
+assert.equal(evidence.ticketCandidateCount,2,'gate9: shared ingredients ambiguous');
+assert.equal(evidence.ticketAmbiguous,true);
+assert.equal(Object.hasOwn(evidence,'itemPublicId'),false);
+engine.clearSlot(2);assert.equal(engine.summary().corroboratedClassCount,0,'gate10: camera disconnect clears source');
+engine.reset();now+=2000;
+ingest(sample(1));now+=1200;ingest(sample(2));assert.equal(engine.summary().corroboratedClassCount,0,'gate11: cross-camera skew');
+engine.reset();now+=100;ingest(sample(1,now,[det('Basil',.5),det('Basil',.97)]));
+now+=100;ingest(sample(2,now,[det('Basil',.96),{...det('Basil'),bbox:{x:-1,y:0,width:.3,height:.2}}]));
+assert.equal(engine.summary().evidence[0].cameraCount,2,'gate12: valid confidence and box filtering');
+const source=fs.readFileSync('assets/js/glasses-cross-camera-evidence.js','utf8');
+const main=fs.readFileSync('assets/js/glasses-web-simulator.js','utf8');
+const html=fs.readFileSync('glasses-simulator.php','utf8');
+assert.doesNotMatch(source,/\bfetch\s*\(|getUserMedia|build\.observe|kds\.ticket|kds\.item|localStorage|setTimeout/,'gate13: read-only');
+assert.match(main,/GelatoCrossCameraEvidence/);
+assert.match(main,/gelato-glasses-stationary-object-frame/);
+assert.match(main,/gelato-glasses-production-object-frame/);
+assert.match(html,/glasses-cross-camera-evidence\.js/);
+console.log('section285d2-class-evidence=13/13');
