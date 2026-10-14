@@ -34,6 +34,8 @@ on:
       - 'docs/GLASSES-SECTION281-LIVE-MEDIAPIPE-HANDS.md'
       - 'assets/js/glasses-hand-tracker.js'
       - 'assets/js/glasses-hand-tracker-ui.js'
+      - 'assets/js/glasses-hand-box-stabilizer.js'
+      - 'tests/glasses-section285d1-stabilization.test.js'
       - 'tests/glasses-dual-hand-tracking.test.js'
       - 'docs/GLASSES-SECTION280-KDS-CLEANUP-HAND-TRAINING.md'
       - 'assets/js/glasses-hud-notifications.js'
@@ -234,6 +236,8 @@ jobs:
           node tests/glasses-live-kds-commands.test.js
           node --check assets/js/glasses-hand-tracker.js
           node --check assets/js/glasses-hand-tracker-ui.js
+          node --check assets/js/glasses-hand-box-stabilizer.js
+          node tests/glasses-section285d1-stabilization.test.js
           node tests/glasses-dual-hand-tracking.test.js
           node --check assets/js/glasses-mediapipe-hands.js
           node --check assets/js/glasses-mediapipe-hands-ui.js
