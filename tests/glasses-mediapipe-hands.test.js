@@ -46,10 +46,14 @@ async function verify(){
  let frame=events.find(e=>e.type==='gelato-glasses-hand-frame')?.detail;
  assert.equal(frame.hands.length,2);assert.equal(frame.modelReady,true);
  assert.equal(frame.activeItem.kdsItemPublicId,'kds-1');
- ctrl.setObjects([{label:'Cheese',confidence:.9,bbox:{x:.2,y:.2,width:.1,height:.1}}]);
+ ctrl.setObjects([{label:'Cheese',confidence:.9,bbox:{x:.2,y:.2,width:.1,height:.1}}],{kdsItemPublicId:'kds-1',modelSha256:'a'.repeat(64)});
  delayed.shift()();
  frame=events.filter(e=>e.type==='gelato-glasses-hand-frame').at(-1).detail;
  assert.equal(frame.objects.length,1);
+ ctrl.setObjects([{label:'Cheese',confidence:.9,bbox:{x:.2,y:.2,width:.1,height:.1}}],{kdsItemPublicId:'different-ticket',modelSha256:'a'.repeat(64)});
+ delayed.shift()();
+ frame=events.filter(e=>e.type==='gelato-glasses-hand-frame').at(-1).detail;
+ assert.equal(frame.objects.length,0,'other ticket objects must never be reused');
  ctrl.stop();assert.equal(ctrl.isActive(),false);
  assert.equal(events.at(-1).type,'gelato-glasses-hand-reset');
  assert.equal(await ctrl.start(video,()=>({})),true);
