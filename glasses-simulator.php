@@ -396,6 +396,24 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
           </div>
           <p id="glassesHeldCaptureStatus" role="status" aria-live="polite">A hand is not proof of an ingredient. Labels appear only when a verified ingredient detector also recognizes a matching object near that hand across fresh model frames.</p>
         </section>
+        <section class="glasses-placement-review" aria-label="Hand to ingredient movement review">
+          <div class="gc-heading"><strong>Placement hypothesis · Operator review</strong><small>Camera 1 · No KDS writes</small></div>
+          <p id="glassesPlacementStatus" role="status" aria-live="polite">UNCONFIGURED · Select a camera zone for read-only movement hypotheses.</p>
+          <div class="glasses-placement-zone">
+            <label>X <input id="glassesPlacementX" type="number" min="0" max="1" step=".01" value=".30" aria-label="Placement zone X"></label>
+            <label>Y <input id="glassesPlacementY" type="number" min="0" max="1" step=".01" value=".50" aria-label="Placement zone Y"></label>
+            <label>Width <input id="glassesPlacementW" type="number" min=".02" max="1" step=".01" value=".40" aria-label="Placement zone width"></label>
+            <label>Height <input id="glassesPlacementH" type="number" min=".02" max="1" step=".01" value=".35" aria-label="Placement zone height"></label>
+            <button id="glassesPlacementSetZone" type="button">Set Work Zone</button>
+          </div>
+          <p class="sim-muted">Coordinates are normalized to the Camera 1 image. Calibration requires a manual Set Work Zone action; the prefilled numbers are not activated automatically. Confirming a suggestion only records a local review—not an Added ingredient.</p>
+          <p id="glassesPlacementCandidate" aria-live="polite">No placement suggestion.</p>
+          <div class="inline-actions">
+            <button id="glassesPlacementConfirm" type="button" disabled>Confirm Hypothesis</button>
+            <button id="glassesPlacementReject" type="button" disabled>Reject Hypothesis</button>
+          </div>
+          <p id="glassesPlacementReceipt" class="sim-muted" role="status" aria-live="polite">No operator review recorded.</p>
+        </section>
         <p class="glasses-hand-tracking-help">Pretrained MediaPipe Hand Landmarker loads after you start Camera 1. Green tracks represent real hand detections; hands can leave and re-enter view. Held-ingredient labels need a separate ingredient model and are suggestions only. No camera starts automatically, no video is uploaded for hand detection, and no KDS state changes.</p>
       </section>
       <section class="sim-multicamera" id="simMultiCameraPanel" aria-labelledby="simMultiCameraTitle">
@@ -574,6 +592,7 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-production-auto-focus.js?v=20261014-285b"></script>
 <script src="assets/js/glasses-shared-camera-recognition.js?v=20261014-285d2"></script>
 <script src="assets/js/glasses-cross-camera-evidence.js?v=20261014-285d2"></script>
+<script src="assets/js/glasses-placement-review.js?v=20261014-285d3"></script>
 <script src="assets/js/glasses-employee-runtimes.js?v=20261013-runtime-refine277"></script>
 <script src="assets/js/glasses-assembly-recognition.js?v=20261013-266"></script>
 <script src="assets/js/glasses-hud-notifications.js?v=20261013-hud-edit2"></script>
@@ -588,6 +607,7 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-pov-calibration.js?v=20261014-284b"></script>
 <script src="assets/js/glasses-hand-box-stabilizer.js?v=20261014-285d1"></script>
 <script src="assets/js/glasses-hand-tracker-ui.js?v=20261014-285d1"></script>
+<script src="assets/js/glasses-placement-review-ui.js?v=20261014-285d3"></script>
 <script src="assets/js/glasses-multicamera.js?v=20261013-multi1"></script>
 <script src="assets/js/glasses-camera-config.js?v=20261014-cam-runtime-split"></script>
 <script src="assets/js/glasses-camera-runtime.js?v=20261013-261"></script>
