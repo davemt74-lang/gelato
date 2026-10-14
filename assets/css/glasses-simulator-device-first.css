@@ -1090,3 +1090,12 @@ html,body{max-width:100%;overflow-x:hidden}
 .glasses-pov-calibration .inline-actions label{display:flex;align-items:center;gap:6px;font-size:11px}
 #glassesPovCalibrationStatus[data-state="review"],#glassesPovCalibrationStatus[data-state="warning"]{color:#ffd37b}
 #glassesPovCalibrationStatus[data-state="ready"]{color:#8ff0a9}
+
+
+/* Section 285A — passive production readiness belongs outside the lenses. */
+#glassesProductionStatus{min-width:0;max-width:min(43vw,450px);flex:1 1 auto;display:inline-block;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;line-height:1.35}
+#glassesProductionStatus[data-state=recognizing]{color:#9ff2bc}
+#glassesProductionStatus[data-state=observing]{color:#b5dac5}
+#glassesProductionStatus[data-state=paused],#glassesProductionStatus[data-state=unassigned]{color:#f8cb79}
+@media(max-width:760px){#glassesProductionStatus{max-width:100%;flex-basis:100%}.sim-status-row{flex-wrap:wrap}}
