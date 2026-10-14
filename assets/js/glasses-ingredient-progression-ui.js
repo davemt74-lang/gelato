@@ -12,7 +12,7 @@
   return [...bytes].map(b=>b.toString(16).padStart(2,'0')).join('');
  }
  const engine=core.create({
-  now:()=>Date.now(),tokenFactory:freshToken,
+  now:()=>Date.now(),tokenFactory:freshToken,currentContext:()=>context(),
   persist:payload=>{
    const fn=nav()?.persistIngredientReview;
    if(typeof fn!=='function')throw Error('Authorized KDS audit is unavailable.');

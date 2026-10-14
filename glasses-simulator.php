@@ -422,6 +422,24 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
                 <button id="glassesProgressionUndo" type="button" disabled>Undo Last Approval</button>
               </div>
               <ol id="glassesProgressionAudit" aria-label="Session ingredient approval audit" aria-live="polite"></ol>
+              <section class="glasses-placement-reliability" aria-label="Placement reliability evidence">
+               <strong>Reliability &amp; Field Validation</strong>
+               <p id="glassesReliabilityStatus" role="status" aria-live="polite">FIELD VALIDATION REQUIRED · Unattended progression OFF.</p>
+               <p id="glassesReliabilityDetail" class="sim-muted">No labeled field samples. Accuracy and recall are unknown.</p>
+               <div class="inline-actions">
+                <label>Observed result
+                 <select id="glassesReliabilityOutcome" aria-label="Operator observed placement outcome">
+                  <option value="uncertain">Uncertain</option>
+                  <option value="observed_placed">Ingredient was placed</option>
+                  <option value="observed_not_placed">False alarm</option>
+                 </select>
+                </label>
+                <button type="button" id="glassesReliabilityLabel" disabled>Label Last Review</button>
+                <button type="button" id="glassesReliabilityMissed">Report Missed Placement</button>
+                <button type="button" id="glassesReliabilityExport">Export Aggregated Report</button>
+               </div>
+               <p id="glassesReliabilityLabelStatus" role="status" aria-live="polite">Labels are operator observations, not independently verified ground truth. Nothing uploads automatically.</p>
+              </section>
               <p class="sim-muted">Every approval is recorded to the authorized KDS audit log. Ingredient checklist updates are operator-reported only; they never verify physical placement or mark items Ready.</p>
             </section>
         </section>
@@ -605,6 +623,7 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-cross-camera-evidence.js?v=20261014-285d2"></script>
 <script src="assets/js/glasses-placement-review.js?v=20261014-285d3"></script>
 <script src="assets/js/glasses-ingredient-progression.js?v=20261014-285d4"></script>
+<script src="assets/js/glasses-placement-reliability.js?v=20261014-285d5"></script>
 <script src="assets/js/glasses-employee-runtimes.js?v=20261013-runtime-refine277"></script>
 <script src="assets/js/glasses-assembly-recognition.js?v=20261013-266"></script>
 <script src="assets/js/glasses-hud-notifications.js?v=20261013-hud-edit2"></script>
@@ -621,6 +640,7 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-hand-tracker-ui.js?v=20261014-285d1"></script>
 <script src="assets/js/glasses-placement-review-ui.js?v=20261014-285d4"></script>
 <script src="assets/js/glasses-ingredient-progression-ui.js?v=20261014-285d4"></script>
+<script src="assets/js/glasses-placement-reliability-ui.js?v=20261014-285d5"></script>
 <script src="assets/js/glasses-multicamera.js?v=20261013-multi1"></script>
 <script src="assets/js/glasses-camera-config.js?v=20261014-cam-runtime-split"></script>
 <script src="assets/js/glasses-camera-runtime.js?v=20261013-261"></script>

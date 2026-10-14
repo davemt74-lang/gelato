@@ -58,8 +58,10 @@
  function review(decision){
   const candidate=engine.summary().candidate;if(!candidate)return;
   const result=engine.review({id:candidate.id,decision,context:ctx()});
-  if(result.ok&&decision==='confirm')
-   window.dispatchEvent(new CustomEvent('gelato-glasses-placement-reviewed',{detail:{receipt:result.receipt}}));
+  if(result.ok){
+   window.dispatchEvent(new CustomEvent('gelato-glasses-placement-outcome',{detail:{id:result.receipt.id,decision}}));
+   if(decision==='confirm')window.dispatchEvent(new CustomEvent('gelato-glasses-placement-reviewed',{detail:{receipt:result.receipt}}));
+  }
   lastDecision=result.ok?
    (decision==='confirm'?'Operator confirmed':'Operator rejected')+
    ' the '+result.receipt.label+' placement hypothesis · local review only; ingredient NOT Added.':
@@ -85,10 +87,14 @@
   }
   const signature=[context.devicePublicId,context.locationId,context.stationPublicId,
     context.item?.kdsItemPublicId,context.modelSha256,...Object.values(zone||{})].join('|');
-  if(lastScope&&signature!==lastScope)engine.reset();
+  if(lastScope&&signature!==lastScope){engine.reset();window.GelatoPlacementReliabilityUI?.reset?.();}
   lastScope=signature;
-  engine.observe({context,frame:{seq:d.seq,timestamp:d.timestamp,
+  const observation=engine.observe({context,frame:{seq:d.seq,timestamp:d.timestamp,
     handTimestamp:lastHandAt,hands:lastHands,objects:d.objects||[]}});
+  window.dispatchEvent(new CustomEvent('gelato-glasses-placement-observation',{detail:{
+   frame:{seq:d.seq,frameAt:d.timestamp,handAt:lastHandAt,accepted:observation.accepted,
+    reason:observation.reason,sourceSlot:1},candidate:observation.candidate||null
+  }}));
   render();
  }
  function mount(){

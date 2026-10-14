@@ -1016,6 +1016,7 @@ async function unloadReadonlyIngredientModel(message='Read-only ingredient model
   window.GelatoSharedCameraRecognitionRuntime?.reset?.();
   window.GelatoCrossCameraEvidenceRuntime?.reset?.();
   window.GelatoPlacementReviewUI?.reset?.();
+  window.GelatoPlacementReliabilityUI?.reset?.();
   renderSharedCameraRecognitionStatus();
   const session=readonlyIngredient.session;
   resetProductionFocusEvidence();
@@ -2915,6 +2916,7 @@ window.GelatoGlassesNavigation={dispatch:simulatorNavigation,
   cameraPerspective:state.cameraInput?.perspective||null,
   crossCameraEvidence:window.GelatoCrossCameraEvidenceRuntime?.summary?.(state.work?.items||[],Date.now())||null,
   placementReview:window.GelatoPlacementReviewUI?.summary?.()||null,
+  placementReliability:window.GelatoPlacementReliabilityUI?.summary?.()||null,
   governedIngredientProgression:window.GelatoIngredientProgressionUI?.summary?.()||null,
   stationaryRecognition:sharedCameraRecognition?.status?.().map(r=>({slot:r.slot,state:r.state,
     count:r.count||0,scope:r.scope||'unscoped',stationPublicId:r.stationPublicId||null}))||[],
