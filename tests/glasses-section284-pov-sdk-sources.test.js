@@ -29,7 +29,7 @@ assert.equal(registry.isVendorInstalled(),false,'must never fabricate vendor SDK
   const adapter={adapterId:'air3.vendor.v1',async listSources(){return [
     {id:'left lens 1',label:'AIR3 Primary',connected},
     {id:'not-connected',label:'AIR3 Missing',connected:false},
-    {id:'left lens 1',label:'Duplicate',connected:true}
+    {id:'left lens 1',label:'Duplicate',connected}
   ];},async openStream(id,constraints){
     assert.equal(id,'left lens 1');
     assert.equal(constraints.audio,false);
