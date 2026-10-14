@@ -12,7 +12,7 @@ assert.equal(v.tracks.length,2);
 assert.deepEqual(v.tracks.map(x=>x.status),['ready','ready'],'two READY hand boxes');
 assert.deepEqual(v.focused.map(x=>x.name),['Sauce','Mozzarella','Basil'],'three focused candidates from active KDS item');
 const hands=[hand(.1,.2,'left hand'),hand(.74,.21,'right hand')];
-v=t.step(hands,110,item,{},[thing(.14,.24)]);
+v=t.step(hands,110,item,{},[]);
 assert.equal(v.live,2,'two visible tracks');
 assert.equal(v.tracks[0].status,'tracking','unfocused object does not fabricate identification');
 assert.equal(v.tracks[1].status,'tracking');
