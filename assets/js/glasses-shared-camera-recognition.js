@@ -50,7 +50,7 @@
    const result={slot:source.slot,state:'recognized',count:objects.length,sourceKind:'stationary',
     stationPublicId:source.stationPublicId||null,scope,
     locationId:source.locationId,devicePublicId,modelSha256,
-    capturedAt,role:source.role,objects};
+    capturedAt,role:source.role,revision:source.revision||0,objects};
    data.set(source.slot,{slot:source.slot,state:'recognized',count:objects.length,
      scope,stationPublicId:source.stationPublicId||null,capturedAt,
      modelSha256,role:source.role});
