@@ -1014,3 +1014,19 @@ html,body{max-width:100%;overflow-x:hidden}
 
 /* Empty auxiliary source holder is retained for listeners, never shown as another camera panel. */
 #gcPaneTraining>.sim-multicamera[hidden]{display:none!important}
+
+/* Section 279: ticket-level KDS completion sits directly below the left lens tickets. */
+#glassesStage .hud-ticket-completion{display:grid;gap:5px;min-width:0;
+ margin-top:4px;padding:6px;border-top:1px solid rgba(137,240,172,.46);
+ background:rgba(8,35,23,.76);border-radius:5px}
+#glassesStage .hud-ticket-completion[hidden]{display:none!important}
+#glassesStage .hud-ticket-completion-state{font:800 9px/1.3 system-ui;
+ letter-spacing:.035em;color:#b0f9c6}
+#glassesStage .hud-ticket-completion button{width:100%;min-width:0;min-height:30px;
+ border-radius:5px;border:1px solid #9eebbc;background:#1d7243;color:#f4fff6;
+ font:850 10px/1.2 system-ui;white-space:normal;cursor:pointer;pointer-events:auto}
+#glassesStage .hud-ticket-completion button[hidden]{display:none!important}
+#glassesStage .hud-ticket-completion button:disabled{opacity:.5;cursor:not-allowed}
+#glassesStage .hud-ticket-completion button:focus-visible{outline:2px solid #ccffdb;outline-offset:2px}
+#glassesStage .hud-ticket-completion small{font:650 8px/1.4 system-ui;
+ color:#c4d8c9;overflow-wrap:anywhere}

@@ -38,7 +38,9 @@
     if(/^(?:start|begin) (?:the )?(?:current )?item$/.test(phrase))return 'start_item';
     if(/^(?:mark )?(?:the )?(?:current )?item (?:ready|done|finished)$/.test(phrase))return 'ready_item';
     if(/^(?:mark )?(?:the )?(?:ticket|order) ready$/.test(phrase))return 'ready_order';
-    if(/^(?:finish|complete|bump) (?:the )?(?:ticket|order)$/.test(phrase))return 'finish_order';
+    if(/^(?:finish|complete|bump) (?:the )?(?:ticket|order)$/.test(phrase)||
+       /^(?:confirm (?:finish|complete) (?:the )?(?:ticket|order)|finish this ticket)$/.test(phrase))
+      return 'finish_order';
     if(/^(?:hold|pause) (?:the )?(?:ticket|order)$/.test(phrase))return 'hold_order';
     if(/^(?:fire|release) (?:the )?(?:ticket|order)$/.test(phrase))return 'fire_order';
     if(/^(?:note added|note ingredient added|i added an item)$/.test(phrase))return 'item_added';

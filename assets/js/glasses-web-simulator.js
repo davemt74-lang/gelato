@@ -1269,6 +1269,69 @@ function activeTicket(){
 function ingredientSummary(item){
   return assembly()?.counts(item,itemActions(item.kdsItemPublicId))||{total:0,accounted:0,complete:false};
 }
+/**
+ * The ingredient checklist is a local assembly observation, not a KDS status.
+ * Suggest the *next authorized KDS transition*, never auto-finish a ticket.
+ * The server validates every transition again and only Expo / All may bump.
+ */
+function ticketCompletionCandidate(group,options={}){
+  if(!group?.key||!Array.isArray(group.items)||!group.items.length)
+    return {visible:false,command:null};
+  const items=group.items.filter(x=>!['completed','cancelled'].includes(x.status));
+  if(!items.length||items.length!==group.items.length)return {visible:false,command:null};
+  const statuses=items.map(x=>String(x.status||''));
+  const ready=statuses.every(x=>x==='ready');
+  const assembled=items.every(x=>['ready','completed'].includes(x.status)||ingredientSummary(x).complete);
+  if(!ready&&!assembled)return {visible:false,command:null};
+  if(statuses.some(x=>x==='held'))
+    return {visible:true,command:null,title:'TICKET HELD',help:'Fire the held items before marking this ticket ready.',enabled:false};
+  const editable=!!options.editable&&!options.buildActive&&!options.busy;
+  const blocked=options.buildActive?'Finish the active glasses build first.':
+    !options.editable?'Kitchen update permission is required.':
+    options.busy?'Kitchen action is already processing.':'';
+  if(statuses.some(x=>x==='queued'))
+    return {visible:true,command:'start_order',title:'ASSEMBLY ACCOUNTED',
+      label:'Start Ticket',enabled:editable,
+      help:blocked||'Items assembled locally. Start the queued KDS items before marking Ready.'};
+  if(statuses.some(x=>x==='in_progress'))
+    return {visible:true,command:'ready_order',title:'ALL ITEMS ASSEMBLED',
+      label:'Ticket Ready',enabled:editable,
+      help:blocked||'Marks the in-progress items Ready in KDS. Does not finish the ticket.'};
+  if(!ready)
+    return {visible:true,command:null,title:'REVIEW KDS STATUS',
+      enabled:false,help:'Refresh the ticket; its kitchen status has changed.'};
+  const expo=!!options.expo;
+  const confirming=!!options.confirming;
+  return {visible:true,command:'finish_order',title:'ALL ITEMS READY · KDS',
+    label:confirming?'Confirm Finish Ticket':'Finish Ticket',
+    enabled:editable&&expo,
+    help:blocked||(!expo?'The station has marked items Ready. Finish the ticket at Expo / All stations.':
+      confirming?'Confirm again within 12 seconds to complete the ticket in KDS.':
+      'Expo finish requires two confirmations. POS payment stays separate.')};
+}
+function renderTicketCompletion(){
+  const region=$('hudTicketCompletion'),button=$('hudTicketCompletionAction');
+  if(!region||!button)return;
+  const group=activeTicket(),current=selectedItem(),ticket=current?.ticket?.checkPublicId||'';
+  const confirmation=state.finishConfirmation;
+  const pending=confirmation?.ticket===ticket&&Number(confirmation.expires)>Date.now();
+  const result=ticketCompletionCandidate(group,{
+    editable:kitchenWritable(),expo:!state.device?.stationPublicId,
+    busy:state.kitchenBusy,buildActive:!!state.build,confirming:pending
+  });
+  region.hidden=!result.visible;
+  if(!result.visible){button.hidden=true;button.disabled=true;return;}
+  $('hudTicketCompletionState').textContent=result.title||'REVIEW TICKET';
+  $('hudTicketCompletionHelp').textContent=result.help||'';
+  button.hidden=!result.command;
+  button.disabled=!result.enabled;
+  if(result.command){
+    button.dataset.glassesCommand=result.command;
+    button.textContent=result.label;
+    button.setAttribute('aria-disabled',result.enabled?'false':'true');
+    button.title=result.help||'';
+  }
+}
 function renderOrdersQueue(item){
   const tickets=visibleKdsTickets(),selected=activeTicket();
   $('hudOrdersCount').textContent=String(tickets.length);
@@ -1292,6 +1355,7 @@ function renderOrdersQueue(item){
   $('hudOrders').innerHTML='<div class="hud-ticket-tabs" role="tablist" aria-label="Occupied KDS tickets">'+tabs+'</div>'+
     (selected?'<div class="hud-ticket-item-list" aria-label="Items on selected ticket">'+items+'</div>':'<span class="sim-muted">No active KDS tickets</span>');
   $('hudOrdersRegion').classList.toggle('hud-queue-empty',tickets.length===0);
+  renderTicketCompletion();
   window.GelatoGlassesHudNotifications?.positionUnderLeftTickets?.();
 }
 function buildProgressIndex(steps,comps){
@@ -2108,6 +2172,9 @@ function updateKitchenControls(){
         'This command is unavailable for the selected item or its current status.'):'';
     }
   }
+  // The left-lens action may be disabled by assembly readiness or Expo scope,
+  // even when other navigation controls permit the same KDS command.
+  renderTicketCompletion();
   const detail=$('simKitchenCommandStatus');
   if(detail)detail.textContent=state.mode==='mock'?'MOCK · no kitchen writes':
     state.device?.kitchenWritable?'LIVE KDS · authorized updates':'VIEW ONLY · Kitchen update permission required';
@@ -2128,6 +2195,7 @@ async function kitchenCommand(action,{spoken=false}={}){
     const confirmation=state.finishConfirmation,now=Date.now();
     if(!confirmation||confirmation.ticket!==ticket||confirmation.expires<now){
       state.finishConfirmation={ticket,expires:now+12000};
+      renderTicketCompletion();
       return {ok:true,message:'Confirm finish ticket #'+(item.ticket?.checkNumber||'')+
         ': all active items must be Ready. Press Finish Ticket or repeat “finish order” within 12 seconds.'};
     }
