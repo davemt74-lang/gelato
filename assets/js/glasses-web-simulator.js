@@ -1157,7 +1157,22 @@ async function deliverVisionInference(frame,raw,started){
   }
   const filtered=(raw||[]).filter(d=>d&&d.bbox&&d.confidence>=threshold);
   if(state.shadowModel.status==='ready')runShadowFrame(frame,filtered);
-  state.visionDetections=trackDetections(filtered,nowWall);renderVisionOverlay();
+  const core=window.GelatoHandTracker;
+  const realModel=$('visionAdapterSelect')?.value==='onnx'&&state.browserModel.status==='ready';
+  if(core){
+    const detections=realModel?(raw||[]):[];
+    const item=selectedItem();
+    window.dispatchEvent(new CustomEvent('gelato-glasses-hand-frame',{detail:{
+      timestamp:nowWall,cameraReady:!!state.cameraStream,modelReady:realModel,
+      hands:detections.filter(core.isHand),
+      objects:detections.filter(d=>!core.isHand(d)),
+      activeItem:item,
+      actions:item?{...itemActions(item.kdsItemPublicId)}:{}
+    }}));
+  }
+  // Hand labels are not ingredient components and must never reach kitchen
+  // observation, temporal ingredient tracking, or KDS status transitions.
+  state.visionDetections=trackDetections(filtered.filter(d=>!core?.isHand(d)),nowWall);renderVisionOverlay();
   await processTemporalEvents(nowWall);await autoEvaluateTemporalReadiness(nowWall);
   refreshAssemblyRecognition(nowWall);
   state.visionLatencyMs=performance.now()-started;
@@ -1207,6 +1222,7 @@ function stopVisionRuntime(reason='idle'){
   if(state.visionTimer){clearTimeout(state.visionTimer);state.visionTimer=null;}
   clearAssemblySuggestion();state.framePipeline.epoch++;state.framePipeline.queue=[];if(state.framePipeline.currentAbort)state.framePipeline.currentAbort.abort();state.framePipeline.currentAbort=null;state.framePipeline.worker=false;
   state.visionBusy=false;state.visionDetections=[];renderVisionOverlay();renderVisionHealth(reason);renderFramePipelineMetrics();
+  window.dispatchEvent(new CustomEvent('gelato-glasses-hand-reset'));
 }
 function startVisionRuntime(){
   stopVisionRuntime('idle');clearTemporalRuntime();state.visionMode=visionMode();state.visionSubmitted.clear();state.visionTracks.clear();state.visionFrameSeq=0;state.visionLastAt=0;state.framePipeline.nextSeq=0;resetFramePipelineMetrics();state.visionAdapter=VISION_ADAPTERS[$('visionAdapterSelect')?.value||'fixture']||VISION_ADAPTERS.fixture;
@@ -2314,7 +2330,9 @@ window.GelatoGlassesAssemblyContext={current:()=>{
     currentIngredientId:currentAssemblyIngredient(item)?.id||''
   };
 }};
-window.GelatoGlassesNavigation={dispatch:simulatorNavigation,context:()=>({
+window.GelatoGlassesNavigation={dispatch:simulatorNavigation,
+  cameraBoxToStage:normalizedBoxToStage,
+  context:()=>({
   mode:state.mode,items:orderItems().length,item:selectedItem()?.posLine?.name||null,
   step:(state.previewStepIndex||0)+1,virtual:!!state.device?.virtualPreview,
   locationId:state.device?.locationId||null,stationPublicId:state.device?.stationPublicId||null

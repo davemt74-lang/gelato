@@ -50,6 +50,7 @@ window.addEventListener('gelato-glasses-hand-frame',event=>{
  render();
 });
 window.addEventListener('gelato-glasses-hand-reset',reset);
+window.addEventListener('pagehide',reset);
 window.setInterval?.(()=>{
  if(!lastFrame||Date.now()-lastFrame<350)return;
  current=tracker.step([],Date.now(),null,{},[]);render();
