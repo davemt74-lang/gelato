@@ -23,7 +23,7 @@ assert.match(workspace,/if\(event\.detail\?\.tab==='runtime'\)/,'runtime photo u
 assert.match(setup,/\$\('cameraDeviceSelect'\)\?\.closest\('\.camera-card'\)/,'camera source setup independent from moved auxiliary controls');
 assert.match(primary,/prefs\.activeTab==='camera'&&prefs\.activeCameraTab==='camera1'/,'old Cam 1 preference opens Runtime');
 assert.match(primary,/window\.GelatoCameraWorkspace\?\.status\?\.\(\)\.active\|\|'camera2'/,'fallback system-camera preference updated');
-assert.match(page,/Camera 2–5 have independent system-camera previews/,'system camera roles described accurately');
+assert.match(page,/Cameras 2–5 have independent system-camera previews/,'system camera roles described accurately');
 assert.match(styling,/grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/,'four cameras and Training have five tabs');
 assert.doesNotMatch(workspace,/if\(slot===1\)view\.appendChild\(card\)/,'primary camera no longer inserted into system-camera tabs');
 assert.doesNotMatch(workspace,/if\(originalDataset\)train\.appendChild\(originalDataset\)/,'glasses dataset tools are not moved to system cameras');
