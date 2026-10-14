@@ -39,8 +39,22 @@
       ['tracking','identifying'].includes(h.status)&&Number.isFinite(h.confidence)&&h.confidence>=.5);
    const objects=(Array.isArray(frame.objects)?frame.objects:[]).filter(o=>o&&box(o.bbox)&&
       Number.isFinite(o.confidence)&&o.confidence>=minConfidence&&o.confidence<=1&&allowed.has(ingredient(o.label)));
+   // 285E3: Never infer release from missing detections while hands overlap.
+   // Ambiguous identity is discarded rather than bridged across occlusion.
+   const conflicted=new Set(),identities=new Set();
+   for(const h of hands){
+     if(identities.has(h.trackId))conflicted.add(h.trackId);
+     identities.add(h.trackId);
+   }
+   for(let i=0;i<hands.length;i++)for(let j=i+1;j<hands.length;j++){
+     if(distance(hands[i].bbox,hands[j].bbox)<.18){
+       conflicted.add(hands[i].trackId);conflicted.add(hands[j].trackId);
+     }
+   }
+   for(const id of conflicted)tracks.delete(id);
    const emitted=[];
    for(const h of hands){
+     if(conflicted.has(h.trackId))continue;
      const close=objects.map(o=>({object:o,d:distance(o.bbox,h.bbox)})).filter(x=>x.d<=.22).sort((a,b)=>a.d-b.d);
      if(close.length>1&&close[1].d-close[0].d<.065){tracks.delete(h.trackId);continue;}
      if(hands.some(other=>other.trackId!==h.trackId&&close[0]&&
