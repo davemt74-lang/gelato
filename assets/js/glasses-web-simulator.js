@@ -1013,6 +1013,7 @@ async function unloadReadonlyIngredientModel(message='Read-only ingredient model
   if(readonlyIngredient.timer!==null){clearTimeout(readonlyIngredient.timer);readonlyIngredient.timer=null;}
   if(readonlyIngredient.auxTimer!=null){clearTimeout(readonlyIngredient.auxTimer);readonlyIngredient.auxTimer=null;}
   window.GelatoSharedCameraRecognitionRuntime?.reset?.();
+  window.GelatoCrossCameraEvidenceRuntime?.reset?.();
   renderSharedCameraRecognitionStatus();
   const session=readonlyIngredient.session;
   resetProductionFocusEvidence();
@@ -1082,6 +1083,7 @@ async function pollReadonlyIngredientFrame(epoch){
      window.dispatchEvent(new CustomEvent('gelato-glasses-production-object-frame',{detail:{
        cameraSlot:1,sourceKind:state.cameraInput?.kind||'browser',
        devicePublicId:deviceKey,stationPublicId:state.device.stationPublicId,
+       locationId:state.device.locationId,
        modelSha256:readonlyIngredient.verifiedSha256,seq:readonlyIngredient.frameSeq,
        timestamp:Date.now(),objects:allDetections.slice(0,16).map(d=>({
          label:String(d.label||''),confidence:Number(d.confidence),bbox:{...d.bbox}
@@ -1105,14 +1107,18 @@ async function pollReadonlyIngredientFrame(epoch){
 // guarded busy flag as Camera 1. No second model, no second permission grant.
 const sharedCameraRecognition=window.GelatoSharedCameraRecognition?.create?.({now:()=>Date.now()})||null;
 window.GelatoSharedCameraRecognitionRuntime=sharedCameraRecognition;
+const crossCameraEvidence=window.GelatoCrossCameraEvidence?.create?.({now:()=>Date.now()})||null;
+window.GelatoCrossCameraEvidenceRuntime=crossCameraEvidence;
 function renderSharedCameraRecognitionStatus(){
  const el=$('glassesSharedCameraInferenceStatus');if(!el)return;
  const rows=sharedCameraRecognition?.status?.()||[];
+ const fusion=crossCameraEvidence?.summary?.(state.work?.items||[],Date.now());
  const names=rows.filter(x=>x.state==='recognized').map(x=>'Cam '+x.slot+' '+x.count+' object(s)'+
    (x.scope==='assigned_station'?' · station scoped':' · view only / unscoped'));
  el.textContent=readonlyIngredient.status==='ready'?
    'SHARED MODEL · '+(names.join(' | ')||'waiting for enabled stationary camera feeds')+
-     ' · observations only, no ingredient or KDS updates.':
+     (fusion?.corroboratedClassCount?' · '+fusion.corroboratedClassCount+' correlated class(es)':'')+
+     ' · class evidence only; placement unverified, no KDS updates.':
    'Cameras 2–5 · load an approved read-only model to enable shared recognition.';
 }
 function scheduleAuxiliaryRecognition(epoch){
@@ -1174,12 +1180,12 @@ async function pollAuxiliaryRecognition(epoch){
  }
 }
 window.addEventListener('gelato-camera-configuration-changed',()=>{
- sharedCameraRecognition?.reset();renderSharedCameraRecognitionStatus();
+ sharedCameraRecognition?.reset();crossCameraEvidence?.reset();renderSharedCameraRecognitionStatus();
 });
 window.addEventListener('gelato-glasses-location-change',()=>{
- sharedCameraRecognition?.reset();renderSharedCameraRecognitionStatus();
+ sharedCameraRecognition?.reset();crossCameraEvidence?.reset();renderSharedCameraRecognitionStatus();
 });
-window.addEventListener('pagehide',()=>sharedCameraRecognition?.reset());
+window.addEventListener('pagehide',()=>{sharedCameraRecognition?.reset();crossCameraEvidence?.reset();});
 async function loadReadonlyIngredientModel(){
  const detector=String($('glassesReadonlyDetector')?.value||'').trim();
  if(!detector)throw new Error('Enter the approved ingredient detector name.');
@@ -2815,11 +2821,40 @@ window.addEventListener('gelato-glasses-production-object-frame',event=>{
    }
  });
 });
-window.addEventListener('gelato-glasses-runtime-revoked',resetProductionFocusEvidence);
-window.addEventListener('gelato-glasses-camera-source-change',resetProductionFocusEvidence);
+window.addEventListener('gelato-glasses-runtime-revoked',()=>{resetProductionFocusEvidence();crossCameraEvidence?.reset();});
+window.addEventListener('gelato-glasses-camera-source-change',()=>{resetProductionFocusEvidence();crossCameraEvidence?.reset();});
 window.addEventListener('gelato-glasses-hand-reset',resetProductionFocusEvidence);
+// Section 285D2: class-level fusion is read-only; no ingredient or KDS writes.
+function fuseCameraEvent(detail,isStationary){
+ if(!crossCameraEvidence||!detail||document.hidden||state.mode!=='live'||
+    readonlyIngredient.status!=='ready'||state.device?.virtualPreview)return;
+ const device=state.device,slot=Number(isStationary?detail.slot:detail.cameraSlot);
+ if(!device?.publicId||!device.stationPublicId||!device.locationId||
+   readonlyIngredient.devicePublicId!==device.publicId||
+   readonlyIngredient.verifiedSha256!==detail.modelSha256)return;
+ if(isStationary){
+  const cfg=window.GelatoCameraConfiguration,saved=cfg?.getSaved?.(slot),
+    video=window.GelatoGlassesMultiCamera?.video?.(slot);
+  if(!Number.isInteger(slot)||slot<2||slot>5||!saved?.enabled||
+    !cfg?.isEnabled?.(slot)||!video?.srcObject||
+    saved.stationPublicId!==device.stationPublicId||
+    Number(saved.revision||0)!==Number(detail.revision||0)){
+    crossCameraEvidence.clearSlot(slot);return;
+  }
+ }else if(slot!==1||!state.cameraStream){crossCameraEvidence.clearSlot(1);return;}
+ const result=crossCameraEvidence.ingest({...detail,cameraSlot:slot},{
+   devicePublicId:device.publicId,locationId:device.locationId,
+   stationPublicId:device.stationPublicId,modelSha256:readonlyIngredient.verifiedSha256,
+   items:state.work?.items||[]
+ });
+ if(result.accepted)renderSharedCameraRecognitionStatus();
+}
+window.addEventListener('gelato-glasses-production-object-frame',
+ e=>fuseCameraEvent(e.detail||{},false));
+window.addEventListener('gelato-glasses-stationary-object-frame',
+ e=>fuseCameraEvent(e.detail||{},true));
 // Stationary feeds are deliberately not subscribed to Camera 1 hand/ticket auto-focus.
-document.addEventListener('visibilitychange',()=>{if(document.hidden)resetProductionFocusEvidence();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){resetProductionFocusEvidence();crossCameraEvidence?.reset();}});
 window.GelatoGlassesNavigation={dispatch:simulatorNavigation,
   primaryCamera:()=>$('cameraVideo'),
   handContext:()=>{
@@ -2841,6 +2876,7 @@ window.GelatoGlassesNavigation={dispatch:simulatorNavigation,
   locationId:state.device?.locationId||null,stationPublicId:state.device?.stationPublicId||null,
   cameraLive:!!state.cameraStream,cameraSourceKind:state.cameraInput?.kind||null,
   cameraPerspective:state.cameraInput?.perspective||null,
+  crossCameraEvidence:crossCameraEvidence?.summary?.(state.work?.items||[],Date.now())||null,
   stationaryRecognition:sharedCameraRecognition?.status?.().map(r=>({slot:r.slot,state:r.state,
     count:r.count||0,scope:r.scope||'unscoped',stationPublicId:r.stationPublicId||null}))||[],
   automaticTicketFocus:!state.manualFocusLocked&&productionFocusEligible()?'evidence_available':
