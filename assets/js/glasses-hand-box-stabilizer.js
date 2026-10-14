@@ -24,12 +24,18 @@
     if(!Number.isInteger(t?.slot)||t.slot<1||t.slot>2||
       typeof t?.trackId!=='string'||!t.trackId||active.has(t.slot))continue;
     active.add(t.slot);const live=t.status==='tracking'||t.status==='identifying',old=seen.get(t.slot);
+    // A duplicate identity across two slots is ambiguous; never paint it twice.
+    if((Array.isArray(tracks)?tracks:[]).some(other=>other!==t&&other?.trackId===t.trackId&&
+      other?.slot!==t.slot&&Number.isInteger(other?.slot)&&other.slot>=1&&other.slot<=2)){
+      seen.delete(t.slot);continue;
+    }
     if(live&&valid(t.bbox)&&Number.isFinite(t.seen)&&t.seen<=timestamp&&timestamp-t.seen<=250){
      const fresh=!old||old.trackId!==t.trackId||timestamp-old.lastSeen>hold||t.seen<old.lastSeen;
      let smooth=box(t.bbox);
      if(!fresh){
       const c1=center(old.bbox),c2=center(t.bbox),delta=Math.hypot(c2.x-c1.x,c2.y-c1.y);
-      const gain=delta>.28?1:clamp(.25+(timestamp-old.at)/600+delta*1.7,.25,.94);
+      const age=timestamp-old.at;
+      const gain=delta>.28?1:clamp(.20+age/450+delta*2.2,.20,.95);
       smooth=mix(old.bbox,t.bbox,gain);
      }
      seen.set(t.slot,{trackId:t.trackId,bbox:smooth,at:timestamp,lastSeen:t.seen});
