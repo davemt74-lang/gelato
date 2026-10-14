@@ -611,9 +611,9 @@ html,body{max-width:100%;overflow-x:hidden}
 }
 .sgv-tabbed-console .sgv-camera-unread-dot,
 .sgv-tabbed-console .gc-camera-status-dot{display:none!important}
-/* All six camera tabs fit the sidebar without a horizontal scrollbar. */
+/* Four system-camera tabs plus Training fit the sidebar. */
 .sgv-tabbed-console .gc-camera-tabs{
-  display:grid;grid-template-columns:repeat(6,minmax(0,1fr));
+  display:grid;grid-template-columns:repeat(5,minmax(0,1fr));
   gap:3px;overflow:visible!important;scrollbar-width:none;
   padding:5px 3px 7px;position:relative;
 }
@@ -1010,4 +1010,4 @@ html,body{max-width:100%;overflow-x:hidden}
 .gc-glasses-runtime-camera>.camera-card{min-width:0;margin:0;padding:0;border:0;background:transparent;box-shadow:none}
 .gc-glasses-runtime-camera .gc-gallery-section{min-width:0}
 .gc-glasses-runtime-camera .gc-advanced summary{cursor:pointer}
-.sgv-tabbed-console .gc-camera-tabs{grid-template-columns:repeat(5,minmax(0,1fr))}
+
