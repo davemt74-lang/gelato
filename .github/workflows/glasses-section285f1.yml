@@ -1,0 +1,26 @@
+name: Glasses Section 285F1 Stabilizer Hardening
+on:
+  pull_request:
+    paths:
+      - 'assets/js/glasses-hand-box-stabilizer.js'
+      - 'tests/glasses-section285f1-stabilization.test.js'
+      - '.github/workflows/glasses-section285f1.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'assets/js/glasses-hand-box-stabilizer.js'
+      - 'tests/glasses-section285f1-stabilization.test.js'
+      - '.github/workflows/glasses-section285f1.yml'
+jobs:
+  stabilizer:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check assets/js/glasses-hand-box-stabilizer.js
+      - run: node --test tests/glasses-section285f1-stabilization.test.js
+      - run: node tests/glasses-section285d1-stabilization.test.js
