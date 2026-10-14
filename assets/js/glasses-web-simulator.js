@@ -12,6 +12,7 @@ const rejectedAssemblyTracks=new Set();
 const readonlyIngredient={status:'idle',session:null,config:null,package:null,
   verifiedSha256:null,epoch:0,timer:null,busy:false,frameSeq:0,devicePublicId:''};
 function readonlyStatus(message,error=false){
+ if(typeof renderProductionReadiness==='function')renderProductionReadiness();
  const el=$('glassesReadonlyModelStatus');if(el){el.textContent=message;el.dataset.state=error?'error':readonlyIngredient.status;}
  if($('glassesReadonlyModelLoad'))$('glassesReadonlyModelLoad').disabled=readonlyIngredient.status==='loading';
  if($('glassesReadonlyModelUnload'))$('glassesReadonlyModelUnload').disabled=readonlyIngredient.status==='idle';
@@ -362,6 +363,7 @@ function saveCameraPrefs(){
 }
 function setCameraHealth(stateName,label){
   const el=$('cameraHealth');if(!el)return;el.textContent=label;el.dataset.state=stateName;
+  if(typeof renderProductionReadiness==='function')renderProductionReadiness();
 }
 function applyCameraPresentation(persist=true){
   const video=$('cameraVideo');video.classList.toggle('fit-contain',$('cameraFit').value==='contain');
@@ -1562,7 +1564,7 @@ function ticketCompletionCandidate(group,options={}){
     options.busy?'Kitchen action is already processing.':'';
   if(statuses.some(x=>x==='queued'))
     return {visible:true,command:'start_order',title:'ASSEMBLY ACCOUNTED',
-      label:'Start Ticket',enabled:editable,
+      label:'Mark KDS Started',enabled:editable,
       help:blocked||'Items assembled locally. Start the queued KDS items before marking Ready.'};
   if(statuses.some(x=>x==='in_progress'))
     return {visible:true,command:'ready_order',title:'ALL ITEMS ASSEMBLED',
@@ -1855,8 +1857,19 @@ async function runCookUxAcceptance(){
   log('UX','Cook on-lens acceptance '+(d.cookUx.passed?'passed':'failed')+' at '+d.cookUx.score+'/10.');
   return d.cookUx;
 }
+function renderProductionReadiness(){
+  const element=$('glassesProductionStatus'),focus=window.GelatoProductionTicketFocus;
+  if(!element||!focus)return;
+  const result=focus.readiness({mode:state.mode,device:state.device,work:state.work,
+    item:selectedItem(),cameraLive:!!state.cameraStream,modelReady:readonlyIngredient.status==='ready',
+    recoveryState:state.recovery.state,hidden:document.hidden,
+    assigned:!!cfg.runtimePublicId&&!!window.GelatoGlassesRuntimes?.binding?.()});
+  element.dataset.state=result.state;
+  element.textContent='PRODUCTION '+result.state.toUpperCase()+' · '+result.message;
+}
 function render(){
   const live=state.mode==='live',item=selectedItem(),build=state.build,validation=state.validation;
+  renderProductionReadiness();
   $('connectionBadge').textContent=live?'LIVE GELATO':'MOCK';
   $('connectionBadge').style.color=live?'var(--good)':'var(--blue)';
   const station=state.work?.station?.name||state.device?.stationName||'Unassigned station';
@@ -2008,7 +2021,12 @@ async function focusKitchenItem(publicId,{autoBegin=true}={}){
   if(state.build)return {ok:false,message:'Finish the active build before selecting another item.'};
   const next=orderItems().find(x=>x.kdsItemPublicId===publicId);
   if(!next)return {ok:false,message:'KDS selection is stale. Refresh your orders.'};
+  if(state.selectedKdsItemPublicId!==next.kdsItemPublicId){
+    clearAssemblySuggestion();
+    window.GelatoHandTrackingUI?.reset?.();
+  }
   state.selectedKdsItemPublicId=next.kdsItemPublicId;
+  state.manualFocusAt=Date.now();
   state.previewStepIndex=0;state.validation=null;render();
   window.GelatoGlassesHudNotifications?.publish?.({
     event:'item.selected',severity:'info',message:(next.posLine?.name||'Item')+' selected.',
@@ -2547,6 +2565,28 @@ function simulatorNavigation(action,options={}){
   if(action==='ingredient_added'||action==='skip_ingredient')return acknowledgeIngredient(action==='ingredient_added'?'added':'skipped',options);
   if(KITCHEN_COMMANDS.has(action))return kitchenCommand(action,options);
   const items=orderItems(),current=selectedItem();
+  if(action==='focus_ticket'){
+    if(!current)return {ok:false,message:'No active KDS ticket is available at this station.'};
+    return {ok:true,message:'Following ticket #'+(current.ticket?.checkNumber||kdsSlotForItem(current)||'—')+
+      ' · '+(current.posLine?.name||'item')+'. Production assistance is ready without changing KDS status.'};
+  }
+  if(action==='next_ticket'||action==='previous_ticket'||/^select_ticket:[0-9]{1,24}$/.test(action)){
+    if(state.build)return {ok:false,message:'Finish the governed build before changing tickets; its evidence must remain assigned to the original item.'};
+    const focus=window.GelatoProductionTicketFocus;
+    if(!focus)return {ok:false,message:'Ticket navigation is unavailable; reload the glasses runtime.'};
+    const groups=visibleKdsTickets();
+    const target=action.startsWith('select_ticket:')?
+      focus.findByNumber(groups,action.slice('select_ticket:'.length)):
+      focus.navigate(groups,current?.kdsItemPublicId||'',action==='next_ticket'?1:-1);
+    if(!target.ok){
+      const errors={no_tickets:'No KDS tickets at this station.',only_one_ticket:'Only one active KDS ticket is available.',
+        ticket_not_found:'Ticket number is not in the current station KDS view.',
+        ambiguous_ticket:'Multiple tickets have that number. Select the ticket manually.',
+        invalid_number:'Say a valid ticket number.',no_items:'No active items on that ticket.'};
+      return {ok:false,message:errors[target.reason]||'Unable to select that KDS ticket.'};
+    }
+    return focusKitchenItem(target.item.kdsItemPublicId);
+  }
   if(action==='next_item'||action==='previous_item'){
     if(!current)return {ok:false,message:'No KDS item selected.'};
     if(state.build)return {ok:false,message:'Finish the governed build before changing items.'};
@@ -2554,9 +2594,7 @@ function simulatorNavigation(action,options={}){
     const index=group.items.findIndex(x=>x.kdsItemPublicId===current.kdsItemPublicId);
     const next=group.items[(index+(action==='next_item'?1:group.items.length-1))%group.items.length];
     if(!next)return {ok:false,message:'No additional item on this ticket.'};
-    state.selectedKdsItemPublicId=next.kdsItemPublicId;
-    state.previewStepIndex=0;render();
-    return {ok:true,message:'Selected '+(next.posLine?.name||'item')+' on KDS ticket #'+(kdsSlotForItem(next)||'—')+'.'};
+    return focusKitchenItem(next.kdsItemPublicId);
   }
 
   if(action==='skip_ingredient')return acknowledgeIngredient('skipped',options);
@@ -2602,12 +2640,24 @@ window.GelatoGlassesNavigation={dispatch:simulatorNavigation,
     return {activeItem:item,actions:item?{...itemActions(item.kdsItemPublicId)}:{}};
   },
   cameraBoxToStage:normalizedBoxToStage,
+  productionStatus:()=>window.GelatoProductionTicketFocus?.readiness?.({
+    mode:state.mode,device:state.device,work:state.work,item:selectedItem(),
+    cameraLive:!!state.cameraStream,modelReady:readonlyIngredient.status==='ready',
+    recoveryState:state.recovery.state,hidden:document.hidden,
+    assigned:!!cfg.runtimePublicId&&!!window.GelatoGlassesRuntimes?.binding?.()
+  })||{state:'unavailable'},
   context:()=>({
   mode:state.mode,items:orderItems().length,item:selectedItem()?.posLine?.name||null,
   step:(state.previewStepIndex||0)+1,virtual:!!state.device?.virtualPreview,
   locationId:state.device?.locationId||null,stationPublicId:state.device?.stationPublicId||null,
   cameraLive:!!state.cameraStream,cameraSourceKind:state.cameraInput?.kind||null,
-  cameraPerspective:state.cameraInput?.perspective||null
+  cameraPerspective:state.cameraInput?.perspective||null,
+  productionMode:window.GelatoProductionTicketFocus?.readiness?.({
+    mode:state.mode,device:state.device,work:state.work,item:selectedItem(),
+    cameraLive:!!state.cameraStream,modelReady:readonlyIngredient.status==='ready',
+    recoveryState:state.recovery.state,hidden:document.hidden,
+    assigned:!!cfg.runtimePublicId&&!!window.GelatoGlassesRuntimes?.binding?.()
+  })?.state||'unavailable'
 })};
 window.GelatoGlassesDisplayPreferences={
   ready:false,
