@@ -611,9 +611,9 @@ html,body{max-width:100%;overflow-x:hidden}
 }
 .sgv-tabbed-console .sgv-camera-unread-dot,
 .sgv-tabbed-console .gc-camera-status-dot{display:none!important}
-/* All six camera tabs fit the sidebar without a horizontal scrollbar. */
+/* Four system-camera tabs plus Training fit the sidebar. */
 .sgv-tabbed-console .gc-camera-tabs{
-  display:grid;grid-template-columns:repeat(6,minmax(0,1fr));
+  display:grid;grid-template-columns:repeat(5,minmax(0,1fr));
   gap:3px;overflow:visible!important;scrollbar-width:none;
   padding:5px 3px 7px;position:relative;
 }
@@ -1000,3 +1000,17 @@ html,body{max-width:100%;overflow-x:hidden}
  .sim-stage-panel .sim-hud-editor-advanced{grid-column:2;grid-row:2}
  .sim-stage-panel .sim-hud-editor-done{grid-column:3;grid-row:2}
 }
+
+/* Section 278: primary glasses camera belongs to each selected glasses Runtime. */
+.gc-glasses-runtime-camera{display:grid;gap:10px;min-width:0;border:1px solid #315441;border-radius:11px;padding:11px;background:#101f17}
+.gc-glasses-runtime-camera>.gc-heading{display:flex;align-items:center;justify-content:space-between;gap:9px}
+.gc-glasses-runtime-camera>.gc-heading strong{color:#edfff1;font-size:12px}
+.gc-glasses-runtime-camera>.gc-heading span{font-size:10px;color:#a6d4b6}
+.gc-glasses-runtime-camera>.gc-capture-button{width:100%}
+.gc-glasses-runtime-camera>.camera-card{min-width:0;margin:0;padding:0;border:0;background:transparent;box-shadow:none}
+.gc-glasses-runtime-camera .gc-gallery-section{min-width:0}
+.gc-glasses-runtime-camera .gc-advanced summary{cursor:pointer}
+
+
+/* Empty auxiliary source holder is retained for listeners, never shown as another camera panel. */
+#gcPaneTraining>.sim-multicamera[hidden]{display:none!important}

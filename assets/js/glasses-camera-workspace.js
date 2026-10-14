@@ -1,7 +1,7 @@
 (() => {
   'use strict';
   if(window.GelatoCameraWorkspace)return;
-  const S={active:'camera1',locationId:0,photos:[],menu:[],local:[],busy:false,seq:0};
+  const S={active:'camera2',locationId:0,photos:[],menu:[],local:[],busy:false,seq:0};
   const $=id=>document.getElementById(id);
   const controls={};
   // Counts are scoped to the current page/location session; never infer "new" from
@@ -30,11 +30,15 @@
         ' · '+session.count[slot]+' new photo'+(session.count[slot]===1?'':'s')+' this session'+
         (session.unread[slot]?' · '+session.unread[slot]+' unread':''));
     }
-    const unread=session.unread.slice(1).reduce((a,b)=>a+b,0);
+    // Camera tab represents auxiliary restaurant cameras only. Camera 1 is
+    // the selected glasses runtime; its session photos remain in its gallery.
+    const status=$('gcGlassesCaptureCount');
+    if(status)status.textContent=session.count[1]+' glasses photo'+(session.count[1]===1?'':'s');
+    const unread=session.unread.slice(2).reduce((a,b)=>a+b,0);
     window.dispatchEvent(new CustomEvent('gelato-camera-session-updated',{detail:{
-      enabledCount:enabled.filter(Boolean).length,
+      enabledCount:enabled.slice(1).filter(Boolean).length,
       unreadPhotos:unread,
-      sessionPhotos:session.count.slice(1).reduce((a,b)=>a+b,0)
+      sessionPhotos:session.count.slice(2).reduce((a,b)=>a+b,0)
     }}));
   }
   function countSessionPhoto(photo){
@@ -45,7 +49,10 @@
     if(session.photoKeys.has(key))return;
     session.photoKeys.add(key);
     session.count[slot]++;
-    if(S.active!=='camera'+slot||window.GelatoGlassesTabs?.active!=='camera')session.unread[slot]++;
+    if(slot===1){
+      if(window.GelatoGlassesTabs?.active!=='runtime')session.unread[slot]++;
+    }else if(S.active!=='camera'+slot||window.GelatoGlassesTabs?.active!=='camera')
+      session.unread[slot]++;
     updateCameraBadges();
   }
 
@@ -58,7 +65,7 @@
   function select(name){
     if(!controls[name])return;
     S.active=name;
-    if(/^camera[1-5]$/.test(name))session.unread[Number(name.slice(-1))]=0;
+    if(/^camera[2-5]$/.test(name))session.unread[Number(name.slice(-1))]=0;
     for(const [key,c] of Object.entries(controls)){
       c.button.setAttribute('aria-selected',key===name?'true':'false');
       c.button.tabIndex=key===name?0:-1;c.pane.hidden=key!==name;
@@ -104,7 +111,10 @@
     info.append(quality,rating,similarity);
     const actions=document.createElement('div');actions.className='gc-actions';
     const train=document.createElement('button');train.type='button';train.textContent='Review / Train';
-    train.addEventListener('click',()=>{select('training');setTraining(photo);});
+    train.addEventListener('click',()=>{
+      select('training');setTraining(photo);
+      window.GelatoGlassesTabs?.select?.('camera');
+    });
     actions.appendChild(train);
     if(photo.url){
       const save=document.createElement('button');save.type='button';save.textContent='Download';
@@ -257,13 +267,41 @@
   }
   function mount(){
     if(!window.GelatoCameraConfiguration||!window.GelatoGlassesMultiCamera)return;
-    const panel=$('sgv-panel-camera'),card=panel?.querySelector('.camera-card');
-    if(!panel||!card)return;
+    const panel=$('sgv-panel-camera'),runtime=$('sgv-panel-runtime');
+    const card=runtime?.querySelector('.camera-card');
+    if(!panel||!runtime||!card)return;
+    // One primary glasses camera is owned by the selected Runtime, never the
+    // system-camera tab. This moves real DOM nodes; event bindings remain live.
+    const glasses=document.createElement('section');
+    glasses.id='gcGlassesRuntimeCamera';
+    glasses.className='gc-glasses-runtime-camera';
+    const heading=document.createElement('div');heading.className='gc-heading';
+    const title=document.createElement('strong');title.textContent='Glasses camera · Primary POV';
+    const count=document.createElement('span');count.id='gcGlassesCaptureCount';
+    count.textContent='0 glasses photos';
+    heading.append(title,count);
+    const note=document.createElement('p');note.className='sim-muted';
+    note.textContent='Camera source, capture zone and vision tracking for the selected glasses workspace. System cameras are managed under Camera.';
+    const capture=document.createElement('button');capture.type='button';
+    capture.className='gc-capture-button';capture.id='gcGlassesCapturePhoto';
+    capture.textContent='Capture Photo · Glasses Camera';
+    capture.addEventListener('click',()=>void window.GelatoCameraConfiguration.capture(1));
+    const history=document.createElement('section');history.className='gc-gallery-section';
+    const historyHeading=document.createElement('div');historyHeading.className='gc-heading';
+    const historyTitle=document.createElement('strong');historyTitle.textContent='Glasses camera · Photo History & Gallery';
+    const historyCount=document.createElement('span');historyCount.id='gcCount1';
+    historyCount.textContent='0 photos';historyHeading.append(historyTitle,historyCount);
+    const info=document.createElement('p');info.className='sim-muted';
+    info.textContent='Photos remain local unless explicitly saved to private Vision Lab.';
+    const gallery=document.createElement('div');gallery.className='gc-gallery';gallery.id='gcGallery1';
+    history.append(historyHeading,info,gallery);
+    glasses.append(heading,note,capture,history,card);
+    runtime.appendChild(glasses);
     const shell=document.createElement('div');shell.className='gc-workspace';
     const nav=document.createElement('div');nav.className='gc-camera-tabs';nav.setAttribute('role','tablist');nav.setAttribute('aria-label','Camera views and training');
     const panes=document.createElement('div');panes.className='gc-camera-panels';
     shell.append(nav,panes);panel.prepend(shell);
-    for(let slot=1;slot<=5;slot++){
+    for(let slot=2;slot<=5;slot++){
       const name='camera'+slot,button=document.createElement('button');button.type='button';
       const label=document.createElement('span');label.textContent='Cam '+slot;
       const counter=document.createElement('span');counter.className='gc-session-new-count';
@@ -275,33 +313,27 @@
       view.setAttribute('role','tabpanel');view.setAttribute('aria-labelledby',button.id);view.hidden=true;
       button.addEventListener('click',()=>select(name));
       button.addEventListener('keydown',event=>{
-        const keys=['camera1','camera2','camera3','camera4','camera5','training'];
-        const idx=keys.indexOf(name),next=event.key==='ArrowRight'?keys[(idx+1)%6]:
-          event.key==='ArrowLeft'?keys[(idx+5)%6]:null;
+        const keys=['camera2','camera3','camera4','camera5','training'];
+        const idx=keys.indexOf(name),next=event.key==='ArrowRight'?keys[(idx+1)%keys.length]:
+          event.key==='ArrowLeft'?keys[(idx+keys.length-1)%keys.length]:null;
         if(next){event.preventDefault();select(next);controls[next].button.focus();}
       });
       nav.append(button);panes.append(view);controls[name]={button,pane:view};
-      if(slot===1)view.appendChild(card);
-      else {
-        const item=document.querySelector('.sim-aux-camera[data-slot="'+slot+'"]');
-        if(item)view.appendChild(item);
-      }
+      const item=document.querySelector('.sim-aux-camera[data-slot="'+slot+'"]');
+      if(item)view.appendChild(item);
       const section=document.createElement('section');section.className='gc-gallery-section';
       section.innerHTML='<div class="gc-heading"><strong>Camera '+slot+' · Photo History & Gallery</strong><span id="gcCount'+slot+'">0 photos</span></div>'+
         '<p class="sim-muted">Photos stay local until you explicitly save to private Vision Lab. Automatic visual scores are not ingredient or order verification.</p>'+
         '<div class="gc-gallery" id="gcGallery'+slot+'"></div>';
       const take=document.createElement('button');take.type='button';take.className='gc-capture-button';
       take.textContent='Capture Photo · Camera '+slot;take.addEventListener('click',()=>void window.GelatoCameraConfiguration.capture(slot));
-      if(slot===1){
-        view.insertBefore(section,view.firstChild);
-        view.insertBefore(take,section);
-        const advanced=card.querySelector('.vision-runtime-panel');
-        if(advanced){
-          const details=document.createElement('details');details.className='gc-advanced';
-          const summary=document.createElement('summary');summary.textContent='Advanced detection, inference & vision controls';
-          details.append(summary,advanced);card.append(details);
-        }
-      }else{view.appendChild(section);section.before(take);}
+      view.appendChild(section);section.before(take);
+    }
+    const advanced=card.querySelector('.vision-runtime-panel');
+    if(advanced){
+      const details=document.createElement('details');details.className='gc-advanced';
+      const summary=document.createElement('summary');summary.textContent='Advanced glasses detection, inference & vision controls';
+      details.append(summary,advanced);card.append(details);
     }
     const tb=document.createElement('button');tb.type='button';tb.textContent='Training';tb.id='gcTabTraining';
     tb.setAttribute('role','tab');tb.setAttribute('aria-controls','gcPaneTraining');
@@ -310,15 +342,25 @@
     tb.addEventListener('click',()=>select('training'));
     tb.addEventListener('keydown',event=>{
       if(event.key==='ArrowRight'||event.key==='ArrowLeft'){
-        event.preventDefault();const next=event.key==='ArrowRight'?'camera1':'camera5';
+        event.preventDefault();const next=event.key==='ArrowRight'?'camera2':'camera5';
         select(next);controls[next].button.focus();
       }
     });
     nav.append(tb);panes.append(train);
     controls.training={button:tb,pane:train};
-    const old=$('simMultiCameraPanel');if(old)train.appendChild(old);
-    const originalDataset=$('datasetCaptureSample')?.closest('.dataset-capture-panel');
-    if(originalDataset)train.appendChild(originalDataset);
+    // Preserve the auxiliary freeze/review and device refresh controls while
+    // removing the now-empty multi-camera container from the visible UI.
+    const old=$('simMultiCameraPanel');
+    if(old){
+      const auxReview=$('simCameraTraining');
+      if(auxReview)train.appendChild(auxReview);
+      const refresh=$('simCameraRefreshDevices');
+      if(refresh)train.appendChild(refresh);
+      old.hidden=true;
+      train.appendChild(old); // Keep legacy nodes available to existing handlers.
+    }
+    // The primary frame dataset controls stay with the glasses camera.
+    // Auxiliary frame review and the shared Vision Lab library remain here.
     const legacy=$('simCameraPhotoHistory')?.closest('.sim-camera-photo-history');if(legacy)legacy.hidden=true;
     const block=document.createElement('section');block.className='gc-training-workflow';
     block.innerHTML='<div class="gc-heading"><strong>Menu Item Photo Training</strong><span id="gcLibraryState">LOADING</span></div>'+
@@ -345,7 +387,11 @@
     });
     window.addEventListener('gelato-camera-configuration-changed',updateCameraBadges);
     window.addEventListener('gelato-glasses-tab-select',event=>{
-      if(event.detail?.tab==='camera')select(S.active);
+      if(event.detail?.tab==='camera')select(controls[S.active]?S.active:'camera2');
+      if(event.detail?.tab==='runtime'){
+        session.unread[1]=0;
+        updateCameraBadges();
+      }
     });
     window.addEventListener('gelato-glasses-location-change',event=>{
       const locationId=Number(event.detail?.locationId||0);
@@ -354,7 +400,7 @@
     });
     const freeze=document.querySelectorAll('[data-freeze]');freeze.forEach(b=>b.addEventListener('click',()=>select('training')));
     resetPhotoSession(Number(window.GelatoCameraConfiguration?.locationId||0));
-    select('camera1');void refresh();
+    select('camera2');void refresh();
   }
   async function persistOrderPhoto(photo,menuItemId,{optIn=false}={}){
     if(!canSave())throw new Error('Camera photo storage requires glasses.manage at this location.');

@@ -2260,7 +2260,7 @@ window.GelatoGlassesDisplayPreferences={
     cameraMirror:$('cameraMirror').checked,
     calibration:deepClone(normalizeCalibration(calibration)),
     activeTab:window.GelatoGlassesTabs?.active||'overview',
-    activeCameraTab:window.GelatoCameraWorkspace?.status?.().active||'camera1',
+    activeCameraTab:window.GelatoCameraWorkspace?.status?.().active||'camera2',
     voiceReplies:!!$('simVoiceReplies').checked,
     previewEmployeeUserId:window.GelatoGlassesRuntimes?.previewEmployeeUserId?.()||null
   }),
@@ -2291,9 +2291,13 @@ window.GelatoGlassesDisplayPreferences={
       $('deviceSelect').value=prefs.devicePublicId;
       $('deviceSelect').dispatchEvent(new Event('change'));
     }
-    if(['overview','voice','camera','runtime','build'].includes(prefs.activeTab))
-      window.GelatoGlassesTabs?.select?.(prefs.activeTab);
-    if(['camera1','camera2','camera3','camera4','camera5','training'].includes(prefs.activeCameraTab))
+    // Previously saved Camera > Cam 1 now belongs under Runtime. Migrate the
+    // visible tab selection in memory; saved camera/device data is unchanged.
+    const oldGlassesCamera=prefs.activeTab==='camera'&&prefs.activeCameraTab==='camera1';
+    const activeMainTab=oldGlassesCamera?'runtime':prefs.activeTab;
+    if(['overview','voice','camera','runtime','build'].includes(activeMainTab))
+      window.GelatoGlassesTabs?.select?.(activeMainTab);
+    if(['camera2','camera3','camera4','camera5','training'].includes(prefs.activeCameraTab))
       window.GelatoCameraWorkspace?.select?.(prefs.activeCameraTab);
     // This restores UI selection only. Never starts microphone, camera capture or KDS writes.
     if(!cfg.runtimePublicId&&prefs.mode==='mock'&&state.mode==='live'){

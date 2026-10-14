@@ -62,6 +62,6 @@ assert.match(page,/glasses-ingredient-training-plan\.js/);
 assert.match(page,/glasses-ingredient-training-studio\.js/);
 assert.match(cams,/getCapturedPhotos:/,'local cameras shared without new image store');
 assert.doesNotMatch(page,/id="simNavRepeat"|id="simNavItemAdded"|id="simViewHudOnly"|id="simViewGlasses"/,'redundant sidebar controls removed');
-assert.match(css,/grid-template-columns:repeat\(6,minmax\(0,1fr\)\)/,'all camera tabs fit');
+assert.match(css,/grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/,'system camera and training tabs fit');
 assert.match(css,/\.gc-session-new-count\[data-state="active"\]/,'single active green camera badge');
 console.log('section267-ingredient-training-plan-and-UI-contract=ok');

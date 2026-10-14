@@ -51,6 +51,8 @@ on:
       - 'assets/js/glasses-camera-runtime.js'
       - 'tests/glasses-camera-runtime.test.js'
       - 'assets/js/glasses-camera-workspace.js'
+      - 'tests/glasses-primary-runtime-camera-ui.test.js'
+      - 'docs/GLASSES-RUNTIME-CAMERA-UI-SEPARATION.md'
       - 'assets/js/glasses-ingredient-training-plan.js'
       - 'assets/js/glasses-ingredient-training-studio.js'
       - 'includes/glasses-ingredient-training.php'
@@ -228,6 +230,7 @@ jobs:
           node tests/glasses-training-foundation.test.js
           node tests/glasses-camera-config.test.js
           node tests/glasses-camera-runtime.test.js
+          node tests/glasses-primary-runtime-camera-ui.test.js
           node tests/glasses-camera-photo-library.test.js
           node tests/glasses-production-photo-flow.test.js
           node tests/glasses-customer-photo-notifications.test.js

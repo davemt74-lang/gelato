@@ -12,7 +12,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <title>Web Glasses Simulator · Gelato</title>
 <link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20261013-live1">
 <link rel="stylesheet" href="assets/css/glasses-simulator-hud-ux.css?v=20261013-voice1">
-<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-hud273">
+<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261014-cam-runtime-split">
 <link rel="stylesheet" href="assets/css/glasses-runtime-workspace.css?v=277refine">
 </head>
 <body>
@@ -345,10 +345,10 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
       <div class="camera-meta" id="cameraMeta"><span>No active camera stream.</span></div>
       <section class="sim-multicamera" id="simMultiCameraPanel" aria-labelledby="simMultiCameraTitle">
         <header class="console-heading">
-          <div><small>MULTI-CAMERA SOURCES</small><strong id="simMultiCameraTitle">Camera 2–5 · Independent training feeds</strong></div>
+          <div><small>MULTI-CAMERA SOURCES</small><strong id="simMultiCameraTitle">System Cameras 2–5 · Independent training feeds</strong></div>
           <span id="simMultiCameraCount" role="status" aria-live="polite">0 / 4 AUX</span>
         </header>
-        <p class="calibration-note">Camera 1 supplies the glasses HUD. Cameras 2–5 have separate previews for training and future builds. Each requires an explicit Start; no secondary feed changes POS, KDS, or build verification.</p>
+        <p class="calibration-note">The primary glasses camera is managed under Runtime. Cameras 2–5 have independent system-camera previews for training and future builds. Each requires an explicit Start; no secondary feed changes POS, KDS, or build verification.</p>
         <div id="simAuxCameraSlots" class="sim-aux-camera-slots" aria-label="Additional camera sources"></div>
         <section class="sim-camera-training" id="simCameraTraining" hidden aria-labelledby="simCameraTrainingTitle">
           <div class="console-heading"><div><small>VISION LAB CAPTURE</small><strong id="simCameraTrainingTitle">Review &amp; label frame</strong></div>
@@ -522,11 +522,11 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-voice-device.js?v=20261013-device1"></script>
 <script src="assets/js/glasses-simulator-voice.js?v=20261013-266a"></script>
 <script src="assets/js/glasses-multicamera.js?v=20261013-multi1"></script>
-<script src="assets/js/glasses-camera-config.js?v=20261013-hud264"></script>
+<script src="assets/js/glasses-camera-config.js?v=20261014-cam-runtime-split"></script>
 <script src="assets/js/glasses-camera-runtime.js?v=20261013-261"></script>
-<script src="assets/js/glasses-simulator-tabs.js?v=20261013-runtime276fix"></script>
+<script src="assets/js/glasses-simulator-tabs.js?v=20261014-cam-runtime-split"></script>
 <script src="assets/js/glasses-camera-similarity.js?v=20261013-ref258"></script>
-<script src="assets/js/glasses-camera-workspace.js?v=20261013-267"></script>
+<script src="assets/js/glasses-camera-workspace.js?v=20261014-cam-runtime-split"></script>
 <script src="assets/js/glasses-ingredient-training-plan.js?v=20261013-267"></script>
 <script src="assets/js/glasses-ingredient-training-studio.js?v=20261013-267"></script>
 <script src="assets/js/glasses-assembly-learning.js?v=20261013-268"></script>

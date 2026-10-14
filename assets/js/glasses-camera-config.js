@@ -248,7 +248,7 @@
     return photo;
   }
   function mount(){
-    const cameraCard=$('simMultiCameraPanel')?.closest('.camera-card');
+    const cameraCard=$('cameraDeviceSelect')?.closest('.camera-card');
     if(!cameraCard)return;
     const headline=document.createElement('p');headline.id='simCameraConfigHealth';headline.className='sim-muted';
     headline.textContent='Waiting for authorized location / camera configuration';
