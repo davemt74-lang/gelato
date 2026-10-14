@@ -576,9 +576,9 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-mediapipe-hands-ui.js?v=20261014-281"></script>
 <script src="assets/js/glasses-camera-sources.js?v=20261014-284a"></script>
 <script src="assets/js/glasses-web-simulator.js?v=20261014-284camera"></script>
-<script src="assets/js/glasses-pov-calibration.js?v=20261014-284b"></script>
 <script src="assets/js/glasses-voice-device.js?v=20261013-device1"></script>
 <script src="assets/js/glasses-simulator-voice.js?v=20261014-kds-completion"></script>
+<script src="assets/js/glasses-pov-calibration.js?v=20261014-284b"></script>
 <script src="assets/js/glasses-hand-tracker-ui.js?v=20261014-282"></script>
 <script src="assets/js/glasses-multicamera.js?v=20261013-multi1"></script>
 <script src="assets/js/glasses-camera-config.js?v=20261014-cam-runtime-split"></script>
