@@ -572,7 +572,8 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-item-assembly.js?v=20261013-265"></script>
 <script src="assets/js/glasses-production-ticket-focus.js?v=20261014-285a"></script>
 <script src="assets/js/glasses-production-auto-focus.js?v=20261014-285b"></script>
-<script src="assets/js/glasses-shared-camera-recognition.js?v=20261014-285c"></script>
+<script src="assets/js/glasses-shared-camera-recognition.js?v=20261014-285d2"></script>
+<script src="assets/js/glasses-cross-camera-evidence.js?v=20261014-285d2"></script>
 <script src="assets/js/glasses-employee-runtimes.js?v=20261013-runtime-refine277"></script>
 <script src="assets/js/glasses-assembly-recognition.js?v=20261013-266"></script>
 <script src="assets/js/glasses-hud-notifications.js?v=20261013-hud-edit2"></script>
@@ -581,7 +582,7 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-mediapipe-hands.js?v=20261014-282"></script>
 <script src="assets/js/glasses-mediapipe-hands-ui.js?v=20261014-281"></script>
 <script src="assets/js/glasses-camera-sources.js?v=20261014-284a"></script>
-<script src="assets/js/glasses-web-simulator.js?v=20261014-285c"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20261014-285d2"></script>
 <script src="assets/js/glasses-voice-device.js?v=20261013-device1"></script>
 <script src="assets/js/glasses-simulator-voice.js?v=20261014-285b"></script>
 <script src="assets/js/glasses-pov-calibration.js?v=20261014-284b"></script>

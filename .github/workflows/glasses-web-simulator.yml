@@ -19,6 +19,8 @@ on:
       - 'assets/css/glasses-web-simulator.css'
       - 'assets/js/glasses-web-simulator.js'
       - 'assets/js/glasses-shared-camera-recognition.js'
+      - 'assets/js/glasses-cross-camera-evidence.js'
+      - 'tests/glasses-section285d2-cross-camera-evidence.test.js'
       - 'tests/glasses-section285c-shared-model.test.js'
       - 'tests/glasses-section285c-live-inference.test.js'
       - 'includes/glasses-vision-models.php'
@@ -246,6 +248,8 @@ jobs:
           node tests/glasses-held-ingredient-evidence.test.js
           node tests/glasses-readonly-ingredient-inference.test.js
           node --check assets/js/glasses-shared-camera-recognition.js
+          node --check assets/js/glasses-cross-camera-evidence.js
+          node tests/glasses-section285d2-cross-camera-evidence.test.js
           node tests/glasses-section285c-shared-model.test.js
           node tests/glasses-section285c-live-inference.test.js
           node tests/glasses-kds-left-lens-completion.test.js
