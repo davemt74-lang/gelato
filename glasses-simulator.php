@@ -638,7 +638,8 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-pov-calibration.js?v=20261014-284b"></script>
 <script src="assets/js/glasses-hand-box-stabilizer.js?v=20261014-285d1"></script>
 <script src="assets/js/glasses-hand-tracker-ui.js?v=20261014-285d1"></script>
-<script src="assets/js/glasses-placement-review-ui.js?v=20261014-285d4"></script>
+<script src="assets/js/glasses-hand-to-food-evidence.js?v=20261014-285e2"></script>
+<script src="assets/js/glasses-placement-review-ui.js?v=20261014-285e2"></script>
 <script src="assets/js/glasses-ingredient-progression-ui.js?v=20261014-285d4"></script>
 <script src="assets/js/glasses-placement-reliability-ui.js?v=20261014-285d5"></script>
 <script src="assets/js/glasses-multicamera.js?v=20261013-multi1"></script>
