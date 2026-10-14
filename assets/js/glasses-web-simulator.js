@@ -8,6 +8,22 @@ const AUTO_ASSEMBLY_KEY='gelato.glasses.autoAssembly.v1:u'+String(cfg.userId||0)
 let autoAssemblyOptIn=false;
 try{autoAssemblyOptIn=localStorage.getItem(AUTO_ASSEMBLY_KEY)==='1';}catch{}
 let assemblySuggestion=null,assemblySuggestionSignature='',assemblyEpoch=0;
+const productionAutoFocus=window.GelatoProductionAutoFocus?.create?.()||null;
+let recentProductionHands=null;
+function resetProductionFocusEvidence(){productionAutoFocus?.reset();recentProductionHands=null;}
+function productionFocusEligible(){
+ return !!productionAutoFocus&&state.mode==='live'&&!!cfg.runtimePublicId&&
+   !!window.GelatoGlassesRuntimes?.binding?.()&&
+   !!state.device&&!state.device.virtualPreview&&!!state.device.stationPublicId&&
+   !!state.cameraStream&&!document.hidden&&readonlyIngredient.status==='ready'&&
+   !state.build&&!state.manualFocusLocked&&!state.cookUx.stopped&&
+   state.recovery.state==='ready'&&!state.recovery.suppressAutomatic&&
+   window.GelatoMediaPipeHandsRuntime?.isActive?.();
+}
+function productionFocusNote(message,stateName='waiting'){
+ const el=$('glassesAutoFocusStatus');
+ if(el){el.textContent=message;el.dataset.state=stateName;}
+}
 const rejectedAssemblyTracks=new Set();
 const readonlyIngredient={status:'idle',session:null,config:null,package:null,
   verifiedSha256:null,epoch:0,timer:null,busy:false,frameSeq:0,devicePublicId:''};
@@ -216,6 +232,8 @@ function applyLiveWork(work,{announce=false}={}){
   const activeBuildItem=state.build?.kdsItemPublicId||'';
   state.work=work;
   if(!ids.includes(state.selectedKdsItemPublicId)){
+    state.manualFocusLocked=false;
+    resetProductionFocusEvidence();
     state.previewStepIndex=0;
     if(activeBuildItem&&ids.includes(activeBuildItem))state.selectedKdsItemPublicId=activeBuildItem;
     else state.selectedKdsItemPublicId=work?.focusItem?.kdsItemPublicId||ids[0]||'';
@@ -994,6 +1012,8 @@ async function unloadReadonlyIngredientModel(message='Read-only ingredient model
   readonlyIngredient.epoch++;
   if(readonlyIngredient.timer!==null){clearTimeout(readonlyIngredient.timer);readonlyIngredient.timer=null;}
   const session=readonlyIngredient.session;
+  resetProductionFocusEvidence();
+  productionFocusNote('Visual ticket focus waiting for an approved ingredient model.');
   readonlyIngredient.session=null;readonlyIngredient.config=null;readonlyIngredient.package=null;
   readonlyIngredient.verifiedSha256=null;readonlyIngredient.devicePublicId='';
   readonlyIngredient.status='idle';readonlyIngredient.busy=false;readonlyIngredient.frameSeq=0;
@@ -1008,11 +1028,13 @@ function scheduleReadonlyIngredientFrame(epoch){
 async function pollReadonlyIngredientFrame(epoch){
  if(epoch!==readonlyIngredient.epoch||readonlyIngredient.status!=='ready')return;
  const item=selectedItem();
- // No fixture detections and no KDS/build mutations. Model inference requires a
- // visible camera, the same authorized device, and a real active KDS item.
- const active=item&&['queued','in_progress'].includes(item.status)&&
-   state.cameraStream&&!document.hidden&&state.mode==='live'&&
-   readonlyIngredient.devicePublicId===state.device?.publicId;
+ // Section 285B: read-only capture considers all currently eligible KDS items
+ // at this assigned station, not just whichever item happens to be focused.
+ const eligibleItems=(state.work?.items||[]).filter(x=>
+   ['queued','in_progress'].includes(x.status)&&x.kdsItemPublicId&&
+   x.ticket?.checkPublicId&&Array.isArray(x.menu?.ingredients));
+ const active=eligibleItems.length>0&&state.cameraStream&&!document.hidden&&
+   state.mode==='live'&&readonlyIngredient.devicePublicId===state.device?.publicId;
  if(!active){
    if(readonlyIngredient.devicePublicId!==state.device?.publicId){
      await unloadReadonlyIngredientModel('Device or station changed; reload the approved model.');
@@ -1021,10 +1043,15 @@ async function pollReadonlyIngredientFrame(epoch){
    scheduleReadonlyIngredientFrame(epoch);return;
  }
  if(readonlyIngredient.busy){scheduleReadonlyIngredientFrame(epoch);return;}
- const options=window.GelatoHeldIngredientEvidence?.choices?.(
-   item,{...itemActions(item.kdsItemPublicId)})||[];
- if(!options.length){window.GelatoMediaPipeHandsRuntime?.setObjects([],{});scheduleReadonlyIngredientFrame(epoch);return;}
- const itemKey=item.kdsItemPublicId,deviceKey=state.device?.publicId,now=Date.now();
+ const options=item?window.GelatoHeldIngredientEvidence?.choices?.(
+   item,{...itemActions(item.kdsItemPublicId)})||[]:[];
+ const allNames=new Set(eligibleItems.flatMap(row=>
+   row.menu.ingredients.map(r=>(window.GelatoHeldIngredientEvidence?.normalize||((s)=>String(s).toLowerCase()))(
+     r?.canonicalName||r?.name)).filter(Boolean)).slice(0,64));
+ if(!allNames.size){window.GelatoMediaPipeHandsRuntime?.setObjects([],{});
+   resetProductionFocusEvidence();scheduleReadonlyIngredientFrame(epoch);return;}
+ const itemKey=item?.kdsItemPublicId||'',deviceKey=state.device?.publicId,
+   snapshot=eligibleItems.map(x=>x.kdsItemPublicId+':'+x.status).sort().join('|'),now=Date.now();
  const video=$('cameraVideo');
  if(!video?.videoWidth||!video?.videoHeight){scheduleReadonlyIngredientFrame(epoch);return;}
  readonlyIngredient.busy=true;
@@ -1034,16 +1061,29 @@ async function pollReadonlyIngredientFrame(epoch){
    const frame={video},detections=await inferOnnxModel(readonlyIngredient,frame,{readonly:true});
    if(epoch!==readonlyIngredient.epoch||Date.now()-now>900||
       !state.cameraStream||document.hidden||
-      selectedItem()?.kdsItemPublicId!==itemKey||state.device?.publicId!==deviceKey)return;
-   const names=new Set(options.map(x=>x.canonical));
+      selectedItem()?.kdsItemPublicId!==itemKey||state.device?.publicId!==deviceKey||
+      snapshot!==(state.work?.items||[]).filter(x=>['queued','in_progress'].includes(x.status)&&
+        x.kdsItemPublicId&&x.ticket?.checkPublicId&&Array.isArray(x.menu?.ingredients))
+        .map(x=>x.kdsItemPublicId+':'+x.status).sort().join('|'))return;
    const normalized=window.GelatoHeldIngredientEvidence?.normalize||((x)=>String(x).toLowerCase());
-   const focused=detections.filter(d=>names.has(normalized(d.label)));
+   const allDetections=detections.filter(d=>allNames.has(normalized(d.label)));
+   const names=new Set(options.map(x=>x.canonical));
+   const focused=allDetections.filter(d=>names.has(normalized(d.label)));
    if(window.GelatoMediaPipeHandsRuntime?.isActive())
      window.GelatoMediaPipeHandsRuntime.setObjects(focused,{
        modelSha256:readonlyIngredient.verifiedSha256,
        kdsItemPublicId:itemKey
      });
    readonlyIngredient.frameSeq++;
+   if(productionFocusEligible())
+     window.dispatchEvent(new CustomEvent('gelato-glasses-production-object-frame',{detail:{
+       cameraSlot:1,sourceKind:state.cameraInput?.kind||'browser',
+       devicePublicId:deviceKey,stationPublicId:state.device.stationPublicId,
+       modelSha256:readonlyIngredient.verifiedSha256,seq:readonlyIngredient.frameSeq,
+       timestamp:Date.now(),objects:allDetections.slice(0,16).map(d=>({
+         label:String(d.label||''),confidence:Number(d.confidence),bbox:{...d.bbox}
+       }))
+     }}));
    if(readonlyIngredient.frameSeq%16===1)
      readonlyStatus('Read-only model active · '+options.length+
        ' active KDS ingredient candidates · '+focused.length+' current detections.');
@@ -2017,16 +2057,22 @@ $('modeSelect').addEventListener('change',async e=>{if(cfg.runtimePublicId&&e.ta
 $('deviceSelect').addEventListener('change',async e=>{if(cfg.runtimePublicId){e.target.value=state.device?.publicId||'';return;}stopLiveStationSync('idle');await unloadGovernedVisionModel('build_reset');state.device=state.devices.find(x=>x.publicId===e.target.value)||null;if(state.device)localStorage.setItem(LIVE_DEVICE_KEY,state.device.publicId);window.dispatchEvent(new CustomEvent('gelato-glasses-location-change',{detail:{locationId:state.device?.locationId||null}}));state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;clearAssemblySession();clearTemporalRuntime();state.syncFingerprint='';if(state.mode==='live'&&state.device){if(state.device.virtualPreview){state.recovery.state='ready';renderRuntimeRecovery();startLiveStationSync();}else{enterRecovery('recovering','device_changed');await resumeRuntimeRecovery('device_changed');}}else render();});
 /* Selecting a kitchen item goes directly to the recipe/build view; no extra load step.
  * Live build writes require a paired writable device and an already started KDS item. */
-async function focusKitchenItem(publicId,{autoBegin=true}={}){
+async function focusKitchenItem(publicId,{autoBegin=true,source='manual'}={}){
   if(state.build)return {ok:false,message:'Finish the active build before selecting another item.'};
   const next=orderItems().find(x=>x.kdsItemPublicId===publicId);
   if(!next)return {ok:false,message:'KDS selection is stale. Refresh your orders.'};
   if(state.selectedKdsItemPublicId!==next.kdsItemPublicId){
     clearAssemblySuggestion();
     window.GelatoHandTrackingUI?.reset?.();
+    resetProductionFocusEvidence();
   }
   state.selectedKdsItemPublicId=next.kdsItemPublicId;
-  state.manualFocusAt=Date.now();
+  if(source!=='vision'){
+    state.manualFocusLocked=true;
+    state.manualFocusAt=Date.now();
+    resetProductionFocusEvidence();
+    productionFocusNote('Manual ticket focus locked · say “follow activity” to resume automatic selection.','manual');
+  }
   state.previewStepIndex=0;state.validation=null;render();
   window.GelatoGlassesHudNotifications?.publish?.({
     event:'item.selected',severity:'info',message:(next.posLine?.name||'Item')+' selected.',
@@ -2565,6 +2611,11 @@ function simulatorNavigation(action,options={}){
   if(action==='ingredient_added'||action==='skip_ingredient')return acknowledgeIngredient(action==='ingredient_added'?'added':'skipped',options);
   if(KITCHEN_COMMANDS.has(action))return kitchenCommand(action,options);
   const items=orderItems(),current=selectedItem();
+  if(action==='follow_activity'){
+    state.manualFocusLocked=false;resetProductionFocusEvidence();
+    productionFocusNote('Following verified hand and ingredient evidence when available.','waiting');
+    return {ok:true,message:'Following kitchen activity. Manual ticket focus released; KDS status unchanged.'};
+  }
   if(action==='focus_ticket'){
     if(!current)return {ok:false,message:'No active KDS ticket is available at this station.'};
     return {ok:true,message:'Following ticket #'+(current.ticket?.checkNumber||kdsSlotForItem(current)||'—')+
@@ -2633,6 +2684,54 @@ window.GelatoGlassesAssemblyContext={current:()=>{
     cameraPerspective:state.cameraInput?.perspective||null
   };
 }};
+// Observe existing MediaPipe hand frames and verified read-only ONNX outputs.
+ // Never turn this observation into an ingredient-added or KDS status action.
+window.addEventListener('gelato-glasses-hand-frame',event=>{
+ const d=event.detail||{};
+ if(!productionFocusEligible()||!d.cameraReady||!d.modelReady){
+   recentProductionHands=null;return;
+ }
+ recentProductionHands={hands:Array.isArray(d.hands)?d.hands:[],timestamp:Number(d.timestamp)||0};
+});
+window.addEventListener('gelato-glasses-production-object-frame',event=>{
+ if(!productionFocusEligible()||!recentProductionHands)return;
+ const d=event.detail||{},now=Date.now();
+ if(d.devicePublicId!==state.device?.publicId||
+   d.stationPublicId!==state.device.stationPublicId||
+   d.modelSha256!==readonlyIngredient.verifiedSha256||
+   d.cameraSlot!==1||!Number.isFinite(d.timestamp)||d.timestamp>now||now-d.timestamp>550){
+   resetProductionFocusEvidence();return;
+ }
+ const result=productionAutoFocus.update({
+   items:state.work?.items||[],objects:d.objects||[],hands:recentProductionHands.hands,
+   seq:d.seq,objectTime:d.timestamp,handTime:recentProductionHands.timestamp,now,
+   modelSha256:d.modelSha256,devicePublicId:d.devicePublicId,
+   stationPublicId:d.stationPublicId,sourceSlot:d.cameraSlot,
+   manualLocked:!!state.manualFocusLocked,buildActive:!!state.build
+ });
+ if(result.status==='candidate')
+   productionFocusNote('Checking '+result.frames+' distinct hand+ingredient frames; no KDS changes.','candidate');
+ if(result.status==='ambiguous')
+   productionFocusNote('Several KDS items could match; use voice to choose a ticket.','warning');
+ if(result.status!=='matched'||!result.itemPublicId||
+   result.itemPublicId===selectedItem()?.kdsItemPublicId)return;
+ // Re-evaluate guards and the exact KDS item right before switching.
+ if(!productionFocusEligible()||
+   !state.work?.items?.some(x=>x.kdsItemPublicId===result.itemPublicId&&
+     ['queued','in_progress'].includes(x.status)))return;
+ void focusKitchenItem(result.itemPublicId,{source:'vision'}).then(out=>{
+   if(out?.ok){
+     productionFocusNote('Recognized hand-held '+result.ingredient+
+       ' · following ticket '+result.ticketNumber+' (view only).','ready');
+     log('VISION','Camera 1 auto-focused KDS ticket '+result.ticketNumber+
+       ' using stable held-ingredient evidence. No KDS write.');
+   }
+ });
+});
+window.addEventListener('gelato-glasses-runtime-revoked',resetProductionFocusEvidence);
+window.addEventListener('gelato-glasses-camera-source-change',resetProductionFocusEvidence);
+window.addEventListener('gelato-glasses-hand-reset',resetProductionFocusEvidence);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)resetProductionFocusEvidence();});
 window.GelatoGlassesNavigation={dispatch:simulatorNavigation,
   primaryCamera:()=>$('cameraVideo'),
   handContext:()=>{
@@ -2640,6 +2739,8 @@ window.GelatoGlassesNavigation={dispatch:simulatorNavigation,
     return {activeItem:item,actions:item?{...itemActions(item.kdsItemPublicId)}:{}};
   },
   cameraBoxToStage:normalizedBoxToStage,
+  autoFocus:()=>({manualLocked:!!state.manualFocusLocked,
+    evidenceReady:productionFocusEligible(),modelSha256:readonlyIngredient.verifiedSha256||null}),
   productionStatus:()=>window.GelatoProductionTicketFocus?.readiness?.({
     mode:state.mode,device:state.device,work:state.work,item:selectedItem(),
     cameraLive:!!state.cameraStream,modelReady:readonlyIngredient.status==='ready',
@@ -2652,6 +2753,8 @@ window.GelatoGlassesNavigation={dispatch:simulatorNavigation,
   locationId:state.device?.locationId||null,stationPublicId:state.device?.stationPublicId||null,
   cameraLive:!!state.cameraStream,cameraSourceKind:state.cameraInput?.kind||null,
   cameraPerspective:state.cameraInput?.perspective||null,
+  automaticTicketFocus:!state.manualFocusLocked&&productionFocusEligible()?'evidence_available':
+    state.manualFocusLocked?'manual_override':'awaiting_evidence',
   productionMode:window.GelatoProductionTicketFocus?.readiness?.({
     mode:state.mode,device:state.device,work:state.work,item:selectedItem(),
     cameraLive:!!state.cameraStream,modelReady:readonlyIngredient.status==='ready',
