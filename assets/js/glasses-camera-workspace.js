@@ -348,7 +348,17 @@
     });
     nav.append(tb);panes.append(train);
     controls.training={button:tb,pane:train};
-    const old=$('simMultiCameraPanel');if(old)train.appendChild(old);
+    // Preserve the auxiliary freeze/review and device refresh controls while
+    // removing the now-empty multi-camera container from the visible UI.
+    const old=$('simMultiCameraPanel');
+    if(old){
+      const auxReview=$('simCameraTraining');
+      if(auxReview)train.appendChild(auxReview);
+      const refresh=$('simCameraRefreshDevices');
+      if(refresh)train.appendChild(refresh);
+      old.hidden=true;
+      train.appendChild(old); // Keep legacy nodes available to existing handlers.
+    }
     // The primary frame dataset controls stay with the glasses camera.
     // Auxiliary frame review and the shared Vision Lab library remain here.
     const legacy=$('simCameraPhotoHistory')?.closest('.sim-camera-photo-history');if(legacy)legacy.hidden=true;
