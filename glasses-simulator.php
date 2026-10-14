@@ -13,7 +13,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20261013-live1">
 <link rel="stylesheet" href="assets/css/glasses-simulator-hud-ux.css?v=20261013-voice1">
 <link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261013-hud273">
-<link rel="stylesheet" href="assets/css/glasses-runtime-workspace.css?v=276fix2">
+<link rel="stylesheet" href="assets/css/glasses-runtime-workspace.css?v=277refine">
 </head>
 <body>
 <header class="sim-topbar">
@@ -39,11 +39,12 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
      aria-label="Assigned employee glasses runtimes" hidden></div>
 <div class="glasses-runtime-toolbar" aria-label="Selected glasses workspace">
     <label id="glassesRuntimeSelectLabel" hidden>Runtime <select id="glassesRuntimeSelect" aria-label="Glasses runtime"><option value="">Preview</option></select></label>
-    <label id="glassesRuntimeDeviceGroup" hidden>Live display <select id="deviceSelect" aria-label="Live KDS display"><option value="">Finding live displays…</option></select></label>
+    <label id="glassesRuntimeDeviceGroup" hidden>Internal display source <select id="deviceSelect" aria-label="Internal KDS display source"><option value="">Finding live displays…</option></select></label>
     <label id="glassesRuntimePairGroup" hidden>Glasses device <select id="glassesRuntimePairSelect" aria-label="Choose paired glasses"><option value="">Choose paired glasses…</option></select></label>
-    <label>Kitchen station <select id="glassesRuntimeStation" aria-label="Kitchen station for selected glasses"><option value="">Choose station…</option></select></label>
-    <button id="glassesRuntimeSaveStation" type="button" title="Save this station to the selected employee glasses runtime">Save Station</button>
-    <label id="glassesRuntimeEmployeeGroup" hidden>Employee profile <select id="glassesRuntimeEmployee" aria-label="Assign employee to glasses runtime"><option value="">Loading staff…</option></select></label>
+    <label id="glassesRuntimeEmployeeGroup">Assigned Employee <select id="glassesRuntimeEmployee" aria-label="Assign employee to selected glasses"><option value="">Loading staff…</option></select></label>
+    <label id="glassesRuntimeStationGroup">Kitchen Station <select id="glassesRuntimeStation" aria-label="Kitchen station for selected glasses"><option value="">Choose station…</option></select></label>
+    <button id="glassesRuntimeSaveStation" type="button" title="Save station on the assigned glasses runtime" hidden>Save Station</button>
+    <button id="glassesRuntimeSaveEmployee" type="button" title="Save employee on the assigned glasses runtime" hidden>Save Employee</button>
     <button id="glassesRuntimeNew" type="button" hidden title="Create an assigned glasses runtime">Save Runtime</button>
     <button id="glassesRuntimeAddCancel" type="button" hidden>Cancel</button>
     <button id="glassesRuntimeOpen" type="button" hidden title="Open glasses runtime">Open</button>
@@ -514,10 +515,10 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-v10-cook-ux-harness.js?v=20260929-v10-6"></script>
 <script src="js/voice-session-presence.js?v=20261013-presence1"></script>
 <script src="assets/js/glasses-item-assembly.js?v=20261013-265"></script>
-<script src="assets/js/glasses-employee-runtimes.js?v=20261013-runtime276fix"></script>
+<script src="assets/js/glasses-employee-runtimes.js?v=20261013-runtime-refine277"></script>
 <script src="assets/js/glasses-assembly-recognition.js?v=20261013-266"></script>
 <script src="assets/js/glasses-hud-notifications.js?v=20261013-hud-edit2"></script>
-<script src="assets/js/glasses-web-simulator.js?v=20261013-runtime-restore"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20261013-runtime-refine277"></script>
 <script src="assets/js/glasses-voice-device.js?v=20261013-device1"></script>
 <script src="assets/js/glasses-simulator-voice.js?v=20261013-266a"></script>
 <script src="assets/js/glasses-multicamera.js?v=20261013-multi1"></script>

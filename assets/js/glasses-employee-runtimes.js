@@ -3,7 +3,7 @@
  * browser camera, inference worker, checklist, audio and recovery state. */
 const cfg=window.GELATO_GLASSES_SIMULATOR||{},byId=id=>document.getElementById(id);
 let catalog={schemaReady:false,runtimes:[],employees:[],stations:[]},bound=null,devices=[],mounted=false,lost=false;
-let adding=false;
+let adding=false,previewEmployeeId=null;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const status=(s,error=false)=>{const e=byId('glassesRuntimeStatus');if(e){e.textContent=s;e.dataset.error=error?'1':'0';}};
 async function json(url,options={}){
@@ -77,9 +77,11 @@ function render(){
  select.value=adding?'':cfg.runtimePublicId||'';
  const chosen=adding?null:choices.find(r=>r.publicId===select.value)||null;
  renderPairDevices();
- byId('glassesRuntimeDeviceGroup').hidden=adding;
- byId('glassesRuntimeEmployeeGroup').hidden=!adding&&!chosen;
+ // The internal KDS display selector remains mounted but not visible.
+ byId('glassesRuntimeDeviceGroup').hidden=true;
+ byId('glassesRuntimeEmployeeGroup').hidden=false;
  byId('glassesRuntimeSaveStation').hidden=!chosen;
+ byId('glassesRuntimeSaveEmployee').hidden=!chosen||!cfg.canManageMedia;
  byId('glassesRuntimeNew').hidden=!adding;
  byId('glassesRuntimeAddCancel').hidden=!adding;
  byId('glassesRuntimeOpen').hidden=true;
@@ -90,13 +92,14 @@ function render(){
  if(chosen&&deviceSelect){deviceSelect.value=chosen.devicePublicId;deviceSelect.disabled=true;}
  else if(deviceSelect&&!cfg.runtimePublicId)deviceSelect.disabled=false;
  const previousEmployee=employee.value;
- employee.innerHTML='<option value="">Assign employee…</option>'+
+ employee.innerHTML='<option value="">'+((catalog.employees||[]).length?'Choose employee…':'No available employees')+'</option>'+
    (catalog.employees||[]).map(e=>'<option value="'+e.id+'">'+esc(e.displayName)+(e.employeeNumber?' · '+esc(e.employeeNumber):'')+'</option>').join('');
  if(chosen&&!(catalog.employees||[]).some(e=>e.id===chosen.employeeUserId))
    employee.innerHTML+='<option value="'+chosen.employeeUserId+'">'+esc(chosen.employeeName)+'</option>';
- employee.value=chosen?String(chosen.employeeUserId):
-   (catalog.employees||[]).some(e=>String(e.id)===previousEmployee)?previousEmployee:'';
- employee.disabled=!adding||(catalog.employees||[]).length===0;
+ employee.value=chosen?String(chosen.employeeUserId):adding?
+   ((catalog.employees||[]).some(e=>String(e.id)===previousEmployee)?previousEmployee:''):
+   ((catalog.employees||[]).some(e=>e.id===previewEmployeeId)?String(previewEmployeeId):'');
+ employee.disabled=!(catalog.employees||[]).length||(!!chosen&&!cfg.canManageMedia);
  renderStation(chosen);
  renderTraining(chosen);
  byId('glassesRuntimeNew').disabled=!adding||!!cfg.runtimePublicId||!!chosen||!catalog.schemaReady||
@@ -104,6 +107,8 @@ function render(){
    !byId('glassesRuntimeStation')?.value||!employee.value;
  byId('glassesRuntimeOpen').disabled=!chosen;
  byId('glassesRuntimeEnd').disabled=!chosen;
+ byId('glassesRuntimeSaveEmployee').disabled=!chosen||!employee.value||
+   Number(employee.value)===chosen.employeeUserId;
  if(!catalog.schemaReady){
    status('Browser preview works without a saved runtime. Run upgrade.php to enable new glasses assignments.',true);
    return;
@@ -130,22 +135,41 @@ function renderPairDevices(){
  if(paired.some(d=>d.publicId===old))field.value=old;
  field.disabled=!paired.length;
 }
+function stationChoices(chosen){
+ const device=selectedDevice(chosen);
+ // For the browser preview, derive permitted choices from the already authorized
+ // preview display list. This works with glasses.view even without glasses.manage.
+ if(!chosen&&!adding){
+  const preview=devices.filter(d=>d.virtualPreview&&d.stationPublicId);
+  return preview.map(d=>({publicId:d.stationPublicId,locationId:d.locationId,
+    name:d.stationName,locationName:d.locationName,previewId:d.publicId}));
+ }
+ const locationId=chosen?.locationId||device?.locationId||null;
+ return (catalog.stations||[]).filter(x=>Number(x.locationId)===Number(locationId));
+}
 function renderStation(chosen){
  const field=byId('glassesRuntimeStation'),button=byId('glassesRuntimeSaveStation');
  if(!field)return;
  const device=selectedDevice(chosen),locationId=chosen?.locationId||device?.locationId||null;
- const prior=field.value,assigned=chosen?.stationPublicId||device?.stationPublicId||'';
- const stations=(catalog.stations||[]).filter(s=>Number(s.locationId)===Number(locationId));
- field.innerHTML='<option value="">'+(locationId?'Choose kitchen station…':'Choose glasses first…')+'</option>'+
-   stations.map(s=>'<option value="'+esc(s.publicId)+'">'+esc(s.name)+'</option>').join('');
+ const previous=field.value,assigned=chosen?.stationPublicId||device?.stationPublicId||'';
+ const stations=stationChoices(chosen);
+ const preview=!chosen&&!adding;
+ field.innerHTML='<option value="">'+(preview?'All kitchen stations':locationId?'Choose kitchen station…':'Choose glasses first…')+'</option>'+
+   stations.map(s=>'<option value="'+esc(s.publicId)+'">'+esc(preview?(s.locationName+' · '+s.name):s.name)+'</option>').join('');
  const allowed=v=>stations.some(s=>s.publicId===v);
- field.value=chosen?(allowed(assigned)?assigned:''):(allowed(prior)?prior:allowed(assigned)?assigned:'');
- field.disabled=!locationId||(cfg.runtimePublicId&&!bound);
+ field.value=chosen?(allowed(assigned)?assigned:''):preview?(allowed(assigned)?assigned:''):
+  (allowed(previous)?previous:allowed(assigned)?assigned:'');
+ field.disabled=!preview&&!locationId||!!cfg.runtimePublicId&&!bound;
  const changed=!!chosen&&!!field.value&&field.value!==assigned;
  button.disabled=!changed;button.dataset.dirty=changed?'1':'0';
  const create=byId('glassesRuntimeNew');
  if(!chosen)create.disabled=!adding||!!cfg.runtimePublicId||!device||!!device.virtualPreview||!field.value||
    !(catalog.employees||[]).length||!catalog.schemaReady||!byId('glassesRuntimeEmployee').value;
+}
+function restorePreviewEmployee(id){
+ const value=Number(id);
+ previewEmployeeId=Number.isSafeInteger(value)&&value>0?value:null;
+ if(!cfg.runtimePublicId&&!adding)render();
 }
 function renderTraining(chosen){
  const training=byId('glassesRuntimeTrainingSelect');
@@ -188,17 +212,38 @@ function mount(){
  byId('deviceSelect').addEventListener('change',()=>renderStation(catalog.runtimes?.find(r=>r.publicId===select.value)||null));
  byId('glassesRuntimePairSelect').addEventListener('change',()=>{renderStation(null);render();});
  byId('glassesRuntimeEmployee').addEventListener('change',()=>{
-   if(!select.value)renderStation(null);
+   if(adding){renderStation(null);return;}
+   if(!cfg.runtimePublicId){
+     const value=Number(byId('glassesRuntimeEmployee').value);
+     previewEmployeeId=Number.isSafeInteger(value)&&value>0?value:null;
+     status(previewEmployeeId?'Preview operator selected (no sign-in or permission change) · Saving UI preference.':'Preview operator cleared.');
+     window.GelatoGlassesUserPreferences?.queueSave?.();
+     return;
+   }
+   const chosen=catalog.runtimes?.find(r=>r.publicId===select.value)||null;
+   byId('glassesRuntimeSaveEmployee').disabled=!chosen||!byId('glassesRuntimeEmployee').value||
+     Number(byId('glassesRuntimeEmployee').value)===chosen?.employeeUserId;
+ });
+ byId('glassesRuntimeSaveEmployee').addEventListener('click',async()=>{
+   const chosen=catalog.runtimes?.find(r=>r.publicId===select.value)||null;
+   const employeeUserId=Number(byId('glassesRuntimeEmployee').value);
+   if(!chosen||!Number.isSafeInteger(employeeUserId)||employeeUserId<1||employeeUserId===chosen.employeeUserId)return;
+   if(!window.confirm('Assign '+chosen.deviceName+' to the selected employee? The active runtime will reload.'))return;
+   try{
+     byId('glassesRuntimeSaveEmployee').disabled=true;
+     await post('runtime.employee_update',{runtimePublicId:chosen.publicId,employeeUserId});
+     await refresh();window.location.reload();
+   }catch(error){status(error.message,true);byId('glassesRuntimeSaveEmployee').disabled=false;}
  });
  byId('glassesRuntimeStation').addEventListener('change',()=>{
    const chosen=catalog.runtimes?.find(r=>r.publicId===select.value)||null;
    const station=byId('glassesRuntimeStation').value;
    if(!chosen&&!adding&&!cfg.runtimePublicId){
-     const locationId=selectedDevice()?.locationId||null;
-     const preview=devices.find(d=>d.virtualPreview&&
-       (d.stationPublicId||'')===station&&d.locationId===locationId);
-     if(preview){
-       byId('deviceSelect').value=preview.publicId;
+     const current=selectedDevice(),candidate=devices.find(d=>d.virtualPreview&&
+       ((station&&d.stationPublicId===station)||(!station&&d.stationPublicId===null&&d.locationId===current?.locationId)));
+     if(candidate&&candidate.publicId!==current?.publicId){
+       // Same event as choosing the preview source directly: reload live KDS only.
+       byId('deviceSelect').value=candidate.publicId;
        byId('deviceSelect').dispatchEvent(new Event('change'));
      }
    }
@@ -281,7 +326,8 @@ async function heartbeat(){
  if(!bound||lost)return;
  try{
    const result=await post('runtime.heartbeat',{runtimePublicId:bound.publicId,devicePublicId:bound.devicePublicId});
-   if(result.runtime?.stationPublicId!==bound.stationPublicId){
+   if(result.runtime?.stationPublicId!==bound.stationPublicId||
+      result.runtime?.employeeUserId!==bound.employeeUserId){
      lost=true;status('Station updated. Reloading assigned glasses workspace.');
      window.location.reload();return;
    }
@@ -311,5 +357,5 @@ async function bootstrap(currentDevices){
  setInterval(heartbeat,15000);
  return bound;
 }
-window.GelatoGlassesRuntimes={bootstrap,refresh,binding:()=>bound,selected:()=>catalog.runtimes?.find(r=>r.publicId===byId('glassesRuntimeSelect')?.value)||null,syncDevices(next){devices=next||[];render();}};
+window.GelatoGlassesRuntimes={bootstrap,refresh,binding:()=>bound,selected:()=>catalog.runtimes?.find(r=>r.publicId===byId('glassesRuntimeSelect')?.value)||null,previewEmployeeUserId:()=>previewEmployeeId,restorePreviewEmployee,syncDevices(next){devices=next||[];render();}};
 })();

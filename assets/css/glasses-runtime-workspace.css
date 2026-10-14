@@ -19,3 +19,12 @@
 .glasses-runtime-advanced>summary{cursor:pointer;font-size:11px}
 .glasses-runtime-advanced:not([open])>.console-card{display:none!important}
 /* Preserve the certified full-canvas glasses layout. */
+
+/* Focused operator runtime: employee and kitchen station only; internal source remains mounted. */
+#sgv-panel-runtime #glassesRuntimeDeviceGroup{display:none!important}
+#sgv-panel-runtime #glassesRuntimeEmployeeGroup,
+#sgv-panel-runtime #glassesRuntimeStationGroup{flex:1 1 calc(50% - 12px);min-width:130px}
+#sgv-panel-runtime #glassesRuntimePairGroup:not([hidden]){flex:1 1 100%}
+#sgv-panel-runtime #glassesRuntimeSaveEmployee:not([hidden]),
+#sgv-panel-runtime #glassesRuntimeSaveStation:not([hidden]){flex:0 0 auto}
+@media(max-width:450px){#sgv-panel-runtime #glassesRuntimeEmployeeGroup,#sgv-panel-runtime #glassesRuntimeStationGroup{flex:1 1 100%}}

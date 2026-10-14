@@ -98,8 +98,10 @@ function glasses_employee_runtime_catalog(PDO $pdo,array $user): array
 {
     if(!glasses_employee_runtimes_ready($pdo)){
         $org=(int)$user['organization_id'];
-        $employees=app_has_permission('glasses.manage',$user)
-            ?glasses_training_employee_catalog($pdo,$org):[];
+        $allEmployees=glasses_training_employee_catalog($pdo,$org);
+        $employees=app_has_permission('glasses.manage',$user)?$allEmployees:
+            array_values(array_filter($allEmployees,static fn(array $staff):bool=>
+                (int)$staff['id']===(int)$user['id']));
         $stations=[];
         if(app_has_permission('glasses.manage',$user)){
             $q=$pdo->prepare("SELECT s.public_id,s.location_id,s.name,l.name location_name
@@ -146,8 +148,10 @@ function glasses_employee_runtime_catalog(PDO $pdo,array $user): array
         $runtimes[]=glasses_employee_runtime_public($row);
     }
     // Reuse the canonical V11 training/employee directory; no duplicate roster.
-    $employees=app_has_permission('glasses.manage',$user)
-        ?glasses_training_employee_catalog($pdo,$org):[];
+    $allEmployees=glasses_training_employee_catalog($pdo,$org);
+    $employees=app_has_permission('glasses.manage',$user)?$allEmployees:
+        array_values(array_filter($allEmployees,static fn(array $staff):bool=>
+            (int)$staff['id']===(int)$user['id']));
     $trainingAssignments=[];
     $activeSessions=[];
     $visibleEmployees=array_fill_keys(array_column($runtimes,'employeeUserId'),true);
@@ -268,6 +272,68 @@ function glasses_employee_runtime_create(PDO $pdo,array $user,string $devicePubl
           $device['station_id']!==null?(int)$device['station_id']:null,
           ['runtimePublicId'=>$publicId,'employeeUserId'=>$employeeId],(int)$user['id']);
         return glasses_employee_runtime_public(glasses_employee_runtime_row($pdo,$user,$publicId));
+    });
+}
+
+/** Governed wearer change; no active kitchen build or training may cross wearer identities. */
+function glasses_employee_runtime_employee_update(PDO $pdo,array $user,string $runtimePublicId,int $employeeId): array
+{
+    if(!app_has_permission('glasses.manage',$user))
+        throw new DomainException('Glasses management permission is required to assign employees.');
+    if($employeeId<1)throw new InvalidArgumentException('Choose an active employee.');
+    $org=(int)$user['organization_id'];
+    return glasses_transaction($pdo,static function()use($pdo,$user,$org,$runtimePublicId,$employeeId):array{
+        $row=glasses_employee_runtime_row($pdo,$user,$runtimePublicId,true);
+        $locationId=(int)$row['location_id'];
+        if(!operational_location_allowed($pdo,$user,'glasses.manage',$locationId))
+            throw new DomainException('Cannot manage glasses at this restaurant.');
+        $device=glasses_device_row($pdo,$org,(string)$row['device_public_id'],true);
+        glasses_employee_runtime_assert_binding($pdo,$user,$runtimePublicId,$device);
+        if(!employee_home_staff_exists($pdo,$org,$employeeId))
+            throw new InvalidArgumentException('Choose an active employee account at this organization.');
+        if((int)$row['employee_user_id']===$employeeId)
+            return glasses_employee_runtime_public($row);
+        if((int)$row['wearer_assignment_created']!==1)
+            throw new DomainException('This wearer was assigned in Vision Lab. Release that assignment there before creating a new runtime.');
+        $q=$pdo->prepare("SELECT 1 FROM glasses_employee_runtimes WHERE organization_id=?
+          AND employee_user_id=? AND status='active' AND active_slot=1 LIMIT 1 FOR UPDATE");
+        $q->execute([$org,$employeeId]);
+        if($q->fetchColumn())throw new DomainException('This employee already has an active glasses runtime.');
+        foreach(['glasses_training_sessions','glasses_build_sessions'] as $table){
+            $q=$pdo->prepare("SELECT 1 FROM $table WHERE organization_id=? AND device_id=? AND status='active' LIMIT 1");
+            $q->execute([$org,(int)$row['device_id']]);
+            if($q->fetchColumn())
+                throw new DomainException('Finish active training and kitchen builds before changing the employee.');
+        }
+        $q=$pdo->prepare("SELECT id,user_id FROM glasses_user_device_assignments
+          WHERE organization_id=? AND device_id=? AND released_at IS NULL LIMIT 1 FOR UPDATE");
+        $q->execute([$org,(int)$row['device_id']]);$wearer=$q->fetch(PDO::FETCH_ASSOC);
+        if(!$wearer||(int)$wearer['id']!==(int)$row['wearer_assignment_id']||
+           (int)$wearer['user_id']!==(int)$row['employee_user_id'])
+            throw new DomainException('Device wearer has changed. Refresh and review its assignment.');
+        $assignment=glasses_vision_lab_assign_device($pdo,$org,(string)$row['device_public_id'],
+            $employeeId,'operator','manual',(int)$user['id']);
+        $q=$pdo->prepare("SELECT id FROM glasses_user_device_assignments
+          WHERE organization_id=? AND public_id=? LIMIT 1");
+        $q->execute([$org,(string)$assignment['publicId']]);$newAssignmentId=(int)$q->fetchColumn();
+        if(!$newAssignmentId)throw new DomainException('New wearer assignment was not recorded.');
+        try{
+            $q=$pdo->prepare("UPDATE glasses_employee_runtimes
+              SET employee_user_id=?,wearer_assignment_id=?,wearer_assignment_created=1,
+                  profile_confirmed_at=NULL,updated_at=NOW(6)
+              WHERE organization_id=? AND id=? AND employee_user_id=? AND status='active'");
+            $q->execute([$employeeId,$newAssignmentId,$org,(int)$row['id'],(int)$row['employee_user_id']]);
+            if($q->rowCount()!==1)throw new DomainException('Runtime changed while saving employee.');
+        }catch(PDOException $e){
+            if((string)$e->getCode()==='23000')
+                throw new DomainException('Employee is already assigned to a different active runtime.');
+            throw $e;
+        }
+        glasses_device_event($pdo,$org,(int)$row['device_id'],'runtime_employee_changed',
+          $locationId,$row['station_id']!==null?(int)$row['station_id']:null,
+          ['runtimePublicId'=>$runtimePublicId,'previousEmployeeUserId'=>(int)$row['employee_user_id'],
+            'employeeUserId'=>$employeeId],(int)$user['id']);
+        return glasses_employee_runtime_public(glasses_employee_runtime_row($pdo,$user,$runtimePublicId));
     });
 }
 

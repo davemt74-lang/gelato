@@ -2261,10 +2261,12 @@ window.GelatoGlassesDisplayPreferences={
     calibration:deepClone(normalizeCalibration(calibration)),
     activeTab:window.GelatoGlassesTabs?.active||'overview',
     activeCameraTab:window.GelatoCameraWorkspace?.status?.().active||'camera1',
-    voiceReplies:!!$('simVoiceReplies').checked
+    voiceReplies:!!$('simVoiceReplies').checked,
+    previewEmployeeUserId:window.GelatoGlassesRuntimes?.previewEmployeeUserId?.()||null
   }),
   apply:async prefs=>{
     if(!prefs||typeof prefs!=='object')return;
+    window.GelatoGlassesRuntimes?.restorePreviewEmployee?.(prefs.previewEmployeeUserId);
     if(prefs.calibration&&typeof prefs.calibration==='object'){
       calibration=normalizeCalibration(prefs.calibration);
       saveCalibration();
