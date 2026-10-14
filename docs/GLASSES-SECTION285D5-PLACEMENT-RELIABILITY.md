@@ -1,0 +1,11 @@
+# Gelato Section 285D5 — Placement Reliability and Production Readiness
+
+Baseline: 285D4 certified main `ecdab59b44deca6811d06a74194c63a9d39def96`.
+
+This release establishes a **non-authoritative, operator-labeled diagnostics pipeline** around Camera 1 placement hypotheses. Metrics include unique frames, stale/replay rejection reasons, p95 frame processing delay, unique review candidates, explicit operator labels (placed / false alarm / uncertain) and operator-reported misses. Reports export only aggregate counts by an explicit button click; there is no frame upload, face identity, employee profile, tracking ID, item ID or automatic telemetry persistence. A short session restart clears all statistics. Operator labels alone do not establish independent physical ground truth, and unreported misses can bias recall proxies.
+
+The existing D4 operator-confirmed, station-scoped audit-before-checklist flow now validates a **fresh live context after the awaited authenticated server audit response**. A camera disconnect, runtime reset, station, item or permission change while the audit is pending cannot apply stale local checklist changes. In-flight audit mutex remains locked until the request settles. This preserves durable idempotency while avoiding incorrect local acknowledgment. An already committed audit with revoked context returns `audited_but_context_revoked`; it is not silently mistaken for a checklist completion. Reversal has the same guard.
+
+**Invariant:** no unattended ingredient Added transition, KDS Ready/Complete transition, automatic build verification, or unapproved camera permission. Field accuracy stays NOT CERTIFIED regardless of synthetic test scores. Real kitchen field testing needs independently labeled placement and non-placement sequences across lighting, staff, food items, cameras and occlusions; review false alarms and misses with operators. Live MySQL audit and hardware behavior need staging/field certification.
+
+Acceptance gates: 25 JavaScript reliability and asynchronous revocation assertions, plus existing 285D1–285D4, glasses, KDS and server contracts. Both glasses simulator and full deployment workflows execute this suite. A passing CI suite earns 10/10 **software readiness**, never physical automatic-progression authorization.
