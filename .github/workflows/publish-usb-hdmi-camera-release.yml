@@ -1,4 +1,4 @@
-name: Release Gelato Section 284
+name: Release Gelato Section 285A
 
 on:
   workflow_run:
@@ -19,12 +19,12 @@ jobs:
           && github.event.workflow_run.head_repository.full_name == 'davemt74-lang/gelato' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Skip once Section 284 release exists
+      - name: Skip once Section 285A release exists
         id: already
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view gelato-section-284 --repo davemt74-lang/gelato >/dev/null 2>&1; then
+          if gh release view gelato-section-285a --repo davemt74-lang/gelato >/dev/null 2>&1; then
             echo 'exists=true' >> "$GITHUB_OUTPUT"
           else
             echo 'exists=false' >> "$GITHUB_OUTPUT"
@@ -65,6 +65,8 @@ jobs:
           unzip -Z1 gelato-full-deploy.zip | grep -Fx 'assets/js/glasses-camera-sources.js'
           unzip -Z1 gelato-full-deploy.zip | grep -Fx 'assets/js/glasses-pov-calibration.js'
           unzip -Z1 gelato-full-deploy.zip | grep -Fx 'tests/glasses-section284-pov-sdk-sources.test.js'
+          unzip -Z1 gelato-full-deploy.zip | grep -Fx 'assets/js/glasses-production-ticket-focus.js'
+          unzip -Z1 gelato-full-deploy.zip | grep -Fx 'tests/glasses-section285a-production-ticket-focus.test.js'
           if unzip -Z1 gelato-full-deploy.zip | grep -Eq '^(config\.php|\.env|uploads/|storage/)'; then
             echo 'Private live config/state unexpectedly included.' >&2
             exit 1
@@ -77,10 +79,10 @@ jobs:
           EXPECTED_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
-          gh release create gelato-section-284 \
+          gh release create gelato-section-285a \
             payload/gelato-full-deploy.zip \
             payload/gelato-full-deploy.sha256 \
             --repo davemt74-lang/gelato \
             --target "$EXPECTED_SHA" \
-            --title 'Gelato — Section 284 Glasses POV and SDK-ready Sources' \
-            --notes 'Full certified deployment ZIP for Section 284: opt-in AIR3 camera source boundary, local head-direction POV calibration, read-only Agent source context, and labeled training sample provenance. USB/HDMI and stationary Cameras 2–5 remain supported. AIR3 proprietary SDK and physical glasses verification are still pending. Extract into the app root and preserve existing configuration/uploads/storage; run upgrade.php if instructed by the installer.'
+            --title 'Gelato — Section 285A Always-ready Production and Voice Ticket Navigation' \
+            --notes 'Full certified Section 285A deployment: assigned glasses work with available KDS items without a Start Ticket prerequisite; distinct next/previous item and ticket voice navigation, exact ticket-number selection, explicit KDS Mark Started action, protected per-item progress and production readiness. This release does not automatically infer which order a worker is preparing from camera images; that requires a qualified Section 285B model. Preserves Section 284 USB/HDMI, stationary cameras and pending AIR3 SDK boundary. Preserve live configuration, uploads and storage when deploying.'
