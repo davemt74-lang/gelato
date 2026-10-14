@@ -13,6 +13,9 @@ assert.match(page,/USB \/ HDMI CAMERA INPUT/);
 assert.match(page,/id="refreshCameraInputs"/);
 assert.match(page,/id="allowCameraDiscovery"/);
 assert.match(app,/function requestCameraDiscoveryAccess\(\)/);
+assert.match(app,/function applyCameraPresentation\(persist=true\)/);
+assert.match(app,/cameraMirror'\)\.checked=!!cp\.mirror;applyCameraPresentation\(false\);await enumerateCameras\(\)/,
+ 'bootstrap should restore stored camera ID before enumerating devices');
 assert.match(page,/id="cameraInputStatus"/);
 assert.match(page,/HDMI capture adapter/);
 assert.match(app,/navigator\.mediaDevices\?\.addEventListener\?\.\('devicechange'/);
