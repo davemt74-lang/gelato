@@ -4,6 +4,10 @@ on:
   pull_request:
     paths:
       - 'glasses-simulator.php'
+      - 'glasses-fleet.php'
+      - 'assets/js/glasses-fleet-page.js'
+      - 'assets/css/glasses-fleet-page.css'
+      - 'assets/css/glasses-runtime-workspace.css'
       - 'api/glasses-software.php'
       - 'includes/glasses-software.php'
       - 'assets/js/glasses-software-manager.js'
@@ -124,6 +128,7 @@ jobs:
       - name: PHP syntax
         run: |
           php -l glasses-simulator.php
+          php -l glasses-fleet.php
           php -l api/glasses-simulator.php
           php -l api/glasses-camera-locations.php
           php -l api/glasses-camera-photo-library.php
@@ -163,6 +168,7 @@ jobs:
       - name: JavaScript syntax
         run: |
           node --check assets/js/glasses-web-simulator.js
+          node --check assets/js/glasses-fleet-page.js
           node --check assets/js/glasses-hud-notifications.js
           node --check assets/js/glasses-employee-runtimes.js
           node --check assets/js/glasses-software-manager.js

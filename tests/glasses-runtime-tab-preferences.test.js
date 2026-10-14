@@ -20,57 +20,58 @@ assert.match(prefs,/const endpoint='api\/glasses-user-preferences.php'/,'existin
 assert.match(prefs,/bridge\(\)\?\.snapshot\?\.\(\)/,'existing safe snapshot reused');
 assert.match(api,/glasses_user_display_preferences/,'no second preferences table');
 assert.match(prefs,/window\.GelatoGlassesUserPreferences=\{save,queueSave/,'existing autosave API preserved');
-assert.match(css,/\.glasses-runtime-tabs\[hidden\]\{display:none!important\}/,'no tabs for 0 or 1 runtime');
+assert.match(css,/\.glasses-runtime-tabs\[hidden\]\{display:none!important\}/,'hidden tab CSS remains safe');
 assert.match(css,/#sgvUserPrefsStatus\[data-state="error"\]/,'save errors remain visible');
-// Exercise the actual runtime-tab renderer; no browser/DOM dependency.
+// New contract: one visible preview runtime by default, no synthetic saved tabs,
+// add only after explicit + / Save, and switch within the same browser tab.
 const start=runtimes.indexOf('function renderRuntimeTabs(choices,current){');
 const end=runtimes.indexOf('function render(){',start);
-assert.ok(start>0&&end>start,'runtime subtab renderer exists');
-const byIdMap={};
-function element(){
+assert.ok(start>0&&end>start,'runtime tab renderer exists');
+const map={};let renders=0,adding=false;
+function el(){
  return {hidden:false,children:[],attributes:{},listeners:{},dataset:{},
-   appendChild(child){this.children.push(child);return child},
-   append(...children){this.children.push(...children)},
-   replaceChildren(){this.children=[]},
-   setAttribute(k,v){this.attributes[k]=v},
-   addEventListener(k,fn){this.listeners[k]=fn},
-   focus(){this.focused=true},
-   querySelectorAll(selector){return selector==='[role="tab"]'?this.children:[]}};
+  append(...nodes){this.children.push(...nodes)},
+  appendChild(node){this.children.push(node);return node},
+  replaceChildren(){this.children=[]},
+  setAttribute(key,value){this.attributes[key]=value},
+  addEventListener(name,fn){this.listeners[name]=fn},
+  focus(){this.focused=true},
+  querySelectorAll(){return this.children.filter(n=>n.attributes?.role==='tab')}};
 }
-byIdMap.glassesRuntimeTabs=element();
-byIdMap.glassesRuntimeSelectLabel=element();
-byIdMap.glassesRuntimeSelect={value:'',disabled:false};
-const cfg={runtimePublicId:''},opened=[];
-let renders=0;
-const context={byId:k=>byIdMap[k],document:{
- createElement:()=>element(),createTextNode:s=>({textContent:s})
- },cfg,location:{href:'https://example.test/glasses-simulator.php'},
- URL,window:{open:(...args)=>opened.push(args)},render:()=>{renders++}};
+map.glassesRuntimeTabs=el();map.glassesRuntimeSelectLabel=el();
+map.glassesRuntimeSelect={value:''};map.glassesRuntimeAddCancel=el();
+map.glassesRuntimePairSelect=el();
+const navigation=[],cfg={runtimePublicId:'',canManageMedia:true};
+const location={href:'https://example.test/glasses-simulator.php'};
+const context={byId:id=>map[id],document:{createElement:()=>el(),createTextNode:text=>({text})},
+ URL,cfg,location,adding:false,render:()=>{renders++},
+ status:()=>{},window:{location:{assign:url=>navigation.push(url)}}};
 vm.runInNewContext(runtimes.slice(start,end)+'\nthis.renderTabs=renderRuntimeTabs;',context);
-const one={publicId:'runtime-1',employeeName:'Cook One',deviceName:'Headset A',stationName:'Pizza Line'};
-const two={publicId:'runtime-2',employeeName:'Cook Two',deviceName:'Headset B',stationName:'Prep'};
+const one={publicId:'runtime-one',employeeName:'Cook One',deviceName:'Glasses A',stationName:'Pizza'};
+const two={publicId:'runtime-two',employeeName:'Cook Two',deviceName:'Glasses B',stationName:'Prep'};
 context.renderTabs([], '');
-assert.equal(byIdMap.glassesRuntimeTabs.hidden,true,'zero runtimes hide subtabs');
-context.renderTabs([one],'runtime-1');
-assert.equal(byIdMap.glassesRuntimeTabs.hidden,true,'one runtime does not create unnecessary tab row');
-assert.equal(byIdMap.glassesRuntimeSelectLabel.hidden,false,'fallback dropdown remains');
-context.renderTabs([one,two],'runtime-1');
-assert.equal(byIdMap.glassesRuntimeTabs.hidden,false,'two runtimes show tabs');
-assert.equal(byIdMap.glassesRuntimeSelectLabel.hidden,true,'dropdown not duplicated');
-assert.equal(byIdMap.glassesRuntimeTabs.children.length,3,'two runtimes and Create tab');
-assert.equal(byIdMap.glassesRuntimeTabs.children[0].attributes['aria-selected'],'true');
-byIdMap.glassesRuntimeTabs.children[1].listeners.click();
-assert.equal(byIdMap.glassesRuntimeSelect.value,'runtime-2','manager changes selected runtime only');
+assert.equal(map.glassesRuntimeTabs.hidden,false,'default preview runtime is visible');
+assert.equal(map.glassesRuntimeTabs.children.length,2,'default preview and + only');
+assert.equal(map.glassesRuntimeTabs.children[0].attributes['aria-selected'],'true','default preview selected');
+assert.equal(map.glassesRuntimeTabs.children[1].textContent,'+','only + starts creation');
+assert.equal(navigation.length,0,'load never creates extra runtime');
+map.glassesRuntimeTabs.children[1].listeners.click();
+assert.equal(context.adding,true,'explicit + activates add form');
+assert.equal(map.glassesRuntimePairSelect.focused,true,'paired device selector receives focus');
 assert.equal(renders,1);
-assert.equal(opened.length,0,'manager never silently opens or reassigns a running device');
-byIdMap.glassesRuntimeTabs.children[2].listeners.click();
-assert.equal(byIdMap.glassesRuntimeSelect.value,'','New resets selection to creation UI');
-cfg.runtimePublicId='runtime-1';
-context.renderTabs([one,two],'runtime-1');
-assert.equal(byIdMap.glassesRuntimeTabs.children.length,2,'bound runtime cannot create extra runtime here');
-byIdMap.glassesRuntimeTabs.children[1].listeners.click();
-assert.equal(opened.length,1,'changing runtime opens isolated session');
-assert.equal(opened[0][1],'_blank');
-assert.equal(new URL(opened[0][0]).searchParams.get('runtime'),'runtime-2');
-assert.equal(renders,2,'bound runtime does not re-render another device into active KDS');
-console.log('section272-runtime-tabs-inline-display-settings=ok');
+context.adding=false;
+context.renderTabs([one], '');
+assert.equal(map.glassesRuntimeTabs.children.length,3,'only a saved pair adds a second numbered tab');
+assert.equal(map.glassesRuntimeTabs.children[1].attributes['aria-selected'],'false');
+map.glassesRuntimeTabs.children[1].listeners.click();
+assert.equal(navigation.length,1,'switch uses current tab URL instead of spawning browser window');
+assert.equal(new URL(navigation[0]).searchParams.get('runtime'),'runtime-one');
+context.renderTabs([one,two], 'runtime-two');
+assert.equal(map.glassesRuntimeTabs.children.length,4,'preview and two saved pairs and +');
+assert.equal(map.glassesRuntimeTabs.children[2].attributes['aria-selected'],'true');
+cfg.runtimePublicId='runtime-two';
+map.glassesRuntimeTabs.children[0].listeners.click();
+assert.equal(new URL(navigation[1]).searchParams.has('runtime'),false,'preview navigation unbinds selected physical runtime');
+assert.doesNotMatch(html,/id="glassesConnectionManager"|id="glassesSoftwareManager"/,'fleet management not in Runtime');
+assert.match(html,/href="glasses-fleet.php"/,'device administration reachable separately');
+console.log('section276-runtime-one-preview-plus-save-same-tab=ok');

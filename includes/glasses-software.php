@@ -39,17 +39,18 @@ function glasses_software_fleet(PDO $pdo,array $user): array
 {
     if(!app_has_permission('glasses.view',$user))
         throw new DomainException('Glasses view permission required.');
-    if(!glasses_software_ready($pdo))
-        throw new DomainException('Software management is not installed. Run upgrade.php.');
+    $schemaReady=glasses_software_ready($pdo);
     $org=(int)$user['organization_id'];
-    $q=$pdo->prepare("SELECT location_id,platform,minimum_version,target_version,notes,revision,updated_at
-      FROM glasses_software_policies WHERE organization_id=?");
-    $q->execute([$org]);
     $policies=[];
-    foreach($q->fetchAll(PDO::FETCH_ASSOC) as $row){
-        $p=['minimumVersion'=>$row['minimum_version'],'targetVersion'=>$row['target_version'],
-            'notes'=>$row['notes'],'revision'=>(int)$row['revision'],'updatedAt'=>$row['updated_at']];
-        $policies[(int)$row['location_id'].'|'.(string)$row['platform']]=$p;
+    if($schemaReady){
+        $q=$pdo->prepare("SELECT location_id,platform,minimum_version,target_version,notes,revision,updated_at
+          FROM glasses_software_policies WHERE organization_id=?");
+        $q->execute([$org]);
+        foreach($q->fetchAll(PDO::FETCH_ASSOC) as $row){
+            $p=['minimumVersion'=>$row['minimum_version'],'targetVersion'=>$row['target_version'],
+                'notes'=>$row['notes'],'revision'=>(int)$row['revision'],'updatedAt'=>$row['updated_at']];
+            $policies[(int)$row['location_id'].'|'.(string)$row['platform']]=$p;
+        }
     }
     $sessions=[];
     if(glasses_employee_runtimes_ready($pdo)){
@@ -87,11 +88,12 @@ function glasses_software_fleet(PDO $pdo,array $user): array
           'runtime'=>$sessions[(string)$d['publicId']]??null,
           'policy'=>$policy,
           'software'=>glasses_software_assess($d['appVersion']??null,$policy),
-          'canManage'=>app_has_permission('glasses.manage',$user)
+          'canManage'=>$schemaReady&&app_has_permission('glasses.manage',$user)
              &&operational_location_allowed($pdo,$user,'glasses.manage',$location),
         ];
     }
-    return ['devices'=>$devices,'updateMethod'=>'manual_only','nativeInstallerAvailable'=>false];
+    return ['devices'=>$devices,'schemaReady'=>$schemaReady,
+            'updateMethod'=>'manual_only','nativeInstallerAvailable'=>false];
 }
 
 function glasses_software_policy_save(PDO $pdo,array $user,string $devicePublicId,
@@ -158,8 +160,6 @@ function glasses_software_policy_save(PDO $pdo,array $user,string $devicePublicI
 
 function glasses_software_diagnostics(PDO $pdo,array $user,string $devicePublicId): array
 {
-    if(!glasses_software_ready($pdo))
-        throw new DomainException('Software management is not installed. Run upgrade.php.');
     $org=(int)$user['organization_id'];
     $device=glasses_device_row($pdo,$org,trim($devicePublicId));
     if(!app_has_permission('glasses.view',$user)||

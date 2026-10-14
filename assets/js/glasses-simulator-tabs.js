@@ -115,11 +115,17 @@
     move($('simLiveGuide'),telemetry);
     section('runtime').appendChild(telemetry);
     // Device and station are per-employee runtime settings, not global HUD controls.
-    move($('glassesConnectionManager'),section('runtime'));
-    move($('glassesSoftwareManager'),section('runtime'));
     move($('glassesRuntimeTabs'),section('runtime'));
     move(document.querySelector('.glasses-runtime-toolbar'),section('runtime'));
-    move(document.querySelector('.glasses-runtime-training-controls'),section('runtime'));
+    const training=document.querySelector('.glasses-runtime-training-controls');
+    if(training){
+      const trainingDetails=document.createElement('details');
+      trainingDetails.className='glasses-training-details';
+      const title=document.createElement('summary');
+      title.textContent='Assigned employee training';
+      trainingDetails.append(title,training);
+      section('camera').appendChild(trainingDetails);
+    }
     const transcript=document.createElement('div');
     transcript.className='sgv-live-transcript';transcript.id='simLiveTranscript';
     transcript.setAttribute('role','status');transcript.setAttribute('aria-live','polite');
@@ -178,6 +184,19 @@
           card.classList.contains('runtime-recovery-card')?'runtime':'build';
       move(card,section(group));
     }
+    // Keep diagnostics available on request, never occupy the normal glasses settings.
+    const advancedRuntime=document.createElement('details');
+    advancedRuntime.className='glasses-runtime-advanced';
+    const advancedHeading=document.createElement('summary');
+    advancedHeading.textContent='Advanced diagnostics';
+    advancedRuntime.appendChild(advancedHeading);
+    for(const card of Array.from(section('runtime').querySelectorAll('.console-card'))){
+      if(card.id==='simControlAuditPanel'||card.classList.contains('hardware-runtime-card')||
+         card.classList.contains('device-health-card')||card.classList.contains('runtime-recovery-card')){
+        advancedRuntime.appendChild(card);
+      }
+    }
+    section('runtime').appendChild(advancedRuntime);
     // Legacy advanced wrapper was an organization aid, not a feature. Its cards are moved intact.
     rail.querySelector('#simAdvancedSettings')?.remove();
     // Default the long engineering gate report to collapsed during normal cooking.
