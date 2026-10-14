@@ -16,7 +16,7 @@ function showPhysical(){
  txt('glassesConnectionProfile',rt?rt.employeeName+(rt.profileConfirmedAt?' · Confirmed in browser':' · Awaiting sign-in'):'No employee assigned');
  txt('glassesConnectionLastSeen',d?.lastSeenAt?new Date(d.lastSeenAt).toLocaleString():'No device heartbeat');
  const confirm=byId('glassesConnectionConfirm');if(confirm)confirm.hidden=!(cfg.runtimePublicId&&rt&&!rt.profileConfirmedAt);
- const pair=byId('glassesConnectionPair');if(pair)pair.hidden=!!cfg.runtimePublicId||!(catalog.employees||[]).length;
+ const pair=byId('glassesConnectionPair');if(pair)pair.hidden=!!cfg.runtimePublicId||!cfg.canManageMedia;
 }
 async function refreshPhysical(){const d=await json(adminApi);physical=d.devices||[];showPhysical();}
 function endPair(){if(pairTimer)clearInterval(pairTimer);pairTimer=null;pairing=null;byId('glassesPairPanel').hidden=true;txt('glassesPairCode','');}

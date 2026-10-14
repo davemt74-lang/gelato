@@ -19,7 +19,7 @@ $check(str_contains($page,"glassesConnectionManager"),'connection UI');
 $check(str_contains($sql,"paired_device_id"),'migration');
 
 $check(str_contains($device,"heartbeat_age_seconds"),'database-calculated heartbeat age');
-$check(str_contains($client,"d.heartbeatAgeSeconds"),'UI uses database-calculated age');
+$check(str_contains($client,"d?.heartbeatAgeSeconds"),'UI uses database-calculated age');
 $check(str_contains($api,"pairing.cancel"),'cancel pairing endpoint');
 $check(str_contains($client,"window.location.reload()"),'fresh hardware appears after successful pairing');
 
