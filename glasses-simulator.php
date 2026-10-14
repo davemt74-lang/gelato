@@ -535,9 +535,9 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-hud-notifications.js?v=20261013-hud-edit2"></script>
 <script src="assets/js/glasses-hand-tracker.js?v=20261014-280"></script>
 <script src="assets/js/glasses-web-simulator.js?v=20261014-hand280"></script>
-<script src="assets/js/glasses-hand-tracker-ui.js?v=20261014-280"></script>
 <script src="assets/js/glasses-voice-device.js?v=20261013-device1"></script>
 <script src="assets/js/glasses-simulator-voice.js?v=20261014-kds-completion"></script>
+<script src="assets/js/glasses-hand-tracker-ui.js?v=20261014-280"></script>
 <script src="assets/js/glasses-multicamera.js?v=20261013-multi1"></script>
 <script src="assets/js/glasses-camera-config.js?v=20261014-cam-runtime-split"></script>
 <script src="assets/js/glasses-camera-runtime.js?v=20261013-261"></script>
