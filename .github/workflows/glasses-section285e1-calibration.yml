@@ -13,6 +13,9 @@ on:
     paths:
       - 'assets/js/glasses-camera-calibration-gate.js'
       - 'tests/glasses-section285e1-calibration.test.js'
+      - 'tests/glasses-section285e1-integration.test.js'
+      - 'assets/js/glasses-camera-runtime.js'
+      - 'glasses-simulator.php'
       - '.github/workflows/glasses-section285e1-calibration.yml'
 jobs:
   calibration:
