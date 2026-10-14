@@ -4,6 +4,9 @@ if(window.GelatoCameraRuntime)return;
 const S={slots:new Map(),samples:new Map(),monitor:false,session:null,lastPoll:0};
 const STAGES={2:'pre_oven',3:'post_oven'};
 const sleep=[750,1500,3000];
+const calibration=window.GelatoCameraCalibrationGate?.create?.();
+const calibrationKeys=new Map();
+const calibrationScope=()=>String(conf()?.locationId||0);
 const now=()=>Date.now();
 const conf=()=>window.GelatoCameraConfiguration;
 const aux=()=>window.GelatoGlassesMultiCamera;
@@ -17,7 +20,7 @@ function row(slot) {
 function status(slot){const v=row(slot);return {...v,active:!!conf()?.isStreaming?.(slot),enabled:!!conf()?.isEnabled?.(slot)};}
 function stop(slot,reason='stopped'){
   const s=row(slot);s.desired=false;s.nextRetry=0;s.retries=0;s.state=reason;
-  S.samples.delete(slot);if(slot>1)aux()?.stop?.(slot,{reason:reason.toUpperCase()});
+  S.samples.delete(slot);calibration?.clear(slot);calibrationKeys.delete(slot);if(slot>1)aux()?.stop?.(slot,{reason:reason.toUpperCase()});
   else window.GelatoGlassesPrimaryCamera?.stop?.();
 }
 async function start(slot){
@@ -65,6 +68,18 @@ function sample(slot){
     if(previous)for(let i=0;i<400;i++)diff+=Math.abs(luma[i]-previous[i]);
     diff=previous?diff/(400*255):0;
     S.samples.set(slot,luma);
+    if(calibration){
+      const track=video.srcObject?.getVideoTracks?.()?.[0], settings=track?.getSettings?.()||{};
+      const sourceId=String(settings.deviceId||track?.id||video.currentSrc||'unknown:'+slot);
+      const scope=calibrationScope(), identity=scope+'|'+sourceId+'|'+String(video.srcObject?.id||'');
+      const prior=calibrationKeys.get(slot);
+      if(!prior||prior.identity!==identity){
+        calibrationKeys.set(slot,{identity,generation:(prior?.generation||0)+1});
+        calibration.clear(slot);
+      }
+      const metric=window.GelatoCameraCalibrationGate.analyzeRgba(rgba,20,20);
+      calibration.sample(slot,{...metric,at:now(),scope,sourceId,generation:calibrationKeys.get(slot).generation,drift:previous?diff:0});
+    }
     s.quality=quality;s.frameCount++;s.lastFrame=now();
     s.fps=s.lastFrameAt?Math.min(60,Math.round(1000/(s.lastFrame-s.lastFrameAt))):0;
     s.lastFrameAt=s.lastFrame;
@@ -127,11 +142,15 @@ function renderDiagnostics(){
       ' · last sample '+(age===null?'never':age+'s ago')+
       ' · image quality '+(c.quality||'—')+'/100'+
       (c.retries?' · recoveries '+c.retries+'/3':'');
+    const calibr=calibration?.status(slot);
+    const calibrationLine=document.createElement('span');
+    calibrationLine.textContent='Calibration: '+(!c.active?'NO STREAM':calibr?.ready?'PRELIMINARY READY':(calibr?.reasonCodes?.join(', ')||'not_calibrated'))+
+      ' · '+(calibr?.samples||0)+' samples · advisory only';
     const evidence=document.createElement('span');
     evidence.textContent=(slot===2||slot===3?
       'Scene: '+c.activity+' · automatic candidate '+(c.ready?'ready':'waiting'):'No oven matching')+
       ' · trained pizza detector: '+c.detector;
-    article.append(title,health,evidence);root.append(article);
+    article.append(title,health,calibrationLine,evidence);root.append(article);
   }
   const note=document.getElementById('gcrRuntimeStatus');
   if(note)note.textContent='Session-bound: camera feeds require this browser page open and visible. '+
@@ -167,6 +186,7 @@ function mount(){
   renderDiagnostics();
 }
 window.GelatoCameraRuntime={mount,start,stop,trackStopped,status,policy,consumeCapture,poll,
+  calibrationStatus:slot=>calibration?.status(slot)||null,
   snapshot:()=>({sessionBound:true,backgroundSupported:false,locationId:conf()?.locationId||0,
     lastPoll:S.lastPoll,cameras:[1,2,3,4,5].map(status)})};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
