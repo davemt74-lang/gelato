@@ -361,9 +361,10 @@ function saveCameraPrefs(){
 function setCameraHealth(stateName,label){
   const el=$('cameraHealth');if(!el)return;el.textContent=label;el.dataset.state=stateName;
 }
-function applyCameraPresentation(){
+function applyCameraPresentation(persist=true){
   const video=$('cameraVideo');video.classList.toggle('fit-contain',$('cameraFit').value==='contain');
-  video.classList.toggle('mirrored',$('cameraMirror').checked);saveCameraPrefs();
+  video.classList.toggle('mirrored',$('cameraMirror').checked);
+  if(persist===true)saveCameraPrefs();
 }
 function cameraInputNote(message,level='ready'){
   const target=$('cameraInputStatus');
@@ -2636,5 +2637,5 @@ window.addEventListener('gelato-glasses-runtime-revoked',()=>{
   state.recovery.suppressAutomatic=true;state.recovery.state='blocked';state.build=null;state.validation=null;
   clearAssemblySession();render();log('SYSTEM','Assigned runtime was ended or access revoked. Refresh from runtime manager.');
 });
-(async()=>{await loadDevices();window.GelatoGlassesDisplayPreferences.ready=true;window.dispatchEvent(new CustomEvent('gelato-glasses-preferences-ready'));const cp=cameraPrefs();if(cp.resolution)$('cameraResolution').value=cp.resolution;if(cp.fit)$('cameraFit').value=cp.fit;$('cameraMirror').checked=!!cp.mirror;applyCameraPresentation();await enumerateCameras();if(!cameraSupported())setCameraHealth('error','UNSUPPORTED');refreshPresets();applyCalibration();render();if(state.device){startLiveStationSync();}else{setSyncBadge('error','NO DISPLAY');}setInterval(renderTopStatus,30000);setInterval(tickLiveTicketTimers,1000);renderRuntimeRecovery();refreshDeviceHealth();setInterval(refreshDeviceHealth,5000);const savedResume=recoveryStored();if(savedResume?.devicePublicId&&state.device?.publicId===savedResume.devicePublicId&&!state.device.virtualPreview){resumeRuntimeRecovery('app_restart_resume');}log('SYSTEM','Simulator ready. Pizza Line Reference HUD loaded.');})();
+(async()=>{await loadDevices();window.GelatoGlassesDisplayPreferences.ready=true;window.dispatchEvent(new CustomEvent('gelato-glasses-preferences-ready'));const cp=cameraPrefs();if(cp.resolution)$('cameraResolution').value=cp.resolution;if(cp.fit)$('cameraFit').value=cp.fit;$('cameraMirror').checked=!!cp.mirror;applyCameraPresentation(false);await enumerateCameras();if(!cameraSupported())setCameraHealth('error','UNSUPPORTED');refreshPresets();applyCalibration();render();if(state.device){startLiveStationSync();}else{setSyncBadge('error','NO DISPLAY');}setInterval(renderTopStatus,30000);setInterval(tickLiveTicketTimers,1000);renderRuntimeRecovery();refreshDeviceHealth();setInterval(refreshDeviceHealth,5000);const savedResume=recoveryStored();if(savedResume?.devicePublicId&&state.device?.publicId===savedResume.devicePublicId&&!state.device.virtualPreview){resumeRuntimeRecovery('app_restart_resume');}log('SYSTEM','Simulator ready. Pizza Line Reference HUD loaded.');})();
 })();
