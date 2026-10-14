@@ -2787,6 +2787,7 @@ window.addEventListener('gelato-glasses-hand-frame',event=>{
  recentProductionHands={hands:Array.isArray(d.hands)?d.hands:[],timestamp:Number(d.timestamp)||0};
 });
 window.addEventListener('gelato-glasses-production-object-frame',event=>{
+ fuseCameraEvent(event.detail||{},false);
  if(!productionFocusEligible()||!recentProductionHands)return;
  const d=event.detail||{},now=Date.now();
  if(d.devicePublicId!==state.device?.publicId||
@@ -2850,8 +2851,6 @@ function fuseCameraEvent(detail,isStationary){
  });
  if(result.accepted)renderSharedCameraRecognitionStatus();
 }
-window.addEventListener('gelato-glasses-production-object-frame',
- e=>fuseCameraEvent(e.detail||{},false));
 window.addEventListener('gelato-glasses-stationary-object-frame',
  e=>fuseCameraEvent(e.detail||{},true));
 // Stationary feeds are deliberately not subscribed to Camera 1 hand/ticket auto-focus.
