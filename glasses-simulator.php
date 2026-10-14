@@ -12,7 +12,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
 <title>Web Glasses Simulator · Gelato</title>
 <link rel="stylesheet" href="assets/css/glasses-web-simulator.css?v=20261013-live1">
 <link rel="stylesheet" href="assets/css/glasses-simulator-hud-ux.css?v=20261013-voice1">
-<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261014-cam-runtime-split">
+<link rel="stylesheet" href="assets/css/glasses-simulator-device-first.css?v=20261014-kds-completion">
 <link rel="stylesheet" href="assets/css/glasses-runtime-workspace.css?v=277refine">
 </head>
 <body>
@@ -200,6 +200,11 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
           <div class="hud-panel-title hud-ticket-diagnostic" hidden aria-hidden="true"><small>ACTIVE KDS TICKETS</small><span id="hudOrdersCount">0</span></div>
           <div class="sim-ticket-time-sync hud-ticket-diagnostic" id="simTicketTimeSync" hidden aria-hidden="true">POS TIME · WAITING</div>
           <div id="hudOrders" class="hud-orders-list" aria-label="Active KDS ticket tabs and item lists"></div>
+          <section id="hudTicketCompletion" class="hud-ticket-completion" aria-label="Selected ticket completion" hidden>
+            <div class="hud-ticket-completion-state" id="hudTicketCompletionState" role="status" aria-live="polite">Waiting for completed assembly</div>
+            <button type="button" id="hudTicketCompletionAction" data-glasses-command="finish_order" hidden disabled>Finish Ticket</button>
+            <small id="hudTicketCompletionHelp"></small>
+          </section>
         </aside>
 
         <div id="hudCenterClear" class="hud-center-clear" aria-hidden="true"></div>
@@ -518,9 +523,9 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-employee-runtimes.js?v=20261013-runtime-refine277"></script>
 <script src="assets/js/glasses-assembly-recognition.js?v=20261013-266"></script>
 <script src="assets/js/glasses-hud-notifications.js?v=20261013-hud-edit2"></script>
-<script src="assets/js/glasses-web-simulator.js?v=20261013-runtime-refine277"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20261014-kds-completion"></script>
 <script src="assets/js/glasses-voice-device.js?v=20261013-device1"></script>
-<script src="assets/js/glasses-simulator-voice.js?v=20261013-266a"></script>
+<script src="assets/js/glasses-simulator-voice.js?v=20261014-kds-completion"></script>
 <script src="assets/js/glasses-multicamera.js?v=20261013-multi1"></script>
 <script src="assets/js/glasses-camera-config.js?v=20261014-cam-runtime-split"></script>
 <script src="assets/js/glasses-camera-runtime.js?v=20261013-261"></script>

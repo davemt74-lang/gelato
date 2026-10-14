@@ -101,6 +101,8 @@ on:
       - 'tests/glasses-voice-navigation.test.js'
       - 'tests/glasses-simulator-csrf.test.js'
       - 'tests/glasses-live-kds-commands.test.js'
+      - 'tests/glasses-kds-left-lens-completion.test.js'
+      - 'docs/GLASSES-KDS-TICKET-COMPLETION.md'
       - 'tests/glasses-hud-manual-voice-parity.test.js'
       - 'tests/glasses-operator-hud-ux.test.js'
       - 'assets/js/glasses-user-display-preferences.js'
@@ -210,6 +212,7 @@ jobs:
           node tests/glasses-voice-navigation.test.js
           node tests/glasses-simulator-csrf.test.js
           node tests/glasses-live-kds-commands.test.js
+          node tests/glasses-kds-left-lens-completion.test.js
           node tests/glasses-hud-manual-voice-parity.test.js
           node tests/glasses-operator-hud-ux.test.js
           node tests/glasses-ticket-ingredient-assembly.test.js
