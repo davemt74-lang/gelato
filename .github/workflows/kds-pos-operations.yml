@@ -12,6 +12,7 @@ on:
       - 'includes/kds-slot-references.php'
       - 'tests/kds-global-order-reference.php'
       - 'js/kds-dashboard.js'
+      - 'api/pos.php'
       - 'tests/kds-test-ticket-cleanup.test.js'
       - 'docs/GLASSES-SECTION280-KDS-CLEANUP-HAND-TRAINING.md'
       - 'pos.php'
@@ -37,6 +38,7 @@ jobs:
           php -l api/kds-history.php
           php -l api/pos-ready.php
           php -l pos.php
+          php -l api/pos.php
           php -l tests/kds-pos-operations-contract.php
           node --check js/kds.js
           php -l tests/kds-slot-voice-contract.php

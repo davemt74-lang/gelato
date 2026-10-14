@@ -63,7 +63,7 @@ async function executeTestCleanup(){
    const response=await fetch('api/pos.php',{method:'POST',credentials:'same-origin',cache:'no-store',
     headers:{'Content-Type':'application/json','X-CSRF-Token':C.csrf||''},
     body:JSON.stringify({csrf_token:C.csrf,action:'check.cancel',locationId:S.locationId,
-     checkPublicId:ticket.id,reason:'Owner-requested cleanup of unrouted test KDS ticket'})});
+     checkPublicId:ticket.id,testCleanupOnly:true,reason:'Owner-requested cleanup of unrouted test KDS ticket'})});
    const data=await response.json().catch(()=>null);
    if(!response.ok||!data?.ok)throw Error(data?.message||'POS cancellation failed');
    completed++;progress.textContent='Cancelled '+completed+'/'+review.length+' test tickets…';

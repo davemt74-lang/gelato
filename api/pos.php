@@ -265,9 +265,24 @@ try{
 
     if($action==='check.cancel'){
         if(!$permissions['void'])app_json_response(['ok'=>false,'message'=>'POS void permission required at this location.'],403);
+        $testCleanup=($input['testCleanupOnly']??false)===true;
+        if($testCleanup&&(!$kdsAvailable||!app_has_permission('kds.configure',$user)||
+            !operational_location_allowed($pdo,$user,'kds.configure',$locationId)))
+            app_json_response(['ok'=>false,'message'=>'KDS configuration and POS void permission required for test cleanup.'],403);
         $reason=(string)($input['reason']??'');
-        $check=operational_db_wrap($pdo,function()use($pdo,$org,$public,$reason,$uid,$crmAvailable,$kdsAvailable):array{
+        $check=operational_db_wrap($pdo,function()use($pdo,$org,$public,$reason,$uid,$crmAvailable,$kdsAvailable,$testCleanup):array{
             $base=pos_check_base($pdo,$org,$public,false);
+            if($testCleanup){
+                // Protect against an old dashboard snapshot deleting a ticket
+                // that has since been assigned to a real production station.
+                $q=$pdo->prepare("SELECT station_id,status FROM kds_order_items
+                    WHERE organization_id=? AND check_id=? AND status NOT IN ('completed','cancelled')
+                    ORDER BY id FOR UPDATE");
+                $q->execute([$org,(int)$base['id']]);
+                $rows=$q->fetchAll(PDO::FETCH_ASSOC);
+                if(!$rows||count(array_filter($rows,static fn(array $row):bool=>$row['station_id']!==null))>0)
+                    throw new InvalidArgumentException('This ticket is no longer entirely unrouted. Refresh and review.');
+            }
             $check=pos_cancel_check($pdo,$org,$public,$reason,$uid);
             if($kdsAvailable)kds_cancel_check($pdo,$org,(int)$base['id'],$reason,$uid);
             if(table_service_ready($pdo))table_service_release_closed_check($pdo,$org,$public,$uid);
