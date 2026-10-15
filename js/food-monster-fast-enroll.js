@@ -113,7 +113,7 @@ async function verifyVoice(){
   const response=await fetch('api/voice-identity.php',{method:'POST',credentials:'same-origin',
    headers:{Accept:'application/json','Content-Type':'application/json'},
    body:JSON.stringify({action:'verify',features:v.features,matchAny:false,csrf_token:csrf()})});
-  const result=await response.json().catch(()=>({});
+  const result=await response.json().catch(()=>({}));
   if(!response.ok||!result.ok)throw Error(result.message||'Could not verify voice.');
   const match=result.match||{},ok=match.matched&&match.sessionUserMatch&&match.userId===g.employeeUserId;
   message(ok?'Enrolled account voice matched (not login or visual ID).':'Voice could not be verified; speaker remains unknown.');
@@ -130,10 +130,13 @@ async function identifySpeaker(){
   const res=await fetch('api/food-monster-speaker.php',{method:'POST',credentials:'same-origin',cache:'no-store',
    headers:{Accept:'application/json','Content-Type':'application/json'},
    body:JSON.stringify({action:'identify',features:v.features,consent:true,csrf_token:csrf()})});
-  const payload=await res.json().catch(()=>({});
+  const payload=await res.json().catch(()=>({}));
   if(!res.ok||!payload.ok)throw Error(payload.message||'Speaker matching unavailable.');
   const match=payload.match||{};
-  window.dispatchEvent(new CustomEvent('gelato-food-monster-speaker-candidate',{detail:match}));
+  window.dispatchEvent(new CustomEvent('gelato-food-monster-speaker-candidate',{detail:
+    match.matched&&match.speaker?{name:match.speaker.name,userId:match.speaker.userId,score:match.score,
+      expiresAt:Date.now()+15000,visualTrackAssociated:false}:{name:'',reason:match.reason||'unverified'}
+   }));
   message(match.matched?'Possible speaker: '+match.speaker.name+' (voice-only cue, not face ID).':
    match.reason==='ambiguous'?'Multiple similar voice profiles; speaker unverified.':'No confident voice match.');
   return match;
