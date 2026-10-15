@@ -42,7 +42,7 @@
       !SHA.test(String(modelSha256||''))||!devicePublicId||
       Number(locationId)!==Number(source.locationId)||
       !Number.isFinite(capturedAt)||capturedAt>now()||now()-capturedAt>1600){
-     if(source?.slot>=MIN&&source?.slot<=MAX)data.delete(source.slot);
+     if(source?.slot>=MIN&&source?.slot<=MAX)clearSlot(source.slot);
      return null;
    }
    // Do not publish out-of-order inference results for the same camera or
