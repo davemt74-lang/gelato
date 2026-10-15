@@ -36,7 +36,7 @@
     ensureScript('js/voice-turn-taking.js?v=20261015-fmg7b2e','data-gelato-voice-turn-loader');
     ensureScript('js/proactive-listening-commands.js?v=20261013-listening1','data-gelato-listening-controls-loader');
     ensureScript('js/voice-diagnostics.js?v=20261013-diagnostics1','data-gelato-voice-diagnostics-loader');
-    if (!window.GelatoGlobalAgent) ensureScript('js/global-agent.js?v=20261015-fmg7b2e', 'data-gelato-global-agent-loader');
+    if (!window.GelatoGlobalAgent) ensureScript('js/global-agent.js?v=20261015-fmg8c', 'data-gelato-global-agent-loader');
     ensureScript('js/dynamic-agent-canvas.js?v=20260915-drawer1', 'data-dynamic-agent-canvas-loader');
     ensureScript('js/agent-next-moves.js?v=20261014-fmg6', 'data-agent-next-moves-loader');
     // One companion UI for the existing authenticated Agent session; never a second brain.
