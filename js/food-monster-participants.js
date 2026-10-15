@@ -4,7 +4,7 @@
 if(!document.body.classList.contains('food-monster-stage-page')||window.GelatoFoodMonsterParticipants)return;
 const host=document.getElementById('food-monster-stage');if(!host)return;
 const state={mode:'agent',camera:false,tracks:[],nextId:1,lastGreet:0,roster:null,
- thumbnails:false,roomMic:null,ctx:null,source:null,analyser:null,levelTimer:0,voiceLevel:0};
+ thumbnails:false,roomMic:null,ctx:null,source:null,analyser:null,levelTimer:0,voiceLevel:0,inputByTrack:new Map(),micEpoch:0};
 const el=document.createElement('section');el.className='fm-room-controls';el.setAttribute('aria-label','Food Monster camera controls');
 el.innerHTML='<div class="fm-room-switch" role="group" aria-label="Food Monster view"><button type="button" data-fm-view="agent" aria-pressed="true">Agent</button><button type="button" data-fm-view="camera" aria-pressed="false">Camera</button></div>'+
  '<button type="button" data-fm-camera-toggle aria-pressed="false">Camera off</button><span class="fm-room-camera-state" role="status">Camera is off</span>';
@@ -28,7 +28,7 @@ function setMode(mode){
  for(const button of el.querySelectorAll('[data-fm-view]'))button.setAttribute('aria-pressed',String(button.dataset.fmView===state.mode));
  if(state.mode==='camera')attachVideo();render();
 }
-function clearTracks(){state.tracks.length=0;state.nextId=1;render();drawOverlay();} // Camera-off ends the tracking session
+function clearTracks(){state.tracks.length=0;state.nextId=1;state.inputByTrack.clear();render();drawOverlay();} // Camera-off ends the tracking session
 function attachVideo(){
  if(!state.camera)return;
  const stream=cameraAPI()?.stream;
@@ -39,7 +39,7 @@ function setCamera(active){
  state.camera=!!active;
  cameraToggle.setAttribute('aria-pressed',String(state.camera));cameraToggle.textContent=state.camera?'Camera on':'Camera off';
  status.textContent=state.camera?'Tracking active · local camera':'Camera is off';empty.hidden=state.camera;
- if(state.camera)attachVideo();else{video.pause();video.srcObject=null;clearTracks();}
+ if(state.camera)attachVideo();else{stopMeter();video.pause();video.srcObject=null;clearTracks();}
  render();
 }
 function nearestTrack(box,used){
@@ -89,9 +89,11 @@ function updateFaces(boxes,ownVerified=false){
   if(track.seen>=(cameraAPI()?.enrolled?12:5))greeting(track);
  }
  state.tracks=state.tracks.filter(t=>now-t.at<18000);
+ for(const id of state.inputByTrack.keys())if(!state.tracks.some(t=>t.id===id))state.inputByTrack.delete(id);
  render();drawOverlay();
 }
 function tracked(){return state.tracks.filter(t=>t.seen>=2&&Date.now()-t.at<1800);} // Hidden tracks retain ID longer than visible cards
+function inputLevel(id){const r=state.inputByTrack.get(id);return r&&Date.now()-r.at<550?Math.max(0,Math.min(1,r.level)):0;}
 function render(){
  const visible=tracked();
  panel.hidden=!state.camera||!visible.length;
@@ -101,7 +103,8 @@ function render(){
   const verified=t.verified&&visible.length===1,label=verified?own:'Person '+t.id.slice(1);
   return '<button type="button" class="fm-participant-card" data-fm-setup="'+esc(t.id)+'" data-track="'+esc(t.id)+'" data-fm-verified="'+String(verified)+'" aria-label="Open '+esc(label)+' participant">'+
    '<span class="fm-participant-photo">'+(t.photo&&state.thumbnails?'<img src="'+t.photo+'" alt="">':'<span aria-hidden="true">◯</span>')+'</span>'+
-   '<span class="fm-participant-info"><strong>'+esc(label)+'</strong><span>'+(verified?'Recognized account':'Unverified participant')+'</span></span></button>';
+   '<span class="fm-participant-info"><strong>'+esc(label)+'</strong><span>'+(verified?'Recognized account':'Unverified participant')+'</span>'+
+   '<span class="fm-participant-input" role="meter" aria-label="Participant microphone input" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+Math.round(inputLevel(t.id)*100)+'"><i style="width:'+Math.round(inputLevel(t.id)*100)+'%"></i></span></span></button>';
  }).join('');
 }
 function drawOverlay(){
@@ -135,7 +138,66 @@ async function loadRoster(){
   }}));
  }catch{/* No roster data must not create participants. */}
 }
-function stopMeter(){}
+function stopMeter(){
+ state.micEpoch++;
+ if(state.levelTimer)clearInterval(state.levelTimer);state.levelTimer=0;
+ try{state.source?.disconnect()}catch{}
+ try{state.roomMic?.getTracks().forEach(t=>t.stop())}catch{}
+ if(state.ctx)void state.ctx.close().catch(()=>{});
+ state.roomMic=null;state.ctx=null;state.source=null;state.analyser=null;state.inputByTrack.clear();
+ for(const meter of panel.querySelectorAll('.fm-participant-input')){meter.setAttribute('aria-valuenow','0');meter.querySelector('i').style.width='0%';}
+}
+async function startMeter(){
+ if(state.roomMic||!state.camera||document.hidden||!navigator.mediaDevices?.getUserMedia||
+  !(window.AudioContext||window.webkitAudioContext)||!window.isSecureContext)return;
+ const epoch=++state.micEpoch;
+ let stream=null,ctx=null;
+ try{
+  // Only AFTER the user explicitly enables Agent Chat's microphone.
+  stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true},video:false});
+  if(epoch!==state.micEpoch||!state.camera||document.hidden){stream.getTracks().forEach(t=>t.stop());return;}
+  ctx=new (window.AudioContext||window.webkitAudioContext)();
+  state.roomMic=stream;state.ctx=ctx;state.source=ctx.createMediaStreamSource(stream);
+  const analyser=ctx.createAnalyser();analyser.fftSize=256;state.source.connect(analyser);state.analyser=analyser;
+  const samples=new Uint8Array(analyser.fftSize);
+  state.levelTimer=setInterval(()=>{
+   const visible=tracked();
+   // A room microphone never identifies a speaker among two or more camera tracks.
+   if(visible.length!==1||window.GelatoVoiceTurns?.speaking||window.speechSynthesis?.speaking){
+    state.inputByTrack.clear();
+   }else{
+    analyser.getByteTimeDomainData(samples);let total=0;
+    for(const val of samples)total+=(val-128)**2;
+    const rms=Math.sqrt(total/samples.length),level=Math.max(0,Math.min(1,(rms-2)/42));
+    state.inputByTrack.set(visible[0].id,{level,at:Date.now(),provisional:true});
+   }
+   for(const card of panel.querySelectorAll('.fm-participant-card')){
+    const id=card.dataset.track,meter=card.querySelector('.fm-participant-input');if(!meter)continue;
+    const level=inputLevel(id);
+    meter.setAttribute('aria-valuenow',String(Math.round(level*100)));
+    meter.querySelector('i').style.width=Math.round(level*100)+'%';
+   }
+  },90);
+  stream.getTracks().forEach(t=>t.addEventListener('ended',stopMeter,{once:true}));
+ }catch{
+  if(stream&&!state.roomMic)stream.getTracks().forEach(t=>t.stop());
+  if(ctx&&!state.ctx)void ctx.close().catch(()=>{});
+ }
+}
+window.addEventListener('gelato-agent-listening-change',event=>{
+ const d=event.detail||{};
+ if(d.microphoneActive===true||d.listening===true)void startMeter();
+ else stopMeter();
+});
+/** Only trusted per-participant audio sources may publish a track-associated
+ * level. An unassociated microphone/voice profile result never qualifies. */
+window.addEventListener('gelato-food-monster-participant-input',event=>{
+ const {trackId,level,attributed}=event.detail||{};
+ if(attributed!==true||!tracked().some(t=>t.id===trackId)||!Number.isFinite(level))return;
+ state.inputByTrack.set(trackId,{level:Math.max(0,Math.min(1,level)),at:Date.now(),provisional:false});
+ const meter=panel.querySelector('[data-track="'+trackId+'"] .fm-participant-input');
+ if(meter){const value=Math.round(inputLevel(trackId)*100);meter.setAttribute('aria-valuenow',String(value));meter.querySelector('i').style.width=value+'%';}
+});
 for(const button of el.querySelectorAll('[data-fm-view]'))button.addEventListener('click',()=>setMode(button.dataset.fmView));
 cameraToggle.addEventListener('click',async()=>{
  const camera=cameraAPI();if(!camera){status.textContent='Camera module is still loading.';return;}
