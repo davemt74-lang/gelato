@@ -10,7 +10,7 @@ $user = app_require_auth();
 <meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" content="#081b2e">
 <title>Food Monster · Gelato Agent</title>
-<link rel="stylesheet" href="css/food-monster.css?v=20261015-fmg7a">
+<link rel="stylesheet" href="css/food-monster.css?v=20261015-fmg7d">
 </head>
 <body class="food-monster-stage-page">
 <main id="food-monster-stage" aria-label="Food Monster Agent stage">
@@ -23,6 +23,6 @@ $user = app_require_auth();
 <script src="js/proactive-listening-commands.js?v=20261013-listening1"></script>
 <script src="js/voice-diagnostics.js?v=20261013-diagnostics1"></script>
 <script src="js/global-agent.js?v=20261015-fmg7c"></script>
-<script src="js/food-monster.js?v=20261015-fmg7a"></script>
+<script src="js/food-monster.js?v=20261015-fmg7d"></script>
 </body>
 </html>

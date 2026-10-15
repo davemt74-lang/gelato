@@ -16,7 +16,7 @@ try{
         app_json_response(['ok'=>true,'providers'=>[
             'anthropic'=>is_array($credentials['anthropic']??null),
             'openai'=>is_array($credentials['openai']??null),
-        ],'defaultProvider'=>'auto']);
+        ],'defaultProvider'=>'auto','models'=>['anthropic'=>fmllm_model('anthropic'),'openai'=>fmllm_model('openai')]]);
     }
     if($_SERVER['REQUEST_METHOD']!=='POST'){
         header('Allow: GET, POST');
@@ -40,17 +40,25 @@ try{
     fmllm_rate_limit($org,$uid);
     $history=fmllm_history($records,12);
     if(!$history||end($history)['role']!=='user')throw new InvalidArgumentException('A user message is required.');
-    $key=app_decrypt_secret((string)$selected['credential']['encrypted_key'],(string)$selected['credential']['nonce'],(string)$selected['credential']['encryption_method']);
+    try{
+        $key=app_decrypt_secret((string)$selected['credential']['encrypted_key'],(string)$selected['credential']['nonce'],(string)$selected['credential']['encryption_method']);
+    }catch(Throwable $error){
+        error_log('Food Monster credential decrypt failure: '.get_class($error));
+        app_json_response(['ok'=>false,'code'=>'credential_decryption','message'=>'Gelato cannot decrypt the saved API key. Re-save it in Gelato LLM Settings and preserve storage/keys during deployment.'],503);
+    }
     // Release session lock while the external API responds so unrelated app requests stay responsive.
     if(session_status()===PHP_SESSION_ACTIVE)session_write_close();
     try{$answer=fmllm_exchange($selected['provider'],$key,$history);}
     finally{if(function_exists('sodium_memzero'))sodium_memzero($key);}
     app_audit($pdo,$org,$uid,'agent.llm_conversation','agent_conversation',$threadId,null,['provider'=>$selected['provider'],'messageCharacters'=>mb_strlen($message,'UTF-8')]);
     app_json_response(['ok'=>true,'skill'=>'agent.llm.conversation','answer'=>$answer,
-        'provider'=>$selected['provider'],'model'=>$selected['provider']==='openai'?'gpt-5-mini':'claude-sonnet-4-20250514',
+        'provider'=>$selected['provider'],'model'=>fmllm_model($selected['provider']),
         'sources'=>[],'data'=>null]);
 }catch(InvalidArgumentException $e){
     app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);
+}catch(FmLlmProviderException $e){
+    error_log('Food Monster provider failure: '.$e->reason);
+    app_json_response(['ok'=>false,'code'=>$e->reason,'message'=>$e->getMessage()],503);
 }catch(Throwable $e){
     error_log('Food Monster LLM failure: '.get_class($e).': '.$e->getMessage());
     app_json_response(['ok'=>false,'message'=>'Food Monster could not reach the selected AI provider. Check the Gelato LLM settings and try again.'],503);
