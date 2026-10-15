@@ -28,7 +28,7 @@ const {chromium}=require('playwright'),base=path.resolve(__dirname,'..');
       evaluate(words){
         if(!window.__tts.speaking)return {kind:'command'};
         if(words.includes('echo'))return {kind:'ignored',reason:'tts-echo'};
-        if(/^hey\\s+gelato\\b/i.test(words))return {kind:'command',interrupt:true};
+        if(/^hey\s+gelato\b/i.test(words))return {kind:'command',interrupt:true};
         return {kind:'ignored',reason:'wake-required-while-speaking'};
       },
       speak(text){window.__tts.speaking=true;window.__tts.text=text;return true},
