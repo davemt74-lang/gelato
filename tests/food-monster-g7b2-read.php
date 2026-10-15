@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
-if(!function_exists('mb_strtolower'))function mb_strtolower($s,$enc='UTF-8'){return strtolower($s);}
-if(!function_exists('mb_strlen'))function mb_strlen($s,$enc='UTF-8'){return strlen($s);}
+if(!function_exists('mb_strtolower')){function mb_strtolower($s,$enc='UTF-8'){return strtolower($s);}}
+if(!function_exists('mb_strlen')){function mb_strlen($s,$enc='UTF-8'){return strlen($s);}}
 function app_has_permission(string $key,array $user):bool{return in_array('*',(array)($user['permissions']??[]),true)||in_array($key,(array)($user['permissions']??[]),true);}
 require __DIR__.'/../includes/food-monster-read-tools.php';
 $n=0;function check_b2(bool $ok,string $name):void{global $n;if(!$ok){fwrite(STDERR,"FM-G7B2 FAIL: $name\n");exit(1);}++$n;}
