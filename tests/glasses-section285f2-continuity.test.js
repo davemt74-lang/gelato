@@ -1,0 +1,25 @@
+'use strict';
+const {test}=require('node:test'),assert=require('node:assert/strict');
+const {create}=require('../assets/js/glasses-held-ingredient-evidence.js');
+const b=(x,y)=>({x,y,width:.12,height:.14});
+const item=()=>({kdsItemPublicId:'item1',status:'in_progress',menu:{ingredients:[{name:'Cheese'},{name:'Sauce'}]}});
+const hand=(id,x)=>({trackId:id,slot:1,status:'tracking',bbox:b(x,.2)});
+const obj=(label,x)=>({label,confidence:.92,bbox:b(x,.2)});
+let t=1000,seq=0;
+function step(e,tracks,objects,other={}){t+=100;return e.update({item:item(),tracks,objects,modelSha256:'a'.repeat(64),objectSeq:seq++,objectTime:t,now:t,...other});}
+test('identity continuity requires distinct clean frames',()=>{t=1000;seq=0;const e=create();for(let i=0;i<3;i++){const r=step(e,[hand('a',.2)],[obj('Cheese',.2)]);assert.equal(r[0].status,i===2?'review':'candidate');}});
+test('duplicate tracking id blocks attribution',()=>{t=1000;seq=0;const e=create();assert.deepEqual(step(e,[hand('a',.2),hand('a',.7)],[obj('Cheese',.2)]),[]);});
+test('overlapping hands cannot retain a prior review',()=>{t=1000;seq=0;const e=create();for(let i=0;i<3;i++)step(e,[hand('a',.2)],[obj('Cheese',.2)]);
+ assert.deepEqual(step(e,[hand('a',.2),hand('b',.23)],[obj('Cheese',.2)]),[]);
+ assert.deepEqual(e.update({item:item(),tracks:[hand('a',.2)],objects:[],modelSha256:'a'.repeat(64),objectSeq:seq-1,objectTime:t,now:t}),[]);
+});
+test('ingredient identity switch starts at one frame, not review',()=>{t=1000;seq=0;const e=create();for(let i=0;i<3;i++)step(e,[hand('a',.2)],[obj('Cheese',.2)]);
+ const r=step(e,[hand('a',.2)],[obj('Sauce',.2)]);assert.equal(r[0].frames,1);
+});
+test('duplicate canonical ingredients are not attributed',()=>{t=1000;seq=0;const e=create();const dupe={...item(),menu:{ingredients:[{name:'Cheese'},{name:'Cheese'}]}};
+ assert.deepEqual(step(e,[hand('a',.2)],[obj('Cheese',.2)],{item:dupe}),[]);
+});
+test('new model resets reviewed identity and out-of-range confidence is ignored',()=>{t=1000;seq=0;const e=create();for(let i=0;i<3;i++)step(e,[hand('a',.2)],[obj('Cheese',.2)]);
+ assert.deepEqual(step(e,[hand('a',.2)],[{...obj('Cheese',.2),confidence:1.3}]),[]);
+ const r=step(e,[hand('a',.2)],[obj('Cheese',.2)],{modelSha256:'b'.repeat(64)});assert.equal(r[0].frames,1);
+});

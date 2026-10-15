@@ -22,22 +22,32 @@ function create({minFrames=3,maxAgeMs=900,maxGapMs=1000,minConfidence=.65,ambigu
   if(itemKey!==lastItem||epoch!==lastEpoch){history.clear();lastResults=[];lastSeq=null;lastItem=itemKey;lastEpoch=epoch;}
   const live=(Array.isArray(tracks)?tracks:[]).filter(t=>t?.trackId&&['tracking','identifying'].includes(t.status)&&inside(t.bbox));
   const identifiers=new Set(live.map(t=>t.trackId)),permissible=new Set(selected.map(x=>x.id));
+  const counts=new Map();
+  for(const t of live)counts.set(t.trackId,(counts.get(t.trackId)||0)+1);
+  const ambiguous=new Set([...counts].filter(([,n])=>n>1).map(([id])=>id));
+  // Any track overlap undermines nearest-hand attribution until a new clean history begins.
+  for(let i=0;i<live.length;i++)for(let j=i+1;j<live.length;j++)
+   if(distance(live[i].bbox,live[j].bbox)<ambiguityMargin*2){
+    ambiguous.add(live[i].trackId);ambiguous.add(live[j].trackId);
+   }
+  for(const [key,v] of history)if(ambiguous.has(v.trackId))history.delete(key);
   for(const [key,v] of history)if(!identifiers.has(v.trackId)||!permissible.has(v.ingredientKey))history.delete(key);
   if(!selected.length||!live.length||!epoch||!/^[a-f0-9]{64}$/i.test(epoch)){lastResults=[];return [];}
   const distinct=Number.isSafeInteger(objectSeq)&&objectSeq>=0&&objectSeq!==lastSeq;
   const fresh=Number.isFinite(objectTime)&&objectTime<=now&&now-objectTime<=maxAgeMs;
   if(distinct&&!fresh){lastSeq=objectSeq;lastResults=[];return [];}
-  if(!distinct)return lastResults.filter(r=>identifiers.has(r.trackId)&&permissible.has(r.ingredientKey)&&now-r.lastSeen<=maxAgeMs);
+  if(!distinct)return lastResults.filter(r=>identifiers.has(r.trackId)&&!ambiguous.has(r.trackId)&&permissible.has(r.ingredientKey)&&now-r.lastSeen<=maxAgeMs);
   lastSeq=objectSeq;
-  const eligible=(Array.isArray(objects)?objects:[]).filter(o=>inside(o?.bbox)&&Number(o.confidence)>=minConfidence);
+  const eligible=(Array.isArray(objects)?objects:[]).filter(o=>inside(o?.bbox)&&Number(o.confidence)>=minConfidence&&Number(o.confidence)<=1);
   const proposals=[];
   for(const obj of eligible){
-   const chosen=selected.find(c=>c.canonical===normalize(obj.label)||c.canonical===normalize(obj.detectorLabel));
+   const matches=selected.filter(c=>c.canonical===normalize(obj.label)||c.canonical===normalize(obj.detectorLabel));
+   const chosen=matches.length===1?matches[0]:null;
    if(!chosen)continue;
    const scores=live.map(t=>({track:t,dist:distance(t.bbox,obj.bbox)})).sort((a,b)=>a.dist-b.dist);
    const nearest=scores[0];if(!nearest)continue;
    const proximity=Math.max(.13,Math.min(.26,.10+Math.max(nearest.track.bbox.width,nearest.track.bbox.height)*.6));
-   if(nearest.dist>proximity)continue;
+   if(nearest.dist>proximity||ambiguous.has(nearest.track.trackId))continue;
    if(scores.length>1&&scores[1].dist-nearest.dist<ambiguityMargin)continue;
    proposals.push({track:nearest.track,ingredient:chosen,object:obj,distance:nearest.dist});
   }
@@ -47,6 +57,8 @@ function create({minFrames=3,maxAgeMs=900,maxGapMs=1000,minConfidence=.65,ambigu
    const key=p.track.trackId+'|'+p.ingredient.id;
    if(usedHands.has(p.track.trackId))continue;
    usedHands.add(p.track.trackId);
+   // A hand cannot keep two ingredient identities in a continuous hold sequence.
+   for(const [priorKey,v] of history)if(v.trackId===p.track.trackId&&priorKey!==key)history.delete(priorKey);
    const old=history.get(key),continuity=old&&now-old.lastSeen<=maxGapMs,count=continuity?old.frames+1:1;
    const record={slot:p.track.slot,trackId:p.track.trackId,ingredientKey:p.ingredient.id,
      label:p.ingredient.label,confidence:Number(p.object.confidence),frames:count,
