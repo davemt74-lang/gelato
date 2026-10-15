@@ -83,7 +83,7 @@ async function capturePhotos(){
     if(parts.count===1)picture=parts.captureGoalPhoto(window.GelatoFoodMonsterGoals.trackId);
     if(!picture)await wait(220);
    }
-   if(!picture)return {ok:false,reason:'lighting_or_multiple_people'};
+   if(!picture)return {ok:false,reason:parts.count>1?'multiple_participants':parts.count===0?'no_stable_participant':'low_light_or_quality'};
    await window.GelatoFoodMonsterGoals.request('photo',{goal:current().id,image:picture});
    if(i<2)await wait(650);
   }
@@ -150,7 +150,11 @@ async function runQuickSetup(){
  const start=Date.now();let photos={ok:true};
  if(g.photos.length<3){
   photos=await capturePhotos();
-  if(!photos.ok)await window.GelatoFoodMonsterGoals.request('defer_photos',{goal:current().id,lowLight:true});
+  if(!photos.ok){
+    if(photos.reason!=='low_light_or_quality')
+     throw Error('Please isolate one participant for photo capture, or choose Low light · voice-first setup.');
+    await window.GelatoFoodMonsterGoals.request('defer_photos',{goal:current().id,lowLight:true});
+   }
   else if(!window.GelatoFoodMonsterCamera?.enrolled)
    await window.GelatoFoodMonsterCamera.enroll({persist:true});
  }

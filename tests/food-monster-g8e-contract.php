@@ -22,6 +22,7 @@ foreach([
  [str_contains($js,'link_existing'),'Current permission-protected account link reused'],
  [str_contains($js,'data-fm-speaker-consent'),'Low-light voice comparison consent moved to chat popup'],
  [str_contains($js,'voiceTools()'),'Manager voice feature permission remains checked'],
+ [str_contains(file_get_contents(__DIR__.'/../js/food-monster-fast-enroll.js'),'multiple_participants'),'Crowded scenes never marked as low light'],
  [str_contains($live,"panel.innerHTML='<div class=\"fm-participant-cards\""),'Only active card collection in right sidebar'],
  [!str_contains($live,'fm-participant-roster'),'No staff roster UI in participant sidebar'],
  [!str_contains($live,'fm-participants-top'),'No heading count or decorative sidebar UI'],

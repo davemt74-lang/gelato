@@ -223,8 +223,11 @@ panel.addEventListener('click',e=>{
  else if(e.target.closest('[data-fm-goal-my-history]')){void window.GelatoFoodMonsterParticipantHistory?.open?.();}
  else if(e.target.closest('[data-fm-voice-identify]')){
   const button=panel.querySelector('[data-fm-voice-identify]');button.disabled=true;
-  void window.GelatoFoodMonsterFastEnrollment?.identifySpeaker?.()
-   .catch(err=>note(err.message||'Speaker remains unverified.'))
+  void Promise.resolve().then(()=>{
+    const fn=window.GelatoFoodMonsterFastEnrollment?.identifySpeaker;
+    if(typeof fn!=='function')throw Error('Speaker identification is still loading.');
+    return fn();
+   }).catch(err=>note(err.message||'Speaker remains unverified.'))
    .finally(()=>{button.disabled=false;});
  }
  else if(e.target.closest('[data-fm-goal-handsfree]')){
