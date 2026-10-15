@@ -22,6 +22,7 @@
     rec: null,
     poll: null,
     voiceDraft: {owned: false, previous: '', committed: ''},
+    conversation: false, conversationTimer: null, conversationDraft: '',
   };
 
   const has = (permission) => S.permissions.includes('*') || S.permissions.includes(permission);
@@ -58,6 +59,7 @@
       #gelato-agent-bar button,#gelato-agent-bar a{width:42px;height:42px;border:0;border-radius:13px;background:#efefe9;display:grid;place-items:center;text-decoration:none;color:#161816;cursor:pointer;font-weight:900;position:relative}
       #gelato-agent-bar .ga-send{background:#171b1a;color:#fff}
       #gelato-agent-bar .ga-listen.on{background:#d94a2b;color:#fff;animation:gaPulse 1.6s infinite}
+      #gelato-agent-bar #gaConversation.on{background:#087fb2;color:#fff}
       #gelato-agent-bar .ga-listen.wake{background:#fff1db;color:#573e14}
       #gelato-agent-bar #gaMicOff{background:#fae2d9;color:#7b311b}
       #gelato-agent-voice-state{font:700 10px/1.4 Inter,system-ui,sans-serif;padding:4px 8px;color:#345847}
@@ -79,6 +81,7 @@
         <button class="ga-listen" id="gaListen" title="Start Listening" aria-label="Start Listening"><span>◉</span><i id="gelato-agent-dot"></i></button>
         <button id="gaMicOff" title="Microphone Off" aria-label="Microphone Off">◼</button>
         <button id="gaMic" title="Talk once or interrupt speech">🎙</button>
+        <button id="gaConversation" type="button" aria-label="Start Conversation Mode" aria-pressed="false" title="Start Conversation Mode">↔</button>
         <button id="gaInterrupt" title="Stop Gelato speaking" aria-label="Stop Agent speech">■</button>
         <textarea id="gaInput" rows="1" placeholder="Ask Gelato about prep, inventory, schedules, catering, wholesale, equipment…"></textarea>
         <a href="agent-canvas.php" id="gaCanvas" title="Open Agent Canvas">▣</a>
@@ -97,9 +100,10 @@
       }
     });
     q('gaMic').onclick = talkOnce;
+    q('gaConversation').onclick = () => void setConversationMode(!S.conversation);
     q('gaInterrupt').onclick = () => interruptSpeech('button');
     q('gaListen').onclick = () => setListening(!S.listening,{keepWake:S.listening});
-    q('gaMicOff').onclick = () => setListening(false,{keepWake:false});
+    q('gaMicOff').onclick = () => {void setConversationMode(false);void setListening(false,{keepWake:false});};
   }
 
   function status(text, milliseconds = 0) {
@@ -141,12 +145,14 @@
   async function send(raw, voice = false) {
     if(!voice)interruptSpeech('typed-message');
     const text = String(raw || '').trim();
+    clearConversationTimer();
     if (!text || S.busy) return null;
 
     S.busy = true;
     const input = document.getElementById('gaInput');
     if (input) input.value = '';
     resetVoiceDraft();
+    S.conversationDraft='';
     status('Gelato is checking your restaurant context…');
 
     try {
@@ -220,6 +226,7 @@
         detail: {answer, result, threadId: S.thread},
       }));
       if (voice && window.speechSynthesis && has('voice.agent')) speak(answer);
+      else if(S.conversation&&voice) status('Reply ready. Browser voice output is unavailable; read the response above.',7000);
       return result;
     } catch (error) {
       status(error.message || 'Gelato could not complete that request.', 6500);
@@ -315,7 +322,55 @@
     return true;
   }
 
-  // Unwoken speech is an editable draft, never an Agent tool command.
+  // FM-G7C: Conversation Mode is opt-in and uses the existing authenticated
+  // Agent Chat pathway. Server permissions and tool approvals remain authoritative.
+  function clearConversationTimer(){
+    if(S.conversationTimer!==null){clearTimeout(S.conversationTimer);S.conversationTimer=null;}
+  }
+  function renderConversation(){
+    const button=document.getElementById('gaConversation');
+    if(button){button.classList.toggle('on',S.conversation);button.setAttribute('aria-pressed',String(S.conversation));
+      button.title=S.conversation?'Stop Conversation Mode':'Start Conversation Mode';
+      button.setAttribute('aria-label',button.title);
+    }
+    window.dispatchEvent(new CustomEvent('gelato-agent-conversation-change',{detail:{enabled:S.conversation}}));
+  }
+  function ensureConversationButton(){
+    if(document.getElementById('gaConversation'))return;
+    const host=document.getElementById('gelato-agent-bar');if(!host)return;
+    const button=document.createElement('button');button.type='button';button.id='gaConversation';button.textContent='↔';
+    button.onclick=()=>void setConversationMode(!S.conversation);
+    const mic=document.getElementById('gaMic');
+    if(mic?.parentElement===host)mic.insertAdjacentElement('afterend',button);else host.prepend(button);
+    renderConversation();
+  }
+  async function setConversationMode(enabled){
+    if(!enabled){S.conversation=false;clearConversationTimer();S.conversationDraft='';interruptSpeech('conversation-off');renderConversation();
+      status('Conversation Mode off. Manual dictation remains available.',3000);return true;}
+    if(!has('voice.agent')){status('Conversation Mode requires Voice Agent permission.',4500);return false;}
+    if(!window.speechSynthesis){status('This browser cannot speak Agent responses.',4500);return false;}
+    const ready=S.listening||await setListening(true);
+    if(!ready){renderConversation();return false;}
+    S.conversation=true;S.conversationDraft='';clearConversationTimer();renderConversation();
+    status('Conversation Mode on · speak naturally and pause to send. Interrupt Gelato by talking.',6500);
+    return true;
+  }
+  function scheduleConversation(raw,isFinal){
+    if(!S.conversation||!S.listening||S.busy||!isFinal)return;
+    const text=String(raw||'').trim();if(!text)return;
+    S.conversationDraft=String(document.getElementById('gaInput')?.value||text).trim();
+    clearConversationTimer();
+    S.conversationTimer=setTimeout(async()=>{
+      S.conversationTimer=null;
+      if(!S.conversation||!S.listening||S.busy||document.hidden||!S.conversationDraft)return;
+      const phrase=S.conversationDraft;S.conversationDraft='';
+      // A manual edit always takes priority over automatic submission.
+      const field=document.getElementById('gaInput');
+      if(!S.voiceDraft.owned||field?.value!==S.voiceDraft.previous)return;
+      try{await send(phrase,true);}catch(error){status('Conversation request failed: '+String(error.message||error),6500);}
+    },1200);
+  }
+  // Unwoken speech is editable; only explicitly enabled Conversation Mode autosends.
   function resetVoiceDraft(){
     S.voiceDraft={owned:false,previous:'',committed:''};
   }
@@ -335,6 +390,7 @@
     draft.owned=true;draft.previous=value;
     if(final)draft.committed=value;
     field.dispatchEvent(new Event('input',{bubbles:true}));
+    if(S.conversation){clearConversationTimer();if(final)scheduleConversation(value,true);}
     window.dispatchEvent(new CustomEvent('gelato-agent-dictation',{
       detail:{text:value,final,source:'browser-speech-recognition'}
     }));
@@ -369,6 +425,7 @@
     });
   }
   async function talkOnce() {
+    if(S.conversation){interruptSpeech('conversation-mic');return;}
     const shouldResume=S.listening||S.wakeStandby;
     try {
       interruptSpeech('talk-once');
@@ -482,6 +539,7 @@
       });
       S.savedListening=!!Number(data.preferences?.listening_enabled??Number(!!on));
       S.listening=!!on;
+      if(!on&&S.conversation){S.conversation=false;clearConversationTimer();S.conversationDraft='';renderConversation();}
       S.wakeStandby=!!(keepWake||on);
       if(on){
         const started=S.rec?true:startContinuous();
@@ -516,6 +574,16 @@
       for(let index=event.resultIndex;index<event.results.length;index++){
         const result=event.results[index],text=String(result[0]?.transcript||'').trim();
         const evaluation=window.GelatoVoiceTurns?.evaluate?.(text,result[0]?.confidence,{wakeRequired:!S.listening});
+        // A genuine user utterance may barge into Agent speech without
+        // a wake word. Voice-turn echo rejection still takes priority.
+        if(S.conversation&&S.listening&&window.GelatoVoiceTurns?.speaking&&text){
+          if(evaluation?.reason==='tts-echo'||evaluation?.reason==='post-tts-echo')continue;
+          if(evaluation?.kind==='interrupt'||evaluation?.reason==='wake-required-while-speaking'||evaluation?.interrupt){
+            interruptSpeech('conversation-barge-in');S.lastBargeIn=0;
+            if(!/^hey\s+gelato\b/i.test(text))showVoiceDraft(text,{final:!!result.isFinal});
+            continue;
+          }
+        }
         if(evaluation?.kind==='ignored'){
           if(['tts-echo','post-tts-echo'].includes(evaluation.reason))diag('echo-ignored');
           // Noisy-room wake/low-confidence policies restrict commands, not
@@ -642,6 +710,7 @@
       S.permissions = data.permissions || [];
       S.user = data.user || null;
       mount();
+      ensureConversationButton();renderConversation();
       await loadListeningPreference();
       window.dispatchEvent(new CustomEvent('gelato-agent-ready', {
         detail: {threadId: S.thread, user: S.user},
@@ -652,7 +721,7 @@
   }
 
   document.addEventListener('visibilitychange',()=>{
-    if(document.hidden){stopContinuous();diag('paused');if(S.listening||S.wakeStandby)status('Microphone paused · tab hidden.');}
+    if(document.hidden){clearConversationTimer();stopContinuous();diag('paused');if(S.listening||S.wakeStandby)status('Microphone paused · tab hidden.');}
     else if(S.listening||S.wakeStandby)startContinuous();
   });
   window.addEventListener('beforeunload',()=>{stopContinuous();interruptSpeech('page-unload');});
@@ -660,6 +729,8 @@
   window.GelatoGlobalAgent = {
     send,
     setListening,
+    setConversationMode,
+    get conversationMode(){return S.conversation;},
     loadListeningPreference,
     updateProactiveVoice,
     enableWakeStandby,
