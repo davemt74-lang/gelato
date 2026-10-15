@@ -12,6 +12,23 @@ minimize.title='Minimize Food Monster';minimize.setAttribute('aria-label','Minim
 minimize.textContent='−';root.querySelector('.fm-actor').append(minimize);
 const actor=root.querySelector('.fm-actor'),figure=root.querySelector('.fm-figure'),bubble=root.querySelector('.fm-speech');
 const state={size:stage?350:170,x:0,y:0,drag:null,pupil:null,targetX:0,targetY:0,px:0,py:0,last:0,timer:0};
+const performanceState={voiceSpeaking:false,listening:false,thinking:false,replyUntil:0,alertUntil:0,lastInteraction:performance.now(),mood:'idle'};
+const moods=['fm-speaking','fm-thinking','fm-listening','fm-alert','fm-happy','fm-sleepy'];
+const reduced=matchMedia('(prefers-reduced-motion: reduce)');
+function updateMood(){
+ const now=performance.now();
+ const mood=performanceState.voiceSpeaking?'speaking':
+   performanceState.thinking?'thinking':
+   performanceState.listening?'listening':
+   performanceState.alertUntil>now?'alert':
+   performanceState.replyUntil>now?'happy':
+   now-performanceState.lastInteraction>45000?'sleepy':'idle';
+ if(mood!==performanceState.mood){
+   root.classList.remove(...moods);
+   if(mood!=='idle')root.classList.add('fm-'+mood);
+   root.dataset.mood=mood;performanceState.mood=mood;
+ }
+}
 if(!stage){try{
  const saved=JSON.parse(localStorage.getItem('gelato-food-monster-layout')||'null');
  if(saved && Number.isFinite(saved.x)&&Number.isFinite(saved.y)&&Number.isFinite(saved.size)) state.saved=saved;
@@ -37,15 +54,65 @@ actor.addEventListener('pointermove',event=>{if(state.drag?.id!==event.pointerId
 for(const kind of ['pointerup','pointercancel'])actor.addEventListener(kind,()=>{if(state.drag){state.drag=null;persist();}});
 root.addEventListener('click',event=>{const b=event.target.closest('[data-size]');if(!b)return;state.size+=Number(b.dataset.size)*24;layout();persist();});
 window.addEventListener('resize',layout,{passive:true});
-window.addEventListener('pointermove',event=>{if(state.drag)return;if(root.classList.contains('fm-minimized'))return;const r=actor.getBoundingClientRect();const dx=event.clientX-(r.left+r.width/2),dy=event.clientY-(r.top+r.height*.54),length=Math.hypot(dx,dy)||1,s=Math.min(length/(r.width*1.5),1);state.targetX=dx/length*s*13;state.targetY=dy/length*s*11;state.last=performance.now();},{passive:true});
-function animate(){if(!root.isConnected)return;if(performance.now()-state.last>10000){state.targetX=Math.sin(performance.now()/2000)*3;state.targetY=0;}state.px+=(state.targetX-state.px)*.15;state.py+=(state.targetY-state.py)*.15;if(state.pupil)state.pupil.setAttribute('transform','translate('+state.px.toFixed(2)+' '+state.py.toFixed(2)+')');requestAnimationFrame(animate);}requestAnimationFrame(animate);
-const reduced=matchMedia('(prefers-reduced-motion: reduce)');
+window.addEventListener('pointermove',event=>{performanceState.lastInteraction=performance.now();if(state.drag)return;if(root.classList.contains('fm-minimized'))return;const r=actor.getBoundingClientRect();const dx=event.clientX-(r.left+r.width/2),dy=event.clientY-(r.top+r.height*.54),length=Math.hypot(dx,dy)||1,s=Math.min(length/(r.width*1.5),1);state.targetX=dx/length*s*13;state.targetY=dy/length*s*11;state.last=performance.now();},{passive:true});
+function animate(){
+ if(!root.isConnected)return;
+ const now=performance.now();
+ if(now-state.last>10000){state.targetX=Math.sin(now/2000)*3;state.targetY=0;}
+ // Gaze remains responsive while the Agent talks. Thinking adds a subtle upward glance.
+ const goalY=state.targetY-(performanceState.thinking?2.8:0);
+ state.px+=(state.targetX-state.px)*.15;state.py+=(goalY-state.py)*.15;
+ if(state.pupil)state.pupil.setAttribute('transform','translate('+state.px.toFixed(2)+' '+state.py.toFixed(2)+')');
+ if(performanceState.voiceSpeaking){
+   // Browser TTS exposes speech lifecycle, not reliable phonemes. Animate a natural
+   // approximate speech rhythm ONLY while GelatoVoiceTurns says the Agent is speaking.
+   const mouth=reduced.matches?.72:Math.min(1.22,Math.max(.32,.35+.60*Math.abs(Math.sin(now/73)+.31*Math.sin(now/119))));
+   root.style.setProperty('--fm-mouth-open',mouth.toFixed(3));
+ }
+ updateMood();
+ requestAnimationFrame(animate);
+}requestAnimationFrame(animate);
 function blink(){if(reduced.matches||document.hidden)return;root.classList.add('fm-blink');setTimeout(()=>root.classList.remove('fm-blink'),165);}
 (function tick(){setTimeout(()=>{blink();tick();},3300+Math.random()*3500);})();
 let speechTimer=0;
-window.addEventListener('gelato-agent-response',event=>{const text=String(event.detail?.answer||'');if(!text)return;bubble.textContent=text.slice(0,180)+(text.length>180?'…':'');root.classList.add('fm-has-speech','fm-speaking');clearTimeout(speechTimer);speechTimer=setTimeout(()=>root.classList.remove('fm-has-speech','fm-speaking'),Math.min(8500,1800+text.length*38));});
-window.addEventListener('gelato-agent-status',event=>{const value=String(event.detail?.message||'');root.classList.toggle('fm-thinking',/checking your restaurant context|thinking/i.test(value));});
-window.addEventListener('gelato-agent-listening-change',event=>root.classList.toggle('fm-listening',!!event.detail?.listening&&!!event.detail?.microphoneActive));
+window.addEventListener('gelato-agent-response',event=>{
+ const text=String(event.detail?.answer||'');
+ if(!text)return;
+ bubble.textContent=text.slice(0,180)+(text.length>180?'…':'');
+ root.classList.add('fm-has-speech');
+ clearTimeout(speechTimer);
+ speechTimer=setTimeout(()=>root.classList.remove('fm-has-speech'),Math.min(8500,1800+text.length*38));
+ performanceState.thinking=false;performanceState.replyUntil=performance.now()+1800;
+ const moves=event.detail?.result?.data?.nextMoves;
+ if(Array.isArray(moves)&&moves.some(move=>['critical','high'].includes(String(move?.severity||''))))
+   performanceState.alertUntil=performance.now()+3500;
+ updateMood();
+});
+window.addEventListener('gelato-agent-status',event=>{
+ const value=String(event.detail?.message||'');
+ performanceState.thinking=/checking your restaurant context|thinking|working on/i.test(value);
+ if(value)performanceState.lastInteraction=performance.now();
+ updateMood();
+});
+window.addEventListener('gelato-agent-listening-change',event=>{
+ performanceState.listening=!!event.detail?.microphoneActive&&!!event.detail?.listening;
+ if(performanceState.listening)performanceState.lastInteraction=performance.now();
+ updateMood();
+});
+window.addEventListener('gelato-voice-turn',event=>{
+ const kind=String(event.detail?.kind||'');
+ const owner=String(event.detail?.owner||'');
+ if(kind==='speaking'&&(owner==='global-agent'||owner==='agent')){
+   performanceState.voiceSpeaking=true;performanceState.thinking=false;
+   performanceState.lastInteraction=performance.now();
+ }else if((kind==='ended'||kind==='interrupted')&&performanceState.voiceSpeaking){
+   performanceState.voiceSpeaking=false;
+   root.style.removeProperty('--fm-mouth-open');
+   performanceState.replyUntil=performance.now()+500;
+ }else return;
+ updateMood();
+});
+window.addEventListener('gelato-agent-ready',()=>{performanceState.replyUntil=performance.now()+1200;updateMood();});
 fetch('assets/food-monster/chef-mascot.svg',{credentials:'same-origin'}).then(r=>{if(!r.ok)throw Error('artwork');return r.text()}).then(content=>{const doc=new DOMParser().parseFromString(content,'image/svg+xml');if(doc.documentElement.localName!=='svg'||doc.querySelector('parsererror'))throw Error('invalid svg');figure.append(document.importNode(doc.documentElement,true));state.pupil=figure.querySelector('[data-fm-pupil]');}).catch(()=>figure.textContent='👁️');
-window.GelatoFoodMonster={root,blink,get isStage(){return stage;}};
+window.GelatoFoodMonster={root,blink,get isStage(){return stage;},get mood(){return performanceState.mood;}};
 })();

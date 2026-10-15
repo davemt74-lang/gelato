@@ -33,7 +33,7 @@ const base=path.resolve(__dirname,'..');
     ok((await actor.boundingBox()).width<enlarged.width,'decrease size');
     await page.evaluate(()=>window.dispatchEvent(new CustomEvent('gelato-agent-response',{detail:{answer:'Hello from Gelato Brain.'}})));
     ok((await page.locator('.fm-speech').innerText()).includes('Hello from Gelato Brain.'),'responses appear in bubble');
-    ok(await page.locator('#food-monster-root.fm-speaking').count()===1,'talking state animates mouth');
+    ok(await page.locator('#food-monster-root.fm-happy').count()===1,'typed response reacts without faking speech');
     await page.evaluate(()=>window.dispatchEvent(new CustomEvent('gelato-agent-listening-change',{detail:{listening:true,microphoneActive:true}})));
     ok(await page.locator('#food-monster-root.fm-listening').count()===1,'listening state');
     const box=await actor.boundingBox();
