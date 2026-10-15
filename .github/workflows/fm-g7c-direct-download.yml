@@ -1,0 +1,81 @@
+name: FM-G7C Permanent Deployment Download
+
+on:
+  push:
+    branches:
+      - delivery/fm-g7c-direct-release
+    paths:
+      - .github/workflows/fm-g7c-direct-download.yml
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify existing release
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view gelato-fm-g7c --repo davemt74-lang/gelato >/dev/null 2>&1; then
+            echo 'exists=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'exists=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download certified FM-G7C full deployment
+        if: steps.existing.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifact
+          gh run download 38690373905 --repo davemt74-lang/gelato --name gelato-full-deploy --dir artifact
+          test -s artifact/gelato-full-deploy.zip
+          test -s artifact/gelato-full-deploy.sha256
+          expected="$(awk 'NR==1 {print $1}' artifact/gelato-full-deploy.sha256)"
+          printf '%s  %s\n' "$expected" artifact/gelato-full-deploy.zip | sha256sum --check -
+          unzip -tq artifact/gelato-full-deploy.zip
+          test "$(unzip -p artifact/gelato-full-deploy.zip DEPLOY_SHA.txt | tr -d '\r\n')" = '35e8744045cfc06d7d60a07d486ba94673039679'
+
+      - name: Stamp exact verified merge and check bundled dependencies
+        if: steps.existing.outputs.exists != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p extracted
+          unzip -q artifact/gelato-full-deploy.zip -d extracted
+          printf '%s\n' 'a8f2e68ae63d5b38d49bd71b5a63643b88007037' > extracted/DEPLOY_SHA.txt
+          test -s extracted/assets/vendor/mediapipe/vision_bundle.mjs
+          test -s extracted/assets/vendor/mediapipe/hand_landmarker.task
+          test -s extracted/assets/vendor/mediapipe/wasm/vision_wasm_internal.wasm
+          test -s extracted/tests/food-monster-g7c-browser.test.cjs
+          test -s extracted/js/global-agent.js
+          test -s extracted/includes/agent-workspace-core.php
+          if test -e extracted/config.php || test -e extracted/.env || test -e extracted/uploads || test -e extracted/storage; then
+            echo 'Live private configuration unexpectedly bundled.' >&2
+            exit 1
+          fi
+          (
+            cd extracted
+            zip -qr "$GITHUB_WORKSPACE/gelato-full-deploy.zip" .
+          )
+          unzip -tq gelato-full-deploy.zip
+          sha256sum gelato-full-deploy.zip > gelato-full-deploy.sha256
+          test "$(unzip -p gelato-full-deploy.zip DEPLOY_SHA.txt | tr -d '\r\n')" = 'a8f2e68ae63d5b38d49bd71b5a63643b88007037'
+
+      - name: Publish direct public GitHub Release downloads
+        if: steps.existing.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create gelato-fm-g7c \
+            gelato-full-deploy.zip \
+            gelato-full-deploy.sha256 \
+            --repo davemt74-lang/gelato \
+            --target a8f2e68ae63d5b38d49bd71b5a63643b88007037 \
+            --title 'Gelato Food Monster FM-G7C — Full Deployment' \
+            --notes 'Direct deployment ZIP, not a source archive or GitHub Actions artifact wrapper. Includes the certified FM-G7C Claude conversation routing, hands-free Listening and Conversation modes, MediaPipe JS/WASM and hand tracking model. Source tree matches the 33/33 green PR #315 revision, merged at a8f2e68ae63d5b38d49bd71b5a63643b88007037. Preserve existing configuration, uploads and storage when extracting on HostGator.'
