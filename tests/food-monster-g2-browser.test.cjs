@@ -31,7 +31,7 @@ const {chromium}=require('playwright');
    await page.waitForTimeout(180);
    ok(!!(await root.getAttribute('style')).match(/--fm-mouth-open/),'speech rhythm updated while TTS active');
    await dispatch('gelato-voice-turn',{kind:'ended',owner:''});
-   ok(await root.getAttribute('data-mood')==='thinking','speech end returns to prior thinking state');
+   ok(await root.getAttribute('data-mood')==='listening','speech end returns to ongoing listening state');
    ok(!(await root.getAttribute('style')).includes('--fm-mouth-open'),'speech end stops rhythm');
    await dispatch('gelato-agent-status',{message:'Ready.'});
    ok(await root.getAttribute('data-mood')==='listening','listening resumes after thought complete');
