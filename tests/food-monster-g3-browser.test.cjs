@@ -81,7 +81,7 @@ try{
  const {page:voice,errors:voiceErrors}=await setup({account:11});
  await voice.locator('.fm-camera-trigger').click();
  await voice.locator('[data-pref="speak"]').check();
- await voice.evaluate(()=>window.dispatchEvent(new CustomEvent('gelato-verified-speaker',{detail:{sessionUserMatch:true,userId:11,name:'Taylor'}})));
+ await voice.evaluate(()=>{window.GelatoGlobalAgent.verifiedSpeaker={sessionUserMatch:true,userId:11,name:'Taylor'};window.dispatchEvent(new CustomEvent('gelato-verified-speaker',{detail:{sessionUserMatch:true,userId:11,name:'Taylor'}}));});
  check((await voice.locator('.fm-speech').innerText()).includes('Taylor'),'verified own speaker receives greeting');
  check((await voice.evaluate(()=>window.__tts?.text||'')).includes('Taylor'),'spoken greeting only with user opt-in');
  check(voiceErrors.length===0,'voice scenario without errors');
