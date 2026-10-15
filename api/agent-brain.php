@@ -184,7 +184,7 @@ function brain_answer(PDO $pdo,int $organizationId,string $message,array $user):
     if($wholesaleIntent&&brain_can_wholesale($user))return brain_wholesale_answer($pdo,$organizationId,$message);
     if($recipeIntent&&brain_can_recipes($user))return brain_recipe_answer($pdo,$organizationId,$message);
     if($equipmentIntent&&brain_can_equipment($user))return brain_equipment_answer($pdo,$organizationId,$message);
-    if(brain_can_menu($user)){ $result=brain_menu_answer($pdo,$organizationId,$message); if(!empty($result['data']))return $result; }
+    // No unrelated menu search on general text; explicit menu intents above remain allowed.
     if(brain_can_wholesale($user)){ $result=brain_wholesale_answer($pdo,$organizationId,$message); if(!empty($result['data']))return $result; }
     if(brain_can_recipes($user)){ $result=brain_recipe_answer($pdo,$organizationId,$message); if(!empty($result['data']))return $result; }
     if(brain_can_equipment($user)){ $result=brain_equipment_answer($pdo,$organizationId,$message); if(!empty($result['data']))return $result; }
