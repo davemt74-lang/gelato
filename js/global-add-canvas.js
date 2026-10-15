@@ -39,6 +39,10 @@
     if (!window.GelatoGlobalAgent) ensureScript('js/global-agent.js?v=20261013-listening1', 'data-gelato-global-agent-loader');
     ensureScript('js/dynamic-agent-canvas.js?v=20260915-drawer1', 'data-dynamic-agent-canvas-loader');
     ensureScript('js/agent-next-moves.js?v=20260916-brain1', 'data-agent-next-moves-loader');
+    // One companion UI for the existing authenticated Agent session; never a second brain.
+    if (page !== 'food-monster.php' && page !== 'agent-canvas.php') {
+      ensureScript('js/food-monster.js?v=20261014-fmg1', 'data-food-monster-loader');
+    }
   }
 
   function ensureStyles() {
