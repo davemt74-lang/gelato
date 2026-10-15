@@ -111,7 +111,7 @@ function gaw_append(PDO $pdo,int $org,int $userId,string $threadPublicId,string 
 function gaw_route(array $user,string $message): array
 {
     $text=mb_strtolower(preg_replace('/^hey\s+gelato[,\s]*/iu','',trim($message))??trim($message),'UTF-8');
-    $menu='/\b(menu|menu item|sold.?out|86(?:d)?|eighty.?six|food item|drink item|menu price|pizza size|modifier|topping|add.?on)\b/u';
+    $menu='/\b(menu|menu item|sold.?out|86(?:d)?|eighty.?six|food item|drink item|menu price|pizza size|modifier|toppings?|add.?on)\b/u';
     $workforce='/\b(resume|resumes|applicant|applicants|candidate|candidates|hiring|hire|new hires?|employee activity|staff activity|recent activity|workforce overview|workforce summary)\b/u';
     if(($user['role_slug']??'')==='wholesale_customer')return ['route'=>'api/wholesale-portal-agent.php','domain'=>'wholesale_portal'];
     $time='/\b(clock(?:ed)?\s+(?:me\s+)?(?:in|out)|time\s*clock|(?:start|take|begin|end|finish|stop)\s+(?:my\s+)?break|my break|(?:employee|staff|team|my)\s+attendance|attendance\s+(?:exceptions?|issues?|status|today|no.?shows?|late arrivals?)|(?:late|missing)\s+(?:employee|staff|worker|shift)|actual labor|labor variance|on clock|clock status|who(?:\s+is|\x27s)?\s+clocked in)\b/u';
@@ -155,7 +155,7 @@ function gaw_route(array $user,string $message): array
     if(preg_match($crm,$text)&&app_has_permission('crm.view',$user))return ['route'=>'api/customer-crm-agent.php','domain'=>'customer_crm'];
     if(preg_match($ops,$text)&&(app_has_permission('tasks.agent',$user)||app_has_permission('inventory.agent',$user))&&(app_has_permission('tasks.view',$user)||app_has_permission('inventory.view',$user)))return ['route'=>'api/operations-agent.php','domain'=>'operations'];
     if(preg_match($ops,$text)&&(app_has_permission('tasks.self',$user)||app_has_permission('agent.employee_view',$user)))return ['route'=>'api/employee-agent.php','domain'=>'employee_operations'];
-    if(app_has_permission('menu.view',$user)||app_has_permission('agent.equipment_skills',$user)||app_has_permission('wholesale.agent',$user)||app_has_permission('recipes.agent',$user))return ['route'=>'api/agent-brain.php','domain'=>'restaurant_brain'];
+    // Ordinary conversation must reach the configured model, never default to a menu dump.
     return ['route'=>null,'domain'=>'general'];
 }
 
