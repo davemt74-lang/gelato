@@ -16,7 +16,7 @@ $llm=$read('api/food-monster-llm.php');
 $camera=$read('js/food-monster-camera.js');
 $suggestions=$read('js/food-monster-suggestions.js');
 $version='20261014-fmg6';
-$agentVersion='20261015-fmg7b2e';
+$agentVersion='20261015-fmg8c';
 $mascotVersion='20261015-fmg8a';
 foreach([
  'js/global-add-canvas.js'=>$global,'js/universal-admin-page-shell.js'=>$universal,
