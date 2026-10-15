@@ -15,7 +15,7 @@ $user = app_require_auth();
 <body class="food-monster-stage-page">
 <main id="food-monster-stage" aria-label="Food Monster Agent stage">
   <a class="fm-stage-brand" href="workspace.php" aria-label="Return to Gelato workspace">Food Monster <span>AI</span></a>
-  <div class="fm-stage-help">Drag the monster · Move your cursor · Ask a question below</div>
+  <div class="fm-stage-help">Drag the monster · Move your cursor · Ask a question below · <a href="profile-pin.php" style="color:#7deafa">Employee PIN &amp; Face setup</a></div>
 </main>
 <script src="js/agent-page-context.js?v=20260915-context3"></script>
 <script src="js/voice-session-presence.js?v=20261013-presence1"></script>

@@ -22,6 +22,8 @@ try {
 $token = trim((string)($_GET['token'] ?? $_POST['token'] ?? ''));
 $tokenRecord = null;
 $error = null;
+require_once __DIR__.'/includes/food-monster-pin.php';
+$pinEnabled=fmpin_ready($pdo);
 
 if (preg_match('/^[a-f0-9]{64}$/', $token) === 1) {
     $statement = $pdo->prepare(
@@ -49,6 +51,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $validToken) {
         $error = 'The reset form expired. Refresh the page and try again.';
     } elseif ($password !== $confirmation) {
         $error = 'The passwords do not match.';
+    } elseif ($pinEnabled && !fmpin_has($pdo,(int)$tokenRecord['organization_id'],(int)$tokenRecord['user_id']) && !fmpin_valid((string)($_POST['employee_pin']??''))) {
+        $error = 'Choose a six-digit employee PIN with at least three different digits.';
+    } elseif ($pinEnabled && (string)($_POST['employee_pin']??'')!=='' && !fmpin_valid((string)$_POST['employee_pin'])) {
+        $error = 'Choose a six-digit employee PIN with at least three different digits.';
+    } elseif ($pinEnabled && (string)($_POST['employee_pin']??'') !== (string)($_POST['confirm_employee_pin']??'')) {
+        $error = 'Employee PIN entries do not match.';
     } elseif (!app_password_is_valid($password)) {
         $error = 'Use at least 12 characters with an uppercase letter, lowercase letter, and number.';
     } else {
@@ -65,6 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $validToken) {
                 "UPDATE password_reset_tokens SET used_at = NOW(6)
                  WHERE user_id = :user_id AND used_at IS NULL"
             )->execute(['user_id' => $tokenRecord['user_id']]);
+            if($pinEnabled && (string)($_POST['employee_pin']??'')!=='')fmpin_set($pdo,(int)$tokenRecord['organization_id'],(int)$tokenRecord['user_id'],(string)$_POST['employee_pin']);
             app_audit(
                 $pdo,
                 (int)$tokenRecord['organization_id'],
@@ -131,6 +140,12 @@ try {
             <div class="field-wrap"><label for="password">New password</label><input class="field" id="password" name="password" type="password" autocomplete="new-password" minlength="12" required autofocus></div>
             <div class="field-wrap"><label for="password_confirmation">Confirm new password</label><input class="field" id="password_confirmation" name="password_confirmation" type="password" autocomplete="new-password" minlength="12" required></div>
             <div class="password-guidance">Use at least 12 characters, including an uppercase letter, lowercase letter, and number.</div>
+            <?php if($pinEnabled): ?>
+            <?php $existingPin=fmpin_has($pdo,(int)$tokenRecord['organization_id'],(int)$tokenRecord['user_id']); ?>
+            <div class="field-wrap"><label for="employee_pin">Employee PIN (six digits<?= $existingPin?' · optional to change':' · required' ?>)</label><input class="field" id="employee_pin" name="employee_pin" type="password" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" autocomplete="new-password" <?= $existingPin?'':'required' ?>></div>
+            <div class="field-wrap"><label for="confirm_employee_pin">Confirm employee PIN</label><input class="field" id="confirm_employee_pin" name="confirm_employee_pin" type="password" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" autocomplete="new-password" <?= $existingPin?'':'required' ?>></div>
+            <div class="password-guidance">PIN sign-in requires Super Admin trusted-terminal approval and consented face enrollment. You can change your PIN later at Employee PIN Settings.</div>
+            <?php endif; ?>
             <div class="auth-links"><a class="auth-back-link" href="landing.html">← Public site</a><a href="login.php">Cancel</a></div>
             <button class="submit-button" type="submit">Update password</button>
           </form>
