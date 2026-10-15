@@ -164,7 +164,7 @@ async function startMeter(){
    const visible=tracked();
    // A room microphone never identifies a speaker among two or more camera tracks.
    if(visible.length!==1||window.GelatoVoiceTurns?.speaking||window.speechSynthesis?.speaking){
-    state.inputByTrack.clear();
+    for(const [id,value] of state.inputByTrack)if(value.provisional)state.inputByTrack.delete(id);
    }else{
     analyser.getByteTimeDomainData(samples);let total=0;
     for(const val of samples)total+=(val-128)**2;
