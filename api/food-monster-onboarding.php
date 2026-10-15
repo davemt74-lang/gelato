@@ -46,6 +46,7 @@ try{
   $status=(string)($input['status']??'')==='completed'?'completed':'cancelled';
   if($status==='completed')$view=fmgoal_finish($pdo,$actor,$goal);
   else{
+   $pdo->prepare('DELETE FROM fm_participant_photos WHERE organization_id=? AND goal_id=?')->execute([(int)$actor['organization_id'],(int)$goal['id']]);
    $pdo->prepare("UPDATE fm_participant_goals SET status='cancelled',phase='cancelled',completed_at=NOW(6),updated_at=NOW(6) WHERE id=? AND organization_id=? AND status='in_progress'")
     ->execute([(int)$goal['id'],(int)$actor['organization_id']]);
    app_audit($pdo,(int)$actor['organization_id'],(int)$actor['id'],'agent.participant_goal_cancelled','participant_goal',(string)$goal['public_id']);
