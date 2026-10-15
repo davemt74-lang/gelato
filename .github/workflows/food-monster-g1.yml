@@ -17,6 +17,8 @@ on:
       - 'tests/food-monster-g7a-*'
       - 'tests/food-monster-g7v-*'
       - 'tests/food-monster-g7c-*'
+      - 'tests/food-monster-g7d-*'
+      - 'docs/FOOD-MONSTER-FM-G7D-HAIKU-PROVIDER.md'
       - 'includes/agent-workspace-core.php'
       - 'api/agent-brain.php'
       - 'api/agent-workspace.php'
@@ -82,6 +84,7 @@ jobs:
           php tests/food-monster-g2-contract.php
           php tests/food-monster-g3-contract.php
           php tests/food-monster-g4-contract.php
+          php tests/food-monster-g7d-provider-contract.php
           php tests/food-monster-g5-contract.php
           php tests/food-monster-g6-contract.php
           php tests/food-monster-g7-contract.php
