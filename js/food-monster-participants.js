@@ -33,7 +33,7 @@ function setMode(mode){
  for(const button of el.querySelectorAll('[data-fm-view]'))button.setAttribute('aria-pressed',String(button.dataset.fmView===state.mode));
  if(state.mode==='camera')attachVideo();render();
 }
-function clearTracks(){state.tracks.length=0;render();drawOverlay();} // Monotonic IDs for this page session
+function clearTracks(){state.tracks.length=0;state.nextId=1;render();drawOverlay();} // Camera-off ends the tracking session
 function attachVideo(){
  if(!state.camera)return;
  const stream=cameraAPI()?.stream;
@@ -96,7 +96,7 @@ function updateFaces(boxes,ownVerified=false){
  state.tracks=state.tracks.filter(t=>now-t.at<18000);
  render();drawOverlay();
 }
-function tracked(){return state.tracks.filter(t=>t.seen>=2&&Date.now()-t.at<5000);}
+function tracked(){return state.tracks.filter(t=>t.seen>=2&&Date.now()-t.at<1800);} // Hidden tracks retain ID longer than visible cards
 function render(){
  const visible=tracked();count.textContent=String(visible.length);
  if(!state.camera){cards.innerHTML='<p class="fm-participant-empty">Camera off · no active tracks</p>';return;}
