@@ -1,0 +1,86 @@
+name: FM-G8D2A Permanent Participant Deployment
+on:
+  push:
+    branches:
+      - delivery/fm-g8d2a-participant-history
+    paths:
+      - .github/workflows/fm-g8d2a-direct-release.yml
+permissions:
+  actions: read
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - name: Check whether certified release exists
+        id: exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view gelato-fm-g8d2a --repo davemt74-lang/gelato >/dev/null 2>&1; then
+            echo 'yes=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'yes=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Wait for merged-main full deployment
+        if: steps.exists.outputs.yes != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          for n in $(seq 1 100); do
+            state="$(gh run view 38788960918 --repo davemt74-lang/gelato --json status,conclusion,headSha --jq '[.status,.conclusion,.headSha]|join(" ")')"
+            echo "Main build: $state"
+            if [[ "$state" == "completed success 9f346055c4803ae3fcce55dbdb2a5398b26e291f" ]]; then exit 0; fi
+            if [[ "$state" == completed\ * && "$state" != "completed success 9f346055c4803ae3fcce55dbdb2a5398b26e291f" ]]; then exit 1; fi
+            sleep 25
+          done
+          echo 'Main full-deploy packaging has not completed within the wait window' >&2
+          exit 1
+      - name: Retrieve and certify immutable main artifact
+        if: steps.exists.outputs.yes != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p tested
+          gh run download 38788960918 --repo davemt74-lang/gelato --name gelato-full-deploy --dir tested
+          test -s tested/gelato-full-deploy.zip
+          test -s tested/gelato-full-deploy.sha256
+          (cd tested && sha256sum -c gelato-full-deploy.sha256)
+          unzip -tq tested/gelato-full-deploy.zip
+          test "$(unzip -p tested/gelato-full-deploy.zip DEPLOY_SHA.txt | tr -d '\r\n')" = '9f346055c4803ae3fcce55dbdb2a5398b26e291f'
+          required=(
+            food-monster.php
+            api/food-monster-participant-history.php
+            includes/food-monster-participant-history.php
+            js/food-monster-participant-history.js
+            database/20261015_fm_g8d2a_participant_history.sql
+            tests/food-monster-g8d2a-browser.test.cjs
+            assets/vendor/mediapipe/hand_landmarker.task
+            assets/vendor/mediapipe/vision_bundle.mjs
+            assets/vendor/mediapipe/wasm/vision_wasm_internal.wasm
+          )
+          for filename in "${required[@]}"; do
+            unzip -p tested/gelato-full-deploy.zip "$filename" >/dev/null || exit 1
+          done
+          for excluded in config.php .env uploads storage; do
+            if unzip -Z1 tested/gelato-full-deploy.zip | grep -Eq "^${excluded}(/|$)"; then
+              echo "Sensitive state was included: $excluded" >&2
+              exit 1
+            fi
+          done
+          cp tested/gelato-full-deploy.zip ./gelato-full-deploy.zip
+          cp tested/gelato-full-deploy.sha256 ./gelato-full-deploy.sha256
+      - name: Publish GitHub Release ZIP and checksum
+        if: steps.exists.outputs.yes != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create gelato-fm-g8d2a gelato-full-deploy.zip gelato-full-deploy.sha256 \
+            --repo davemt74-lang/gelato \
+            --target 9f346055c4803ae3fcce55dbdb2a5398b26e291f \
+            --title 'Gelato FM-G8D2A — Participant History and Private Agent Folders' \
+            --notes 'Certified full HostGator deployment for participant-owned Agent Chat folders, timeline, verified goal/event history and permission-filtered main Agent Brain summaries. PR #324: 13/13 exact-head checks successful; merged main source tree matches the tested revision. Preserve config.php, .env, uploads/, storage/ and storage/keys/application.key; run protected upgrade.php for history tables. Physical camera/voice certification remains separate. FM-G8D2B specialist sub-agent coordination will be a following build.'
