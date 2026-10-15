@@ -74,10 +74,23 @@ const {chromium}=require('playwright'),base=path.resolve(__dirname,'..');
   ok(await page.evaluate(()=>window.__answers[1]==='Tell me more'),'Interrupted voice creates next turn');
   await page.evaluate(()=>window.GelatoGlobalAgent.setConversationMode(false));
   ok(!await page.evaluate(()=>window.GelatoGlobalAgent.conversationMode),'Mode can stop');
-  await page.evaluate(()=>window.__recognizers.at(-1).say('Dictation only',true));
+  // Listening remains active when Conversation Mode is off. It must still auto-send.
+  await page.evaluate(()=>window.__recognizers.at(-1).say('Listening sends automatically',true));
+  await page.waitForFunction(()=>window.__answers.length===3,null,{timeout:7000});
+  ok(await page.evaluate(()=>window.__answers[2]==='Listening sends automatically'),'Listening Mode also auto-sends after speech stops');
+  ok(await page.locator('#gaInput').inputValue()==='','Voice transcript cleared after automatic submission');
+  // Typed messages are never auto-sent or overwritten by recognized speech.
+  await page.locator('#gaInput').fill('My typed message');
+  await page.evaluate(()=>window.__recognizers.at(-1).say('Do not replace typed message',true));
   await page.waitForTimeout(1400);
-  ok(await page.evaluate(()=>window.__answers.length===2),'No auto submission in dictation mode');
-  ok(await page.locator('#gaInput').inputValue()==='Dictation only','Draft remains editable');
+  ok(await page.locator('#gaInput').inputValue()==='My typed message','Manual typing wins over recognized words');
+  ok(await page.evaluate(()=>window.__answers.length===3),'Typed text does not auto-submit');
+  await page.locator('#gaInput').fill('');
+  // Microphone Off cancels the pending recognized phrase.
+  await page.evaluate(()=>window.__recognizers.at(-1).say('Cancel pending turn',true));
+  await page.evaluate(()=>window.GelatoGlobalAgent.setListening(false,{keepWake:false}));
+  await page.waitForTimeout(1400);
+  ok(await page.evaluate(()=>window.__answers.length===3),'Stopping Listening cancels pending auto-send');
   ok(errors.length===0,'No page errors: '+errors.join(';'));
   console.log('FM-G7C hands-free conversation Chromium: PASS ('+count+' assertions)');
  }finally{await browser.close()}
