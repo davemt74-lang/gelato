@@ -19,6 +19,15 @@ on:
       - 'tests/food-monster-g7c-*'
       - 'tests/food-monster-g7d-*'
       - 'tests/food-monster-g8a-*'
+      - 'tests/food-monster-g8b-pin-*'
+      - 'api/fm-pin.php'
+      - 'includes/food-monster-pin.php'
+      - 'js/fm-face-pin.js'
+      - 'login.php'
+      - 'reset-password.php'
+      - 'profile-pin.php'
+      - 'database/20261015_fm_g8b_face_pin.sql'
+      - 'docs/FOOD-MONSTER-FM-G8B-FACE-PIN.md'
       - 'js/food-monster-participants.js'
       - 'includes/food-monster-participants.php'
       - 'api/food-monster-participants.php'
@@ -100,6 +109,13 @@ jobs:
           php -l api/food-monster-participants.php
           php -l includes/food-monster-participants.php
           php tests/food-monster-g8a-participants.php
+          php -l login.php
+          php -l reset-password.php
+          php -l profile-pin.php
+          php -l api/fm-pin.php
+          php -l includes/food-monster-pin.php
+          php tests/food-monster-g8b-pin-contract.php
+          node --check js/fm-face-pin.js
           node --check js/food-monster-participants.js
           php tests/food-monster-g7b1-registry.php
           php tests/food-monster-g7b2-read.php
@@ -135,5 +151,6 @@ jobs:
           node tests/food-monster-g7v-browser.test.cjs
           node tests/food-monster-g7c-browser.test.cjs
           node tests/food-monster-g8a-browser.test.cjs
+          node tests/food-monster-g8b-pin-browser.test.cjs
           node tests/food-monster-g7b1-browser.test.cjs
           node tests/food-monster-g7b2-browser.test.cjs
