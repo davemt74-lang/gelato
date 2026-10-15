@@ -88,9 +88,10 @@ function fmgoal_photo(PDO $pdo,array $actor,array $goal,string $dataUri):array {
  $org=(int)$actor['organization_id'];
  $q=$pdo->prepare('SELECT COUNT(*) FROM fm_participant_photos WHERE organization_id=? AND goal_id=?');
  $q->execute([$org,(int)$goal['id']]);if((int)$q->fetchColumn()>=8)throw new DomainException('Photo gallery is full (eight images).');
- $q=$pdo->prepare('INSERT INTO fm_participant_photos (organization_id,goal_id,image_mime,image_bytes,created_by) VALUES (?,?,?,?,?)');
+ $encrypted=app_encrypt_secret($bytes);
+ $q=$pdo->prepare('INSERT INTO fm_participant_photos (organization_id,goal_id,image_mime,image_bytes,image_nonce,image_encryption,created_by) VALUES (?,?,?,?,?,?,?)');
  $q->bindValue(1,$org,PDO::PARAM_INT);$q->bindValue(2,(int)$goal['id'],PDO::PARAM_INT);
- $q->bindValue(3,$mime);$q->bindValue(4,$bytes,PDO::PARAM_LOB);$q->bindValue(5,(int)$actor['id'],PDO::PARAM_INT);$q->execute();
+ $q->bindValue(3,$mime);$q->bindValue(4,$encrypted['ciphertext'],PDO::PARAM_LOB);$q->bindValue(5,$encrypted['nonce']);$q->bindValue(6,$encrypted['method']);$q->bindValue(7,(int)$actor['id'],PDO::PARAM_INT);$q->execute();
  app_audit($pdo,$org,(int)$actor['id'],'agent.participant_photo_saved','participant_goal',(string)$goal['public_id']);
  return fmgoal_view($pdo,fmgoal_get($pdo,$actor,(string)$goal['public_id']));
 }
