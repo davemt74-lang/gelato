@@ -4,7 +4,7 @@ if(window.GelatoFoodMonster)return;
 const stage=document.body.classList.contains('food-monster-stage-page');
 if(document.body.dataset.agentCanvas==='1'&&!stage)return;
 if(!document.querySelector('link[rel="stylesheet"][href^="css/food-monster.css"]')){
- const stylesheet=document.createElement('link');stylesheet.rel='stylesheet';stylesheet.href='css/food-monster.css?v=20261015-fmg7a';document.head.append(stylesheet);
+ const stylesheet=document.createElement('link');stylesheet.rel='stylesheet';stylesheet.href='css/food-monster.css?v=20261015-fmg7d';document.head.append(stylesheet);
 }
 const root=document.createElement('div');root.id='food-monster-root';if(stage)root.classList.add('fm-is-stage');
 root.innerHTML='<div class="fm-actor" role="group" aria-label="Floating Food Monster"><div class="fm-speech" role="status"></div><div class="fm-figure" aria-hidden="true"></div><div class="fm-actions"><button type="button" data-size="-1" aria-label="Make Food Monster smaller">−</button><button type="button" data-size="1" aria-label="Make Food Monster larger">+</button><button type="button" data-fm-roam aria-label="Pause autonomous floating" aria-pressed="true" title="Pause autonomous floating">◌</button>'+(stage?'':'<a href="food-monster.php" aria-label="Open Food Monster page">↗</a>')+'</div></div>';document.body.append(root);
