@@ -1,0 +1,50 @@
+name: FM-G1 Food Monster Stage
+on:
+  pull_request:
+    paths:
+      - 'food-monster.php'
+      - 'css/food-monster.css'
+      - 'js/food-monster.js'
+      - 'js/global-add-canvas.js'
+      - 'assets/food-monster/**'
+      - 'tests/food-monster-g1-*'
+      - '.github/workflows/food-monster-g1.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'food-monster.php'
+      - 'css/food-monster.css'
+      - 'js/food-monster.js'
+      - 'js/global-add-canvas.js'
+      - 'assets/food-monster/**'
+      - 'tests/food-monster-g1-*'
+      - '.github/workflows/food-monster-g1.yml'
+jobs:
+  stage-contract:
+    name: Mascot PHP & JS contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+      - run: |
+          php -l food-monster.php
+          php -l tests/food-monster-g1-contract.php
+          node --check js/food-monster.js
+          node --check js/global-add-canvas.js
+          php tests/food-monster-g1-contract.php
+  chromium:
+    name: Mascot desktop, mobile & overlay
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser test dependency
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Browser acceptance tests
+        run: node tests/food-monster-g1-browser.test.cjs
