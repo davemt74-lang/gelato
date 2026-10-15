@@ -41,7 +41,7 @@
     ensureScript('js/agent-next-moves.js?v=20261014-fmg6', 'data-agent-next-moves-loader');
     // One companion UI for the existing authenticated Agent session; never a second brain.
     if (page !== 'food-monster.php' && page !== 'agent-canvas.php') {
-      ensureScript('js/food-monster.js?v=20261014-fmg6', 'data-food-monster-loader');
+      ensureScript('js/food-monster.js?v=20261015-fmg7a', 'data-food-monster-loader');
     }
   }
 

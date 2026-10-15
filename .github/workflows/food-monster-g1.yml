@@ -14,6 +14,7 @@ on:
       - 'tests/food-monster-g5-*'
       - 'tests/food-monster-g6-*'
       - 'tests/food-monster-g7-*'
+      - 'tests/food-monster-g7a-*'
       - 'api/agent-workspace.php'
       - 'api/food-monster-orchestrate.php'
       - 'includes/food-monster-multi-node.php'
@@ -96,3 +97,4 @@ jobs:
           node tests/food-monster-g5-browser.test.cjs
           node tests/food-monster-g6-browser.test.cjs
           node tests/food-monster-g7-browser.test.cjs
+          node tests/food-monster-g7a-browser.test.cjs

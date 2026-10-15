@@ -1,0 +1,86 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const {chromium}=require('playwright');
+const base=path.resolve(__dirname,'..');
+(async()=>{
+ const browser=await chromium.launch({headless:true,args:['--no-sandbox']});let checks=0;
+ const ok=(condition,message)=>{assert.ok(condition,message);checks++};
+ const js=fs.readFileSync(path.join(base,'js/food-monster.js'),'utf8');
+ const css=fs.readFileSync(path.join(base,'css/food-monster.css'),'utf8');
+ const svg=fs.readFileSync(path.join(base,'assets/food-monster/chef-mascot.svg'),'utf8');
+ async function setup(stage,width,height,reduced=false){
+  const page=await browser.newPage({viewport:{width,height},reducedMotion:reduced?'reduce':'no-preference'});
+  const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.setContent('<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body class="'+(stage?'food-monster-stage-page':'')+'"><main id="food-monster-stage"></main><div id="gelato-agent-bar" style="position:fixed;left:10px;right:10px;bottom:10px;height:70px"><textarea></textarea></div></body></html>');
+  await page.addStyleTag({content:css});
+  await page.evaluate(svg=>{window.fetch=async()=>({ok:true,text:async()=>svg})},svg);
+  await page.addScriptTag({content:js});
+  await page.locator('[data-fm-pupil]').waitFor({timeout:5000});
+  return {page,errors};
+ }
+ try{
+  for(const [stage,width,height] of [[true,1100,820],[false,1100,820],[true,390,844],[false,390,844]]){
+   const {page,errors}=await setup(stage,width,height);
+   await page.waitForTimeout(1350);
+   const first=await page.evaluate(()=>window.GelatoFoodMonster.motion);
+   ok(first.enabled,'autonomous roaming defaults on');
+   await page.evaluate(()=>window.dispatchEvent(new CustomEvent('gelato-voice-turn',{detail:{kind:'speaking',owner:'global-agent'}})));
+   await page.waitForTimeout(1050);
+   const speaking=await page.evaluate(()=>window.GelatoFoodMonster.motion.size);
+   ok(speaking>first.size+3,'grows during speech');
+   await page.evaluate(()=>{window.dispatchEvent(new CustomEvent('gelato-voice-turn',{detail:{kind:'ended',owner:'global-agent'}}));window.dispatchEvent(new CustomEvent('gelato-agent-listening-change',{detail:{listening:true,microphoneActive:true}}))});
+   await page.waitForTimeout(850);
+   const listening=await page.evaluate(()=>window.GelatoFoodMonster.motion.size);
+   ok(listening<speaking-3,'shrinks while listening');
+   await page.evaluate(()=>{window.dispatchEvent(new CustomEvent('gelato-agent-listening-change',{detail:{listening:false,microphoneActive:false}}));window.GelatoFoodMonster.setFaceTarget({x:.65,y:.3,proximity:.9,follow:false,scale:true})});
+   await page.waitForTimeout(760);
+   const camera=await page.evaluate(()=>window.GelatoFoodMonster.motion);
+   ok(camera.size>listening+3,'proximity zoom independent of follow');
+   await page.evaluate(()=>window.GelatoFoodMonster.setFaceTarget(null));
+   await page.locator('[data-size="1"]').click({force:true});
+   const manual=await page.evaluate(()=>window.GelatoFoodMonster.motion);
+   ok(Math.abs(manual.size-manual.baseSize)<.01,'manual zoom overrides auto');
+   await page.waitForTimeout(400);
+   ok(Math.abs((await page.evaluate(()=>window.GelatoFoodMonster.motion.size))-manual.size)<1,'manual override holds');
+   await page.locator('[data-fm-roam]').click({force:true});
+   ok(await page.locator('[data-fm-roam]').getAttribute('aria-pressed')==='false','pause roaming');
+   await page.locator('[data-fm-roam]').click({force:true});
+   ok(await page.locator('[data-fm-roam]').getAttribute('aria-pressed')==='true','resume roaming');
+   const m=await page.evaluate(()=>window.GelatoFoodMonster.motion);
+   const barTop=await page.evaluate(()=>document.getElementById('gelato-agent-bar').getBoundingClientRect().top);
+   ok(m.y+m.size*1.2<=barTop-8,'avoids sticky composer');
+   ok(m.x>=8&&m.x+m.size<=width-7,'stays inside viewport');
+   ok(errors.length===0,'no browser errors: '+errors.join(' | '));
+   await page.close();
+  }
+  const {page,errors}=await setup(true,1100,820);
+  await page.waitForTimeout(1000);
+  const before=await page.evaluate(()=>window.GelatoFoodMonster.motion);
+  await page.waitForTimeout(1800);
+  const after=await page.evaluate(()=>window.GelatoFoodMonster.motion);
+  ok(Math.abs(after.x-before.x)+Math.abs(after.y-before.y)>7,'autonomous movement');
+  const r=await page.locator('.fm-actor').boundingBox();
+  await page.mouse.move(r.x+r.width/2,r.y+r.height/2);
+  await page.waitForTimeout(170);
+  const hover=await page.evaluate(()=>window.GelatoFoodMonster.motion);
+  await page.waitForTimeout(750);
+  const still=await page.evaluate(()=>window.GelatoFoodMonster.motion);
+  ok(Math.abs(still.x-hover.x)+Math.abs(still.y-hover.y)<1.8,'hover pauses motion');
+  await page.mouse.down();await page.mouse.move(r.x+r.width*.35,r.y+r.height*.48,{steps:5});await page.mouse.up();
+  const dragged=await page.evaluate(()=>window.GelatoFoodMonster.motion);
+  ok(Math.abs(dragged.x-hover.x)+Math.abs(dragged.y-hover.y)>6,'drag is highest priority');
+  ok(errors.length===0,'no roaming errors');
+  await page.close();
+  const reduced=await setup(true,1100,820,true);
+  await reduced.page.waitForTimeout(150);
+  const initial=await reduced.page.evaluate(()=>window.GelatoFoodMonster.motion);
+  await reduced.page.waitForTimeout(1500);
+  const later=await reduced.page.evaluate(()=>window.GelatoFoodMonster.motion);
+  ok(Math.abs(later.x-initial.x)+Math.abs(later.y-initial.y)<1,'reduced motion stops roaming');
+  await reduced.page.evaluate(()=>window.dispatchEvent(new CustomEvent('gelato-voice-turn',{detail:{kind:'speaking',owner:'agent'}})));
+  await reduced.page.waitForTimeout(400);
+  ok(Math.abs((await reduced.page.evaluate(()=>window.GelatoFoodMonster.motion.size))-later.size)<1,'reduced motion stops auto zoom');
+  ok(reduced.errors.length===0,'no reduced-motion errors');
+  await reduced.page.close();
+  console.log('FM-G7A autonomous floating and engagement zoom: PASS ('+checks+' checks)');
+ }finally{await browser.close();}
+})().catch(e=>{console.error(e.stack||e);process.exit(1)});
