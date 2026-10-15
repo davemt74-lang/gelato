@@ -1,0 +1,73 @@
+name: FM-G7B2E Echo Guard Direct Deployment
+on:
+  push:
+    branches:
+      - delivery/fm-g7b2e-echo-guard
+    paths:
+      - .github/workflows/fm-g7b2e-direct-release.yml
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check whether permanent release exists
+        id: exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view gelato-fm-g7b2e --repo davemt74-lang/gelato >/dev/null 2>&1; then
+            echo 'yes=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'yes=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Retrieve exact certified PR deployment
+        if: steps.exists.outputs.yes != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p tested
+          gh run download 38737051735 --repo davemt74-lang/gelato --name gelato-full-deploy --dir tested
+          test -s tested/gelato-full-deploy.zip
+          test -s tested/gelato-full-deploy.sha256
+          digest="$(awk 'NR==1 {print $1}' tested/gelato-full-deploy.sha256)"
+          printf '%s  %s\n' "$digest" tested/gelato-full-deploy.zip | sha256sum -c -
+          unzip -tq tested/gelato-full-deploy.zip
+          test "$(unzip -p tested/gelato-full-deploy.zip DEPLOY_SHA.txt | tr -d '\r\n')" = '9db4e3f5af2bdcd99676f02a58229fc48f790950'
+      - name: Verify contents and stamp tree-identical merged main
+        if: steps.exists.outputs.yes != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p package
+          unzip -q tested/gelato-full-deploy.zip -d package
+          test -s package/assets/vendor/mediapipe/hand_landmarker.task
+          test -s package/assets/vendor/mediapipe/vision_bundle.mjs
+          test -s package/assets/vendor/mediapipe/wasm/vision_wasm_internal.wasm
+          test -s package/tests/food-monster-g7c-browser.test.cjs
+          test -s package/js/voice-turn-taking.js
+          grep -q 'speaker-audio-ignored' package/js/global-agent.js
+          test ! -e package/config.php
+          test ! -e package/.env
+          test ! -e package/uploads
+          test ! -e package/storage
+          printf '%s\n' 'cb0ec9015c2b4fe51f2261d20544ed396fa10b8e' > package/DEPLOY_SHA.txt
+          (cd package && zip -qr "$GITHUB_WORKSPACE/gelato-full-deploy.zip" .)
+          unzip -tq gelato-full-deploy.zip
+          sha256sum gelato-full-deploy.zip > gelato-full-deploy.sha256
+          test "$(unzip -p gelato-full-deploy.zip DEPLOY_SHA.txt | tr -d '\r\n')" = 'cb0ec9015c2b4fe51f2261d20544ed396fa10b8e'
+      - name: Publish direct full deploy ZIP and SHA-256
+        if: steps.exists.outputs.yes != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create gelato-fm-g7b2e \
+            gelato-full-deploy.zip gelato-full-deploy.sha256 \
+            --repo davemt74-lang/gelato \
+            --target cb0ec9015c2b4fe51f2261d20544ed396fa10b8e \
+            --title 'Gelato FM-G7B2E — Conversation Echo Guard + Verified Agent Reads' \
+            --notes 'Certified full HostGator deploy package. Includes FM-G7B2 permitted identity, active staff, and recorded sales tools plus FM-G7B2E speech echo guard. Echo playback cannot trigger ambient auto-transcription or interruptions; speaking over TTS requires an explicit Hey Gelato wake phrase or Stop control. 24/24 exact-PR workflows green; tested PR source tree identical to merged main. MediaPipe included. Preserve config.php, .env, uploads/ and storage/. Physical microphone/speaker field certification still needed.'
