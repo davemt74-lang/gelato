@@ -91,7 +91,7 @@
     const q = (id) => document.getElementById(id);
     q('gaSend').onclick = () => send(q('gaInput').value, false);
     q('gaInput').addEventListener('input', (event) => {
-      if (event.isTrusted) resetVoiceDraft();
+      if (event.isTrusted) {resetVoiceDraft();clearConversationTimer();S.conversationDraft='';}
     });
     q('gaInput').addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && !event.shiftKey) {
@@ -346,7 +346,7 @@
   }
   async function setConversationMode(enabled){
     if(!enabled){S.conversation=false;clearConversationTimer();S.conversationDraft='';interruptSpeech('conversation-off');renderConversation();
-      status('Conversation Mode off. Manual dictation remains available.',3000);return true;}
+      status(S.listening?'Conversation Mode off · Listening still auto-sends after you pause.':'Conversation Mode off.',3000);return true;}
     if(!has('voice.agent')){status('Conversation Mode requires Voice Agent permission.',4500);return false;}
     if(!window.speechSynthesis){status('This browser cannot speak Agent responses.',4500);return false;}
     const ready=S.listening||await setListening(true);
@@ -355,26 +355,29 @@
     status('Conversation Mode on · speak naturally and pause to send. Interrupt Gelato by talking.',6500);
     return true;
   }
-  function scheduleConversation(raw,isFinal){
-    if(!S.conversation||!S.listening||S.busy||!isFinal)return;
+  function scheduleSpokenTurn(raw,isFinal){
+    // Both Listening and Conversation Mode auto-send a finalized turn.
+    // Conversation Mode also adds interruption/turn-taking controls.
+    if(!S.listening||S.busy||!isFinal)return;
     const text=String(raw||'').trim();if(!text)return;
     S.conversationDraft=String(document.getElementById('gaInput')?.value||text).trim();
     clearConversationTimer();
     S.conversationTimer=setTimeout(async()=>{
       S.conversationTimer=null;
-      if(!S.conversation||!S.listening||S.busy||document.hidden||!S.conversationDraft)return;
+      if(!S.listening||S.busy||document.hidden||!S.conversationDraft)return;
       const phrase=S.conversationDraft;S.conversationDraft='';
       // A manual edit always takes priority over automatic submission.
       const field=document.getElementById('gaInput');
       if(!S.voiceDraft.owned||field?.value!==S.voiceDraft.previous)return;
+      if(Date.now()>=S.voiceUntil){status('Voice verification expired. Restart Listening to verify again.',5000);void setListening(false,{keepWake:false});return;}
       try{await send(phrase,true);}catch(error){status('Conversation request failed: '+String(error.message||error),6500);}
     },1200);
   }
-  // Unwoken speech is editable; only explicitly enabled Conversation Mode autosends.
+  // Finalized speech auto-sends while Listening is active; typed text never auto-sends.
   function resetVoiceDraft(){
     S.voiceDraft={owned:false,previous:'',committed:''};
   }
-  function showVoiceDraft(raw,{final=false}={}){
+  function showVoiceDraft(raw,{final=false,once=false}={}){
     const field=document.getElementById('gaInput');
     const text=String(raw||'').trim().slice(0,3500);
     if(!field||!text)return false;
@@ -390,7 +393,7 @@
     draft.owned=true;draft.previous=value;
     if(final)draft.committed=value;
     field.dispatchEvent(new Event('input',{bubbles:true}));
-    if(S.conversation){clearConversationTimer();if(final)scheduleConversation(value,true);}
+    if(S.listening&&!once){clearConversationTimer();if(final)scheduleSpokenTurn(value,true);}
     window.dispatchEvent(new CustomEvent('gelato-agent-dictation',{
       detail:{text:value,final,source:'browser-speech-recognition'}
     }));
@@ -414,7 +417,7 @@
         for(let i=event.resultIndex||0;i<event.results.length;i++){
           const result=event.results[i],spoken=String(result[0]?.transcript||'').trim();
           if(!spoken)continue;
-          showVoiceDraft(spoken,{final:!!result.isFinal});
+          showVoiceDraft(spoken,{final:!!result.isFinal,once:true});
           if(result.isFinal){finalText=spoken;finish();return;}
         }
       };
@@ -500,6 +503,7 @@
       await verifyVoice();
     }catch(error){status(error.message||'Voice verification required.',4000);return false;}
     S.listening=false;S.wakeStandby=true;
+    clearConversationTimer();S.conversationDraft='';
     stopPoll();
     const started=S.rec?true:startContinuous();
     if(!started){S.wakeStandby=false;renderListening();return false;}
@@ -539,13 +543,13 @@
       });
       S.savedListening=!!Number(data.preferences?.listening_enabled??Number(!!on));
       S.listening=!!on;
-      if(!on&&S.conversation){S.conversation=false;clearConversationTimer();S.conversationDraft='';renderConversation();}
+      if(!on){clearConversationTimer();S.conversationDraft='';if(S.conversation){S.conversation=false;renderConversation();}}
       S.wakeStandby=!!(keepWake||on);
       if(on){
         const started=S.rec?true:startContinuous();
         if(!started){S.listening=false;S.wakeStandby=false;stopPoll();renderListening();return false;}
         startPoll();
-        status('Listening active · speech appears in chat. Say “Hey Gelato” for hands-free commands.',5500);
+        status('Listening active · speech sends automatically after you pause. Say “Hey Gelato” for commands.',5500);
       }else{
         stopPoll();
         if(keepWake&&S.rec){
@@ -616,7 +620,7 @@
         // Non-wake speech is visible dictation and never executes an action.
         if(!/^hey\s+gelato\b/i.test(text)){
           showVoiceDraft(text,{final:!!result.isFinal});
-          if(result.isFinal)status('Dictation ready · press Send, or say “Hey Gelato” for hands-free commands.',3500);
+          if(result.isFinal)status('Speech captured · sending after a short pause…',1800);
           continue;
         }
         if(!result.isFinal)continue;
@@ -721,7 +725,7 @@
   }
 
   document.addEventListener('visibilitychange',()=>{
-    if(document.hidden){clearConversationTimer();stopContinuous();diag('paused');if(S.listening||S.wakeStandby)status('Microphone paused · tab hidden.');}
+    if(document.hidden){clearConversationTimer();S.conversationDraft='';stopContinuous();diag('paused');if(S.listening||S.wakeStandby)status('Microphone paused · tab hidden.');}
     else if(S.listening||S.wakeStandby)startContinuous();
   });
   window.addEventListener('beforeunload',()=>{stopContinuous();interruptSpeech('page-unload');});
