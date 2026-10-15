@@ -58,6 +58,7 @@ function init(){
    // Keep the panel within the viewport even when the user has dragged the mascot.
    const box=actor.getBoundingClientRect();
    panel.classList.toggle('fm-suggestion-align-right',box.left>innerWidth*.52);
+   panel.classList.toggle('fm-suggestion-below',box.top<250);
  }
  function hide(){panel.hidden=true;current=null;fm.root.classList.remove('fm-suggestion-open');}
  function show(move=null){
