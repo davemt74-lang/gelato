@@ -1,0 +1,73 @@
+name: FM-G7D Permanent Haiku 5.5 Deployment
+on:
+  push:
+    branches:
+      - delivery/fm-g7d-haiku55-release
+    paths:
+      - .github/workflows/fm-g7d-direct-release.yml
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine release state
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view gelato-fm-g7d-haiku55 --repo davemt74-lang/gelato >/dev/null 2>&1; then
+            echo 'exists=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'exists=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Fetch and verify certified package
+        if: steps.existing.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifact
+          gh run download 38693614277 --repo davemt74-lang/gelato --name gelato-full-deploy --dir artifact
+          test -s artifact/gelato-full-deploy.zip
+          test -s artifact/gelato-full-deploy.sha256
+          expected="$(awk 'NR==1 {print $1}' artifact/gelato-full-deploy.sha256)"
+          printf '%s  %s\n' "$expected" artifact/gelato-full-deploy.zip | sha256sum --check -
+          unzip -tq artifact/gelato-full-deploy.zip
+          test "$(unzip -p artifact/gelato-full-deploy.zip DEPLOY_SHA.txt | tr -d '\r\n')" = 'ea9e9de7d07b42e76698bec5c80e6dea3d0cf39e'
+      - name: Mark merged revision and verify MediaPipe
+        if: steps.existing.outputs.exists != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p extracted
+          unzip -q artifact/gelato-full-deploy.zip -d extracted
+          printf '%s\n' '61a91664ece4c9dde5f2c05e33e89331f1140e57' > extracted/DEPLOY_SHA.txt
+          test -s extracted/assets/vendor/mediapipe/vision_bundle.mjs
+          test -s extracted/assets/vendor/mediapipe/hand_landmarker.task
+          test -s extracted/assets/vendor/mediapipe/wasm/vision_wasm_internal.wasm
+          test -s extracted/tests/food-monster-g7d-provider-contract.php
+          grep -q 'claude-haiku-5-5' extracted/includes/food-monster-llm.php
+          if test -e extracted/config.php || test -e extracted/.env || test -e extracted/uploads || test -e extracted/storage; then
+            echo 'Private site configuration was bundled unexpectedly.' >&2
+            exit 1
+          fi
+          (cd extracted && zip -qr "$GITHUB_WORKSPACE/gelato-full-deploy.zip" .)
+          unzip -tq gelato-full-deploy.zip
+          sha256sum gelato-full-deploy.zip > gelato-full-deploy.sha256
+          test "$(unzip -p gelato-full-deploy.zip DEPLOY_SHA.txt | tr -d '\r\n')" = '61a91664ece4c9dde5f2c05e33e89331f1140e57'
+      - name: Publish direct ZIP and checksum
+        if: steps.existing.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create gelato-fm-g7d-haiku55 \
+            gelato-full-deploy.zip \
+            gelato-full-deploy.sha256 \
+            --repo davemt74-lang/gelato \
+            --target 61a91664ece4c9dde5f2c05e33e89331f1140e57 \
+            --title 'Gelato Food Monster FM-G7D — Claude Haiku 5.5' \
+            --notes 'Full certified HostGator deployment: active claude-haiku-5-5, safer provider-error diagnostics, FM-G7C voice turn taking, Agent Brain and MediaPipe. PR #316 passed 23/23 checks; release exact tested tree matches merged main 61a91664ece4c9dde5f2c05e33e89331f1140e57. Keep config.php, .env, uploads and storage/keys/application.key intact. Live Anthropic API access remains a field test.'
