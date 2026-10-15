@@ -32,36 +32,49 @@ jobs:
           fetch-depth: 1
 
       - name: Build and verify exact merged complete deployment
-        if: steps.release.outputs.exists != 'true'
         shell: bash
+        if: steps.release.outputs.exists != 'true'
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = '368604f5f6162b700f06179769537a5842f33f0a'
-          test -s database/20261015_fm_g8b_face_pin.sql
-          test -s api/fm-pin.php
-          test -s includes/food-monster-pin.php
-          test -s js/fm-face-pin.js
-          test -s tests/food-monster-g8b-pin-browser.test.cjs
-          test -s assets/vendor/mediapipe/hand_landmarker.task
-          test -s assets/vendor/mediapipe/vision_bundle.mjs
-          test -s assets/vendor/mediapipe/wasm/vision_wasm_internal.wasm
-          php -l api/fm-pin.php
-          php -l login.php
-          php -l reset-password.php
-          php -l profile-pin.php
-          node --check js/fm-face-pin.js
-          if git ls-files --error-unmatch config.php .env uploads storage >/dev/null 2>&1; then
-            echo 'Private files unexpectedly tracked.' >&2
-            exit 1
-          fi
-          printf '%s\n' 368604f5f6162b700f06179769537a5842f33f0a > DEPLOY_SHA.txt
-          git ls-files -z | xargs -0 zip -q gelato-full-deploy.zip
-          zip -q -u gelato-full-deploy.zip DEPLOY_SHA.txt
+          deploy_root="${RUNNER_TEMP}/gelato-fm-g8b"
+          mkdir -p "$deploy_root"
+          rsync -a ./ "$deploy_root/" --exclude '.git/' --exclude 'config.php' --exclude '.env' --exclude 'uploads/' --exclude 'storage/'
+          vendor_dir="$deploy_root/assets/vendor/mediapipe"
+          mkdir -p "$vendor_dir" "${RUNNER_TEMP}/mediapipe-src"
+          archive="$(npm pack @mediapipe/tasks-vision@0.10.32 --silent --pack-destination "${RUNNER_TEMP}")"
+          tar -xzf "${RUNNER_TEMP}/$archive" -C "${RUNNER_TEMP}/mediapipe-src"
+          cp "${RUNNER_TEMP}/mediapipe-src/package/vision_bundle.mjs" "$vendor_dir/vision_bundle.mjs"
+          cp -R "${RUNNER_TEMP}/mediapipe-src/package/wasm" "$vendor_dir/wasm"
+          curl --fail --location --retry 3 --max-time 90 --silent --show-error \
+            'https://raw.githubusercontent.com/google-ai-edge/mediapipe/master/LICENSE' \
+            --output "$vendor_dir/LICENSE"
+          curl --fail --location --retry 3 --max-time 120 --silent --show-error \
+            'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task' \
+            --output "$vendor_dir/hand_landmarker.task"
+          test "$(stat -c %s "$vendor_dir/hand_landmarker.task")" -gt 1000000
+          test -s "$vendor_dir/vision_bundle.mjs"
+          test -s "$vendor_dir/wasm/vision_wasm_internal.wasm"
+          sha256sum "$vendor_dir/vision_bundle.mjs" "$vendor_dir/hand_landmarker.task" > "$vendor_dir/ASSET-SHA256SUMS.txt"
+          test -s "$deploy_root/database/20261015_fm_g8b_face_pin.sql"
+          test -s "$deploy_root/api/fm-pin.php"
+          test -s "$deploy_root/includes/food-monster-pin.php"
+          test -s "$deploy_root/js/fm-face-pin.js"
+          php -l "$deploy_root/api/fm-pin.php"
+          php -l "$deploy_root/login.php"
+          php -l "$deploy_root/reset-password.php"
+          php -l "$deploy_root/profile-pin.php"
+          node --check "$deploy_root/js/fm-face-pin.js"
+          test ! -e "$deploy_root/config.php"
+          test ! -e "$deploy_root/.env"
+          test ! -e "$deploy_root/uploads"
+          test ! -e "$deploy_root/storage"
+          printf '%s\n' 368604f5f6162b700f06179769537a5842f33f0a > "$deploy_root/DEPLOY_SHA.txt"
+          (cd "$deploy_root" && zip -qr "$GITHUB_WORKSPACE/gelato-full-deploy.zip" .)
           unzip -tq gelato-full-deploy.zip
           test "$(unzip -p gelato-full-deploy.zip DEPLOY_SHA.txt | tr -d '\r\n')" = '368604f5f6162b700f06179769537a5842f33f0a'
           for asset in assets/vendor/mediapipe/hand_landmarker.task assets/vendor/mediapipe/vision_bundle.mjs assets/vendor/mediapipe/wasm/vision_wasm_internal.wasm; do
-            test -s "$asset"
-            unzip -p gelato-full-deploy.zip "$asset" | cmp - "$asset"
+            unzip -p gelato-full-deploy.zip "$asset" | cmp - "$deploy_root/$asset"
           done
           sha256sum gelato-full-deploy.zip > gelato-full-deploy.sha256
 
