@@ -18,6 +18,10 @@ on:
       - 'tests/food-monster-g7v-*'
       - 'tests/food-monster-g7c-*'
       - 'tests/food-monster-g7d-*'
+      - 'tests/food-monster-g8a-*'
+      - 'js/food-monster-participants.js'
+      - 'includes/food-monster-participants.php'
+      - 'api/food-monster-participants.php'
       - 'tests/food-monster-g7b1-*'
       - 'tests/food-monster-g7b2-*'
       - 'api/food-monster-read.php'
@@ -93,6 +97,10 @@ jobs:
           php tests/food-monster-g3-contract.php
           php tests/food-monster-g4-contract.php
           php tests/food-monster-g7d-provider-contract.php
+          php -l api/food-monster-participants.php
+          php -l includes/food-monster-participants.php
+          php tests/food-monster-g8a-participants.php
+          node --check js/food-monster-participants.js
           php tests/food-monster-g7b1-registry.php
           php tests/food-monster-g7b2-read.php
           php -l api/food-monster-read.php
@@ -126,5 +134,6 @@ jobs:
           node tests/food-monster-g7a-browser.test.cjs
           node tests/food-monster-g7v-browser.test.cjs
           node tests/food-monster-g7c-browser.test.cjs
+          node tests/food-monster-g8a-browser.test.cjs
           node tests/food-monster-g7b1-browser.test.cjs
           node tests/food-monster-g7b2-browser.test.cjs
