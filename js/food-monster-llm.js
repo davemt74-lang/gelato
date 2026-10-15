@@ -34,7 +34,7 @@ function init(){
    if(!status){message.textContent='Checking Gelato provider configuration…';return;}
    const available=Object.entries(status).filter(([,ready])=>ready).map(([name])=>name);
    message.textContent=available.length
-      ?'Configured: '+available.map(name=>name==='anthropic'?'Anthropic Claude':'OpenAI').join(' · ')+'.'
+      ?'Configured: '+available.map(name=>name==='anthropic'?'Claude Haiku 5.5':'OpenAI').join(' · ')+'.'
       :'No model key is configured. The existing restaurant tools remain available.';
    for(const option of selector.options)
      option.disabled=option.value!=='auto'&&!status[option.value];
