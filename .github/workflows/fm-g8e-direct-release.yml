@@ -47,7 +47,8 @@ jobs:
           gh run download 38794698528 --repo davemt74-lang/gelato --name gelato-full-deploy --dir tested
           test -s tested/gelato-full-deploy.zip
           test -s tested/gelato-full-deploy.sha256
-          (cd tested && sha256sum -c gelato-full-deploy.sha256)
+          expected="$(awk 'NR==1 {print $1}' tested/gelato-full-deploy.sha256)"
+          printf '%s  %s\n' "$expected" tested/gelato-full-deploy.zip | sha256sum -c -
           unzip -tq tested/gelato-full-deploy.zip
           test "$(unzip -p tested/gelato-full-deploy.zip DEPLOY_SHA.txt | tr -d '\r\n')" = 'a4fddb0663612261640fdb95e9c26c7e4a47697a'
           for f in food-monster.php js/food-monster-participants.js js/food-monster-onboarding.js \
@@ -63,7 +64,7 @@ jobs:
             echo "Private environment content included" >&2;exit 1
           fi
           cp tested/gelato-full-deploy.zip ./gelato-full-deploy.zip
-          cp tested/gelato-full-deploy.sha256 ./gelato-full-deploy.sha256
+          sha256sum gelato-full-deploy.zip > gelato-full-deploy.sha256
       - name: Publish GitHub Release with complete HostGator ZIP
         if: steps.exists.outputs.yes != 'true'
         env:
