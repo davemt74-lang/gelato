@@ -1,0 +1,72 @@
+name: FM-G8D1 Certified Direct Deployment
+on:
+  push:
+    branches:
+      - delivery/fm-g8d1-fast-enrollment
+    paths:
+      - .github/workflows/fm-g8d1-direct-release.yml
+permissions:
+  actions: read
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip if release exists
+        id: exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view gelato-fm-g8d1 --repo davemt74-lang/gelato >/dev/null 2>&1; then
+            echo 'yes=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'yes=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Download certified exact-head package
+        if: steps.exists.outputs.yes != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p tested
+          gh run download 38786014582 --repo davemt74-lang/gelato --name gelato-full-deploy --dir tested
+          test -s tested/gelato-full-deploy.zip
+          test -s tested/gelato-full-deploy.sha256
+          d="$(awk 'NR==1 {print $1}' tested/gelato-full-deploy.sha256)"
+          printf '%s  %s\n' "$d" tested/gelato-full-deploy.zip | sha256sum -c -
+          unzip -tq tested/gelato-full-deploy.zip
+          test "$(unzip -p tested/gelato-full-deploy.zip DEPLOY_SHA.txt | tr -d '\r\n')" = 'b7399ebfea38bd213ee6401fb6a079ccabf5c464'
+      - name: Validate protected contents and re-stamp merged tree
+        if: steps.exists.outputs.yes != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p package
+          unzip -q tested/gelato-full-deploy.zip -d package
+          test -s package/food-monster.php
+          test -s package/includes/food-monster-speaker.php
+          test -s package/api/food-monster-speaker.php
+          test -s package/js/food-monster-fast-enroll.js
+          test -s package/js/food-monster-onboarding.js
+          test -s package/database/20261015_fm_g8d1_enrollment.sql
+          test -s package/assets/vendor/mediapipe/hand_landmarker.task
+          test -s package/assets/vendor/mediapipe/vision_bundle.mjs
+          test -s package/assets/vendor/mediapipe/wasm/vision_wasm_internal.wasm
+          for secret in config.php .env uploads storage; do
+            test ! -e "package/$secret" || { echo "Private state unexpectedly packaged" >&2; exit 1; }
+          done
+          printf '%s\n' d1cbd673e822e03a3129963117dbb1a93995ee08 > package/DEPLOY_SHA.txt
+          (cd package && zip -qr "$GITHUB_WORKSPACE/gelato-full-deploy.zip" .)
+          unzip -tq gelato-full-deploy.zip
+          sha256sum gelato-full-deploy.zip > gelato-full-deploy.sha256
+          test "$(unzip -p gelato-full-deploy.zip DEPLOY_SHA.txt | tr -d '\r\n')" = 'd1cbd673e822e03a3129963117dbb1a93995ee08'
+      - name: Publish GitHub release assets
+        if: steps.exists.outputs.yes != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create gelato-fm-g8d1 gelato-full-deploy.zip gelato-full-deploy.sha256 \
+            --repo davemt74-lang/gelato \
+            --target d1cbd673e822e03a3129963117dbb1a93995ee08 \
+            --title 'Gelato FM-G8D1 — Fast Participant Enrollment + Voice Fallback' \
+            --notes 'Certified HostGator full deploy for FM-G8D1. Enroll existing staff including self-enrolled Super Admin, three-photo rapid capture, voice setup and opt-in multi-user provisional speaker comparisons, low-light deferral, private face template persistence, conversational popup at the chat bar and consented hands-free input. 21/21 checks passed; certified source tree identical to merged main. MediaPipe included. Preserve config.php, .env, uploads/ and storage/keys/application.key; run protected upgrade.php. Real camera/voice <20-second goal and face/voice recognition accuracy still require device field tests.'
