@@ -17,7 +17,7 @@ $camera=$read('js/food-monster-camera.js');
 $suggestions=$read('js/food-monster-suggestions.js');
 $version='20261014-fmg6';
 $agentVersion='20261015-fmg7c';
-$mascotVersion='20261015-fmg7a';
+$mascotVersion='20261015-fmg7d';
 foreach([
  'js/global-add-canvas.js'=>$global,'js/universal-admin-page-shell.js'=>$universal,
  'js/workspace-shell-sync.js'=>$workspace,'food-monster.php'=>$page,'js/food-monster.js'=>$actor
