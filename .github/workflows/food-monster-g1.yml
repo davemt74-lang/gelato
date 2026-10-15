@@ -20,6 +20,12 @@ on:
       - 'tests/food-monster-g7d-*'
       - 'tests/food-monster-g8a-*'
       - 'tests/food-monster-g8b-pin-*'
+      - 'tests/food-monster-g8c-*'
+      - 'api/food-monster-onboarding.php'
+      - 'includes/food-monster-onboarding.php'
+      - 'js/food-monster-onboarding.js'
+      - 'database/20261015_fm_g8c_goals.sql'
+      - 'docs/FOOD-MONSTER-FM-G8C-GOALS.md'
       - 'api/fm-pin.php'
       - 'includes/food-monster-pin.php'
       - 'js/fm-face-pin.js'
@@ -115,6 +121,10 @@ jobs:
           php -l api/fm-pin.php
           php -l includes/food-monster-pin.php
           php tests/food-monster-g8b-pin-contract.php
+          php -l api/food-monster-onboarding.php
+          php -l includes/food-monster-onboarding.php
+          php tests/food-monster-g8c-goals.php
+          node --check js/food-monster-onboarding.js
           node --check js/fm-face-pin.js
           node --check js/food-monster-participants.js
           php tests/food-monster-g7b1-registry.php
@@ -152,5 +162,6 @@ jobs:
           node tests/food-monster-g7c-browser.test.cjs
           node tests/food-monster-g8a-browser.test.cjs
           node tests/food-monster-g8b-pin-browser.test.cjs
+          node tests/food-monster-g8c-browser.test.cjs
           node tests/food-monster-g7b1-browser.test.cjs
           node tests/food-monster-g7b2-browser.test.cjs

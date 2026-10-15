@@ -33,7 +33,7 @@ function setMode(mode){
  for(const button of el.querySelectorAll('[data-fm-view]'))button.setAttribute('aria-pressed',String(button.dataset.fmView===state.mode));
  if(state.mode==='camera')attachVideo();render();
 }
-function clearTracks(){state.tracks.length=0;state.nextId=1;render();drawOverlay();}
+function clearTracks(){state.tracks.length=0;state.nextId=1;render();drawOverlay();} // Camera-off ends the tracking session
 function attachVideo(){
  if(!state.camera)return;
  const stream=cameraAPI()?.stream;
@@ -48,12 +48,15 @@ function setCamera(active){
  render();
 }
 function nearestTrack(box,used){
- let match=null,best=.20;
+ let match=null,best=.38;
  for(const track of state.tracks){
   if(used.has(track))continue;
   const a=track.box,dx=(a.x+a.width/2)-(box.x+box.width/2),dy=(a.y+a.height/2)-(box.y+box.height/2),distance=Math.hypot(dx,dy);
   if(distance<best){match=track;best=distance;}
  }
+ // Preserve a single stable participant across temporary model failures or
+ // dramatic head motion. Do not merge two simultaneously visible people.
+ if(!match&&state.tracks.length===1&&!used.size&&Date.now()-state.tracks[0].at<15000)match=state.tracks[0];
  return match;
 }
 function capture(track){
@@ -72,7 +75,8 @@ function greeting(track){
  if(!cameraAPI()?.preferences?.greet||track.greeted||Date.now()-state.lastGreet<20000)return;
  track.greeted=true;state.lastGreet=Date.now();
  if(track.verified)return; // Existing enrolled, verified self-face greeting is handled by camera module.
- window.GelatoFoodMonster?.greet?.('Hello! Welcome.');
+ window.GelatoFoodMonster?.greet?.('Hello! Welcome. What is your name?');
+ window.dispatchEvent(new CustomEvent('gelato-food-monster-new-track',{detail:{id:track.id}}));
  // No unsolicited TTS for unknown bystanders: avoid self-audio echo loops.
 }
 function updateFaces(boxes,ownVerified=false){
@@ -89,10 +93,10 @@ function updateFaces(boxes,ownVerified=false){
   // Give optional own-face enrollment time to verify before any generic greeting.
   if(track.seen>=(cameraAPI()?.enrolled?12:5))greeting(track);
  }
- state.tracks=state.tracks.filter(t=>now-t.at<1800);
+ state.tracks=state.tracks.filter(t=>now-t.at<18000);
  render();drawOverlay();
 }
-function tracked(){return state.tracks.filter(t=>t.seen>=2);}
+function tracked(){return state.tracks.filter(t=>t.seen>=2&&Date.now()-t.at<1800);} // Hidden tracks retain ID longer than visible cards
 function render(){
  const visible=tracked();count.textContent=String(visible.length);
  if(!state.camera){cards.innerHTML='<p class="fm-participant-empty">Camera off · no active tracks</p>';return;}
@@ -104,7 +108,7 @@ function render(){
     '<div class="fm-participant-photo">'+(t.photo&&state.thumbnails?'<img src="'+t.photo+'" alt="Temporary captured participant thumbnail">':'<span aria-label="No captured photo">◯</span>')+'</div>'+
     '<div class="fm-participant-info"><strong>'+esc(label)+'</strong><span>'+(verified?'Verified: signed-in account':'Identity unknown · tracked locally')+'</span>'+
     '<small>'+(verified?'Account session only · see staff context':'Employee/guest classification not verified')+'</small>'+
-    '<div class="fm-participant-meter" title="Shared microphone activity; not speaker identification"><i style="width:'+Math.round(state.voiceLevel*100)+'%"></i></div><small>Shared room mic · cannot assign speaker</small></div></article>';
+    '<div class="fm-participant-meter" title="Shared microphone activity; not speaker identification"><i style="width:'+Math.round(state.voiceLevel*100)+'%"></i></div><small>Shared room mic · cannot assign speaker</small>'+ '<button type="button" data-fm-setup="'+esc(t.id)+'">Start setup</button></div></article>';
  }).join('');
 }
 function drawOverlay(){
@@ -112,7 +116,7 @@ function drawOverlay(){
  const rect=canvas.getBoundingClientRect(),ratio=Math.min(2,window.devicePixelRatio||1),w=Math.round(rect.width*ratio),h=Math.round(rect.height*ratio);
  if(!w||!h)return;if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}
  draw.clearRect(0,0,w,h);
- const vw=video.videoWidth||640,vh=video.videoHeight||480,fit=Math.min(w/vw,h/vh),innerW=vw*fit,innerH=vh*fit,left=(w-innerW)/2,top=(h-innerH)/2;
+ const vw=video.videoWidth||640,vh=video.videoHeight||480,fit=Math.max(w/vw,h/vh),innerW=vw*fit,innerH=vh*fit,left=(w-innerW)/2,top=(h-innerH)/2;
  draw.font='bold '+Math.max(11,Math.round(12*ratio))+'px system-ui';draw.lineWidth=2*ratio;
  for(const t of tracked()){
   const b=t.box,px=left+(1-b.x-b.width)*innerW,py=top+b.y*innerH,bw=b.width*innerW,bh=b.height*innerH;
@@ -181,12 +185,25 @@ panel.querySelector('[data-fm-meter]').addEventListener('click',()=>void toggleM
 panel.querySelector('[data-fm-photos]').addEventListener('change',e=>{
  state.thumbnails=e.target.checked;if(!state.thumbnails)for(const t of state.tracks)t.photo='';render();
 });
+panel.addEventListener('click',e=>{const button=e.target.closest('[data-fm-setup]');if(button)window.GelatoFoodMonsterGoals?.begin(button.dataset.fmSetup);});
 window.addEventListener('gelato-food-monster-camera',e=>setCamera(e.detail?.active));
 window.addEventListener('gelato-food-monster-faces',e=>updateFaces(e.detail?.boxes||[],e.detail?.ownVerified===true));
 window.addEventListener('resize',drawOverlay);
 window.addEventListener('pagehide',()=>{stopMeter();clearTracks();});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){stopMeter();clearTracks();}});
-setInterval(()=>{if(state.camera){state.tracks=state.tracks.filter(t=>Date.now()-t.at<1800);render();drawOverlay();}},1100);
+setInterval(()=>{if(state.camera){state.tracks=state.tracks.filter(t=>Date.now()-t.at<18000);render();drawOverlay();}},1100);
 loadRoster();setInterval(loadRoster,60000);
-window.GelatoFoodMonsterParticipants={setMode,updateFaces,get mode(){return state.mode},get count(){return tracked().length},get cameraActive(){return state.camera},get roster(){return state.roster}};
+function captureGoalPhoto(trackId){
+ const t=tracked().find(track=>track.id===trackId);
+ if(!t||!state.camera||!video.videoWidth||!video.videoHeight)return '';
+ const b=t.box,c=document.createElement('canvas');c.width=320;c.height=360;
+ const sx=Math.max(0,Math.floor(b.x*video.videoWidth)),sy=Math.max(0,Math.floor(b.y*video.videoHeight));
+ const sw=Math.min(video.videoWidth-sx,Math.max(1,Math.floor(b.width*video.videoWidth)));
+ const sh=Math.min(video.videoHeight-sy,Math.max(1,Math.floor(b.height*video.videoHeight)));
+ c.getContext('2d').drawImage(video,sx,sy,sw,sh,0,0,320,360);
+ return c.toDataURL('image/webp',.65);
+}
+window.GelatoFoodMonsterParticipants={setMode,updateFaces,captureGoalPhoto,
+ get mode(){return state.mode},get count(){return tracked().length},
+ get cameraActive(){return state.camera},get roster(){return state.roster}};
 })();
