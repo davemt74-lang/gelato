@@ -276,6 +276,7 @@ async function unlock(){
  finally{input.value='';}
 }
 function forget(deleteSaved=false){
+ if(deleteSaved)void deleteDeviceFace();
  S.profile=null;S.matchCount=0;S.lastMatch=0;
  if(deleteSaved)try{localStorage.removeItem(TEMPLATE);}catch{}
  say(deleteSaved?'Encrypted profile deleted for this account.':'Active face recognition cleared. Camera tracking may continue.');

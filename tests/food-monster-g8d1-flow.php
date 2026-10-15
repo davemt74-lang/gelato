@@ -16,7 +16,7 @@ foreach([
  [str_contains($api,"'consent'"),'Explicit speaker consent'],
  [str_contains($onboarding,"state.handsFree"),'Handsfree consent gate'],
  [str_contains($onboarding,'GelatoVoiceTurns'),'Uses self-echo turn-taking engine'],
- [str_contains($onboarding,'#gelato-agent-bar'),'Launcher in sticky bar'],
+ [str_contains($onboarding,"getElementById('gelato-agent-bar')"),'Launcher in sticky bar'],
  [!str_contains($onboarding,'host.append(launch)'),'No corner launcher'],
  [str_contains($participants,"visible.length!==1"),'No photo capture among several people'],
  [str_contains($participants,"variance<110"),'Exposure quality gate'],
