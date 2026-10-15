@@ -55,12 +55,14 @@ try{
    $pdo->prepare("UPDATE fm_participant_goals SET status='cancelled',phase='cancelled',completed_at=NOW(6),updated_at=NOW(6) WHERE id=? AND organization_id=? AND status='in_progress'")
     ->execute([(int)$goal['id'],(int)$actor['organization_id']]);
    app_audit($pdo,(int)$actor['organization_id'],(int)$actor['id'],'agent.participant_goal_cancelled','participant_goal',(string)$goal['public_id']);
+   fmph_write($pdo,$actor,'goal_cancelled',fmgoal_get($pdo,$actor,(string)$goal['public_id']));
    $view=fmgoal_view($pdo,fmgoal_get($pdo,$actor,(string)$goal['public_id']));
   }
  }elseif($action==='remove_photo'){
   $photoId=(int)($input['photo']??0);
   $pdo->prepare('DELETE FROM fm_participant_photos WHERE id=? AND goal_id=? AND organization_id=?')
    ->execute([$photoId,(int)$goal['id'],(int)$actor['organization_id']]);
+  if($photoId>0)fmph_write($pdo,$actor,'photo_removed',$goal);
   $view=fmgoal_view($pdo,fmgoal_get($pdo,$actor,(string)$goal['public_id']));
  }else throw new InvalidArgumentException('Unsupported onboarding goal action.');
  app_json_response(['ok'=>true,'goal'=>$view]);
