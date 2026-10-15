@@ -52,7 +52,7 @@ try{
  await page.evaluate(async()=>{window.__faceTest.move(40,290);await window.GelatoFoodMonsterCamera.scanOnce();});
  await page.waitForTimeout(400);
  let moved=await page.locator('.fm-actor').boundingBox();
- check(moved.x<starting.x,'floating body tracks change in face position');
+ check(moved.x>starting.x,'floating body follows selfie-mirrored face position');
  check(await page.locator('[data-fm-pupil]').getAttribute('transform')!=='translate(0 0)','eye follows face');
  await page.locator('[data-cam="enroll"]').click();
  await page.waitForFunction(()=>window.GelatoFoodMonsterCamera.enrolled===true,{timeout:12000});
