@@ -56,7 +56,7 @@ function fmgoal_voice_enrolled(PDO $pdo,int $org,int $uid):bool {
 }
 function fmgoal_list(PDO $pdo,array $actor):array {
  $q=$pdo->prepare("SELECT public_id FROM fm_participant_goals WHERE organization_id=? AND (created_by=? OR linked_user_id=?) ORDER BY updated_at DESC LIMIT 25");
- $q->execute([(int)$actor['organization_id'],(int)$actor['id']]);
+ $q->execute([(int)$actor['organization_id'],(int)$actor['id'],(int)$actor['id']]);
  $goals=[];foreach($q->fetchAll(PDO::FETCH_COLUMN) as $id)$goals[]=fmgoal_view($pdo,fmgoal_get($pdo,$actor,(string)$id));
  return $goals;
 }
