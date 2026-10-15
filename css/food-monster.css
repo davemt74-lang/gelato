@@ -257,3 +257,15 @@ body.food-monster-stage-page #gelato-agent-bar .fm-goal-launch{position:relative
 .fm-history-event{border:1px solid #285871;background:#0e314a;border-radius:10px;padding:10px;display:grid;gap:3px}
 .fm-history-event small{color:#bdd8e6}.fm-history-actions{display:flex;gap:8px}.fm-history-messages p{overflow-wrap:anywhere;background:#102c41;padding:8px;border-radius:8px}
 @media(max-width:620px){.fm-history-panel{width:calc(100vw - 12px);bottom:calc(8px + 83px);max-height:60dvh;padding:11px}}
+
+/* FM-G8E: only live participant cards belong on the right. */
+body.food-monster-stage-page .fm-participants-panel{top:58px;right:12px;bottom:auto;left:auto;width:236px;max-height:calc(100dvh - 178px);overflow:auto;padding:0;border:0;border-radius:0;background:transparent;box-shadow:none}
+body.food-monster-stage-page .fm-participants-panel[hidden]{display:none}
+body.food-monster-stage-page .fm-participant-cards{display:grid;grid-template-columns:1fr;gap:7px}
+body.food-monster-stage-page .fm-participant-card{appearance:none;box-sizing:border-box;display:flex;align-items:center;gap:10px;width:100%;min-height:62px;text-align:left;padding:8px 9px;background:#0e2d42f2;border:1px solid #325b74;border-radius:9px;color:#e6f8ff;cursor:pointer}
+body.food-monster-stage-page .fm-participant-card:hover,body.food-monster-stage-page .fm-participant-card:focus-visible{border-color:#56cbde;outline:none}
+body.food-monster-stage-page .fm-participant-photo{width:42px;height:46px;flex:0 0 42px;font-size:20px;border-radius:6px}
+body.food-monster-stage-page .fm-participant-info{display:flex;flex-direction:column;gap:3px;overflow:hidden}
+body.food-monster-stage-page .fm-participant-info strong{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body.food-monster-stage-page .fm-participant-info span{font-size:10px;color:#abcbdc}
+@media(max-width:850px){body.food-monster-stage-page .fm-participants-panel{top:auto;right:8px;bottom:100px;left:auto;width:min(205px,46vw);max-height:36dvh}}
