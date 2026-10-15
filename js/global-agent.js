@@ -152,7 +152,8 @@
     const beforeSend=new CustomEvent('gelato-agent-before-send',{
       cancelable:true,detail:{text,voice:Boolean(voice)}
     });
-    if(!window.dispatchEvent(beforeSend)){
+    window.dispatchEvent(beforeSend);
+    if(beforeSend.defaultPrevented===true){
       const field=document.getElementById('gaInput');
       if(field&&field.value.trim()===text)field.value='';
       resetVoiceDraft();S.conversationDraft='';
