@@ -242,7 +242,7 @@ if(!document.querySelector('script[data-fm-camera-loader]')){
 }
 if(!document.querySelector('script[data-fm-llm-loader]')){
  const script=document.createElement('script');
- script.src='js/food-monster-llm.js?v=20261014-fmg4';script.async=true;
+ script.src='js/food-monster-llm.js?v=20261015-fmg7d';script.async=true;
  script.dataset.fmLlmLoader='1';document.head.append(script);
 }
 if(!document.querySelector('script[data-fm-suggestions-loader]')){
