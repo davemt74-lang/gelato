@@ -32,6 +32,8 @@ foreach([
  [str_contains($core,"photo_consent_at']===null"),'Photo consent gate'],
  [str_contains($core,'strlen($bytes)>140000'),'Size-limited photo uploads'],
  [str_contains($core,'getimagesizefromstring'),'Image validation'],
+ [str_contains($core,'app_encrypt_secret($bytes)'),'Gallery photos are encrypted before persistence'],
+ [str_contains($api,'app_decrypt_secret('),'Gallery served with authenticated decryption'],
  [str_contains($core,'count($photos)<3'),'Employee requires 3 photos'],
  [str_contains($core,'voice_identity_profiles'),'Real voice profile required'],
  [str_contains($core,'$explicitConsent'),'Guest-to-CRM explicit consent'],
