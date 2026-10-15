@@ -10,6 +10,11 @@ on:
       - 'tests/food-monster-g1-*'
       - 'tests/food-monster-g2-*'
       - 'tests/food-monster-g3-*'
+      - 'tests/food-monster-g4-*'
+      - 'js/food-monster-llm.js'
+      - 'api/food-monster-llm.php'
+      - 'includes/food-monster-llm.php'
+      - 'js/global-agent.js'
       - 'js/food-monster-camera.js'
       - '.github/workflows/food-monster-g1.yml'
   push:
@@ -36,12 +41,18 @@ jobs:
           php -l tests/food-monster-g1-contract.php
           php -l tests/food-monster-g2-contract.php
           php -l tests/food-monster-g3-contract.php
+          php -l tests/food-monster-g4-contract.php
+          php -l includes/food-monster-llm.php
+          php -l api/food-monster-llm.php
+          node --check js/food-monster-llm.js
+          node --check js/global-agent.js
           node --check js/food-monster-camera.js
           node --check js/food-monster.js
           node --check js/global-add-canvas.js
           php tests/food-monster-g1-contract.php
           php tests/food-monster-g2-contract.php
           php tests/food-monster-g3-contract.php
+          php tests/food-monster-g4-contract.php
   chromium:
     name: Mascot desktop, mobile & overlay
     runs-on: ubuntu-latest
@@ -59,3 +70,4 @@ jobs:
           node tests/food-monster-g1-browser.test.cjs
           node tests/food-monster-g2-browser.test.cjs
           node tests/food-monster-g3-browser.test.cjs
+          node tests/food-monster-g4-browser.test.cjs

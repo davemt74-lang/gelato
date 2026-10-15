@@ -82,3 +82,16 @@ body.food-monster-stage-page #gelato-agent-bar{box-sizing:border-box;max-width:1
 #fm-camera-dialog .fm-camera-password{display:grid;gap:5px;margin:10px 0;font-size:12px;font-weight:700}
 #fm-camera-dialog .fm-camera-password input{width:100%;box-sizing:border-box;border:1px solid #b9d4e0;border-radius:9px;padding:10px;background:#fff}
 @media(max-width:620px){#fm-camera-dialog{padding:14px;max-height:95dvh}#fm-camera-dialog .fm-camera-head{font-size:15px}}
+
+/* FM-G4: model settings only, never another sidebar or chat composer. */
+#fm-llm-dialog{position:fixed;inset:auto;top:50%;left:50%;transform:translate(-50%,-50%);margin:0;box-sizing:border-box;width:min(420px,calc(100vw - 24px));max-height:90dvh;overflow:auto;background:#f7fbfe;color:#102d40;border:1px solid #bedbe9;border-radius:20px;padding:20px;box-shadow:0 24px 70px #001b3380;font:500 13px/1.6 system-ui;z-index:2147483600}
+#fm-llm-dialog:not([open]){display:none}
+#fm-llm-dialog::backdrop{background:#001b3099;backdrop-filter:blur(4px)}
+#fm-llm-dialog .fm-llm-title{display:flex;align-items:center;justify-content:space-between;font-size:18px}
+#fm-llm-dialog button{border:1px solid #c1dce8;border-radius:9px;background:#e9f7fc;color:#143347;padding:6px 12px;cursor:pointer;font-size:20px}
+#fm-llm-dialog .fm-llm-choose{display:grid;gap:7px;font-weight:700}
+#fm-llm-dialog select{font:inherit;border:1px solid #a9d1df;border-radius:10px;padding:10px;color:#143348;background:white}
+#fm-llm-dialog .fm-llm-status{padding:10px;border-radius:10px;background:#e3f1f9;font-size:12px}
+#fm-llm-dialog .fm-llm-info{font-size:11px;color:#557182}
+#fm-llm-dialog :is(button,select):focus-visible{outline:3px solid #12c8ec;outline-offset:2px}
+#food-monster-root .fm-llm-trigger{font-size:16px}

@@ -172,6 +172,10 @@
         });
         result = await response.json().catch(() => ({ok: false, message: 'Invalid Agent tool response.'}));
         if (!response.ok || !result.ok) throw new Error(result.message || 'The requested Agent skill is unavailable.');
+      } else if (window.GelatoFoodMonsterLLM?.ask) {
+        // No specialized tool route: use the server-side LLM conversation adapter.
+        // Domain actions remain exclusively owned by the permission-gated routes above.
+        result = await window.GelatoFoodMonsterLLM.ask({text,threadId:S.thread,csrf:S.csrf});
       } else {
         result = {
           ok: true,
