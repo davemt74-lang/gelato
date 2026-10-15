@@ -197,3 +197,45 @@ body.food-monster-stage-page #gelato-agent-bar{width:min(850px,calc(100% - 335px
  .fm-participant-photo{width:50px;height:60px;flex-basis:50px}
 }
 @media(max-width:480px){.fm-room-controls{font-size:10px}.fm-room-camera-view{inset:146px 8px calc(30dvh + 115px) 8px}.fm-room-camera-state{width:100%}}
+
+
+/* FM-G8C: full-bleed camera, safe overlays and guided onboarding goal. */
+body.food-monster-stage-page.fm-view-camera .fm-room-camera-view{inset:0;z-index:2147482955;gap:0}
+body.food-monster-stage-page.fm-view-camera .fm-room-camera-frame{border:0;border-radius:0}
+body.food-monster-stage-page.fm-view-camera .fm-room-camera-frame video{object-fit:cover}
+body.food-monster-stage-page.fm-view-camera .fm-room-camera-frame canvas{object-fit:cover}
+body.food-monster-stage-page.fm-view-camera .fm-room-camera-legend{position:absolute;bottom:105px;left:14px;max-width:410px;padding:6px 12px;border-radius:9px;background:#001523b8}
+body.food-monster-stage-page.fm-view-camera .fm-participants-panel{display:none}
+body.food-monster-stage-page.fm-view-camera .fm-room-controls{right:auto;max-width:calc(100% - 30px);background:#061b2db8;padding:7px 10px;border-radius:12px;backdrop-filter:blur(8px)}
+body.food-monster-stage-page.fm-view-camera #gelato-agent-bar{width:min(850px,calc(100% - 24px));z-index:2147482980}
+.fm-participant-info button[data-fm-setup]{padding:6px;border:1px solid #43aec9;border-radius:7px;background:#175778;color:#fff;cursor:pointer;font-size:11px}
+.fm-goal-launch{position:fixed;top:17px;right:15px;z-index:2147482990;background:#126b80;color:#f4fdff;border:1px solid #68d3e8;border-radius:10px;padding:10px 14px;font:700 12px system-ui;cursor:pointer}
+.fm-goal-panel{box-sizing:border-box;position:fixed;top:68px;left:16px;bottom:104px;width:min(386px,calc(100vw - 32px));z-index:2147482994;overflow:auto;border:1px solid #497f99;border-radius:17px;padding:16px;background:#092a42f5;color:#edfdff;box-shadow:0 20px 50px #00172580;font:12px/1.6 system-ui}
+.fm-goal-panel[hidden]{display:none}
+.fm-goal-head{display:flex;justify-content:space-between;align-items:start;gap:8px}
+.fm-goal-head strong{font-size:15px}
+.fm-goal-head small{display:block;color:#b4d3e3}
+.fm-goal-head button{font-size:24px;background:transparent;color:white;border:0;cursor:pointer}
+.fm-goal-prompt{font-size:14px;font-weight:600;border-left:3px solid #38c8de;padding:8px 10px;background:#103b54;border-radius:5px;margin:13px 0}
+.fm-goal-body{display:grid;gap:10px}
+.fm-goal-body h3{font-size:13px;margin:10px 0 0}
+.fm-goal-body button,.fm-goal-footer button{min-height:35px;border:1px solid #63b3cc;border-radius:8px;background:#186688;color:#fff;padding:7px 10px;cursor:pointer;font:700 12px system-ui}
+.fm-goal-body button:disabled{opacity:.55}
+.fm-goal-body button:focus-visible,.fm-goal-launch:focus-visible{outline:3px solid #7dedff}
+.fm-goal-body a{color:#79e3fa}
+.fm-goal-field{display:grid;gap:5px;font-weight:700}
+.fm-goal-field input,.fm-goal-field select{width:100%;box-sizing:border-box;border:1px solid #6c9fb3;border-radius:8px;background:#edf9ff;color:#16344b;padding:9px;font:12px system-ui}
+.fm-goal-consent{display:flex;gap:8px;align-items:start}
+.fm-goal-safety{font-size:11px;color:#b7ccdc}
+.fm-goal-progress{display:grid;gap:2px;border:1px solid #2d6075;border-radius:9px;padding:10px}
+.fm-goal-progress small{color:#a9d8e5}
+.fm-goal-gallery{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+.fm-goal-gallery figure{margin:0;min-width:0}
+.fm-goal-gallery img{width:100%;aspect-ratio:4/5;object-fit:cover;border-radius:6px}
+.fm-goal-gallery button{font-size:10px;padding:4px;width:100%}
+.fm-goal-footer{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px;border-top:1px solid #3f7485;padding-top:10px}
+@media(max-width:700px){
+ .fm-goal-panel{top:104px;bottom:105px;width:calc(100% - 20px);left:10px;max-width:390px}
+ .fm-goal-launch{top:10px;right:10px}
+ body.food-monster-stage-page.fm-view-camera .fm-room-camera-legend{bottom:95px;max-width:240px}
+}
