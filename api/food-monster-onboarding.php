@@ -13,12 +13,13 @@ try{
   if($action==='get')app_json_response(['ok'=>true,'goal'=>fmgoal_view($pdo,$goal)]);
   if($action==='photo'){
    $photoId=(int)($_GET['photo']??0);
-   $q=$pdo->prepare('SELECT image_mime,image_bytes FROM fm_participant_photos WHERE id=? AND goal_id=? AND organization_id=? LIMIT 1');
+   $q=$pdo->prepare('SELECT image_mime,image_bytes,image_nonce,image_encryption FROM fm_participant_photos WHERE id=? AND goal_id=? AND organization_id=? LIMIT 1');
    $q->execute([$photoId,(int)$goal['id'],(int)$actor['organization_id']]);$photo=$q->fetch(PDO::FETCH_ASSOC);
    if(!$photo)app_json_response(['ok'=>false,'message'=>'Photo not found.'],404);
-   header('Content-Type: '.$photo['image_mime']);header('Content-Length: '.strlen($photo['image_bytes']));
+   $plaintext=app_decrypt_secret((string)$photo['image_bytes'],(string)$photo['image_nonce'],(string)$photo['image_encryption']);
+   header('Content-Type: '.$photo['image_mime']);header('Content-Length: '.strlen($plaintext));
    header('X-Content-Type-Options: nosniff');header('Content-Security-Policy: sandbox');
-   echo $photo['image_bytes'];exit;
+   echo $plaintext;exit;
   }
   throw new InvalidArgumentException('Unsupported onboarding read action.');
  }
