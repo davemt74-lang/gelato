@@ -1,0 +1,35 @@
+const {chromium}=require('playwright'),fs=require('fs'),assert=require('node:assert/strict'),path=require('path');
+(async()=>{const browser=await chromium.launch({headless:true,args:['--no-sandbox']});let count=0;
+const ok=(x,m)=>{assert.ok(x,m);count++};
+try{const page=await browser.newPage(),errors=[];
+page.on('pageerror',e=>errors.push(e.message));
+await page.setContent('<html><head><meta name="gelato-csrf" content="test"></head><body class="food-monster-stage-page"><main id="food-monster-stage"></main><div id="gelato-agent-bar"><textarea id="gaInput"></textarea></div></body></html>');
+await page.evaluate(()=>{
+ window.__turns=[];window.__spoken=[];
+ window.GelatoFoodMonster={greet:s=>{window.__bubble=s}};
+ window.GelatoGlobalAgent={conversationMode:false,setConversationMode:async v=>{window.__turns.push(v);window.GelatoGlobalAgent.conversationMode=v;return true}};
+ window.GelatoVoiceTurns={speak:(s,opts)=>{window.__spoken.push(s);window.__onEnd=opts.onEnd;return true}};
+ window.fetch=async()=>({ok:true,json:async()=>({ok:true,goals:[],roles:[],accounts:[]})});
+});
+await page.addScriptTag({content:fs.readFileSync(path.join(__dirname,'../js/food-monster-onboarding.js'),'utf8')});
+await page.waitForFunction(()=>!!window.GelatoFoodMonsterGoals);
+ok(await page.locator('#gelato-agent-bar .fm-goal-launch').count()===1,'Launcher is inside chat bar');
+ok(await page.evaluate(()=>window.__turns.length===0),'Passive page load does not open mic');
+await page.locator('#gelato-agent-bar .fm-goal-launch').click();
+ok(await page.locator('.fm-goal-panel').isVisible(),'Goal panel opens');
+ok(await page.evaluate(()=>window.__turns.length===0),'Opening goal does not auto-activate mic');
+await page.locator('[data-fm-goal-handsfree]').click();
+await page.waitForFunction(()=>window.GelatoGlobalAgent.conversationMode===true);
+ok(await page.locator('[data-fm-goal-handsfree]').getAttribute('aria-pressed')==='true','Hands-free needs explicit opt-in');
+ok(await page.evaluate(()=>window.__spoken.length===1),'First question voiced through shared TTS');
+await page.evaluate(()=>window.GelatoFoodMonsterGoals.note('Hello! Welcome. What is your name?'));
+ok(await page.evaluate(()=>window.__spoken.length===1),'Duplicate prompt not spoken again');
+await page.evaluate(()=>window.GelatoFoodMonsterGoals.note('Are you an employee or a guest?'));
+ok(await page.evaluate(()=>window.__spoken.length===2),'Next question spoken once');
+await page.locator('[data-fm-goal-hide]').click();
+await page.waitForFunction(()=>window.GelatoGlobalAgent.conversationMode===false);
+ok(await page.evaluate(()=>window.__turns.at(-1)===false),'Closing goal releases owned conversation');
+ok(errors.length===0,'No script errors '+errors.join(';'));
+console.log('FM-G8D1 chat bar and hands-free PASS ('+count+' checks)');
+}finally{await browser.close();}
+})().catch(e=>{console.error(e);process.exit(1)});

@@ -5,19 +5,43 @@ if(!document.body.classList.contains('food-monster-stage-page')||window.GelatoFo
 const host=document.getElementById('food-monster-stage');if(!host)return;
 const csrf=()=>document.querySelector('meta[name="gelato-csrf"]')?.content||'';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const state={goal:null,roles:[],accounts:[],tracking:'',opened:false,busy:false,nameDraft:'',lastPrompt:''};
+const state={goal:null,roles:[],accounts:[],tracking:'',opened:false,busy:false,handsFree:false,ownsConversation:false,nameDraft:'',lastPrompt:''};
 const panel=document.createElement('section');panel.className='fm-goal-panel';panel.hidden=true;
 panel.setAttribute('aria-label','Participant onboarding goal');
 panel.innerHTML='<header class="fm-goal-head"><div><strong>Agent Brain · Participant Setup</strong><small>Guided onboarding goal</small></div><button type="button" data-fm-goal-hide aria-label="Close participant setup panel">×</button></header>'+
  '<p class="fm-goal-prompt" role="status" aria-live="polite">Start by introducing yourself.</p><div class="fm-goal-body"></div>'+
- '<footer class="fm-goal-footer"><button type="button" data-fm-goal-refresh>Refresh goal</button><button type="button" data-fm-goal-cancel>Cancel goal</button></footer>';
+ '<footer class="fm-goal-footer"><button type="button" data-fm-goal-handsfree aria-pressed="false">Enable hands-free answers</button><button type="button" data-fm-goal-refresh>Refresh goal</button><button type="button" data-fm-goal-cancel>Cancel goal</button></footer>';
 host.append(panel);
 const body=panel.querySelector('.fm-goal-body'),prompt=panel.querySelector('.fm-goal-prompt');
-const launch=document.createElement('button');launch.type='button';launch.className='fm-goal-launch';launch.textContent='Participant setup';
-launch.setAttribute('aria-label','Start participant onboarding goal');host.append(launch);
-function note(message){prompt.textContent=message;state.lastPrompt=message;window.GelatoFoodMonster?.greet?.(message);}
+const launch=document.createElement('button');launch.type='button';launch.className='fm-goal-launch';launch.textContent='+';
+launch.title='Participant setup';launch.setAttribute('aria-label','Open participant setup');
+function attachLauncher(){
+ const bar=document.getElementById('gelato-agent-bar');
+ if(bar&&!bar.contains(launch)){const input=bar.querySelector('#gaInput');if(input)input.before(launch);else bar.append(launch);}
+}
+attachLauncher();window.addEventListener('gelato-agent-ready',attachLauncher);
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',attachLauncher,{once:true});
+function note(message){
+ message=String(message||'').slice(0,250);prompt.textContent=message;
+ if(state.lastPrompt===message)return;
+ state.lastPrompt=message;window.GelatoFoodMonster?.greet?.(message);
+ if(state.handsFree&&state.opened){
+  const voice=window.GelatoVoiceTurns;
+  if(!voice?.speak?.(message,{owner:'participant-onboarding',onEnd:({interrupted})=>{
+   if(!interrupted&&state.handsFree&&state.opened&&window.GelatoGlobalAgent&&!window.GelatoGlobalAgent.conversationMode)
+    void window.GelatoGlobalAgent.setConversationMode(true);
+  }})){
+   if(window.GelatoGlobalAgent&&!window.GelatoGlobalAgent.conversationMode)
+    void window.GelatoGlobalAgent.setConversationMode(true);
+  }
+ }
+}
 function show(){state.opened=true;panel.hidden=false;document.body.classList.add('fm-goal-open');render();}
-function hide(){state.opened=false;panel.hidden=true;document.body.classList.remove('fm-goal-open');}
+function hide(){
+ state.opened=false;panel.hidden=true;document.body.classList.remove('fm-goal-open');
+ state.handsFree=false;panel.querySelector('[data-fm-goal-handsfree]').setAttribute('aria-pressed','false');
+ if(state.ownsConversation){state.ownsConversation=false;void window.GelatoGlobalAgent?.setConversationMode?.(false);}
+}
 async function request(action,payload={}){
  const response=await fetch('api/food-monster-onboarding.php',{method:'POST',cache:'no-store',credentials:'same-origin',headers:{Accept:'application/json','Content-Type':'application/json','X-CSRF-Token':csrf()},body:JSON.stringify({action,csrf_token:csrf(),...payload})});
  const data=await response.json().catch(()=>({message:'Invalid onboarding response'}));
@@ -155,6 +179,21 @@ async function action(which){
 }
 panel.addEventListener('click',e=>{
  if(e.target.closest('[data-fm-goal-hide]'))hide();
+ else if(e.target.closest('[data-fm-goal-handsfree]')){
+  const turn=window.GelatoGlobalAgent,button=panel.querySelector('[data-fm-goal-handsfree]');
+  if(!turn?.setConversationMode){note('Voice controls are loading.');return;}
+  if(state.handsFree){
+   state.handsFree=false;button.setAttribute('aria-pressed','false');button.textContent='Enable hands-free answers';
+   if(state.ownsConversation){state.ownsConversation=false;void turn.setConversationMode(false);}
+  }else{
+   const wasOn=!!turn.conversationMode;
+   void turn.setConversationMode(true).then(ok=>{
+    if(!ok)return;
+    state.handsFree=true;state.ownsConversation=!wasOn;button.setAttribute('aria-pressed','true');button.textContent='Hands-free on · Disable';
+    const question=state.lastPrompt;state.lastPrompt='';note(question||'What would you like to do next?');
+   });
+  }
+ }
  else if(e.target.closest('[data-fm-goal-refresh]'))void load();
  else if(e.target.closest('[data-fm-goal-cancel]')){if(state.goal&&confirm('Cancel this onboarding goal?'))void action('cancel');}
  else{const btn=e.target.closest('[data-goal-action]');if(btn)void action(btn.dataset.goalAction);}

@@ -79,6 +79,7 @@ function fmgoal_update(PDO $pdo,array $actor,array $goal,array $fields,string $e
  return fmgoal_view($pdo,fmgoal_get($pdo,$actor,(string)$goal['public_id']));
 }
 function fmgoal_photo(PDO $pdo,array $actor,array $goal,string $dataUri):array {
+ if($goal['linked_user_id']&&(int)$goal['linked_user_id']!==(int)$actor['id'])throw new DomainException('Linked employee must capture their own photos while signed in.');
  if($goal['photo_consent_at']===null)throw new DomainException('Confirm the participant consented to photo storage first.');
  if((string)$goal['status']!=='in_progress')throw new DomainException('Cannot save photos to a completed setup.');
  if(!preg_match('#^data:image/(webp|jpeg);base64,([A-Za-z0-9+/=]+)$#D',$dataUri,$match))throw new InvalidArgumentException('Capture a JPEG or WebP photo.');
