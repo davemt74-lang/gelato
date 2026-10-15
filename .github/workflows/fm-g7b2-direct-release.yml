@@ -1,0 +1,71 @@
+name: FM-G7B2 Permanent Deployment Download
+on:
+  push:
+    branches:
+      - delivery/fm-g7b2-direct-release
+    paths:
+      - .github/workflows/fm-g7b2-direct-release.yml
+permissions:
+  actions: read
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify release has not already been published
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view gelato-fm-g7b2 --repo davemt74-lang/gelato >/dev/null 2>&1; then
+            echo 'exists=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'exists=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Retrieve exact certified PR source
+        if: steps.existing.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifact
+          gh run download 38735403360 --repo davemt74-lang/gelato --name gelato-full-deploy --dir artifact
+          test -s artifact/gelato-full-deploy.zip
+          expected="$(awk 'NR==1 {print $1}' artifact/gelato-full-deploy.sha256)"
+          printf '%s  %s\n' "$expected" artifact/gelato-full-deploy.zip | sha256sum --check -
+          unzip -tq artifact/gelato-full-deploy.zip
+          test "$(unzip -p artifact/gelato-full-deploy.zip DEPLOY_SHA.txt | tr -d '\r\n')" = 'f615ffd3465965ee81b526eb836b9f4e11447b73'
+      - name: Stamp exact merged commit and certify MediaPipe contents
+        if: steps.existing.outputs.exists != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p extracted
+          unzip -q artifact/gelato-full-deploy.zip -d extracted
+          printf '%s\n' '965132829f6de50793e6ce4538ad8a2fc7f594a2' > extracted/DEPLOY_SHA.txt
+          test -s extracted/api/food-monster-read.php
+          test -s extracted/includes/food-monster-read-tools.php
+          test -s extracted/tests/food-monster-g7b2-browser.test.cjs
+          test -s extracted/assets/vendor/mediapipe/vision_bundle.mjs
+          test -s extracted/assets/vendor/mediapipe/hand_landmarker.task
+          test -s extracted/assets/vendor/mediapipe/wasm/vision_wasm_internal.wasm
+          if test -e extracted/config.php || test -e extracted/.env || test -e extracted/uploads || test -e extracted/storage; then
+            echo 'Refusing to publish private site config or state.' >&2
+            exit 1
+          fi
+          (cd extracted && zip -qr "$GITHUB_WORKSPACE/gelato-full-deploy.zip" .)
+          unzip -tq gelato-full-deploy.zip
+          sha256sum gelato-full-deploy.zip > gelato-full-deploy.sha256
+          test "$(unzip -p gelato-full-deploy.zip DEPLOY_SHA.txt | tr -d '\r\n')" = '965132829f6de50793e6ce4538ad8a2fc7f594a2'
+      - name: Publish direct ZIP and checksum
+        if: steps.existing.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create gelato-fm-g7b2 \
+            gelato-full-deploy.zip \
+            gelato-full-deploy.sha256 \
+            --repo davemt74-lang/gelato \
+            --target 965132829f6de50793e6ce4538ad8a2fc7f594a2 \
+            --title 'Gelato Food Monster FM-G7B2 — Governed Verified Reads' \
+            --notes 'Full deploy-ready HostGator ZIP for FM-G7B1 skill registry and FM-G7B2 governed verified session, active clock-in and sales reads. PR #318 merged after 33/33 checks; CI tested tree matches main 965132829f6de50793e6ce4538ad8a2fc7f594a2. Includes MediaPipe and Haiku 5.5. Preserve existing config.php, .env, uploads, storage and encryption keys; live database/microphone still require field certification.'
