@@ -16,7 +16,7 @@ proactiveAssert(str_contains($api,'listening_enabled=VALUES(listening_enabled)')
 proactiveAssert(str_contains($global,'loadListeningPreference()'),'global Agent hydrates saved listening');
 proactiveAssert(str_contains($global,'microphoneActive:S.micActive'),'UI reports actual mic runtime');
 proactiveAssert(str_contains($global,'wakeStandby:S.wakeStandby'),'wake-only mode surfaced in status');
-proactiveAssert(str_contains($global,"await verifyVoice()"),'start and wake activation require existing enrolled identity verification');
+proactiveAssert(!str_contains($global,"await verifyVoice()"),'start and wake activation do not require biometric enrollment');
 proactiveAssert(str_contains($global,"function parseListeningCommand"),'voice controls parsed before Agent message dispatch');
 proactiveAssert(str_contains($global,'keepWake:true'),'wake-only Stop Listening remains distinct from mic off');
 proactiveAssert(str_contains($global,'keepWake:false'),'hard microphone stop supported');
