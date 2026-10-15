@@ -5,6 +5,8 @@ require_once __DIR__.'/agent-node-registry.php';
 function fm_skill_registry_definitions():array {
  return [
   'brain_brief'=>['node'=>'brain','label'=>'Agent Brain priorities','description'=>'Review cross-department risks and next moves.','prompt'=>'Show the Agent Brain priorities and recommended next reviews.','manager'=>true],
+  'sales'=>['node'=>'sales','label'=>'Verified sales','description'=>'Review recorded sales totals from Sales Intelligence.','prompt'=>'What were our recorded sales today?','all'=>['sales.view','sales.agent']],
+  'clock_ins'=>['node'=>'timeclock','label'=>'Staff clock-ins','description'=>'Review currently clocked-in staff.','prompt'=>'Who is currently clocked in?','all'=>['timeclock.agent'],'any'=>[['timeclock.view'],['attendance.view']]],
   'kitchen'=>['node'=>'kds','label'=>'Kitchen tickets','description'=>'Review kitchen tickets and service priorities.','prompt'=>'Review KDS tickets and tell me what needs attention.','all'=>['kds.view']],
   'inventory'=>['node'=>'operations','label'=>'Inventory & tasks','description'=>'Review low stock and operational tasks.','prompt'=>'Review inventory shortages and overdue restaurant tasks.','any'=>[['inventory.view','inventory.agent'],['tasks.view','tasks.agent']]],
   'staffing'=>['node'=>'scheduling','label'=>'Staffing & shifts','description'=>'Review staffing coverage and open shifts.','prompt'=>'Review staffing schedule coverage and open shifts.','any'=>[['schedule.view'],['schedule.agent']]],

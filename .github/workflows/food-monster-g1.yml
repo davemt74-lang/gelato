@@ -19,6 +19,9 @@ on:
       - 'tests/food-monster-g7c-*'
       - 'tests/food-monster-g7d-*'
       - 'tests/food-monster-g7b1-*'
+      - 'tests/food-monster-g7b2-*'
+      - 'api/food-monster-read.php'
+      - 'includes/food-monster-read-tools.php'
       - 'includes/food-monster-skill-registry.php'
       - 'js/food-monster-skills.js'
       - 'docs/FOOD-MONSTER-FM-G7B1-SKILLS.md'
@@ -90,6 +93,9 @@ jobs:
           php tests/food-monster-g4-contract.php
           php tests/food-monster-g7d-provider-contract.php
           php tests/food-monster-g7b1-registry.php
+          php tests/food-monster-g7b2-read.php
+          php -l api/food-monster-read.php
+          php -l includes/food-monster-read-tools.php
           php -l includes/food-monster-skill-registry.php
           node --check js/food-monster-skills.js
           php tests/food-monster-g5-contract.php
@@ -120,3 +126,4 @@ jobs:
           node tests/food-monster-g7v-browser.test.cjs
           node tests/food-monster-g7c-browser.test.cjs
           node tests/food-monster-g7b1-browser.test.cjs
+          node tests/food-monster-g7b2-browser.test.cjs
