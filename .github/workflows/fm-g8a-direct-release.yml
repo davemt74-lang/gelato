@@ -1,0 +1,74 @@
+name: FM-G8A Permanent Participant Stage Deployment
+on:
+  push:
+    branches:
+      - delivery/fm-g8a-participants-release
+    paths:
+      - .github/workflows/fm-g8a-direct-release.yml
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check permanent release
+        id: exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view gelato-fm-g8a-participants --repo davemt74-lang/gelato >/dev/null 2>&1; then
+            echo 'yes=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'yes=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Retrieve tested PR ZIP and validate SHA
+        if: steps.exists.outputs.yes != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p tested
+          gh run download 38742504706 --repo davemt74-lang/gelato --name gelato-full-deploy --dir tested
+          test -s tested/gelato-full-deploy.zip
+          test -s tested/gelato-full-deploy.sha256
+          digest="$(awk 'NR==1 {print $1}' tested/gelato-full-deploy.sha256)"
+          printf '%s  %s\n' "$digest" tested/gelato-full-deploy.zip | sha256sum --check -
+          unzip -tq tested/gelato-full-deploy.zip
+          test "$(unzip -p tested/gelato-full-deploy.zip DEPLOY_SHA.txt | tr -d '\r\n')" = '892bcc9363b636590e37b875667140ea9d897201'
+      - name: Verify participant assets and stamp merged revision
+        if: steps.exists.outputs.yes != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p deployed
+          unzip -q tested/gelato-full-deploy.zip -d deployed
+          test -s deployed/js/food-monster-participants.js
+          test -s deployed/api/food-monster-participants.php
+          test -s deployed/includes/food-monster-participants.php
+          test -s deployed/tests/food-monster-g8a-browser.test.cjs
+          test -s deployed/assets/vendor/mediapipe/hand_landmarker.task
+          test -s deployed/assets/vendor/mediapipe/vision_bundle.mjs
+          test -s deployed/assets/vendor/mediapipe/wasm/vision_wasm_internal.wasm
+          test ! -e deployed/config.php
+          test ! -e deployed/.env
+          test ! -e deployed/uploads
+          test ! -e deployed/storage
+          printf '%s\n' 'b8a4d4771f16055a64e72c211e3918aea824d8a4' > deployed/DEPLOY_SHA.txt
+          (cd deployed && zip -qr "$GITHUB_WORKSPACE/gelato-full-deploy.zip" .)
+          unzip -tq gelato-full-deploy.zip
+          sha256sum gelato-full-deploy.zip > gelato-full-deploy.sha256
+          test "$(unzip -p gelato-full-deploy.zip DEPLOY_SHA.txt | tr -d '\r\n')" = 'b8a4d4771f16055a64e72c211e3918aea824d8a4'
+      - name: Publish direct ZIP and checksum
+        if: steps.exists.outputs.yes != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create gelato-fm-g8a-participants \
+            gelato-full-deploy.zip gelato-full-deploy.sha256 \
+            --repo davemt74-lang/gelato \
+            --target b8a4d4771f16055a64e72c211e3918aea824d8a4 \
+            --title 'Gelato FM-G8A — Active Participants and Agent/Camera View' \
+            --notes 'Certified full HostGator deployment. PR #320 23/23 checks passed and tested tree identical to merged main. Adds explicit camera toggle, Agent/Camera mode, on-device multi-person tracking boxes and participant cards, optional in-memory thumbnails, opt-in shared mic meter, authenticated schedule/clock-in roster and safe generic greetings. Existing enrolled signed-in identity only; no automated employee/guest identification from appearance. MediaPipe bundled. Preserve config.php, .env, uploads/ and storage/ during deployment. Physical webcam and participant enrollment field qualification remain.'
