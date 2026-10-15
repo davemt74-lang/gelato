@@ -10,7 +10,7 @@ function fmph_ready(PDO $pdo):bool {
 }
 function fmph_allowed_event(string $event):bool {
  return in_array($event,['goal_started','name_confirmed','participant_type','existing_account_linked','photo_consent',
-  'photo_saved','photos_deferred','voice_consent','account_proposed','employee_account_created',
+  'photo_saved','photos_deferred','voice_consent','account_proposed','employee_account_created','voice_enrolled',
   'goal_completed','goal_cancelled','guest_crm_conversion','photo_removed'],true);
 }
 function fmph_write(PDO $pdo,array $actor,string $event,?array $goal=null):void {
@@ -26,11 +26,23 @@ function fmph_write(PDO $pdo,array $actor,string $event,?array $goal=null):void 
   'photo_consent'=>'Photo storage consented','photo_saved'=>'Enrollment photo saved',
   'photos_deferred'=>'Photos postponed for poor lighting','voice_consent'=>'Voice enrollment consented',
   'account_proposed'=>'Employee account proposed','employee_account_created'=>'Employee account approved and created',
+  'voice_enrolled'=>'Enrolled voice profile saved',
   'goal_completed'=>'Participant goal completed','goal_cancelled'=>'Participant goal cancelled',
   'guest_crm_conversion'=>'Guest CRM contact created with consent','photo_removed'=>'Enrollment photo deleted'
  ];
  $q=$pdo->prepare('INSERT INTO fm_participant_events (organization_id,public_id,user_id,goal_id,actor_user_id,event_type,privacy_scope,source,summary) VALUES (?,?,?,?,?,?,?,?,?)');
  $q->execute([$org,'fme-'.bin2hex(random_bytes(12)),$userId,$goalId,$uid,$event,'operational','onboarding',$labels[$event]]);
+}
+function fmph_voice_enrollment_event(PDO $pdo,array $actor):void {
+ if(!fmph_ready($pdo))return;
+ $org=(int)$actor['organization_id'];$uid=(int)$actor['id'];
+ $q=$pdo->prepare("SELECT p.id FROM voice_identity_profiles p WHERE p.organization_id=? AND p.user_id=? AND p.status='active' AND p.enrolled_at>=DATE_SUB(NOW(6),INTERVAL 5 MINUTE)");
+ $q->execute([$org,$uid]);if(!$q->fetchColumn())return;
+ $q=$pdo->prepare("SELECT * FROM fm_participant_goals WHERE organization_id=? AND linked_user_id=? ORDER BY updated_at DESC LIMIT 1");
+ $q->execute([$org,$uid]);$goal=$q->fetch(PDO::FETCH_ASSOC);if(!$goal)return;
+ $seen=$pdo->prepare("SELECT COUNT(*) FROM fm_participant_events WHERE organization_id=? AND goal_id=? AND event_type='voice_enrolled' AND occurred_at>=DATE_SUB(NOW(6),INTERVAL 5 MINUTE)");
+ $seen->execute([$org,(int)$goal['id']]);if((int)$seen->fetchColumn()>0)return;
+ fmph_write($pdo,$actor,'voice_enrolled',$goal);
 }
 function fmph_owner(array $actor):bool{return (int)($actor['is_owner_role']??0)===1;}
 function fmph_read(PDO $pdo,array $actor,int $targetId,int $limit=75):array {
@@ -39,8 +51,10 @@ function fmph_read(PDO $pdo,array $actor,int $targetId,int $limit=75):array {
  if($targetId<1)throw new InvalidArgumentException('Invalid user.');
  $limit=max(1,min(100,$limit));
  $where=$targetId===$uid?'':' AND privacy_scope=\'operational\'';
- $q=$pdo->prepare("SELECT public_id,event_type,privacy_scope,source,summary,occurred_at FROM fm_participant_events WHERE organization_id=? AND user_id=?".$where." ORDER BY occurred_at DESC,id DESC LIMIT ".$limit);
- $q->execute([$org,$targetId]);
+ // Include earlier unlinked goal events after an authorized account is linked.
+ $link=" OR goal_id IN (SELECT id FROM fm_participant_goals WHERE organization_id=? AND linked_user_id=?)";
+ $q=$pdo->prepare("SELECT public_id,event_type,privacy_scope,source,summary,occurred_at FROM fm_participant_events WHERE organization_id=? AND (user_id=?".$link.")".$where." ORDER BY occurred_at DESC,id DESC LIMIT ".$limit);
+ $q->execute([$org,$targetId,$org,$targetId]);
  return array_map(static fn($r)=>['id'=>(string)$r['public_id'],'type'=>(string)$r['event_type'],'scope'=>(string)$r['privacy_scope'],
   'source'=>(string)$r['source'],'summary'=>(string)$r['summary'],'at'=>(string)$r['occurred_at']],$q->fetchAll(PDO::FETCH_ASSOC));
 }
