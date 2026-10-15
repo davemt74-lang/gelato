@@ -15,6 +15,7 @@ on:
       - 'tests/food-monster-g6-*'
       - 'tests/food-monster-g7-*'
       - 'tests/food-monster-g7a-*'
+      - 'tests/food-monster-g7v-*'
       - 'api/agent-workspace.php'
       - 'api/food-monster-orchestrate.php'
       - 'includes/food-monster-multi-node.php'
@@ -66,6 +67,8 @@ jobs:
           php -l api/food-monster-llm.php
           node --check js/food-monster-llm.js
           node --check js/global-agent.js
+          node tests/food-monster-g7v-listening.test.cjs
+          node tests/proactive-global-listening.test.js
           node --check js/food-monster-camera.js
           node --check js/food-monster.js
           node --check js/global-add-canvas.js
@@ -98,3 +101,4 @@ jobs:
           node tests/food-monster-g6-browser.test.cjs
           node tests/food-monster-g7-browser.test.cjs
           node tests/food-monster-g7a-browser.test.cjs
+          node tests/food-monster-g7v-browser.test.cjs
