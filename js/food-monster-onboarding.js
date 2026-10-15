@@ -82,7 +82,8 @@ function render(){
     html+=button('crm','Create CRM contact with consent');
    }else html+='<p>CRM contact linked. Marketing subscriptions require separate consent.</p>';
   }
-  html+=button('complete','Finish onboarding goal');
+  html+=button('complete','Finish onboarding goal',g.type==='employee'&&(!g.employeeUserId||g.photos.length<3||!g.voiceVerified));
+  if(g.type==='employee'&&!g.voiceVerified)html+='<p>Employee must finish their own voice enrollment before this goal can be completed.</p>';
  }
  body.innerHTML=html;
 }
@@ -90,7 +91,7 @@ async function action(which){
  if(state.busy)return;state.busy=true;
  try{
   const get=name=>body.querySelector('[name="'+name+'"]')?.value?.trim()||'';
-  if(which==='start'||which==='new'){const data=await request('start',{trackLabel:state.tracking});state.goal=data.goal;if(get('name'))await request('name',{goal:state.goal.id,name:get('name')});note('Onboarding goal created. Tell me your name.');}
+  if(which==='start'||which==='new'){const intro=get('name');const data=await request('start',{trackLabel:state.tracking});state.goal=data.goal;if(intro)await request('name',{goal:state.goal.id,name:intro});note('Onboarding goal created. Tell me your name.');}
   else if(which==='name'){await request('name',{goal:state.goal.id,name:get('name')});}
   else if(which.startsWith('type-'))await request('type',{goal:state.goal.id,type:which.slice(5)});
   else if(which==='photo-consent')await request('photo_consent',{goal:state.goal.id,consent:true});
