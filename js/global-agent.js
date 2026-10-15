@@ -323,8 +323,12 @@
     const field=document.getElementById('gaInput');
     const text=String(raw||'').trim().slice(0,3500);
     if(!field||!text)return false;
-    const draft=S.voiceDraft;
-    if(draft.owned&&field.value!==draft.previous){resetVoiceDraft();return false;}
+    let draft=S.voiceDraft;
+    if(draft.owned&&field.value!==draft.previous){
+      resetVoiceDraft();
+      if(field.value.trim()!=='')return false;
+      draft=S.voiceDraft;
+    }
     if(!draft.owned&&field.value.trim()!=='')return false;
     const value=(draft.committed?draft.committed+' ':'')+text;
     field.value=value;field.dataset.voiceInterim=final?'false':'true';
