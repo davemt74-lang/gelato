@@ -8,7 +8,7 @@ header('Cache-Control: no-store, private');
 try{
  if($_SERVER['REQUEST_METHOD']==='GET'){
   $action=(string)($_GET['action']??'list');
-  if($action==='list')app_json_response(['ok'=>true,'goals'=>fmgoal_list($pdo,$actor),'roles'=>fmgoal_roles($pdo,$actor)]);
+  if($action==='list')app_json_response(['ok'=>true,'goals'=>fmgoal_list($pdo,$actor),'roles'=>fmgoal_roles($pdo,$actor),'accounts'=>fmgoal_existing_accounts($pdo,$actor)]);
   $goal=fmgoal_get($pdo,$actor,(string)($_GET['goal']??''));
   if($action==='get')app_json_response(['ok'=>true,'goal'=>fmgoal_view($pdo,$goal)]);
   if($action==='photo'){
@@ -36,6 +36,10 @@ try{
  }elseif($action==='photo_consent'){
   if(($input['consent']??null)!==true)throw new DomainException('Only an affirmative photo consent can enable storage.');
   $view=fmgoal_update($pdo,$actor,$goal,['photo_consent_at'=>date('Y-m-d H:i:s.u'),'phase'=>'photos'],'photo_consent');
+ }elseif($action==='link_existing')$view=fmgoal_link_existing($pdo,$actor,$goal,(int)($input['userId']??0));
+ elseif($action==='defer_photos'){
+  if(($input['lowLight']??null)!==true)throw new DomainException('Explicit low-light deferral required.');
+  $view=fmgoal_update($pdo,$actor,$goal,['photos_deferred'=>1,'phase'=>'voice_enrollment'],'photos_deferred');
  }elseif($action==='photo')$view=fmgoal_photo($pdo,$actor,$goal,(string)($input['image']??''));
  elseif($action==='voice_consent'){
   if(($input['consent']??null)!==true)throw new DomainException('Voice enrollment requires affirmative consent.');
