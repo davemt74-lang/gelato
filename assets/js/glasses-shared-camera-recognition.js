@@ -49,6 +49,7 @@
    // carry old timestamps across camera reconfiguration/model changes.
    const identity=[source.stream?.id||'',source.revision||0,source.stationPublicId||'',modelSha256,devicePublicId].join('|');
    const prior=lastCapture.get(source.slot);
+   if(prior&&Number(source.revision||0)<prior.revision)return null;
    if(prior?.identity===identity&&capturedAt<=prior.capturedAt)return null;
    const objects=sanitize(raw),scope=source.stationPublicId&&
       source.stationPublicId===currentStationPublicId?'assigned_station':'unscoped';
@@ -56,7 +57,7 @@
     stationPublicId:source.stationPublicId||null,scope,
     locationId:source.locationId,devicePublicId,modelSha256,
     capturedAt,role:source.role,revision:source.revision||0,objects};
-   lastCapture.set(source.slot,{identity,capturedAt});
+   lastCapture.set(source.slot,{identity,capturedAt,revision:Number(source.revision||0)});
    data.set(source.slot,{slot:source.slot,state:'recognized',count:objects.length,
      scope,stationPublicId:source.stationPublicId||null,capturedAt,
      modelSha256,role:source.role});
