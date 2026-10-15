@@ -594,7 +594,7 @@
           const explicitStop=/^(?:stop speaking|interrupt)$/i.test(text);
           if(!hasWake&&!explicitStop){diag('speaker-audio-ignored');continue;}
           // A loaded shared voice-turn controller remains authoritative.
-          if(evaluation&&evaluation.kind!=='interrupt'&&evaluation.interrupt!==true)continue;
+          if(!evaluation||(evaluation.kind!=='interrupt'&&evaluation.interrupt!==true))continue;
           interruptSpeech('conversation-barge-in');S.lastBargeIn=0;
           const control=parseListeningCommand(text);
           if(control==='stop')void setListening(false,{keepWake:true});
