@@ -5,7 +5,7 @@ if(!document.body.classList.contains('food-monster-stage-page')||window.GelatoFo
 const host=document.getElementById('food-monster-stage');if(!host)return;
 const csrf=()=>document.querySelector('meta[name="gelato-csrf"]')?.content||'';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const state={goal:null,roles:[],tracking:'',opened:false,busy:false,nameDraft:'',lastPrompt:''};
+const state={goal:null,roles:[],accounts:[],tracking:'',opened:false,busy:false,nameDraft:'',lastPrompt:''};
 const panel=document.createElement('section');panel.className='fm-goal-panel';panel.hidden=true;
 panel.setAttribute('aria-label','Participant onboarding goal');
 panel.innerHTML='<header class="fm-goal-head"><div><strong>Agent Brain · Participant Setup</strong><small>Guided onboarding goal</small></div><button type="button" data-fm-goal-hide aria-label="Close participant setup panel">×</button></header>'+
@@ -30,6 +30,7 @@ async function load(){
   const response=await fetch('api/food-monster-onboarding.php?action=list',{credentials:'same-origin',cache:'no-store'});
   const data=await response.json();if(!response.ok||!data.ok)throw Error(data.message||'Goals unavailable');
   state.roles=Array.isArray(data.roles)?data.roles:[];
+  state.accounts=Array.isArray(data.accounts)?data.accounts:[];
   const active=data.goals?.find(g=>g.status==='in_progress');
   if(active){state.goal=active;show();}else render();
  }catch(error){if(state.opened)note('Onboarding unavailable: '+error.message);}
@@ -57,14 +58,27 @@ function render(){
   html+='<p class="fm-goal-safety">This name was introduced, not biometric identity verified. Photo storage and voice enrollment require informed consent.</p>';
   if(!g.photoConsent){note('May I save photos to your participant profile? You can decline.');html+=button('photo-consent','Yes, save photos')+button('skip-photo','Skip photos');}
   else{
-   html+='<p>Photos: '+g.photos.length+' of 8 saved. Capture only with the participant’s permission.</p>';
-   html+=button('photo','Capture selected participant photo',g.photos.length>=8);
+   html+='<p>Three guided photos: '+g.photos.length+'/3. Front, slight left, slight right. AI captures clear frames automatically.</p>';
+   html+=button('auto-photos','Automatically capture 3 photos',g.photos.length>=3);
+   html+=button('defer-photos','Low light · voice-first setup');
+   html+='<small>Capture starts after consent; poor or ambiguous frames are skipped.</small>';
    html+=gallery(g);
   }
-  if(!g.voiceConsent){html+='<p>Voice enrollment is optional and requires consent.</p>'+button('voice-consent','Consent to voice setup');}
-  else html+='<p>Voice consent recorded. The employee completes enrolled speaker verification from their own authenticated Gelato account.</p>';
+  if(!g.voiceConsent){html+='<p>Voice enrollment works when lighting is poor.</p>'+button('voice-consent','Consent to voice setup');}
+  else{
+   html+='<p>Voice: '+(g.voiceVerified?'Enrolled':'Not yet enrolled')+'. Enrollment belongs to the authenticated account holder.</p>';
+   if(g.employeeUserId===Number(window.GelatoGlobalAgent?.user?.id)&&g.employeeUserId){
+    if(g.photoConsent)html+=button('quick-enroll','Quick photo + voice enrollment · 20s target');
+    html+=button('auto-voice','Record short voice sample');
+    if(g.voiceVerified)html+=button('voice-check','Check my enrolled voice');
+   }
+  }
   if(g.type==='employee'){
    if(!g.employeeUserId){
+    if(state.accounts.length){
+     html+='<h3>Link existing Gelato account</h3><label class="fm-goal-field">Employee or my account<select name="existing">'+state.accounts.map(a=>'<option value="'+a.id+'"'+(a.self?' selected':'')+'>'+esc(a.name)+(a.self?' (my account)':'')+'</option>').join('')+'</select></label>';
+     html+=button('link-existing','Use existing account without changing roles');
+    }
     if(state.roles.length){
      html+='<h3>Super-admin employee account review</h3>'+field('Employee email','email','email',g.email||'')+
       '<label class="fm-goal-field">Employee role<select name="role">'+state.roles.map(r=>'<option value="'+r.id+'"'+(r.id===g.proposedRoleId?' selected':'')+'>'+esc(r.name)+'</option>').join('')+'</select></label>';
@@ -76,7 +90,9 @@ function render(){
      }
     }else html+='<p>Super admin can create and assign the employee account after reviewing the role.</p>';
    }else{
-    html+='<p>Employee account linked (ID '+g.employeeUserId+'). Password and PIN must be set by the employee through their secure setup email.</p>';
+    html+='<p>Gelato account linked (ID '+g.employeeUserId+'). Existing login, role and permissions are unchanged.</p>';
+    if(g.employeeUserId===Number(window.GelatoGlobalAgent?.user?.id))html+=button('enroll-own-face','Train my likeness');
+    else html+='<p>Biometrics require the linked employee to sign in and consent personally.</p>';
     html+='<p><a href="timeclock.php">Enroll and verify your voice in Time Clock</a> · <a href="profile-pin.php">Face + PIN device setup</a></p>';
    }
   }else{
@@ -86,8 +102,9 @@ function render(){
     html+=button('crm','Create CRM contact with consent');
    }else html+='<p>CRM contact linked. Marketing subscriptions require separate consent.</p>';
   }
-  html+=button('complete','Finish onboarding goal',g.type==='employee'&&(!g.employeeUserId||g.photos.length<3||!g.voiceVerified));
-  if(g.type==='employee'&&!g.voiceVerified)html+='<p>Employee must finish their own voice enrollment before this goal can be completed.</p>';
+  html+=button('complete','Finish onboarding goal',g.type==='employee'&&(!g.employeeUserId||(!g.photosDeferred&&g.photos.length<3)||!g.voiceVerified));
+  if(g.type==='employee'&&!g.voiceVerified)html+='<p>The linked employee needs an active saved voice profile to complete enrollment.</p>';
+  if(g.photosDeferred)html+='<p>Photos deferred in low light. Voice match identifies only a possible speaker, not a face or login.</p>';
  }
  body.innerHTML=html;
 }
@@ -101,6 +118,20 @@ async function action(which){
   else if(which==='photo-consent')await request('photo_consent',{goal:state.goal.id,consent:true});
   else if(which==='skip-photo')note('Photo enrollment skipped. You may complete it later.');
   else if(which==='voice-consent')await request('voice_consent',{goal:state.goal.id,consent:true});
+  else if(which==='link-existing'){await request('link_existing',{goal:state.goal.id,userId:Number(get('existing'))});note('Existing Gelato account linked without role changes.');}
+  else if(which==='auto-photos'){await window.GelatoFoodMonsterFastEnrollment.capturePhotos();}
+  else if(which==='quick-enroll'){await window.GelatoFoodMonsterFastEnrollment.runQuickSetup();}
+  else if(which==='auto-voice'){await window.GelatoFoodMonsterFastEnrollment.enrollVoice();}
+  else if(which==='voice-check'){await window.GelatoFoodMonsterFastEnrollment.verifyVoice();}
+  else if(which==='defer-photos'){await request('defer_photos',{goal:state.goal.id,lowLight:true});note('Photos deferred until lighting improves. Continue with voice.');}
+  else if(which==='enroll-own-face'){
+   if(state.goal.employeeUserId!==Number(window.GelatoGlobalAgent?.user?.id))throw Error('Only your own account can train your face.');
+   const camera=window.GelatoFoodMonsterCamera;
+   if(!camera)throw Error('Camera is unavailable.');
+   if(!camera.active)await camera.start();
+   await camera.enroll({persist:true});
+   note(camera.enrolled?'Face trained and saved securely on this device.':'Face needs retraining in better lighting.');
+  }
   else if(which==='photo'){
    const data=window.GelatoFoodMonsterParticipants?.captureGoalPhoto?.(state.tracking);
    if(!data)throw Error('Turn the camera on, select a participant, and wait for a stable face.');
@@ -160,6 +191,6 @@ window.addEventListener('gelato-food-monster-new-track',event=>{
  show();note('Hello! Welcome. What is your name?');
  // Wait for a response before persisting a person's presence.
 });
-window.GelatoFoodMonsterGoals={show,hide,load,get goal(){return state.goal},get opened(){return state.opened},begin(id=''){state.tracking=id;state.goal=null;show();}};
+window.GelatoFoodMonsterGoals={show,hide,load,request,note,get trackId(){return state.tracking},get goal(){return state.goal},get opened(){return state.opened},begin(id=''){state.tracking=id;state.goal=null;show();}};
 load();
 })();
