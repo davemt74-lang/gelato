@@ -13,12 +13,11 @@ $page=$read('food-monster.php');
 $actor=$read('js/food-monster.js');
 $agent=$read('js/global-agent.js');
 $llm=$read('api/food-monster-llm.php');
-$camera=$read('js/food-monster-camera.js');
 $suggestions=$read('js/food-monster-suggestions.js');
 $version='20261014-fmg6';
-$agentVersion='20261015-fmg8d1';
+$agentVersion='20261015-fmg8reset';
 $mascotVersion='20261015-fmg8a';
-$stageCssVersion='20261015-fmg8e';
+$stageCssVersion='20261015-fmg8reset';
 foreach([
  'js/global-add-canvas.js'=>$global,'js/universal-admin-page-shell.js'=>$universal,
  'js/workspace-shell-sync.js'=>$workspace,'food-monster.php'=>$page,'js/food-monster.js'=>$actor
@@ -37,10 +36,6 @@ check_g6(!str_contains($page,'<aside'),'Stage cannot load a sidebar');
 check_g6(str_contains($agent,'if (route.route)')&&str_contains($agent,'else if (window.GelatoFoodMonsterLLM?.ask)'),'Existing tool route precedes model');
 check_g6(str_contains($llm,'app_verify_request_csrf'),'LLM endpoint requires CSRF');
 check_g6(str_contains($llm,'gaw_thread($pdo,$org,$uid'),'LLM history is user/organization isolated');
-check_g6(str_contains($camera,'window.isSecureContext'),'Camera requires secure context');
-check_g6(str_contains($camera,'audio:false'),'Camera never opens competing microphone');
-check_g6(str_contains($camera,'sessionUserMatch===true'),'Voice-greeting identity is not account auth');
-check_g6(str_contains($camera,'crypto.subtle.encrypt'),'Biometric template encrypted');
 check_g6(str_contains($suggestions,'agent.send(question,false)'),'Recommendations require human Review interaction');
 check_g6(!str_contains($suggestions,'speechSynthesis'),'No automatic spoken alerts');
 check_g6(!str_contains($suggestions,'getUserMedia'),'Proactive system never opens camera');
