@@ -26,7 +26,7 @@ function fmgoal_get(PDO $pdo,array $actor,string $publicId,bool $lock=false):arr
  $org=(int)$actor['organization_id'];
  $q=$pdo->prepare('SELECT * FROM fm_participant_goals WHERE organization_id=? AND public_id=? LIMIT 1'.($lock?' FOR UPDATE':''));
  $q->execute([$org,$publicId]);$goal=$q->fetch(PDO::FETCH_ASSOC);
- if(!$goal||((int)$goal['created_by']!==(int)$actor['id']&&!fmgoal_owner($actor)))throw new InvalidArgumentException('Participant setup was not found.');
+ if(!$goal||((int)$goal['created_by']!==(int)$actor['id']&&(int)($goal['linked_user_id']??0)!==(int)$actor['id']&&!fmgoal_owner($actor)))throw new InvalidArgumentException('Participant setup was not found.');
  return $goal;
 }
 function fmgoal_view(PDO $pdo,array $goal):array {
