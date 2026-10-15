@@ -18,7 +18,7 @@ $suggestions=$read('js/food-monster-suggestions.js');
 $version='20261014-fmg6';
 $agentVersion='20261015-fmg8d1';
 $mascotVersion='20261015-fmg8a';
-$stageCssVersion='20261015-fmg8d2a';
+$stageCssVersion='20261015-fmg8e';
 foreach([
  'js/global-add-canvas.js'=>$global,'js/universal-admin-page-shell.js'=>$universal,
  'js/workspace-shell-sync.js'=>$workspace,'food-monster.php'=>$page,'js/food-monster.js'=>$actor
