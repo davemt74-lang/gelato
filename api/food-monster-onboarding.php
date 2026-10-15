@@ -44,10 +44,13 @@ try{
  elseif($action==='convert_guest')$view=fmgoal_guest_convert($pdo,$actor,$goal,(string)($input['email']??''),($input['consent']??false)===true);
  elseif($action==='close'){
   $status=(string)($input['status']??'')==='completed'?'completed':'cancelled';
-  $pdo->prepare('UPDATE fm_participant_goals SET status=?,phase=?,completed_at=NOW(6),updated_at=NOW(6) WHERE id=? AND organization_id=? AND status=?')
-   ->execute([$status,$status,(int)$goal['id'],(int)$actor['organization_id'],'in_progress']);
-  app_audit($pdo,(int)$actor['organization_id'],(int)$actor['id'],'agent.participant_goal_'.$status,'participant_goal',(string)$goal['public_id']);
-  $view=fmgoal_view($pdo,fmgoal_get($pdo,$actor,(string)$goal['public_id']));
+  if($status==='completed')$view=fmgoal_finish($pdo,$actor,$goal);
+  else{
+   $pdo->prepare("UPDATE fm_participant_goals SET status='cancelled',phase='cancelled',completed_at=NOW(6),updated_at=NOW(6) WHERE id=? AND organization_id=? AND status='in_progress'")
+    ->execute([(int)$goal['id'],(int)$actor['organization_id']]);
+   app_audit($pdo,(int)$actor['organization_id'],(int)$actor['id'],'agent.participant_goal_cancelled','participant_goal',(string)$goal['public_id']);
+   $view=fmgoal_view($pdo,fmgoal_get($pdo,$actor,(string)$goal['public_id']));
+  }
  }elseif($action==='remove_photo'){
   $photoId=(int)($input['photo']??0);
   $pdo->prepare('DELETE FROM fm_participant_photos WHERE id=? AND goal_id=? AND organization_id=?')
