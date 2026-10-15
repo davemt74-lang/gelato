@@ -1,0 +1,25 @@
+name: Glasses Section 285F3 Inference Freshness
+on:
+  pull_request:
+    paths:
+      - 'assets/js/glasses-shared-camera-recognition.js'
+      - 'tests/glasses-section285f3-inference.test.js'
+      - '.github/workflows/glasses-section285f3.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'assets/js/glasses-shared-camera-recognition.js'
+      - 'tests/glasses-section285f3-inference.test.js'
+      - '.github/workflows/glasses-section285f3.yml'
+jobs:
+  inference:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --check assets/js/glasses-shared-camera-recognition.js
+      - run: node --test tests/glasses-section285f3-inference.test.js
