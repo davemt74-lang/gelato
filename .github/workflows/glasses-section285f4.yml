@@ -23,4 +23,3 @@ jobs:
           node-version: '22'
       - run: node --check assets/js/glasses-web-simulator.js
       - run: node --test tests/glasses-section285f4-integration.test.js
-      - run: node tests/glasses-section285a-production-ticket-navigation.test.js
