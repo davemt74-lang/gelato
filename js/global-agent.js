@@ -147,6 +147,17 @@
     const text = String(raw || '').trim();
     clearConversationTimer();
     if (!text || S.busy) return null;
+    // An active governed Agent Brain goal can consume an expected onboarding
+    // answer before ordinary model routing. Outside that goal, chat is unchanged.
+    const beforeSend=new CustomEvent('gelato-agent-before-send',{
+      cancelable:true,detail:{text,voice:Boolean(voice)}
+    });
+    if(!window.dispatchEvent(beforeSend)){
+      const field=document.getElementById('gaInput');
+      if(field&&field.value.trim()===text)field.value='';
+      resetVoiceDraft();S.conversationDraft='';
+      return null;
+    }
 
     S.busy = true;
     const input = document.getElementById('gaInput');
