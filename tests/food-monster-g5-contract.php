@@ -15,7 +15,7 @@ fm5(str_contains($mount,'data-fm-suggestions-loader'),'load from existing mascot
 fm5(str_contains($companion,"window.GelatoAgentNextMoves?.moves"),'read existing authorized moves');
 fm5(str_contains($companion,"gelato-agent-next-moves-change"),'subscribe to authorized signal events');
 fm5(str_contains($companion,"gelato-agent-response"),'consume existing tool results');
-fm5(str_contains($companion,"agent.user?.id"),'scope dismissal history to signed-in user');
+fm5(str_contains($companion,"String(agent.user.id)") && str_contains($companion,"agent?.user?.id"),'scope dismissal history to signed-in user');
 fm5(str_contains($companion,"sessionStorage"),'session-scoped dedup, not persistent surveillance');
 fm5(str_contains($companion,"['critical','high']"),'only high importance auto prompts');
 fm5(str_contains($companion,"const question="),'review sends explanation request');
