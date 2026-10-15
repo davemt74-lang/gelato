@@ -512,7 +512,14 @@
       for(let index=event.resultIndex;index<event.results.length;index++){
         const result=event.results[index],text=String(result[0]?.transcript||'').trim();
         const evaluation=window.GelatoVoiceTurns?.evaluate?.(text,result[0]?.confidence,{wakeRequired:!S.listening});
-        if(evaluation?.kind==='ignored'){if(['tts-echo','post-tts-echo'].includes(evaluation.reason))diag('echo-ignored');continue;}
+        if(evaluation?.kind==='ignored'){
+          if(['tts-echo','post-tts-echo'].includes(evaluation.reason))diag('echo-ignored');
+          // Noisy-room wake/low-confidence policies restrict commands, not
+          // editable drafts while the user has explicitly enabled listening.
+          else if(S.listening&&['wake-required','low-confidence'].includes(evaluation.reason)&&!/^hey\s+gelato\b/i.test(text))
+            showVoiceDraft(text,{final:!!result.isFinal});
+          continue;
+        }
         // Evaluate explicit stop/start controls before generic speech barge-in.
         // "Hey Gelato stop listening" must update the saved preference,
         // not merely silence the current text-to-speech response.
