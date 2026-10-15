@@ -8,6 +8,7 @@ require_once __DIR__.'/../includes/admin-control-core.php';
 require_once __DIR__.'/../includes/menu-training-knowledge.php';
 require_once __DIR__.'/../includes/food-monster-multi-node.php';
 require_once __DIR__.'/../includes/food-monster-skill-registry.php';
+require_once __DIR__.'/../includes/food-monster-read-tools.php';
 
 // Compatibility route markers for older CI/contracts. Canonical routing now lives in includes/agent-node-registry.php.
 // api/admin-dashboard-agent.php api/daily-manager-agent.php api/sales-cost-agent.php api/sales-agent.php
@@ -60,6 +61,10 @@ try{
     if($action==='route'){
         $message=trim((string)($in['message']??''));if($message==='')throw new InvalidArgumentException('Enter an Agent request.');
         $text=mb_strtolower(preg_replace('/^hey\s+gelato[,\s]*/iu','',$message)??$message,'UTF-8');
+        // FM-G7B2: server-selected, audited evidence reads; never LLM endpoints.
+        $readIntent=fm_read_intent($message);
+        if($readIntent!==null)app_json_response(['ok'=>true,'route'=>'api/food-monster-read.php',
+            'domain'=>'governed_verified_read','node'=>'brain','nodeMode'=>'read_only']);
 
         // FM-G7: only explicit read-only multi-domain manager requests use the
         // existing, permission-filtered Brain snapshot; writes stay with node routes.

@@ -179,7 +179,7 @@
             voice: Boolean(voice),
             voiceEventId: voice ? S.voiceEventId : '',
             // Thread comes from existing Agent Chat, never from an LLM tool suggestion.
-            ...(route.route === 'api/food-monster-orchestrate.php' ? {threadId:S.thread} : {}),
+            ...(['api/food-monster-orchestrate.php','api/food-monster-read.php'].includes(route.route) ? {threadId:S.thread} : {}),
             csrf_token: S.csrf,
           }),
         });
