@@ -36,6 +36,8 @@ const {chromium}=require('playwright'),root=path.resolve(__dirname,'..');
   ok(await page.evaluate(()=>window.GelatoFoodMonsterParticipants.cameraActive),'user toggle enables camera');
   await page.locator('[data-fm-view="camera"]').click();
   ok(await page.locator('.fm-room-camera-frame').isVisible(),'camera mode visible');
+  // FM-G8C: full-screen Camera hides participant sidebar; return to Agent to use its controls.
+  await page.locator('[data-fm-view="agent"]').click();
   const faces=[{x:.10,y:.15,width:.22,height:.34,confidence:.91},{x:.55,y:.22,width:.19,height:.30,confidence:.87}];
   for(let i=0;i<5;i++)await page.evaluate(faces=>window.GelatoFoodMonsterParticipants.updateFaces(faces,false),faces);
   ok(await page.locator('.fm-participant-card').count()===2,'two independently tracked faces');
