@@ -43,3 +43,14 @@ body.food-monster-stage-page #gelato-agent-bar textarea{min-width:0}
 
 /* Keep the mobile composer within viewport including padding and border. */
 body.food-monster-stage-page #gelato-agent-bar{box-sizing:border-box;max-width:100vw}
+
+/* FM-G2: natural expressions driven by real Agent/voice lifecycle events. */
+#food-monster-root.fm-speaking .fm-mouth{animation:none!important;transform:scale(.96,var(--fm-mouth-open,.73));transition:transform .085s ease-out}
+#food-monster-root.fm-listening .fm-actor{filter:drop-shadow(0 12px 20px rgba(0,200,246,.45))}
+#food-monster-root.fm-happy .fm-mouth{transform:scale(1,1.08)}
+#food-monster-root.fm-alert .fm-actor{filter:drop-shadow(0 12px 24px rgba(255,149,69,.65))}
+#food-monster-root.fm-sleepy .fm-figure{filter:brightness(.82) saturate(.85)}
+#food-monster-root.fm-sleepy .fm-mouth{transform:scale(.78,.28)}
+#food-monster-root.fm-alert .fm-figure{animation:fm-alert-react .58s cubic-bezier(.22,1,.36,1) 1}
+@keyframes fm-alert-react{0%{transform:translateY(0) scale(1)}45%{transform:translateY(-10px) scale(1.045)}100%{transform:translateY(0) scale(1)}}
+@media(prefers-reduced-motion:reduce){#food-monster-root.fm-alert .fm-figure{animation:none!important}#food-monster-root.fm-speaking .fm-mouth{transition:none!important}}

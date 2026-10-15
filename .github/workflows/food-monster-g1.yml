@@ -8,6 +8,7 @@ on:
       - 'js/global-add-canvas.js'
       - 'assets/food-monster/**'
       - 'tests/food-monster-g1-*'
+      - 'tests/food-monster-g2-*'
       - '.github/workflows/food-monster-g1.yml'
   push:
     branches: [main]
@@ -31,9 +32,11 @@ jobs:
       - run: |
           php -l food-monster.php
           php -l tests/food-monster-g1-contract.php
+          php -l tests/food-monster-g2-contract.php
           node --check js/food-monster.js
           node --check js/global-add-canvas.js
           php tests/food-monster-g1-contract.php
+          php tests/food-monster-g2-contract.php
   chromium:
     name: Mascot desktop, mobile & overlay
     runs-on: ubuntu-latest
@@ -47,4 +50,6 @@ jobs:
           npm install --no-save --no-package-lock playwright@1.56.1
           npx playwright install --with-deps chromium
       - name: Browser acceptance tests
-        run: node tests/food-monster-g1-browser.test.cjs
+        run: |
+          node tests/food-monster-g1-browser.test.cjs
+          node tests/food-monster-g2-browser.test.cjs
