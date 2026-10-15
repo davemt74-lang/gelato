@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+function app_has_permission(string $permission,array $user):bool{return in_array('*',(array)($user['permissions']??[]),true)||in_array($permission,(array)($user['permissions']??[]),true);}
 require dirname(__DIR__).'/includes/agent-workspace-core.php';
 $n=0;
 function g7c_assert(bool $yes,string $reason):void{global $n;if(!$yes){fwrite(STDERR,"FAIL: $reason\n");exit(1);}++$n;}
