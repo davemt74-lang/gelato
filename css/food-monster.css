@@ -246,3 +246,14 @@ body.food-monster-stage-page #gelato-agent-bar .fm-goal-launch{position:relative
 .fm-goal-footer [data-fm-goal-handsfree][aria-pressed="true"]{background:#13614b;border-color:#83ead7;}
 .fm-goal-samples{display:flex;gap:8px;align-items:center}.fm-goal-samples i{display:block;height:9px;background:#51d9ed;border-radius:8px}
 @media(max-width:700px){body.food-monster-stage-page .fm-goal-panel{left:50%;top:auto;bottom:calc(8px + 80px);width:calc(100% - 16px);max-height:58dvh}}
+
+/* FM-G8D2A: participant Agent Workspace above shared sticky chat bar */
+.fm-history-panel{box-sizing:border-box;position:fixed;z-index:2147482995;left:50%;bottom:calc(14px + 90px);transform:translateX(-50%);width:min(860px,calc(100vw - 24px));max-height:65dvh;overflow:auto;border:1px solid #548ca7;border-radius:18px;padding:18px;background:#09263df7;color:#e9faff;box-shadow:0 18px 55px #001529a6;font:13px/1.5 system-ui}
+.fm-history-panel[hidden]{display:none}
+.fm-history-head{display:flex;justify-content:space-between;align-items:center;gap:12px}.fm-history-head strong{font-size:16px}
+.fm-history-panel button{border:1px solid #5e92a9;background:#174965;color:#fff;border-radius:8px;padding:8px 12px;cursor:pointer;font:700 12px system-ui}
+.fm-history-tabs{display:flex;gap:8px;margin:14px 0}.fm-history-tabs button[aria-pressed="true"]{background:#198ca4}
+.fm-history-content{display:grid;gap:8px}.fm-history-note{color:#bad3e2;font-size:12px}
+.fm-history-event{border:1px solid #285871;background:#0e314a;border-radius:10px;padding:10px;display:grid;gap:3px}
+.fm-history-event small{color:#bdd8e6}.fm-history-actions{display:flex;gap:8px}.fm-history-messages p{overflow-wrap:anywhere;background:#102c41;padding:8px;border-radius:8px}
+@media(max-width:620px){.fm-history-panel{width:calc(100vw - 12px);bottom:calc(8px + 83px);max-height:60dvh;padding:11px}}

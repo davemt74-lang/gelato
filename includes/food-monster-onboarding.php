@@ -5,6 +5,7 @@ declare(strict_types=1);
  * A camera track or self-reported name never authenticates a user.
  */
 require_once __DIR__.'/customer-crm-core.php';
+require_once __DIR__.'/food-monster-participant-history.php';
 function fmgoal_owner(array $user):bool {return (int)($user['is_owner_role']??0)===1;}
 function fmgoal_ready(PDO $pdo):bool {
  try{
@@ -19,6 +20,7 @@ function fmgoal_create(PDO $pdo,array $actor,string $label=''):array {
  $q=$pdo->prepare("INSERT INTO fm_participant_goals (organization_id,public_id,created_by,tracking_label) VALUES (?,?,?,?)");
  $q->execute([$org,$id,$uid,$label]);
  app_audit($pdo,$org,$uid,'agent.participant_goal_started','participant_goal',$id);
+ fmph_write($pdo,$actor,'goal_started',fmgoal_get($pdo,$actor,$id));
  return fmgoal_get($pdo,$actor,$id);
 }
 function fmgoal_get(PDO $pdo,array $actor,string $publicId,bool $lock=false):array {
@@ -76,6 +78,10 @@ function fmgoal_update(PDO $pdo,array $actor,array $goal,array $fields,string $e
  $values[]=(int)$actor['organization_id'];$values[]=(int)$goal['id'];
  $pdo->prepare('UPDATE fm_participant_goals SET '.implode(',',$columns).',updated_at=NOW(6) WHERE organization_id=? AND id=?')->execute($values);
  app_audit($pdo,(int)$actor['organization_id'],(int)$actor['id'],'agent.participant_'.$event,'participant_goal',(string)$goal['public_id']);
+ $map=['name_recorded'=>'name_confirmed','type_recorded'=>'participant_type','existing_account_linked'=>'existing_account_linked',
+   'photo_consent'=>'photo_consent','voice_consent'=>'voice_consent','photos_deferred'=>'photos_deferred',
+   'account_proposed'=>'account_proposed'];
+ if(isset($map[$event]))fmph_write($pdo,$actor,$map[$event],fmgoal_get($pdo,$actor,(string)$goal['public_id']));
  return fmgoal_view($pdo,fmgoal_get($pdo,$actor,(string)$goal['public_id']));
 }
 function fmgoal_photo(PDO $pdo,array $actor,array $goal,string $dataUri):array {
@@ -96,6 +102,7 @@ function fmgoal_photo(PDO $pdo,array $actor,array $goal,string $dataUri):array {
  $q->bindValue(1,$org,PDO::PARAM_INT);$q->bindValue(2,(int)$goal['id'],PDO::PARAM_INT);
  $q->bindValue(3,$mime);$q->bindValue(4,$encrypted['ciphertext'],PDO::PARAM_LOB);$q->bindValue(5,$encrypted['nonce']);$q->bindValue(6,$encrypted['method']);$q->bindValue(7,(int)$actor['id'],PDO::PARAM_INT);$q->execute();
  app_audit($pdo,$org,(int)$actor['id'],'agent.participant_photo_saved','participant_goal',(string)$goal['public_id']);
+ fmph_write($pdo,$actor,'photo_saved',fmgoal_get($pdo,$actor,(string)$goal['public_id']));
  return fmgoal_view($pdo,fmgoal_get($pdo,$actor,(string)$goal['public_id']));
 }
 /** Existing accounts are selected from active organization memberships; only an
@@ -171,6 +178,7 @@ function fmgoal_account_confirm(PDO $pdo,array $actor,array $goal):array {
  }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
  $sent=app_send_password_reset_email($email,$name,app_url('reset-password.php?token='.rawurlencode($token)));
  if(!$sent)error_log('Food Monster: password setup email delivery failed for user ID '.$newUid);
+ fmph_write($pdo,$actor,'employee_account_created',fmgoal_get($pdo,$actor,(string)$goal['public_id']));
  $view=fmgoal_view($pdo,fmgoal_get($pdo,$actor,(string)$goal['public_id']));
  return ['goal'=>$view,'emailSent'=>$sent,'message'=>$sent?'Employee created. The employee has been emailed a secure password/PIN setup link.':'Employee created, but setup email could not be sent. Ask them to use Forgot Password to set credentials.'];
 }
@@ -187,6 +195,7 @@ function fmgoal_finish(PDO $pdo,array $actor,array $goal):array {
  $pdo->prepare("UPDATE fm_participant_goals SET status='completed',phase='completed',completed_at=NOW(6) WHERE organization_id=? AND id=? AND status='in_progress'")
   ->execute([(int)$actor['organization_id'],(int)$goal['id']]);
  app_audit($pdo,(int)$actor['organization_id'],(int)$actor['id'],'agent.participant_goal_completed','participant_goal',(string)$goal['public_id']);
+ fmph_write($pdo,$actor,'goal_completed',fmgoal_get($pdo,$actor,(string)$goal['public_id']));
  return fmgoal_view($pdo,fmgoal_get($pdo,$actor,(string)$goal['public_id']));
 }
 function fmgoal_guest_convert(PDO $pdo,array $actor,array $goal,string $email,bool $explicitConsent):array {
@@ -198,5 +207,6 @@ function fmgoal_guest_convert(PDO $pdo,array $actor,array $goal,string $email,bo
  $contact=crm_customer_save($pdo,(int)$actor['organization_id'],['displayName'=>(string)$goal['preferred_name'],'email'=>$email],(int)$actor['id'],'manual');
  $pdo->prepare("UPDATE fm_participant_goals SET guest_crm_consent_at=NOW(6),crm_customer_public_id=?,phase='complete',status='completed',completed_at=NOW(6) WHERE id=? AND organization_id=?")->execute([(string)$contact['public_id'],(int)$goal['id'],(int)$actor['organization_id']]);
  app_audit($pdo,(int)$actor['organization_id'],(int)$actor['id'],'agent.guest_crm_conversion','crm_customer',(string)$contact['public_id'],null,['goal'=>(string)$goal['public_id'],'marketingConsent'=>'not_recorded']);
+ fmph_write($pdo,$actor,'guest_crm_conversion',fmgoal_get($pdo,$actor,(string)$goal['public_id']));
  return fmgoal_view($pdo,fmgoal_get($pdo,$actor,(string)$goal['public_id']));
 }
