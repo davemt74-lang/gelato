@@ -145,4 +145,9 @@ function greet(message){
  performanceState.replyUntil=performance.now()+1600;updateMood();
 }
 window.GelatoFoodMonster={root,blink,greet,setFaceTarget,get isStage(){return stage;},get mood(){return performanceState.mood;}};
+if(!document.querySelector('script[data-fm-camera-loader]')){
+ const script=document.createElement('script');
+ script.src='js/food-monster-camera.js?v=20261014-fmg3';script.async=true;
+ script.dataset.fmCameraLoader='1';document.head.append(script);
+}
 })();
