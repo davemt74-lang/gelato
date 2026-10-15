@@ -8,7 +8,14 @@ header('Cache-Control: no-store, private');
 try{
  if($_SERVER['REQUEST_METHOD']==='GET'){
   $action=(string)($_GET['action']??'list');
-  if($action==='list')app_json_response(['ok'=>true,'goals'=>fmgoal_list($pdo,$actor),'roles'=>fmgoal_roles($pdo,$actor),'accounts'=>fmgoal_existing_accounts($pdo,$actor)]);
+  if($action==='list'){
+   $goals=fmgoal_list($pdo,$actor);$active=null;
+   foreach($goals as $item){if(($item['status']??'')==='in_progress'){$active=$item;break;}}
+   $matches=$active&&($active['type']??'')==='unknown'&&($active['name']??'')!==''
+    ?fmgoal_name_candidates($pdo,$actor,(string)$active['name']):[];
+   app_json_response(['ok'=>true,'goals'=>$goals,'roles'=>fmgoal_roles($pdo,$actor),
+    'accounts'=>fmgoal_existing_accounts($pdo,$actor),'matches'=>$matches]);
+  }
   $goal=fmgoal_get($pdo,$actor,(string)($_GET['goal']??''));
   if($action==='get')app_json_response(['ok'=>true,'goal'=>fmgoal_view($pdo,$goal)]);
   if($action==='photo'){
@@ -27,8 +34,17 @@ try{
  $input=app_json_input();app_verify_request_csrf($input);
  $action=(string)($input['action']??'');
  if($action==='start')app_json_response(['ok'=>true,'goal'=>fmgoal_view($pdo,fmgoal_create($pdo,$actor,(string)($input['trackLabel']??'')))],201);
+ if($action==='start_self'){
+  if(($input['selfConfirmed']??false)!==true)throw new DomainException('The signed-in account holder must explicitly confirm this is their own enrollment.');
+  app_json_response(['ok'=>true,'goal'=>fmgoal_view($pdo,fmgoal_start_self($pdo,$actor,(string)($input['trackLabel']??'')))],201);
+ }
  $goal=fmgoal_get($pdo,$actor,(string)($input['goal']??''));
- if($action==='name')$view=fmgoal_update($pdo,$actor,$goal,['preferred_name'=>fmgoal_name((string)($input['name']??'')),'phase'=>'type'],'name_recorded');
+ if($action==='name'){
+  $name=fmgoal_name((string)($input['name']??''));
+  $view=fmgoal_update($pdo,$actor,$goal,['preferred_name'=>$name,'phase'=>'type'],'name_recorded');
+  // Staff list follows owner/self account visibility; no identity binding or account creation.
+  app_json_response(['ok'=>true,'goal'=>$view,'matches'=>fmgoal_name_candidates($pdo,$actor,$name)]);
+ }
  elseif($action==='type'){
   $type=(string)($input['type']??'');
   if(!in_array($type,['employee','guest'],true))throw new InvalidArgumentException('Choose employee or guest.');

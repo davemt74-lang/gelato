@@ -23,6 +23,8 @@ on:
       - 'tests/food-monster-g8c-*'
       - 'tests/food-monster-g8d1-*'
       - 'tests/food-monster-g8d2a-*'
+      - 'tests/food-monster-g8e-*'
+      - 'docs/FOOD-MONSTER-FM-G8E-UNIFIED-ONBOARDING.md'
       - 'includes/food-monster-participant-history.php'
       - 'api/food-monster-participant-history.php'
       - 'js/food-monster-participant-history.js'
@@ -142,6 +144,7 @@ jobs:
           php -l includes/food-monster-participant-history.php
           php -l api/food-monster-participant-history.php
           php tests/food-monster-g8d2a-history.php
+          php tests/food-monster-g8e-contract.php
           node --check js/food-monster-participant-history.js
           node --check js/food-monster-fast-enroll.js
           node --check js/food-monster-onboarding.js
@@ -186,5 +189,6 @@ jobs:
           node tests/food-monster-g8c-browser.test.cjs
           node tests/food-monster-g8d1-chat-browser.test.cjs
           node tests/food-monster-g8d2a-browser.test.cjs
+          node tests/food-monster-g8e-browser.test.cjs
           node tests/food-monster-g7b1-browser.test.cjs
           node tests/food-monster-g7b2-browser.test.cjs

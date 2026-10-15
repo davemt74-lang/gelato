@@ -19,7 +19,8 @@ async function captureVoice(ms,record){
   throw Error('HTTPS and microphone access are required.');
  if(record&&!window.MediaRecorder)throw Error('Voice recording is unavailable in this browser.');
  const agent=window.GelatoGlobalAgent;
- if(agent?.conversationMode)await agent.setConversationMode(false);
+ const resumeConversation=!!agent?.conversationMode;
+ if(resumeConversation)await agent.setConversationMode(false);
  if(agent?.listening)await agent.setListening(false,{keepWake:false});
  const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true},video:false});
  let context,recorder,timer,meter;
@@ -63,6 +64,8 @@ async function captureVoice(ms,record){
   stream.getTracks().forEach(t=>t.stop());
   await context?.close?.().catch(()=>{});
   meter?.remove();
+  if(resumeConversation&&!document.hidden&&!speechBlocked())
+   await agent?.setConversationMode?.(true).catch(()=>{});
  }
 }
 async function capturePhotos(){
@@ -80,7 +83,7 @@ async function capturePhotos(){
     if(parts.count===1)picture=parts.captureGoalPhoto(window.GelatoFoodMonsterGoals.trackId);
     if(!picture)await wait(220);
    }
-   if(!picture)return {ok:false,reason:'lighting_or_multiple_people'};
+   if(!picture)return {ok:false,reason:parts.count>1?'multiple_participants':parts.count===0?'no_stable_participant':'low_light_or_quality'};
    await window.GelatoFoodMonsterGoals.request('photo',{goal:current().id,image:picture});
    if(i<2)await wait(650);
   }
@@ -147,7 +150,11 @@ async function runQuickSetup(){
  const start=Date.now();let photos={ok:true};
  if(g.photos.length<3){
   photos=await capturePhotos();
-  if(!photos.ok)await window.GelatoFoodMonsterGoals.request('defer_photos',{goal:current().id,lowLight:true});
+  if(!photos.ok){
+    if(photos.reason!=='low_light_or_quality')
+     throw Error('Please isolate one participant for photo capture, or choose Low light · voice-first setup.');
+    await window.GelatoFoodMonsterGoals.request('defer_photos',{goal:current().id,lowLight:true});
+   }
   else if(!window.GelatoFoodMonsterCamera?.enrolled)
    await window.GelatoFoodMonsterCamera.enroll({persist:true});
  }

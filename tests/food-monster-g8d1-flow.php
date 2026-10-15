@@ -20,7 +20,7 @@ foreach([
  [!str_contains($onboarding,'host.append(launch)'),'No corner launcher'],
  [str_contains($participants,"visible.length!==1"),'No photo capture among several people'],
  [str_contains($participants,"variance<110"),'Exposure quality gate'],
- [str_contains($participants,'voice does not identify which person'),'Voice/visual identity separation'],
+ [str_contains($participants,'attributed!==true'),'Shared voice cannot be assigned to a specific camera track'],
  [str_contains($camera,'persistDeviceFace'),'Encrypted face template persistence'],
  [str_contains($camera,"profile.account!==ACCOUNT"),'Account-isolated face template'],
  [str_contains($stage,'js/food-monster-fast-enroll.js'),'Rapid enrolment loaded'],

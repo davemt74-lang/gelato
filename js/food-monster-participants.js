@@ -4,7 +4,7 @@
 if(!document.body.classList.contains('food-monster-stage-page')||window.GelatoFoodMonsterParticipants)return;
 const host=document.getElementById('food-monster-stage');if(!host)return;
 const state={mode:'agent',camera:false,tracks:[],nextId:1,lastGreet:0,roster:null,
- thumbnails:false,roomMic:null,ctx:null,source:null,analyser:null,levelTimer:0,voiceLevel:0};
+ thumbnails:false,roomMic:null,ctx:null,source:null,analyser:null,levelTimer:0,voiceLevel:0,inputByTrack:new Map(),micEpoch:0};
 const el=document.createElement('section');el.className='fm-room-controls';el.setAttribute('aria-label','Food Monster camera controls');
 el.innerHTML='<div class="fm-room-switch" role="group" aria-label="Food Monster view"><button type="button" data-fm-view="agent" aria-pressed="true">Agent</button><button type="button" data-fm-view="camera" aria-pressed="false">Camera</button></div>'+
  '<button type="button" data-fm-camera-toggle aria-pressed="false">Camera off</button><span class="fm-room-camera-state" role="status">Camera is off</span>';
@@ -15,16 +15,10 @@ cameraArea.innerHTML='<div class="fm-room-camera-frame"><video autoplay muted pl
  '<div class="fm-room-camera-legend">Tracking nodes show temporary, unverified people. Names require an authorized identity match. Frames stay on this device.</div>';
 host.append(cameraArea);
 const video=cameraArea.querySelector('video'),canvas=cameraArea.querySelector('canvas'),draw=canvas.getContext('2d');
-const panel=document.createElement('aside');panel.className='fm-participants-panel';panel.setAttribute('aria-label','Active participants');
-panel.innerHTML='<div class="fm-participants-top"><strong>Active participants</strong><span data-fm-count>0</span></div>'+
- '<p class="fm-participants-explain">Camera presence is not identity verification. Staff status comes from Gelato, not face appearance.</p>'+
- '<div class="fm-participant-options"><label><input type="checkbox" data-fm-photos> Capture local thumbnails</label><button type="button" data-fm-meter>Enable room voice meter</button></div>'+
- '<div class="fm-room-meter"><div class="fm-room-meter-bar"><i data-fm-level></i></div><small>Shared microphone · not attributed to a person</small></div>'+
- '<div class="fm-speaker-controls" hidden><label><input type="checkbox" data-fm-speaker-consent> Speaker agrees to a short voice comparison</label><button type="button" data-fm-speaker-check>Check enrolled voice</button><p class="fm-speaker-result" role="status" aria-live="polite">No speaker checked.</p></div>'+
- '<div class="fm-participant-cards" aria-live="polite"><p class="fm-participant-empty">Camera off · no active tracks</p></div>'+
- '<div class="fm-participant-roster"><strong>Gelato staff context</strong><p class="fm-staff-note">Checking authorized schedule and clock-in data…</p><div data-fm-roster></div></div>';
+const panel=document.createElement('aside');panel.className='fm-participants-panel';panel.setAttribute('aria-label','Live participant cards');
+panel.innerHTML='<div class="fm-participant-cards" aria-live="polite"></div>';
 host.append(panel);
-const cards=panel.querySelector('.fm-participant-cards'),count=panel.querySelector('[data-fm-count]'),roster=panel.querySelector('[data-fm-roster]');
+const cards=panel.querySelector('.fm-participant-cards');
 const status=el.querySelector('.fm-room-camera-state'),cameraToggle=el.querySelector('[data-fm-camera-toggle]'),empty=cameraArea.querySelector('.fm-room-camera-empty');
 const esc=str=>String(str||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function cameraAPI(){return window.GelatoFoodMonsterCamera;}
@@ -34,7 +28,7 @@ function setMode(mode){
  for(const button of el.querySelectorAll('[data-fm-view]'))button.setAttribute('aria-pressed',String(button.dataset.fmView===state.mode));
  if(state.mode==='camera')attachVideo();render();
 }
-function clearTracks(){state.tracks.length=0;state.nextId=1;render();drawOverlay();} // Camera-off ends the tracking session
+function clearTracks(){state.tracks.length=0;state.nextId=1;state.inputByTrack.clear();render();drawOverlay();} // Camera-off ends the tracking session
 function attachVideo(){
  if(!state.camera)return;
  const stream=cameraAPI()?.stream;
@@ -45,7 +39,7 @@ function setCamera(active){
  state.camera=!!active;
  cameraToggle.setAttribute('aria-pressed',String(state.camera));cameraToggle.textContent=state.camera?'Camera on':'Camera off';
  status.textContent=state.camera?'Tracking active · local camera':'Camera is off';empty.hidden=state.camera;
- if(state.camera)attachVideo();else{video.pause();video.srcObject=null;clearTracks();}
+ if(state.camera)attachVideo();else{stopMeter();video.pause();video.srcObject=null;clearTracks();}
  render();
 }
 function nearestTrack(box,used){
@@ -95,21 +89,22 @@ function updateFaces(boxes,ownVerified=false){
   if(track.seen>=(cameraAPI()?.enrolled?12:5))greeting(track);
  }
  state.tracks=state.tracks.filter(t=>now-t.at<18000);
+ for(const id of state.inputByTrack.keys())if(!state.tracks.some(t=>t.id===id))state.inputByTrack.delete(id);
  render();drawOverlay();
 }
 function tracked(){return state.tracks.filter(t=>t.seen>=2&&Date.now()-t.at<1800);} // Hidden tracks retain ID longer than visible cards
+function inputLevel(id){const r=state.inputByTrack.get(id);return r&&Date.now()-r.at<550?Math.max(0,Math.min(1,r.level)):0;}
 function render(){
- const visible=tracked();count.textContent=String(visible.length);
- if(!state.camera){cards.innerHTML='<p class="fm-participant-empty">Camera off · no active tracks</p>';return;}
- if(!visible.length){cards.innerHTML='<p class="fm-participant-empty">No person detected yet</p>';return;}
+ const visible=tracked();
+ panel.hidden=!state.camera||!visible.length;
+ if(!state.camera||!visible.length){cards.innerHTML='';return;}
  const own=state.roster?.session?.displayName||window.GelatoGlobalAgent?.user?.name||'Signed-in account';
  cards.innerHTML=visible.map(t=>{
   const verified=t.verified&&visible.length===1,label=verified?own:'Person '+t.id.slice(1);
-  return '<article class="fm-participant-card" data-track="'+t.id+'">'+
-    '<div class="fm-participant-photo">'+(t.photo&&state.thumbnails?'<img src="'+t.photo+'" alt="Temporary captured participant thumbnail">':'<span aria-label="No captured photo">◯</span>')+'</div>'+
-    '<div class="fm-participant-info"><strong>'+esc(label)+'</strong><span>'+(verified?'Verified: signed-in account':'Identity unknown · tracked locally')+'</span>'+
-    '<small>'+(verified?'Account session only · see staff context':'Employee/guest classification not verified')+'</small>'+
-    '<div class="fm-participant-meter" title="Shared microphone activity; not speaker identification"><i style="width:'+Math.round(state.voiceLevel*100)+'%"></i></div><small>Shared room mic · cannot assign speaker</small>'+ '<button type="button" data-fm-setup="'+esc(t.id)+'">Start setup</button>'+ (verified?'<button type="button" data-fm-my-history>My history</button>':'')+'</div></article>';
+  return '<button type="button" class="fm-participant-card" data-fm-setup="'+esc(t.id)+'" data-track="'+esc(t.id)+'" data-fm-verified="'+String(verified)+'" aria-label="Open '+esc(label)+' participant">'+
+   '<span class="fm-participant-photo">'+(t.photo&&state.thumbnails?'<img src="'+t.photo+'" alt="">':'<span aria-hidden="true">◯</span>')+'</span>'+
+   '<span class="fm-participant-info"><strong>'+esc(label)+'</strong><span>'+(verified?'Recognized account':'Unverified participant')+'</span>'+
+   '<span class="fm-participant-input" role="meter" aria-label="Participant microphone input" aria-valuemin="0" aria-valuemax="100" aria-valuenow="'+Math.round(inputLevel(t.id)*100)+'"><i style="width:'+Math.round(inputLevel(t.id)*100)+'%"></i></span></span></button>';
  }).join('');
 }
 function drawOverlay(){
@@ -134,47 +129,75 @@ function drawOverlay(){
 }
 async function loadRoster(){
  try{
-  const res=await fetch('api/food-monster-participants.php',{cache:'no-store',headers:{Accept:'application/json'}});
-  const data=await res.json();if(!res.ok||!data.ok)throw Error(data.message||'Roster unavailable');
-  state.roster=data;panel.querySelector('.fm-speaker-controls').hidden=data.access?.voiceManage!==true;
-  const rows=(data.staff||[]).slice(0,35),access=data.access||{};
-  roster.innerHTML=rows.map(row=>'<div class="fm-staff-item"><strong>'+esc(row.displayName)+'</strong><small>'+esc(row.status||'Status unavailable')+(row.signedInHere?' · Signed in here':'')+'</small></div>').join('')||'<p>No permitted staff records.</p>';
-  panel.querySelector('.fm-staff-note').textContent=data.scopeNote||'Schedule and attendance context only';
-  if(!access.scheduleReady&&!access.clockReady)panel.querySelector('.fm-staff-note').textContent+=' Schedule and clock-in details are unavailable to this account.';
-  render();
- }catch{panel.querySelector('.fm-staff-note').textContent='Staff context unavailable; camera identities remain unverified.';roster.textContent='';}
+  const res=await fetch('api/food-monster-participants.php',{cache:'no-store',credentials:'same-origin',headers:{Accept:'application/json'}});
+  const data=await res.json();if(!res.ok||!data.ok)throw Error(data.message||'Staff context unavailable');
+  state.roster=data;render();
+  // Schedule roster informs the main agent; only live camera tracks get sidebar cards.
+  window.dispatchEvent(new CustomEvent('gelato-food-monster-staff-context',{detail:{
+   session:data.session,staff:data.staff||[],access:data.access||{},generatedAt:data.generatedAt
+  }}));
+ }catch{/* No roster data must not create participants. */}
 }
 function stopMeter(){
+ state.micEpoch++;
  if(state.levelTimer)clearInterval(state.levelTimer);state.levelTimer=0;
- try{state.source?.disconnect();}catch{}state.source=null;
- try{state.roomMic?.getTracks().forEach(t=>t.stop());}catch{}state.roomMic=null;
- if(state.ctx){void state.ctx.close().catch(()=>{});state.ctx=null;}
- state.analyser=null;state.voiceLevel=0;panel.querySelector('[data-fm-level]').style.width='0%';
- panel.querySelector('[data-fm-meter]').textContent='Enable room voice meter';render();
+ try{state.source?.disconnect()}catch{}
+ try{state.roomMic?.getTracks().forEach(t=>t.stop())}catch{}
+ if(state.ctx)void state.ctx.close().catch(()=>{});
+ state.roomMic=null;state.ctx=null;state.source=null;state.analyser=null;state.inputByTrack.clear();
+ for(const meter of panel.querySelectorAll('.fm-participant-input')){meter.setAttribute('aria-valuenow','0');meter.querySelector('i').style.width='0%';}
 }
-async function toggleMeter(){
- if(state.roomMic){stopMeter();return;}
- const button=panel.querySelector('[data-fm-meter]');button.textContent='Requesting microphone…';
+async function startMeter(){
+ if(state.roomMic||!state.camera||document.hidden||!navigator.mediaDevices?.getUserMedia||
+  !(window.AudioContext||window.webkitAudioContext)||!window.isSecureContext)return;
+ const epoch=++state.micEpoch;
+ let stream=null,ctx=null;
  try{
-  if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia)throw Error('HTTPS and microphone permission required');
-  const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true},video:false});
-  const Context=window.AudioContext||window.webkitAudioContext;
-  if(!Context){stream.getTracks().forEach(t=>t.stop());throw Error('Audio meter unavailable');}
-  state.roomMic=stream;state.ctx=new Context();state.source=state.ctx.createMediaStreamSource(stream);
-  state.analyser=state.ctx.createAnalyser();state.analyser.fftSize=256;state.source.connect(state.analyser);
-  const samples=new Uint8Array(state.analyser.frequencyBinCount);
+  // Only AFTER the user explicitly enables Agent Chat's microphone.
+  stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true},video:false});
+  if(epoch!==state.micEpoch||!state.camera||document.hidden){stream.getTracks().forEach(t=>t.stop());return;}
+  ctx=new (window.AudioContext||window.webkitAudioContext)();
+  state.roomMic=stream;state.ctx=ctx;state.source=ctx.createMediaStreamSource(stream);
+  const analyser=ctx.createAnalyser();analyser.fftSize=256;state.source.connect(analyser);state.analyser=analyser;
+  const samples=new Uint8Array(analyser.fftSize);
   state.levelTimer=setInterval(()=>{
-   if(!state.roomMic)return;
-   state.analyser.getByteTimeDomainData(samples);
-   let sum=0;for(const x of samples)sum+=(x-128)**2;
-   state.voiceLevel=Math.min(1,Math.sqrt(sum/samples.length)/36);
-   panel.querySelector('[data-fm-level]').style.width=Math.round(state.voiceLevel*100)+'%';
-   for(const m of panel.querySelectorAll('.fm-participant-meter i'))m.style.width=Math.round(state.voiceLevel*100)+'%';
-  },110);
+   const visible=tracked();
+   // A room microphone never identifies a speaker among two or more camera tracks.
+   if(visible.length!==1||window.GelatoVoiceTurns?.speaking||window.speechSynthesis?.speaking){
+    for(const [id,value] of state.inputByTrack)if(value.provisional)state.inputByTrack.delete(id);
+   }else{
+    analyser.getByteTimeDomainData(samples);let total=0;
+    for(const val of samples)total+=(val-128)**2;
+    const rms=Math.sqrt(total/samples.length),level=Math.max(0,Math.min(1,(rms-2)/42));
+    state.inputByTrack.set(visible[0].id,{level,at:Date.now(),provisional:true});
+   }
+   for(const card of panel.querySelectorAll('.fm-participant-card')){
+    const id=card.dataset.track,meter=card.querySelector('.fm-participant-input');if(!meter)continue;
+    const level=inputLevel(id);
+    meter.setAttribute('aria-valuenow',String(Math.round(level*100)));
+    meter.querySelector('i').style.width=Math.round(level*100)+'%';
+   }
+  },90);
   stream.getTracks().forEach(t=>t.addEventListener('ended',stopMeter,{once:true}));
-  button.textContent='Disable room voice meter';
- }catch(e){stopMeter();panel.querySelector('.fm-staff-note').textContent='Room voice meter unavailable: '+(e.message||'permission denied');}
+ }catch{
+  if(stream&&!state.roomMic)stream.getTracks().forEach(t=>t.stop());
+  if(ctx&&!state.ctx)void ctx.close().catch(()=>{});
+ }
 }
+window.addEventListener('gelato-agent-listening-change',event=>{
+ const d=event.detail||{};
+ if(d.microphoneActive===true||d.listening===true)void startMeter();
+ else stopMeter();
+});
+/** Only trusted per-participant audio sources may publish a track-associated
+ * level. An unassociated microphone/voice profile result never qualifies. */
+window.addEventListener('gelato-food-monster-participant-input',event=>{
+ const {trackId,level,attributed}=event.detail||{};
+ if(attributed!==true||!tracked().some(t=>t.id===trackId)||!Number.isFinite(level))return;
+ state.inputByTrack.set(trackId,{level:Math.max(0,Math.min(1,level)),at:Date.now(),provisional:false});
+ const meter=panel.querySelector('[data-track="'+trackId+'"] .fm-participant-input');
+ if(meter){const value=Math.round(inputLevel(trackId)*100);meter.setAttribute('aria-valuenow',String(value));meter.querySelector('i').style.width=value+'%';}
+});
 for(const button of el.querySelectorAll('[data-fm-view]'))button.addEventListener('click',()=>setMode(button.dataset.fmView));
 cameraToggle.addEventListener('click',async()=>{
  const camera=cameraAPI();if(!camera){status.textContent='Camera module is still loading.';return;}
@@ -182,26 +205,10 @@ cameraToggle.addEventListener('click',async()=>{
  try{if(camera.active)camera.stop();else await camera.start();setCamera(camera.active);}
  finally{cameraToggle.disabled=false;}
 });
-panel.querySelector('[data-fm-meter]').addEventListener('click',()=>void toggleMeter());
-const speakerBtn=panel.querySelector('[data-fm-speaker-check]');
-speakerBtn.addEventListener('click',async()=>{
- speakerBtn.disabled=true;try{
-  if(!window.GelatoFoodMonsterFastEnrollment?.identifySpeaker)throw Error('Voice matcher is still loading.');
-  await window.GelatoFoodMonsterFastEnrollment.identifySpeaker();
- }catch(e){panel.querySelector('.fm-speaker-result').textContent=e.message||'Speaker check unavailable.';}
- finally{speakerBtn.disabled=false;}
+panel.addEventListener('click',event=>{
+ const card=event.target.closest('[data-fm-setup]');if(!card)return;
+ window.GelatoFoodMonsterGoals?.begin?.(card.dataset.fmSetup,{verified:card.dataset.fmVerified==='true'});
 });
-window.addEventListener('gelato-food-monster-speaker-candidate',event=>{
- const d=event.detail||{},result=panel.querySelector('.fm-speaker-result');
- if(!d.name){result.textContent='No verified speaker: '+String(d.reason||'uncertain');return;}
- result.textContent='Possible speaker: '+String(d.name).slice(0,90)+'. '+
-  (tracked().length>1?'Multiple tracks: voice does not identify which person spoke.':'Voice-only cue, not verified face identity.')+
-  ' No sign-in or attendance action taken.';
-});
-panel.querySelector('[data-fm-photos]').addEventListener('change',e=>{
- state.thumbnails=e.target.checked;if(!state.thumbnails)for(const t of state.tracks)t.photo='';render();
-});
-panel.addEventListener('click',e=>{if(e.target.closest('[data-fm-my-history]')){void window.GelatoFoodMonsterParticipantHistory?.open?.();return;}const button=e.target.closest('[data-fm-setup]');if(button)window.GelatoFoodMonsterGoals?.begin(button.dataset.fmSetup);});
 window.addEventListener('gelato-food-monster-camera',e=>setCamera(e.detail?.active));
 window.addEventListener('gelato-food-monster-faces',e=>updateFaces(e.detail?.boxes||[],e.detail?.ownVerified===true));
 window.addEventListener('resize',drawOverlay);
@@ -226,5 +233,6 @@ function captureGoalPhoto(trackId){
 }
 window.GelatoFoodMonsterParticipants={setMode,updateFaces,captureGoalPhoto,
  get mode(){return state.mode},get count(){return tracked().length},
- get cameraActive(){return state.camera},get roster(){return state.roster}};
+ get cameraActive(){return state.camera},get roster(){return state.roster},
+ get activeTracks(){const active=tracked();return active.map(t=>({id:t.id,verified:active.length===1&&t.verified}));}};
 })();
