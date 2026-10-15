@@ -109,7 +109,7 @@ function render(){
     '<div class="fm-participant-photo">'+(t.photo&&state.thumbnails?'<img src="'+t.photo+'" alt="Temporary captured participant thumbnail">':'<span aria-label="No captured photo">◯</span>')+'</div>'+
     '<div class="fm-participant-info"><strong>'+esc(label)+'</strong><span>'+(verified?'Verified: signed-in account':'Identity unknown · tracked locally')+'</span>'+
     '<small>'+(verified?'Account session only · see staff context':'Employee/guest classification not verified')+'</small>'+
-    '<div class="fm-participant-meter" title="Shared microphone activity; not speaker identification"><i style="width:'+Math.round(state.voiceLevel*100)+'%"></i></div><small>Shared room mic · cannot assign speaker</small>'+ '<button type="button" data-fm-setup="'+esc(t.id)+'">Start setup</button></div></article>';
+    '<div class="fm-participant-meter" title="Shared microphone activity; not speaker identification"><i style="width:'+Math.round(state.voiceLevel*100)+'%"></i></div><small>Shared room mic · cannot assign speaker</small>'+ '<button type="button" data-fm-setup="'+esc(t.id)+'">Start setup</button>'+ (verified?'<button type="button" data-fm-my-history>My history</button>':'')+'</div></article>';
  }).join('');
 }
 function drawOverlay(){
@@ -201,7 +201,7 @@ window.addEventListener('gelato-food-monster-speaker-candidate',event=>{
 panel.querySelector('[data-fm-photos]').addEventListener('change',e=>{
  state.thumbnails=e.target.checked;if(!state.thumbnails)for(const t of state.tracks)t.photo='';render();
 });
-panel.addEventListener('click',e=>{const button=e.target.closest('[data-fm-setup]');if(button)window.GelatoFoodMonsterGoals?.begin(button.dataset.fmSetup);});
+panel.addEventListener('click',e=>{if(e.target.closest('[data-fm-my-history]')){void window.GelatoFoodMonsterParticipantHistory?.open?.();return;}const button=e.target.closest('[data-fm-setup]');if(button)window.GelatoFoodMonsterGoals?.begin(button.dataset.fmSetup);});
 window.addEventListener('gelato-food-monster-camera',e=>setCamera(e.detail?.active));
 window.addEventListener('gelato-food-monster-faces',e=>updateFaces(e.detail?.boxes||[],e.detail?.ownVerified===true));
 window.addEventListener('resize',drawOverlay);

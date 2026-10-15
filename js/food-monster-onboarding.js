@@ -10,7 +10,7 @@ const panel=document.createElement('section');panel.className='fm-goal-panel';pa
 panel.setAttribute('aria-label','Participant onboarding goal');
 panel.innerHTML='<header class="fm-goal-head"><div><strong>Agent Brain · Participant Setup</strong><small>Guided onboarding goal</small></div><button type="button" data-fm-goal-hide aria-label="Close participant setup panel">×</button></header>'+
  '<p class="fm-goal-prompt" role="status" aria-live="polite">Start by introducing yourself.</p><div class="fm-goal-body"></div>'+
- '<footer class="fm-goal-footer"><button type="button" data-fm-goal-handsfree aria-pressed="false">Enable hands-free answers</button><button type="button" data-fm-goal-refresh>Refresh goal</button><button type="button" data-fm-goal-cancel>Cancel goal</button></footer>';
+ '<footer class="fm-goal-footer"><button type="button" data-fm-goal-my-history>My participant history</button><button type="button" data-fm-goal-handsfree aria-pressed="false">Enable hands-free answers</button><button type="button" data-fm-goal-refresh>Refresh goal</button><button type="button" data-fm-goal-cancel>Cancel goal</button></footer>';
 host.append(panel);
 const body=panel.querySelector('.fm-goal-body'),prompt=panel.querySelector('.fm-goal-prompt');
 const launch=document.createElement('button');launch.type='button';launch.className='fm-goal-launch';launch.textContent='+';
@@ -179,6 +179,7 @@ async function action(which){
 }
 panel.addEventListener('click',e=>{
  if(e.target.closest('[data-fm-goal-hide]'))hide();
+ else if(e.target.closest('[data-fm-goal-my-history]')){void window.GelatoFoodMonsterParticipantHistory?.open?.();}
  else if(e.target.closest('[data-fm-goal-handsfree]')){
   const turn=window.GelatoGlobalAgent,button=panel.querySelector('[data-fm-goal-handsfree]');
   if(!turn?.setConversationMode){note('Voice controls are loading.');return;}

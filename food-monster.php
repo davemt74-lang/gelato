@@ -11,7 +11,7 @@ $user = app_require_auth();
 <meta name="gelato-csrf" content="<?= app_escape(app_csrf_token()) ?>">
 <meta name="theme-color" content="#081b2e">
 <title>Food Monster · Gelato Agent</title>
-<link rel="stylesheet" href="css/food-monster.css?v=20261015-fmg8d1">
+<link rel="stylesheet" href="css/food-monster.css?v=20261015-fmg8d2a">
 </head>
 <body class="food-monster-stage-page">
 <main id="food-monster-stage" aria-label="Food Monster Agent stage">
@@ -28,5 +28,6 @@ $user = app_require_auth();
 <script src="js/food-monster-participants.js?v=20261015-fmg8d1"></script>
 <script src="js/food-monster-onboarding.js?v=20261015-fmg8d1"></script>
 <script src="js/food-monster-fast-enroll.js?v=20261015-fmg8d1"></script>
+<script src="js/food-monster-participant-history.js?v=20261015-fmg8d2a"></script>
 </body>
 </html>
