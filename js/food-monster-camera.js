@@ -5,6 +5,8 @@
 (() => {
 'use strict';
 if (window.GelatoFoodMonsterCamera) return;
+function init(){
+if (window.GelatoFoodMonsterCamera) return;
 const fm=window.GelatoFoodMonster;
 if (!fm?.root || !window.GelatoGlobalAgent) return;
 const root=fm.root, actor=root.querySelector('.fm-actor');
@@ -253,4 +255,7 @@ window.addEventListener('gelato-verified-speaker',event=>{
  if(d.sessionUserMatch===true&&Number(d.userId)===Number(ACCOUNT))greet('voice');
 });
 window.GelatoFoodMonsterCamera={open:show,start,stop,enroll,forget,get active(){return!!S.stream},get enrolled(){return!!S.profile},get account(){return ACCOUNT}};
+}
+if(window.GelatoGlobalAgent?.user?.id) init();
+else window.addEventListener('gelato-agent-ready',init,{once:true});
 })();
