@@ -5,7 +5,7 @@ if(!document.body.classList.contains('food-monster-stage-page')||window.GelatoFo
 const host=document.getElementById('food-monster-stage');if(!host)return;
 const csrf=()=>document.querySelector('meta[name="gelato-csrf"]')?.content||'';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const state={goal:null,roles:[],accounts:[],tracking:'',opened:false,busy:false,handsFree:false,ownsConversation:false,nameDraft:'',lastPrompt:''};
+const state={goal:null,roles:[],accounts:[],matches:[],selfDeclined:false,tracking:'',opened:false,busy:false,handsFree:false,ownsConversation:false,nameDraft:'',lastPrompt:''};
 const panel=document.createElement('section');panel.className='fm-goal-panel';panel.hidden=true;
 panel.setAttribute('aria-label','Participant onboarding goal');
 panel.innerHTML='<header class="fm-goal-head"><div><strong>Agent Brain · Participant Setup</strong><small>Guided onboarding goal</small></div><button type="button" data-fm-goal-hide aria-label="Close participant setup panel">×</button></header>'+
@@ -47,6 +47,8 @@ async function request(action,payload={}){
  const data=await response.json().catch(()=>({message:'Invalid onboarding response'}));
  if(!response.ok||!data.ok)throw Error(data.message||'Onboarding request failed');
  if(data.goal)state.goal=data.goal;
+ if(Array.isArray(data.matches))state.matches=data.matches;
+ if(['start','start_self','type','link_existing'].includes(action))state.matches=[];
  render();return data;
 }
 async function load(){
@@ -55,6 +57,7 @@ async function load(){
   const data=await response.json();if(!response.ok||!data.ok)throw Error(data.message||'Goals unavailable');
   state.roles=Array.isArray(data.roles)?data.roles:[];
   state.accounts=Array.isArray(data.accounts)?data.accounts:[];
+  state.matches=Array.isArray(data.matches)?data.matches:[];
   const active=data.goals?.find(g=>g.status==='in_progress');
   if(active){state.goal=active;show();}else render();
  }catch(error){if(state.opened)note('Onboarding unavailable: '+error.message);}
@@ -68,16 +71,33 @@ function gallery(goal){
 }
 function render(){
  if(!state.opened)return;
- const g=state.goal;
- if(!g){note('Hello! Welcome. What is your name?');body.innerHTML=field('Participant name','name')+button('start','Start setup');return;}
+ const g=state.goal,me=state.accounts.find(a=>a.self);
+ if(!g){
+  if(me&&!state.selfDeclined&&(!state.tracking||window.GelatoFoodMonsterParticipants?.count===1)){
+   note('Gelato is signed in as '+me.name+'. Is this you?');
+   body.innerHTML='<p>Use your existing Gelato account. No new account is needed.</p>'+
+    button('start-self','Yes, this is me')+button('someone-else','No, someone else');
+  }else{
+   note('Hello! Welcome. What is your name?');
+   body.innerHTML=field('Participant name','name')+button('start','Continue');
+  }
+  return;
+ }
  const title=g.name||('Unverified '+(g.trackLabel||'participant'));
  const base='<div class="fm-goal-progress"><strong>'+esc(title)+'</strong><small>'+esc(g.type==='unknown'?'Participant type not set':g.type)+' · '+esc(g.phase.replaceAll('_',' '))+' · '+esc(g.status)+'</small></div>';
  if(g.status!=='in_progress'){body.innerHTML=base+'<p>This goal is '+esc(g.status)+'.</p>'+button('new','Start another participant');return;}
  let html=base;
  if(!g.name){note('What name would you like me to use?');html+=field('Name provided by participant','name')+button('name','Confirm name');}
  else if(g.type==='unknown'){
-  note('Thanks, '+g.name+'. Are you here as an employee or a guest?');
-  html+=button('type-employee','Employee')+button('type-guest','Guest');
+  if(state.matches.length){
+   note('Thanks, '+g.name+'. I found a matching Gelato account. Is this yours?');
+   html+='<p>Account recognition is provisional until the account holder signs in.</p>'+
+    state.matches.map(a=>button('match-'+a.id,a.name+(a.self?' (signed in)':''))).join('')+
+    button('not-listed','None of these');
+  }else{
+   note('Thanks, '+g.name+'. Are you an employee or a guest?');
+   html+=button('type-employee','Employee')+button('type-guest','Guest');
+  }
  }else{
   html+='<p class="fm-goal-safety">This name was introduced, not biometric identity verified. Photo storage and voice enrollment require informed consent.</p>';
   if(!g.photoConsent){note('May I save photos to your participant profile? You can decline.');html+=button('photo-consent','Yes, save photos')+button('skip-photo','Skip photos');}
@@ -136,7 +156,22 @@ async function action(which){
  if(state.busy)return;state.busy=true;
  try{
   const get=name=>body.querySelector('[name="'+name+'"]')?.value?.trim()||'';
-  if(which==='start'||which==='new'){const intro=get('name');const data=await request('start',{trackLabel:state.tracking});state.goal=data.goal;if(intro)await request('name',{goal:state.goal.id,name:intro});note('Onboarding goal created. Tell me your name.');}
+  if(which==='start-self'){
+    if(window.GelatoFoodMonsterParticipants?.count>1)throw Error('Multiple people are present. Select one person before self-enrollment.');
+    await request('start_self',{trackLabel:state.tracking,selfConfirmed:true});
+    note('Your existing Gelato account is linked. Consent is required before capturing recognition profiles.');
+   }
+   else if(which==='someone-else'){state.selfDeclined=true;render();}
+   else if(which==='start'||which==='new'){const intro=get('name');state.matches=[];const data=await request('start',{trackLabel:state.tracking});state.goal=data.goal;if(intro)await request('name',{goal:state.goal.id,name:intro});}
+   else if(which==='not-listed'){state.matches=[];render();}
+   else if(which.startsWith('match-')){
+    const uid=Number(which.slice(6)),account=state.matches.find(a=>a.id===uid);
+    if(!account)throw Error('Account is not available.');
+    if(!confirm('Link '+account.name+' to this setup? Private access still requires authenticated sign-in.'))return;
+    await request('type',{goal:state.goal.id,type:'employee'});
+    await request('link_existing',{goal:state.goal.id,userId:uid});
+    note('Existing account linked. The user must sign in to complete personal biometric enrollment.');
+   }
   else if(which==='name'){await request('name',{goal:state.goal.id,name:get('name')});}
   else if(which.startsWith('type-'))await request('type',{goal:state.goal.id,type:which.slice(5)});
   else if(which==='photo-consent')await request('photo_consent',{goal:state.goal.id,consent:true});
@@ -199,7 +234,7 @@ panel.addEventListener('click',e=>{
  else if(e.target.closest('[data-fm-goal-cancel]')){if(state.goal&&confirm('Cancel this onboarding goal?'))void action('cancel');}
  else{const btn=e.target.closest('[data-goal-action]');if(btn)void action(btn.dataset.goalAction);}
 });
-launch.onclick=()=>{show();if(!state.goal)note('Hello! Welcome. What is your name?');};
+launch.onclick=()=>{show();};
 function introductionText(text){
  text=String(text||'').trim();const matched=text.match(/^(?:(?:my name is|i(?:'m| am)|call me|this is)\s+)([\p{L}\p{M}' -]{2,75})[.!]?$/iu);
  if(matched)return matched[1].trim();
@@ -210,6 +245,15 @@ window.addEventListener('gelato-agent-before-send',event=>{
  const text=String(event.detail?.text||'');
  if(!state.opened)return;
  const g=state.goal;
+ if(!g&&state.accounts.some(a=>a.self)&&!state.selfDeclined){
+  const reply=text.trim().toLowerCase();
+  if(/^(?:yes|yes that's me|that's me|it's me|i am|correct)[.!]?$/.test(reply)){
+   event.preventDefault();void action('start-self');return;
+  }
+  if(/^(?:no|nope|someone else|not me)[.!]?$/.test(reply)){
+   event.preventDefault();state.selfDeclined=true;render();return;
+  }
+ }
  if(!g||!g.name){
   const name=introductionText(text);
   if(!name)return;
@@ -217,9 +261,9 @@ window.addEventListener('gelato-agent-before-send',event=>{
   void (async()=>{try{
    if(!state.goal){const data=await request('start',{trackLabel:state.tracking});state.goal=data.goal;}
    await request('name',{goal:state.goal.id,name});
-   note('Nice to meet you, '+name+'. Are you an employee or a guest?');
+   // The next question is chosen after checking Gelato accounts.
   }catch(err){note(err.message);}})();
- }else if(g.type==='unknown'){
+ }else if(g.type==='unknown'&&!state.matches.length){
   const match=text.trim().toLowerCase().match(/^(?:i(?:'m| am) (?:an? )?)?(employee|guest)[.!]?$/);
   if(match){event.preventDefault();void request('type',{goal:g.id,type:match[1]}).catch(err=>note(err.message));}
  }
@@ -228,9 +272,9 @@ window.addEventListener('gelato-food-monster-new-track',event=>{
  const id=String(event.detail?.id||'');
  if(!id||state.goal?.status==='in_progress')return;
  state.tracking=id;
- show();note('Hello! Welcome. What is your name?');
+ state.selfDeclined=false;state.matches=[];show();
  // Wait for a response before persisting a person's presence.
 });
-window.GelatoFoodMonsterGoals={show,hide,load,request,note,get trackId(){return state.tracking},get goal(){return state.goal},get opened(){return state.opened},begin(id=''){state.tracking=id;state.goal=null;show();}};
+window.GelatoFoodMonsterGoals={show,hide,load,request,note,get trackId(){return state.tracking},get goal(){return state.goal},get opened(){return state.opened},begin(id='',options={}){state.tracking=id;state.goal=null;state.matches=[];state.selfDeclined=false;show();}};
 load();
 })();
