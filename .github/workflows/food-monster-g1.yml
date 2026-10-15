@@ -18,6 +18,10 @@ on:
       - 'tests/food-monster-g7v-*'
       - 'tests/food-monster-g7c-*'
       - 'tests/food-monster-g7d-*'
+      - 'tests/food-monster-g7b1-*'
+      - 'includes/food-monster-skill-registry.php'
+      - 'js/food-monster-skills.js'
+      - 'docs/FOOD-MONSTER-FM-G7B1-SKILLS.md'
       - 'docs/FOOD-MONSTER-FM-G7D-HAIKU-PROVIDER.md'
       - 'includes/agent-workspace-core.php'
       - 'api/agent-brain.php'
@@ -85,6 +89,9 @@ jobs:
           php tests/food-monster-g3-contract.php
           php tests/food-monster-g4-contract.php
           php tests/food-monster-g7d-provider-contract.php
+          php tests/food-monster-g7b1-registry.php
+          php -l includes/food-monster-skill-registry.php
+          node --check js/food-monster-skills.js
           php tests/food-monster-g5-contract.php
           php tests/food-monster-g6-contract.php
           php tests/food-monster-g7-contract.php
@@ -112,3 +119,4 @@ jobs:
           node tests/food-monster-g7a-browser.test.cjs
           node tests/food-monster-g7v-browser.test.cjs
           node tests/food-monster-g7c-browser.test.cjs
+          node tests/food-monster-g7b1-browser.test.cjs
