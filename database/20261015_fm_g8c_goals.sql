@@ -1,0 +1,38 @@
+-- FM-G8C: reviewable participant onboarding goals; no biometric authentication.
+CREATE TABLE IF NOT EXISTS fm_participant_goals (
+ id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+ organization_id BIGINT UNSIGNED NOT NULL,
+ public_id VARCHAR(64) NOT NULL,
+ created_by BIGINT UNSIGNED NOT NULL,
+ tracking_label VARCHAR(48) NOT NULL DEFAULT '',
+ preferred_name VARCHAR(180) NOT NULL DEFAULT '',
+ participant_type VARCHAR(16) NOT NULL DEFAULT 'unknown',
+ email VARCHAR(254) NULL,
+ linked_user_id BIGINT UNSIGNED NULL,
+ proposed_role_id BIGINT UNSIGNED NULL,
+ crm_customer_public_id VARCHAR(80) NULL,
+ photo_consent_at DATETIME(6) NULL,
+ voice_consent_at DATETIME(6) NULL,
+ guest_crm_consent_at DATETIME(6) NULL,
+ status VARCHAR(24) NOT NULL DEFAULT 'in_progress',
+ phase VARCHAR(32) NOT NULL DEFAULT 'name',
+ approved_by BIGINT UNSIGNED NULL,
+ approved_at DATETIME(6) NULL,
+ completed_at DATETIME(6) NULL,
+ created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+ updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+ UNIQUE KEY uq_fmg8c_org_public (organization_id,public_id),
+ KEY idx_fmg8c_actor (organization_id,created_by,status,updated_at),
+ KEY idx_fmg8c_linked_user (organization_id,linked_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+CREATE TABLE IF NOT EXISTS fm_participant_photos (
+ id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+ organization_id BIGINT UNSIGNED NOT NULL,
+ goal_id BIGINT UNSIGNED NOT NULL,
+ image_mime VARCHAR(24) NOT NULL,
+ image_bytes MEDIUMBLOB NOT NULL,
+ created_by BIGINT UNSIGNED NOT NULL,
+ created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+ KEY idx_fmg8c_photos (organization_id,goal_id,id),
+ CONSTRAINT fk_fmg8c_photo_goal FOREIGN KEY (goal_id) REFERENCES fm_participant_goals(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
