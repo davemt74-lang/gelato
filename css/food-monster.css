@@ -95,3 +95,25 @@ body.food-monster-stage-page #gelato-agent-bar{box-sizing:border-box;max-width:1
 #fm-llm-dialog .fm-llm-info{font-size:11px;color:#557182}
 #fm-llm-dialog :is(button,select):focus-visible{outline:3px solid #12c8ec;outline-offset:2px}
 #food-monster-root .fm-llm-trigger{font-size:16px}
+
+/* FM-G5: restrained, human-reviewed proactive recommendation surface. */
+#food-monster-root .fm-suggestion-trigger{position:relative;background:#133246;color:#fff}
+#food-monster-root .fm-suggestion-count{position:absolute;top:-7px;right:-6px;min-width:15px;height:15px;display:grid;place-items:center;background:#ec6e37;color:#fff;border-radius:12px;font:800 10px system-ui}
+#food-monster-root .fm-suggestion-trigger[hidden]{display:none}
+#food-monster-root.fm-suggestion-alert .fm-actions{opacity:1}
+#food-monster-root.fm-suggestion-alert .fm-suggestion-trigger{box-shadow:0 0 0 3px rgba(252,180,93,.3)}
+#food-monster-root .fm-suggestion-panel{box-sizing:border-box;position:absolute;left:0;bottom:calc(100% + 12px);width:min(330px,82vw);min-height:80px;max-height:min(52vh,340px);overflow:auto;border:1px solid #bed9e4;border-radius:15px;background:#f9fdff;color:#0e2a3a;padding:13px 14px;box-shadow:0 19px 44px #011a375a;cursor:default;z-index:1;font:500 12px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;touch-action:auto}
+#food-monster-root .fm-suggestion-panel[hidden]{display:none}
+#food-monster-root .fm-suggestion-panel.fm-suggestion-align-right{left:auto;right:0}
+#food-monster-root .fm-suggestion-panel.fm-suggestion-below{bottom:auto;top:calc(100% + 16px)}
+#food-monster-root .fm-suggestion-title{font-size:13px;line-height:1.4;display:block;overflow-wrap:anywhere}
+#food-monster-root .fm-suggestion-source{font-size:10px;display:block;color:#557587;margin:3px 0 7px}
+#food-monster-root .fm-suggestion-summary{margin:0 0 9px;overflow-wrap:anywhere}
+#food-monster-root .fm-suggestion-actions{display:flex;gap:6px;align-items:center}
+#food-monster-root .fm-suggestion-actions button{border:1px solid #bcd9e6;border-radius:8px;background:#e4f4fa;color:#103044;padding:7px 9px;cursor:pointer;font:700 11px system-ui}
+#food-monster-root .fm-suggestion-actions button[data-suggestion-action="review"]{background:#102c3e;color:#fff}
+#food-monster-root .fm-suggestion-actions button:focus-visible{outline:3px solid #14bee3;outline-offset:2px}
+#food-monster-root .fm-suggestion-actions button[data-suggestion-action="close"]{margin-left:auto;font-size:16px;padding:4px 9px}
+#food-monster-root.fm-suggestion-alert .fm-figure{filter:drop-shadow(0 0 8px rgba(253,173,82,.37))}
+@media(max-width:620px){#food-monster-root .fm-suggestion-panel{width:min(290px,78vw);padding:11px}}
+@media(prefers-reduced-motion:reduce){#food-monster-root.fm-suggestion-alert .fm-figure{animation:none!important}}

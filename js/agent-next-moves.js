@@ -52,11 +52,16 @@
     root.innerHTML=moves.length?moves.map((move)=>`<article class="ganm-card" data-key="${esc(move.key)}" data-severity="${esc(move.severity||'normal')}"><div class="ganm-top"><span class="ganm-sev"></span><div class="ganm-copy"><strong>${esc(move.title)}</strong><p>${esc(move.summary||'')}</p><span class="ganm-node">${esc(move.nodeLabel||move.node||'Agent node')}</span></div></div><div class="ganm-actions"><button class="ganm-review" type="button" data-next-action="review">Review</button><button class="ganm-propose" type="button" data-next-action="propose">Propose Fix</button>${move.href?`<a class="ganm-link" href="${esc(move.href)}">Open</a>`:''}<button class="ganm-dismiss" type="button" data-next-action="dismiss">Dismiss</button></div></article>`).join(''):'<div style="padding:14px;color:#777a74;font-size:10px">No active Next Moves are available from your permitted restaurant signals.</div>';
   }
 
+  function publishMoves(){window.dispatchEvent(new CustomEvent('gelato-agent-next-moves-change',{detail:{moves:visibleMoves()}}));}
+  function dismissMove(key){
+    if(!findMove(key))return false;
+    state.dismissed.add(String(key));saveDismissed();render();publishMoves();return true;
+  }
   function findMove(key) { return state.moves.find((move)=>String(move.key)===String(key)); }
   async function onAction(event) {
     const action=event.target.closest('[data-next-action]');if(!action)return;
     const card=action.closest('[data-key]');const key=card?.dataset.key;const move=findMove(key);if(!move)return;
-    if(action.dataset.nextAction==='dismiss'){state.dismissed.add(String(key));saveDismissed();render();return;}
+    if(action.dataset.nextAction==='dismiss'){dismissMove(key);return;}
     const nodeHint=`${move.nodeLabel || move.node || 'Agent node'}: `;
     const safety=action.dataset.nextAction==='propose'?'Propose the safest fix. Do not execute a consequential change until I explicitly confirm. ':'';
     document.getElementById('gelato-agent-next-moves')?.classList.remove('open');
@@ -66,7 +71,7 @@
   function accept(moves) {
     if(!Array.isArray(moves))return;
     state.moves=moves.filter((move)=>move&&typeof move==='object'&&move.key);
-    render();
+    render();publishMoves();
     if(visibleMoves().some((move)=>['critical','high'].includes(String(move.severity)))) document.querySelector('.ganm-toggle')?.classList.add('show');
   }
 
@@ -100,6 +105,6 @@
 
   window.addEventListener('gelato-agent-ready',start);
   window.addEventListener('gelato-agent-response',(event)=>{const moves=event.detail?.result?.data?.nextMoves;if(Array.isArray(moves))accept(moves);});
-  window.GelatoAgentNextMoves={refresh,accept,get moves(){return visibleMoves();}};
+  window.GelatoAgentNextMoves={refresh,accept,dismiss:dismissMove,get moves(){return visibleMoves();}};
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
 })();
