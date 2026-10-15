@@ -72,7 +72,7 @@ asc_test(str_contains($workspaceSync, "fetch('api/admin-shell.php?page=workspace
 asc_test(str_contains($workspaceSync, "#gelatoHeaderPos,#gelatoHeaderKds,[data-canonical-shell-shortcut]"), 'Workspace sync does not remove legacy/duplicate shortcuts before rendering canonical ones', 32);
 asc_test(str_contains($workspaceSync, "a.header-link[href=\"landing.html\"]"), 'Legacy Public site header shortcut is not removed from the workspace topbar', 33);
 asc_test(str_contains($workspaceSync, 'shell.headerLinks || []'), 'Workspace shortcut visibility is not driven by server-filtered shell links', 34);
-asc_test(str_contains($workspacePhp, 'js/workspace-shell-sync.js?v=20261013-nav1'), 'Workspace does not load canonical shell synchronization', 35);
+asc_test(str_contains($workspacePhp, 'js/workspace-shell-sync.js?v=20261014-fmg6'), 'Workspace does not load canonical shell synchronization', 35);
 asc_test(str_contains($shell, "cleanProfileMenu"), 'Profile menu deduplication is missing', 36);
 asc_test(str_contains($shell, "a[href=\"landing.html\"],a[href=\"apply.html\"]"), 'Legacy duplicate profile links are not removed', 37);
 

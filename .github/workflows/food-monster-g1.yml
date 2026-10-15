@@ -12,6 +12,10 @@ on:
       - 'tests/food-monster-g3-*'
       - 'tests/food-monster-g4-*'
       - 'tests/food-monster-g5-*'
+      - 'tests/food-monster-g6-*'
+      - 'js/universal-admin-page-shell.js'
+      - 'js/workspace-shell-sync.js'
+      - 'workspace.php'
       - 'js/food-monster-suggestions.js'
       - 'js/agent-next-moves.js'
       - 'js/food-monster-llm.js'
@@ -46,6 +50,7 @@ jobs:
           php -l tests/food-monster-g3-contract.php
           php -l tests/food-monster-g4-contract.php
           php -l tests/food-monster-g5-contract.php
+          php -l tests/food-monster-g6-contract.php
           node --check js/food-monster-suggestions.js
           node --check js/agent-next-moves.js
           php -l includes/food-monster-llm.php
@@ -60,6 +65,7 @@ jobs:
           php tests/food-monster-g3-contract.php
           php tests/food-monster-g4-contract.php
           php tests/food-monster-g5-contract.php
+          php tests/food-monster-g6-contract.php
   chromium:
     name: Mascot desktop, mobile & overlay
     runs-on: ubuntu-latest
@@ -79,3 +85,4 @@ jobs:
           node tests/food-monster-g3-browser.test.cjs
           node tests/food-monster-g4-browser.test.cjs
           node tests/food-monster-g5-browser.test.cjs
+          node tests/food-monster-g6-browser.test.cjs

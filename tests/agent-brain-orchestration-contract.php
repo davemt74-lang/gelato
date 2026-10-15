@@ -37,7 +37,7 @@ $checks=[
     'next moves are session dismissible'=>str_contains($files['nextMoves'],'sessionStorage')&&str_contains($files['nextMoves'],'dismiss'),
     'next moves use main global Agent'=>str_contains($files['nextMoves'],'window.GelatoGlobalAgent?.send?.'),
     'propose fix preserves confirmation boundary'=>str_contains($files['nextMoves'],'Do not execute a consequential change until I explicitly confirm.'),
-    'shared admin shell loads next moves'=>str_contains($files['loader'],'js/agent-next-moves.js?v=20260916-brain1'),
+    'shared admin shell loads next moves'=>str_contains($files['loader'],'js/agent-next-moves.js?v=20261014-fmg6'),
 ];
 
 $failed=[];foreach($checks as $label=>$passed)if(!$passed)$failed[]=$label;
