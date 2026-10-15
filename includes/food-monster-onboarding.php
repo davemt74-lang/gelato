@@ -43,8 +43,16 @@ function fmgoal_view(PDO $pdo,array $goal):array {
   'voiceConsent'=>$goal['voice_consent_at']!==null,
   'guestCrmConsent'=>$goal['guest_crm_consent_at']!==null,
   'photos'=>array_map('intval',$q->fetchAll(PDO::FETCH_COLUMN)),
+  'voiceVerified'=>fmgoal_voice_enrolled($pdo,(int)$goal['organization_id'],(int)($goal['linked_user_id']??0)),
   'updatedAt'=>(string)$goal['updated_at']
  ];
+}
+function fmgoal_voice_enrolled(PDO $pdo,int $org,int $uid):bool {
+ if($uid<1)return false;
+ try{
+  $q=$pdo->prepare("SELECT COUNT(*) FROM voice_identity_profiles WHERE organization_id=? AND user_id=? AND status='active'");
+  $q->execute([$org,$uid]);return (int)$q->fetchColumn()>0;
+ }catch(Throwable){return false;}
 }
 function fmgoal_list(PDO $pdo,array $actor):array {
  $q=$pdo->prepare("SELECT public_id FROM fm_participant_goals WHERE organization_id=? AND created_by=? ORDER BY updated_at DESC LIMIT 25");
@@ -133,6 +141,21 @@ function fmgoal_account_confirm(PDO $pdo,array $actor,array $goal):array {
  if(!$sent)error_log('Food Monster: password setup email delivery failed for user ID '.$newUid);
  $view=fmgoal_view($pdo,fmgoal_get($pdo,$actor,(string)$goal['public_id']));
  return ['goal'=>$view,'emailSent'=>$sent,'message'=>$sent?'Employee created. The employee has been emailed a secure password/PIN setup link.':'Employee created, but setup email could not be sent. Ask them to use Forgot Password to set credentials.'];
+}
+function fmgoal_finish(PDO $pdo,array $actor,array $goal):array {
+ if((string)$goal['status']!=='in_progress'||trim((string)$goal['preferred_name'])===''||!in_array($goal['participant_type'],['employee','guest'],true))
+  throw new DomainException('Confirm participant name and type before completion.');
+ if($goal['participant_type']==='employee'){
+  if(!$goal['linked_user_id'])throw new DomainException('Employee account must be linked before completing onboarding.');
+  $photos=fmgoal_view($pdo,$goal)['photos'];
+  if(count($photos)<3)throw new DomainException('Employee photo gallery needs at least three consented photos.');
+  if(!fmgoal_voice_enrolled($pdo,(int)$actor['organization_id'],(int)$goal['linked_user_id']))
+   throw new DomainException('Employee voice profile is not yet enrolled. Have them enroll through their authenticated Time Clock account.');
+ }
+ $pdo->prepare("UPDATE fm_participant_goals SET status='completed',phase='completed',completed_at=NOW(6) WHERE organization_id=? AND id=? AND status='in_progress'")
+  ->execute([(int)$actor['organization_id'],(int)$goal['id']]);
+ app_audit($pdo,(int)$actor['organization_id'],(int)$actor['id'],'agent.participant_goal_completed','participant_goal',(string)$goal['public_id']);
+ return fmgoal_view($pdo,fmgoal_get($pdo,$actor,(string)$goal['public_id']));
 }
 function fmgoal_guest_convert(PDO $pdo,array $actor,array $goal,string $email,bool $explicitConsent):array {
  if(!app_has_permission('crm.manage',$actor))throw new DomainException('Customer CRM management permission required.');
