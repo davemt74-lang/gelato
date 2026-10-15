@@ -44,6 +44,7 @@ const {chromium}=require('playwright'),root=path.resolve(__dirname,'..');
   await page.evaluate(()=>window.GelatoFoodMonsterParticipants.setMode('camera'));
   ok(await page.evaluate(()=>getComputedStyle(document.querySelector('.fm-room-camera-view')).top)==='0px','Camera view starts at top of viewport');
   ok(await page.evaluate(()=>getComputedStyle(document.querySelector('.fm-room-camera-frame video')).objectFit)==='cover','Camera is full-bleed');
+  await page.evaluate(()=>window.GelatoFoodMonsterParticipants.setMode('agent'));
   await page.locator('[data-fm-setup="P1"]').click();
   ok(await page.locator('.fm-goal-panel').isVisible(),'Start setup opens goal');
   const intercepted=await page.evaluate(()=>{
