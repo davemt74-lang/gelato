@@ -12,6 +12,18 @@ on:
       - '.github/workflows/admin-tech-theme.yml'
   push:
     branches: [main]
+    paths:
+      - 'css/admin-tech-theme.css'
+      - 'js/universal-admin-page-shell.js'
+      - 'scheduling.php'
+      - 'workspace.php'
+      - 'tests/admin-tech-theme-contract.php'
+      - 'tests/universal-admin-page-shell-contract.php'
+      - '.github/workflows/admin-tech-theme.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   admin-tech-theme:
