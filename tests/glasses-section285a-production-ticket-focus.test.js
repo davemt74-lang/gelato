@@ -60,8 +60,10 @@ vm.runInNewContext(sim.slice(begin,end)+'\nthis.navigate=simulatorNavigation;',e
  assert.equal((await env.navigate('next_ticket')).ok,true);assert.equal(selected,'d');
  assert.equal((await env.navigate('previous_ticket')).ok,true);assert.equal(selected,'c');
  assert.equal((await env.navigate('select_ticket:104')).ok,true);assert.equal(selected,'b');
- assert.equal((await env.navigate('next_item')).ok,true);assert.equal(selected,'a');
- assert.equal((await env.navigate('previous_item')).ok,true);assert.equal(selected,'b');
+ assert.equal((await env.navigate('next_item')).ok,false);assert.equal(selected,'b','last item must not wrap');
+ assert.equal((await env.navigate('previous_item')).ok,true);assert.equal(selected,'a');
+ assert.equal((await env.navigate('previous_item')).ok,false);assert.equal(selected,'a','first item must not wrap');
+ assert.equal((await env.navigate('next_item')).ok,true);assert.equal(selected,'b');
  assert.equal((await env.navigate('select_ticket:999')).ok,false);assert.equal(selected,'b','unknown ticket never changes focus');
  assert.equal((await env.navigate('select_ticket:abc')).ok,false);
  assert.equal(remoteWrites,0,'all navigation is view-local');
