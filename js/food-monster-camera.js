@@ -101,7 +101,7 @@ function greet(reason){
    window.GelatoVoiceTurns.speak(message,{owner:'global-agent'});
 }
 async function scan(){
- if(S.detecting||!S.stream||document.hidden||!S.video||S.video.readyState<2)return;
+ if(S.busy||S.detecting||!S.stream||document.hidden||!S.video||S.video.readyState<2)return;
  S.detecting=true;const epoch=S.epoch;
  try{
    const api=await trackingModels();
@@ -254,7 +254,7 @@ window.addEventListener('gelato-verified-speaker',event=>{
  const d=event.detail||{};
  if(d.sessionUserMatch===true&&Number(d.userId)===Number(ACCOUNT))greet('voice');
 });
-window.GelatoFoodMonsterCamera={open:show,start,stop,enroll,forget,get active(){return!!S.stream},get enrolled(){return!!S.profile},get account(){return ACCOUNT}};
+window.GelatoFoodMonsterCamera={open:show,start,stop,enroll,forget,get active(){return!!S.stream},get enrolled(){return!!S.profile},get account(){return ACCOUNT},scanOnce:scan};
 }
 if(window.GelatoGlobalAgent?.user?.id) init();
 else window.addEventListener('gelato-agent-ready',init,{once:true});
