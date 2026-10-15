@@ -2744,9 +2744,13 @@ function simulatorNavigation(action,options={}){
     if(state.build)return {ok:false,message:'Finish the governed build before changing items.'};
     const group=activeTicket();if(!group)return {ok:false,message:'No active ticket.'};
     const index=group.items.findIndex(x=>x.kdsItemPublicId===current.kdsItemPublicId);
-    const next=group.items[(index+(action==='next_item'?1:group.items.length-1))%group.items.length];
-    if(!next)return {ok:false,message:'No additional item on this ticket.'};
-    return focusKitchenItem(next.kdsItemPublicId);
+    // A stale selected item or the end of a ticket must not wrap silently to
+    // an unrelated item (or report a successful move to the same item).
+    if(index<0)return {ok:false,message:'Selected item is no longer on the active KDS ticket. Refresh the ticket.'};
+    const target=index+(action==='next_item'?1:-1);
+    if(target<0||target>=group.items.length)
+      return {ok:false,message:action==='next_item'?'Last item on this ticket. Say Next Ticket to continue.':'First item on this ticket.'};
+    return focusKitchenItem(group.items[target].kdsItemPublicId);
   }
 
   if(action==='skip_ingredient')return acknowledgeIngredient('skipped',options);
