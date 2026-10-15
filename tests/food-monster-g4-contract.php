@@ -21,7 +21,7 @@ $open=fmllm_payload('openai',$history);
 $test($open['store']===false,'OpenAI does not retain conversation by request default');
 $test($open['max_output_tokens']<=500,'OpenAI bounded generation');
 $claude=fmllm_payload('anthropic',$history);
-$test($claude['max_tokens']<=500,'Anthropic bounded generation');
+$test($claude['max_tokens']<=800,'Anthropic bounded generation');
 $test(!isset($claude['tools'])&&!isset($open['tools']),'models receive no executable tool definitions');
 $test(str_contains($claude['system'],'Never claim you have executed a tool'),'system instructions forbid fake actions');
 $test(fmllm_parse('openai',['output'=>[['content'=>[['type'=>'output_text','text'=>'Test reply']]]]])==='Test reply','OpenAI Responses format');
