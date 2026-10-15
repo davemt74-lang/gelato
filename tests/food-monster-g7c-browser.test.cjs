@@ -27,7 +27,9 @@ const {chromium}=require('playwright'),base=path.resolve(__dirname,'..');
       get speaking(){return window.__tts.speaking},
       evaluate(words){
         if(!window.__tts.speaking)return {kind:'command'};
-        return words.includes('echo')?{kind:'ignored',reason:'tts-echo'}:{kind:'ignored',reason:'wake-required-while-speaking'};
+        if(words.includes('echo'))return {kind:'ignored',reason:'tts-echo'};
+        if(/^hey\s+gelato\b/i.test(words))return {kind:'command',interrupt:true};
+        return {kind:'ignored',reason:'wake-required-while-speaking'};
       },
       speak(text){window.__tts.speaking=true;window.__tts.text=text;return true},
       interrupt(){const active=window.__tts.speaking;window.__tts.speaking=false;
@@ -69,9 +71,12 @@ const {chromium}=require('playwright'),base=path.resolve(__dirname,'..');
   await page.evaluate(()=>window.__recognizers.at(-1).say('speech echo',true));
   ok(await page.locator('#gaInput').inputValue()==='','Echo is suppressed');
   await page.evaluate(()=>window.__recognizers.at(-1).say('Tell me more',true));
-  ok(await page.evaluate(()=>window.__tts.interruptions)===1,'Speech interrupts Agent reply');
+  ok(await page.evaluate(()=>window.__tts.interruptions)===0,'Unwoken room speech cannot interrupt playback');
+  ok(await page.locator('#gaInput').inputValue()==='','Rejected echo never enters chat input');
+  await page.evaluate(()=>window.__recognizers.at(-1).say('Hey Gelato tell me more',true));
+  ok(await page.evaluate(()=>window.__tts.interruptions)===1,'Explicit wake can interrupt Agent reply');
   await page.waitForFunction(()=>window.__answers.length===2,null,{timeout:7000});
-  ok(await page.evaluate(()=>window.__answers[1]==='Tell me more'),'Interrupted voice creates next turn');
+  ok(await page.evaluate(()=>window.__answers[1]==='tell me more'),'Wake phrase stripped from next user turn');
   await page.evaluate(()=>window.GelatoGlobalAgent.setConversationMode(false));
   ok(!await page.evaluate(()=>window.GelatoGlobalAgent.conversationMode),'Mode can stop');
   // Listening remains active when Conversation Mode is off. It must still auto-send.

@@ -578,15 +578,35 @@
       for(let index=event.resultIndex;index<event.results.length;index++){
         const result=event.results[index],text=String(result[0]?.transcript||'').trim();
         const evaluation=window.GelatoVoiceTurns?.evaluate?.(text,result[0]?.confidence,{wakeRequired:!S.listening});
-        // A genuine user utterance may barge into Agent speech without
-        // a wake word. Voice-turn echo rejection still takes priority.
-        if(S.conversation&&S.listening&&window.GelatoVoiceTurns?.speaking&&text){
-          if(evaluation?.reason==='tts-echo'||evaluation?.reason==='post-tts-echo')continue;
-          if(evaluation?.kind==='interrupt'||evaluation?.reason==='wake-required-while-speaking'||evaluation?.interrupt){
-            interruptSpeech('conversation-barge-in');S.lastBargeIn=0;
-            if(!/^hey\s+gelato\b/i.test(text))showVoiceDraft(text,{final:!!result.isFinal});
-            continue;
+        // FM-G7B2E: loudspeaker playback is never proof of a new user turn.
+        // Do not treat "wake-required-while-speaking" as an interruption:
+        // that classification is the *reason to reject* ambient/speaker audio.
+        // Web Speech does not give us an isolated echo-cancelled microphone feed,
+        // so hands-free barge-in during TTS must use an explicit wake phrase.
+        const agentSpeaking=!!(window.GelatoVoiceTurns?.speaking||window.speechSynthesis?.speaking);
+        if(S.listening&&agentSpeaking&&text){
+          if(['tts-echo','post-tts-echo'].includes(evaluation?.reason)){
+            diag('speaker-echo-suppressed');continue;
           }
+          // Interim guesses are especially prone to picking up speaker output.
+          if(!result.isFinal)continue;
+          const hasWake=/^(?:hey|hi|okay|ok)\s+gelato\b/i.test(text);
+          const explicitStop=/^(?:stop speaking|interrupt)$/i.test(text);
+          if(!hasWake&&!explicitStop){diag('speaker-audio-ignored');continue;}
+          // A loaded shared voice-turn controller remains authoritative.
+          if(!evaluation||(evaluation.kind!=='interrupt'&&evaluation.interrupt!==true))continue;
+          interruptSpeech('conversation-barge-in');S.lastBargeIn=0;
+          const control=parseListeningCommand(text);
+          if(control==='stop')void setListening(false,{keepWake:true});
+          else if(control==='off')void setListening(false,{keepWake:false});
+          else if(hasWake){
+            const rest=text.replace(/^(?:hey|hi|okay|ok)\s+gelato[,\s]*/i,'').trim();
+            // Wake-and-question is a real new voice turn. Wake alone and
+            // "stop speaking" are controls, never new model prompts.
+            if(rest&&!/^(?:stop|stop speaking|be quiet|quiet|interrupt|hold on)\b/i.test(rest))
+              showVoiceDraft(rest,{final:true});
+          }
+          continue;
         }
         if(evaluation?.kind==='ignored'){
           if(['tts-echo','post-tts-echo'].includes(evaluation.reason))diag('echo-ignored');

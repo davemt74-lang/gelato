@@ -80,6 +80,7 @@ jobs:
           node --check js/food-monster-llm.js
           node --check js/global-agent.js
           node tests/food-monster-g7v-listening.test.cjs
+          node tests/voice-turn-taking.test.js
           php tests/food-monster-g7c-routing.php
           php -l includes/agent-workspace-core.php
           php -l api/agent-brain.php

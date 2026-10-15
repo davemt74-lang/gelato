@@ -33,10 +33,10 @@
     if (page === 'operations.php') ensureScript('js/operations-agent-context.js?v=20260915-context1', 'data-operations-agent-context-loader');
     if (page === 'kds.php' || page === 'kds-dashboard.php') ensureScript('js/kds-agent-context.js?v=20260915-context1', 'data-kds-agent-context-loader');
     ensureScript('js/voice-session-presence.js?v=20261013-presence1','data-gelato-voice-presence-loader');
-    ensureScript('js/voice-turn-taking.js?v=20261013-turn1','data-gelato-voice-turn-loader');
+    ensureScript('js/voice-turn-taking.js?v=20261015-fmg7b2e','data-gelato-voice-turn-loader');
     ensureScript('js/proactive-listening-commands.js?v=20261013-listening1','data-gelato-listening-controls-loader');
     ensureScript('js/voice-diagnostics.js?v=20261013-diagnostics1','data-gelato-voice-diagnostics-loader');
-    if (!window.GelatoGlobalAgent) ensureScript('js/global-agent.js?v=20261015-fmg7b2', 'data-gelato-global-agent-loader');
+    if (!window.GelatoGlobalAgent) ensureScript('js/global-agent.js?v=20261015-fmg7b2e', 'data-gelato-global-agent-loader');
     ensureScript('js/dynamic-agent-canvas.js?v=20260915-drawer1', 'data-dynamic-agent-canvas-loader');
     ensureScript('js/agent-next-moves.js?v=20261014-fmg6', 'data-agent-next-moves-loader');
     // One companion UI for the existing authenticated Agent session; never a second brain.

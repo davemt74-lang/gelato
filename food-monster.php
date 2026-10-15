@@ -19,10 +19,10 @@ $user = app_require_auth();
 </main>
 <script src="js/agent-page-context.js?v=20260915-context3"></script>
 <script src="js/voice-session-presence.js?v=20261013-presence1"></script>
-<script src="js/voice-turn-taking.js?v=20261013-turn1"></script>
+<script src="js/voice-turn-taking.js?v=20261015-fmg7b2e"></script>
 <script src="js/proactive-listening-commands.js?v=20261013-listening1"></script>
 <script src="js/voice-diagnostics.js?v=20261013-diagnostics1"></script>
-<script src="js/global-agent.js?v=20261015-fmg7b2"></script>
+<script src="js/global-agent.js?v=20261015-fmg7b2e"></script>
 <script src="js/food-monster.js?v=20261015-fmg7b1"></script>
 </body>
 </html>

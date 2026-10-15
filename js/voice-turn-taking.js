@@ -85,13 +85,15 @@
     const woken=/^(?:hey|hi|okay|ok)\s+gelato\b/.test(phrase);
     const isStop=/^(?:(?:hey|hi|okay|ok)\s+gelato\s+)?(?:stop|stop speaking|be quiet|quiet|interrupt|cancel speech|hold on)\b/.test(phrase);
     if(speaking){
-      if(isStop&&(woken||phrase==='stop speaking'||phrase==='interrupt'))return {kind:'interrupt',text};
+      // Check playback echo before processing a "stop" or wake command.
+      // The synthesized reply can quote those phrases itself.
       if(resemblesSpeech(phrase))return {kind:'ignored',reason:'tts-echo',text};
+      if(isStop&&(woken||phrase==='stop speaking'||phrase==='interrupt'))return {kind:'interrupt',text};
       if(!woken)return {kind:'ignored',reason:'wake-required-while-speaking',text};
       // A genuine wake-word command is barge-in, not another concurrent TTS.
       return {kind:'command',interrupt:true,text};
     }
-    if(Date.now()-lastEnd<1400&&resemblesSpeech(phrase))return {kind:'ignored',reason:'post-tts-echo',text};
+    if(Date.now()-lastEnd<2000&&resemblesSpeech(phrase))return {kind:'ignored',reason:'post-tts-echo',text};
     const preset=presets[environment];
     const score=Number(confidence);
     if(Number.isFinite(score)&&score>0&&score<preset.confidence&&!woken)
