@@ -132,8 +132,8 @@ function animate(){
  const cameraActive=!!(state.cameraTarget&&now<state.faceSeenUntil);
  const target=cameraActive?state.cameraTarget:null;
  const minimized=root.classList.contains('fm-minimized');
- const paused=!!(state.drag||minimized||document.hidden||reduced.matches);
- if(!paused&&now>=state.manualSizeUntil){
+ const paused=!!(state.drag||minimized||document.hidden);
+ if(!paused&&!reduced.matches&&now>=state.manualSizeUntil){
    const desired=engagementSize(now);
    state.size+=(desired-state.size)*(1-Math.exp(-dt*3.2));
  }
@@ -152,7 +152,7 @@ function animate(){
    state.targetX=reduced.matches?0:Math.sin(now/2000)*3;state.targetY=0;
  }
  const dialogOpen=!!document.querySelector('#fm-camera-dialog[open],#fm-llm-dialog[open]');
- const canRoam=state.roamEnabled&&!paused&&!state.hovered&&!dialogOpen&&
+ const canRoam=state.roamEnabled&&!paused&&!reduced.matches&&!state.hovered&&!dialogOpen&&
    !performanceState.voiceSpeaking&&!performanceState.thinking&&
    now>=state.cameraManualUntil&&now>=state.roamResumeAt&&!(target&&target.follow);
  if(canRoam){
