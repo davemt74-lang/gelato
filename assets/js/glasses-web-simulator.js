@@ -1127,10 +1127,12 @@ function renderSharedCameraRecognitionStatus(){
      ' · class evidence only; placement unverified, no KDS updates.':
    'Cameras 2–5 · load an approved read-only model to enable shared recognition.';
 }
-function scheduleAuxiliaryRecognition(epoch){
+function scheduleAuxiliaryRecognition(epoch,elapsedMs=0){
  if(epoch!==readonlyIngredient.epoch||readonlyIngredient.status!=='ready')return;
  if(readonlyIngredient.auxTimer!=null)clearTimeout(readonlyIngredient.auxTimer);
- readonlyIngredient.auxTimer=setTimeout(()=>void pollAuxiliaryRecognition(epoch),460);
+ // Back off under load without queueing overlapping shared ONNX inference calls.
+ const delay=Math.max(300,Math.min(1400,Math.ceil((Number.isFinite(elapsedMs)?elapsedMs:0)*1.25+300)));
+ readonlyIngredient.auxTimer=setTimeout(()=>void pollAuxiliaryRecognition(epoch),delay);
 }
 async function pollAuxiliaryRecognition(epoch){
  if(epoch!==readonlyIngredient.epoch||readonlyIngredient.status!=='ready')return;
@@ -1182,7 +1184,7 @@ async function pollAuxiliaryRecognition(epoch){
    }
    log('VISION','Camera '+source.slot+' read-only inference failed: '+String(error?.message||error));
  }finally{
-   if(epoch===model.epoch){model.busy=false;scheduleAuxiliaryRecognition(epoch);}
+   if(epoch===model.epoch){model.busy=false;scheduleAuxiliaryRecognition(epoch,Date.now()-capturedAt);}
  }
 }
 window.addEventListener('gelato-camera-configuration-changed',()=>{
