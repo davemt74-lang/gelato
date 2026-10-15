@@ -21,6 +21,7 @@
     lastBargeIn: 0,
     rec: null,
     poll: null,
+    voiceDraft: {owned: false, previous: '', committed: ''},
   };
 
   const has = (permission) => S.permissions.includes('*') || S.permissions.includes(permission);
@@ -86,6 +87,9 @@
     `);
     const q = (id) => document.getElementById(id);
     q('gaSend').onclick = () => send(q('gaInput').value, false);
+    q('gaInput').addEventListener('input', (event) => {
+      if (event.isTrusted) resetVoiceDraft();
+    });
     q('gaInput').addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && !event.shiftKey) {
         event.preventDefault();
@@ -142,6 +146,7 @@
     S.busy = true;
     const input = document.getElementById('gaInput');
     if (input) input.value = '';
+    resetVoiceDraft();
     status('Gelato is checking your restaurant context…');
 
     try {
@@ -310,17 +315,69 @@
     return true;
   }
 
+  // Unwoken speech is an editable draft, never an Agent tool command.
+  function resetVoiceDraft(){
+    S.voiceDraft={owned:false,previous:'',committed:''};
+  }
+  function showVoiceDraft(raw,{final=false}={}){
+    const field=document.getElementById('gaInput');
+    const text=String(raw||'').trim().slice(0,3500);
+    if(!field||!text)return false;
+    const draft=S.voiceDraft;
+    if(draft.owned&&field.value!==draft.previous){resetVoiceDraft();return false;}
+    if(!draft.owned&&field.value.trim()!=='')return false;
+    const value=(draft.committed?draft.committed+' ':'')+text;
+    field.value=value;field.dataset.voiceInterim=final?'false':'true';
+    draft.owned=true;draft.previous=value;
+    if(final)draft.committed=value;
+    field.dispatchEvent(new Event('input',{bubbles:true}));
+    window.dispatchEvent(new CustomEvent('gelato-agent-dictation',{
+      detail:{text:value,final,source:'browser-speech-recognition'}
+    }));
+    return true;
+  }
+  function speechOnce(){
+    const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!Recognition)return Promise.reject(new Error('Speech recognition is unavailable in this browser.'));
+    if(S.rec)stopContinuous();
+    return new Promise((resolve,reject)=>{
+      const rec=new Recognition();let settled=false,finalText='',timer=0;
+      rec.lang='en-US';rec.continuous=false;rec.interimResults=true;rec.maxAlternatives=1;
+      function finish(error){
+        if(settled)return;settled=true;clearTimeout(timer);
+        rec.onresult=rec.onerror=rec.onend=null;
+        try{rec.stop?.();}catch{}
+        if(error)reject(error);else if(finalText)resolve(finalText);
+        else reject(new Error('No speech recognized. Check microphone permissions and try again.'));
+      }
+      rec.onresult=event=>{
+        for(let i=event.resultIndex||0;i<event.results.length;i++){
+          const result=event.results[i],spoken=String(result[0]?.transcript||'').trim();
+          if(!spoken)continue;
+          showVoiceDraft(spoken,{final:!!result.isFinal});
+          if(result.isFinal){finalText=spoken;finish();return;}
+        }
+      };
+      rec.onerror=event=>finish(new Error('Speech recognition: '+String(event.error||'unavailable')));
+      rec.onend=()=>finish();
+      timer=setTimeout(()=>finish(new Error('No speech detected. Check your microphone and try again.')),16000);
+      try{rec.start();}catch(error){finish(error);}
+    });
+  }
   async function talkOnce() {
+    const shouldResume=S.listening||S.wakeStandby;
     try {
       interruptSpeech('talk-once');
       await verifyVoice();
-      status('Listening…');
+      status('Listening… speaking will appear in the chat bar.');
       const text = await speechOnce();
       window.dispatchEvent(new CustomEvent('gelato-agent-voice-transcript', {detail: {text}}));
       return await send(text, true);
     } catch (error) {
-      status(error.message, 4500);
+      status(error.message||'Could not transcribe speech.', 4500);
       return null;
+    } finally {
+      if(shouldResume&&!document.hidden&&!S.rec)startContinuous();
     }
   }
 
@@ -423,9 +480,10 @@
       S.listening=!!on;
       S.wakeStandby=!!(keepWake||on);
       if(on){
-        if(!S.rec)startContinuous();
+        const started=S.rec?true:startContinuous();
+        if(!started){S.listening=false;S.wakeStandby=false;stopPoll();renderListening();return false;}
         startPoll();
-        status('Listening active. Say “Hey Gelato, stop listening” to enter wake standby.',4500);
+        status('Listening active · speech appears in chat. Say “Hey Gelato” for hands-free commands.',5500);
       }else{
         stopPoll();
         if(keepWake&&S.rec){
@@ -444,14 +502,16 @@
     const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
     if(!SpeechRecognition||document.hidden||(!S.listening&&!S.wakeStandby))return false;
     stopContinuous();
-    const activeRec=new SpeechRecognition();S.rec=activeRec;diag('starting');
+    let activeRec;
+    try{activeRec=new SpeechRecognition();}catch(error){status('Could not initialize browser speech recognition.',4500);return false;}
+    S.rec=activeRec;diag('starting');
     activeRec.lang='en-US';activeRec.continuous=true;activeRec.interimResults=true;
     activeRec.onstart=()=>{if(S.rec!==activeRec)return;S.micActive=true;diag('active');renderListening();};
     activeRec.onresult=event=>{
       if(S.rec!==activeRec)return;
       for(let index=event.resultIndex;index<event.results.length;index++){
         const result=event.results[index],text=String(result[0]?.transcript||'').trim();
-        const evaluation=window.GelatoVoiceTurns?.evaluate?.(text,result[0]?.confidence,{wakeRequired:true});
+        const evaluation=window.GelatoVoiceTurns?.evaluate?.(text,result[0]?.confidence,{wakeRequired:!S.listening});
         if(evaluation?.kind==='ignored'){if(['tts-echo','post-tts-echo'].includes(evaluation.reason))diag('echo-ignored');continue;}
         // Evaluate explicit stop/start controls before generic speech barge-in.
         // "Hey Gelato stop listening" must update the saved preference,
@@ -473,7 +533,14 @@
           status('Gelato stopped speaking.',2200);
           continue;
         }
-        if(!result.isFinal||!S.listening||Date.now()-S.lastBargeIn<1300)continue;
+        if(!S.listening||Date.now()-S.lastBargeIn<1300)continue;
+        // Non-wake speech is visible dictation and never executes an action.
+        if(!/^hey\s+gelato\b/i.test(text)){
+          showVoiceDraft(text,{final:!!result.isFinal});
+          if(result.isFinal)status('Dictation ready · press Send, or say “Hey Gelato” for hands-free commands.',3500);
+          continue;
+        }
+        if(!result.isFinal)continue;
         if(/^hey\s+gelato\b/i.test(text)){
           if(evaluation?.interrupt)interruptSpeech('voice-barge-in');
           if(Date.now()>=S.voiceUntil){
@@ -491,10 +558,10 @@
       const error=String(event.error||'unknown');diag('error',{error});
       if(['not-allowed','service-not-allowed','audio-capture'].includes(error)){
         stopContinuous();S.listening=false;S.wakeStandby=false;stopPoll();diag('blocked',{error});
-        status('Microphone blocked: '+error+'. Check browser settings.',5000);
+        status('Speech recognition blocked: '+error+'. Check browser microphone and speech-service settings.',6500);
         renderListening();return;
       }
-      if(!['no-speech','aborted'].includes(error))status('Listening: '+error,3000);
+      if(!['no-speech','aborted'].includes(error))status('Speech recognition: '+error+'. No transcript was received.',5000);
     };
     activeRec.onend=()=>{
       if(S.rec!==activeRec)return;
