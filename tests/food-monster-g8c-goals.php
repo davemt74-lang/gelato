@@ -29,7 +29,7 @@ foreach([
  [str_contains($core,'is_owner_role=0'),'Cannot assign protected owner role'],
  [str_contains($core,'is_assignable=1'),'Cannot assign non-assignable role'],
  [str_contains($core,'$last,$name'),'Single-name employee accounts retain required non-null last_name'],
- [str_contains($core,"mb_strlen($first,'UTF-8')>100"),'Employee name lengths match SQL schema'],
+ [str_contains($core,"mb_strlen(\$first,'UTF-8')>100"),'Employee name lengths match SQL schema'],
  [str_contains($js,'Pending approval:'),'Exact email and role visible during approval'],
  [str_contains($core,"['employee','guest']"),'Explicit participant type'],
  [str_contains($core,"photo_consent_at']===null"),'Photo consent gate'],
