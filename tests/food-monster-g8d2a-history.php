@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require __DIR__.'/../includes/food-monster-participant-history.php';
 $n=0;function yes(bool $v,string $label):void{global $n;if(!$v){fwrite(STDERR,"FAIL: $label\n");exit(1);}++$n;}
-foreach(['goal_started','name_confirmed','participant_type','existing_account_linked','photo_consent','photo_saved',
+foreach(['voice_enrolled','goal_started','name_confirmed','participant_type','existing_account_linked','photo_consent','photo_saved',
  'voice_consent','account_proposed','employee_account_created','goal_completed','goal_cancelled','guest_crm_conversion','photos_deferred','photo_removed'] as $event)yes(fmph_allowed_event($event),'Valid history event '.$event);
 foreach(['login_with_pin','raw_audio','camera_image','password','face_vector','unknown'] as $bad)yes(!fmph_allowed_event($bad),'Reject sensitive event type');
 yes(fmph_owner(['is_owner_role'=>1]),'Protected owner can read operational summaries');

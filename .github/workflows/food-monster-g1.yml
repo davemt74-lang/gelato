@@ -22,6 +22,12 @@ on:
       - 'tests/food-monster-g8b-pin-*'
       - 'tests/food-monster-g8c-*'
       - 'tests/food-monster-g8d1-*'
+      - 'tests/food-monster-g8d2a-*'
+      - 'includes/food-monster-participant-history.php'
+      - 'api/food-monster-participant-history.php'
+      - 'js/food-monster-participant-history.js'
+      - 'database/20261015_fm_g8d2a_participant_history.sql'
+      - 'docs/FOOD-MONSTER-FM-G8D2A-HISTORY.md'
       - 'js/food-monster-fast-enroll.js'
       - 'api/food-monster-speaker.php'
       - 'includes/food-monster-speaker.php'
@@ -133,6 +139,10 @@ jobs:
           php -l includes/food-monster-speaker.php
           php tests/food-monster-g8d1-speaker.php
           php tests/food-monster-g8d1-flow.php
+          php -l includes/food-monster-participant-history.php
+          php -l api/food-monster-participant-history.php
+          php tests/food-monster-g8d2a-history.php
+          node --check js/food-monster-participant-history.js
           node --check js/food-monster-fast-enroll.js
           node --check js/food-monster-onboarding.js
           node --check js/food-monster-onboarding.js
@@ -175,5 +185,6 @@ jobs:
           node tests/food-monster-g8b-pin-browser.test.cjs
           node tests/food-monster-g8c-browser.test.cjs
           node tests/food-monster-g8d1-chat-browser.test.cjs
+          node tests/food-monster-g8d2a-browser.test.cjs
           node tests/food-monster-g7b1-browser.test.cjs
           node tests/food-monster-g7b2-browser.test.cjs
