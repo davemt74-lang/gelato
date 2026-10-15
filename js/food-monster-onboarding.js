@@ -10,9 +10,15 @@ const panel=document.createElement('section');panel.className='fm-goal-panel';pa
 panel.setAttribute('aria-label','Participant onboarding goal');
 panel.innerHTML='<header class="fm-goal-head"><div><strong>Agent Brain · Participant Setup</strong><small>Guided onboarding goal</small></div><button type="button" data-fm-goal-hide aria-label="Close participant setup panel">×</button></header>'+
  '<p class="fm-goal-prompt" role="status" aria-live="polite">Start by introducing yourself.</p><div class="fm-goal-body"></div>'+
+ '<div class="fm-goal-voice-match" hidden><label><input type="checkbox" data-fm-speaker-consent> Speaker consents to a short voice comparison</label><button type="button" data-fm-voice-identify>Identify enrolled speaker</button><small class="fm-speaker-result" role="status" aria-live="polite"></small></div>'+
  '<footer class="fm-goal-footer"><button type="button" data-fm-goal-my-history>My participant history</button><button type="button" data-fm-goal-handsfree aria-pressed="false">Enable hands-free answers</button><button type="button" data-fm-goal-refresh>Refresh goal</button><button type="button" data-fm-goal-cancel>Cancel goal</button></footer>';
 host.append(panel);
 const body=panel.querySelector('.fm-goal-body'),prompt=panel.querySelector('.fm-goal-prompt');
+function voiceTools(){
+ const access=window.GelatoFoodMonsterParticipants?.roster?.access||{};
+ panel.querySelector('.fm-goal-voice-match').hidden=access.voiceManage!==true;
+}
+window.addEventListener('gelato-food-monster-staff-context',voiceTools);
 const launch=document.createElement('button');launch.type='button';launch.className='fm-goal-launch';launch.textContent='+';
 launch.title='Participant setup';launch.setAttribute('aria-label','Open participant setup');
 function attachLauncher(){
@@ -36,7 +42,7 @@ function note(message){
   }
  }
 }
-function show(){state.opened=true;panel.hidden=false;document.body.classList.add('fm-goal-open');render();}
+function show(){state.opened=true;panel.hidden=false;document.body.classList.add('fm-goal-open');voiceTools();render();}
 function hide(){
  state.opened=false;panel.hidden=true;document.body.classList.remove('fm-goal-open');
  state.handsFree=false;panel.querySelector('[data-fm-goal-handsfree]').setAttribute('aria-pressed','false');
@@ -215,6 +221,12 @@ async function action(which){
 panel.addEventListener('click',e=>{
  if(e.target.closest('[data-fm-goal-hide]'))hide();
  else if(e.target.closest('[data-fm-goal-my-history]')){void window.GelatoFoodMonsterParticipantHistory?.open?.();}
+ else if(e.target.closest('[data-fm-voice-identify]')){
+  const button=panel.querySelector('[data-fm-voice-identify]');button.disabled=true;
+  void window.GelatoFoodMonsterFastEnrollment?.identifySpeaker?.()
+   .catch(err=>note(err.message||'Speaker remains unverified.'))
+   .finally(()=>{button.disabled=false;});
+ }
  else if(e.target.closest('[data-fm-goal-handsfree]')){
   const turn=window.GelatoGlobalAgent,button=panel.querySelector('[data-fm-goal-handsfree]');
   if(!turn?.setConversationMode){note('Voice controls are loading.');return;}

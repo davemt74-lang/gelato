@@ -19,7 +19,8 @@ async function captureVoice(ms,record){
   throw Error('HTTPS and microphone access are required.');
  if(record&&!window.MediaRecorder)throw Error('Voice recording is unavailable in this browser.');
  const agent=window.GelatoGlobalAgent;
- if(agent?.conversationMode)await agent.setConversationMode(false);
+ const resumeConversation=!!agent?.conversationMode;
+ if(resumeConversation)await agent.setConversationMode(false);
  if(agent?.listening)await agent.setListening(false,{keepWake:false});
  const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true},video:false});
  let context,recorder,timer,meter;
@@ -63,6 +64,8 @@ async function captureVoice(ms,record){
   stream.getTracks().forEach(t=>t.stop());
   await context?.close?.().catch(()=>{});
   meter?.remove();
+  if(resumeConversation&&!document.hidden&&!speechBlocked())
+   await agent?.setConversationMode?.(true).catch(()=>{});
  }
 }
 async function capturePhotos(){

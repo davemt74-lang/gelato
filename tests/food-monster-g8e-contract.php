@@ -20,6 +20,8 @@ foreach([
  [str_contains($js,'someone-else'),'Bystander cannot silently become signed-in user'],
  [str_contains($js,'not-listed'),'Names do not automatically claim identities'],
  [str_contains($js,'link_existing'),'Current permission-protected account link reused'],
+ [str_contains($js,'data-fm-speaker-consent'),'Low-light voice comparison consent moved to chat popup'],
+ [str_contains($js,'voiceTools()'),'Manager voice feature permission remains checked'],
  [str_contains($live,"panel.innerHTML='<div class=\"fm-participant-cards\""),'Only active card collection in right sidebar'],
  [!str_contains($live,'fm-participant-roster'),'No staff roster UI in participant sidebar'],
  [!str_contains($live,'fm-participants-top'),'No heading count or decorative sidebar UI'],
