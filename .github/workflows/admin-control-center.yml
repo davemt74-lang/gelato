@@ -12,6 +12,18 @@ on:
       - '.github/workflows/admin-control-center.yml'
   push:
     branches: [main]
+    paths:
+      - 'admin.php'
+      - 'online-orders-admin.php'
+      - 'workspace.php'
+      - 'includes/admin-control-core.php'
+      - 'assets/css/admin-control.css'
+      - 'tests/admin-control-center-contract.php'
+      - '.github/workflows/admin-control-center.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   admin-control-center:
