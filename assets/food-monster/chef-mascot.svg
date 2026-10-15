@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 480" role="img" aria-label="Food Monster orange one-eyed chef">
+<defs><linearGradient id="fm-body" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffb344"/><stop offset=".4" stop-color="#ff7522"/><stop offset="1" stop-color="#e4401b"/></linearGradient><radialGradient id="fm-eye"><stop stop-color="#0cddff"/><stop offset=".7" stop-color="#0daee6"/><stop offset="1" stop-color="#e1ffff"/></radialGradient><linearGradient id="fm-hat" x1="0" y1="0" x2=".8" y2="1"><stop stop-color="#fffefa"/><stop offset=".8" stop-color="#fceedd"/><stop offset="1" stop-color="#afe9fb"/></linearGradient><clipPath id="fm-iris-clip"><circle cx="200" cy="261" r="63"/></clipPath></defs>
+<g class="fm-head">
+<path d="M78 193 Q29 160 26 117 Q50 157 112 157 L126 193Z" fill="#fff0bc" stroke="#fff8dd" stroke-width="4"/><path d="M322 193 Q371 160 374 117 Q350 157 288 157 L274 193Z" fill="#fff0bc" stroke="#fff8dd" stroke-width="4"/>
+<path d="M118 200 V127 Q93 116 104 87 Q119 49 150 63 Q169 19 205 26 Q244 19 264 62 Q299 49 314 85 Q326 117 285 132 V200Z" fill="url(#fm-hat)" stroke="#fffefa" stroke-width="4"/>
+<path d="M131 150 Q200 138 269 150 V197 H131Z" fill="#fff8ef" stroke="#e4d5d0" stroke-width="2"/>
+<rect x="55" y="179" width="290" height="248" rx="91" fill="url(#fm-body)" stroke="#ef521d" stroke-width="5"/>
+<path d="M80 257 Q73 213 110 197" fill="none" stroke="#ffdd82" stroke-linecap="round" stroke-width="13" opacity=".65"/>
+<circle cx="200" cy="261" r="71" fill="#177d94" stroke="#b8ffff" stroke-width="7"/><circle cx="200" cy="261" r="63" fill="url(#fm-eye)"/>
+<g clip-path="url(#fm-iris-clip)"><g data-fm-pupil="1"><circle cx="200" cy="261" r="27" fill="#07192d"/><circle cx="211" cy="252" r="12" fill="#00588c"/><circle cx="185" cy="241" r="11" fill="#fff"/></g><ellipse class="fm-lid fm-lid-top" cx="200" cy="196" rx="67" ry="68" fill="#ff7220"/><ellipse class="fm-lid fm-lid-bottom" cx="200" cy="326" rx="67" ry="68" fill="#f35e1f"/></g>
+<g class="fm-mouth"><path d="M115 339 Q200 385 285 339 Q265 402 200 410 Q135 407 115 339Z" fill="#541222" stroke="#dc491a" stroke-width="4"/><path d="M156 396 Q199 373 245 396 Q217 415 170 410Z" fill="#f2434e"/><path d="M143 351 L158 353 L153 380 Q146 380 143 351Z M257 351 L243 353 L248 380 Q255 380 257 351Z" fill="#fff7da"/></g>
+</g></svg>

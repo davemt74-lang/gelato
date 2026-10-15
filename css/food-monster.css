@@ -1,0 +1,45 @@
+:root{--fm-cyan:#20d8ff}
+#food-monster-root{position:fixed;inset:0;z-index:2147482950;pointer-events:none;--fm-size:180px;--fm-x:60vw;--fm-y:35vh}
+#food-monster-root .fm-actor{position:fixed;top:var(--fm-y);left:var(--fm-x);width:var(--fm-size);aspect-ratio:5/6;pointer-events:auto;touch-action:none;cursor:grab;filter:drop-shadow(0 20px 24px #00152650)}
+#food-monster-root .fm-actor:active{cursor:grabbing}
+#food-monster-root .fm-figure{width:100%;height:100%;animation:fm-float 5s ease-in-out infinite}
+#food-monster-root .fm-figure svg{width:100%;height:100%;display:block;pointer-events:none}
+#food-monster-root .fm-actions{display:flex;gap:5px;justify-content:center;margin-top:-12px;opacity:0;transition:opacity .2s}
+#food-monster-root .fm-actor:is(:hover,:focus-within) .fm-actions,#food-monster-root.fm-is-stage .fm-actions{opacity:1}
+#food-monster-root .fm-actions :is(a,button){background:#f9feff;color:#143144;border:1px solid #bdd9e3;border-radius:50%;width:30px;height:30px;display:grid;place-items:center;text-decoration:none;font:700 16px system-ui;cursor:pointer;pointer-events:auto}
+#food-monster-root .fm-actions :is(a,button):focus-visible{outline:3px solid var(--fm-cyan)}
+#food-monster-root .fm-speech{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);max-width:min(360px,80vw);width:max-content;padding:10px 14px;border-radius:15px;background:white;color:#152d3d;font:600 12px/1.5 system-ui;text-align:center;overflow-wrap:anywhere;box-shadow:0 12px 22px #00162640;visibility:hidden;opacity:0;transition:opacity .2s;pointer-events:none}
+#food-monster-root.fm-has-speech .fm-speech{visibility:visible;opacity:1}
+#food-monster-root .fm-lid-top{transform:translateY(-122px);transition:transform .11s ease}
+#food-monster-root .fm-lid-bottom{transform:translateY(122px);transition:transform .11s ease}
+#food-monster-root.fm-blink .fm-lid{transform:translateY(0)}
+#food-monster-root .fm-mouth{transform-origin:200px 365px}
+#food-monster-root.fm-speaking .fm-mouth{animation:fm-talk .2s ease-in-out infinite alternate}
+#food-monster-root.fm-listening .fm-mouth{transform:scale(.85,.65)}
+#food-monster-root.fm-thinking .fm-head{transform-origin:200px 370px;animation:fm-think 1s ease-in-out infinite alternate}
+@keyframes fm-float{50%{transform:translateY(-10px) rotate(1deg)}}
+@keyframes fm-talk{from{transform:scale(1,.45)}to{transform:scale(.95,1.22)}}
+@keyframes fm-think{to{transform:rotate(2deg)}}
+body.food-monster-stage-page{margin:0;height:100dvh;overflow:hidden;background:radial-gradient(ellipse at 50% 37%,#183c59,#0a2236 55%,#061522);color:#e9faff;font-family:system-ui,-apple-system,sans-serif}
+body.food-monster-stage-page #food-monster-stage{height:100dvh}
+body.food-monster-stage-page .fm-stage-brand{position:fixed;top:20px;left:22px;color:#d5f3fa;text-decoration:none;font-size:13px;font-weight:800;z-index:10}
+body.food-monster-stage-page .fm-stage-brand span{color:var(--fm-cyan)}
+body.food-monster-stage-page .fm-stage-help{position:fixed;top:20px;right:24px;font-size:11px;color:#aac0d3}
+body.food-monster-stage-page #gelato-agent-bar{bottom:max(14px,env(safe-area-inset-bottom));width:min(890px,calc(100% - 28px));border-radius:24px;padding:10px;box-shadow:0 18px 45px #0005}
+body.food-monster-stage-page #gelato-agent-status{bottom:95px}
+@media(max-width:620px){#food-monster-root .fm-actions{opacity:1}body.food-monster-stage-page .fm-stage-help{top:47px;left:22px;right:auto}body.food-monster-stage-page #gelato-agent-bar{width:calc(100% - 14px);bottom:max(7px,env(safe-area-inset-bottom))}}
+@media(prefers-reduced-motion:reduce){#food-monster-root .fm-figure,#food-monster-root.fm-speaking .fm-mouth,#food-monster-root.fm-thinking .fm-head{animation:none!important}}
+#food-monster-root .fm-minimize{position:absolute;right:10%;top:8%;height:27px;width:27px;border:1px solid #a9d8e4;border-radius:50%;background:#061c30;color:#e8faff;cursor:pointer;opacity:0;pointer-events:auto;font:700 17px system-ui;transition:opacity .18s}
+#food-monster-root .fm-actor:is(:hover,:focus-within) .fm-minimize,#food-monster-root.fm-minimized .fm-minimize{opacity:1}
+#food-monster-root.fm-minimized .fm-actor{width:62px;aspect-ratio:1;filter:none}
+#food-monster-root.fm-minimized .fm-figure{transform:scale(.52);transform-origin:center top;animation:none}
+#food-monster-root.fm-minimized .fm-actions,#food-monster-root.fm-minimized .fm-speech{display:none}
+#food-monster-root.fm-minimized .fm-minimize{right:-2px;top:0}
+body.food-monster-stage-page #gelato-agent-bar #gaMicOff,
+body.food-monster-stage-page #gelato-agent-bar #gaInterrupt,
+body.food-monster-stage-page #gelato-agent-bar #gaCanvas{display:none}
+body.food-monster-stage-page #gelato-agent-bar textarea{min-width:0}
+@media(max-width:620px){body.food-monster-stage-page #gelato-agent-bar{gap:4px}body.food-monster-stage-page #gelato-agent-bar button{width:38px;height:38px;flex:0 0 38px}}
+
+/* Keep the mobile composer within viewport including padding and border. */
+body.food-monster-stage-page #gelato-agent-bar{box-sizing:border-box;max-width:100vw}
