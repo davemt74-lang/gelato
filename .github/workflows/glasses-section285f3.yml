@@ -4,12 +4,16 @@ on:
     paths:
       - 'assets/js/glasses-shared-camera-recognition.js'
       - 'tests/glasses-section285f3-inference.test.js'
+      - 'tests/glasses-section285f3-scheduling.test.js'
+      - 'assets/js/glasses-web-simulator.js'
       - '.github/workflows/glasses-section285f3.yml'
   push:
     branches: [main]
     paths:
       - 'assets/js/glasses-shared-camera-recognition.js'
       - 'tests/glasses-section285f3-inference.test.js'
+      - 'tests/glasses-section285f3-scheduling.test.js'
+      - 'assets/js/glasses-web-simulator.js'
       - '.github/workflows/glasses-section285f3.yml'
 jobs:
   inference:
@@ -21,5 +25,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: node --check assets/js/glasses-shared-camera-recognition.js
-      - run: node --test tests/glasses-section285f3-inference.test.js
+      - run: node --check assets/js/glasses-shared-camera-recognition.js && node --check assets/js/glasses-web-simulator.js
+      - run: node --test tests/glasses-section285f3-inference.test.js tests/glasses-section285f3-scheduling.test.js
