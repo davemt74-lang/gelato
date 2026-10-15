@@ -62,15 +62,47 @@ function fmllm_parse(string $provider,array $response): string
     }
     return trim(implode("\n",$parts));
 }
+function fmllm_model(string $provider): string
+{
+    if($provider==='anthropic')return 'claude-haiku-5-5';
+    if($provider==='openai')return 'gpt-5-mini';
+    throw new InvalidArgumentException('Unknown model provider.');
+}
+final class FmLlmProviderException extends RuntimeException
+{
+    public function __construct(public readonly string $reason,string $message){parent::__construct($message);}
+}
+function fmllm_provider_failure(string $provider,int $httpStatus,int $curlError=0): FmLlmProviderException
+{
+    $name=$provider==='anthropic'?'Claude':'OpenAI';
+    if($curlError!==0)return match($curlError){
+        6=>new FmLlmProviderException('dns',$name.' API hostname could not be resolved by this server. Check HostGator DNS and outbound HTTPS.'),
+        7=>new FmLlmProviderException('connect',$name.' API connection failed. Check outbound HTTPS (port 443).'),
+        28=>new FmLlmProviderException('timeout',$name.' did not respond before the server timeout. Try again shortly.'),
+        60=>new FmLlmProviderException('tls',$name.' certificate validation failed. Ask your host to update PHP CA certificates.'),
+        default=>new FmLlmProviderException('network',$name.' could not be reached (network error '.$curlError.').'),
+    };
+    return match($httpStatus){
+        400=>new FmLlmProviderException('request',$name.' rejected the request (HTTP 400). Check model settings.'),
+        401=>new FmLlmProviderException('authentication',$name.' rejected the API key (HTTP 401). Recheck Gelato LLM Settings.'),
+        402=>new FmLlmProviderException('billing',$name.' billing or API credits require attention (HTTP 402).'),
+        403=>new FmLlmProviderException('permissions',$name.' API key is not authorized for this model (HTTP 403).'),
+        404=>new FmLlmProviderException('model_unavailable',$name.' model not found for this account (HTTP 404).'),
+        429=>new FmLlmProviderException('rate_limited',$name.' rate or spending limit reached (HTTP 429).'),
+        500,502,503,504,529=>new FmLlmProviderException('upstream_unavailable',$name.' is temporarily unavailable (HTTP '.$httpStatus.').'),
+        default=>new FmLlmProviderException('provider_error',$name.' request failed (HTTP '.$httpStatus.').'),
+    };
+}
 function fmllm_payload(string $provider,array $history): array
 {
     $instructions=fmllm_instructions();
     if($provider==='openai')return [
-        'model'=>'gpt-5-mini','store'=>false,'instructions'=>$instructions,
+        'model'=>fmllm_model('openai'),'store'=>false,'instructions'=>$instructions,
         'input'=>array_map(static fn($r):array=>['role'=>$r['role'],'content'=>$r['content']],$history),
         'max_output_tokens'=>450,
     ];
-    return ['model'=>'claude-sonnet-4-20250514','max_tokens'=>450,
+    return ['model'=>fmllm_model('anthropic'),'max_tokens'=>600,
+        'thinking'=>['type'=>'disabled'],
         'system'=>$instructions,'messages'=>$history];
 }
 function fmllm_exchange(string $provider,string $apiKey,array $history,?callable $transport=null): string
@@ -92,9 +124,11 @@ function fmllm_exchange(string $provider,string $apiKey,array $history,?callable
             CURLOPT_CONNECTTIMEOUT=>5,CURLOPT_TIMEOUT=>25,CURLOPT_SSL_VERIFYPEER=>true,CURLOPT_SSL_VERIFYHOST=>2,
             CURLOPT_USERAGENT=>'Gelato-FoodMonster/1.0']);
         $body=curl_exec($curl);$code=(int)curl_getinfo($curl,CURLINFO_RESPONSE_CODE);
+        $curlError=(int)curl_errno($curl);
         curl_close($curl);
+        if($curlError!==0)throw fmllm_provider_failure($provider,0,$curlError);
         if(!is_string($body)||$code<200||$code>=300)
-            throw new RuntimeException('The AI provider is unavailable or rejected the request.');
+            throw fmllm_provider_failure($provider,$code);
         $response=json_decode($body,true);
     }
     if(!is_array($response))throw new RuntimeException('The AI provider returned an invalid response.');
