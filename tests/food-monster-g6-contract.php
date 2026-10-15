@@ -18,6 +18,7 @@ $suggestions=$read('js/food-monster-suggestions.js');
 $version='20261014-fmg6';
 $agentVersion='20261015-fmg8c';
 $mascotVersion='20261015-fmg8a';
+$stageCssVersion='20261015-fmg8c';
 foreach([
  'js/global-add-canvas.js'=>$global,'js/universal-admin-page-shell.js'=>$universal,
  'js/workspace-shell-sync.js'=>$workspace,'food-monster.php'=>$page,'js/food-monster.js'=>$actor
@@ -27,7 +28,7 @@ check_g6(str_contains($global,'js/agent-next-moves.js?v='.$version),'Shared Next
 check_g6(str_contains($global,'js/food-monster.js?v='.$mascotVersion),'Mascot cache must update on global pages');
 check_g6(str_contains($universal,'js/global-add-canvas.js?v='.$mascotVersion),'Universal admin shell must request new loader');
 check_g6(str_contains($workspace,'js/global-add-canvas.js?v='.$mascotVersion),'Workspace shell must request new loader');
-check_g6(str_contains($page,'css/food-monster.css?v='.$mascotVersion),'Stage CSS must be fresh');
+check_g6(str_contains($page,'css/food-monster.css?v='.$stageCssVersion),'Stage CSS must be fresh');
 check_g6(str_contains($page,'js/global-agent.js?v='.$agentVersion),'Stage global Agent must be fresh');
 check_g6(str_contains($page,'js/food-monster.js?v='.$mascotVersion),'Stage mascot must be fresh');
 check_g6(str_contains($actor,'document.querySelector(\'link[rel="stylesheet"][href^="css/food-monster.css"]\')'),'Do not insert second stage stylesheet');
