@@ -39,7 +39,7 @@ jobs:
           expected="$(awk 'NR==1 {print $1}' artifact/gelato-full-deploy.sha256)"
           printf '%s  %s\n' "$expected" artifact/gelato-full-deploy.zip | sha256sum --check -
           unzip -tq artifact/gelato-full-deploy.zip
-          test "$(unzip -p artifact/gelato-full-deploy.zip DEPLOY_SHA.txt | tr -d '\r\n')" = '35e8744045cfc06d7d60a07d486ba94673039679'
+          test "$(unzip -p artifact/gelato-full-deploy.zip DEPLOY_SHA.txt | tr -d '\r\n')" = 'cff2efb9cb9021e4fd384f10ed5df75b2123269c'
 
       - name: Stamp exact verified merge and check bundled dependencies
         if: steps.existing.outputs.exists != 'true'
