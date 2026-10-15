@@ -39,6 +39,7 @@ function fmgoal_view(PDO $pdo,array $goal):array {
   'employeeUserId'=>$goal['linked_user_id']?(int)$goal['linked_user_id']:null,
   'crmCustomerId'=>$goal['crm_customer_public_id']?:null,
   'email'=>(string)($goal['email']??''),
+  'proposedRoleId'=>$goal['proposed_role_id']?(int)$goal['proposed_role_id']:null,
   'photoConsent'=>$goal['photo_consent_at']!==null,
   'voiceConsent'=>$goal['voice_consent_at']!==null,
   'guestCrmConsent'=>$goal['guest_crm_consent_at']!==null,
@@ -126,8 +127,9 @@ function fmgoal_account_confirm(PDO $pdo,array $actor,array $goal):array {
   if($q->fetchColumn())throw new DomainException('Another account now uses this email.');
   $name=fmgoal_name((string)$goal['preferred_name']);
   $parts=preg_split('/\s+/u',$name,2);$first=$parts[0];$last=$parts[1]??'';
+  if(mb_strlen($first,'UTF-8')>100||mb_strlen($last,'UTF-8')>100)throw new InvalidArgumentException('Employee first and last names must be 100 characters or fewer.');
   $hash=app_password_hash(bin2hex(random_bytes(40))); // Unknown, unusable initial password.
-  $pdo->prepare("INSERT INTO users (email,password_hash,first_name,last_name,display_name,status) VALUES (?,?,?,?,?,'active')")->execute([$email,$hash,$first,$last?:null,$name]);
+  $pdo->prepare("INSERT INTO users (email,password_hash,first_name,last_name,display_name,status) VALUES (?,?,?,?,?,'active')")->execute([$email,$hash,$first,$last,$name]);
   $newUid=(int)$pdo->lastInsertId();
   $pdo->prepare("INSERT INTO organization_memberships (organization_id,user_id,job_title,status) VALUES (?,?,'Employee','active')")->execute([$org,$newUid]);
   $membership=(int)$pdo->lastInsertId();

@@ -67,9 +67,13 @@ function render(){
    if(!g.employeeUserId){
     if(state.roles.length){
      html+='<h3>Super-admin employee account review</h3>'+field('Employee email','email','email',g.email||'')+
-      '<label class="fm-goal-field">Employee role<select name="role">'+state.roles.map(r=>'<option value="'+r.id+'">'+esc(r.name)+'</option>').join('')+'</select></label>';
+      '<label class="fm-goal-field">Employee role<select name="role">'+state.roles.map(r=>'<option value="'+r.id+'"'+(r.id===g.proposedRoleId?' selected':'')+'>'+esc(r.name)+'</option>').join('')+'</select></label>';
      html+=button('propose','Prepare account');
-     if(g.phase==='account_review')html+=button('confirm','Super Admin: approve employee account');
+     if(g.phase==='account_review'){
+      const selected=state.roles.find(r=>r.id===g.proposedRoleId);
+      html+='<p class="fm-goal-review">Pending approval: '+esc(g.name)+' · '+esc(g.email)+' · '+esc(selected?.name||'Role unavailable')+'. Confirm to create an employee account.</p>';
+      html+=button('confirm','Super Admin: approve employee account',!selected);
+     }
     }else html+='<p>Super admin can create and assign the employee account after reviewing the role.</p>';
    }else{
     html+='<p>Employee account linked (ID '+g.employeeUserId+'). Password and PIN must be set by the employee through their secure setup email.</p>';
@@ -106,7 +110,8 @@ async function action(which){
    const response=await request('propose_employee',{goal:state.goal.id,email:get('email'),roleId:Number(get('role'))});
    note('Review the employee email and role, then approve using the Super Admin account.');
   }else if(which==='confirm'){
-   if(!confirm('Create this employee account with the reviewed role? The employee will set their own password and PIN.'))return;
+   const goal=state.goal,role=state.roles.find(r=>r.id===goal.proposedRoleId);
+   if(!role||!confirm('Create '+goal.name+' ('+goal.email+') with '+role.name+' permissions? The employee will set their own password and PIN.'))return;
    const data=await request('confirm_employee',{goal:state.goal.id});
    note(data.message||'Employee account created.');
   }else if(which==='crm'){
