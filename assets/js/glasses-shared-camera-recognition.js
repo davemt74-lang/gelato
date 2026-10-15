@@ -14,9 +14,9 @@
     label:d.label,confidence:d.confidence,bbox:{x:d.bbox.x,y:d.bbox.y,width:d.bbox.width,height:d.bbox.height}
    }));}
  function create({now=()=>Date.now()}={}){
-  let cursor=MIN;const data=new Map();
-  function reset(){cursor=MIN;data.clear();}
-  function clearSlot(slot){data.delete(slot);}
+  let cursor=MIN;const data=new Map(),lastCapture=new Map();
+  function reset(){cursor=MIN;data.clear();lastCapture.clear();}
+  function clearSlot(slot){data.delete(slot);lastCapture.delete(slot);}
   function status(){return Array.from({length:4},(_,index)=>{
    const slot=index+MIN,record=data.get(slot);
    return record?{...record}:{slot,state:'waiting',count:0};
@@ -29,7 +29,7 @@
     if(!c||c.enabled!==true||!configuration.isEnabled?.(slot)||
        !video?.srcObject||!video.videoWidth||!video.videoHeight||
        !video.srcObject.getVideoTracks?.().some(t=>t.readyState!=='ended')){
-      data.delete(slot);continue;
+      clearSlot(slot);continue;
     }
     return {slot,video,stream:video.srcObject,stationPublicId:c.stationPublicId||null,
       role:c.role||'custom',locationId:Number(locationId),revision:c.revision||0};
@@ -41,16 +41,22 @@
    if(!source||source.slot<MIN||source.slot>MAX||valid!==true||
       !SHA.test(String(modelSha256||''))||!devicePublicId||
       Number(locationId)!==Number(source.locationId)||
-      !Number.isFinite(capturedAt)||capturedAt>now()+1000||now()-capturedAt>1600){
+      !Number.isFinite(capturedAt)||capturedAt>now()||now()-capturedAt>1600){
      if(source?.slot>=MIN&&source?.slot<=MAX)data.delete(source.slot);
      return null;
    }
+   // Do not publish out-of-order inference results for the same camera or
+   // carry old timestamps across camera reconfiguration/model changes.
+   const identity=[source.stream?.id||'',source.revision||0,source.stationPublicId||'',modelSha256,devicePublicId].join('|');
+   const prior=lastCapture.get(source.slot);
+   if(prior?.identity===identity&&capturedAt<=prior.capturedAt)return null;
    const objects=sanitize(raw),scope=source.stationPublicId&&
       source.stationPublicId===currentStationPublicId?'assigned_station':'unscoped';
    const result={slot:source.slot,state:'recognized',count:objects.length,sourceKind:'stationary',
     stationPublicId:source.stationPublicId||null,scope,
     locationId:source.locationId,devicePublicId,modelSha256,
     capturedAt,role:source.role,revision:source.revision||0,objects};
+   lastCapture.set(source.slot,{identity,capturedAt});
    data.set(source.slot,{slot:source.slot,state:'recognized',count:objects.length,
      scope,stationPublicId:source.stationPublicId||null,capturedAt,
      modelSha256,role:source.role});
