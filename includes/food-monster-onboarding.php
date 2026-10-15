@@ -132,6 +132,32 @@ function fmgoal_link_existing(PDO $pdo,array $actor,array $goal,int $userId):arr
  return fmgoal_update($pdo,$actor,$goal,
   ['linked_user_id'=>$userId,'email'=>$email,'phase'=>'enrollment'],'existing_account_linked');
 }
+/** Names suggest existing accounts; they do NOT prove identity.
+ * This uses the same permission-filtered roster as manual account selection. */
+function fmgoal_name_candidates(PDO $pdo,array $actor,string $name):array {
+ $name=mb_strtolower(trim($name),'UTF-8');if($name==='')return [];
+ $matches=[];
+ foreach(fmgoal_existing_accounts($pdo,$actor) as $account){
+  $candidate=mb_strtolower(trim((string)$account['name']),'UTF-8');
+  if($candidate===$name||str_contains($candidate,$name)||str_contains($name,$candidate)){
+   $matches[]=$account;
+   if(count($matches)>=5)break;
+  }
+ }
+ return $matches;
+}
+/** The active browser account can prefill its own goal only with explicit consent.
+ * A camera detection or self-reported name alone never links another account. */
+function fmgoal_start_self(PDO $pdo,array $actor,string $track):array {
+ $uid=(int)$actor['id'];$org=(int)$actor['organization_id'];
+ $q=$pdo->prepare("SELECT u.id,u.display_name FROM users u INNER JOIN organization_memberships om ON om.user_id=u.id AND om.organization_id=? AND om.status='active' WHERE u.id=? AND u.status='active' AND u.archived_at IS NULL LIMIT 1");
+ $q->execute([$org,$uid]);$user=$q->fetch(PDO::FETCH_ASSOC);
+ if(!$user)throw new DomainException('Signed-in user is no longer active.');
+ $goal=fmgoal_create($pdo,$actor,$track);
+ return fmgoal_update($pdo,$actor,$goal,
+ ['preferred_name'=>(string)$user['display_name'],'participant_type'=>'employee',
+ 'linked_user_id'=>$uid,'phase'=>'enrollment'],'existing_account_linked');
+}
 function fmgoal_roles(PDO $pdo,array $actor):array {
  if(!fmgoal_owner($actor))return [];
  $q=$pdo->prepare("SELECT id,name,slug FROM roles WHERE organization_id=? AND is_owner_role=0 AND is_assignable=1 AND slug NOT IN ('customer','wholesale_customer','super_admin') ORDER BY name");
