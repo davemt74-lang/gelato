@@ -47,7 +47,7 @@ const {chromium}=require('playwright'),root=path.resolve(__dirname,'..');
   ok(await page.locator('.fm-participant-card img').count()===2,'opt-in thumbnails captured locally');
   ok(await page.evaluate(()=>localStorage.length===0),'photos never persisted in localStorage');
   await page.waitForTimeout(2100);
-  await page.evaluate(()=>window.GelatoFoodMonsterParticipants.updateFaces([{x:.1,y:.15,width:.22,height:.34,confidence:.92}],true));
+  for(let i=0;i<3;i++)await page.evaluate(()=>window.GelatoFoodMonsterParticipants.updateFaces([{x:.1,y:.15,width:.22,height:.34,confidence:.92}],true));
   ok((await page.locator('.fm-participant-card').first().innerText()).includes('Taylor Account'),'verified sole face can use only signed-in account');
   await page.locator('[data-fm-photos]').uncheck();
   ok(await page.locator('.fm-participant-card img').count()===0,'turning off photos clears thumbnail');
