@@ -1,0 +1,79 @@
+name: FM-G8B PIN Permanent Full Deployment
+on:
+  push:
+    branches:
+      - delivery/fm-g8b-face-pin
+    paths:
+      - .github/workflows/fm-g8b-pin-release.yml
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check permanent release status
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view gelato-fm-g8b-pin --repo davemt74-lang/gelato >/dev/null 2>&1; then
+            echo 'exists=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'exists=false' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out tested merged application source
+        if: steps.release.outputs.exists != 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: 368604f5f6162b700f06179769537a5842f33f0a
+          fetch-depth: 1
+
+      - name: Build and verify exact merged complete deployment
+        if: steps.release.outputs.exists != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = '368604f5f6162b700f06179769537a5842f33f0a'
+          test -s database/20261015_fm_g8b_face_pin.sql
+          test -s api/fm-pin.php
+          test -s includes/food-monster-pin.php
+          test -s js/fm-face-pin.js
+          test -s tests/food-monster-g8b-pin-browser.test.cjs
+          test -s assets/vendor/mediapipe/hand_landmarker.task
+          test -s assets/vendor/mediapipe/vision_bundle.mjs
+          test -s assets/vendor/mediapipe/wasm/vision_wasm_internal.wasm
+          php -l api/fm-pin.php
+          php -l login.php
+          php -l reset-password.php
+          php -l profile-pin.php
+          node --check js/fm-face-pin.js
+          if git ls-files --error-unmatch config.php .env uploads storage >/dev/null 2>&1; then
+            echo 'Private files unexpectedly tracked.' >&2
+            exit 1
+          fi
+          printf '%s\n' 368604f5f6162b700f06179769537a5842f33f0a > DEPLOY_SHA.txt
+          git ls-files -z | xargs -0 zip -q gelato-full-deploy.zip
+          zip -q -u gelato-full-deploy.zip DEPLOY_SHA.txt
+          unzip -tq gelato-full-deploy.zip
+          test "$(unzip -p gelato-full-deploy.zip DEPLOY_SHA.txt | tr -d '\r\n')" = '368604f5f6162b700f06179769537a5842f33f0a'
+          for asset in assets/vendor/mediapipe/hand_landmarker.task assets/vendor/mediapipe/vision_bundle.mjs assets/vendor/mediapipe/wasm/vision_wasm_internal.wasm; do
+            test -s "$asset"
+            unzip -p gelato-full-deploy.zip "$asset" | cmp - "$asset"
+          done
+          sha256sum gelato-full-deploy.zip > gelato-full-deploy.sha256
+
+      - name: Publish permanent direct ZIP
+        if: steps.release.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create gelato-fm-g8b-pin \
+            gelato-full-deploy.zip gelato-full-deploy.sha256 \
+            --repo davemt74-lang/gelato \
+            --target 368604f5f6162b700f06179769537a5842f33f0a \
+            --title 'Gelato FM-G8B — Employee Face + PIN Sign-in' \
+            --notes 'Complete Gelato application ZIP with MediaPipe and FM-G8B trusted terminal PIN login. PR #321: 14/14 green. Tested source tree equals merged commit 368604f5f6162b700f06179769537a5842f33f0a. After installation preserve config.php, .env, uploads and storage, then run owner-only upgrade.php. Enroll photos only with consent; face selection requires PIN and a Super Admin registered on-site terminal. Physical camera spoof/liveness tests remain pending.'
