@@ -122,3 +122,18 @@ body.food-monster-stage-page #gelato-agent-bar{box-sizing:border-box;max-width:1
 #food-monster-root [data-fm-roam][aria-pressed="false"]{color:#597182;background:#e6edf1}
 #food-monster-root .fm-actions [data-fm-roam]{font-size:19px}
 @media(prefers-reduced-motion:reduce){#food-monster-root .fm-actor{transition:none!important}}
+
+
+/* FM-G7B1: compact skill discovery, not a separate Agent Chat. */
+#fm-skills-dialog{position:fixed;inset:auto;top:50%;left:50%;transform:translate(-50%,-50%);margin:0;box-sizing:border-box;width:min(460px,calc(100vw - 22px));max-height:min(78dvh,690px);padding:17px;background:#f9fcff;color:#0b2939;border:1px solid #accddc;border-radius:18px;box-shadow:0 26px 70px #001b3470;font:500 13px/1.5 system-ui,sans-serif;overflow:auto;z-index:2147483600}
+#fm-skills-dialog:not([open]){display:none}
+#fm-skills-dialog::backdrop{background:#00192a9e}
+#fm-skills-dialog .fm-skills-header{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:17px}
+#fm-skills-dialog .fm-skills-header button{cursor:pointer;width:32px;height:32px;font-size:23px;line-height:1;border:1px solid #bfd9e5;border-radius:9px;background:#ebf4f8}
+#fm-skills-dialog .fm-skills-note{color:#446678;margin:9px 0 12px}
+#fm-skills-dialog .fm-skills-status{font-size:12px;color:#365868;min-height:18px}
+#fm-skills-dialog .fm-skills-list{display:grid;gap:7px}
+#fm-skills-dialog .fm-skills-choice{display:grid;text-align:left;gap:3px;cursor:pointer;background:#fff;border:1px solid #ccdfeb;border-radius:11px;padding:11px;color:#163b4d;font:inherit}
+#fm-skills-dialog .fm-skills-choice strong{font-size:13px}
+#fm-skills-dialog .fm-skills-choice span{font-size:11px;color:#527185}
+#fm-skills-dialog button:focus-visible,#fm-skills-dialog .fm-skills-choice:hover{outline:2px solid #0fafd8;outline-offset:1px}

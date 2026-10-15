@@ -7,6 +7,7 @@ require_once __DIR__.'/../includes/agent-node-registry.php';
 require_once __DIR__.'/../includes/admin-control-core.php';
 require_once __DIR__.'/../includes/menu-training-knowledge.php';
 require_once __DIR__.'/../includes/food-monster-multi-node.php';
+require_once __DIR__.'/../includes/food-monster-skill-registry.php';
 
 // Compatibility route markers for older CI/contracts. Canonical routing now lives in includes/agent-node-registry.php.
 // api/admin-dashboard-agent.php api/daily-manager-agent.php api/sales-cost-agent.php api/sales-agent.php
@@ -22,6 +23,11 @@ if($_SERVER['REQUEST_METHOD']==='GET'){
         $threads=gaw_threads($pdo,$org,$uid,40);$active=$threads[0]['public_id']??null;
         if(!$active){$thread=gaw_create_thread($pdo,$org,$uid);$threads=gaw_threads($pdo,$org,$uid,40);$active=$thread['public_id']??null;}
         app_json_response(['ok'=>true,'csrf'=>app_csrf_token(),'threads'=>$threads,'activeThread'=>$active,'messages'=>$active?gaw_messages($pdo,$org,$uid,(string)$active,120):[],'user'=>['id'=>$uid,'name'=>$user['display_name'],'firstName'=>$user['first_name'],'role'=>$user['role_slug']],'permissions'=>$user['permissions']]);
+    }
+    if($action==='food_monster_skills'){
+        require_once __DIR__.'/../includes/admin-dashboard-core.php';
+        app_json_response(['ok'=>true,'skills'=>fm_skill_registry_for_user($user),
+            'mode'=>'chat_review','writes'=>'existing_approvals_only']);
     }
     if($action==='thread'){$id=trim((string)($_GET['id']??''));app_json_response(['ok'=>true,'thread'=>gaw_thread($pdo,$org,$uid,$id),'messages'=>gaw_messages($pdo,$org,$uid,$id,220)]);}
     if($action==='threads')app_json_response(['ok'=>true,'threads'=>gaw_threads($pdo,$org,$uid,80)]);
