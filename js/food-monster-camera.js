@@ -86,6 +86,18 @@ const dist=(a,b)=>{
  if(!a||!b||a.length!==128||b.length!==128)return Infinity;
  let sum=0;for(let k=0;k<128;k++)sum+=(a[k]-b[k])**2;return Math.sqrt(sum);
 };
+function publishCamera(active){
+ window.dispatchEvent(new CustomEvent('gelato-food-monster-camera',{detail:{active:!!active}}));
+}
+function publishFaces(faces,ownVerified=false){
+ const width=S.video.videoWidth||1,height=S.video.videoHeight||1;
+ // Temporary presence boxes only; no descriptors, frames, images or names.
+ window.dispatchEvent(new CustomEvent('gelato-food-monster-faces',{detail:{
+  boxes:faces.slice(0,10).map(f=>({x:clamp(f.box.x/width,0,1),y:clamp(f.box.y/height,0,1),
+    width:clamp(f.box.width/width,0,1),height:clamp(f.box.height/height,0,1),confidence:clamp(Number(f.score)||0,0,1)})),
+  ownVerified:!!ownVerified&&faces.length===1
+ }}));
+}
 function verifiedGreeting(){
  const value=window.GelatoGlobalAgent?.verifiedSpeaker;
  return value?.sessionUserMatch===true && Number(value.userId)===Number(ACCOUNT);
@@ -109,6 +121,7 @@ async function scan(){
    // Avoid adopting an arbitrary face as an identity: multiple faces block matching.
    const faces=await api.detectAllFaces(S.video,detectorOptions());
    if(epoch!==S.epoch||!S.stream)return;
+   publishFaces(faces,S.matchCount>=2&&!!S.profile);
    const face=faces.slice().sort((a,b)=>(b.box.width*b.box.height)-(a.box.width*a.box.height))[0];
    if(!face){
      S.matchCount=0;
@@ -131,7 +144,7 @@ async function scan(){
    if(epoch!==S.epoch||!S.stream)return;
    if(match && dist(Array.from(match.descriptor),S.profile.descriptor)<.48){
      S.matchCount=Math.min(4,S.matchCount+1);S.lastMatch=Date.now();
-     if(S.matchCount>=2)greet('face');
+     if(S.matchCount>=2){publishFaces(faces,true);greet('face');}
    }else S.matchCount=0;
  }catch(e){
    if(epoch===S.epoch&&S.stream){say('Tracking paused: '+(e.message||String(e)),true);stop();}
@@ -143,6 +156,7 @@ function stop(){
  if(S.stream){for(const t of S.stream.getTracks())t.stop();S.stream=null;}
  S.video.srcObject=null;S.tracking=false;S.seen=0;S.matchCount=0;
  fm.setFaceTarget?.(null);btn('start').disabled=false;btn('stop').disabled=true;
+ publishFaces([]);publishCamera(false);
  say('Camera is off. No frames or face descriptors are uploaded.');
 }
 async function start(){
@@ -160,7 +174,7 @@ async function start(){
   say('Loading the local face tracker…');
   await trackingModels();
   if(epoch!==S.epoch)return false;
-  S.tracking=true;btn('stop').disabled=false;S.detectTimer=setInterval(scan,360);
+  S.tracking=true;btn('stop').disabled=false;publishCamera(true);S.detectTimer=setInterval(scan,360);
   scan();say('Tracking active. Move left/right or closer/farther away. No video is uploaded.');
   return true;
  }catch(e){if(epoch===S.epoch){say('Could not start camera: '+(e.message||String(e)),true);stop();}return false;}
@@ -254,7 +268,7 @@ window.addEventListener('gelato-verified-speaker',event=>{
  const d=event.detail||{};
  if(d.sessionUserMatch===true&&Number(d.userId)===Number(ACCOUNT))greet('voice');
 });
-window.GelatoFoodMonsterCamera={open:show,start,stop,enroll,forget,get active(){return!!S.stream},get enrolled(){return!!S.profile},get account(){return ACCOUNT},scanOnce:scan};
+window.GelatoFoodMonsterCamera={open:show,start,stop,enroll,forget,get active(){return!!S.stream},get stream(){return S.stream},get enrolled(){return!!S.profile},get account(){return ACCOUNT},get preferences(){return {greet:S.greet,speak:S.speak}},scanOnce:scan};
 }
 if(window.GelatoGlobalAgent?.user?.id) init();
 else window.addEventListener('gelato-agent-ready',init,{once:true});
