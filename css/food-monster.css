@@ -40,3 +40,6 @@ body.food-monster-stage-page #gelato-agent-bar #gaInterrupt,
 body.food-monster-stage-page #gelato-agent-bar #gaCanvas{display:none}
 body.food-monster-stage-page #gelato-agent-bar textarea{min-width:0}
 @media(max-width:620px){body.food-monster-stage-page #gelato-agent-bar{gap:4px}body.food-monster-stage-page #gelato-agent-bar button{width:38px;height:38px;flex:0 0 38px}}
+
+/* Keep the mobile composer within viewport including padding and border. */
+body.food-monster-stage-page #gelato-agent-bar{box-sizing:border-box;max-width:100vw}
