@@ -269,3 +269,8 @@ body.food-monster-stage-page .fm-participant-info{display:flex;flex-direction:co
 body.food-monster-stage-page .fm-participant-info strong{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 body.food-monster-stage-page .fm-participant-info span{font-size:10px;color:#abcbdc}
 @media(max-width:850px){body.food-monster-stage-page .fm-participants-panel{top:auto;right:8px;bottom:100px;left:auto;width:min(205px,46vw);max-height:36dvh}}
+
+/* FM-G8E: independent, unobtrusive participant input indicator. */
+body.food-monster-stage-page .fm-participant-input{display:block;overflow:hidden;box-sizing:border-box;width:100%;height:4px;margin-top:3px;border-radius:3px;background:#27465b}
+body.food-monster-stage-page .fm-participant-input i{display:block;width:0%;height:100%;border-radius:3px;background:#3ccfd2;transition:width 90ms linear}
+@media(prefers-reduced-motion:reduce){body.food-monster-stage-page .fm-participant-input i{transition:none}}
