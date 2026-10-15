@@ -4,7 +4,7 @@
 if(!document.body.classList.contains('food-monster-stage-page')||window.GelatoFoodMonsterGoals)return;
 const host=document.getElementById('food-monster-stage');if(!host)return;
 const csrf=()=>document.querySelector('meta[name="gelato-csrf"]')?.content||'';
-const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;':'&quot;',"'":'&#39;'}[c]));
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const state={goal:null,roles:[],tracking:'',opened:false,busy:false,nameDraft:'',lastPrompt:''};
 const panel=document.createElement('section');panel.className='fm-goal-panel';panel.hidden=true;
 panel.setAttribute('aria-label','Participant onboarding goal');
