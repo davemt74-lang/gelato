@@ -1,0 +1,77 @@
+name: FM-G8C Permanent Onboarding Deployment
+on:
+  push:
+    branches:
+      - delivery/fm-g8c-onboarding-goals
+    paths:
+      - .github/workflows/fm-g8c-direct-release.yml
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check permanent release
+        id: exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view gelato-fm-g8c-goals --repo davemt74-lang/gelato >/dev/null 2>&1; then
+            echo 'exists=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'exists=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Retrieve exact certified full deployment
+        if: steps.exists.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p source
+          gh run download 38768891904 --repo davemt74-lang/gelato --name gelato-full-deploy --dir source
+          test -s source/gelato-full-deploy.zip
+          test -s source/gelato-full-deploy.sha256
+          digest="$(awk 'NR==1 {print $1}' source/gelato-full-deploy.sha256)"
+          printf '%s  %s\n' "$digest" source/gelato-full-deploy.zip | sha256sum --check -
+          unzip -tq source/gelato-full-deploy.zip
+          test "$(unzip -p source/gelato-full-deploy.zip DEPLOY_SHA.txt | tr -d '\r\n')" = 'bb90b3adafd93d1a6b589937d4c18147c9b9af62'
+      - name: Stamp tree-equivalent merged revision and validate contents
+        if: steps.exists.outputs.exists != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p packaged
+          unzip -q source/gelato-full-deploy.zip -d packaged
+          test -s packaged/food-monster.php
+          test -s packaged/api/food-monster-onboarding.php
+          test -s packaged/includes/food-monster-onboarding.php
+          test -s packaged/js/food-monster-onboarding.js
+          test -s packaged/database/20261015_fm_g8c_goals.sql
+          test -s packaged/tests/food-monster-g8c-browser.test.cjs
+          test -s packaged/assets/vendor/mediapipe/hand_landmarker.task
+          test -s packaged/assets/vendor/mediapipe/vision_bundle.mjs
+          test -s packaged/assets/vendor/mediapipe/wasm/vision_wasm_internal.wasm
+          grep -q 'app_encrypt_secret' packaged/includes/food-monster-onboarding.php
+          grep -q 'fmgoal_account_confirm' packaged/includes/food-monster-onboarding.php
+          for private in config.php .env uploads storage; do
+            test ! -e "packaged/$private" || { echo "Private config unexpectedly packaged: $private" >&2; exit 1; }
+          done
+          printf '%s\n' 'e2d19be1657b49e854d76ccfa73a2bb4b897d3b7' > packaged/DEPLOY_SHA.txt
+          (cd packaged && zip -qr "$GITHUB_WORKSPACE/gelato-full-deploy.zip" .)
+          unzip -tq gelato-full-deploy.zip
+          sha256sum gelato-full-deploy.zip > gelato-full-deploy.sha256
+          test "$(unzip -p gelato-full-deploy.zip DEPLOY_SHA.txt | tr -d '\r\n')" = 'e2d19be1657b49e854d76ccfa73a2bb4b897d3b7'
+      - name: Publish direct ZIP and verified checksum
+        if: steps.exists.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create gelato-fm-g8c-goals \
+            gelato-full-deploy.zip gelato-full-deploy.sha256 \
+            --repo davemt74-lang/gelato \
+            --target e2d19be1657b49e854d76ccfa73a2bb4b897d3b7 \
+            --title 'Gelato Food Monster FM-G8C — Participant Onboarding Goals' \
+            --notes 'Certified full HostGator deployment with stable Person IDs, full-screen camera view, Agent Brain onboarding conversation, encrypted consented photo galleries, owner-approved employee roles, guided voice enrollment linkage and explicit guest-to-CRM conversion. 28/28 exact PR #322 checks passed; exact tested source tree matches merged main e2d19be1657b49e854d76ccfa73a2bb4b897d3b7. Includes MediaPipe. Run protected upgrade.php after deployment; preserve config.php, .env, uploads/ and storage/keys/application.key. Live camera/voice/SMTP/MySQL integration remain field acceptance checks.'
