@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS fm_participant_photos (
  goal_id BIGINT UNSIGNED NOT NULL,
  image_mime VARCHAR(24) NOT NULL,
  image_bytes MEDIUMBLOB NOT NULL,
+ image_nonce VARCHAR(80) NOT NULL,
+ image_encryption VARCHAR(40) NOT NULL DEFAULT 'sodium_secretbox_v1',
  created_by BIGINT UNSIGNED NOT NULL,
  created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
  KEY idx_fmg8c_photos (organization_id,goal_id,id),
