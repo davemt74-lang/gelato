@@ -6,6 +6,7 @@ function fmpt_access(array $user): array
     return [
         'schedule'=>app_has_permission('schedule.view',$user)||app_has_permission('schedule.manage',$user)||app_has_permission('schedule.self',$user),
         'scheduleTeam'=>app_has_permission('schedule.view',$user)||app_has_permission('schedule.manage',$user),
+        'voiceManage'=>app_has_permission('voice.manage',$user),
         'clock'=>app_has_permission('timeclock.agent',$user)&&(app_has_permission('timeclock.view',$user)||app_has_permission('attendance.view',$user)),
     ];
 }

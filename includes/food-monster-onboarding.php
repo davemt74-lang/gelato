@@ -40,6 +40,7 @@ function fmgoal_view(PDO $pdo,array $goal):array {
   'crmCustomerId'=>$goal['crm_customer_public_id']?:null,
   'email'=>(string)($goal['email']??''),
   'proposedRoleId'=>$goal['proposed_role_id']?(int)$goal['proposed_role_id']:null,
+  'photosDeferred'=>(bool)($goal['photos_deferred']??false),
   'photoConsent'=>$goal['photo_consent_at']!==null,
   'voiceConsent'=>$goal['voice_consent_at']!==null,
   'guestCrmConsent'=>$goal['guest_crm_consent_at']!==null,
@@ -68,7 +69,7 @@ function fmgoal_name(string $name):string {
 }
 function fmgoal_update(PDO $pdo,array $actor,array $goal,array $fields,string $event):array {
  if((string)$goal['status']!=='in_progress')throw new DomainException('This onboarding goal is no longer active.');
- $allowed=['preferred_name','participant_type','phase','photo_consent_at','voice_consent_at','guest_crm_consent_at','email','proposed_role_id','linked_user_id','crm_customer_public_id'];
+ $allowed=['preferred_name','participant_type','phase','photo_consent_at','voice_consent_at','guest_crm_consent_at','email','proposed_role_id','linked_user_id','crm_customer_public_id','photos_deferred'];
  foreach(array_keys($fields) as $key)if(!in_array($key,$allowed,true))throw new InvalidArgumentException('Unsupported setup change.');
  if(!$fields)throw new InvalidArgumentException('No change requested.');
  $columns=[];$values=[];foreach($fields as $key=>$value){$columns[]=$key.'=?';$values[]=$value;}
@@ -78,6 +79,7 @@ function fmgoal_update(PDO $pdo,array $actor,array $goal,array $fields,string $e
  return fmgoal_view($pdo,fmgoal_get($pdo,$actor,(string)$goal['public_id']));
 }
 function fmgoal_photo(PDO $pdo,array $actor,array $goal,string $dataUri):array {
+ if($goal['linked_user_id']&&(int)$goal['linked_user_id']!==(int)$actor['id'])throw new DomainException('Linked employee must capture their own photos while signed in.');
  if($goal['photo_consent_at']===null)throw new DomainException('Confirm the participant consented to photo storage first.');
  if((string)$goal['status']!=='in_progress')throw new DomainException('Cannot save photos to a completed setup.');
  if(!preg_match('#^data:image/(webp|jpeg);base64,([A-Za-z0-9+/=]+)$#D',$dataUri,$match))throw new InvalidArgumentException('Capture a JPEG or WebP photo.');
@@ -88,13 +90,40 @@ function fmgoal_photo(PDO $pdo,array $actor,array $goal,string $dataUri):array {
  if($info[0]>1200||$info[1]>1200)throw new InvalidArgumentException('Photo dimensions must be 1200px or smaller.');
  $org=(int)$actor['organization_id'];
  $q=$pdo->prepare('SELECT COUNT(*) FROM fm_participant_photos WHERE organization_id=? AND goal_id=?');
- $q->execute([$org,(int)$goal['id']]);if((int)$q->fetchColumn()>=8)throw new DomainException('Photo gallery is full (eight images).');
+ $q->execute([$org,(int)$goal['id']]);if((int)$q->fetchColumn()>=3)throw new DomainException('Photo gallery already has three samples.');
  $encrypted=app_encrypt_secret($bytes);
  $q=$pdo->prepare('INSERT INTO fm_participant_photos (organization_id,goal_id,image_mime,image_bytes,image_nonce,image_encryption,created_by) VALUES (?,?,?,?,?,?,?)');
  $q->bindValue(1,$org,PDO::PARAM_INT);$q->bindValue(2,(int)$goal['id'],PDO::PARAM_INT);
  $q->bindValue(3,$mime);$q->bindValue(4,$encrypted['ciphertext'],PDO::PARAM_LOB);$q->bindValue(5,$encrypted['nonce']);$q->bindValue(6,$encrypted['method']);$q->bindValue(7,(int)$actor['id'],PDO::PARAM_INT);$q->execute();
  app_audit($pdo,$org,(int)$actor['id'],'agent.participant_photo_saved','participant_goal',(string)$goal['public_id']);
  return fmgoal_view($pdo,fmgoal_get($pdo,$actor,(string)$goal['public_id']));
+}
+/** Existing accounts are selected from active organization memberships; only an
+ * enrolled employee can capture their own face/voice when signed in. */
+function fmgoal_existing_accounts(PDO $pdo,array $actor):array {
+ $org=(int)$actor['organization_id'];$uid=(int)$actor['id'];$owner=fmgoal_owner($actor);
+ $sql="SELECT DISTINCT u.id,u.display_name,u.email FROM users u
+ JOIN organization_memberships om ON om.user_id=u.id AND om.organization_id=? AND om.status='active'
+ WHERE u.status='active' AND u.archived_at IS NULL";
+ if($owner)$sql.=" AND (u.id=? OR NOT EXISTS(
+  SELECT 1 FROM organization_memberships om2 JOIN user_roles ur ON ur.membership_id=om2.id AND ur.revoked_at IS NULL
+  JOIN roles r ON r.id=ur.role_id WHERE om2.organization_id=? AND om2.user_id=u.id AND r.is_owner_role=1))";
+ else $sql.=" AND u.id=?";
+ $sql.=" ORDER BY u.display_name LIMIT 150";
+ $q=$pdo->prepare($sql);$q->execute($owner?[$org,$uid,$org]:[$org,$uid]);
+ return array_map(static fn($r)=>['id'=>(int)$r['id'],'name'=>(string)$r['display_name'],
+  'self'=>(int)$r['id']===$uid],$q->fetchAll(PDO::FETCH_ASSOC));
+}
+function fmgoal_link_existing(PDO $pdo,array $actor,array $goal,int $userId):array {
+ if($goal['participant_type']!=='employee'||$goal['status']!=='in_progress'||$goal['linked_user_id'])
+  throw new DomainException('Choose an unlinked employee setup.');
+ if(!in_array($userId,array_column(fmgoal_existing_accounts($pdo,$actor),'id'),true))
+  throw new DomainException('This employee is not available for linking.');
+ $q=$pdo->prepare('SELECT email FROM users WHERE id=?');$q->execute([$userId]);
+ $email=$q->fetchColumn();if(!$email)throw new DomainException('Employee account unavailable.');
+ // Linking never changes role, permissions, credentials or existing records.
+ return fmgoal_update($pdo,$actor,$goal,
+  ['linked_user_id'=>$userId,'email'=>$email,'phase'=>'enrollment'],'existing_account_linked');
 }
 function fmgoal_roles(PDO $pdo,array $actor):array {
  if(!fmgoal_owner($actor))return [];
@@ -151,7 +180,7 @@ function fmgoal_finish(PDO $pdo,array $actor,array $goal):array {
  if($goal['participant_type']==='employee'){
   if(!$goal['linked_user_id'])throw new DomainException('Employee account must be linked before completing onboarding.');
   $photos=fmgoal_view($pdo,$goal)['photos'];
-  if(count($photos)<3)throw new DomainException('Employee photo gallery needs at least three consented photos.');
+  if(count($photos)<3&&empty($goal['photos_deferred']))throw new DomainException('Capture three photos or defer photos due to insufficient lighting.');
   if(!fmgoal_voice_enrolled($pdo,(int)$actor['organization_id'],(int)$goal['linked_user_id']))
    throw new DomainException('Employee voice profile is not yet enrolled. Have them enroll through their authenticated Time Clock account.');
  }

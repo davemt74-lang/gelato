@@ -239,3 +239,10 @@ body.food-monster-stage-page.fm-view-camera #gelato-agent-bar{width:min(850px,ca
  .fm-goal-launch{top:10px;right:10px}
  body.food-monster-stage-page.fm-view-camera .fm-room-camera-legend{bottom:95px;max-width:240px}
 }
+
+/* FM-G8D1: complete setup above the chat bar; + belongs inside its footer */
+body.food-monster-stage-page .fm-goal-panel{left:50%;right:auto;transform:translateX(-50%);top:auto;bottom:calc(17px + 83px);width:min(850px,calc(100vw - 28px));max-height:min(65dvh,650px);z-index:2147482995;}
+body.food-monster-stage-page #gelato-agent-bar .fm-goal-launch{position:relative;inset:auto;left:auto;right:auto;bottom:auto;top:auto;transform:none;width:42px;height:42px;min-width:42px;padding:0;border:0;background:#126b80;border-radius:13px;color:white;font-size:23px;box-shadow:none;z-index:auto}
+.fm-goal-footer [data-fm-goal-handsfree][aria-pressed="true"]{background:#13614b;border-color:#83ead7;}
+.fm-goal-samples{display:flex;gap:8px;align-items:center}.fm-goal-samples i{display:block;height:9px;background:#51d9ed;border-radius:8px}
+@media(max-width:700px){body.food-monster-stage-page .fm-goal-panel{left:50%;top:auto;bottom:calc(8px + 80px);width:calc(100% - 16px);max-height:58dvh}}

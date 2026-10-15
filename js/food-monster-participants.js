@@ -20,6 +20,7 @@ panel.innerHTML='<div class="fm-participants-top"><strong>Active participants</s
  '<p class="fm-participants-explain">Camera presence is not identity verification. Staff status comes from Gelato, not face appearance.</p>'+
  '<div class="fm-participant-options"><label><input type="checkbox" data-fm-photos> Capture local thumbnails</label><button type="button" data-fm-meter>Enable room voice meter</button></div>'+
  '<div class="fm-room-meter"><div class="fm-room-meter-bar"><i data-fm-level></i></div><small>Shared microphone · not attributed to a person</small></div>'+
+ '<div class="fm-speaker-controls" hidden><label><input type="checkbox" data-fm-speaker-consent> Speaker agrees to a short voice comparison</label><button type="button" data-fm-speaker-check>Check enrolled voice</button><p class="fm-speaker-result" role="status" aria-live="polite">No speaker checked.</p></div>'+
  '<div class="fm-participant-cards" aria-live="polite"><p class="fm-participant-empty">Camera off · no active tracks</p></div>'+
  '<div class="fm-participant-roster"><strong>Gelato staff context</strong><p class="fm-staff-note">Checking authorized schedule and clock-in data…</p><div data-fm-roster></div></div>';
 host.append(panel);
@@ -135,7 +136,7 @@ async function loadRoster(){
  try{
   const res=await fetch('api/food-monster-participants.php',{cache:'no-store',headers:{Accept:'application/json'}});
   const data=await res.json();if(!res.ok||!data.ok)throw Error(data.message||'Roster unavailable');
-  state.roster=data;
+  state.roster=data;panel.querySelector('.fm-speaker-controls').hidden=data.access?.voiceManage!==true;
   const rows=(data.staff||[]).slice(0,35),access=data.access||{};
   roster.innerHTML=rows.map(row=>'<div class="fm-staff-item"><strong>'+esc(row.displayName)+'</strong><small>'+esc(row.status||'Status unavailable')+(row.signedInHere?' · Signed in here':'')+'</small></div>').join('')||'<p>No permitted staff records.</p>';
   panel.querySelector('.fm-staff-note').textContent=data.scopeNote||'Schedule and attendance context only';
@@ -182,6 +183,21 @@ cameraToggle.addEventListener('click',async()=>{
  finally{cameraToggle.disabled=false;}
 });
 panel.querySelector('[data-fm-meter]').addEventListener('click',()=>void toggleMeter());
+const speakerBtn=panel.querySelector('[data-fm-speaker-check]');
+speakerBtn.addEventListener('click',async()=>{
+ speakerBtn.disabled=true;try{
+  if(!window.GelatoFoodMonsterFastEnrollment?.identifySpeaker)throw Error('Voice matcher is still loading.');
+  await window.GelatoFoodMonsterFastEnrollment.identifySpeaker();
+ }catch(e){panel.querySelector('.fm-speaker-result').textContent=e.message||'Speaker check unavailable.';}
+ finally{speakerBtn.disabled=false;}
+});
+window.addEventListener('gelato-food-monster-speaker-candidate',event=>{
+ const d=event.detail||{},result=panel.querySelector('.fm-speaker-result');
+ if(!d.name){result.textContent='No verified speaker: '+String(d.reason||'uncertain');return;}
+ result.textContent='Possible speaker: '+String(d.name).slice(0,90)+'. '+
+  (tracked().length>1?'Multiple tracks: voice does not identify which person spoke.':'Voice-only cue, not verified face identity.')+
+  ' No sign-in or attendance action taken.';
+});
 panel.querySelector('[data-fm-photos]').addEventListener('change',e=>{
  state.thumbnails=e.target.checked;if(!state.thumbnails)for(const t of state.tracks)t.photo='';render();
 });
@@ -194,13 +210,18 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden){stopMeter(
 setInterval(()=>{if(state.camera){state.tracks=state.tracks.filter(t=>Date.now()-t.at<18000);render();drawOverlay();}},1100);
 loadRoster();setInterval(loadRoster,60000);
 function captureGoalPhoto(trackId){
- const t=tracked().find(track=>track.id===trackId);
- if(!t||!state.camera||!video.videoWidth||!video.videoHeight)return '';
- const b=t.box,c=document.createElement('canvas');c.width=320;c.height=360;
+ const visible=tracked(),t=visible.find(track=>track.id===trackId)||(visible.length===1?visible[0]:null);
+ if(!t||visible.length!==1||!state.camera||!video.videoWidth||!video.videoHeight||document.hidden)return '';
+ const b=t.box;if(b.width<.10||b.height<.13||b.width>.73)return '';
+ const c=document.createElement('canvas');c.width=320;c.height=360;
  const sx=Math.max(0,Math.floor(b.x*video.videoWidth)),sy=Math.max(0,Math.floor(b.y*video.videoHeight));
  const sw=Math.min(video.videoWidth-sx,Math.max(1,Math.floor(b.width*video.videoWidth)));
  const sh=Math.min(video.videoHeight-sy,Math.max(1,Math.floor(b.height*video.videoHeight)));
- c.getContext('2d').drawImage(video,sx,sy,sw,sh,0,0,320,360);
+ const ctx=c.getContext('2d');ctx.drawImage(video,sx,sy,sw,sh,0,0,320,360);
+ const pixels=ctx.getImageData(0,0,320,360).data;let sum=0,sum2=0,n=0;
+ for(let i=0;i<pixels.length;i+=96){const v=pixels[i]*.2126+pixels[i+1]*.7152+pixels[i+2]*.0722;sum+=v;sum2+=v*v;n++;}
+ const avg=sum/n,variance=sum2/n-avg*avg;
+ if(avg<44||avg>226||variance<110)return '';
  return c.toDataURL('image/webp',.65);
 }
 window.GelatoFoodMonsterParticipants={setMode,updateFaces,captureGoalPhoto,

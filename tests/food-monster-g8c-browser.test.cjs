@@ -5,7 +5,7 @@ const {chromium}=require('playwright'),root=path.resolve(__dirname,'..');
  try{
   const page=await browser.newPage({viewport:{width:1200,height:800}});
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
-  await page.setContent('<!doctype html><html><head><meta name="gelato-csrf" content="test-csrf"></head><body class="food-monster-stage-page"><main id="food-monster-stage"></main><div id="gaInput"></div></body></html>');
+  await page.setContent('<!doctype html><html><head><meta name="gelato-csrf" content="test-csrf"></head><body class="food-monster-stage-page"><main id="food-monster-stage"></main><div id="gelato-agent-bar"><textarea id="gaInput"></textarea></div></body></html>');
   await page.evaluate(()=>{
    window.GelatoGlobalAgent={user:{id:42,name:'Staff'},permissions:['voice.agent']};
    window.GelatoFoodMonster={greet(text){window.__lastGreeting=text}};
@@ -31,7 +31,7 @@ const {chromium}=require('playwright'),root=path.resolve(__dirname,'..');
   await page.addScriptTag({content:fs.readFileSync(path.join(root,'js/food-monster-participants.js'),'utf8')});
   await page.addScriptTag({content:fs.readFileSync(path.join(root,'js/food-monster-onboarding.js'),'utf8')});
   await page.waitForFunction(()=>!!window.GelatoFoodMonsterGoals?.load);
-  ok(await page.locator('.fm-goal-launch').count()===1,'Goal launcher present');
+  ok(await page.locator('#gelato-agent-bar .fm-goal-launch').count()===1,'Goal launcher present inside sticky chat bar');
   ok(await page.locator('.fm-goal-panel').isHidden(),'No unattended camera/goal overlay');
   await page.evaluate(()=>window.GelatoFoodMonsterParticipants.updateFaces([{x:.20,y:.12,width:.19,height:.30}],false));
   await page.evaluate(()=>window.dispatchEvent(new CustomEvent('gelato-food-monster-camera',{detail:{active:true}})));

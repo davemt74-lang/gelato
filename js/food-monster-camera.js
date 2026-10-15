@@ -180,7 +180,7 @@ async function start(){
  }catch(e){if(epoch===S.epoch){say('Could not start camera: '+(e.message||String(e)),true);stop();}return false;}
  finally{S.busy=false;if(!S.stream)btn('start').disabled=false;}
 }
-async function enroll(){
+async function enroll(options={}){
  if(S.busy)return;
  if(!S.stream){say('Start your camera before enrolling a face.',true);return;}
  S.busy=true;btn('enroll').disabled=true;
@@ -202,10 +202,45 @@ async function enroll(){
   if(Math.max(dist(samples[0],samples[1]),dist(samples[1],samples[2]),dist(samples[0],samples[2]))>.51)
    throw Error('Samples differed too much. Hold still and try again.');
   S.profile={account:ACCOUNT,name:NAME,descriptor:samples[0].map((_,i)=>(samples[0][i]+samples[1][i]+samples[2][i])/3)};
-  S.matchCount=0;S.lastGreet=0;say('Face enrolled locally for this signed-in account. Look away and return to test recognition.');
+  S.matchCount=0;S.lastGreet=0;
+  if(options.persist===true){try{await persistDeviceFace();say('Encrypted face profile saved for this account on this device.');}
+   catch{say('Face enrolled for this session; secure device storage unavailable.');}}
+  else say('Face enrolled locally for this signed-in account. Look away and return to test recognition.');
  }catch(e){say('Enrollment not completed: '+(e.message||String(e)),true);}
  finally{S.busy=false;btn('enroll').disabled=false;}
 }
+/* Encrypted local face descriptor, scoped to the authenticated user only. */
+const DEVICE_DB='gelato-fm-onboard-face-v1';
+function faceDb(){return new Promise((resolve,reject)=>{
+ const q=indexedDB.open(DEVICE_DB,1);
+ q.onupgradeneeded=()=>{const db=q.result;if(!db.objectStoreNames.contains('keys'))db.createObjectStore('keys');if(!db.objectStoreNames.contains('profiles'))db.createObjectStore('profiles');};
+ q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);
+});}
+function faceTxn(db,store,mode,fn){return new Promise((resolve,reject)=>{
+ const t=db.transaction(store,mode),q=fn(t.objectStore(store));t.oncomplete=()=>resolve(q.result);t.onerror=()=>reject(t.error);
+});}
+async function faceKey(db){let k=await faceTxn(db,'keys','readonly',o=>o.get('k'));
+ if(!k){k=await crypto.subtle.generateKey({name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+ await faceTxn(db,'keys','readwrite',o=>o.put(k,'k'));}return k;}
+async function persistDeviceFace(){
+ if(!S.profile||S.profile.account!==ACCOUNT)throw Error('Wrong face enrollment account.');
+ const db=await faceDb();try{
+  const key=await faceKey(db),iv=crypto.getRandomValues(new Uint8Array(12));
+  const raw=new TextEncoder().encode(JSON.stringify(S.profile));
+  const encrypted=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,raw);
+  await faceTxn(db,'profiles','readwrite',o=>o.put({iv:Array.from(iv),cipher:Array.from(new Uint8Array(encrypted)),savedAt:Date.now()},ACCOUNT));
+ }finally{db.close();}
+}
+async function loadDeviceFace(){try{
+ const db=await faceDb();try{
+  const stored=await faceTxn(db,'profiles','readonly',o=>o.get(ACCOUNT));if(!stored||S.profile)return;
+  const key=await faceKey(db);
+  const raw=await crypto.subtle.decrypt({name:'AES-GCM',iv:new Uint8Array(stored.iv)},key,new Uint8Array(stored.cipher));
+  const profile=JSON.parse(new TextDecoder().decode(raw));
+  if(profile.account===ACCOUNT&&Array.isArray(profile.descriptor)&&profile.descriptor.length===128&&profile.descriptor.every(Number.isFinite))S.profile=profile;
+ }finally{db.close();}
+ }catch{/* Browser keys may be deleted or storage may be unavailable. */}}
+async function deleteDeviceFace(){try{const db=await faceDb();try{await faceTxn(db,'profiles','readwrite',o=>o.delete(ACCOUNT));}finally{db.close();}}catch{}}
 const enc=new TextEncoder(),dec=new TextDecoder();
 const b64=b=>btoa(String.fromCharCode(...new Uint8Array(b)));
 const un64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
@@ -241,6 +276,7 @@ async function unlock(){
  finally{input.value='';}
 }
 function forget(deleteSaved=false){
+ if(deleteSaved)void deleteDeviceFace();
  S.profile=null;S.matchCount=0;S.lastMatch=0;
  if(deleteSaved)try{localStorage.removeItem(TEMPLATE);}catch{}
  say(deleteSaved?'Encrypted profile deleted for this account.':'Active face recognition cleared. Camera tracking may continue.');
@@ -268,6 +304,7 @@ window.addEventListener('gelato-verified-speaker',event=>{
  const d=event.detail||{};
  if(d.sessionUserMatch===true&&Number(d.userId)===Number(ACCOUNT))greet('voice');
 });
+void loadDeviceFace();
 window.GelatoFoodMonsterCamera={open:show,start,stop,enroll,forget,get active(){return!!S.stream},get stream(){return S.stream},get enrolled(){return!!S.profile},get account(){return ACCOUNT},get preferences(){return {greet:S.greet,speak:S.speak}},scanOnce:scan};
 }
 if(window.GelatoGlobalAgent?.user?.id) init();
