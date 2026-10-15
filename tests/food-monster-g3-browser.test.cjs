@@ -18,6 +18,7 @@ async function setup({account=7,permission='voice.agent',fakeVideo=true}={}){
   window.GelatoVoiceTurns={speak:(text,opts)=>{window.__tts={text,opts};}};
   window.fetch=async()=>({ok:true,text:async()=>svg});
   Object.defineProperty(window,'isSecureContext',{configurable:true,value:true});
+  Object.defineProperty(HTMLMediaElement.prototype,'srcObject',{configurable:true,get(){return this.__mockMediaStream||null},set(s){this.__mockMediaStream=s}});
   const video=HTMLMediaElement.prototype;
   video.play=async function(){if(fakeVideo){Object.defineProperty(this,'readyState',{configurable:true,value:4});Object.defineProperty(this,'videoWidth',{configurable:true,value:640});Object.defineProperty(this,'videoHeight',{configurable:true,value:480});}};
   let faces=[{box:{x:220,y:120,width:180,height:200}}];
