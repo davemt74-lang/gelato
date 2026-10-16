@@ -15,7 +15,7 @@ $agent=$read('js/global-agent.js');
 $llm=$read('api/food-monster-llm.php');
 $suggestions=$read('js/food-monster-suggestions.js');
 $version='20261014-fmg6';
-$agentVersion='20261015-fmg8reset';
+$agentVersion='20261016-fmg11e';
 $mascotVersion='20261015-fmg8a';
 $stageCssVersion='20261015-fmg8reset';
 foreach([

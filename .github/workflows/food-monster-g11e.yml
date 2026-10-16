@@ -1,0 +1,48 @@
+name: FM-G11E Participant and Conversation Certification
+on:
+  pull_request:
+    paths:
+      - 'js/voice-diagnostics.js'
+      - 'tests/voice-diagnostics.test.js'
+      - 'food-monster.php'
+      - '.github/workflows/food-monster-g11e.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'js/voice-diagnostics.js'
+      - 'tests/voice-diagnostics.test.js'
+      - 'food-monster.php'
+      - '.github/workflows/food-monster-g11e.yml'
+jobs:
+  participant-and-memory:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Integrated participant, voice, memory, and privacy regression
+        run: |
+          php -l food-monster.php
+          php -l api/agent-workspace.php
+          php -l includes/food-monster-room-presence.php
+          php -l includes/food-monster-conversation-memory.php
+          php -l includes/food-monster-g11d-followups.php
+          php tests/food-monster-g11a-speaker.php
+          php tests/food-monster-g9c-presence.php
+          php tests/food-monster-g9d-conversations.php
+          php tests/food-monster-g9e-memory.php
+          php tests/food-monster-g11c-concepts.php
+          php tests/food-monster-g11d-followups.php
+          php scripts/test-fm-g9f-relevance.php
+          node --check js/voice-diagnostics.js
+          node --check js/global-agent.js
+          node tests/voice-diagnostics.test.js
+          node tests/food-monster-g10a-tracker.test.cjs
+          node tests/food-monster-g10b-turns.test.cjs
+          node tests/food-monster-g11b-turns.test.cjs
+          node tests/food-monster-g10e-certification.test.cjs

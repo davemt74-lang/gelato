@@ -9,7 +9,7 @@
     owner: 'none', recognition: 'off', microphoneActive: false, savedListening: false,
     listenActive: false, wakeStandby: false, speech: false, speechOwner: 'none',
     profile: 'unknown', echoBlocks: 0, bargeIns: 0, restarts: 0,
-    lastError: 'none', events: []
+    lastError: 'none', speakerTurns:{correlated:0,verifiedWithoutVisual:0,unknown:0},events: []
   };
   let panel = null, previousFocus = null;
   const esc = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','"':'&quot;'}[c]));
@@ -36,7 +36,7 @@
       wakeStandby: state.wakeStandby, speech: state.speech, speechOwner: state.speechOwner,
       profile: state.profile, echoBlocks: state.echoBlocks, bargeIns: state.bargeIns,
       restarts: state.restarts, lastError: state.lastError,
-      camera:cameraHealth(), events: state.events.map(e => ({...e}))
+      camera:cameraHealth(), speakerTurns:{...state.speakerTurns},events: state.events.map(e => ({...e}))
     };
   }
   function push(source, kind, error) {
@@ -61,6 +61,16 @@
     if (kind === 'echo-ignored') state.echoBlocks++;
     if (kind === 'barge-in') state.bargeIns++;
     push(source, kind, error);
+    render();
+  }
+  function recordSpeakerTurn(detail={}) {
+    // Counters consume ONLY three boolean states. Never access detail.personId,
+    // eventId, voiceprint, transcript, face vectors or employee names.
+    let bucket='unknown';
+    if(detail.verified===true){
+      bucket=detail.correlated===true?'correlated':'verifiedWithoutVisual';
+    }
+    state.speakerTurns[bucket]=Math.min(999,state.speakerTurns[bucket]+1);
     render();
   }
   function hydrate(detail = {}) {
@@ -97,7 +107,10 @@
       ['Face models reused',label(s.camera.modelCached)],
       ['Camera sampling interval (ms)',s.camera.intervalMs],
       ['Last camera observation (ms)',s.camera.lastObservationMs],
-      ['Consecutive camera errors',s.camera.consecutiveFailures]
+      ['Consecutive camera errors',s.camera.consecutiveFailures],
+      ['Voice + visual correlations',s.speakerTurns.correlated],
+      ['Verified voice only',s.speakerTurns.verifiedWithoutVisual],
+      ['Unattributed voice turns',s.speakerTurns.unknown]
     ];
     root.innerHTML = '<dl class="gvd-values">' +
       items.map(item => '<div><dt>'+esc(item[0])+'</dt><dd>'+esc(item[1])+'</dd></div>').join('') +
@@ -124,7 +137,7 @@
     document.body.appendChild(panel);
     panel.addEventListener('click', event => {
       if (event.target === panel || event.target.closest('[data-gvd-close]')) close();
-      if (event.target.closest('[data-gvd-clear]')) { state.events=[];state.restarts=0;state.echoBlocks=0;state.bargeIns=0;render(); }
+      if (event.target.closest('[data-gvd-clear]')) { state.events=[];state.restarts=0;state.echoBlocks=0;state.bargeIns=0;state.speakerTurns={correlated:0,verifiedWithoutVisual:0,unknown:0};render(); }
       if (event.target.closest('[data-gvd-copy]')) {
         const report = JSON.stringify(snapshot(),null,2);
         void navigator.clipboard?.writeText(report).catch(() => {});
@@ -146,6 +159,7 @@
   window.addEventListener('gelato-agent-listening-change', event => hydrate(event.detail));
   window.addEventListener('gelato-voice-turn', event => onTurn(event.detail));
   window.addEventListener('gelato-agent-ready', () => hydrate(window.GelatoGlobalAgent?.listeningStatus || {}));
+  window.addEventListener('gelato-agent-speaker-turn',event => recordSpeakerTurn(event.detail));
   window.GelatoVoiceDiagnostics = {record,open,close,snapshot,hydrate};
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount, {once:true}); else mount();
 })();
