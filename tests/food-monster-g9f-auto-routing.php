@@ -4,7 +4,7 @@ function check_fm9f(bool $ok,string $name):void {if(!$ok)throw new RuntimeExcept
 $workspace=file_get_contents(__DIR__.'/../api/agent-workspace.php');
 $person=file_get_contents(__DIR__.'/../includes/food-monster-person-conversations.php');
 $followup=file_get_contents(__DIR__.'/../includes/food-monster-operational-followup.php');
-check_fm9f(str_contains($person,"'reportMessageId'=>$meta['memoryCategory']==='operational_report'"),'only operational reports supply action key');
+check_fm9f(str_contains($person, "'reportMessageId'=>\$meta['memoryCategory']==='operational_report'"),'only operational reports supply action key');
 check_fm9f(str_contains($person,"$"."reportMessage=gaw_append("),'canonical saved report is action source');
 check_fm9f(str_contains($workspace,"fm9a_agent_action_decision($"."user,'routine')==='delegated'"),'owner standing delegation is required');
 check_fm9f(str_contains($workspace,"app_has_permission('tasks.manage',$"."user)"),'task management permission is required');
