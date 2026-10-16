@@ -223,15 +223,25 @@
         };
       }
 
+      const followup=submitted?.operationalFollowup;
+      const createdTaskId=followup&&typeof followup.taskId==='string'
+        &&/^task-[a-f0-9]{20}$/.test(followup.taskId)?followup.taskId:'';
+      const followupMessage=createdTaskId
+        ?(followup.alreadyCreated
+          ?'I already have a task tracking that report ('+createdTaskId+').'
+          :'I created an operational follow-up task ('+createdTaskId+'). It remains open for review.')
+        :'';
+      // Report capture succeeds independently of task creation; never imply an
+      // operational action completed when its receipt is unavailable.
       const baseAnswer = result.answer || result.reply || 'Done.';
       // Only a fresh server-verified speaker can receive a spoken name greeting.
       const greeting=voice&&submitted?.greeting?.text?String(submitted.greeting.text):'';
-      const answer=greeting?greeting+' '+baseAnswer:baseAnswer;
+      const answer=(greeting?greeting+' ':'')+(followupMessage?followupMessage+' ':'')+baseAnswer;
       const agentMessage = await append('agent', answer, {
         channel: voice ? 'voice' : 'text',
         skill: result.skill || route.domain,
         tool: route.route || 'capabilities',
-        structured: result.data ?? null,
+        structured: createdTaskId ? {responseData:result.data??null,operationalFollowup:{taskId:createdTaskId,reportMessageId:String(followup.reportMessageId||''),alreadyCreated:followup.alreadyCreated===true}} : (result.data ?? null),
         sources: Array.isArray(result.sources) ? result.sources : [],
       });
 

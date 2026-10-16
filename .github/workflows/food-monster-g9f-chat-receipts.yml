@@ -1,0 +1,21 @@
+name: FM-G9F Chat Receipts
+on:
+  pull_request:
+    paths:
+      - 'js/global-agent.js'
+      - 'tests/food-monster-g9f-chat-receipt.test.cjs'
+      - '.github/workflows/food-monster-g9f-chat-receipts.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'js/global-agent.js'
+      - 'tests/food-monster-g9f-chat-receipt.test.cjs'
+      - '.github/workflows/food-monster-g9f-chat-receipts.yml'
+jobs:
+  receipt-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: node --check js/global-agent.js
+      - run: node --check tests/food-monster-g9f-chat-receipt.test.cjs
+      - run: node tests/food-monster-g9f-chat-receipt.test.cjs
