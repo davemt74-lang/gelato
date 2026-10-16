@@ -137,6 +137,12 @@ try{
         // Owner-authenticated high-impact staging uses a deterministic grammar,
         // never a model-selected endpoint. Only an owner may approve; an approval
         // records a decision but does not execute the underlying operation.
+        $approvalThread=trim((string)($in['threadId']??''));
+        if(fm9a_is_super_admin_session($user)&&preg_match('/^Confirm[.!]?$/i',$message)
+            &&fm9h_active_grant($user,$approvalThread))
+            app_json_response(['ok'=>true,'route'=>'api/food-monster-approvals.php',
+                'domain'=>'food_monster_permission_change','node'=>'brain',
+                'nodeMode'=>'approved_domain_write']);
         $approvalIntent=fm9f_approval_chat_intent($message);
         if($approvalIntent&&fm9a_is_super_admin_session($user)){
             $pending=$approvalIntent['action']==='decide'
