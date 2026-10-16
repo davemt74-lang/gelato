@@ -3,6 +3,11 @@ on:
   pull_request:
     paths:
       - 'food-monster.php'
+      - 'api/food-monster-presence.php'
+      - 'includes/food-monster-room-presence.php'
+      - 'js/food-monster-room.js'
+      - 'js/food-monster-room-tracker.js'
+      - 'tests/food-monster-g9c-*'
       - 'js/food-monster-clock-popup.js'
       - 'tests/food-monster-g9b-clock.php'
       - 'tests/food-monster-g9b-clock-browser.test.cjs'
@@ -62,6 +67,11 @@ on:
     branches: [main]
     paths:
       - 'food-monster.php'
+      - 'api/food-monster-presence.php'
+      - 'includes/food-monster-room-presence.php'
+      - 'js/food-monster-room.js'
+      - 'js/food-monster-room-tracker.js'
+      - 'tests/food-monster-g9c-*'
       - 'js/food-monster-clock-popup.js'
       - 'tests/food-monster-g9b-clock.php'
       - 'tests/food-monster-g9b-clock-browser.test.cjs'
@@ -88,6 +98,12 @@ jobs:
       - run: |
           php -l food-monster.php
           php tests/food-monster-g8reset-contract.php
+          php -l includes/food-monster-room-presence.php
+          php -l api/food-monster-presence.php
+          php tests/food-monster-g9c-presence.php
+          node --check js/food-monster-room-tracker.js
+          node --check js/food-monster-room.js
+          node tests/food-monster-g9c-tracker.test.cjs
           php -l api/employee-clock.php
           php -l includes/food-monster-employee-clock.php
           php tests/food-monster-g9b-clock.php
@@ -160,6 +176,7 @@ jobs:
           node tests/food-monster-g7v-browser.test.cjs
           node tests/food-monster-g7c-browser.test.cjs
           node tests/food-monster-g9b-clock-browser.test.cjs
+          node tests/food-monster-g9c-room-browser.test.cjs
           node tests/food-monster-g8b-pin-browser.test.cjs
           node tests/food-monster-g7b1-browser.test.cjs
           node tests/food-monster-g7b2-browser.test.cjs

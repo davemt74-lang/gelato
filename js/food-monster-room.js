@@ -113,7 +113,7 @@ async function start(){
   state.stream=stream;
   const video=document.createElement('video');video.autoplay=true;video.playsInline=true;video.muted=true;video.setAttribute('aria-hidden','true');video.style.cssText='position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;top:-10px;left:-10px';document.body.append(video);state.video=video;video.srcObject=stream;await video.play();
   try{await faceModels();}catch(e){
-   if(typeof window.FaceDetector==='function')state.nativeDetector=new FaceDetector({fastMode:true,maxDetectedFaces:8});
+   if(typeof window.FaceDetector==='function')state.nativeDetector=new window.FaceDetector({fastMode:true,maxDetectedFaces:8});
    else throw e;
   }
   state.tracker=window.GelatoRoomTracker.create();state.lastStatus='';
