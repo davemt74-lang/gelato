@@ -5,6 +5,10 @@ on:
     paths:
       - 'agent-canvas.php'
       - 'api/agent-workspace.php'
+      - 'api/food-monster-presence.php'
+      - 'includes/food-monster-room-presence.php'
+      - 'includes/food-monster-identity-authority.php'
+      - 'tests/food-monster-g9c-presence.php'
       - 'includes/food-monster-identity-authority.php'
       - 'tests/food-monster-g9a-contract.php'
       - 'api/employee-agent.php'
@@ -52,6 +56,10 @@ on:
     paths:
       - 'agent-canvas.php'
       - 'api/agent-workspace.php'
+      - 'api/food-monster-presence.php'
+      - 'includes/food-monster-room-presence.php'
+      - 'includes/food-monster-identity-authority.php'
+      - 'tests/food-monster-g9c-presence.php'
       - 'includes/food-monster-identity-authority.php'
       - 'tests/food-monster-g9a-contract.php'
       - 'api/employee-agent.php'
@@ -116,6 +124,9 @@ jobs:
         run: |
           php -l agent-canvas.php
           php -l api/agent-workspace.php
+          php -l api/food-monster-presence.php
+          php -l includes/food-monster-room-presence.php
+          php tests/food-monster-g9c-presence.php
           php -l includes/food-monster-identity-authority.php
           php tests/food-monster-g9a-contract.php
           php -l api/employee-agent.php
@@ -210,6 +221,8 @@ jobs:
           node tests/kds-natural-order-voice.test.js
       - name: FM-G9A real attendance and authority isolation
         run: php tests/food-monster-g9a-contract.php --db
+      - name: FM-G9C existing enrollment and room isolation
+        run: php tests/food-monster-g9c-presence.php --db
       - name: Verify upgrader idempotence
         run: |
           php <<'PHP'
