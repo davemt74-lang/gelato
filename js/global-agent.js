@@ -24,6 +24,7 @@
     poll: null,
     voiceDraft: {owned: false, previous: '', committed: ''},
     conversation: false, conversationTimer: null, conversationDraft: '',
+    recentFinalSpeech: {text:'',at:0}, recognitionFaults:0,
   };
 
   const has = (permission) => S.permissions.includes('*') || S.permissions.includes(permission);
@@ -410,10 +411,14 @@
   function resetVoiceDraft(){
     S.voiceDraft={owned:false,previous:'',committed:''};
   }
-  function showVoiceDraft(raw,{final=false,once=false}={}){
+  function showVoiceDraft(raw,{final=false,once=false,autoSend=true}={}){
     const field=document.getElementById('gaInput');
     const text=String(raw||'').trim().slice(0,3500);
     if(!field||!text)return false;
+    // Repeated browser final callbacks are not a second human utterance.
+    if(final&&autoSend&&S.recentFinalSpeech.text===text.toLowerCase()
+      &&Date.now()-S.recentFinalSpeech.at<2200){diag('duplicate-final-suppressed');return false;}
+    if(final&&autoSend)S.recentFinalSpeech={text:text.toLowerCase(),at:Date.now()};
     let draft=S.voiceDraft;
     if(draft.owned&&field.value!==draft.previous){
       resetVoiceDraft();
@@ -426,7 +431,7 @@
     draft.owned=true;draft.previous=value;
     if(final)draft.committed=value;
     field.dispatchEvent(new Event('input',{bubbles:true}));
-    if(S.listening&&!once){clearConversationTimer();if(final)scheduleSpokenTurn(value,true);}
+    if(S.listening&&!once){clearConversationTimer();if(final&&autoSend)scheduleSpokenTurn(value,true);}
     window.dispatchEvent(new CustomEvent('gelato-agent-dictation',{
       detail:{text:value,final,source:'browser-speech-recognition'}
     }));
@@ -569,6 +574,7 @@
       });
       S.savedListening=!!Number(data.preferences?.listening_enabled??Number(!!on));
       S.listening=!!on;
+      if(on)S.recognitionFaults=0;
       if(!on){clearConversationTimer();S.conversationDraft='';if(S.conversation){S.conversation=false;renderConversation();}}
       S.wakeStandby=!!(keepWake||on);
       if(on){
@@ -601,6 +607,7 @@
     activeRec.onstart=()=>{if(S.rec!==activeRec)return;S.micActive=true;diag('active');renderListening();};
     activeRec.onresult=event=>{
       if(S.rec!==activeRec)return;
+      S.recognitionFaults=0;
       for(let index=event.resultIndex;index<event.results.length;index++){
         const result=event.results[index],text=String(result[0]?.transcript||'').trim();
         const evaluation=window.GelatoVoiceTurns?.evaluate?.(text,result[0]?.confidence,{wakeRequired:!S.listening});
@@ -639,7 +646,7 @@
           // Noisy-room wake/low-confidence policies restrict commands, not
           // editable drafts while the user has explicitly enabled listening.
           else if(S.listening&&['wake-required','low-confidence'].includes(evaluation.reason)&&!/^hey\s+gelato\b/i.test(text))
-            showVoiceDraft(text,{final:!!result.isFinal});
+            showVoiceDraft(text,{final:!!result.isFinal,autoSend:false});
           continue;
         }
         // Evaluate explicit stop/start controls before generic speech barge-in.
@@ -680,6 +687,7 @@
     activeRec.onerror=event=>{
       if(S.rec!==activeRec)return;
       const error=String(event.error||'unknown');diag('error',{error});
+      if(!['no-speech','aborted'].includes(error))S.recognitionFaults++;
       if(['not-allowed','service-not-allowed','audio-capture'].includes(error)){
         stopContinuous();S.listening=false;S.wakeStandby=false;stopPoll();diag('blocked',{error});
         status('Speech recognition blocked: '+error+'. Check browser microphone and speech-service settings.',6500);
@@ -691,7 +699,17 @@
       if(S.rec!==activeRec)return;
       S.micActive=false;diag('ended');renderListening();
       if((S.listening||S.wakeStandby)&&!document.hidden){
-        setTimeout(()=>{if(S.rec===activeRec&&(S.listening||S.wakeStandby)&&!document.hidden){try{diag('retry');activeRec.start();}catch{diag('failed',{error:'start-failed'});S.listening=false;S.wakeStandby=false;stopPoll();stopContinuous();}}},650);
+        if(S.recognitionFaults>=5){
+          status('Speech service keeps failing. Microphone paused; press Listen to retry.',6500);
+          S.listening=false;S.wakeStandby=false;stopPoll();stopContinuous();renderListening();return;
+        }
+        const delay=Math.min(8000,650*Math.pow(2,Math.max(0,S.recognitionFaults-1)));
+        diag('retry-scheduled',{delay,faults:S.recognitionFaults});
+        setTimeout(()=>{if(S.rec===activeRec&&(S.listening||S.wakeStandby)&&!document.hidden){
+          try{diag('retry');activeRec.start();}catch{
+            diag('failed',{error:'start-failed'});S.listening=false;S.wakeStandby=false;stopPoll();stopContinuous();
+          }
+        }},delay);
       }
     };
     try{activeRec.start();return true;}catch(error){diag('failed',{error:'start-failed'});
