@@ -21,3 +21,24 @@ $d=fm9f_approval_decide($owner,$p['proposalId'],'approve');
 check_it($d['decision']==='approve'&&!$d['executed'],'owner approval does not execute tool');
 try{fm9f_approval_decide($owner,$p['proposalId'],'approve');check_it(false,'replay blocked');}
 catch(InvalidArgumentException){check_it(true,'replay blocked');}
+
+
+// Audit regression: explicit chat parser cannot infer an arbitrary action.
+$intent=fm9f_approval_chat_intent('Request approval: major_purchase: Replace the broken oven');
+check_it(is_array($intent)&&$intent['action']==='propose'&&$intent['kind']==='major_purchase','owner chat proposal parsed safely');
+check_it(fm9f_approval_chat_intent('Request approval: run_php: Execute script')===null,'no generic tool-execution grammar');
+check_it(fm9f_approval_chat_intent('What if we approve a refund?')===null,'hypothetical conversation never becomes approval');
+check_it(fm9f_approval_chat_intent('Approve')['decision']==='approve','owner decision grammar');
+check_it(fm9f_approval_chat_intent('Reject')['decision']==='reject','owner rejection grammar');
+$api=(string)file_get_contents(__DIR__.'/../api/food-monster-approvals.php');
+$workspace=(string)file_get_contents(__DIR__.'/../api/agent-workspace.php');
+$client=(string)file_get_contents(__DIR__.'/../js/global-agent.js');
+check_it(str_contains($api,'gaw_messages($pdo,$org,$uid,$thread,1)')
+    &&str_contains($api,'app_verify_request_csrf'),'only canonical authenticated chat messages stage approval');
+check_it(str_contains($api,"'fm9f_high_impact_decision'")
+    &&str_contains($api,"'executed'=>false"),'approval decisions are auditable and nonexecuting');
+check_it(str_contains($workspace,'fm9f_approval_chat_intent')
+    &&str_contains($client,'api/food-monster-approvals.php'),'Agent Chat routes owner approval');
+$p2=fm9f_approval_propose($owner,'record_deletion','Review old order removal','thr-1234567890');
+$d2=fm9f_approval_decide($owner,$p2['proposalId'],'reject');
+check_it($d2['decision']==='reject'&&!$d2['executed'],'owner rejection is nonexecuting');
