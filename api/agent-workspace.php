@@ -26,6 +26,7 @@ if($_SERVER['REQUEST_METHOD']==='GET'){
         if(!$active){$thread=gaw_create_thread($pdo,$org,$uid);$threads=gaw_threads($pdo,$org,$uid,40);$active=$thread['public_id']??null;}
         app_json_response(['ok'=>true,'csrf'=>app_csrf_token(),'threads'=>$threads,'activeThread'=>$active,'messages'=>$active?gaw_messages($pdo,$org,$uid,(string)$active,120):[],'user'=>['id'=>$uid,'name'=>$user['display_name'],'firstName'=>$user['first_name'],'role'=>$user['role_slug']],'permissions'=>$user['permissions'],'foodMonsterContext'=>fm9a_context($pdo,$user)]);
     }
+    if($action==='food_monster_context')app_json_response(['ok'=>true,'foodMonsterContext'=>fm9a_context($pdo,$user)]);
     if($action==='food_monster_skills'){
         require_once __DIR__.'/../includes/admin-dashboard-core.php';
         app_json_response(['ok'=>true,'skills'=>fm_skill_registry_for_user($user),

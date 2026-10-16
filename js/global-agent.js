@@ -10,6 +10,7 @@
     user: null,
     busy: false,
     voiceEventId: '',
+    foodMonsterContext: null,
     voiceUntil: 0,
     verifiedSpeaker: null,
     listening: false,
@@ -721,6 +722,12 @@
     S.poll = null;
   }
 
+  async function refreshContext(){
+    const data=await req('api/agent-workspace.php?action=food_monster_context');
+    S.foodMonsterContext=data.foodMonsterContext||null;
+    window.dispatchEvent(new CustomEvent('gelato-agent-context-refreshed',{detail:{foodMonsterContext:S.foodMonsterContext}}));
+    return S.foodMonsterContext;
+  }
   function selectThread(id) {
     if (id) S.thread = String(id);
   }
@@ -732,6 +739,7 @@
       S.thread = data.activeThread;
       S.permissions = data.permissions || [];
       S.user = data.user || null;
+      S.foodMonsterContext=data.foodMonsterContext||null;
       mount();
       ensureConversationButton();renderConversation();
       await loadListeningPreference();
@@ -763,6 +771,8 @@
     identifySpeaker,
     get verifiedSpeaker(){return S.verifiedSpeaker&&Date.now()<S.verifiedSpeaker.verifiedUntil?S.verifiedSpeaker:null;},
     selectThread,
+    refreshContext,
+    get foodMonsterContext(){return S.foodMonsterContext;},
     get threadId() { return S.thread; },
     get user() { return S.user; },
     get permissions() { return [...S.permissions]; },
