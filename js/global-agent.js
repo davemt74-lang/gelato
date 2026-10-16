@@ -146,6 +146,14 @@
   async function send(raw, voice = false) {
     if(!voice)interruptSpeech('typed-message');
     const text = String(raw || '').trim();
+    // Explicit spoken request; ordinary conversation NEVER requires voice verification.
+    if(/^(?:(?:hey|hi)\\s+)?(?:gelato|food monster|monster)[,\\s]+(?:recognize|identify)\\s+(?:my\\s+)?voice[.!?]*$/i.test(text)
+       ||/^(?:recognize|identify)\\s+(?:my\\s+)?voice[.!?]*$/i.test(text)){
+      try{await identifySpeaker({allowRoster:true,force:true});}
+      catch(error){status(error.message||'Speaker could not be identified. Conversation remains available.',4500);}
+      const field=document.getElementById('gaInput');if(field)field.value='';
+      return null;
+    }
     clearConversationTimer();
     if (!text || S.busy) return null;
     // An active governed Agent Brain goal can consume an expected onboarding
@@ -169,9 +177,12 @@
     status('Gelato is checking your restaurant context…');
 
     try {
+      const freshSpeakerEvent=voice&&S.verifiedSpeaker
+        &&Date.now()-(S.verifiedSpeaker.verifiedAt||0)<60000
+        ?S.verifiedSpeaker.eventId:'';
       const submitted = await append('user', text, {
         channel: voice ? 'voice' : 'text',
-        voiceEventId: voice ? S.voiceEventId : '',
+        voiceEventId: freshSpeakerEvent||(voice ? S.voiceEventId : ''),
       });
 
       const route = await post('api/agent-workspace.php', {action: 'route', message: text});
@@ -314,7 +325,7 @@
       eventId:String(match.eventId||''),userId:Number(match.userId||0),
       name:String(match.displayName||S.user?.name||''),
       sessionUserMatch:Boolean(match.sessionUserMatch),
-      verifiedUntil:Date.now()+13*60*1000,rosterChecked
+      verifiedAt:Date.now(),verifiedUntil:Date.now()+13*60*1000,rosterChecked
     };
     S.verifiedSpeaker=identity;
     // A manager recognizing a different employee must never gain that

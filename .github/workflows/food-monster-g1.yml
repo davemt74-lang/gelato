@@ -49,6 +49,8 @@ on:
       - 'docs/FOOD-MONSTER-FM-G7B1-SKILLS.md'
       - 'docs/FOOD-MONSTER-FM-G7D-HAIKU-PROVIDER.md'
       - 'includes/agent-workspace-core.php'
+      - 'includes/food-monster-person-conversations.php'
+      - 'tests/food-monster-g9d-conversations.php'
       - 'api/agent-brain.php'
       - 'api/agent-workspace.php'
       - 'api/food-monster-orchestrate.php'
@@ -119,6 +121,8 @@ jobs:
           php -l includes/food-monster-multi-node.php
           php -l api/food-monster-orchestrate.php
           php -l api/agent-workspace.php
+          php -l includes/food-monster-person-conversations.php
+          php tests/food-monster-g9d-conversations.php
           node --check js/food-monster-suggestions.js
           node --check js/agent-next-moves.js
           php -l includes/food-monster-llm.php

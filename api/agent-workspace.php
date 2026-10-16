@@ -10,6 +10,7 @@ require_once __DIR__.'/../includes/food-monster-multi-node.php';
 require_once __DIR__.'/../includes/food-monster-skill-registry.php';
 require_once __DIR__.'/../includes/food-monster-read-tools.php';
 require_once __DIR__.'/../includes/food-monster-identity-authority.php';
+require_once __DIR__.'/../includes/food-monster-person-conversations.php';
 
 // Compatibility route markers for older CI/contracts. Canonical routing now lives in includes/agent-node-registry.php.
 // api/admin-dashboard-agent.php api/daily-manager-agent.php api/sales-cost-agent.php api/sales-agent.php
@@ -27,6 +28,20 @@ if($_SERVER['REQUEST_METHOD']==='GET'){
         app_json_response(['ok'=>true,'csrf'=>app_csrf_token(),'threads'=>$threads,'activeThread'=>$active,'messages'=>$active?gaw_messages($pdo,$org,$uid,(string)$active,120):[],'user'=>['id'=>$uid,'name'=>$user['display_name'],'firstName'=>$user['first_name'],'role'=>$user['role_slug']],'permissions'=>$user['permissions'],'foodMonsterContext'=>fm9a_context($pdo,$user)]);
     }
     if($action==='food_monster_context')app_json_response(['ok'=>true,'foodMonsterContext'=>fm9a_context($pdo,$user)]);
+    if($action==='person_conversations'){
+        $personId=(int)($_GET['personId']??0);
+        app_json_response(['ok'=>true]+fm9d_person_collections($pdo,$user,$personId));
+    }
+    if($action==='person_conversation_page'){
+        $personId=(int)($_GET['personId']??0);
+        $info=fm9d_person_collections($pdo,$user,$personId);
+        $threadId=trim((string)($_GET['threadId']??''));
+        $allowed=false;
+        foreach($info['collections'] as $collection)if($collection['public_id']===$threadId)$allowed=true;
+        if(!$allowed)throw new InvalidArgumentException('Person conversation not found.');
+        $before=max(0,(int)($_GET['before']??0));
+        app_json_response(['ok'=>true]+gaw_history_page($pdo,$org,$personId,$threadId,$before,80));
+    }
     if($action==='food_monster_skills'){
         require_once __DIR__.'/../includes/admin-dashboard-core.php';
         app_json_response(['ok'=>true,'skills'=>fm_skill_registry_for_user($user),
@@ -48,17 +63,44 @@ try{
         $channel=(string)($in['channel']??'text');
         $voiceEvent=(string)($in['voiceEventId']??'');
         $greeting=null;
+        $speaker=null;
+        // Speaker event is server evidence, not an employee login or role grant.
         if($role==='user'&&$channel==='voice'){
             $speaker=avc_verified_speaker($pdo,$org,$user,$voiceEvent);
             if($speaker&&(int)$speaker['userId']===$uid)
                 $greeting=avc_greeting($pdo,$org,$uid,(string)$speaker['firstName']);
         }
-        $message=gaw_append($pdo,$org,$uid,$thread,$role,(string)($in['content']??''),[
-            'channel'=>$channel,'skill'=>$in['skill']??null,'tool'=>$in['tool']??null,
-            'voiceEventId'=>$voiceEvent,'structured'=>$in['structured']??null,
-            'sources'=>is_array($in['sources']??null)?$in['sources']:[]
-        ]);
-        app_json_response(['ok'=>true,'message'=>$message,'greeting'=>$greeting?['text'=>$greeting,'verified'=>true]:null]);
+        $personSpeaker=$role==='user'&&$channel==='voice'
+            ?fm9d_resolve_speaker($pdo,$user,$voiceEvent):null;
+        $pendingKey='fm9d_pending_'.hash('sha256',$org.'|'.$uid.'|'.$thread);
+        $pdo->beginTransaction();
+        try{
+            $message=gaw_append($pdo,$org,$uid,$thread,$role,(string)($in['content']??''),[
+                'channel'=>$channel,'skill'=>$in['skill']??null,'tool'=>$in['tool']??null,
+                'voiceEventId'=>$voiceEvent,'structured'=>$in['structured']??null,
+                'sources'=>is_array($in['sources']??null)?$in['sources']:[]
+            ]);
+            if($role==='user'){
+                // Never carry a previous voice's attribution across a new turn.
+                unset($_SESSION[$pendingKey]);
+                if($personSpeaker&&(int)$personSpeaker['personId']!==$uid){
+                    $_SESSION[$pendingKey]=fm9d_mirror_user_turn(
+                        $pdo,$user,$personSpeaker,(string)$in['content'],$thread);
+                }
+            }elseif($role==='agent'&&isset($_SESSION[$pendingKey])){
+                fm9d_mirror_reply($pdo,$user,(array)$_SESSION[$pendingKey],$thread,(string)$in['content']);
+                unset($_SESSION[$pendingKey]);
+            }
+            $pdo->commit();
+        }catch(Throwable $error){
+            if($pdo->inTransaction())$pdo->rollBack();
+            unset($_SESSION[$pendingKey]);
+            throw $error;
+        }
+        app_json_response(['ok'=>true,'message'=>$message,
+            'greeting'=>$greeting?['text'=>$greeting,'verified'=>true]:null,
+            'participant'=>($personSpeaker&&(int)$personSpeaker['personId']!==$uid)
+                ?['personId'=>(int)$personSpeaker['personId'],'identityAssurance'=>'provisional_voice_match']:null]);
     }
     if($action==='route'){
         $message=trim((string)($in['message']??''));if($message==='')throw new InvalidArgumentException('Enter an Agent request.');

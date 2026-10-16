@@ -16,6 +16,8 @@ on:
       - 'api/workspace-workforce-agent.php'
       - 'includes/agent-workspace-core.php'
       - 'includes/agent-voice-conversation.php'
+      - 'includes/food-monster-person-conversations.php'
+      - 'tests/food-monster-g9d-conversations.php'
       - 'includes/kds-spoken-orders.php'
       - 'js/kds-spoken-orders.js'
       - 'tests/kds-natural-order-voice.php'
@@ -67,6 +69,8 @@ on:
       - 'api/workspace-workforce-agent.php'
       - 'includes/agent-workspace-core.php'
       - 'includes/agent-voice-conversation.php'
+      - 'includes/food-monster-person-conversations.php'
+      - 'tests/food-monster-g9d-conversations.php'
       - 'includes/kds-spoken-orders.php'
       - 'js/kds-spoken-orders.js'
       - 'tests/kds-natural-order-voice.php'
@@ -124,6 +128,8 @@ jobs:
         run: |
           php -l agent-canvas.php
           php -l api/agent-workspace.php
+          php -l includes/food-monster-person-conversations.php
+          php tests/food-monster-g9d-conversations.php
           php -l api/food-monster-presence.php
           php -l includes/food-monster-room-presence.php
           php tests/food-monster-g9c-presence.php
@@ -223,6 +229,8 @@ jobs:
         run: php tests/food-monster-g9a-contract.php --db
       - name: FM-G9C existing enrollment and room isolation
         run: php tests/food-monster-g9c-presence.php --db
+      - name: FM-G9D person conversation history and voice identity isolation
+        run: php tests/food-monster-g9d-conversations.php --db
       - name: Verify upgrader idempotence
         run: |
           php <<'PHP'
