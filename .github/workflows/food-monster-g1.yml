@@ -3,6 +3,12 @@ on:
   pull_request:
     paths:
       - 'food-monster.php'
+      - 'js/food-monster-clock-popup.js'
+      - 'tests/food-monster-g9b-clock.php'
+      - 'tests/food-monster-g9b-clock-browser.test.cjs'
+      - 'api/employee-clock.php'
+      - 'includes/food-monster-employee-clock.php'
+      - 'database/20261016_fm_g9b_employee_clock_pin.sql'
       - 'includes/food-monster-identity-authority.php'
       - 'tests/food-monster-g9a-contract.php'
       - 'tests/food-monster-g8reset-contract.php'
@@ -56,6 +62,12 @@ on:
     branches: [main]
     paths:
       - 'food-monster.php'
+      - 'js/food-monster-clock-popup.js'
+      - 'tests/food-monster-g9b-clock.php'
+      - 'tests/food-monster-g9b-clock-browser.test.cjs'
+      - 'api/employee-clock.php'
+      - 'includes/food-monster-employee-clock.php'
+      - 'database/20261016_fm_g9b_employee_clock_pin.sql'
       - 'includes/food-monster-identity-authority.php'
       - 'tests/food-monster-g9a-contract.php'
       - 'css/food-monster.css'
@@ -76,6 +88,10 @@ jobs:
       - run: |
           php -l food-monster.php
           php tests/food-monster-g8reset-contract.php
+          php -l api/employee-clock.php
+          php -l includes/food-monster-employee-clock.php
+          php tests/food-monster-g9b-clock.php
+          node --check js/food-monster-clock-popup.js
           php -l includes/food-monster-identity-authority.php
           php tests/food-monster-g9a-contract.php
           php -l tests/food-monster-g1-contract.php
@@ -143,6 +159,7 @@ jobs:
           node tests/food-monster-g7a-browser.test.cjs
           node tests/food-monster-g7v-browser.test.cjs
           node tests/food-monster-g7c-browser.test.cjs
+          node tests/food-monster-g9b-clock-browser.test.cjs
           node tests/food-monster-g8b-pin-browser.test.cjs
           node tests/food-monster-g7b1-browser.test.cjs
           node tests/food-monster-g7b2-browser.test.cjs
