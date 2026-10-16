@@ -1,0 +1,26 @@
+name: FM-G10B Natural Conversation
+on:
+  pull_request:
+    paths:
+      - 'js/global-agent.js'
+      - 'tests/food-monster-g10b-turns.test.cjs'
+      - '.github/workflows/food-monster-g10b.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'js/global-agent.js'
+      - 'tests/food-monster-g10b-turns.test.cjs'
+      - '.github/workflows/food-monster-g10b.yml'
+jobs:
+  conversation-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Existing and new voice behavior
+        run: |
+          node --check js/global-agent.js
+          node tests/food-monster-g7v-listening.test.cjs
+          node tests/food-monster-g10b-turns.test.cjs
