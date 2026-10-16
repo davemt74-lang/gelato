@@ -2,6 +2,8 @@
 declare(strict_types=1);
 require_once __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/purchasing-agent-core.php';
+require_once __DIR__.'/../includes/agent-workspace-core.php';
+require_once __DIR__.'/../includes/food-monster-high-impact-approval.php';
 
 function paa_assert(bool $condition,string $message):void{if(!$condition)throw new RuntimeException($message);}
 $pdo=app_pdo();
