@@ -40,7 +40,7 @@ ok11d($hint['sourceMessageIds']===['msg-'.str_repeat('b',20),'msg-'.str_repeat('
 $workspace=file_get_contents(__DIR__.'/../api/agent-workspace.php');
 $client=file_get_contents(__DIR__.'/../js/global-agent.js');
 ok11d(str_contains($workspace,'fm11d_verified_turn_suggestion(')
-  &&str_contains($workspace,"$"."personSpeaker")&&str_contains($workspace,"'role'")==false,
+  &&str_contains($workspace,"$"."personSpeaker")&&str_contains($workspace,"$"."role==='user'"),
  'only server-side verified person turn obtains a suggestion');
 ok11d(str_contains($client,'conversationalSuggestion')&&str_contains($client,'suggested.executed===false'),
  'client never presents suggestion as completed action');
