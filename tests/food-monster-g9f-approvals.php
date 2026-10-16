@@ -11,7 +11,7 @@ try{fm9f_approval_propose($staff,'major_purchase','Buy new oven','agent-'.str_re
 catch(DomainException){check_it(true,'staff rejected');}
 try{fm9f_approval_propose($owner,'arbitrary_tool','Do anything','agent-'.str_repeat('e',20));check_it(false,'allowlist');}
 catch(InvalidArgumentException){check_it(true,'allowlist');}
-$p=fm9f_approval_propose($owner,'record_deletion','Review record deletion','agent-'.str_repeat('e',20));
+$p=fm9f_approval_propose($owner,'large_refund','Review refund proposal','agent-'.str_repeat('e',20));
 check_it($p['requiresApproval']&&!$p['executed'],'proposal never executes');
 try{fm9f_approval_propose($owner,'large_refund','Try replacing prior approval','agent-'.str_repeat('e',20));check_it(false,'pending proposal protected');}
 catch(DomainException){check_it(true,'pending proposal protected');}
@@ -42,6 +42,6 @@ check_it(str_contains($api,"'fm9f_high_impact_decision'")
     &&str_contains($api,"'executed'=>false"),'approval decisions are auditable and nonexecuting');
 check_it(str_contains($workspace,'fm9f_approval_chat_intent')
     &&str_contains($client,'api/food-monster-approvals.php'),'Agent Chat routes owner approval');
-$p2=fm9f_approval_propose($owner,'record_deletion','Review old order removal','agent-'.str_repeat('e',20));
+$p2=fm9f_approval_propose($owner,'large_refund','Review a refund proposal','agent-'.str_repeat('e',20));
 $d2=fm9f_approval_decide($owner,$p2['proposalId'],'reject');
 check_it($d2['decision']==='reject'&&!$d2['executed'],'owner rejection is nonexecuting');

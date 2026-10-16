@@ -5,6 +5,7 @@ require_once __DIR__.'/agent-confirmation-core.php';
 require_once __DIR__.'/purchasing-agent-core.php';
 require_once __DIR__.'/food-monster-g9g-purchase-execution.php';
 require_once __DIR__.'/food-monster-g9h-role-execution.php';
+require_once __DIR__.'/food-monster-g9i-task-archive.php';
 
 /** Explicit chat grammar only; never accept arbitrary model-generated tool calls. */
 function fm9f_approval_chat_intent(string $message):?array {
@@ -31,6 +32,15 @@ function fm9f_approval_propose(array $operator,string $kind,string $summary,stri
     $org=(int)$operator['organization_id'];$uid=(int)$operator['id'];
     if(gac_pending_get('food_monster_high_impact',$org,$uid))
         throw new DomainException('Resolve the existing high-impact approval before proposing another.');
+    // One executable grant at a time: a generic Confirm must never choose
+    // between two unrelated high-impact operations.
+    $key=$org.':'.$uid;
+    foreach(['fm9g_purchase_grants','fm9h_role_grants','fm9i_task_archive_grants'] as $bucket){
+        $grant=$_SESSION[$bucket][$key]??null;
+        if(is_array($grant)&&($grant['consumed']??true)===false
+            &&(int)($grant['expires']??0)>time())
+            throw new DomainException('Finish the previously approved high-impact action before proposing another.');
+    }
     $binding=null;
     if($kind==='major_purchase'){
         if(!$pdo)throw new DomainException('A verified purchase-order proposal is required.');
@@ -44,8 +54,15 @@ function fm9f_approval_propose(array $operator,string $kind,string $summary,stri
         $roleBinding=fm9h_prepare_role($pdo,$operator,$summary);
         $summary=$roleBinding['summary'];
     }
+    $taskBinding=null;
+    if($kind==='record_deletion'){
+        if(!$pdo)throw new DomainException('Canonical task state is required.');
+        $taskBinding=fm9i_prepare($pdo,$operator,$summary);
+        $summary=$taskBinding['summary'];
+    }
     $proposal=gac_pending_store('food_monster_high_impact',$org,$uid,$kind,
-        ['threadId'=>$threadId,'purchaseBinding'=>$binding,'roleBinding'=>$roleBinding],$summary,600);
+        ['threadId'=>$threadId,'purchaseBinding'=>$binding,
+            'roleBinding'=>$roleBinding,'taskBinding'=>$taskBinding],$summary,600);
     return ['requiresApproval'=>true,'executed'=>false,'proposalId'=>$proposal['id'],
         'kind'=>$kind,'summary'=>$summary,'purchaseOrderId'=>$binding['purchaseOrderId']??null,
         'expiresAt'=>date(DATE_ATOM,(int)$proposal['expires'])];
@@ -69,6 +86,12 @@ function fm9f_approval_decide(array $operator,string $proposalId,string $decisio
         $roleBinding=(array)($pending['payload']['roleBinding']??[]);
         if(!$roleBinding)throw new DomainException('Missing verified role change; create a new approval.');
         $handoff=fm9h_issue_grant($operator,$roleBinding,
+            (string)$pending['payload']['threadId'],$proposalId);
+    }
+    if($decision==='approve'&&($pending['type']??'')==='record_deletion'){
+        $taskBinding=(array)($pending['payload']['taskBinding']??[]);
+        if(!$taskBinding)throw new DomainException('Missing bound task. Create a new approval.');
+        $handoff=fm9i_issue_grant($operator,$taskBinding,
             (string)$pending['payload']['threadId'],$proposalId);
     }
     gac_pending_clear('food_monster_high_impact',$org,$uid);

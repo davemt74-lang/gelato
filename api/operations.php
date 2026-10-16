@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require __DIR__ . '/../includes/bootstrap.php';
 require __DIR__ . '/../includes/operations-core.php';
+require_once __DIR__ . '/../includes/operations-archive-core.php';
 require_once __DIR__ . '/../includes/operations-wholesale.php';
 
 $user=app_require_auth();$pdo=app_pdo();$organizationId=(int)$user['organization_id'];$userId=(int)$user['id'];
@@ -68,6 +69,15 @@ if($action==='task_timer'){
     $id=trim((string)($input['id']??''));$canManage=ops_can($user,'tasks.manage');$canSelf=ops_can($user,'tasks.self')&&ops_task_assigned($pdo,$organizationId,$id,$userId);if(!$canManage&&!$canSelf)app_json_response(['ok'=>false,'message'=>'You can only track time on tasks assigned to you.'],403);$start=(string)($input['mode']??'start')==='start';$originalTask=operations_task_by_public_id($pdo,$organizationId,$id);if(!$originalTask)app_json_response(['ok'=>false,'message'=>'Task not found.'],404);if($start){try{operations_wholesale_validate_task_transition($pdo,$organizationId,$originalTask,'in_progress');}catch(Throwable $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);}}$task=operations_task_timer($pdo,$organizationId,$id,$userId,$start);if($start)operations_wholesale_task_status_changed($pdo,$organizationId,$task,(string)($task['status']??'in_progress'),$userId);app_json_response(['ok'=>true,'task'=>$task,'message'=>$start?'Task timer started.':'Task timer stopped.']);
 }
 if($action==='task_delete'){
-    ops_require($user,'tasks.manage');$id=trim((string)($input['id']??''));$task=operations_task_by_public_id($pdo,$organizationId,$id);if(!$task)app_json_response(['ok'=>false,'message'=>'Task not found.'],404);if($task['source_type'])app_json_response(['ok'=>false,'message'=>'Source-linked tasks cannot be deleted; cancel them instead.'],422);$pdo->prepare('UPDATE restaurant_tasks SET archived_at=NOW(6),status="cancelled",updated_by=?,updated_at=NOW(6) WHERE id=? AND organization_id=?')->execute([$userId,(int)$task['id'],$organizationId]);operations_task_event($pdo,$organizationId,(int)$task['id'],'archived','Task archived',$userId);app_audit($pdo,$organizationId,$userId,'tasks.archived','restaurant_task',$id);app_json_response(['ok'=>true,'message'=>'Task archived.']);
+    ops_require($user,'tasks.manage');
+    try{
+        $result=operations_archive_task($pdo,$user,trim((string)($input['id']??'')));
+        app_json_response(['ok'=>true,'message'=>'Task archived.','result'=>$result]);
+    }catch(InvalidArgumentException $e){
+        app_json_response(['ok'=>false,'message'=>$e->getMessage()],404);
+    }catch(DomainException $e){
+        app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);
+    }
 }
+
 app_json_response(['ok'=>false,'message'=>'Unsupported Operations Core action.'],422);

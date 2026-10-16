@@ -139,6 +139,10 @@ try{
         // records a decision but does not execute the underlying operation.
         $approvalThread=trim((string)($in['threadId']??''));
         if(fm9a_is_super_admin_session($user)&&preg_match('/^Confirm[.!]?$/i',$message)
+            &&fm9i_active_grant($user,$approvalThread))
+            app_json_response(['ok'=>true,'route'=>'api/food-monster-approvals.php',
+                'domain'=>'food_monster_task_archival','node'=>'brain','nodeMode'=>'approved_domain_write']);
+        if(fm9a_is_super_admin_session($user)&&preg_match('/^Confirm[.!]?$/i',$message)
             &&fm9h_active_grant($user,$approvalThread))
             app_json_response(['ok'=>true,'route'=>'api/food-monster-approvals.php',
                 'domain'=>'food_monster_permission_change','node'=>'brain',
