@@ -96,7 +96,7 @@ jobs:
           grep -q "module: 'timeclock'" js/timeclock-agent-context.js
           grep -q "js/global-agent.js" timeclock.php
           grep -q "js/dynamic-agent-canvas.js" timeclock.php
-          grep -q "Voice recognition is opt-in personalization only" timeclock.php
+          grep -q "Employees clock in using a shift PIN, not a website login" timeclock.php
       - name: Install and upgrade schema
         run: |
           sudo apt-get update -qq
