@@ -7,13 +7,14 @@ const base=path.resolve(__dirname,'..');
  const browser=await chromium.launch({headless:true,args:['--no-sandbox','--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream']});
  try{
   const page=await browser.newPage();
-  await page.goto('about:blank');
+  await page.route('http://localhost/**',route=>route.fulfill({status:200,contentType:'text/html',body:'<!doctype html><title>FM-G9C Test</title>'}));
+  await page.goto('http://localhost/');
   await page.setContent('<!doctype html><html><head><meta name="gelato-csrf" content="ci-token"></head><body><button data-fm-camera>Camera</button></body></html>');
   await page.evaluate(async()=>{
    window.calls=[];window.refreshed=0;window.mediaStream=null;
    window.GelatoGlobalAgent={refreshContext:async()=>{window.refreshed++;return {};}};
    const canvas=document.createElement('canvas');canvas.width=320;canvas.height=240;document.body.append(canvas);
-   navigator.mediaDevices={getUserMedia:async()=>{window.mediaStream=canvas.captureStream(10);return window.mediaStream;}};
+   Object.defineProperty(navigator,'mediaDevices',{configurable:true,value:{getUserMedia:async()=>{window.mediaStream=canvas.captureStream(10);return window.mediaStream;}}});
    Object.defineProperty(window,'isSecureContext',{configurable:true,get:()=>true});
    const d=Array.from({length:128},(_,i)=>.1+(i%5)*.001);
    // Same encrypted IndexedDB contract as preexisting Face/PIN enrollment.
