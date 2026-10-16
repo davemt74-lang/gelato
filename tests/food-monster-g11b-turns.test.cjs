@@ -81,7 +81,7 @@ const flush=async()=>{for(let i=0;i<50;i++)await Promise.resolve()};
  await agent.send('Typed operator note',false);
  ok(messages().at(-1).body.voiceEventId==='','typed chat cannot inherit voice attribution');
  ok(messages().length===before+4,'all chat turns persist even with unknown speaker');
- ok(turnEvents.length===3&&turnEvents.every(e=>Object.keys(e).every(k=>['verified','correlated','unverified'].includes(k))),
+ ok(turnEvents.length===4&&turnEvents.every(e=>Object.keys(e).every(k=>['verified','correlated','unverified'].includes(k))),
    'speaker-turn notifications reveal no voiceprint, name or person identity');
  console.log('FM-G11B single-use voice and speaker-switch safeguards PASS ('+n+' assertions)');
 })().catch(e=>{console.error(e);process.exitCode=1});
