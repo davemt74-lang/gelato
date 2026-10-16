@@ -7,7 +7,7 @@ else{
     function app_has_permission(string $permission,array $u):bool{return in_array('*',$u['permissions']??[],true)||in_array($permission,$u['permissions']??[],true);}
 }
 require __DIR__.'/../includes/food-monster-person-conversations.php';
-require __DIR__.'/../includes/food-monster-conversation-memory.php';
+require_once __DIR__.'/../includes/food-monster-conversation-memory.php';
 require __DIR__.'/../includes/food-monster-llm.php';
 $n=0;
 function fm9e_ok(bool $v,string $name):void{global $n;if(!$v){fwrite(STDERR,"FM-G9E FAIL: ".$name."\n");exit(1);}++$n;}
