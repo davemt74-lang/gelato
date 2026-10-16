@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__.'/food-monster-identity-authority.php';
 require_once __DIR__.'/agent-confirmation-core.php';
+require_once __DIR__.'/purchasing-agent-core.php';
 require_once __DIR__.'/food-monster-g9g-purchase-execution.php';
 
 /**
