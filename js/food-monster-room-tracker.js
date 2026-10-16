@@ -41,7 +41,7 @@
     rows.push(record);
    }
    for(const [key,track] of tracks)if(t-track.seen>5500)tracks.delete(key);
-   const duplicate={};for(const row of rows)if(row.candidate&&row.streak>=3)duplicate[row.candidate]=(duplicate[row.candidate]||0)+1;
+   const duplicate={};for(const row of rows)if(row.candidate)duplicate[row.candidate]=(duplicate[row.candidate]||0)+1;
    return rows.map(r=>({trackId:r.trackId,box:r.box,localProfileEmail:r.candidate&&r.streak>=3&&duplicate[r.candidate]===1?r.candidate:''}));
   }
   function clear(){tracks.clear();}
