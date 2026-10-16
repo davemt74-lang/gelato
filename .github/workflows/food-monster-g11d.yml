@@ -1,0 +1,42 @@
+name: FM-G11D Grounded Conversation Suggestions
+on:
+  pull_request:
+    paths:
+      - 'includes/food-monster-g11d-followups.php'
+      - 'includes/food-monster-person-conversations.php'
+      - 'api/agent-workspace.php'
+      - 'js/global-agent.js'
+      - 'tests/food-monster-g11d-followups.php'
+      - '.github/workflows/food-monster-g11d.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'includes/food-monster-g11d-followups.php'
+      - 'includes/food-monster-person-conversations.php'
+      - 'api/agent-workspace.php'
+      - 'js/global-agent.js'
+      - 'tests/food-monster-g11d-followups.php'
+      - '.github/workflows/food-monster-g11d.yml'
+jobs:
+  grounded-suggestions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Memory grounding, voice isolation, and no-execution gates
+        run: |
+          php -l includes/food-monster-g11d-followups.php
+          php -l api/agent-workspace.php
+          php -l includes/food-monster-person-conversations.php
+          php tests/food-monster-g11d-followups.php
+          php tests/food-monster-g9d-conversations.php
+          php scripts/test-fm-g9f-relevance.php
+          node --check js/global-agent.js
+          node tests/food-monster-g10b-turns.test.cjs
+          node tests/food-monster-g11b-turns.test.cjs
