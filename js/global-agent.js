@@ -303,7 +303,7 @@
     if(!has('voice.agent'))throw new Error('Voice recognition permission is not enabled for this account.');
     if(!force&&S.verifiedSpeaker&&Date.now()<S.verifiedSpeaker.verifiedUntil
       &&(!allowRoster||S.verifiedSpeaker.rosterChecked))return S.verifiedSpeaker;
-    status('Checking the enrolled voice sample… speak naturally for a few seconds.');
+    // Optional identity matching is not required to listen.
     const features=await captureFeatures();
     const rosterChecked=Boolean(allowRoster&&has('voice.manage'));
     const data=await post('api/voice-identity.php',{action:'verify',features,matchAny:rosterChecked});
@@ -381,7 +381,6 @@
       // A manual edit always takes priority over automatic submission.
       const field=document.getElementById('gaInput');
       if(!S.voiceDraft.owned||field?.value!==S.voiceDraft.previous)return;
-      if(Date.now()>=S.voiceUntil){status('Voice verification expired. Restart Listening to verify again.',5000);void setListening(false,{keepWake:false});return;}
       try{await send(phrase,true);}catch(error){status('Conversation request failed: '+String(error.message||error),6500);}
     },1200);
   }
@@ -444,7 +443,6 @@
     const shouldResume=S.listening||S.wakeStandby;
     try {
       interruptSpeech('talk-once');
-      await verifyVoice();
       status('Listening… speaking will appear in the chat bar.');
       const text = await speechOnce();
       window.dispatchEvent(new CustomEvent('gelato-agent-voice-transcript', {detail: {text}}));
@@ -510,10 +508,7 @@
     if(!(window.SpeechRecognition||window.webkitSpeechRecognition)){
       status('This browser cannot start wake-word recognition.',3500);return false;
     }
-    try{
-      if(!(S.voiceEventId&&Date.now()<S.voiceUntil))stopContinuous();
-      await verifyVoice();
-    }catch(error){status(error.message||'Voice verification required.',4000);return false;}
+    // Wake standby uses ordinary browser speech recognition, not a biometric challenge.
     S.listening=false;S.wakeStandby=true;
     clearConversationTimer();S.conversationDraft='';
     stopPoll();
@@ -543,10 +538,7 @@
         status('Speech recognition is unavailable. Microphone remains off.',4500);
         return false;
       }
-      try{
-        if(!(S.voiceEventId&&Date.now()<S.voiceUntil))stopContinuous();
-        await verifyVoice();
-      }catch(error){status(error.message||'Please verify your enrolled voice.',4500);renderListening();return false;}
+      // No separate voice sample before transcription.
     }
     try{
       const data=await post('api/proactive-agent.php',{
@@ -658,11 +650,6 @@
         if(!result.isFinal)continue;
         if(/^hey\s+gelato\b/i.test(text)){
           if(evaluation?.interrupt)interruptSpeech('voice-barge-in');
-          if(Date.now()>=S.voiceUntil){
-            void setListening(false,{keepWake:false});
-            status('Voice check expired. Click Start Listening to verify again.',4500);
-            return;
-          }
           window.dispatchEvent(new CustomEvent('gelato-agent-voice-transcript',{detail:{text}}));
           void send(text,true);
         }
