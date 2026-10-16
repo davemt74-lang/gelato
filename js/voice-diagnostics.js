@@ -3,7 +3,7 @@
   if (window.GelatoVoiceDiagnostics) return;
 
   // Session memory only. Never ingest transcripts, audio, speaker IDs or names.
-  const ALLOWED = new Set(['starting','active','ended','retry','blocked','error','failed','off','paused','resumed','wake-command','echo-ignored','barge-in','verified','verification-failed','no-speech']);
+  const ALLOWED = new Set(['starting','active','ended','retry','blocked','error','failed','off','paused','resumed','wake-command','echo-ignored','barge-in','verified','verification-failed','no-speech','retry-scheduled','duplicate-final-suppressed','speaker-echo-suppressed','speaker-audio-ignored']);
   const ERRORS = new Set(['not-allowed','service-not-allowed','audio-capture','network','no-speech','aborted','language-not-supported','bad-grammar','unknown','start-failed','retry-limit']);
   const state = {
     owner: 'none', recognition: 'off', microphoneActive: false, savedListening: false,
@@ -14,6 +14,20 @@
   let panel = null, previousFocus = null;
   const esc = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','"':'&quot;'}[c]));
 
+  function cameraHealth() {
+    // Strict projection from local camera runtime: no face tracks, identities,
+    // vectors, audio, transcripts, credentials or personal records.
+    let source={};
+    try{source=window.GelatoRoomPresence?.diagnostics||{};}catch{}
+    const safeMs=value=>Number.isFinite(value)?Math.min(60000,Math.max(0,Math.round(value))):0;
+    return {
+      active:source.active===true,
+      modelCached:source.modelCached===true,
+      intervalMs:safeMs(source.intervalMs),
+      lastObservationMs:safeMs(source.lastInferenceMs),
+      consecutiveFailures:Math.min(10,Math.max(0,Math.trunc(Number(source.failures)||0)))
+    };
+  }
   function snapshot() {
     return {
       owner: state.microphoneActive ? state.owner : 'none',
@@ -22,7 +36,7 @@
       wakeStandby: state.wakeStandby, speech: state.speech, speechOwner: state.speechOwner,
       profile: state.profile, echoBlocks: state.echoBlocks, bargeIns: state.bargeIns,
       restarts: state.restarts, lastError: state.lastError,
-      events: state.events.map(e => ({...e}))
+      camera:cameraHealth(), events: state.events.map(e => ({...e}))
     };
   }
   function push(source, kind, error) {
@@ -78,7 +92,12 @@
       ['Full listening requested',label(s.listenActive)],['Wake standby armed',label(s.wakeStandby)],
       ['Agent speaking',label(s.speech)],['Speech owner',s.speechOwner],
       ['Noise / echo profile',s.profile],['Echo blocks',s.echoBlocks],
-      ['Barge-ins',s.bargeIns],['Recovery retries',s.restarts],['Last recognition error',s.lastError]
+      ['Barge-ins',s.bargeIns],['Recovery retries',s.restarts],['Last recognition error',s.lastError],
+      ['Room camera enabled',label(s.camera.active)],
+      ['Face models reused',label(s.camera.modelCached)],
+      ['Camera sampling interval (ms)',s.camera.intervalMs],
+      ['Last camera observation (ms)',s.camera.lastObservationMs],
+      ['Consecutive camera errors',s.camera.consecutiveFailures]
     ];
     root.innerHTML = '<dl class="gvd-values">' +
       items.map(item => '<div><dt>'+esc(item[0])+'</dt><dd>'+esc(item[1])+'</dd></div>').join('') +

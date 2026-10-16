@@ -16,6 +16,24 @@ const context={window:win,document,Date,JSON,Array,Set,String,navigator:{clipboa
 vm.runInNewContext(source,context,{filename:'voice-diagnostics.js'});
 const d=win.GelatoVoiceDiagnostics;
 assert.ok(d,'diagnostics API');
+win.GelatoRoomPresence={diagnostics:{
+  active:true,modelCached:true,intervalMs:1450,lastInferenceMs:317,failures:2,
+  personId:8945,transcript:'SECRET_TRANSCRIPT',descriptor:[42,99],faceName:'EMPLOYEE_SECRET'
+}};
+const camera=d.snapshot().camera;
+assert.equal(camera.active,true,'opt-in camera is reported as enabled');
+assert.equal(camera.modelCached,true,'model-cache state is included');
+assert.equal(camera.intervalMs,1450,'adaptive interval is projected');
+assert.equal(camera.lastObservationMs,317,'camera latency is projected');
+assert.equal(camera.consecutiveFailures,2,'camera failure counter is projected');
+assert.ok(!JSON.stringify(d.snapshot()).includes('SECRET_TRANSCRIPT'),'camera diagnostics never copy transcripts');
+assert.ok(!JSON.stringify(d.snapshot()).includes('EMPLOYEE_SECRET'),'camera diagnostics never expose enrolled names');
+assert.ok(!JSON.stringify(d.snapshot()).includes('8945'),'camera diagnostics never expose person identifiers');
+win.GelatoRoomPresence.diagnostics.intervalMs=Infinity;
+assert.equal(d.snapshot().camera.intervalMs,0,'untrusted nonfinite timing is rejected');
+d.record('global-agent','retry-scheduled',{transcript:'SECRET_TRANSCRIPT',speaker:'EMPLOYEE_SECRET'});
+assert.ok(!JSON.stringify(d.snapshot()).includes('SECRET_TRANSCRIPT'),'retry diagnostics retain no private text');
+
 assert.equal(d.snapshot().microphoneActive,false,'cannot open microphone at load');
 assert.equal(elements.length,0,'no microphone or UI is mounted before DOM ready');
 d.record('global-agent','starting');
