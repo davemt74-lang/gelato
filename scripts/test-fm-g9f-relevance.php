@@ -16,3 +16,4 @@ fm9f_check(fm9f_relevant_context($m,'Does pesto have dairy?')[0]['item']['messag
 fm9f_check(count(fm9f_relevant_context($m,'What is the next ticket?'))===0,'unrelated ticket omitted');
 fm9f_check(count(fm9f_relevant_context(['openReports'=>[]],'Oven leaking'))===0,'resolved report excluded');
 fm9f_check(count(fm9f_relevant_context($m,'oven door',1))===1,'bounded results');
+fm9f_check(count(fm9f_relevant_context($m,'Remember?'))===2,'explicit recall returns prior questions but not unrelated reports');
