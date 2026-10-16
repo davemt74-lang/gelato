@@ -11,6 +11,7 @@ require_once __DIR__.'/../includes/food-monster-skill-registry.php';
 require_once __DIR__.'/../includes/food-monster-read-tools.php';
 require_once __DIR__.'/../includes/food-monster-identity-authority.php';
 require_once __DIR__.'/../includes/food-monster-person-conversations.php';
+require_once __DIR__.'/../includes/food-monster-room-presence.php';
 require_once __DIR__.'/../includes/food-monster-conversation-memory.php';
 require_once __DIR__.'/../includes/food-monster-operational-followup.php';
 require_once __DIR__.'/../includes/food-monster-high-impact-approval.php';
@@ -110,6 +111,11 @@ try{
             unset($_SESSION[$pendingKey]);
             throw $error;
         }
+        // Correlate only a committed user turn with its server-resolved voice.
+        // Any unverified, typed, or unknown turn clears the previous speaker.
+        // Visual presence never authenticates or authorizes tools.
+        $roomSpeaker=$role==='user'
+            ?fm11a_room_voice_turn($user,$personSpeaker):null;
         // A real, verified operational report can create a routine follow-up under
         // the authenticated owner's standing delegation. Never execute in a DB
         // transaction or let task failures invalidate the captured conversation.
@@ -126,7 +132,7 @@ try{
                 $followup=['status'=>'unavailable'];
             }
         }
-        app_json_response(['ok'=>true,'message'=>$message,'operationalFollowup'=>$followup,
+        app_json_response(['ok'=>true,'message'=>$message,'roomSpeaker'=>$roomSpeaker,'operationalFollowup'=>$followup,
             'greeting'=>$greeting?['text'=>$greeting,'verified'=>true]:null,
             'participant'=>($personSpeaker&&(int)$personSpeaker['personId']!==$uid)
                 ?['personId'=>(int)$personSpeaker['personId'],'identityAssurance'=>'provisional_voice_match']:null]);
