@@ -250,7 +250,15 @@
       const baseAnswer = result.answer || result.reply || 'Done.';
       // Only a fresh server-verified speaker can receive a spoken name greeting.
       const greeting=voice&&submitted?.greeting?.text?String(submitted.greeting.text):'';
-      const answer=(greeting?greeting+' ':'')+(followupMessage?followupMessage+' ':'')+baseAnswer;
+      const suggested=submitted?.conversationalSuggestion;
+      const suggestedText=(suggested
+        &&['training_recap','ingredient_recap'].includes(suggested.type)
+        &&Array.isArray(suggested.sourceMessageIds)
+        &&suggested.sourceMessageIds.length>=2
+        &&suggested.executed===false)
+        ?String(suggested.text||'').slice(0,200):'';
+      const answer=(greeting?greeting+' ':'')+(followupMessage?followupMessage+' ':'')+baseAnswer
+        +(suggestedText?'\n\n'+suggestedText:'');
       const agentMessage = await append('agent', answer, {
         channel: voice ? 'voice' : 'text',
         skill: result.skill || route.domain,

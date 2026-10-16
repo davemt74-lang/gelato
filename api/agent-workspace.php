@@ -13,6 +13,7 @@ require_once __DIR__.'/../includes/food-monster-identity-authority.php';
 require_once __DIR__.'/../includes/food-monster-person-conversations.php';
 require_once __DIR__.'/../includes/food-monster-room-presence.php';
 require_once __DIR__.'/../includes/food-monster-conversation-memory.php';
+require_once __DIR__.'/../includes/food-monster-g11d-followups.php';
 require_once __DIR__.'/../includes/food-monster-operational-followup.php';
 require_once __DIR__.'/../includes/food-monster-high-impact-approval.php';
 
@@ -132,7 +133,18 @@ try{
                 $followup=['status'=>'unavailable'];
             }
         }
-        app_json_response(['ok'=>true,'message'=>$message,'roomSpeaker'=>$roomSpeaker,'operationalFollowup'=>$followup,
+        $conversationalSuggestion=null;
+        if($role==='user'&&$personSpeaker&&(int)$personSpeaker['personId']!==$uid
+            &&isset($_SESSION[$pendingKey])){
+            try{
+                $conversationalSuggestion=fm11d_verified_turn_suggestion(
+                    $pdo,$user,(array)$_SESSION[$pendingKey],(string)$in['content']);
+            }catch(Throwable $hintError){
+                error_log('FM-G11D conversational follow-up unavailable: '.get_class($hintError));
+            }
+        }
+        app_json_response(['ok'=>true,'message'=>$message,'roomSpeaker'=>$roomSpeaker,
+            'conversationalSuggestion'=>$conversationalSuggestion,'operationalFollowup'=>$followup,
             'greeting'=>$greeting?['text'=>$greeting,'verified'=>true]:null,
             'participant'=>($personSpeaker&&(int)$personSpeaker['personId']!==$uid)
                 ?['personId'=>(int)$personSpeaker['personId'],'identityAssurance'=>'provisional_voice_match']:null]);

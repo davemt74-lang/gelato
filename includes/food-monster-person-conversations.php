@@ -73,6 +73,7 @@ function fm9d_mirror_user_turn(PDO $pdo,array $operator,array $speaker,string $t
     $reportMessage=gaw_append($pdo,$org,$personId,$thread,'user',$text,[
         'channel'=>'voice','voiceEventId'=>$voice,'structured'=>$meta]);
     return ['personId'=>$personId,'threadId'=>$thread,'voiceEventId'=>$voice,
+        'personMessageId'=>(string)($reportMessage['id']??''),
         'operatorThreadId'=>$operatorThread,'createdAt'=>time(),
         'reportMessageId'=>$meta['memoryCategory']==='operational_report'?(string)($reportMessage['id']??''):null];
 }
