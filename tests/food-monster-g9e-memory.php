@@ -81,6 +81,19 @@ if($db){
   fm9e_ok(count($older['openReports'])===1 && $older['reportCounts']['open']===1,
       'unresolved reports older than 90 days remain actionable');
 
+  // FM-G10C: deictic follow-ups may borrow only this speaker's recent
+  // canonical question, not the shared room or a different employee.
+  $freshVoice='voice-'.bin2hex(random_bytes(9));
+  $followup=fm10c_contextual_utterance($pdo,$owner,$cook,$sharedId,$freshVoice,'And what about that?');
+  fm9e_ok(str_contains($followup,'stretch dough')&&str_contains($followup,'And what about that?'),
+      'same speaker brief follow-up inherits recent dough question');
+  fm9e_ok(fm10c_contextual_utterance($pdo,$owner,$other,$sharedId,$freshVoice,'And what about that?')==='And what about that?',
+      'another employee cannot retrieve the first speaker question');
+  $otherRoom=gaw_create_thread($pdo,$org,$admin,'voice','Other FM-G10C room');
+  fm9e_ok(fm10c_contextual_utterance($pdo,$owner,$cook,$otherRoom['public_id'],$freshVoice,'And what about that?')==='And what about that?',
+      'previous speaker question is isolated by shared room');
+  fm9e_ok(fm10c_contextual_utterance($pdo,$owner,$cook,$sharedId,$freshVoice,'Tell me about the dough')==='Tell me about the dough',
+      'unrelated explicit question does not import earlier content');
   fm9e_ok($memory['personId']===$cook,'memory is attached to permanent employee identity');
   fm9e_ok(fm9e_person_memory($pdo,$owner,$other)['openReports']===[],'second employee sees no first employee reports');
   try{fm9e_person_memory($pdo,$unprivileged,$cook);fm9e_ok(false,'deny employee reading coworkers');}
