@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__.'/purchasing-receiving.php';
+require_once __DIR__.'/food-monster-g9g-purchase-execution.php';
 
 final class PurchasingAgentPermissionException extends RuntimeException {}
 
