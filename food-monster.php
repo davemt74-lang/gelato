@@ -24,5 +24,7 @@ $user = app_require_auth();
 <script src="js/global-agent.js?v=20261015-fmg8reset"></script>
 <script src="js/food-monster.js?v=20261015-fmg8a"></script>
 <script src="js/food-monster-clock-popup.js?v=20261016-fmg9b"></script>
+<script src="js/food-monster-room-tracker.js?v=20261016-fmg9c"></script>
+<script src="js/food-monster-room.js?v=20261016-fmg9c"></script>
 </body>
 </html>
