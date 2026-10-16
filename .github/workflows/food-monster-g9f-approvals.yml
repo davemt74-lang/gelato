@@ -1,0 +1,18 @@
+name: FM-G9F High Impact Approval
+on:
+  pull_request:
+    paths: ['includes/food-monster-high-impact-approval.php','api/food-monster-approvals.php','tests/food-monster-g9f-approvals.php','.github/workflows/food-monster-g9f-approvals.yml']
+  push:
+    branches: [main]
+    paths: ['includes/food-monster-high-impact-approval.php','api/food-monster-approvals.php','tests/food-monster-g9f-approvals.php','.github/workflows/food-monster-g9f-approvals.yml']
+jobs:
+  approval-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring
+      - run: php -l includes/food-monster-high-impact-approval.php && php -l api/food-monster-approvals.php && php -l tests/food-monster-g9f-approvals.php
+      - run: php tests/food-monster-g9f-approvals.php
