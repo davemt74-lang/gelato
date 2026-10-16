@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'food-monster.php'
+      - 'includes/food-monster-identity-authority.php'
+      - 'tests/food-monster-g9a-contract.php'
       - 'tests/food-monster-g8reset-contract.php'
       - 'css/food-monster.css'
       - 'js/food-monster.js'
@@ -54,6 +56,8 @@ on:
     branches: [main]
     paths:
       - 'food-monster.php'
+      - 'includes/food-monster-identity-authority.php'
+      - 'tests/food-monster-g9a-contract.php'
       - 'css/food-monster.css'
       - 'js/food-monster.js'
       - 'js/global-add-canvas.js'
@@ -72,6 +76,8 @@ jobs:
       - run: |
           php -l food-monster.php
           php tests/food-monster-g8reset-contract.php
+          php -l includes/food-monster-identity-authority.php
+          php tests/food-monster-g9a-contract.php
           php -l tests/food-monster-g1-contract.php
           php -l tests/food-monster-g2-contract.php
           php -l tests/food-monster-g4-contract.php
