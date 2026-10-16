@@ -74,7 +74,7 @@ function fm9d_mirror_user_turn(PDO $pdo,array $operator,array $speaker,string $t
         'channel'=>'voice','voiceEventId'=>$voice,'structured'=>$meta]);
     return ['personId'=>$personId,'threadId'=>$thread,'voiceEventId'=>$voice,
         'operatorThreadId'=>$operatorThread,'createdAt'=>time(),
-        'reportMessageId'=>$meta['memoryCategory']==='operational_report'?(string)($reportMessage['public_id']??''):null];
+        'reportMessageId'=>$meta['memoryCategory']==='operational_report'?(string)($reportMessage['id']??''):null];
 }
 
 /** Append the agent response to the previously verified person, at most once. */
