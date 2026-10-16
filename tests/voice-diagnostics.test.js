@@ -34,6 +34,19 @@ assert.equal(d.snapshot().camera.intervalMs,0,'untrusted nonfinite timing is rej
 d.record('global-agent','retry-scheduled',{transcript:'SECRET_TRANSCRIPT',speaker:'EMPLOYEE_SECRET'});
 assert.ok(!JSON.stringify(d.snapshot()).includes('SECRET_TRANSCRIPT'),'retry diagnostics retain no private text');
 
+const speakerEvent=handlers['gelato-agent-speaker-turn'];
+assert.equal(typeof speakerEvent,'function','speaker attribution diagnostics are connected');
+speakerEvent({detail:{verified:true,correlated:true,personId:192,faceVector:[5,6],
+  transcript:'SECRET_SPEECH',name:'SECRET_EMPLOYEE'}});
+speakerEvent({detail:{verified:true,correlated:false,eventId:'SECRET_VOICE_ID'}});
+speakerEvent({detail:{verified:false,correlated:true,personId:'SECRET_FAKE'}});
+let stats=d.snapshot().speakerTurns;
+assert.equal(stats.correlated,1,'verified+visual correlation counted');
+assert.equal(stats.verifiedWithoutVisual,1,'verified voice without face separately counted');
+assert.equal(stats.unknown,1,'unverified visual match remains unattributed');
+assert.ok(!JSON.stringify(d.snapshot()).includes('SECRET_'),'diagnostics never retain participant metadata');
+for(let i=0;i<1100;i++)speakerEvent({detail:{verified:false}});
+assert.equal(d.snapshot().speakerTurns.unknown,999,'speaker diagnostic counters bounded');
 assert.equal(d.snapshot().microphoneActive,false,'cannot open microphone at load');
 assert.equal(elements.length,0,'no microphone or UI is mounted before DOM ready');
 d.record('global-agent','starting');
