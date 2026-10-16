@@ -5,6 +5,9 @@ on:
       - 'includes/food-monster-operational-followup.php'
       - 'api/food-monster-followup.php'
       - 'tests/food-monster-g9f-actions.php'
+      - 'tests/food-monster-g9f-auto-routing.php'
+      - 'includes/food-monster-person-conversations.php'
+      - 'api/agent-workspace.php'
       - '.github/workflows/food-monster-g9f-actions.yml'
   push:
     branches: [main]
@@ -28,3 +31,5 @@ jobs:
           php -l api/food-monster-followup.php
           php -l tests/food-monster-g9f-actions.php
           php tests/food-monster-g9f-actions.php
+          php -l tests/food-monster-g9f-auto-routing.php
+          php tests/food-monster-g9f-auto-routing.php
