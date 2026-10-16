@@ -63,7 +63,8 @@ function fm9f_create_report_task(PDO $pdo,array $operator,int $personId,string $
         if((int)$resolved->fetchColumn()>0)throw new DomainException('Report already resolved.');
         $title='Investigate reported issue: '.fm9e_trim((string)$row['content'],150);
         $task=operations_create_task($pdo,$org,[
-            'title'=>$title,'category'=>'general','quantity'=>null,'unit'=>null,
+            'title'=>$title,'category'=>'general','sourceType'=>'food_monster_report',
+            'sourcePublicId'=>$reportId,'quantity'=>null,'unit'=>null,
             'transcript'=>(string)$row['content'],'aiConfidence'=>1.0,'assigneeIds'=>[]
         ],$actor);
         $taskId=(string)($task['public_id']??'');
