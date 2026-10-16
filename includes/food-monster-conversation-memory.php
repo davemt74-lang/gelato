@@ -14,7 +14,7 @@ function fm9e_classify(string $text): string
     if($s===''||mb_strlen($s,'UTF-8')>12000)return 'general';
     // Do not turn hypothetical questions into a real-world incident report.
     if(str_contains($s,'?')||preg_match('/\b(?:what if|suppose|hypothetically)\b/u',$s)){
-        if(preg_match('/\b(?:ingredient|allergen|gluten|dairy|contains|recipe)\b/u',$s))return 'ingredient_question';
+        if(preg_match('/\b(?:ingredients?|allergens?|gluten|dairy|contains?|recipes?)\b/u',$s))return 'ingredient_question';
         if(preg_match('/\b(?:train|learn|prepare|make|stretch|cook|bake|temperature|procedure|how do|how to)\b/u',$s))return 'training_question';
         return 'general';
     }
@@ -22,7 +22,7 @@ function fm9e_classify(string $text): string
        ||preg_match('/\b(?:we are|we\x27re|we ran|i ran)\s+out of\s+\S/u',$s)
        ||preg_match('/\b(?:is broken|is leaking|is not working|isn\x27t working|has stopped working|won\x27t turn on)\b/u',$s))
         return 'operational_report';
-    if(preg_match('/\b(?:ingredient|allergen|gluten|dairy|contains|recipe)\b/u',$s))return 'ingredient_question';
+    if(preg_match('/\b(?:ingredients?|allergens?|gluten|dairy|contains?|recipes?)\b/u',$s))return 'ingredient_question';
     if(preg_match('/\b(?:training|train me|show me how|how to|explain|preparation|procedure)\b/u',$s))return 'training_question';
     return 'general';
 }
