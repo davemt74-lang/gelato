@@ -167,7 +167,7 @@ function fm9e_resolve_report(PDO $pdo,array $operator,int $personId,string $mess
 function fm9f_keywords(string $text):array {
     $text=mb_strtolower($text,'UTF-8');
     preg_match_all('/[\\p{L}\\p{N}]{3,}/u',$text,$matches);
-    $stop=array_fill_keys(['the','and','for','this','that','with','what','when','where','which','have','has','how','can','could','would','should','please','from','about','there','their','they','you','your','our','are','was','were','not','its','report','issue','problem','monster','food','gelato','today','again','last','time','show','tell','need','some','any','did','does','doing','still','now','check'],true);
+    $stop=array_fill_keys(['the','and','for','this','that','with','what','when','where','which','have','has','how','can','could','would','should','please','from','about','there','their','they','you','your','our','are','was','were','not','its','contain','contains','report','issue','problem','monster','food','gelato','today','again','last','time','show','tell','need','some','any','did','does','doing','still','now','check'],true);
     $words=[];
     foreach($matches[0] as $word){
         if(isset($stop[$word]))continue;
