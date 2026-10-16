@@ -93,9 +93,12 @@ function fmllm_provider_failure(string $provider,int $httpStatus,int $curlError=
         default=>new FmLlmProviderException('provider_error',$name.' request failed (HTTP '.$httpStatus.').'),
     };
 }
-function fmllm_payload(string $provider,array $history): array
+function fmllm_payload(string $provider,array $history,string $personMemory=''): array
 {
     $instructions=fmllm_instructions();
+    if($personMemory!==''){
+        $instructions.="\n\n".mb_substr($personMemory,0,1100,'UTF-8');
+    }
     if($provider==='openai')return [
         'model'=>fmllm_model('openai'),'store'=>false,'instructions'=>$instructions,
         'input'=>array_map(static fn($r):array=>['role'=>$r['role'],'content'=>$r['content']],$history),
@@ -105,7 +108,7 @@ function fmllm_payload(string $provider,array $history): array
         'thinking'=>['type'=>'disabled'],
         'system'=>$instructions,'messages'=>$history];
 }
-function fmllm_exchange(string $provider,string $apiKey,array $history,?callable $transport=null): string
+function fmllm_exchange(string $provider,string $apiKey,array $history,?callable $transport=null,string $personMemory=''): string
 {
     $provider=fmllm_allowed_provider($provider);
     if($provider==='auto')throw new InvalidArgumentException('Choose a concrete provider.');
@@ -113,7 +116,7 @@ function fmllm_exchange(string $provider,string $apiKey,array $history,?callable
     $headers=$provider==='openai'?
         ['Authorization: Bearer '.$apiKey,'Content-Type: application/json']:
         ['x-api-key: '.$apiKey,'anthropic-version: 2023-06-01','Content-Type: application/json'];
-    $payload=fmllm_payload($provider,$history);
+    $payload=fmllm_payload($provider,$history,$personMemory);
     if($transport!==null)$response=$transport($endpoint,$headers,$payload);
     else{
         if(!function_exists('curl_init'))throw new RuntimeException('PHP cURL is not installed.');

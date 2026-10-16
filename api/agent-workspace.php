@@ -11,6 +11,7 @@ require_once __DIR__.'/../includes/food-monster-skill-registry.php';
 require_once __DIR__.'/../includes/food-monster-read-tools.php';
 require_once __DIR__.'/../includes/food-monster-identity-authority.php';
 require_once __DIR__.'/../includes/food-monster-person-conversations.php';
+require_once __DIR__.'/../includes/food-monster-conversation-memory.php';
 
 // Compatibility route markers for older CI/contracts. Canonical routing now lives in includes/agent-node-registry.php.
 // api/admin-dashboard-agent.php api/daily-manager-agent.php api/sales-cost-agent.php api/sales-agent.php
@@ -28,6 +29,10 @@ if($_SERVER['REQUEST_METHOD']==='GET'){
         app_json_response(['ok'=>true,'csrf'=>app_csrf_token(),'threads'=>$threads,'activeThread'=>$active,'messages'=>$active?gaw_messages($pdo,$org,$uid,(string)$active,120):[],'user'=>['id'=>$uid,'name'=>$user['display_name'],'firstName'=>$user['first_name'],'role'=>$user['role_slug']],'permissions'=>$user['permissions'],'foodMonsterContext'=>fm9a_context($pdo,$user)]);
     }
     if($action==='food_monster_context')app_json_response(['ok'=>true,'foodMonsterContext'=>fm9a_context($pdo,$user)]);
+    if($action==='person_memory'){
+        $personId=(int)($_GET['personId']??0);
+        app_json_response(['ok'=>true,'memory'=>fm9e_person_memory($pdo,$user,$personId)]);
+    }
     if($action==='person_conversations'){
         $personId=(int)($_GET['personId']??0);
         app_json_response(['ok'=>true]+fm9d_person_collections($pdo,$user,$personId));
@@ -56,6 +61,12 @@ if($_SERVER['REQUEST_METHOD']==='GET'){
 if($_SERVER['REQUEST_METHOD']!=='POST'){header('Allow: GET, POST');app_json_response(['ok'=>false,'message'=>'Method not allowed.'],405);}
 $in=app_json_input();app_verify_request_csrf($in);$action=(string)($in['action']??'');
 try{
+    if($action==='resolve_person_report'){
+        $personId=(int)($in['personId']??0);
+        $messageId=trim((string)($in['reportMessageId']??''));
+        $result=fm9e_resolve_report($pdo,$user,$personId,$messageId);
+        app_json_response(['ok'=>true,'report'=>$result]);
+    }
     if($action==='new_thread'){$thread=gaw_create_thread($pdo,$org,$uid,(string)($in['channel']??'text'));app_audit($pdo,$org,$uid,'agent.thread_created','agent_conversation',(string)$thread['public_id']);app_json_response(['ok'=>true,'thread'=>$thread]);}
     if($action==='append'){
         $thread=trim((string)($in['threadId']??''));

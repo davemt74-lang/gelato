@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__.'/agent-workspace-core.php';
 require_once __DIR__.'/food-monster-identity-authority.php';
+require_once __DIR__.'/food-monster-conversation-memory.php';
 
 /**
  * FM-G9D conversational archive. Voice identification is an optional,
@@ -67,6 +68,7 @@ function fm9d_mirror_user_turn(PDO $pdo,array $operator,array $speaker,string $t
     $meta=['collection'=>'fm9d_person_turn','speakerPersonId'=>$personId,
         'actorUserId'=>(int)$operator['id'],
         'identityAssurance'=>'provisional_voice_match',
+        'memoryCategory'=>fm9e_classify($text),
         'source'=>'food_monster_conversation','operatorThreadId'=>$operatorThread];
     gaw_append($pdo,$org,$personId,$thread,'user',$text,[
         'channel'=>'voice','voiceEventId'=>$voice,'structured'=>$meta]);
