@@ -11,7 +11,11 @@ const base=path.resolve(__dirname,'..');
   await page.goto('http://localhost/');
   await page.setContent('<!doctype html><html><head><meta name="gelato-csrf" content="ci-token"></head><body><button data-fm-camera>Camera</button></body></html>');
   await page.evaluate(async()=>{
-   window.calls=[];window.refreshed=0;window.mediaStream=null;
+   window.calls=[];window.refreshed=0;window.mediaStream=null;window.cameraErrors=[];
+   window.addEventListener('gelato-room-camera-error',e=>window.cameraErrors.push(e.detail?.message||'Unknown camera error'));
+   // The canvas stream has no real video frames; camera inference is mocked below.
+   // Resolve HTMLVideoElement.play() without awaiting physical frame delivery.
+   window.HTMLMediaElement.prototype.play=async function(){return;};
    window.GelatoGlobalAgent={refreshContext:async()=>{window.refreshed++;return {};}};
    const canvas=document.createElement('canvas');canvas.width=320;canvas.height=240;document.body.append(canvas);
    Object.defineProperty(navigator,'mediaDevices',{configurable:true,value:{getUserMedia:async()=>{window.mediaStream=canvas.captureStream(10);return window.mediaStream;}}});
@@ -50,7 +54,9 @@ const base=path.resolve(__dirname,'..');
   ok(await page.evaluate(()=>window.GelatoRoomPresence.active===false),'camera initially off');
   ok(await page.evaluate(()=>window.calls.length===0),'no autonomous camera request');
   await page.locator('[data-fm-camera]').click();
-  await page.waitForFunction(()=>window.GelatoRoomPresence?.active&&window.calls.some(x=>x.action==='observe'),{timeout:18000});
+  await page.waitForFunction(()=>window.calls.some(x=>x.action==='observe')||window.cameraErrors.length>0,null,{timeout:12000});
+  const cameraErrors=await page.evaluate(()=>window.cameraErrors);
+  assert.deepEqual(cameraErrors,[],'Camera startup should not fail: '+cameraErrors.join('; '));
   ok(await page.locator('#fm-room-presence').isVisible(),'small presence strip visible only while enabled');
   ok(await page.evaluate(()=>window.calls.some(x=>x.tracks?.length===2)),'two faces observed independently');
   ok(await page.evaluate(()=>window.calls.every(x=>!(JSON.stringify(x).includes('vector')||JSON.stringify(x).includes('descriptor')||JSON.stringify(x).includes('password')))),'no raw biometric vector in network payload');
