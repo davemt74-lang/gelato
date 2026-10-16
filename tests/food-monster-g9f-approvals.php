@@ -35,7 +35,7 @@ check_it(fm9f_approval_chat_intent('Reject')['decision']==='reject','owner rejec
 $api=(string)file_get_contents(__DIR__.'/../api/food-monster-approvals.php');
 $workspace=(string)file_get_contents(__DIR__.'/../api/agent-workspace.php');
 $client=(string)file_get_contents(__DIR__.'/../js/global-agent.js');
-check_it(str_contains($api,"($last['channel']??'')!=='text'")&&str_contains($api,"voice_event_public_id"),'shared room voice cannot approve high-impact requests');
+check_it(str_contains($api,"(\$last['channel']??'')!=='text'")&&str_contains($api,"voice_event_public_id"),'shared room voice cannot approve high-impact requests');
 check_it(str_contains($api,'gaw_messages($pdo,$org,$uid,$thread,1)')
     &&str_contains($api,'app_verify_request_csrf'),'only canonical authenticated chat messages stage approval');
 check_it(str_contains($api,"'fm9f_high_impact_decision'")
