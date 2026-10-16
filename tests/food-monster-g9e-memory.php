@@ -74,6 +74,13 @@ if($db){
   fm9e_ok(count($memory['recentIngredientQuestions'])===1,'ingredient question preserved');
   fm9e_ok(count($memory['recentTrainingQuestions'])===1,'training question preserved');
   fm9e_ok($memory['reportCounts']['open']===1,'open report count accurate');
+  // Long-lived unresolved obligations must survive the recent-chat window.
+  $pdo->prepare("UPDATE agent_messages SET created_at=DATE_SUB(NOW(6),INTERVAL 95 DAY)
+     WHERE organization_id=? AND public_id=?")->execute([$org,$report['reportMessageId']]);
+  $older=fm9e_person_memory($pdo,$owner,$cook);
+  fm9e_ok(count($older['openReports'])===1 && $older['reportCounts']['open']===1,
+      'unresolved reports older than 90 days remain actionable');
+
   fm9e_ok($memory['personId']===$cook,'memory is attached to permanent employee identity');
   fm9e_ok(fm9e_person_memory($pdo,$owner,$other)['openReports']===[],'second employee sees no first employee reports');
   try{fm9e_person_memory($pdo,$unprivileged,$cook);fm9e_ok(false,'deny employee reading coworkers');}

@@ -33,6 +33,40 @@ function fm9e_trim(string $s,int $max=160):string
     return mb_substr($s,0,$max,'UTF-8');
 }
 
+/** Open reports are persistent obligations, not 90-day conversation snippets. */
+function fm9e_persistent_report_history(PDO $pdo,int $org,int $personId,int $limit):array
+{
+    $limit=max(1,min(10,$limit));
+    $filter="m.organization_id=? AND c.user_id=? AND c.title LIKE 'Food Monster · %'
+      AND m.role='user' AND m.voice_event_public_id IS NOT NULL
+      AND JSON_UNQUOTE(JSON_EXTRACT(m.structured_json,'$.collection'))='fm9d_person_turn'
+      AND JSON_UNQUOTE(JSON_EXTRACT(m.structured_json,'$.identityAssurance'))='provisional_voice_match'
+      AND CAST(JSON_UNQUOTE(JSON_EXTRACT(m.structured_json,'$.speakerPersonId')) AS UNSIGNED)=?
+      AND JSON_UNQUOTE(JSON_EXTRACT(m.structured_json,'$.memoryCategory'))='operational_report'";
+    $resolution="SELECT 1 FROM agent_messages r WHERE r.organization_id=m.organization_id
+      AND r.conversation_id=m.conversation_id AND r.role='system'
+      AND JSON_UNQUOTE(JSON_EXTRACT(r.structured_json,'$.collection'))='fm9e_report_resolution'
+      AND JSON_UNQUOTE(JSON_EXTRACT(r.structured_json,'$.reportMessageId'))=m.public_id
+      AND JSON_UNQUOTE(JSON_EXTRACT(r.structured_json,'$.state'))='resolved'";
+    $join=" FROM agent_messages m INNER JOIN agent_conversations c
+      ON c.id=m.conversation_id AND c.organization_id=m.organization_id ";
+    $params=[$org,$personId,$personId];
+    $query=$pdo->prepare("SELECT m.public_id,m.content,m.created_at".$join.
+      "WHERE ".$filter." AND NOT EXISTS (".$resolution.") ORDER BY m.id DESC LIMIT ".$limit);
+    $query->execute($params);
+    $open=[];
+    foreach($query->fetchAll(PDO::FETCH_ASSOC) as $row)$open[]=[
+        'messageId'=>(string)$row['public_id'],'text'=>fm9e_trim((string)$row['content']),
+        'category'=>'operational_report','createdAt'=>(string)$row['created_at']];
+    $count=$pdo->prepare("SELECT COUNT(*) total,
+      COALESCE(SUM(CASE WHEN EXISTS (".$resolution.") THEN 1 ELSE 0 END),0) resolved".$join.
+      "WHERE ".$filter);
+    $count->execute($params);
+    $stats=$count->fetch(PDO::FETCH_ASSOC)?:[];
+    $total=(int)($stats['total']??0);$done=(int)($stats['resolved']??0);
+    return ['openReports'=>$open,'reportCounts'=>['open'=>max(0,$total-$done),'resolved'=>$done]];
+}
+
 /** Constrained read: single tenant, single known person, dated Food Monster threads only. */
 function fm9e_person_memory(PDO $pdo,array $operator,int $personId,int $limit=5): array
 {
@@ -71,15 +105,15 @@ function fm9e_person_memory(PDO $pdo,array $operator,int $personId,int $limit=5)
         if($type==='ingredient_question')$questions[]=$item;
         if($type==='training_question')$training[]=$item;
     }
-    $open=array_values(array_filter($reports,static fn($r)=>!isset($resolved[$r['messageId']])));
     $limit=max(1,min(10,$limit));
+    $persistent=fm9e_persistent_report_history($pdo,$org,$personId,$limit);
     return [
         'personId'=>$personId,
         'displayName'=>(string)$person['displayName'],
-        'openReports'=>array_slice(array_reverse($open),0,$limit),
+        'openReports'=>$persistent['openReports'],
         'recentIngredientQuestions'=>array_slice(array_reverse($questions),0,$limit),
         'recentTrainingQuestions'=>array_slice(array_reverse($training),0,$limit),
-        'reportCounts'=>['open'=>count($open),'resolved'=>count($reports)-count($open)],
+        'reportCounts'=>$persistent['reportCounts'],
         'source'=>'existing_agent_messages',
         'memoryAgeDays'=>90,
     ];

@@ -185,7 +185,7 @@
         voiceEventId: freshSpeakerEvent||(voice ? S.voiceEventId : ''),
       });
 
-      const route = await post('api/agent-workspace.php', {action: 'route', message: text});
+      const route = await post('api/agent-workspace.php', {action: 'route', message: text, threadId: S.thread});
       let result;
 
       if (route.route) {
@@ -203,7 +203,7 @@
             voice: Boolean(voice),
             voiceEventId: voice ? S.voiceEventId : '',
             // Thread comes from existing Agent Chat, never from an LLM tool suggestion.
-            ...(['api/food-monster-orchestrate.php','api/food-monster-read.php'].includes(route.route) ? {threadId:S.thread} : {}),
+            ...(['api/food-monster-orchestrate.php','api/food-monster-read.php','api/food-monster-approvals.php'].includes(route.route) ? {threadId:S.thread} : {}),
             csrf_token: S.csrf,
           }),
         });

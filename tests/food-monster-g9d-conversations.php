@@ -79,6 +79,21 @@ if($db){
   catch(DomainException){fm9d_ok(true,'staff cannot browse others');}
   try{fm9d_person_collections($pdo,$otherOrg,$employee['id']);fm9d_ok(false,'tenant isolation');}
   catch(InvalidArgumentException){fm9d_ok(true,'person collections tenant isolated');}
+  // FM-G9F: check the actual DB append return shape, not a source-code marker.
+  $reportVoice='voice-'.bin2hex(random_bytes(9));
+  $pdo->prepare("INSERT INTO voice_identity_events (organization_id,public_id,session_user_id,matched_user_id,event_type,confidence,threshold_used,context) VALUES (?,?,?,?,'match',0.9500,0.8600,'agent_listening')")
+      ->execute([$org,$reportVoice,$admin['id'],$employee['id']]);
+  $reportSpeaker=fm9d_resolve_speaker($pdo,$o,$reportVoice);
+  fm9d_ok(is_array($reportSpeaker),'fresh report speaker validated');
+  $reportPending=fm9d_mirror_user_turn($pdo,$o,$reportSpeaker,'Report: the pizza oven is broken',$shared['public_id']);
+  $reportReference=(string)($reportPending['reportMessageId']??'');
+  fm9d_ok((bool)preg_match('/^msg-[a-f0-9]{20}$/D',$reportReference),'actionable report returns real canonical message ID');
+  $reportPage=gaw_history_page($pdo,$org,$employee['id'],$reportPending['threadId'],0,20);
+  $reportFound=false;
+  foreach($reportPage['messages'] as $item)if($item['public_id']===$reportReference
+      &&($item['structured']['memoryCategory']??'')==='operational_report')$reportFound=true;
+  fm9d_ok($reportFound,'returned report ID resolves to persisted verified report');
+  fm9d_ok($pending['reportMessageId']===null,'ordinary training question never receives actionable report ID');
   $pdo->prepare("UPDATE voice_identity_profiles SET status='disabled' WHERE organization_id=? AND user_id=?")->execute([$org,$employee['id']]);
   $second='voice-'.bin2hex(random_bytes(9));
   $pdo->prepare("INSERT INTO voice_identity_events (organization_id,public_id,session_user_id,matched_user_id,event_type,confidence,threshold_used) VALUES (?,?,?,?,'match',0.95,0.86)")->execute([$org,$second,$admin['id'],$employee['id']]);
