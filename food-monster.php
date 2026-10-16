@@ -20,11 +20,11 @@ $user = app_require_auth();
 <script src="js/voice-session-presence.js?v=20261013-presence1"></script>
 <script src="js/voice-turn-taking.js?v=20261015-fmg7b2e"></script>
 <script src="js/proactive-listening-commands.js?v=20261013-listening1"></script>
-<script src="js/voice-diagnostics.js?v=20261013-diagnostics1"></script>
-<script src="js/global-agent.js?v=20261015-fmg8reset"></script>
+<script src="js/voice-diagnostics.js?v=20261016-fmg11e"></script>
+<script src="js/global-agent.js?v=20261016-fmg11e"></script>
 <script src="js/food-monster.js?v=20261015-fmg8a"></script>
 <script src="js/food-monster-clock-popup.js?v=20261016-fmg9b"></script>
-<script src="js/food-monster-room-tracker.js?v=20261016-fmg9c"></script>
-<script src="js/food-monster-room.js?v=20261016-fmg9c"></script>
+<script src="js/food-monster-room-tracker.js?v=20261016-fmg11e"></script>
+<script src="js/food-monster-room.js?v=20261016-fmg11e"></script>
 </body>
 </html>
