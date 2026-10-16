@@ -1,0 +1,57 @@
+'use strict';
+const assert=require('node:assert/strict');
+const tracker=require('../js/food-monster-room-tracker.js');
+let passed=0,clock=0,seq=0;
+const check=(value,label)=>{assert.ok(value,label);passed++;};
+const vector=(value)=>Array.from({length:128},(_,i)=>value+i*.00001);
+const cook=vector(.12),manager=vector(.52),unknown=vector(.93);
+const profiles=[{email:'cook@example.test',vector:cook},{email:'manager@example.test',vector:manager}];
+const make=()=>tracker.create({now:()=>clock,id:()=>('r-'+String(++seq).padStart(16,'0'))});
+const entry=(x,descriptor,y=.20)=>({box:[x,y,.15,.15],descriptor});
+let instance=make(),results;
+for(let step=0;step<3;step++){
+ clock+=1300;
+ results=instance.update([entry(.10,cook),entry(.68,manager)],profiles);
+}
+const initial=results.map(x=>x.trackId);
+check(results[0].localProfileEmail==='cook@example.test','initial cook provisionally matched');
+check(results[1].localProfileEmail==='manager@example.test','initial manager provisionally matched');
+clock+=1300;
+results=instance.update([entry(.68,cook),entry(.10,manager)],profiles);
+check(results[0].trackId===initial[0]&&results[1].trackId===initial[1],
+ 'crossing people cannot swap identities based on old position');
+check(results[0].localProfileEmail==='cook@example.test','crossing retains cook identity');
+check(results[1].localProfileEmail==='manager@example.test','crossing retains manager identity');
+clock+=1300;
+results=instance.update([entry(.10,manager),entry(.68,cook)],profiles);
+check(results[0].trackId===initial[1]&&results[1].trackId===initial[0],
+ 'reordered camera detections keep original tracks');
+clock+=1300;
+results=instance.update([entry(.68,null),entry(.10,manager)],profiles);
+check(results[0].localProfileEmail==='','missing descriptor immediately suppresses identity');
+check(results[1].localProfileEmail==='manager@example.test','other person remains recognized');
+clock+=1300;
+results=instance.update([entry(.68,cook),entry(.10,manager)],profiles);
+check(results[0].localProfileEmail==='','restoration requires fresh evidence');
+clock+=1300;
+instance.update([entry(.68,cook),entry(.10,manager)],profiles);
+clock+=1300;
+results=instance.update([entry(.68,cook),entry(.10,manager)],profiles);
+check(results[0].localProfileEmail==='cook@example.test','three new observations restore provisional identity');
+clock+=4000;
+results=instance.update([entry(.68,cook)],profiles);
+check(results[0].localProfileEmail==='','long occlusion invalidates recognition streak');
+clock+=6000;
+results=instance.update([entry(.68,cook)],profiles);
+check(results[0].trackId!==initial[0],'expired person cannot retain identity track');
+check(results[0].localProfileEmail==='','fresh track needs new recognition evidence');
+instance.clear();check(instance.trackCount===0,'stop removes ephemeral appearance descriptors');
+instance=make();clock+=1300;
+results=instance.update([entry(.2,unknown)],profiles);
+check(results[0].localProfileEmail==='','unknown person remains anonymous');
+check(!tracker.candidate(new Array(128).fill(NaN),profiles),'nonfinite descriptor rejected');
+check(!tracker.candidate(new Array(128).fill(Infinity),profiles),'infinite descriptor rejected');
+clock+=1300;
+results=instance.update([entry(.2,cook),entry(.2,cook)],profiles);
+check(results.every(r=>r.localProfileEmail===''),'ambiguous duplicate profile remains anonymous');
+console.log('FM-G10A tracking continuity PASS ('+passed+' assertions)');

@@ -1,0 +1,27 @@
+name: FM-G10A Participant Continuity
+on:
+  pull_request:
+    paths:
+      - 'js/food-monster-room-tracker.js'
+      - 'tests/food-monster-g10a-tracker.test.cjs'
+      - '.github/workflows/food-monster-g10a.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'js/food-monster-room-tracker.js'
+      - 'tests/food-monster-g10a-tracker.test.cjs'
+      - '.github/workflows/food-monster-g10a.yml'
+jobs:
+  tracking-isolation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: JavaScript contracts
+        run: |
+          node --check js/food-monster-room-tracker.js
+          node --check tests/food-monster-g10a-tracker.test.cjs
+          node tests/food-monster-g9c-tracker.test.cjs
+          node tests/food-monster-g10a-tracker.test.cjs
