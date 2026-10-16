@@ -215,7 +215,7 @@
             action: 'ask',
             message: text,
             voice: Boolean(voice),
-            voiceEventId: voice ? S.voiceEventId : '',
+            voiceEventId: voice ? freshSpeakerEvent : '',
             // Thread comes from existing Agent Chat, never from an LLM tool suggestion.
             ...(['api/food-monster-orchestrate.php','api/food-monster-read.php','api/food-monster-approvals.php'].includes(route.route) ? {threadId:S.thread} : {}),
             csrf_token: S.csrf,
