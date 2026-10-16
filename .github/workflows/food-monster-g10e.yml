@@ -1,0 +1,37 @@
+name: FM-G10E Participant and Conversation Reliability
+on:
+  pull_request:
+    paths:
+      - 'js/voice-diagnostics.js'
+      - 'tests/voice-diagnostics.test.js'
+      - 'tests/food-monster-g10e-certification.test.cjs'
+      - '.github/workflows/food-monster-g10e.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'js/voice-diagnostics.js'
+      - 'tests/voice-diagnostics.test.js'
+      - 'tests/food-monster-g10e-certification.test.cjs'
+      - '.github/workflows/food-monster-g10e.yml'
+jobs:
+  lifecycle-and-privacy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring
+      - name: Diagnostics and runtime contracts
+        run: |
+          node --check js/voice-diagnostics.js
+          node --check tests/food-monster-g10e-certification.test.cjs
+          node tests/voice-diagnostics.test.js
+          node tests/food-monster-g9c-tracker.test.cjs
+          node tests/food-monster-g10a-tracker.test.cjs
+          node tests/food-monster-g10b-turns.test.cjs
+          node tests/food-monster-g10e-certification.test.cjs
+          php tests/food-monster-g9e-memory.php
