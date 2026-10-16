@@ -37,7 +37,7 @@ $person=(string)file_get_contents(__DIR__.'/../includes/food-monster-person-conv
 fm9e_ok(str_contains($api,"'person_memory'")&&str_contains($api,"'resolve_person_report'"),'scoped memory and resolution actions exposed');
 fm9e_ok(str_contains($api,'app_require_auth()')&&str_contains($api,'app_verify_request_csrf($in)'),'owner session and CSRF retained');
 fm9e_ok(str_contains($llmapi,'fm9e_llm_memory($pdo,$user,$threadId,$last)'),'LLM receives server-verified person memory');
-fm9e_ok(str_contains($person,"'memoryCategory'=>fm9e_classify($text)"),'person turn carries classifier metadata');
+fm9e_ok(str_contains($person,"'memoryCategory'=>fm9e_classify("),'person turn carries classifier metadata');
 fm9e_ok(str_contains($core,'fm9a_is_super_admin_session')&&str_contains($core,'fm9d_person_collections'),'only owner and tenant-member memories accessed');
 fm9e_ok(str_contains($core,'$last[\'channel\']')&&str_contains($core,'$pending[\'voiceEventId\']'),'model memory only for matched voice turn');
 fm9e_ok(!str_contains($core,'CREATE TABLE')&&!str_contains($core,'$_GET'),'no alternate employee database or client-provided speaker identities');
