@@ -22,6 +22,7 @@ on:
       - 'api/food-monster-llm.php'
       - 'includes/food-monster-llm.php'
       - 'tests/food-monster-g9d-conversations.php'
+      - 'tests/food-monster-g9f-database.php'
       - 'includes/kds-spoken-orders.php'
       - 'js/kds-spoken-orders.js'
       - 'tests/kds-natural-order-voice.php'
@@ -79,6 +80,7 @@ on:
       - 'api/food-monster-llm.php'
       - 'includes/food-monster-llm.php'
       - 'tests/food-monster-g9d-conversations.php'
+      - 'tests/food-monster-g9f-database.php'
       - 'includes/kds-spoken-orders.php'
       - 'js/kds-spoken-orders.js'
       - 'tests/kds-natural-order-voice.php'
@@ -243,6 +245,8 @@ jobs:
         run: php tests/food-monster-g9d-conversations.php --db
       - name: FM-G9E structured memory and report lifecycle acceptance
         run: php tests/food-monster-g9e-memory.php --db
+      - name: FM-G9F real report-to-task database, permissions and idempotency
+        run: php tests/food-monster-g9f-database.php
       - name: Verify upgrader idempotence
         run: |
           php <<'PHP'
