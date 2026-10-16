@@ -176,19 +176,49 @@ function fm9f_keywords(string $text):array {
     }
     return array_keys($words);
 }
+/**
+ * FM-G11C: conservative, inspectable restaurant-domain concept aliases.
+ * Unlike ungrounded embeddings, every expansion is fixed and reviewable.
+ * Keep allergy-specific terms distinct (e.g. wheat is NOT gluten-free evidence).
+ */
+function fm11c_concepts(string $utterance):array {
+    $words=fm9f_keywords($utterance);
+    $groups=[
+      'dough'=>['dough','crust','pizza-base','pizza-crust'],
+      'refrigeration'=>['refrigerator','fridge','walk-in','walkin','cooler'],
+      'fermentation'=>['ferment','fermentation','proof','proofing'],
+      'allergen'=>['allergen','allergens','allergy','allergies'],
+      'temperature'=>['temperature','thermometer','thermostat','heat'],
+      'mozzarella'=>['mozzarella','mozz','fresh-mozz'],
+      'inventory'=>['inventory','stock','stockroom'],
+      'equipment'=>['equipment','appliance','machine'],
+    ];
+    $out=[];
+    foreach($words as $word){
+        $out[$word]=true;
+        foreach($groups as $concept=>$synonyms){
+            if($word===$concept||in_array($word,$synonyms,true))$out['concept:'.$concept]=true;
+        }
+    }
+    return array_keys($out);
+}
+
 function fm9f_relevant_context(array $memory,string $utterance,int $max=3):array {
     $explicitRecall=(bool)preg_match('/\\b(?:remember|recall|previous conversation|what did (?:i|we) ask)\\b/iu',$utterance);
-    $query=fm9f_keywords($utterance);
+    $query=fm11c_concepts($utterance);
+    $literalQuery=fm9f_keywords($utterance);
     if(!$query&&!$explicitRecall)return [];
     $category=fm9e_classify($utterance);
     $pool=[];
     foreach(['openReports'=>'open_report','recentIngredientQuestions'=>'ingredient_question','recentTrainingQuestions'=>'training_question'] as $bucket=>$type){
         foreach((array)($memory[$bucket]??[]) as $item){
             if(!is_array($item)||!isset($item['text'],$item['messageId']))continue;
-            $overlap=array_intersect($query,fm9f_keywords((string)$item['text']));
+            $known=(string)$item['text'];
+            $overlap=array_intersect($query,fm11c_concepts($known));
+            $exact=array_intersect($literalQuery,fm9f_keywords($known));
             if(!$overlap&&!$explicitRecall)continue;
             if($explicitRecall&&$type==='open_report'&&!$overlap)continue;
-            $score=count($overlap)*3;
+            $score=count($overlap)*2+count($exact)*2;
             if($type===$category||($type==='open_report'&&$category==='operational_report'))$score+=2;
             $pool[]=['type'=>$type,'item'=>$item,'score'=>$score];
         }
