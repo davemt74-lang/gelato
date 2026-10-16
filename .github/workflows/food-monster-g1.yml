@@ -50,6 +50,8 @@ on:
       - 'docs/FOOD-MONSTER-FM-G7D-HAIKU-PROVIDER.md'
       - 'includes/agent-workspace-core.php'
       - 'includes/food-monster-person-conversations.php'
+      - 'includes/food-monster-conversation-memory.php'
+      - 'tests/food-monster-g9e-memory.php'
       - 'tests/food-monster-g9d-conversations.php'
       - 'api/agent-brain.php'
       - 'api/agent-workspace.php'
@@ -123,6 +125,8 @@ jobs:
           php -l api/agent-workspace.php
           php -l includes/food-monster-person-conversations.php
           php tests/food-monster-g9d-conversations.php
+          php -l includes/food-monster-conversation-memory.php
+          php tests/food-monster-g9e-memory.php
           node --check js/food-monster-suggestions.js
           node --check js/agent-next-moves.js
           php -l includes/food-monster-llm.php
