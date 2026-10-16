@@ -24,5 +24,6 @@ $check(str_contains($voice,'tv_voice_profile')&&str_contains($voice,'voice_ident
 $check(is_file($root.'/api/timeclock.php')&&is_file($root.'/includes/timeclock-voice-core.php'),'Time clock preserved');
 $check(!str_contains($agent,'await verifyVoice();'),'Microphone never blocked by biometric sample');
 $check(!str_contains($agent,'Checking the enrolled voice sample'),'No enrollment interruption in Agent Chat');
+$check(!str_contains($agent,'Date.now()>=S.voiceUntil'),'Voice sample expiration cannot interrupt conversation or wake commands');
 $check(str_contains($agent,'startContinuous()')&&str_contains($agent,'speechOnce()'),'Existing STT paths preserved');
 echo "FM-G8 reset contract PASS ($checks checks)\n";

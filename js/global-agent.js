@@ -381,7 +381,6 @@
       // A manual edit always takes priority over automatic submission.
       const field=document.getElementById('gaInput');
       if(!S.voiceDraft.owned||field?.value!==S.voiceDraft.previous)return;
-      if(Date.now()>=S.voiceUntil){status('Voice verification expired. Restart Listening to verify again.',5000);void setListening(false,{keepWake:false});return;}
       try{await send(phrase,true);}catch(error){status('Conversation request failed: '+String(error.message||error),6500);}
     },1200);
   }
@@ -651,11 +650,6 @@
         if(!result.isFinal)continue;
         if(/^hey\s+gelato\b/i.test(text)){
           if(evaluation?.interrupt)interruptSpeech('voice-barge-in');
-          if(Date.now()>=S.voiceUntil){
-            void setListening(false,{keepWake:false});
-            status('Voice check expired. Click Start Listening to verify again.',4500);
-            return;
-          }
           window.dispatchEvent(new CustomEvent('gelato-agent-voice-transcript',{detail:{text}}));
           void send(text,true);
         }

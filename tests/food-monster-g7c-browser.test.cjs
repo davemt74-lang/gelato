@@ -67,6 +67,7 @@ const {chromium}=require('playwright'),base=path.resolve(__dirname,'..');
   await page.evaluate(()=>window.__recognizers.at(-1).say('Tell me about space',true));
   await page.waitForFunction(()=>window.__answers.length===1,null,{timeout:7000});
   ok(await page.evaluate(()=>window.__answers[0]==='Tell me about space'),'Silence submits to Claude');
+  ok(await page.evaluate(()=>window.__requests.every(x=>!x.url.includes('voice-identity.php'))),'Normal listening does not require voice verification');
   await page.waitForFunction(()=>window.__tts.speaking);
   await page.evaluate(()=>window.__recognizers.at(-1).say('speech echo',true));
   ok(await page.locator('#gaInput').inputValue()==='','Echo is suppressed');
