@@ -1,0 +1,28 @@
+name: FM-G10C Conversational Continuity
+on:
+  pull_request:
+    paths:
+      - 'includes/food-monster-conversation-memory.php'
+      - 'tests/food-monster-g9e-memory.php'
+      - '.github/workflows/food-monster-g10c.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'includes/food-monster-conversation-memory.php'
+      - 'tests/food-monster-g9e-memory.php'
+      - '.github/workflows/food-monster-g10c.yml'
+jobs:
+  memory-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_mysql
+      - name: Syntax, classification and bounded recall
+        run: |
+          php -l includes/food-monster-conversation-memory.php
+          php -l tests/food-monster-g9e-memory.php
+          php tests/food-monster-g9e-memory.php
+          php scripts/test-fm-g9f-relevance.php
