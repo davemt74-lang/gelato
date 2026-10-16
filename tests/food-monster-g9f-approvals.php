@@ -11,7 +11,7 @@ try{fm9f_approval_propose($staff,'major_purchase','Buy new oven','thr-1234567890
 catch(DomainException){check_it(true,'staff rejected');}
 try{fm9f_approval_propose($owner,'arbitrary_tool','Do anything','thr-1234567890');check_it(false,'allowlist');}
 catch(InvalidArgumentException){check_it(true,'allowlist');}
-$p=fm9f_approval_propose($owner,'major_purchase','Review oven purchase','thr-1234567890');
+$p=fm9f_approval_propose($owner,'record_deletion','Review record deletion','thr-1234567890');
 check_it($p['requiresApproval']&&!$p['executed'],'proposal never executes');
 try{fm9f_approval_propose($owner,'large_refund','Try replacing prior approval','thr-1234567890');check_it(false,'pending proposal protected');}
 catch(DomainException){check_it(true,'pending proposal protected');}
