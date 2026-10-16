@@ -204,6 +204,44 @@ function fm9f_relevant_context(array $memory,string $utterance,int $max=3):array
     return $out;
 }
 
+/**
+ * FM-G10C: resolve short contextual follow-ups ONLY from the most recent
+ * server-mirrored voice turn of the SAME enrolled person in this SAME
+ * conversation. Never infer person identity from face presence or client text.
+ * This is bounded retrieval, not automatic model training.
+ */
+function fm10c_contextual_utterance(PDO $pdo,array $operator,int $personId,string $roomThread,
+    string $currentVoiceEvent,string $utterance):string
+{
+    $utterance=trim($utterance);
+    if(!preg_match('/^(?:and\b|also\b|what about\b|how about\b|what(?:\x27s| is) its\b|does it\b|is it\b|can it\b|how long\b)/iu',$utterance))
+        return $utterance;
+    if($personId<1||!fm9a_is_super_admin_session($operator)
+        ||!preg_match('/^agent-[a-f0-9]{20}$/D',$roomThread)
+        ||!preg_match('/^voice-[a-zA-Z0-9-]{8,90}$/D',$currentVoiceEvent))
+        return $utterance;
+    $org=(int)$operator['organization_id'];
+    // Previous person-specific question, not the shared-room transcript.
+    $q=$pdo->prepare("SELECT m.content FROM agent_messages m
+      INNER JOIN agent_conversations c ON c.id=m.conversation_id
+        AND c.organization_id=m.organization_id
+      WHERE m.organization_id=? AND c.user_id=? AND c.title LIKE 'Food Monster · %'
+        AND m.role='user' AND m.voice_event_public_id IS NOT NULL
+        AND m.voice_event_public_id<>?
+        AND m.created_at>=DATE_SUB(NOW(6),INTERVAL 8 MINUTE)
+        AND JSON_UNQUOTE(JSON_EXTRACT(m.structured_json,'$.collection'))='fm9d_person_turn'
+        AND JSON_UNQUOTE(JSON_EXTRACT(m.structured_json,'$.identityAssurance'))='provisional_voice_match'
+        AND CAST(JSON_UNQUOTE(JSON_EXTRACT(m.structured_json,'$.speakerPersonId')) AS UNSIGNED)=?
+        AND JSON_UNQUOTE(JSON_EXTRACT(m.structured_json,'$.operatorThreadId'))=?
+        AND JSON_UNQUOTE(JSON_EXTRACT(m.structured_json,'$.memoryCategory')) IN
+          ('ingredient_question','training_question')
+      ORDER BY m.id DESC LIMIT 1");
+    $q->execute([$org,$personId,$currentVoiceEvent,$personId,$roomThread]);
+    $previous=$q->fetchColumn();
+    if(!is_string($previous)||trim($previous)==='')return $utterance;
+    return fm9e_trim($previous,130).' '.$utterance;
+}
+
 /** Provide only limited prior memory when a server-validated speaker owns THIS voice turn. */
 function fm9e_llm_memory(PDO $pdo,array $operator,string $thread,array $last):string
 {
@@ -217,7 +255,9 @@ function fm9e_llm_memory(PDO $pdo,array $operator,string $thread,array $last):st
        ||time()-(int)($pending['createdAt']??0)>120
        ||time()<(int)($pending['createdAt']??0))return '';
     $memory=fm9e_person_memory($pdo,$operator,$personId,5);
-    $relevant=fm9f_relevant_context($memory,(string)($last['content']??''));
+    $utterance=fm10c_contextual_utterance($pdo,$operator,$personId,$thread,
+        (string)$pending['voiceEventId'],(string)($last['content']??''));
+    $relevant=fm9f_relevant_context($memory,$utterance);
     if(!$relevant)return '';
     $parts=[];
     foreach($relevant as $match){
