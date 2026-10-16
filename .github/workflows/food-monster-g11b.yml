@@ -1,0 +1,28 @@
+name: FM-G11B Single-use Speaker Turns
+on:
+  pull_request:
+    paths:
+      - 'js/global-agent.js'
+      - 'tests/food-monster-g11b-turns.test.cjs'
+      - '.github/workflows/food-monster-g11b.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'js/global-agent.js'
+      - 'tests/food-monster-g11b-turns.test.cjs'
+      - '.github/workflows/food-monster-g11b.yml'
+jobs:
+  speaker-turns:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Browser voice event replay regression
+        run: |
+          node --check js/global-agent.js
+          node --check tests/food-monster-g11b-turns.test.cjs
+          node tests/voice-turn-taking.test.js
+          node tests/food-monster-g10b-turns.test.cjs
+          node tests/food-monster-g11b-turns.test.cjs
