@@ -5,6 +5,7 @@ declare(strict_types=1);
  * Purchasing Agent. No payment or PO execution occurs in this module.
  */
 require_once __DIR__.'/food-monster-identity-authority.php';
+require_once __DIR__.'/agent-workspace-core.php';
 
 
 function fm9g_purchase_signature(array $proposal):string
