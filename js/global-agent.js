@@ -13,6 +13,7 @@
     foodMonsterContext: null,
     voiceUntil: 0,
     verifiedSpeaker: null,
+    usedVoiceEvents:new Set(),
     listening: false,
     savedListening: false,
     wakeStandby: false,
@@ -178,13 +179,25 @@
     status('Gelato is checking your restaurant context…');
 
     try {
-      const freshSpeakerEvent=voice&&S.verifiedSpeaker
+      // One signed voice event is evidence for ONE completed transcript only.
+      // A subsequent turn without fresh verification is deliberately unknown.
+      const possibleVoiceEvent=voice&&S.verifiedSpeaker
         &&Date.now()-(S.verifiedSpeaker.verifiedAt||0)<60000
-        ?S.verifiedSpeaker.eventId:'';
+        ?String(S.verifiedSpeaker.eventId||''):'';
+      const freshSpeakerEvent=/^voice-[a-zA-Z0-9-]{8,90}$/.test(possibleVoiceEvent)
+        &&!S.usedVoiceEvents.has(possibleVoiceEvent)?possibleVoiceEvent:'';
       const submitted = await append('user', text, {
         channel: voice ? 'voice' : 'text',
-        voiceEventId: freshSpeakerEvent||(voice ? S.voiceEventId : ''),
+        voiceEventId: freshSpeakerEvent,
       });
+      if(freshSpeakerEvent){
+        S.usedVoiceEvents.add(freshSpeakerEvent);
+        if(S.usedVoiceEvents.size>32)S.usedVoiceEvents.delete(S.usedVoiceEvents.values().next().value);
+      }
+      if(voice)window.dispatchEvent(new CustomEvent('gelato-agent-speaker-turn',{
+        detail:{verified:Boolean(freshSpeakerEvent)&&Boolean(submitted?.participant),
+          correlated:Boolean(submitted?.roomSpeaker),unverified:!submitted?.participant}
+      }));
 
       const route = await post('api/agent-workspace.php', {action: 'route', message: text, threadId: S.thread});
       let result;
