@@ -13,6 +13,7 @@ require_once __DIR__.'/../includes/food-monster-identity-authority.php';
 require_once __DIR__.'/../includes/food-monster-person-conversations.php';
 require_once __DIR__.'/../includes/food-monster-conversation-memory.php';
 require_once __DIR__.'/../includes/food-monster-operational-followup.php';
+require_once __DIR__.'/../includes/food-monster-high-impact-approval.php';
 
 // Compatibility route markers for older CI/contracts. Canonical routing now lives in includes/agent-node-registry.php.
 // api/admin-dashboard-agent.php api/daily-manager-agent.php api/sales-cost-agent.php api/sales-agent.php
@@ -133,6 +134,19 @@ try{
     if($action==='route'){
         $message=trim((string)($in['message']??''));if($message==='')throw new InvalidArgumentException('Enter an Agent request.');
         $text=mb_strtolower(preg_replace('/^hey\s+gelato[,\s]*/iu','',$message)??$message,'UTF-8');
+        // Owner-authenticated high-impact staging uses a deterministic grammar,
+        // never a model-selected endpoint. Only an owner may approve; an approval
+        // records a decision but does not execute the underlying operation.
+        $approvalIntent=fm9f_approval_chat_intent($message);
+        if($approvalIntent&&fm9a_is_super_admin_session($user)){
+            $pending=$approvalIntent['action']==='decide'
+                ?gac_pending_get('food_monster_high_impact',$org,$uid):null;
+            $approvalThread=trim((string)($in['threadId']??''));
+            if($approvalIntent['action']==='propose'
+                ||($pending&&($pending['payload']['threadId']??'')===$approvalThread))
+                app_json_response(['ok'=>true,'route'=>'api/food-monster-approvals.php',
+                    'domain'=>'food_monster_high_impact_approval','node'=>'brain','nodeMode'=>'approval_only']);
+        }
         // FM-G7B2: server-selected, audited evidence reads; never LLM endpoints.
         $readIntent=fm_read_intent($message);
         if($readIntent!==null)app_json_response(['ok'=>true,'route'=>'api/food-monster-read.php',
