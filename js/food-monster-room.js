@@ -2,7 +2,7 @@
 (()=>{'use strict';
 if(window.GelatoRoomPresence)return;
 const endpoint='api/food-monster-presence.php',profileDB='gelato-fm-face-pin-v1';
-const state={active:false,stream:null,video:null,faceApi:null,nativeDetector:null,profiles:[],tracker:null,timer:null,busy:false,csrf:'',room:null,changeKey:'',lastContext:0,lastStatus:'',generation:0};
+const state={active:false,stream:null,video:null,faceApi:null,nativeDetector:null,profiles:[],tracker:null,timer:null,busy:false,csrf:'',room:null,changeKey:'',lastContext:0,lastStatus:'',generation:0,modelReady:false,idleCycles:0,failures:0,intervalMs:1700,lastInferenceMs:0};
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const $=s=>document.querySelector(s);
 function ui(){
@@ -46,6 +46,7 @@ async function dbProfiles(){
  }finally{db.close();}
 }
 async function faceModels(){
+ if(state.modelReady&&state.faceApi)return;
  if(window.faceapi){state.faceApi=window.faceapi;}
  else{
   await new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js';script.onload=resolve;script.onerror=()=>reject(Error('Face models unavailable'));document.head.append(script);});
@@ -54,6 +55,7 @@ async function faceModels(){
  if(!state.faceApi)throw Error('Face models unavailable');
  const root='https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights';
  await Promise.all([state.faceApi.nets.tinyFaceDetector.loadFromUri(root),state.faceApi.nets.faceLandmark68Net.loadFromUri(root),state.faceApi.nets.faceRecognitionNet.loadFromUri(root)]);
+ state.modelReady=true;
 }
 function normalizeBox(b,w,h){
  return window.GelatoRoomTracker.geometry([b.x/w,b.y/h,b.width/w,b.height/h]);
@@ -72,13 +74,14 @@ async function detect(){
 }
 async function observe(){
  if(!state.active||state.busy||document.hidden)return;
- state.busy=true;const generation=state.generation;
+ state.busy=true;const generation=state.generation,started=Date.now();
  try{
   const faces=await detect();if(!state.active||generation!==state.generation)return;
+  state.idleCycles=faces.length?0:Math.min(20,state.idleCycles+1);
   const tracks=state.tracker.update(faces,state.profiles);
   const result=await request('observe',{tracks});
   if(!state.active||generation!==state.generation)return;
-  state.room=result.room;state.lastStatus='';
+  state.room=result.room;state.lastStatus='';state.failures=0;
   const key=JSON.stringify((result.room?.people||[]).map(p=>[p.trackId,p.personId,p.identitySource]));
   const now=Date.now();
   if(key!==state.changeKey||now-state.lastContext>10000){
@@ -86,15 +89,25 @@ async function observe(){
    window.dispatchEvent(new CustomEvent('gelato-room-presence-updated',{detail:{room:result.room}}));
    void window.GelatoGlobalAgent?.refreshContext?.().catch(()=>{});
   }
- }catch(e){if(state.active){state.lastStatus='Camera on · room connection unavailable';}}
- finally{state.busy=false;ui();}
+ }catch(e){if(state.active){state.failures=Math.min(6,state.failures+1);state.lastStatus='Camera on · room connection unavailable';}}
+ finally{
+  state.lastInferenceMs=Math.max(0,Date.now()-started);
+  state.busy=false;ui();
+  if(state.active&&generation===state.generation&&!document.hidden){
+   // No idle polling while camera is off. Never exceed room heartbeat TTL.
+   state.intervalMs=state.failures?Math.min(6000,1800*Math.pow(2,Math.min(2,state.failures-1)))
+     :(state.idleCycles>=3?3200:state.idleCycles>0?1900:1450);
+   state.timer=setTimeout(observe,state.intervalMs);
+  }
+ }
 }
 async function stop(){
  const running=state.active;state.active=false;state.generation++;
- if(state.timer){clearInterval(state.timer);state.timer=null;}
+ if(state.timer){clearTimeout(state.timer);state.timer=null;}
  if(state.stream){state.stream.getTracks().forEach(t=>t.stop());state.stream=null;}
  if(state.video){state.video.pause();state.video.srcObject=null;state.video.remove();state.video=null;}
  state.tracker?.clear();state.room=null;state.lastStatus='';state.changeKey='';state.profiles=[];
+ state.idleCycles=0;state.failures=0;
  ui();
  if(running){try{await request('stop',{});}catch{}window.dispatchEvent(new CustomEvent('gelato-room-presence-updated',{detail:{room:{status:'not_connected',people:[],currentSpeaker:null}}}));void window.GelatoGlobalAgent?.refreshContext?.().catch(()=>{});}
 }
@@ -113,11 +126,11 @@ async function start(){
   state.stream=stream;
   const video=document.createElement('video');video.autoplay=true;video.playsInline=true;video.muted=true;video.setAttribute('aria-hidden','true');video.style.cssText='position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;top:-10px;left:-10px';document.body.append(video);state.video=video;video.srcObject=stream;await video.play();
   try{await faceModels();}catch(e){
-   if(typeof window.FaceDetector==='function')state.nativeDetector=new window.FaceDetector({fastMode:true,maxDetectedFaces:8});
+   if(typeof window.FaceDetector==='function'){state.faceApi=null;state.nativeDetector=new window.FaceDetector({fastMode:true,maxDetectedFaces:8});}
    else throw e;
   }
   state.tracker=window.GelatoRoomTracker.create();state.lastStatus='';
-  await observe();state.timer=setInterval(observe,1700);
+  await observe();
  }catch(e){await stop();throw e;}
  ui();
 }
@@ -137,6 +150,8 @@ function mount(){
  }
  ui();
 }
-window.GelatoRoomPresence={start,stop,toggle,get active(){return state.active;},get room(){return state.room;}};
+window.GelatoRoomPresence={start,stop,toggle,get active(){return state.active;},get room(){return state.room;},
+ get diagnostics(){return {active:state.active,intervalMs:state.intervalMs,
+   lastInferenceMs:state.lastInferenceMs,modelCached:state.modelReady,failures:state.failures};}};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
 })();

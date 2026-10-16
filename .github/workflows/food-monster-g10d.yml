@@ -1,0 +1,27 @@
+name: FM-G10D Camera Performance
+on:
+  pull_request:
+    paths:
+      - 'js/food-monster-room.js'
+      - 'tests/food-monster-g9c-room-browser.test.cjs'
+      - '.github/workflows/food-monster-g10d.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'js/food-monster-room.js'
+      - 'tests/food-monster-g9c-room-browser.test.cjs'
+      - '.github/workflows/food-monster-g10d.yml'
+jobs:
+  camera-runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax and recognition tracker safety
+        run: |
+          node --check js/food-monster-room.js
+          node --check tests/food-monster-g9c-room-browser.test.cjs
+          node tests/food-monster-g9c-tracker.test.cjs
+          node tests/food-monster-g10a-tracker.test.cjs

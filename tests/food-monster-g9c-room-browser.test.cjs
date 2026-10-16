@@ -17,6 +17,7 @@ const base=path.resolve(__dirname,'..');
    // Resolve HTMLVideoElement.play() without awaiting physical frame delivery.
    window.HTMLMediaElement.prototype.play=async function(){return;};
    window.GelatoGlobalAgent={refreshContext:async()=>{window.refreshed++;return {};}};
+   window.loadedModels=0;
    const canvas=document.createElement('canvas');canvas.width=320;canvas.height=240;document.body.append(canvas);
    Object.defineProperty(navigator,'mediaDevices',{configurable:true,value:{getUserMedia:async()=>{window.mediaStream=canvas.captureStream(10);return window.mediaStream;}}});
    Object.defineProperty(window,'isSecureContext',{configurable:true,get:()=>true});
@@ -33,7 +34,7 @@ const base=path.resolve(__dirname,'..');
    const toB64=x=>btoa(String.fromCharCode(...new Uint8Array(x)));
    await store('profiles','local-profile',{iv:toB64(iv),cipher:toB64(crypt)});db.close();
    window.faceapi={
-     nets:{tinyFaceDetector:{loadFromUri:async()=>{}},faceLandmark68Net:{loadFromUri:async()=>{}},faceRecognitionNet:{loadFromUri:async()=>{}}},
+     nets:{tinyFaceDetector:{loadFromUri:async()=>{window.loadedModels++;}},faceLandmark68Net:{loadFromUri:async()=>{window.loadedModels++;}},faceRecognitionNet:{loadFromUri:async()=>{window.loadedModels++;}}},
      TinyFaceDetectorOptions:class{},
      detectAllFaces:()=>({withFaceLandmarks:()=>({withFaceDescriptors:async()=>[
        {detection:{box:{x:32,y:24,width:80,height:80}},descriptor:new Float32Array(d)},
@@ -66,12 +67,21 @@ const base=path.resolve(__dirname,'..');
   ok(await page.evaluate(()=>window.GelatoRoomPresence.room.people.some(p=>p.personId===22)),'server-scoped identity displayed only after lookup');
   ok(await page.evaluate(()=>window.GelatoRoomPresence.room.people.some(p=>p.personId===null)),'unrecognized person remains anonymous');
   ok(await page.evaluate(()=>window.GelatoRoomPresence.room.currentSpeaker===null),'video never fabricates current speaker');
+  ok(await page.evaluate(()=>window.GelatoRoomPresence.diagnostics.modelCached===true
+    &&window.GelatoRoomPresence.diagnostics.intervalMs===1450),'active room uses responsive adaptive rate');
+  ok(await page.evaluate(()=>window.loadedModels===3),'model weights loaded only once on first camera start');
   await page.locator('[data-fm-camera]').click();
   await page.waitForFunction(()=>!window.GelatoRoomPresence.active);
   ok(await page.locator('#fm-room-presence').isHidden(),'camera stop removes presence strip');
   ok(await page.evaluate(()=>window.mediaStream.getTracks().every(t=>t.readyState==='ended')),'camera tracks closed on stop');
   ok(await page.evaluate(()=>window.calls.some(x=>x.action==='stop')),'server room presence cleared on stop');
   ok(await page.evaluate(()=>window.refreshed>=1),'Agent Brain context refreshed');
+  await page.evaluate(()=>window.GelatoRoomPresence.start());
+  ok(await page.evaluate(()=>window.loadedModels===3),
+    'subsequent opt-in camera session reuses already loaded face recognition models');
+  ok(await page.evaluate(()=>window.GelatoRoomPresence.diagnostics.modelCached
+    &&window.GelatoRoomPresence.diagnostics.active),'restart preserves initialized camera session');
+  await page.evaluate(()=>window.GelatoRoomPresence.stop());
   console.log('FM-G9C opt-in camera and presence Chromium PASS ('+n+' checks)');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e.stack||e);process.exit(1)});
