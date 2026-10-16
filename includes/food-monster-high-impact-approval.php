@@ -25,7 +25,7 @@ function fm9f_approval_propose(array $operator,string $kind,string $summary,stri
     $kind=fm9f_high_impact_kind($kind);
     $summary=trim($summary);
     if($summary===''||mb_strlen($summary,'UTF-8')>300
-        ||!preg_match('/^thr-[a-zA-Z0-9-]{8,90}$/D',$threadId))
+        ||!preg_match('/^agent-[a-f0-9]{20}$/D',$threadId))
         throw new InvalidArgumentException('Valid summary and conversation required.');
     $org=(int)$operator['organization_id'];$uid=(int)$operator['id'];
     if(gac_pending_get('food_monster_high_impact',$org,$uid))
