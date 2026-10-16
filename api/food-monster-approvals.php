@@ -20,6 +20,14 @@ try {
             throw new InvalidArgumentException('Send this request through your authenticated Agent Chat.');
         if(($last['channel']??'')!=='text'||!empty($last['voice_event_public_id']))
             throw new DomainException('High-impact approvals must be typed in the Super Admin account. Room voice cannot approve actions.');
+        if(preg_match('/^Confirm[.!]?$/i',$message)
+            &&fm9h_active_grant($user,$thread)){
+            $result=fm9h_execute_role($pdo,$user,$thread);
+            $answer='Confirmed. '.$result['operation'].' '.$result['permission'].' on '.$result['roleId'].
+                '. Permission change executed and recorded in Agent Brain (approval '.$result['approvalId'].').';
+            app_json_response(['ok'=>true,'skill'=>'food_monster.permission_change_executed',
+                'answer'=>$answer,'data'=>['execution'=>$result],'sources'=>['Roles & Permissions']]);
+        }
         $intent=fm9f_approval_chat_intent($message);
         if(!$intent)throw new InvalidArgumentException('Use an explicit approval request or Approve / Reject.');
         if($intent['action']==='propose'){
@@ -34,7 +42,9 @@ try {
             $state=$approval['decision']==='approve'?'approved':'rejected';
             $answer=$state==='approved'
                 ?(!empty($approval['handoff'])
-                    ?'Approval recorded for purchase order '.$approval['handoff']['purchaseOrderId'].'. No order submitted yet. Type Confirm in this authenticated Agent Chat to execute the original Purchasing Agent proposal.'
+                    ?(($approval['kind']??'')==='permission_change'
+                        ? 'Approval recorded for '.$approval['handoff']['roleId'].': '.$approval['handoff']['operation'].' '.$approval['handoff']['permission'].'. No change executed yet. Type Confirm in this authenticated Agent Chat to apply the verified role permission change.'
+                        : 'Approval recorded for purchase order '.$approval['handoff']['purchaseOrderId'].'. No order submitted yet. Type Confirm in this authenticated Agent Chat to execute the original Purchasing Agent proposal.')
                     :'Approval recorded. No purchase, refund, deletion, or permission change was executed. Continue through the relevant Gelato module to confirm the authorized operation.')
                 :'Request rejected. No operational action was executed.';
         }
