@@ -12,6 +12,7 @@ require_once __DIR__.'/../includes/food-monster-read-tools.php';
 require_once __DIR__.'/../includes/food-monster-identity-authority.php';
 require_once __DIR__.'/../includes/food-monster-person-conversations.php';
 require_once __DIR__.'/../includes/food-monster-conversation-memory.php';
+require_once __DIR__.'/../includes/food-monster-operational-followup.php';
 
 // Compatibility route markers for older CI/contracts. Canonical routing now lives in includes/agent-node-registry.php.
 // api/admin-dashboard-agent.php api/daily-manager-agent.php api/sales-cost-agent.php api/sales-agent.php
@@ -108,7 +109,23 @@ try{
             unset($_SESSION[$pendingKey]);
             throw $error;
         }
-        app_json_response(['ok'=>true,'message'=>$message,
+        // A real, verified operational report can create a routine follow-up under
+        // the authenticated owner's standing delegation. Never execute in a DB
+        // transaction or let task failures invalidate the captured conversation.
+        $followup=null;
+        $reportId=(string)($_SESSION[$pendingKey]['reportMessageId']??'');
+        if($role==='user'&&$personSpeaker&&$reportId!==''&&fm9a_agent_action_decision($user,'routine')==='delegated'
+            &&app_has_permission('tasks.manage',$user)){
+            try{
+                $followup=fm9f_create_report_task($pdo,$user,(int)$personSpeaker['personId'],$reportId);
+                app_audit($pdo,$org,$uid,'food_monster.report_task_auto_created','agent_message',$reportId,null,
+                    ['taskId'=>$followup['taskId'],'alreadyCreated'=>$followup['alreadyCreated']]);
+            }catch(Throwable $failure){
+                error_log('Food Monster routine task follow-up failed: '.get_class($failure));
+                $followup=['status'=>'unavailable'];
+            }
+        }
+        app_json_response(['ok'=>true,'message'=>$message,'operationalFollowup'=>$followup,
             'greeting'=>$greeting?['text'=>$greeting,'verified'=>true]:null,
             'participant'=>($personSpeaker&&(int)$personSpeaker['personId']!==$uid)
                 ?['personId'=>(int)$personSpeaker['personId'],'identityAssurance'=>'provisional_voice_match']:null]);

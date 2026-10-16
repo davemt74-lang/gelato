@@ -70,10 +70,11 @@ function fm9d_mirror_user_turn(PDO $pdo,array $operator,array $speaker,string $t
         'identityAssurance'=>'provisional_voice_match',
         'memoryCategory'=>fm9e_classify($text),
         'source'=>'food_monster_conversation','operatorThreadId'=>$operatorThread];
-    gaw_append($pdo,$org,$personId,$thread,'user',$text,[
+    $reportMessage=gaw_append($pdo,$org,$personId,$thread,'user',$text,[
         'channel'=>'voice','voiceEventId'=>$voice,'structured'=>$meta]);
     return ['personId'=>$personId,'threadId'=>$thread,'voiceEventId'=>$voice,
-        'operatorThreadId'=>$operatorThread,'createdAt'=>time()];
+        'operatorThreadId'=>$operatorThread,'createdAt'=>time(),
+        'reportMessageId'=>$meta['memoryCategory']==='operational_report'?(string)($reportMessage['public_id']??''):null];
 }
 
 /** Append the agent response to the previously verified person, at most once. */
