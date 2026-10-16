@@ -19,6 +19,7 @@ try{
     $pageContext=is_array($input['pageContext']??null)?$input['pageContext']:[];
     app_audit($pdo,$org,$uid,'purchasing.agent_skill_used','agent_node',(string)($result['skill']??'purchasing.unknown'),null,['message'=>mb_substr($message,0,1800,'UTF-8'),'contextModule'=>(string)($pageContext['module']??'')]);
     app_json_response($result);
+}catch(DomainException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],403);
 }catch(PurchasingAgentPermissionException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],403);
 }catch(InvalidArgumentException $e){if(str_contains($e->getMessage(),'changed after I proposed'))pac_pending_clear($org,$uid);app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);
 }catch(RuntimeException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],409);
