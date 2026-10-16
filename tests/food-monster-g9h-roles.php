@@ -23,6 +23,14 @@ $permission='roles.view';
 $check=$pdo->prepare("SELECT id FROM permissions WHERE permission_key=?");$check->execute([$permission]);
 fm9h_ok((int)$check->fetchColumn()>0,'canonical role permission exists');
 $summary="role db-role-{$roleId} grant {$permission}";
+try{fm9h_role_state($pdo,$org+444,$roleId);fm9h_ok(false,'tenant isolation');}
+catch(DomainException){fm9h_ok(true,'tenant isolation');}
+$pdo->prepare("INSERT INTO roles (organization_id,name,slug,description,is_system_role,is_owner_role,is_assignable)
+  VALUES (?,'Protected','owner_protected_g9h',NULL,1,1,0)")->execute([$org]);
+$protected=(int)$pdo->lastInsertId();
+try{fm9h_prepare_role($pdo,$owner,"role db-role-{$protected} grant {$permission}");fm9h_ok(false,'protected owner role');}
+catch(DomainException){fm9h_ok(true,'protected owner role');}
+
 $binding=fm9h_prepare_role($pdo,$owner,$summary);
 fm9h_ok($binding['roleId']===$roleId&&$binding['operation']==='grant','exact role and permission parsed');
 try{fm9h_prepare_role($pdo,$unprivileged,$summary);fm9h_ok(false,'employee denied');}
