@@ -18,6 +18,8 @@ try {
         $last=$latest[0]??null;
         if(!$last||($last['role']??'')!=='user'||trim((string)($last['content']??''))!==$message)
             throw new InvalidArgumentException('Send this request through your authenticated Agent Chat.');
+        if(($last['channel']??'')!=='text'||!empty($last['voice_event_public_id']))
+            throw new DomainException('High-impact approvals must be typed in the Super Admin account. Room voice cannot approve actions.');
         $intent=fm9f_approval_chat_intent($message);
         if(!$intent)throw new InvalidArgumentException('Use an explicit approval request or Approve / Reject.');
         if($intent['action']==='propose'){
