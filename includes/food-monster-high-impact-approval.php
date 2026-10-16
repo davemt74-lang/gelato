@@ -7,6 +7,19 @@ require_once __DIR__.'/agent-confirmation-core.php';
  * FM-G9F approval staging. This service NEVER executes a high-impact tool.
  * The canonical module still owns its permission checks and actual execution.
  */
+/**
+ * Explicit, deterministic Agent Chat grammar. Do not let a model invent a
+ * proposal kind, permission, target, amount or execution endpoint.
+ */
+function fm9f_approval_chat_intent(string $message):?array {
+    $message=trim($message);
+    if(preg_match('/^request approval\s*:\s*(major_purchase|permission_change|record_deletion|large_refund)\s*:\s*(.{5,300})$/iu',$message,$m))
+        return ['action'=>'propose','kind'=>strtolower($m[1]),'summary'=>trim($m[2])];
+    if(preg_match('/^(approve|reject)(?:\s+(?:this|that|the)\s+(?:request|proposal|approval)|\s+approval)?[.!]?$/iu',$message,$m))
+        return ['action'=>'decide','decision'=>strtolower($m[1])];
+    return null;
+}
+
 function fm9f_high_impact_kind(string $kind):string {
     $allowed=['major_purchase','permission_change','record_deletion','large_refund'];
     if(!in_array($kind,$allowed,true))throw new InvalidArgumentException('Unsupported high-impact action.');
