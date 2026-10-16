@@ -37,6 +37,7 @@ $submit=purchasing_agent_handle($pdo,$manager,['message'=>'submit this PO','page
 paa_assert(($submit['skill']??'')==='purchasing.action_proposal','PO submission must require confirmation.');
 paa_assert((purchasing_order($pdo,$org,$poId)['status']??'')==='draft','Submission proposal must not change PO status.');
 $approvalThread=gaw_create_thread($pdo,$org,$uid,'text','FM-G9G Purchase Approval');
+$originalSubmitProposal=pac_pending_get($org,$uid);
 $blocked=false;
 try{purchasing_agent_handle($pdo,$manager,['message'=>'Confirm','pageContext'=>$context]);}
 catch(DomainException){$blocked=true;}
@@ -48,6 +49,12 @@ paa_assert(($approval['purchaseOrderId']??'')===$poId,'Approval binds actual PO,
 $decision=fm9f_approval_decide($manager,$approval['proposalId'],'approve');
 paa_assert(($decision['handoff']['purchaseOrderId']??'')===$poId
     &&$decision['executed']===false,'Approval generates scoped grant without execution.');
+$tampered=$originalSubmitProposal;
+$tampered['id']='pap-'.bin2hex(random_bytes(8));
+$blocked=false;
+try{fm9g_authorize_purchase($manager,$tampered);}
+catch(DomainException){$blocked=true;}
+paa_assert($blocked,'Approved grant cannot authorize a substituted Purchasing Agent proposal.');
 $submitted=purchasing_agent_handle($pdo,$manager,['message'=>'Confirm','pageContext'=>$context]);
 paa_assert(($submitted['data']['action']??'')==='submit_po'&&(purchasing_order($pdo,$org,$poId)['status']??'')==='submitted','Confirmed PO submission failed.');
 paa_assert(($submitted['data']['approvalId']??'')===$approval['proposalId']
@@ -58,7 +65,7 @@ $executions=$pdo->prepare("SELECT COUNT(*) FROM agent_messages WHERE organizatio
 $executions->execute([$org,$poId]);
 paa_assert((int)$executions->fetchColumn()===1,'Exactly one canonical execution receipt recorded.');
 $blocked=false;
-try{fm9g_authorize_purchase($manager,$submit);}
+try{fm9g_authorize_purchase($manager,$originalSubmitProposal);}
 catch(Throwable){$blocked=true;}
 paa_assert($blocked,'Consumed approval cannot be replayed.');
 
