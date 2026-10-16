@@ -3,6 +3,8 @@ declare(strict_types=1);
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/agent-workspace-core.php';
 require_once __DIR__.'/../includes/food-monster-llm.php';
+require_once __DIR__.'/../includes/food-monster-person-conversations.php';
+require_once __DIR__.'/../includes/food-monster-conversation-memory.php';
 
 $user=app_require_auth();
 $org=(int)$user['organization_id'];$uid=(int)$user['id'];
@@ -39,6 +41,7 @@ try{
     if($selected===null)app_json_response(['ok'=>false,'message'=>'Selected AI provider is not configured. Ask a Gelato administrator to configure an OpenAI or Anthropic API key.'],503);
     fmllm_rate_limit($org,$uid);
     $history=fmllm_history($records,12);
+    $personMemory=fm9e_llm_memory($pdo,$user,$threadId,$last);
     if(!$history||end($history)['role']!=='user')throw new InvalidArgumentException('A user message is required.');
     try{
         $key=app_decrypt_secret((string)$selected['credential']['encrypted_key'],(string)$selected['credential']['nonce'],(string)$selected['credential']['encryption_method']);
@@ -48,7 +51,7 @@ try{
     }
     // Release session lock while the external API responds so unrelated app requests stay responsive.
     if(session_status()===PHP_SESSION_ACTIVE)session_write_close();
-    try{$answer=fmllm_exchange($selected['provider'],$key,$history);}
+    try{$answer=fmllm_exchange($selected['provider'],$key,$history,null,$personMemory);}
     finally{if(function_exists('sodium_memzero'))sodium_memzero($key);}
     app_audit($pdo,$org,$uid,'agent.llm_conversation','agent_conversation',$threadId,null,['provider'=>$selected['provider'],'messageCharacters'=>mb_strlen($message,'UTF-8')]);
     app_json_response(['ok'=>true,'skill'=>'agent.llm.conversation','answer'=>$answer,
