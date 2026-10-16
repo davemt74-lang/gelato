@@ -13,6 +13,8 @@ try{fm9f_approval_propose($owner,'arbitrary_tool','Do anything','thr-1234567890'
 catch(InvalidArgumentException){check_it(true,'allowlist');}
 $p=fm9f_approval_propose($owner,'major_purchase','Review oven purchase','thr-1234567890');
 check_it($p['requiresApproval']&&!$p['executed'],'proposal never executes');
+try{fm9f_approval_propose($owner,'large_refund','Try replacing prior approval','thr-1234567890');check_it(false,'pending proposal protected');}
+catch(DomainException){check_it(true,'pending proposal protected');}
 try{fm9f_approval_decide($staff,$p['proposalId'],'approve');check_it(false,'staff decision denied');}
 catch(DomainException){check_it(true,'staff decision denied');}
 try{fm9f_approval_decide($owner,'gap-incorrect','approve');check_it(false,'wrong token denied');}
@@ -33,6 +35,7 @@ check_it(fm9f_approval_chat_intent('Reject')['decision']==='reject','owner rejec
 $api=(string)file_get_contents(__DIR__.'/../api/food-monster-approvals.php');
 $workspace=(string)file_get_contents(__DIR__.'/../api/agent-workspace.php');
 $client=(string)file_get_contents(__DIR__.'/../js/global-agent.js');
+check_it(str_contains($api,"($last['channel']??'')!=='text'")&&str_contains($api,"voice_event_public_id"),'shared room voice cannot approve high-impact requests');
 check_it(str_contains($api,'gaw_messages($pdo,$org,$uid,$thread,1)')
     &&str_contains($api,'app_verify_request_csrf'),'only canonical authenticated chat messages stage approval');
 check_it(str_contains($api,"'fm9f_high_impact_decision'")
