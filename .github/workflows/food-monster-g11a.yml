@@ -1,0 +1,31 @@
+name: FM-G11A Verified Room Speaker
+on:
+  pull_request:
+    paths:
+      - 'includes/food-monster-room-presence.php'
+      - 'api/agent-workspace.php'
+      - 'tests/food-monster-g11a-speaker.php'
+      - '.github/workflows/food-monster-g11a.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'includes/food-monster-room-presence.php'
+      - 'api/agent-workspace.php'
+      - 'tests/food-monster-g11a-speaker.php'
+      - '.github/workflows/food-monster-g11a.yml'
+jobs:
+  speaker-isolation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+      - name: Provenance and privacy gates
+        run: |
+          php -l includes/food-monster-room-presence.php
+          php -l api/agent-workspace.php
+          php -l tests/food-monster-g11a-speaker.php
+          php tests/food-monster-g11a-speaker.php
+          php tests/food-monster-g9c-presence.php
+          php tests/food-monster-g9d-conversations.php

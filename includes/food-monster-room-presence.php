@@ -23,7 +23,62 @@ function fm9c_room_context(array $operator,?array $session=null,?int $now=null):
       ||(int)($session['seen']??0)>$now+2)return fm9c_empty_room();
     return ['status'=>'active','source'=>'opt_in_browser_camera',
         'people'=>array_values((array)($session['people']??[])),
-        'currentSpeaker'=>null];
+        'currentSpeaker'=>fm11a_current_speaker($session,$now)];
+}
+
+/**
+ * FM-G11A: a short-lived room speaker marker is written only from the server's
+ * confirmed FM-G9D voice event, never from webcam presence or client speaker IDs.
+ * This is room context, NOT account authentication or action authorization.
+ */
+function fm11a_room_clear_speaker(array $operator): void
+{
+    if(!fm9a_is_super_admin_session($operator))return;
+    if(isset($_SESSION['fm9c_room'])&&is_array($_SESSION['fm9c_room']))
+        unset($_SESSION['fm9c_room']['speaker']);
+}
+function fm11a_current_speaker(array $session,int $now):?array
+{
+    $speaker=$session['speaker']??null;
+    if(!is_array($speaker)||($now-(int)($speaker['seen']??0))>5
+       ||(int)($speaker['seen']??0)>$now+1)return null;
+    $id=(int)($speaker['personId']??0);
+    $track=(string)($speaker['trackId']??'');
+    if($id<1||!preg_match('/^r-[a-f0-9]{16,32}$/D',$track))return null;
+    $matches=0;
+    foreach((array)($session['people']??[]) as $person){
+        if((int)($person['personId']??0)===$id&&($person['trackId']??'')===$track
+          &&($person['identityAssurance']??'')==='provisional_visual_match')$matches++;
+    }
+    if($matches!==1)return null;
+    return ['personId'=>$id,'trackId'=>$track,
+        'identityAssurance'=>'correlated_voice_and_visual_observation',
+        'websiteAuthenticated'=>false,'agentAdministration'=>false];
+}
+function fm11a_room_voice_turn(array $operator,?array $voiceSpeaker,?int $now=null):?array
+{
+    fm11a_room_clear_speaker($operator);
+    if(!fm9a_is_super_admin_session($operator)||!is_array($voiceSpeaker))return null;
+    $session=(array)($_SESSION['fm9c_room']??[]);
+    $now??=time();
+    if((int)($session['org']??0)!==(int)$operator['organization_id']
+      ||(int)($session['operator']??0)!==(int)$operator['id']
+      ||(int)($session['seen']??0)<$now-6
+      ||(int)($session['seen']??0)>$now+1)return null;
+    if(($voiceSpeaker['identityAssurance']??'')!=='provisional_voice_match'
+      ||!preg_match('/^voice-[a-zA-Z0-9-]{8,90}$/D',(string)($voiceSpeaker['voiceEventId']??'')))
+        return null;
+    $id=(int)($voiceSpeaker['personId']??0);
+    if($id<=0)return null;
+    $candidates=array_values(array_filter((array)($session['people']??[]),
+        static fn($p)=>is_array($p)
+          &&(int)($p['personId']??0)===$id
+          &&($p['identityAssurance']??'')==='provisional_visual_match'));
+    if(count($candidates)!==1)return null;
+    $track=(string)($candidates[0]['trackId']??'');
+    if(!preg_match('/^r-[a-f0-9]{16,32}$/D',$track))return null;
+    $_SESSION['fm9c_room']['speaker']=['personId'=>$id,'trackId'=>$track,'seen'=>$now];
+    return fm11a_current_speaker($_SESSION['fm9c_room'],$now);
 }
 
 function fm9c_normalize_tracks(array $observations): array
@@ -103,7 +158,14 @@ function fm9c_room_update(PDO $pdo,array $operator,array $observations,int $seen
         }
     }
     unset($p);
-    $_SESSION['fm9c_room']=['org'=>$org,'operator'=>(int)$operator['id'],'seen'=>$now,'people'=>$people];
+    $old=(array)($_SESSION['fm9c_room']??[]);
+    $session=['org'=>$org,'operator'=>(int)$operator['id'],'seen'=>$now,'people'=>$people];
+    if((int)($old['org']??0)===$org
+       &&(int)($old['operator']??0)===(int)$operator['id']
+       &&isset($old['speaker'])&&fm11a_current_speaker($old,$now)){
+        $session['speaker']=$old['speaker'];
+    }
+    $_SESSION['fm9c_room']=$session;
     return fm9c_room_context($operator,$_SESSION['fm9c_room'],$now);
 }
 
