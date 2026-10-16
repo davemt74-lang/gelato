@@ -4,6 +4,11 @@ on:
   pull_request:
     paths:
       - 'timeclock.php'
+      - 'api/employee-clock.php'
+      - 'includes/food-monster-employee-clock.php'
+      - 'database/20261016_fm_g9b_employee_clock_pin.sql'
+      - 'tests/food-monster-g9b-clock.php'
+      - 'js/food-monster-clock-popup.js'
       - 'api/timeclock-agent.php'
       - 'api/agent-workspace.php'
       - 'api/brain-orchestrator.php'
@@ -61,6 +66,10 @@ jobs:
       - name: Syntax checks
         run: |
           php -l timeclock.php
+          php -l api/employee-clock.php
+          php -l includes/food-monster-employee-clock.php
+          php tests/food-monster-g9b-clock.php
+          node --check js/food-monster-clock-popup.js
           php -l api/timeclock-agent.php
           php -l api/agent-workspace.php
           php -l api/brain-orchestrator.php
@@ -87,7 +96,7 @@ jobs:
           grep -q "module: 'timeclock'" js/timeclock-agent-context.js
           grep -q "js/global-agent.js" timeclock.php
           grep -q "js/dynamic-agent-canvas.js" timeclock.php
-          grep -q "Voice recognition is opt-in personalization only" timeclock.php
+          grep -q "Employees clock in using a shift PIN, not a website login" timeclock.php
       - name: Install and upgrade schema
         run: |
           sudo apt-get update -qq
@@ -114,6 +123,8 @@ jobs:
         run: php tests/timeclock-agent-lifecycle.php
       - name: Existing voice, privacy and clock regression
         run: php tests/timeclock-voice-contract.php
+      - name: FM-G9B clock DB lifecycle
+        run: php tests/food-monster-g9b-clock.php --db
       - name: Verify upgrader idempotence
         run: |
           php <<'PHP'

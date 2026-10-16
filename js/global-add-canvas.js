@@ -38,6 +38,7 @@
     ensureScript('js/voice-diagnostics.js?v=20261013-diagnostics1','data-gelato-voice-diagnostics-loader');
     if (!window.GelatoGlobalAgent) ensureScript('js/global-agent.js?v=20261015-fmg8reset', 'data-gelato-global-agent-loader');
     ensureScript('js/dynamic-agent-canvas.js?v=20260915-drawer1', 'data-dynamic-agent-canvas-loader');
+    ensureScript('js/food-monster-clock-popup.js?v=20261016-fmg9b','data-food-monster-clock-popup-loader');
     ensureScript('js/agent-next-moves.js?v=20261014-fmg6', 'data-agent-next-moves-loader');
     // One companion UI for the existing authenticated Agent session; never a second brain.
     if (page !== 'food-monster.php' && page !== 'agent-canvas.php') {
