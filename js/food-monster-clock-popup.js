@@ -7,9 +7,9 @@ const employeeEndpoint='api/employee-clock.php';
 const $=(q)=>panel?.querySelector(q);
 
 function matchIntent(value){
- const text=String(value||'').trim().replace(/^(?:hey|hi|okay|ok)\s+(?:food\s+monster|monster|gelato)[,\s]+/i,'').trim();
+ const text=String(value||'').trim().replace(/^(?:(?:hey|hi|okay|ok)\s+)?(?:food\s+monster|monster|gelato)[,\s]+/i,'').trim();
  if(/^(?:(?:i|we)\s+(?:want|need|would\s+like)\s+to\s+)?(?:clock|punch)\s+out|(?:i\s+)?(?:want|need)\s+to\s+clock\s+out|end\s+(?:my\s+)?shift)\s*[.!?]*$/i.test(text))return 'clock_out';
- if(/^(?:(?:i|we)\s+(?:want|need|would\s+like)\s+to\s+)?(?:clock|punch)\s+in|(?:i\s+)?(?:want|need)\s+to\s+(?:sign|log)\s+in(?:\s+for\s+(?:my\s+)?shift)?|(?:sign|log)\s+in\s+to\s+work|start\s+(?:my\s+)?shift)\s*[.!?]*$/i.test(text))return 'clock_in';
+ if(/^(?:(?:i|we)\s+(?:want|need|would\s+like)\s+to\s+)?(?:clock|punch)\s+in|(?:i\s+)?(?:want|need)\s+to\s+(?:sign\s+in|log\s*in)(?:\s+for\s+(?:my\s+)?shift)?|(?:sign\s+in|log\s*in)\s+to\s+work|start\s+(?:my\s+)?shift)\s*[.!?]*$/i.test(text))return 'clock_in';
  return null;
 }
 function status(value,isError=false){const x=$('[data-fm-clock-status]');if(x){x.textContent=value;x.style.color=isError?'#b91c1c':'#334155';}}
