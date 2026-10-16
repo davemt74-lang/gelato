@@ -1,0 +1,30 @@
+name: FM-G9F Operational Follow-up
+on:
+  pull_request:
+    paths:
+      - 'includes/food-monster-operational-followup.php'
+      - 'api/food-monster-followup.php'
+      - 'tests/food-monster-g9f-actions.php'
+      - '.github/workflows/food-monster-g9f-actions.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'includes/food-monster-operational-followup.php'
+      - 'api/food-monster-followup.php'
+      - 'tests/food-monster-g9f-actions.php'
+      - '.github/workflows/food-monster-g9f-actions.yml'
+jobs:
+  fm-g9f-actions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_mysql
+      - name: Syntax and policy
+        run: |
+          php -l includes/food-monster-operational-followup.php
+          php -l api/food-monster-followup.php
+          php -l tests/food-monster-g9f-actions.php
+          php tests/food-monster-g9f-actions.php
