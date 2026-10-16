@@ -32,6 +32,8 @@ function fm9f_approval_propose(array $operator,string $kind,string $summary,stri
     $summary=trim($summary);
     if($summary===''||mb_strlen($summary,'UTF-8')>300||!preg_match('/^thr-[a-zA-Z0-9-]{8,90}$/D',$threadId))
         throw new InvalidArgumentException('Valid summary and conversation required.');
+    if(gac_pending_get('food_monster_high_impact',(int)$operator['organization_id'],(int)$operator['id']))
+        throw new DomainException('Resolve the existing high-impact approval before proposing another.');
     // Stored only under the authenticated Super Admin session; no model or employee grants.
     $proposal=gac_pending_store('food_monster_high_impact',(int)$operator['organization_id'],
         (int)$operator['id'],$kind,['threadId'=>$threadId],$summary,600);
