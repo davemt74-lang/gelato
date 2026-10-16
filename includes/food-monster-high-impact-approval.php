@@ -4,6 +4,7 @@ require_once __DIR__.'/food-monster-identity-authority.php';
 require_once __DIR__.'/agent-confirmation-core.php';
 require_once __DIR__.'/purchasing-agent-core.php';
 require_once __DIR__.'/food-monster-g9g-purchase-execution.php';
+require_once __DIR__.'/food-monster-g9h-role-execution.php';
 
 /** Explicit chat grammar only; never accept arbitrary model-generated tool calls. */
 function fm9f_approval_chat_intent(string $message):?array {
@@ -37,8 +38,14 @@ function fm9f_approval_propose(array $operator,string $kind,string $summary,stri
         $summary='Submit purchase order '.$binding['orderNumber'].' to '.$binding['vendor']
             .' for $'.number_format($binding['amount'],2).'. Owner note: '.$summary;
     }
+    $roleBinding=null;
+    if($kind==='permission_change'){
+        if(!$pdo)throw new DomainException('Canonical role state is required.');
+        $roleBinding=fm9h_prepare_role($pdo,$operator,$summary);
+        $summary=$roleBinding['summary'];
+    }
     $proposal=gac_pending_store('food_monster_high_impact',$org,$uid,$kind,
-        ['threadId'=>$threadId,'purchaseBinding'=>$binding],$summary,600);
+        ['threadId'=>$threadId,'purchaseBinding'=>$binding,'roleBinding'=>$roleBinding],$summary,600);
     return ['requiresApproval'=>true,'executed'=>false,'proposalId'=>$proposal['id'],
         'kind'=>$kind,'summary'=>$summary,'purchaseOrderId'=>$binding['purchaseOrderId']??null,
         'expiresAt'=>date(DATE_ATOM,(int)$proposal['expires'])];
@@ -57,6 +64,12 @@ function fm9f_approval_decide(array $operator,string $proposalId,string $decisio
         $binding=(array)($pending['payload']['purchaseBinding']??[]);
         if(!$binding)throw new DomainException('Missing bound purchase proposal; submit a new approval request.');
         $handoff=fm9g_issue_grant($operator,$binding,(string)$pending['payload']['threadId'],$proposalId);
+    }
+    if($decision==='approve'&&($pending['type']??'')==='permission_change'){
+        $roleBinding=(array)($pending['payload']['roleBinding']??[]);
+        if(!$roleBinding)throw new DomainException('Missing verified role change; create a new approval.');
+        $handoff=fm9h_issue_grant($operator,$roleBinding,
+            (string)$pending['payload']['threadId'],$proposalId);
     }
     gac_pending_clear('food_monster_high_impact',$org,$uid);
     // Approval alone never executes a purchase, deletion, refund, or permission change.
