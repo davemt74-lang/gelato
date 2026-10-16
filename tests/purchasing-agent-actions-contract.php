@@ -2,6 +2,8 @@
 declare(strict_types=1);
 require_once __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/purchasing-agent-core.php';
+require_once __DIR__.'/../includes/agent-workspace-core.php';
+require_once __DIR__.'/../includes/food-monster-high-impact-approval.php';
 
 function paa_assert(bool $condition,string $message):void{if(!$condition)throw new RuntimeException($message);}
 $pdo=app_pdo();
@@ -13,7 +15,7 @@ $pdo->prepare("INSERT INTO inventory_items (organization_id,public_id,normalized
 $vendor=purchasing_save_vendor($pdo,$org,['name'=>'CI Foods','leadTimeDays'=>1],$uid);
 purchasing_save_vendor_item($pdo,$org,['vendorId'=>$vendor['public_id'],'inventoryId'=>'inv-'.$slug,'vendorSku'=>'CHEESE-20','packSize'=>20,'packUnit'=>'lb','pricePerPack'=>55,'preferred'=>true],$uid);
 
-$manager=['id'=>$uid,'organization_id'=>$org,'permissions'=>['purchasing.agent','purchasing.view','purchasing.manage','receiving.view','receiving.manage']];
+$manager=['id'=>$uid,'organization_id'=>$org,'is_owner_role'=>1,'permissions'=>['purchasing.agent','purchasing.view','purchasing.manage','receiving.view','receiving.manage']];
 $viewer=['id'=>$uid,'organization_id'=>$org,'permissions'=>['purchasing.agent','purchasing.view']];
 $context=['module'=>'purchasing','activeTab'=>'suggestions','selectedPurchaseOrderPublicId'=>''];
 
@@ -34,8 +36,39 @@ $context['selectedPurchaseOrderPublicId']=$poId;
 $submit=purchasing_agent_handle($pdo,$manager,['message'=>'submit this PO','pageContext'=>$context]);
 paa_assert(($submit['skill']??'')==='purchasing.action_proposal','PO submission must require confirmation.');
 paa_assert((purchasing_order($pdo,$org,$poId)['status']??'')==='draft','Submission proposal must not change PO status.');
+$approvalThread=gaw_create_thread($pdo,$org,$uid,'text','FM-G9G Purchase Approval');
+$originalSubmitProposal=pac_pending_get($org,$uid);
+$blocked=false;
+try{purchasing_agent_handle($pdo,$manager,['message'=>'Confirm','pageContext'=>$context]);}
+catch(DomainException){$blocked=true;}
+paa_assert($blocked,'Purchase submission cannot bypass Super Admin approval.');
+paa_assert((purchasing_order($pdo,$org,$poId)['status']??'')==='draft','Blocked confirmation leaves PO draft.');
+$approval=fm9f_approval_propose($manager,'major_purchase','Review this exact order',
+    $approvalThread['public_id'],$pdo);
+paa_assert(($approval['purchaseOrderId']??'')===$poId,'Approval binds actual PO, not client text.');
+$decision=fm9f_approval_decide($manager,$approval['proposalId'],'approve');
+paa_assert(($decision['handoff']['purchaseOrderId']??'')===$poId
+    &&$decision['executed']===false,'Approval generates scoped grant without execution.');
+$tampered=$originalSubmitProposal;
+$tampered['id']='pap-'.bin2hex(random_bytes(8));
+$blocked=false;
+try{fm9g_authorize_purchase($manager,$tampered);}
+catch(DomainException){$blocked=true;}
+paa_assert($blocked,'Approved grant cannot authorize a substituted Purchasing Agent proposal.');
 $submitted=purchasing_agent_handle($pdo,$manager,['message'=>'Confirm','pageContext'=>$context]);
 paa_assert(($submitted['data']['action']??'')==='submit_po'&&(purchasing_order($pdo,$org,$poId)['status']??'')==='submitted','Confirmed PO submission failed.');
+paa_assert(($submitted['data']['approvalId']??'')===$approval['proposalId']
+    &&($submitted['data']['receiptRecorded']??false)===true,'Executed PO carries linked Agent Brain receipt.');
+$executions=$pdo->prepare("SELECT COUNT(*) FROM agent_messages WHERE organization_id=?
+    AND JSON_UNQUOTE(JSON_EXTRACT(structured_json,'$.collection'))='fm9g_high_impact_execution'
+    AND JSON_UNQUOTE(JSON_EXTRACT(structured_json,'$.purchaseOrderId'))=?");
+$executions->execute([$org,$poId]);
+paa_assert((int)$executions->fetchColumn()===1,'Exactly one canonical execution receipt recorded.');
+$blocked=false;
+try{fm9g_authorize_purchase($manager,$originalSubmitProposal);}
+catch(Throwable){$blocked=true;}
+paa_assert($blocked,'Consumed approval cannot be replayed.');
+
 
 $inventoryBefore=(float)$pdo->query("SELECT on_hand_quantity FROM inventory_items WHERE organization_id={$org} AND public_id='inv-{$slug}'")->fetchColumn();
 $receive=purchasing_agent_handle($pdo,$manager,['message'=>'everything arrived, receive this PO in full','pageContext'=>$context]);

@@ -23,7 +23,7 @@ try {
         $intent=fm9f_approval_chat_intent($message);
         if(!$intent)throw new InvalidArgumentException('Use an explicit approval request or Approve / Reject.');
         if($intent['action']==='propose'){
-            $approval=fm9f_approval_propose($user,$intent['kind'],$intent['summary'],$thread);
+            $approval=fm9f_approval_propose($user,$intent['kind'],$intent['summary'],$thread,$pdo);
             $answer='High-impact approval request recorded: '.$approval['summary'].'. Reply Approve or Reject in this conversation. Approval never executes the underlying action; the relevant Gelato module still requires its own authorized confirmation.';
             $state='proposed';
         }else{
@@ -33,12 +33,15 @@ try {
             $approval=fm9f_approval_decide($user,(string)$pending['id'],$intent['decision']);
             $state=$approval['decision']==='approve'?'approved':'rejected';
             $answer=$state==='approved'
-                ?'Approval recorded. No purchase, refund, deletion, or permission change was executed. Continue through the relevant Gelato module to confirm the authorized operation.'
+                ?(!empty($approval['handoff'])
+                    ?'Approval recorded for purchase order '.$approval['handoff']['purchaseOrderId'].'. No order submitted yet. Type Confirm in this authenticated Agent Chat to execute the original Purchasing Agent proposal.'
+                    :'Approval recorded. No purchase, refund, deletion, or permission change was executed. Continue through the relevant Gelato module to confirm the authorized operation.')
                 :'Request rejected. No operational action was executed.';
         }
         gaw_append($pdo,$org,$uid,$thread,'system','Food Monster high-impact request '.$state.'.',[
             'channel'=>'proactive','structured'=>['collection'=>'fm9f_high_impact_decision',
             'proposalId'=>$approval['proposalId'],'kind'=>$approval['kind'],
+            'purchaseOrderId'=>$approval['handoff']['purchaseOrderId']??null,
             'state'=>$state,'executed'=>false,'actorUserId'=>$uid]]);
         app_audit($pdo,$org,$uid,'food_monster.high_impact_'.$state,'agent_conversation',$thread,null,
             ['proposalId'=>$approval['proposalId'],'kind'=>$approval['kind'],'executed'=>false]);
@@ -48,7 +51,7 @@ try {
     if($action==='propose'){
         $thread=trim((string)($in['threadId']??''));
         if(!gaw_thread($pdo,$org,$uid,$thread))throw new InvalidArgumentException('Conversation not found.');
-        $result=fm9f_approval_propose($user,(string)($in['kind']??''),(string)($in['summary']??''),$thread);
+        $result=fm9f_approval_propose($user,(string)($in['kind']??''),(string)($in['summary']??''),$thread,$pdo);
         app_audit($pdo,$org,$uid,'food_monster.high_impact_proposed','agent_conversation',$thread,null,
             ['proposalId'=>$result['proposalId'],'kind'=>$result['kind'],'executed'=>false]);
         app_json_response(['ok'=>true,'approval'=>$result]);

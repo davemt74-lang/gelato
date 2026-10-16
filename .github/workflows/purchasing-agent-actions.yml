@@ -8,6 +8,10 @@ on:
       - 'api/purchasing-agent.php'
       - 'includes/agent-node-registry.php'
       - 'includes/purchasing-agent-core.php'
+      - 'includes/food-monster-g9g-purchase-execution.php'
+      - 'includes/food-monster-high-impact-approval.php'
+      - 'api/food-monster-approvals.php'
+      - 'tests/food-monster-g9g-grant.php'
       - 'js/global-add-canvas.js'
       - 'js/purchasing-agent-context.js'
       - 'tests/purchasing-manager-agent-node-contract.php'
@@ -21,6 +25,10 @@ on:
       - 'api/purchasing-agent.php'
       - 'includes/agent-node-registry.php'
       - 'includes/purchasing-agent-core.php'
+      - 'includes/food-monster-g9g-purchase-execution.php'
+      - 'includes/food-monster-high-impact-approval.php'
+      - 'api/food-monster-approvals.php'
+      - 'tests/food-monster-g9g-grant.php'
       - 'js/global-add-canvas.js'
       - 'js/purchasing-agent-context.js'
       - 'tests/purchasing-manager-agent-node-contract.php'
@@ -51,6 +59,11 @@ jobs:
         run: |
           php -l includes/agent-node-registry.php
           php -l includes/purchasing-agent-core.php
+          php -l includes/food-monster-g9g-purchase-execution.php
+          php -l includes/food-monster-high-impact-approval.php
+          php -l api/food-monster-approvals.php
+          php -l tests/food-monster-g9g-grant.php
+          php tests/food-monster-g9g-grant.php
           php -l api/agent-workspace.php
           php -l api/admin-dashboard-agent.php
           php -l api/purchasing-agent.php
