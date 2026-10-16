@@ -98,5 +98,8 @@ function fm9a_context(PDO $pdo,array $operator): array
     }catch(Throwable $error){
         error_log('FM-G9A time-clock context unavailable: '.get_class($error));
     }
-    return fm9a_build_context($operator,$rows,$clockStatus);
+    $context=fm9a_build_context($operator,$rows,$clockStatus);
+    require_once __DIR__.'/food-monster-room-presence.php';
+    $context['room']=fm9c_room_context($operator);
+    return $context;
 }
