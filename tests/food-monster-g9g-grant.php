@@ -19,7 +19,7 @@ $signature=fm9g_purchase_signature($proposal);
 g9g_check(strlen($signature)===64,'deterministic proposal digest');
 $binding=['proposalId'=>$proposal['id'],'signature'=>$signature,
     'purchaseOrderId'=>$proposal['payload']['purchaseOrderId'],'expires'=>$proposal['expires']];
-$grant=fm9g_issue_grant($owner,$binding,'thr-1234567890','gap-'.str_repeat('c',16));
+$grant=fm9g_issue_grant($owner,$binding,'agent-'.str_repeat('e',20),'gap-'.str_repeat('c',16));
 g9g_check(!$grant['executed']&&$grant['status']==='approved_for_domain_confirmation','approval never executes');
 g9g_check(fm9g_authorize_purchase($owner,$proposal)['approvalId']===$grant['approvalId'],'owner matches exact proposal');
 try{fm9g_authorize_purchase($staff,$proposal);g9g_check(false,'employee denied');}
