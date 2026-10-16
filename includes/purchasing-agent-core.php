@@ -93,7 +93,21 @@ function pac_execute_pending(PDO $pdo,int $org,int $uid,array $user,array $propo
     }
     if(in_array($type,['submit_po','cancel_po','receive_po_full'],true)){
         $po=purchasing_order($pdo,$org,(string)$payload['purchaseOrderId']);if(!$po)throw new InvalidArgumentException('The selected purchase order no longer exists.');pac_guard_order($po,(array)$payload['expected']);
-        if($type==='submit_po'){$saved=purchasing_submit($pdo,$org,(string)$po['public_id'],$uid);app_audit($pdo,$org,$uid,'purchasing.agent_po_submitted','purchase_order',(string)$po['public_id'],null,['proposalId'=>$proposal['id']]);return ['skill'=>'purchasing.action_confirmed','answer'=>'Confirmed. Marked '.$saved['order_number'].' submitted to '.$saved['vendor_name'].'.','data'=>['action'=>'submit_po','purchaseOrderId'=>$saved['public_id']],'sources'=>['Purchase Orders']];}
+        if($type==='submit_po'){
+            // FM-G9G: submitting a PO through Agent Chat is an exceptional
+            // commitment. Only the owner may confirm the exact approved,
+            // still-current proposal; no model/voice delegation can bypass it.
+            $grant=fm9g_authorize_purchase($user,$proposal);
+            $saved=purchasing_submit($pdo,$org,(string)$po['public_id'],$uid);
+            $receipt=fm9g_record_purchase_result($pdo,$user,$grant,(string)$saved['public_id']);
+            app_audit($pdo,$org,$uid,'purchasing.agent_po_submitted','purchase_order',(string)$po['public_id'],null,
+                ['proposalId'=>$proposal['id'],'approvalId'=>$grant['approvalId'],'receiptRecorded'=>$receipt]);
+            return ['skill'=>'purchasing.action_confirmed',
+                'answer'=>'Confirmed. Submitted '.$saved['order_number'].' to '.$saved['vendor_name'].'. Approved by Super Admin ('.$grant['approvalId'].').',
+                'data'=>['action'=>'submit_po','purchaseOrderId'=>$saved['public_id'],
+                    'approvalId'=>$grant['approvalId'],'receiptRecorded'=>$receipt],
+                'sources'=>['Purchase Orders']];
+        }
         if($type==='cancel_po'){$saved=pac_cancel_order($pdo,$org,$po,$uid);app_audit($pdo,$org,$uid,'purchasing.agent_po_cancelled','purchase_order',(string)$po['public_id'],null,['proposalId'=>$proposal['id']]);return ['skill'=>'purchasing.action_confirmed','answer'=>'Confirmed. Cancelled '.$saved['order_number'].'.','data'=>['action'=>'cancel_po','purchaseOrderId'=>$saved['public_id']],'sources'=>['Purchase Orders']];}
         $lines=pac_outstanding_lines($po);if(!$lines)throw new InvalidArgumentException('That purchase order has no outstanding quantity to receive.');if(pac_outstanding_signature($lines)!==(string)$payload['outstandingSignature']){pac_pending_clear($org,$uid);throw new InvalidArgumentException('The outstanding quantities changed after I proposed receiving the PO. Review the order and ask again.');}
         $receipt=purchasing_receive($pdo,$org,(string)$po['public_id'],array_map(static fn($line)=>['itemId'=>$line['itemId'],'quantity'=>$line['quantity']],$lines),$uid,'','Received in full through Gelato Agent after explicit confirmation.');app_audit($pdo,$org,$uid,'purchasing.agent_po_received','purchase_order',(string)$po['public_id'],null,['proposalId'=>$proposal['id'],'receiptId'=>$receipt['receiptId']??null]);return ['skill'=>'purchasing.action_confirmed','answer'=>'Confirmed. Recorded all remaining quantities on '.$po['order_number'].' as received in full. Receipt '.($receipt['receiptNumber']??'created').'.','data'=>['action'=>'receive_po_full','purchaseOrderId'=>$po['public_id'],'receiptId'=>$receipt['receiptId']??null],'sources'=>['Purchase Orders','Goods Receiving','Inventory']];
