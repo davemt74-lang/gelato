@@ -1,0 +1,29 @@
+name: FM-G11C Evidence-linked Memory Recall
+on:
+  pull_request:
+    paths:
+      - 'includes/food-monster-conversation-memory.php'
+      - 'tests/food-monster-g11c-concepts.php'
+      - '.github/workflows/food-monster-g11c.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'includes/food-monster-conversation-memory.php'
+      - 'tests/food-monster-g11c-concepts.php'
+      - '.github/workflows/food-monster-g11c.yml'
+jobs:
+  memory-provenance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring
+      - name: Memory privacy, provenance and retrieval
+        run: |
+          php -l includes/food-monster-conversation-memory.php
+          php -l tests/food-monster-g11c-concepts.php
+          php tests/food-monster-g11c-concepts.php
+          php scripts/test-fm-g9f-relevance.php
+          php tests/food-monster-g9e-memory.php
