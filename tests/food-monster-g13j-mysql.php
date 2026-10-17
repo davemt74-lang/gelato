@@ -68,8 +68,11 @@ verify13j($reloaded['refresh']['priorStatus']==='completed'
     &&$reloaded['practiceAttempts']===0,'prior completion retained with new practice counters');
 verify13j(fm13c_read_state($pdo,$org,$other,$two)['digest']===$old['digest'],
     'coworker training unchanged by another person refreshing');
-verify13j(fm13c_read_state($pdo,$org,$other,$one)===null,
-    'cannot read another employee thread by supplying their public ID');
+$crossPersonDenied=false;
+try{fm13c_read_state($pdo,$org,$other,$one);}
+catch(InvalidArgumentException $e){$crossPersonDenied=true;}
+verify13j($crossPersonDenied,
+    'cross-person thread lookup throws a denial rather than returning private messages');
 $log=gaw_messages($pdo,$org,$person,$one,10);
 verify13j(count($log)===4,'prior progress, review, acknowledgement and refresh append-only events retained');
 verify13j(($log[2]['structured']['action']??'')==='acknowledge_update',
