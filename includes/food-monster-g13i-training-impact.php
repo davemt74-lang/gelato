@@ -42,7 +42,12 @@ function fm13i_assess(array $state,?array $material,?array $revision):array
     $current=(string)($material['digest']??'');
     $status=$material===null?'source_missing':($saved!==''&&hash_equals($saved,$current)
        ?'current':'needs_review');
+    $ack=fm13j_status($state,$material);
     return [
+      'reviewedUpdate'=>$ack['reviewedUpdate'],
+      'acknowledgedUpdate'=>$ack['acknowledgedUpdate'],
+      'refreshInProgress'=>$ack['refreshInProgress'],
+      'refreshCompleted'=>$ack['refreshCompleted'],
       'kind'=>(string)($state['kind']??''),
       'itemId'=>(int)($state['id']??0),
       'trainingStatus'=>(string)($state['status']??'unknown'),
@@ -52,10 +57,14 @@ function fm13i_assess(array $state,?array $material,?array $revision):array
       'recordedChange'=>is_array($revision),
       'lastChangedAt'=>$revision['publishedAt']??null,
       'sourceName'=>$material!==null?mb_substr((string)($material['name']??''),0,100,'UTF-8'):null,
-      'recommendation'=>$status==='current'?'Continue the recorded procedure.'
-       :($status==='source_missing'
+      'recommendation'=>$status==='current'
+        ?($ack['refreshCompleted']?'The revised procedure walkthrough is complete. This is not competency certification.'
+          :($ack['refreshInProgress']?'Continue the new guided review of the acknowledged procedure.'
+            :'Continue the recorded procedure.'))
+        :($status==='source_missing'
           ?'Ask a manager to verify the missing active procedure before resuming.'
-          :'Review the updated preparation steps with a manager, then explicitly restart training. No prior completion or practice result certifies the new steps.')
+          :($ack['acknowledgedUpdate']?'The revised source is acknowledged. Say "start updated training" for a guided review.'
+            :'Review the updated preparation steps. Say "review updated training", then acknowledge the change before refreshing practice.'))
     ];
 }
 function fm13i_summary(array $people,string $scope,bool $partial):array
