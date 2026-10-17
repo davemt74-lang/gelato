@@ -66,5 +66,14 @@ const flush=async()=>{for(let i=0;i<50;i++)await Promise.resolve()};
  voiceTimers.shift()();await flush();
  ok(sent.filter(x=>x.body.action==='append'&&x.body.content==='Review orders now').length===1,
    'confident final is submitted exactly once');
- console.log('FM-G10B noisy room and duplicate turns PASS ('+n+' assertions)');
+ // G12B: a browser microphone failure invalidates a queued finalized turn.
+ rec.say('Pending unsafe retry',true);
+ ok(voiceTimers.length===1,'queued finalized turn exists before mic failure');
+ const previousCount=sent.filter(x=>x.body.action==='append').length;
+ rec.onerror?.({error:'audio-capture'});
+ voiceTimers.shift()();await flush();
+ ok(sent.filter(x=>x.body.action==='append').length===previousCount,
+   'blocked microphone cannot submit stale scheduled speech');
+ ok(!agent.listening,'blocked microphone disables active listening');
+ console.log('FM-G10B/G12B noisy room and duplicate turns PASS ('+n+' assertions)');
 })().catch(e=>{console.error(e);process.exitCode=1});
