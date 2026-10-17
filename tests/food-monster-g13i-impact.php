@@ -74,7 +74,7 @@ check13i(str_contains($api,"'text'")&&str_contains($api,'fm13i_allowed('),
     'only authorized typed requests can read progress');
 check13i(str_contains($api,'organization_memberships')
     &&str_contains($api,"om.status='active'"),'SQL scopes to currently active organization members');
-check13i(str_contains($api,"($state['kind']??'')!=='menu'"),'private recipe training excluded from impact view');
+check13i(str_contains($api,'($state['."'kind'".']??\'\')!==\'menu\''),'private recipe training excluded from impact view');
 check13i(str_contains($api,'fm13c_read_state')&&str_contains($api,'fm13c_fetch_material'),
     'canonical saved state compared to current source');
 check13i(str_contains($route,"'domain'=>'food_monster_training_change_impact'"),
