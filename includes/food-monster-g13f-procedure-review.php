@@ -42,20 +42,32 @@ function fm13f_validate_note(string $old,string $replacement):bool
  */
 function fm13f_review_signals(array $rows,array $authorizedPeople):array
 {
-    $summary=fm13e_aggregate($rows,$authorizedPeople,30);
-    $items=[];
-    foreach($summary['participants'] as $person){
-        $source=$person['current'];
-        if($source['kind']!=='menu'||!ctype_digit($source['id']))continue;
-        $id=(int)$source['id'];if($id<=0)continue;
-        $revisits=(int)$person['revisits'];
-        $help=(int)$person['helpRequests'];
-        if($help===0&&$revisits===0)continue;
+    $allow=array_fill_keys(array_map('intval',$authorizedPeople),true);
+    $items=[];$seenHelp=[];
+    foreach($rows as $row){
+        $personId=(int)($row['person_id']??0);
+        if($personId<=0||!isset($allow[$personId])||($row['role']??'')!=='system')continue;
+        $meta=$row['structured']??null;
+        if(!is_array($meta)||($meta['collection']??'')!=='fm13c_guided_training'
+            ||($meta['source']??'')!=='gelato_training')continue;
+        $state=$meta['state']??null;
+        if(!is_array($state)||($state['kind']??'')!=='menu'
+            ||!ctype_digit((string)($state['id']??'')))continue;
+        $id=(int)$state['id'];if($id<1)continue;
+        $action=(string)($meta['action']??'');
+        $isHelp=in_array($action,['hint','question'],true);
+        $isRevisit=in_array($action,['repeat','previous','restart'],true);
+        if(!$isHelp&&!$isRevisit)continue;
         if(!isset($items[$id]))$items[$id]=['itemId'=>$id,'helpRequests'=>0,
             'revisits'=>0,'peopleRequestingHelp'=>0,'reviewSuggested'=>false];
-        $items[$id]['helpRequests']+=$help;
-        $items[$id]['revisits']+=$revisits;
-        if($help>0)$items[$id]['peopleRequestingHelp']++;
+        if($isHelp){
+            $items[$id]['helpRequests']++;
+            if(!isset($seenHelp[$id][$personId])){
+                $items[$id]['peopleRequestingHelp']++;
+                $seenHelp[$id][$personId]=true;
+            }
+        }
+        if($isRevisit)$items[$id]['revisits']++;
     }
     foreach($items as &$entry){
         $entry['reviewSuggested']=$entry['helpRequests']>=3||$entry['revisits']>=4
