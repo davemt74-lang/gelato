@@ -1,0 +1,52 @@
+name: FM-G13A Participant Engagement and Safe Conversation
+on:
+  pull_request:
+    paths:
+      - 'includes/food-monster-g13a-engagement.php'
+      - 'api/agent-workspace.php'
+      - 'api/food-monster-llm.php'
+      - 'includes/food-monster-llm.php'
+      - 'includes/food-monster-person-conversations.php'
+      - 'includes/food-monster-conversation-memory.php'
+      - 'tests/food-monster-g13a-engagement.php'
+      - '.github/workflows/food-monster-g13a.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'includes/food-monster-g13a-engagement.php'
+      - 'api/agent-workspace.php'
+      - 'api/food-monster-llm.php'
+      - 'includes/food-monster-llm.php'
+      - 'includes/food-monster-person-conversations.php'
+      - 'includes/food-monster-conversation-memory.php'
+      - 'tests/food-monster-g13a-engagement.php'
+      - '.github/workflows/food-monster-g13a.yml'
+jobs:
+  participant-conversation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_mysql
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Lint all engagement integration points
+        run: |
+          php -l includes/food-monster-g13a-engagement.php
+          php -l api/agent-workspace.php
+          php -l api/food-monster-llm.php
+          php -l includes/food-monster-llm.php
+          php -l tests/food-monster-g13a-engagement.php
+      - name: Behavioral route, memory, privacy and conversation tests
+        run: |
+          php tests/food-monster-g13a-engagement.php
+          php tests/food-monster-g12e-llm-isolation.php
+          php tests/food-monster-g9d-conversations.php
+          php tests/food-monster-g9e-memory.php
+          php tests/food-monster-g11d-followups.php
+          php tests/food-monster-g9f-approvals.php
+          node tests/food-monster-g10b-turns.test.cjs
+          node tests/food-monster-g11b-turns.test.cjs
