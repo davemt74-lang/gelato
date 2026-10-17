@@ -151,6 +151,29 @@ try{
     }
     if($action==='route'){
         $message=trim((string)($in['message']??''));if($message==='')throw new InvalidArgumentException('Enter an Agent request.');
+        // A room participant's speech cannot borrow the signed-in owner's
+        // skill, purchase, CRM, approval, or write authority. Trust the most
+        // recent canonical turn and a server-resolved owner voice event only.
+        // Do not trust a client-supplied participant, role, or channel flag.
+        $roomThread=trim((string)($in['threadId']??''));
+        if(fm9a_is_super_admin_session($user)
+            &&preg_match('/^agent-[a-f0-9]{20}$/D',$roomThread)
+            &&gaw_thread($pdo,$org,$uid,$roomThread)){
+            require_once __DIR__.'/../includes/food-monster-g13a-engagement.php';
+            $recent=gaw_messages($pdo,$org,$uid,$roomThread,1);
+            $latest=(array)($recent[0]??[]);
+            $ownerMatch=false;
+            if(($latest['role']??'')==='user'&&($latest['channel']??'')==='voice'
+                &&trim((string)($latest['content']??''))===$message){
+                $voiceId=(string)($latest['voice_event_public_id']??'');
+                $speaker=$voiceId!==''?avc_verified_speaker($pdo,$org,$user,$voiceId):null;
+                $ownerMatch=is_array($speaker)&&(int)($speaker['userId']??0)===$uid;
+            }
+            if(fm13a_voice_route_mode($latest,$message,$ownerMatch)==='conversation_only'){
+                app_json_response(['ok'=>true,'route'=>null,
+                    'domain'=>'participant_conversation','nodeMode'=>'conversation_only']);
+            }
+        }
         $text=mb_strtolower(preg_replace('/^hey\s+gelato[,\s]*/iu','',$message)??$message,'UTF-8');
         // Owner-authenticated high-impact staging uses a deterministic grammar,
         // never a model-selected endpoint. Only an owner may approve; an approval
