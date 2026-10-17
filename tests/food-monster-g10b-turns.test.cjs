@@ -1,7 +1,8 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const source=fs.readFileSync('js/global-agent.js','utf8');
-const recognizers=[],sent=[],listeners={},voiceTimers=[];
+const recognizers=[],sent=[],listeners={},voiceTimers=[],restartTimers=[],events=[];
+let verifiedHandoff=false;
 let n=0;const ok=(value,reason)=>{assert.ok(value,reason);n++};
 const input={value:'',dataset:{},handlers:{},dispatchEvent(e){this.handlers[e.type]?.(e);},
  addEventListener(t,f){this.handlers[t]=f}};
@@ -29,21 +30,24 @@ const fetch=async(url,opt={})=>{
   data={ok:true,preferences:pref};
  }
  else if(url.includes('voice-identity.php'))data={ok:true,match:{matched:true,sessionUserMatch:true,userId:15,eventId:'verified'}};
- else if(body.action==='append')data={ok:true,message:{databaseId:12}};
+ else if(body.action==='append')data={ok:true,message:{databaseId:12},
+  roomSpeaker:body.channel==='voice'&&verifiedHandoff?{handoffFromPreviousVerifiedTurn:true}:null,
+  participant:body.channel==='voice'&&verifiedHandoff?{personId:23}:null};
  else if(url.includes('proactive-agent.php'))data={ok:true,events:[]};
  return {ok:true,json:async()=>data};
 };
 const document={readyState:'complete',hidden:false,body:{dataset:{agentCanvas:'1'}},
  getElementById:id=>id==='gaInput'?input:null,querySelector:()=>null,
  addEventListener:(name,fn)=>{listeners[name]=fn}};
-const window={SpeechRecognition:Recognition,AudioContext:Audio,
- addEventListener:(name,fn)=>{listeners['window:'+name]=fn},dispatchEvent:()=>{}};
+const window={SpeechRecognition:Recognition,AudioContext:Audio,speechSynthesis:{speaking:false},
+ addEventListener:(name,fn)=>{listeners['window:'+name]=fn},dispatchEvent:e=>events.push(e)};
 const context={window,document,fetch,navigator:{mediaDevices:{getUserMedia:async()=>({getTracks:()=>[{stop(){}}]})}},
  CustomEvent:class{constructor(type,options){this.type=type;this.detail=options.detail}},
  Event:class{constructor(type){this.type=type;this.isTrusted=false}},
  Float64Array,Uint8Array,Date,Promise,console,
  setInterval:fn=>{fn();return 1},clearInterval:()=>{},
- setTimeout:(fn,ms)=>{if(ms===2800)queueMicrotask(fn);if(ms===1200)voiceTimers.push(fn);return 1},
+ setTimeout:(fn,ms)=>{if(ms===2800)queueMicrotask(fn);if(ms===1200)voiceTimers.push(fn);
+  if(ms>=650&&ms<=8000&&ms!==1200)restartTimers.push(fn);return 1},
  clearTimeout:()=>{}};
 vm.runInNewContext(source,context);
 const flush=async()=>{for(let i=0;i<50;i++)await Promise.resolve()};
@@ -67,6 +71,7 @@ const flush=async()=>{for(let i=0;i<50;i++)await Promise.resolve()};
  ok(sent.filter(x=>x.body.action==='append'&&x.body.content==='Review orders now').length===1,
    'confident final is submitted exactly once');
  // G12B: a browser microphone failure invalidates a queued finalized turn.
+ ok(await agent.setConversationMode(true),'conversation mode enabled before failure');
  rec.say('Pending unsafe retry',true);
  ok(voiceTimers.length===1,'queued finalized turn exists before mic failure');
  const previousCount=sent.filter(x=>x.body.action==='append').length;
@@ -75,5 +80,24 @@ const flush=async()=>{for(let i=0;i<50;i++)await Promise.resolve()};
  ok(sent.filter(x=>x.body.action==='append').length===previousCount,
    'blocked microphone cannot submit stale scheduled speech');
  ok(!agent.listening,'blocked microphone disables active listening');
+ ok(!agent.conversationMode,'blocked microphone also disables Conversation Mode');
+ verifiedHandoff=true;
+ await agent.send('Can you help me with dough?',true);
+ ok(events.some(e=>e.type==='gelato-agent-speaker-handoff'&&e.detail.verified===true),
+   'server-verified handoff event is consumed by Agent Chat');
+ ok(events.some(e=>e.type==='gelato-agent-speaker-turn'&&e.detail.handoff===true),
+   'verified handoff appears in voice turn state');
+ verifiedHandoff=false;
+ const before=events.filter(e=>e.type==='gelato-agent-speaker-handoff').length;
+ await agent.send('And what about the oven?',true);
+ ok(events.filter(e=>e.type==='gelato-agent-speaker-handoff').length===before,
+   'unknown participant never inherits a prior handoff');
+ ok(await agent.setListening(true),'listening restarts after fatal error');
+ const restarted=recognizers.at(-1);
+ for(let i=0;i<5;i++){
+  restarted.onend?.();
+  if(i<4)restartTimers.shift()?.();
+ }
+ ok(!agent.listening&&!agent.conversationMode,'repeated restarts pause microphone and conversation');
  console.log('FM-G10B/G12B noisy room and duplicate turns PASS ('+n+' assertions)');
 })().catch(e=>{console.error(e);process.exitCode=1});
