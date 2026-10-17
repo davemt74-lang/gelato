@@ -16,7 +16,10 @@ function fm13c_command(string $message):?array
         'pause'=>'^(?:pause training|stop training|end training)$',
         'resume'=>'^(?:resume training|continue training|where were we in training)$',
         'restart'=>'^(?:restart training|start training over)$',
-        'question'=>'^(?:why (?:this|that) step|explain (?:this|that|the current) step|what does (?:this|that) step mean|what temperature for this step)
+        'question'=>'^(?:why (?:this|that) step|explain (?:this|that|the current) step|what does (?:this|that) step mean|what temperature for this step)$',
+        'quiz'=>'^(?:quiz me|check my knowledge|training quiz|practice question)$',
+        'hint'=>'^(?:training hint|hint for (?:this|the current) step|give me a training hint)$',
+        'progress'=>'^(?:training progress|my training progress|training summary|summarize my training)$',
     ];
     foreach($actions as $action=>$regex)
         if(preg_match('/'.$regex.'/u',$s))return ['action'=>$action,'subject'=>''];
