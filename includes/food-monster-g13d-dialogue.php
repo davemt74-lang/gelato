@@ -51,7 +51,7 @@ function fm13d_explanation(array $state,array $material):string
     $notes=trim((string)($material['notes']??''));
     $answer='The recorded instruction for step '.($index+1).' is: '.$step.'.';
     if($notes!=='')$answer.=' Recorded source notes: '.mb_substr($notes,0,420,'UTF-8').'.';
-    return $answer.' These records do not establish additional reasons, timing, temperatures, or allergy safety unless explicitly stated. Ask your kitchen manager when details are missing.';
+    return $answer.' The saved instruction does not establish additional reasons, timing, temperatures, or allergy safety unless explicitly stated. Ask your kitchen manager when details are missing.';
 }
 function fm13d_progress(array $state,array $material):string
 {
