@@ -14,6 +14,7 @@ require_once __DIR__.'/../includes/food-monster-person-conversations.php';
 require_once __DIR__.'/../includes/food-monster-room-presence.php';
 require_once __DIR__.'/../includes/food-monster-conversation-memory.php';
 require_once __DIR__.'/../includes/food-monster-g11d-followups.php';
+require_once __DIR__.'/../includes/food-monster-g13e-intelligence.php';
 require_once __DIR__.'/../includes/food-monster-g13c-training.php';
 require_once __DIR__.'/../includes/food-monster-g13b-knowledge.php';
 require_once __DIR__.'/../includes/food-monster-operational-followup.php';
@@ -77,6 +78,9 @@ try{
     if($action==='append'){
         $thread=trim((string)($in['threadId']??''));
         $role=(string)($in['role']??'user');
+        // The Agent training ledger uses private system records. A client
+        // must never impersonate those records using the public chat API.
+        if($role==='system')throw new DomainException('System records are reserved for server-side services.');
         $channel=(string)($in['channel']??'text');
         $voiceEvent=(string)($in['voiceEventId']??'');
         $greeting=null;
@@ -158,6 +162,20 @@ try{
         // recent canonical turn and a server-resolved owner voice event only.
         // Do not trust a client-supplied participant, role, or channel flag.
         $roomThread=trim((string)($in['threadId']??''));
+        $insightIntent=fm13e_intent($message);
+        if($insightIntent!==null
+            &&preg_match('/^agent-[a-f0-9]{20}$/D',$roomThread)
+            &&gaw_thread($pdo,$org,$uid,$roomThread)){
+            $insightLast=gaw_messages($pdo,$org,$uid,$roomThread,1)[0]??[];
+            if(($insightLast['role']??'')==='user'
+                &&trim((string)($insightLast['content']??''))===$message
+                &&fm13e_scope($user,$insightIntent,
+                    (string)($insightLast['channel']??''),
+                    fm9a_is_super_admin_session($user))!==null)
+                app_json_response(['ok'=>true,
+                    'route'=>'api/food-monster-training-intelligence.php?threadId='.rawurlencode($roomThread),
+                    'domain'=>'food_monster_training_intelligence','nodeMode'=>'read_only']);
+        }
         $trainingCommand=fm13c_command($message);
         // Training is read-only guidance with person-scoped progress. This
         // route is selected ONLY from exact deliberate training utterances,
