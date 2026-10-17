@@ -176,7 +176,7 @@ try{
                 // The endpoint rechecks this exact canonical voice turn and
                 // uses staff-facing menu data, never the owner's private tools.
                 if($knowledgeIntent!==null)app_json_response(['ok'=>true,
-                    'route'=>'api/food-monster-knowledge.php',
+                    'route'=>'api/food-monster-knowledge.php?threadId='.rawurlencode($roomThread),
                     'domain'=>'food_monster_grounded_knowledge','nodeMode'=>'read_only']);
                 app_json_response(['ok'=>true,'route'=>null,
                     'domain'=>'participant_conversation','nodeMode'=>'conversation_only']);
@@ -185,7 +185,7 @@ try{
         // Explicit staff-facing factual requests use the same read-only
         // evidence layer; mutating requests keep established governed routes.
         if($knowledgeIntent!==null)app_json_response(['ok'=>true,
-            'route'=>'api/food-monster-knowledge.php',
+            'route'=>'api/food-monster-knowledge.php?threadId='.rawurlencode($roomThread),
             'domain'=>'food_monster_grounded_knowledge','nodeMode'=>'read_only']);
         $text=mb_strtolower(preg_replace('/^hey\s+gelato[,\s]*/iu','',$message)??$message,'UTF-8');
         // Owner-authenticated high-impact staging uses a deterministic grammar,
