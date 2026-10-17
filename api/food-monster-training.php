@@ -119,7 +119,8 @@ try{
         if($result['changed']&&$trainingThread){
             gaw_append($pdo,$org,$personId,$trainingThread,'system','Training progress updated',[
                 'channel'=>'text',
-                'structured'=>['collection'=>'fm13c_guided_training','state'=>$result['state'],
+                'structured'=>['collection'=>'fm13c_guided_training',
+                    'action'=>$command['action'],'state'=>$result['state'],
                     'source'=>'gelato_training','operatorUserId'=>$uid,'operatorRoomThread'=>$room]]);
         }
         $pdo->commit();
