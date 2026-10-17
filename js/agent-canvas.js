@@ -81,6 +81,39 @@
 
   function structuredCard(data, skill, sources = []) {
     if (data == null) return '<div class="empty">No structured result for this response.</div>';
+    if (skill === 'food_monster.procedure_version_history') {
+      if (data.mode === 'history' && Array.isArray(data.revisions)) {
+        const revisions=data.revisions.slice(0,30).map(rev =>
+          '<div class="result-card"><h3>' + esc(rev.versionId || '') + '</h3>' +
+          '<p>Published: ' + esc(new Date(Number(rev.publishedAt || 0)*1000).toLocaleString()) + '</p>' +
+          '<p>Before: ' + esc(String(rev.beforeHash || '').slice(0,14)) +
+          ' · After: ' + esc(String(rev.afterHash || '').slice(0,14)) + '</p>' +
+          '<p>Type "compare procedure ' + esc(rev.versionId || '') + '" to review changes.</p></div>'
+        ).join('');
+        return '<div class="result-card"><h3>Procedure version history</h3>' +
+          '<p>' + esc(data.itemName || '') + ' · Menu version ' + esc(data.menuVersion || 0) +
+          ' · Current matches last known: ' + (data.currentMatchesLatest ? 'Yes' : 'No / unknown') + '</p>' +
+          '<p>Only Food Monster publications are included, not unrelated Menu Manager edits.</p>' +
+          (data.partial?'<p class="pill">Partial history</p>':'') + '</div>' +
+          (revisions || '<div class="empty">No recorded Food Monster publications.</div>');
+      }
+      if (data.mode === 'compare' && data.revision) {
+        const rev=data.revision;
+        return '<div class="result-card"><h3>Compare procedure revision</h3>' +
+          '<p>' + esc(data.itemName || '') + ' · ' + esc(rev.versionId || '') + '</p>' +
+          '<h4>Before publication</h4><pre>' + esc(rev.before || '') + '</pre>' +
+          '<h4>After publication</h4><pre>' + esc(rev.after || '') + '</pre>' +
+          '<p>Matches current menu: ' + (data.isCurrent?'Yes':'No') +
+          '. Rollback requires a fresh owner draft, approval and separate publication.</p></div>';
+      }
+      if (data.mode === 'rollback_draft') {
+        return '<div class="result-card"><h3>Rollback draft created</h3>' +
+          '<div class="kv"><b>Version</b><span>' + esc(data.versionId || '') + '</span>' +
+          '<b>Proposal</b><span>' + esc(data.proposalId || '') + '</span>' +
+          '<b>Status</b><span>Draft only</span></div>' +
+          '<p>No menu changes were made. Review, approve, and separately publish in typed Super Admin chat.</p></div>';
+      }
+    }
     if (skill === 'food_monster.procedure_review') {
       if (Array.isArray(data.candidates)) {
         const cards = data.candidates.slice(0, 12).map(item =>
