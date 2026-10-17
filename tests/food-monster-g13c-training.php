@@ -27,7 +27,8 @@ foreach($commands as $spoken=>$action){
     check13c(($cmd['action']??'')===$action,'recognized intentional training command: '.$spoken);
 }
 foreach(['next ticket','next item','finish order','confirm','approve it','stop listening',
-    'add step to the recipe','update training record','start timer'] as $ordinary){
+    'add step to the recipe','update training record','start timer',
+    'show me sales','show me my schedule','walk me through my CRM pipeline'] as $ordinary){
     check13c(fm13c_command($ordinary)===null,'never intercept operational or privileged command: '.$ordinary);
 }
 $menu=['id'=>4,'name'=>'Pesto Pizza','preparationNotes'=>
