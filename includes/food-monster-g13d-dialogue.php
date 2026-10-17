@@ -22,7 +22,7 @@ function fm13d_options(array $material,int $stepIndex):?array
     }
     if(count($candidates)<2)return null;
     // Rotate to avoid making the correct answer invariably option 1.
-    $rotation=($stepIndex+1)%count($candidates);
+    $rotation=($stepIndex+2)%count($candidates);
     for($j=0;$j<$rotation;$j++)$candidates[]=array_shift($candidates);
     $correct=null;$options=[];
     foreach($candidates as $i=>$candidate){
