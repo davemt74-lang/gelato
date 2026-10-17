@@ -48,12 +48,28 @@ ok11d(fm11d_suggest_from_memory($duplicate,'How to prepare the pizza crust right
 $duplicate['recentTrainingQuestions'][1]=$mk('b','Show me how to prepare pizza crust dough');
 ok11d(fm11d_suggest_from_memory($duplicate,'How to prepare the pizza crust right now?',
  'msg-'.str_repeat('c',20))!==null,'distinct training questions still qualify');
-// G12D: Agent Brain must keep repeated recommendation fingerprints session-only.
-$implementation=file_get_contents(__DIR__.'/../includes/food-monster-g11d-followups.php');
-ok11d(str_contains($implementation,"fm12d_hint_fingerprints")
-  &&str_contains($implementation,"hash('sha256'")
-  &&str_contains($implementation,"if((\$_SESSION['fm12d_hint_fingerprints'][\$key]??'')===\$fingerprint)return null;"),
-  'same evidence-backed advice suppressed on repeat');
+// G12C: paraphrases with identical meaningful terms are one source of evidence.
+$duplicate['recentTrainingQuestions'][1]=$mk('b','Could you show me how to prepare pizza crust?');
+ok11d(fm11d_suggest_from_memory($duplicate,'How to prepare the pizza crust right now?',
+ 'msg-'.str_repeat('c',20))===null,'paraphrased duplicate does not become new evidence');
+
+// G12D: exercise actual runtime gate, not strings in production source.
+$first=['type'=>'training_recap','sourceMessageIds'=>['msg-'.str_repeat('a',20),'msg-'.str_repeat('b',20)]];
+$reversed=['type'=>'training_recap','sourceMessageIds'=>array_reverse($first['sourceMessageIds'])];
+$changed=['type'=>'training_recap','sourceMessageIds'=>['msg-'.str_repeat('a',20),'msg-'.str_repeat('d',20)]];
+$times=[];$history=[];
+ok11d(fm12d_advice_gate($times,$history,'org:owner:employee1',$first,100000),'first suggestion allowed');
+ok11d(!fm12d_advice_gate($times,$history,'org:owner:employee1',$reversed,101201),'same sources reversed do not produce repeat');
+ok11d(fm12d_advice_gate($times,$history,'org:owner:employee1',$changed,101201),'new independent evidence produces new offer');
+ok11d(fm12d_advice_gate($times,$history,'org:owner:employee2',$first,101202),'employee boundaries independent');
+ok11d(!fm12d_advice_gate($times,$history,'org:owner:employee2',$first,101203),'employee cooldown remains enforced');
+ok11d(!fm12d_advice_gate($times,$history,'org:owner:employee2',['type'=>'training_recap',
+ 'sourceMessageIds'=>[$first['sourceMessageIds'][0],$first['sourceMessageIds'][0]]],102500),'duplicate evidence IDs rejected');
+for($i=0;$i<40;$i++){
+ $key='org:owner:staff'.$i;
+ fm12d_advice_gate($times,$history,$key,$first,105000);
+}
+ok11d(count($times)<=32&&count($history)<=32,'session policy has bounded cardinality');
 $workspace=file_get_contents(__DIR__.'/../api/agent-workspace.php');
 $client=file_get_contents(__DIR__.'/../js/global-agent.js');
 ok11d(str_contains($workspace,'fm11d_verified_turn_suggestion(')
