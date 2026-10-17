@@ -710,6 +710,7 @@
       const error=String(event.error||'unknown');diag('error',{error});
       if(!['no-speech','aborted'].includes(error))S.recognitionFaults++;
       if(['not-allowed','service-not-allowed','audio-capture'].includes(error)){
+        clearConversationTimer();S.conversationDraft='';resetVoiceDraft();
         stopContinuous();S.listening=false;S.wakeStandby=false;stopPoll();diag('blocked',{error});
         status('Speech recognition blocked: '+error+'. Check browser microphone and speech-service settings.',6500);
         renderListening();return;
@@ -722,13 +723,15 @@
       if((S.listening||S.wakeStandby)&&!document.hidden){
         if(S.recognitionFaults>=5){
           status('Speech service keeps failing. Microphone paused; press Listen to retry.',6500);
+          clearConversationTimer();S.conversationDraft='';resetVoiceDraft();
           S.listening=false;S.wakeStandby=false;stopPoll();stopContinuous();renderListening();return;
         }
         const delay=Math.min(8000,650*Math.pow(2,Math.max(0,S.recognitionFaults-1)));
         diag('retry-scheduled',{delay,faults:S.recognitionFaults});
         setTimeout(()=>{if(S.rec===activeRec&&(S.listening||S.wakeStandby)&&!document.hidden){
           try{diag('retry');activeRec.start();}catch{
-            diag('failed',{error:'start-failed'});S.listening=false;S.wakeStandby=false;stopPoll();stopContinuous();
+            diag('failed',{error:'start-failed'});clearConversationTimer();S.conversationDraft='';
+            S.listening=false;S.wakeStandby=false;stopPoll();stopContinuous();
           }
         }},delay);
       }
