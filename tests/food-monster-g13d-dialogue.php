@@ -10,7 +10,7 @@ function check13d(bool $condition,string $label):void {
     if(!$condition)throw new RuntimeException('FM-G13D FAIL: '.$label);
     $assertions++;
 }
-$hex=static fn(int $n):string=>'msg-'.str_repeat(dechex($n),20);
+$hex=static fn(int $n):string=>'msg-'.str_pad(dechex($n),20,'0',STR_PAD_LEFT);
 $menu=['id'=>105,'name'=>'Pesto Pizza','sectionNote'=>'Follow the posted station standards.',
     'preparationNotes'=>"Stretch the dough.\nAdd the pesto.\nBake until fully cooked."];
 $material=fm13c_material($menu,'menu');
