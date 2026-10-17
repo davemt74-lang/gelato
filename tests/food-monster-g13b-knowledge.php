@@ -16,6 +16,9 @@ $owner=['organization_id'=>7,'permissions'=>['menu.view','recipes.view','recipes
 $none=['organization_id'=>7,'permissions'=>[]];
 check13b(fm13b_allowed($staff,'allergen',false,true),'staff may ask menu allergen facts');
 check13b(fm13b_allowed($staff,'training',false,true),'staff may ask documented menu prep');
+$staffTraining=['organization_id'=>7,'permissions'=>['employee.self','training.self_view']];
+check13b(fm13b_allowed($staffTraining,'training',false,true),'employee self-training grant may read documented menu preparation');
+check13b(!fm13b_allowed($staffTraining,'recipe',false,true),'employee training grant cannot access private recipes');
 check13b(!fm13b_allowed($staff,'recipe',false,true),'voice staff cannot borrow private recipe access');
 check13b(!fm13b_allowed($owner,'recipe',false,true),'unknown voice cannot borrow owner recipe access');
 check13b(fm13b_allowed($owner,'recipe',true,true),'verified owner voice accesses governed recipe reads');
@@ -29,7 +32,7 @@ $questions=['Does the pesto pizza contain milk?'=>'allergen',
  'How do I prepare the pesto pizza?'=>'training',
  'How much is the pepperoni pizza?'=>'menu'];
 foreach($questions as $q=>$expected)check13b(fm13b_intent($q)===$expected,'intent: '.$q);
-foreach(['Change the recipe price','Delete the pesto pizza','Add milk to the dough','Refund the pasta'] as $q)
+foreach(['Change the recipe price','Delete the pesto pizza','Add milk to the dough','Refund the pasta','Can you change the pizza recipe?','Please add an ingredient to the dough'] as $q)
  check13b(fm13b_intent($q)===null,'mutation never enters evidence route: '.$q);
 check13b(fm13b_subject('Does the pesto pizza contain dairy?')==='pesto pizza','safe subject stripping retains menu name');
 check13b(fm13b_subject('How do I prepare the pesto pizza?')==='pesto pizza','training words not search terms');
@@ -46,6 +49,10 @@ $v=fm13b_menu_answer([$pepper],'allergen','Does pesto pizza contain nuts?');
 check13b(str_contains($v['answer'],'possible Tree nuts concern'),'heuristic indicator never confirmed allergen');
 $u=fm13b_menu_answer([$pepper],'allergen','Does pesto pizza contain sesame?');
 check13b(str_contains($u['answer'],'does not establish')&&!str_contains($u['answer'],'sesame-free'),'unknown ingredient cannot certify allergen absence');
+$priced=$pepper;$priced['prices']=[['label'=>'Large','amount'=>18.5,'currency'=>'USD']];
+$price=fm13b_menu_answer([$priced],'menu','How much does pesto pizza cost?');
+check13b(str_contains($price['answer'],'Large: 18.50 USD'),'menu price comes from stored price options');
+check13b(str_contains(fm13b_menu_answer([$pepper],'menu','What is the price?')['answer'],'No current price is recorded'),'missing price not fabricated');
 $ing=fm13b_menu_answer([$pepper],'menu','What ingredients are in pesto pizza?');
 check13b(str_contains($ing['answer'],'Mozzarella, Pesto, Dough'),'listed menu ingredients from record');
 $prep=fm13b_menu_answer([$pepper],'training','How do I prepare pesto pizza?');
