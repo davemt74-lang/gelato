@@ -103,6 +103,11 @@ function fm13c_transition(?array $prior,array $command,?array $material,string $
     if($prior&&($prior['lastTurnId']??'')===$turnId)
         return ['changed'=>false,'state'=>$prior,'answer'=>(string)($prior['lastAnswer']??'That step has already been handled.')];
     if($action==='start'){
+        // An ordinary "start training" must not bypass acknowledgement when
+        // the same participant has saved progress on an earlier menu revision.
+        if(fm13j_source_changed($prior,$material))
+            return ['changed'=>false,'state'=>$prior,
+                'answer'=>'This procedure changed since your saved training. Say "review updated training", then "acknowledge updated training", then "start updated training". No prior progress was changed.'];
         if(!$material)return ['changed'=>false,'state'=>$prior,'answer'=>'I could not find a single active procedure with recorded steps. Please name the exact item or ask a manager to record its preparation steps.'];
         $state=['status'=>'active','kind'=>$material['kind'],'id'=>$material['id'],
             'digest'=>$material['digest'],'index'=>0,'stepCount'=>count($material['steps']),
