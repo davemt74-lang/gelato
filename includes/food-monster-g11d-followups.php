@@ -14,13 +14,18 @@ function fm11d_suggest_from_memory(array $memory,string $utterance,string $curre
     if(!in_array($category,['ingredient_question','training_question'],true))return null;
     if(!preg_match('/^msg-[a-f0-9]{20}$/D',$currentMessageId))return null;
     $matches=fm9f_relevant_context($memory,$utterance,3);
-    $eligible=[];$seen=[];
+    $eligible=[];$seen=[];$evidenceText=[];
     foreach($matches as $match){
         if(($match['type']??'')!==$category)continue;
         $item=(array)($match['item']??[]);
         $id=(string)($item['messageId']??'');
         if(!preg_match('/^msg-[a-f0-9]{20}$/D',$id)
            ||$id===$currentMessageId||isset($seen[$id]))continue;
+        // Two message IDs repeating identical text are not independent learning evidence.
+        // Do not turn one duplicated voice recognition into a repeated-needs signal.
+        $content=mb_strtolower(trim(preg_replace('/\\s+/u',' ',(string)($item['text']??''))??''),'UTF-8');
+        if($content===''||isset($evidenceText[$content]))continue;
+        $evidenceText[$content]=true;
         $seen[$id]=true;$eligible[]=$id;
     }
     if(count($eligible)<2)return null;
