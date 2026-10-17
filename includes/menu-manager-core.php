@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__.'/menu-sync.php';
 require_once __DIR__.'/pos-core.php';
 require_once __DIR__.'/menu-operations-core.php';
+require_once __DIR__.'/food-monster-g13h-unified-audit.php';
 
 function menu_manager_tables(): array
 {
@@ -243,6 +244,16 @@ function menu_manager_save_item(PDO $pdo,int $org,?int $itemId,array $input,int 
 
         $pdo->prepare('DELETE FROM menu_item_location_availability WHERE organization_id=? AND menu_item_id=?')->execute([$org,$itemId]);$availability=is_array($input['locationAvailability']??null)?$input['locationAvailability']:[];
         if($availability){$q=$pdo->prepare('SELECT id FROM locations WHERE organization_id=?');$q->execute([$org]);$valid=array_map('intval',$q->fetchAll(PDO::FETCH_COLUMN));$validMap=array_fill_keys($valid,true);foreach($availability as $loc=>$isAvailable){$locId=(int)$loc;if($locId<1||!isset($validMap[$locId]))continue;$pdo->prepare('INSERT INTO menu_item_location_availability (organization_id,menu_item_id,location_id,is_available,updated_by) VALUES (?,?,?,?,?)')->execute([$org,$itemId,$locId,!empty($isAvailable)?1:0,$userId]);}}
+        // The native Menu Manager is a first-class revision source.
+        // The audit insert is part of the same transaction as the menu edit;
+        // if it fails, the entire edit fails instead of silently losing history.
+        $priorNotes=(string)($existing['preparation_notes']??'');
+        $updatedNotes=(string)($prep??'');
+        if($priorNotes!==$updatedNotes){
+            fm13h_audit_procedure($pdo,$org,$userId,(int)$itemId,$name,
+                $priorNotes,$updatedNotes,(int)($existing['version']??0),
+                $existing?(int)$existing['version']+1:1,'menu_manager');
+        }
         return menu_manager_item_payload($pdo,$org,$itemId);
     });
 }
