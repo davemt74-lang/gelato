@@ -1,0 +1,81 @@
+name: FM-G13H Unified Procedure and Real MySQL Certification
+on:
+  pull_request:
+    paths:
+      - 'includes/food-monster-g13h-unified-audit.php'
+      - 'includes/menu-manager-core.php'
+      - 'includes/food-monster-g13g-procedure-history.php'
+      - 'api/food-monster-procedure-history.php'
+      - 'api/food-monster-procedure-review.php'
+      - 'tests/food-monster-g13h-audit.php'
+      - 'tests/food-monster-g13h-mysql.php'
+      - '.github/workflows/food-monster-g13h.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'includes/food-monster-g13h-unified-audit.php'
+      - 'includes/menu-manager-core.php'
+      - 'includes/food-monster-g13g-procedure-history.php'
+      - 'api/food-monster-procedure-history.php'
+      - 'api/food-monster-procedure-review.php'
+      - 'tests/food-monster-g13h-audit.php'
+      - 'tests/food-monster-g13h-mysql.php'
+      - '.github/workflows/food-monster-g13h.yml'
+jobs:
+  contract-and-privacy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_mysql
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: PHP and Agent routing checks
+        run: |
+          php -l includes/food-monster-g13h-unified-audit.php
+          php -l includes/menu-manager-core.php
+          php -l api/food-monster-procedure-history.php
+          php -l api/food-monster-procedure-review.php
+          php -l tests/food-monster-g13h-audit.php
+          php -l tests/food-monster-g13h-mysql.php
+      - name: Complete Food Monster release safety regression
+        run: |
+          php tests/food-monster-g13h-audit.php
+          php tests/food-monster-g13g-history.php
+          php tests/food-monster-g13f-procedures.php
+          php tests/food-monster-g13e-intelligence.php
+          php tests/food-monster-g13d-dialogue.php
+          php tests/food-monster-g13c-training.php
+          php tests/food-monster-g13b-knowledge.php
+          php tests/food-monster-g13a-engagement.php
+          php tests/food-monster-g9f-approvals.php
+          node tests/food-monster-g10b-turns.test.cjs
+          node tests/food-monster-g11b-turns.test.cjs
+  real-mysql-transaction-certification:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: fm_cert_only
+          MYSQL_DATABASE: gelato_fm_cert
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pfm_cert_only"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+    env:
+      G13H_MYSQL_DSN: mysql:host=127.0.0.1;port=3306;dbname=gelato_fm_cert;charset=utf8mb4
+      G13H_MYSQL_USER: root
+      G13H_MYSQL_PASS: fm_cert_only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_mysql
+      - name: Verify actual InnoDB CAS, concurrent row lock, transaction rollback and tenant isolation
+        run: php tests/food-monster-g13h-mysql.php

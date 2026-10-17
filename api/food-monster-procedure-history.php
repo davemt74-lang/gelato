@@ -3,6 +3,7 @@ declare(strict_types=1);
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/agent-workspace-core.php';
 require_once __DIR__.'/../includes/food-monster-g13g-procedure-history.php';
+require_once __DIR__.'/../includes/food-monster-g13h-unified-audit.php';
 
 $user=app_require_auth();$pdo=app_pdo();
 $org=(int)$user['organization_id'];$uid=(int)$user['id'];
@@ -31,8 +32,10 @@ try{
     try{
         $ledger=fm13f_proposal_thread($pdo,$org,$uid,false);
         $events=$ledger?gaw_messages($pdo,$org,$uid,$ledger,300):[];
-        $versions=fm13g_versions($events,$org,$uid);
-        $partial=count($events)===300;
+        $unified=fm13h_recent($pdo,$org);
+        $versions=fm13h_unified(fm13g_versions($events,$org,$uid),
+            $unified['events'],$org,$uid);
+        $partial=count($events)===300||$unified['partial'];
         $source=null;$version=null;$proposal=null;
         if($action==='history'){
             $itemId=(int)$intent['itemId'];
@@ -50,9 +53,9 @@ try{
             }
             $matches=$history&&hash_equals((string)$history[0]['afterHash'],
                 fm13f_notes_digest((string)($source['preparation_notes']??'')));
-            $answer=$entries?'Found '.count($entries).' recorded Food Monster procedure publications for '.
-                (string)$source['name'].'.':'No published Food Monster procedure revisions were found for this menu item.';
-            $answer.=' These are only Food Monster publications visible in the authorized 300-event history, not a full history of changes through the Menu Manager or other editors.';
+            $answer=$entries?'Found '.count($entries).' recorded procedure revisions for '.
+                (string)$source['name'].'.':'No recorded procedure revisions were found for this menu item.';
+            $answer.=' History combines recorded Food Monster publications and Menu Manager preparation edits since unified auditing was enabled; earlier external edits cannot be reconstructed.';
             if($history&&!$matches)$answer.=' The current procedure differs from the most recent recorded publication.';
             if($partial||count($history)>40)$answer.=' Results may omit older versions.';
             $data=['mode'=>'history','itemId'=>$itemId,'itemName'=>(string)$source['name'],
@@ -88,7 +91,10 @@ try{
                 $events=$ledger?gaw_messages($pdo,$org,$uid,$ledger,300):[];
                 if(fm13g_turn_seen($events,$turnId))
                     throw new DomainException('This saved chat turn has already created a procedure proposal.');
-                $version=fm13g_find_version(fm13g_versions($events,$org,$uid),(string)$intent['versionId']);
+                $fresh=fm13h_recent($pdo,$org);
+                $version=fm13g_find_version(fm13h_unified(
+                    fm13g_versions($events,$org,$uid),$fresh['events'],$org,$uid),
+                    (string)$intent['versionId']);
                 if(!$version)throw new DomainException('The selected version has changed or is no longer available.');
                 $proposal=fm13g_rollback_proposal($version,$source,$org,$uid,time(),
                     'prp-'.bin2hex(random_bytes(10)));
