@@ -72,8 +72,7 @@ function fm13c_material(array $source,string $kind):?array
         'steps'=>$steps,
         'notes'=>mb_substr(trim((string)($kind==='menu'
             ?($source['sectionNote']??''):($source['notes']??''))),0,1200,'UTF-8'),
-        'digest'=>hash('sha256',json_encode([$kind,$id,$steps,
-            $kind==='menu'?($source['sectionNote']??''):($source['notes']??'')],
+        'digest'=>hash('sha256',json_encode([$kind,$id,$steps],
             JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES))];
 }
 function fm13c_answer(array $state,array $material,string $note=''):string
