@@ -125,7 +125,7 @@ check13f(str_contains($endpoint,'beginTransaction()')
 check13f(str_contains($endpoint,"COALESCE(preparation_notes,'')=?")
     &&str_contains($endpoint,'$q->rowCount()!==1'),
     'publish uses compare-and-set on prior exact preparation note');
-check13f(str_contains($endpoint,"if($action==='approve')")&&str_contains($endpoint,"if($action==='publish')"),
+check13f(str_contains($endpoint,"if(".'$action'."==='approve')")&&str_contains($endpoint,"if(".'$action'."==='publish')"),
     'approval and publication are separate user operations');
 check13f(str_contains($endpoint,'fm13f_record($pdo,')
     &&str_contains($endpoint,'app_audit($pdo,'),'proposal history and audit receipts persisted');
