@@ -62,6 +62,11 @@ try{
         try{$material=fm13c_fetch_material($pdo,$org,$current);}catch(Throwable $e){
             // A stale or no-longer-readable source must not fabricate a title.
         }
+        foreach($people as $person)if((int)$person['id']===(int)$entry['personId']){
+            $entry['displayName']=$scope==='self'?'Your training':
+                mb_substr((string)($person['display_name']??'Participant'),0,70,'UTF-8');
+            break;
+        }
         $entry['sourceAvailable']=$material!==null
             &&($material['digest']??'')===($current['digest']??'');
         $entry['sourceTitle']=$entry['sourceAvailable']
