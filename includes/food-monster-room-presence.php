@@ -53,10 +53,15 @@ function fm11a_current_speaker(array $session,int $now):?array
     if($matches!==1)return null;
     return ['personId'=>$id,'trackId'=>$track,
         'identityAssurance'=>'correlated_voice_and_visual_observation',
-        'websiteAuthenticated'=>false,'agentAdministration'=>false];
+        'websiteAuthenticated'=>false,'agentAdministration'=>false,
+        'handoffFromPreviousVerifiedTurn'=>($speaker['handoff']??false)===true];
 }
 function fm11a_room_voice_turn(array $operator,?array $voiceSpeaker,?int $now=null):?array
 {
+    // Snapshot only a still-valid verified speaker before invalidating the old turn.
+    // Unknown or typed speech MUST clear attribution rather than inherit it.
+    $previous=fm9a_is_super_admin_session($operator)
+        ? fm11a_current_speaker((array)($_SESSION['fm9c_room']??[]),$now??time()) : null;
     fm11a_room_clear_speaker($operator);
     if(!fm9a_is_super_admin_session($operator)||!is_array($voiceSpeaker))return null;
     $session=(array)($_SESSION['fm9c_room']??[]);
@@ -77,7 +82,8 @@ function fm11a_room_voice_turn(array $operator,?array $voiceSpeaker,?int $now=nu
     if(count($candidates)!==1)return null;
     $track=(string)($candidates[0]['trackId']??'');
     if(!preg_match('/^r-[a-f0-9]{16,32}$/D',$track))return null;
-    $_SESSION['fm9c_room']['speaker']=['personId'=>$id,'trackId'=>$track,'seen'=>$now];
+    $_SESSION['fm9c_room']['speaker']=['personId'=>$id,'trackId'=>$track,'seen'=>$now,
+        'handoff'=>$previous!==null && (int)$previous['personId']!==$id];
     return fm11a_current_speaker($_SESSION['fm9c_room'],$now);
 }
 
