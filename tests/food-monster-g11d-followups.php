@@ -37,6 +37,17 @@ $hint=fm11d_suggest_from_memory($memory,'Does pesto have milk ingredients?',$cur
 ok11d(is_array($hint)&&$hint['type']==='ingredient_recap','repeated ingredient topic produces offer');
 ok11d($hint['sourceMessageIds']===['msg-'.str_repeat('b',20),'msg-'.str_repeat('a',20)]
    ||count($hint['sourceMessageIds'])===2,'ingredient hint links to source records');
+// G12C: distinct IDs with identical recognized content are not two independent examples.
+$duplicate=['openReports'=>[],'recentIngredientQuestions'=>[],
+ 'recentTrainingQuestions'=>[
+  $mk('a','How to prepare the pizza crust?'),
+  $mk('b','How to prepare the pizza crust?'),
+  $mk('c','How to prepare the pizza crust right now?')]];
+ok11d(fm11d_suggest_from_memory($duplicate,'How to prepare the pizza crust right now?',
+ 'msg-'.str_repeat('c',20))===null,'duplicated transcript cannot trigger repeated-training suggestion');
+$duplicate['recentTrainingQuestions'][1]=$mk('b','Show me how to prepare pizza crust dough');
+ok11d(fm11d_suggest_from_memory($duplicate,'How to prepare the pizza crust right now?',
+ 'msg-'.str_repeat('c',20))!==null,'distinct training questions still qualify');
 $workspace=file_get_contents(__DIR__.'/../api/agent-workspace.php');
 $client=file_get_contents(__DIR__.'/../js/global-agent.js');
 ok11d(str_contains($workspace,'fm11d_verified_turn_suggestion(')
