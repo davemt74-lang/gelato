@@ -81,6 +81,19 @@
 
   function structuredCard(data, skill, sources = []) {
     if (data == null) return '<div class="empty">No structured result for this response.</div>';
+    if (skill === 'food_monster.training_change_impact' && Array.isArray(data.participants)) {
+      const cards=data.participants.slice(0,30).map(p =>
+        '<div class="result-card"><h3>' + esc(p.displayName || 'Participant') + '</h3>' +
+        '<p>' + esc(p.sourceName || 'Menu source unavailable') + '</p>' +
+        '<div class="kv"><b>Saved step</b><span>' + esc(p.step || 0) + ' / ' + esc(p.stepCount || 0) + '</span>' +
+        '<b>Source status</b><span>' + esc(p.impact || 'unknown') + '</span>' +
+        '<b>Guided practice</b><span>' + esc(p.trainingStatus || 'unknown') + '</span></div>' +
+        '<p>' + esc(p.recommendation || '') + '</p></div>').join('');
+      return '<div class="result-card"><h3>Procedure change impact</h3>' +
+        '<p>' + esc(data.affected || 0) + ' training sessions may need review. No progress was reset or rated.</p>' +
+        (data.partial?'<span class="pill">Partial result</span>':'') + '</div>' +
+        (cards||'<div class="empty">No saved menu-guided training was found for this view.</div>');
+    }
     if (skill === 'food_monster.procedure_version_history') {
       if (data.mode === 'history' && Array.isArray(data.revisions)) {
         const revisions=data.revisions.slice(0,30).map(rev =>
