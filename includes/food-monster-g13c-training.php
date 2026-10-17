@@ -19,7 +19,15 @@ function fm13c_command(string $message):?array
     ];
     foreach($actions as $action=>$regex)
         if(preg_match('/'.$regex.'/u',$s))return ['action'=>$action,'subject'=>''];
-    if(preg_match('/^(?:start|begin|show me|walk me through|guide me through|teach me|train me(?: on| about)?|practice)\s+(?:(?:a |the )?training\s+)?(?:on |for |about |how to (?:make|prepare)\s+)?(.{2,160})$/u',$s,$m)){
+    // Require a deliberate training request; do not hijack "show me sales".
+    $starts=[
+        '/^(?:start|begin)\s+(?:a\s+|the\s+)?(?:training|practice)\s+(?:on|for|about)\s+(.{2,160})$/u',
+        '/^train me\s+(?:on|about)\s+(.{2,160})$/u',
+        '/^(?:teach me|show me|walk me through|guide me through)\s+how to\s+(?:make|prepare|cook|bake|assemble)\s+(.{2,160})$/u',
+        '/^(?:walk me through|guide me through)\s+(?:the\s+)?(?:training|preparation|recipe)\s+(?:for|on|of)\s+(.{2,160})$/u',
+    ];
+    foreach($starts as $expression){
+        if(!preg_match($expression,$s,$m))continue;
         $subject=trim(preg_replace('/^(?:(?:the|a|how to|make|prepare|recipe for)\s+)+/u','',$m[1])??$m[1]);
         if($subject!=='')return ['action'=>'start','subject'=>$subject];
     }
