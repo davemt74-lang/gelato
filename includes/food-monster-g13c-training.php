@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once __DIR__.'/food-monster-g13b-knowledge.php';
 require_once __DIR__.'/food-monster-person-conversations.php';
 require_once __DIR__.'/food-monster-g13d-dialogue.php';
+require_once __DIR__.'/food-monster-g13j-refresh.php';
 
 /** Deliberate training utterances only; never hijack KDS next-ticket controls. */
 function fm13c_command(string $message):?array
@@ -20,6 +21,9 @@ function fm13c_command(string $message):?array
         'quiz'=>'^(?:quiz me|check my knowledge|training quiz|practice question)$',
         'hint'=>'^(?:training hint|hint for (?:this|the current) step|give me a training hint)$',
         'progress'=>'^(?:training progress|my training progress|training summary|summarize my training)$',
+        'review_update'=>'^(?:review updated training|review revised training)$',
+        'acknowledge_update'=>'^(?:acknowledge updated training|acknowledge revised training)$',
+        'start_refresh'=>'^(?:start updated training|start revised training)$',
     ];
     foreach($actions as $action=>$regex)
         if(preg_match('/'.$regex.'/u',$s))return ['action'=>$action,'subject'=>''];
@@ -99,6 +103,11 @@ function fm13c_transition(?array $prior,array $command,?array $material,string $
     if($prior&&($prior['lastTurnId']??'')===$turnId)
         return ['changed'=>false,'state'=>$prior,'answer'=>(string)($prior['lastAnswer']??'That step has already been handled.')];
     if($action==='start'){
+        // An ordinary "start training" must not bypass acknowledgement when
+        // the same participant has saved progress on an earlier menu revision.
+        if(fm13j_source_changed($prior,$material))
+            return ['changed'=>false,'state'=>$prior,
+                'answer'=>'This procedure changed since your saved training. Say "review updated training", then "acknowledge updated training", then "start updated training". No prior progress was changed.'];
         if(!$material)return ['changed'=>false,'state'=>$prior,'answer'=>'I could not find a single active procedure with recorded steps. Please name the exact item or ask a manager to record its preparation steps.'];
         $state=['status'=>'active','kind'=>$material['kind'],'id'=>$material['id'],
             'digest'=>$material['digest'],'index'=>0,'stepCount'=>count($material['steps']),
@@ -106,9 +115,11 @@ function fm13c_transition(?array $prior,array $command,?array $material,string $
         $answer=fm13c_answer($state,$material,'Training started.');
     }else{
         if(!$prior||!in_array($action,['next','repeat','previous','pause','resume','restart','question',
-            'quiz','answer','hint','progress'],true))
+            'quiz','answer','hint','progress','review_update','acknowledge_update','start_refresh'],true))
             return $no;
         $state=$prior;
+        if(fm13j_is_action($action))
+            return fm13j_transition($prior,$command,$material,$turnId,$now);
         if(!$material||$material['kind']!==($prior['kind']??'')||$material['id']!==($prior['id']??'')
           ||$material['digest']!==($prior['digest']??'')){
             $state['status']='paused';
@@ -176,6 +187,10 @@ function fm13c_transition(?array $prior,array $command,?array $material,string $
             $state['quiz']=null;
             if((int)$state['index']+1>=count($material['steps'])){
                 $state['status']='completed';
+                if(is_array($state['refresh']??null)
+                    &&($state['refresh']['sourceDigest']??'')===$material['digest']
+                    &&!empty($state['refresh']['startedAt']))
+                    $state['refresh']['completedAt']=$now;
                 $answer='You have reached the end of the recorded '.$material['name'].' procedure. This is not a skills assessment or certification. Say "restart training" to review it.';
             }else{
                 $state['index']++;
