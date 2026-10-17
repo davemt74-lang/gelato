@@ -48,6 +48,12 @@ ok11d(fm11d_suggest_from_memory($duplicate,'How to prepare the pizza crust right
 $duplicate['recentTrainingQuestions'][1]=$mk('b','Show me how to prepare pizza crust dough');
 ok11d(fm11d_suggest_from_memory($duplicate,'How to prepare the pizza crust right now?',
  'msg-'.str_repeat('c',20))!==null,'distinct training questions still qualify');
+// G12D: Agent Brain must keep repeated recommendation fingerprints session-only.
+$implementation=file_get_contents(__DIR__.'/../includes/food-monster-g11d-followups.php');
+ok11d(str_contains($implementation,"fm12d_hint_fingerprints")
+  &&str_contains($implementation,"hash('sha256'")
+  &&str_contains($implementation,"if((\$_SESSION['fm12d_hint_fingerprints'][\$key]??'')===\$fingerprint)return null;"),
+  'same evidence-backed advice suppressed on repeat');
 $workspace=file_get_contents(__DIR__.'/../api/agent-workspace.php');
 $client=file_get_contents(__DIR__.'/../js/global-agent.js');
 ok11d(str_contains($workspace,'fm11d_verified_turn_suggestion(')
