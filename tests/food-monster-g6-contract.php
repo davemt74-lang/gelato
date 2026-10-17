@@ -18,7 +18,7 @@ $version='20261014-fmg6';
 $agentVersion='20261016-fmg11e';
 $mascotVersion='20261015-fmg8a';
 // The stage can deploy a newer Agent and mascot without requiring all global loaders to bump simultaneously.
-$stageAgentVersion='20261017-fmg12e';
+$stageAgentVersion='20261017-fmg13b';
 $stageMascotVersion='20261017-fmg12e';
 $stageCssVersion='20261015-fmg8reset';
 foreach([
