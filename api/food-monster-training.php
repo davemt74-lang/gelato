@@ -101,6 +101,10 @@ try{
             FOR UPDATE");
         $member->execute([$org,$personId]);
         if(!$member->fetchColumn())throw new DomainException('An active organization member is required for training.');
+        // Never let an earlier voice request race a newer participant's turn.
+        $lockedRoomLast=gaw_messages($pdo,$org,$uid,$room,1)[0]??[];
+        if((string)($lockedRoomLast['public_id']??'')!==$turnId)
+            throw new DomainException('A newer conversation turn has superseded this training request.');
         $trainingThread=fm13c_training_thread($pdo,$org,$personId,$command['action']==='start');
         $prior=$trainingThread?fm13c_read_state($pdo,$org,$personId,$trainingThread):null;
         if($prior&&$command['action']!=='start'){
