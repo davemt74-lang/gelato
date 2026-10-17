@@ -117,7 +117,7 @@ $training=(string)file_get_contents(__DIR__.'/../api/food-monster-training.php')
 $core=(string)file_get_contents(__DIR__.'/../includes/food-monster-g13e-intelligence.php');
 check13e(str_contains($api,'app_verify_request_csrf')
     &&str_contains($api,'gaw_messages($pdo,$org,$uid,$room,1)'), 'canonical authenticated typed request and CSRF');
-check13e(str_contains($api,"'voice'")===false||str_contains($api,"'text'"),
+check13e(str_contains($api,"!== 'text'")||str_contains($api,"!=='text'"),
     'voice cannot request employee history using signed-in operator');
 check13e(str_contains($api,'fm13e_scope(')&&str_contains($api,'fm9a_is_super_admin_session'),
     'owner authority and self permissions validated at data endpoint');
@@ -125,9 +125,9 @@ check13e(str_contains($api,'organization_memberships')&&str_contains($api,"om.st
     'only active current-organization members used in roster');
 check13e(str_contains($core,'WHERE c.organization_id=? AND c.user_id IN ($marks)')
     &&str_contains($core,"m.role='system'"),'query explicitly organization/user scoped and system role only');
-check13e(str_contains($training,"'action'=>$command['action']"),
+check13e(str_contains($training,"'action'=>".'$command['."'action'".']'),
     'future events include true server-side training action evidence');
-check13e(str_contains($route,"if($role==='system')throw new DomainException"),
+check13e(str_contains($route,"if(".'$role'."==='system')throw new DomainException"),
     'client cannot impersonate internal training ledger system messages');
 check13e(str_contains($route,"'domain'=>'food_monster_training_intelligence'"),
     'Agent Chat routes authorized insight requests into read-only Brain results');
