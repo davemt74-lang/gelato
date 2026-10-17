@@ -87,7 +87,10 @@
         '<p>' + esc(p.sourceName || 'Menu source unavailable') + '</p>' +
         '<div class="kv"><b>Saved step</b><span>' + esc(p.step || 0) + ' / ' + esc(p.stepCount || 0) + '</span>' +
         '<b>Source status</b><span>' + esc(p.impact || 'unknown') + '</span>' +
-        '<b>Guided practice</b><span>' + esc(p.trainingStatus || 'unknown') + '</span></div>' +
+        '<b>Guided practice</b><span>' + esc(p.trainingStatus || 'unknown') + '</span>' +
+        '<b>Revision acknowledged</b><span>' + (p.acknowledgedUpdate ? 'Yes — refresh needed' : 'Not pending') + '</span>' +
+        '<b>Guided refresh</b><span>' + (p.refreshCompleted ? 'Walkthrough complete (not certified)' :
+          p.refreshInProgress ? 'In progress' : 'Not started') + '</span></div>' +
         '<p>' + esc(p.recommendation || '') + '</p></div>').join('');
       return '<div class="result-card"><h3>Procedure change impact</h3>' +
         '<p>' + esc(data.affected || 0) + ' training sessions may need review. No progress was reset or rated.</p>' +
