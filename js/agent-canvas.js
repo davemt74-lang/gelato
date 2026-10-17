@@ -81,6 +81,43 @@
 
   function structuredCard(data, skill, sources = []) {
     if (data == null) return '<div class="empty">No structured result for this response.</div>';
+    // Keep the chat uncluttered: owner/self-only training insights belong
+    // in the existing slide-out/side results area, never a persistent overlay.
+    if (skill === 'food_monster.training_intelligence' && Array.isArray(data.participants)) {
+      const people = data.participants.slice(0, 15);
+      const shown = people.map((person) => {
+        const current = person.current || {};
+        const actions = person.actionCounts || {};
+        const name = String(person.displayName || 'Participant');
+        const source = person.sourceAvailable
+          ? String(person.sourceTitle || 'Recorded procedure')
+          : 'Procedure needs verification';
+        const step = Number(current.stepIndex || 0) + 1;
+        const total = Number(current.stepCount || 0);
+        const attempts = Number(current.practiceAttempts || 0);
+        const correct = Number(current.practiceCorrect || 0);
+        const revisit = Number(person.revisits || 0);
+        const help = Number(person.helpRequests || 0);
+        const tips = person.coachingSuggestion
+          ? '<p class="brain-coach">' + esc(person.coachingSuggestion) + '</p>' : '';
+        return '<div class="result-card"><h3>' + esc(name) + '</h3>' +
+          '<p>' + esc(source) + ' · ' + esc(current.status || 'unavailable') + '</p>' +
+          '<div class="kv"><b>Current step</b><span>' + esc(step) + ' / ' + esc(total) + '</span>' +
+          '<b>Practice choices</b><span>' + esc(correct) + ' of ' + esc(attempts) + ' selections</span>' +
+          '<b>Recorded revisits</b><span>' + esc(revisit) + '</span>' +
+          '<b>Help requests</b><span>' + esc(help) + '</span>' +
+          '<b>Knowledge checks</b><span>' + esc(Number(actions.quiz || 0)) + '</span></div>' +
+          tips + '</div>';
+      }).join('');
+      return '<div class="result-card"><h3>Guided training activity</h3>' +
+        '<span class="pill">' + esc(Number(data.peopleWithActivity || 0)) + ' participants · ' +
+          esc(Number(data.recordedEvents || 0)) + ' recorded events</span>' +
+        '<p>60-day window' + (data.isPartial ? ' · partial history' : '') +
+        '. Practice observations only, not employee ratings or certification.</p></div>' +
+        (shown || '<div class="empty">No recorded activity in this view.</div>') +
+        (people.length < data.participants.length
+          ? '<div class="empty">Additional authorized participants are in the chat response.</div>' : '');
+    }
     const rows = Array.isArray(data) ? data : [data];
     let html = `
       <div class="result-card">
