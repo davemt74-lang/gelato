@@ -3,6 +3,7 @@ declare(strict_types=1);
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/agent-workspace-core.php';
 require_once __DIR__.'/../includes/food-monster-g13f-procedure-review.php';
+require_once __DIR__.'/../includes/food-monster-g13h-unified-audit.php';
 
 $user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];
 $uid=(int)$user['id'];
@@ -125,6 +126,10 @@ try{
                 $q->execute($args);
                 if($q->rowCount()!==1)
                     throw new DomainException('The menu procedure changed; nothing was published.');
+                fm13h_audit_procedure($pdo,$org,$uid,(int)$proposal['itemId'],
+                    (string)$proposal['itemName'],$old,(string)$proposal['replacement'],
+                    (int)($item['version']??0),(int)($item['version']??0)+1,
+                    'food_monster',(string)$proposal['id']);
                 $proposal['publishedAt']=time();
             }
             $proposal['status']=$decision['status'];
