@@ -81,6 +81,31 @@
 
   function structuredCard(data, skill, sources = []) {
     if (data == null) return '<div class="empty">No structured result for this response.</div>';
+    if (skill === 'food_monster.procedure_review') {
+      if (Array.isArray(data.candidates)) {
+        const cards = data.candidates.slice(0, 12).map(item =>
+          '<div class="result-card"><h3>' + esc(item.name || 'Menu item') +
+          ' · #' + esc(item.itemId || '') + '</h3>' +
+          '<div class="kv"><b>Help requests</b><span>' + esc(item.helpRequests || 0) + '</span>' +
+          '<b>Revisited steps</b><span>' + esc(item.revisits || 0) + '</span>' +
+          '<b>Staff asking for help</b><span>' + esc(item.peopleRequestingHelp || 0) + '</span>' +
+          '<b>Review</b><span>' + (item.reviewSuggested ? 'Suggested' : 'Optional') + '</span></div>' +
+          '<p>Recorded preparation: ' + esc(item.recordedPreparation || 'Not recorded') + '</p>' +
+          '</div>').join('');
+        return '<div class="result-card"><h3>Procedure improvement review</h3>' +
+          '<p>Source-backed signals only. No procedure changes without typed owner approval and publication.</p>' +
+          (data.partial ? '<span class="pill">Partial history</span>' : '') +
+          '</div>' + (cards || '<div class="empty">No recorded review candidates.</div>');
+      }
+      if (data.proposalId) {
+        return '<div class="result-card"><h3>Procedure proposal</h3>' +
+          '<div class="kv"><b>Proposal ID</b><span>' + esc(data.proposalId) + '</span>' +
+          '<b>Menu item</b><span>' + esc(data.itemId || '') + '</span>' +
+          '<b>Status</b><span>' + esc(data.status || '') + '</span>' +
+          '<b>Published</b><span>' + (data.published ? 'Yes' : 'No') + '</span></div>' +
+          '<p>Changes are applied only following explicit owner review, approval and publication.</p></div>';
+      }
+    }
     // Keep the chat uncluttered: owner/self-only training insights belong
     // in the existing slide-out/side results area, never a persistent overlay.
     if (skill === 'food_monster.training_intelligence' && Array.isArray(data.participants)) {
