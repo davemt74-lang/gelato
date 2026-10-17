@@ -23,9 +23,15 @@ function fm11d_suggest_from_memory(array $memory,string $utterance,string $curre
            ||$id===$currentMessageId||isset($seen[$id]))continue;
         // Two message IDs repeating identical text are not independent learning evidence.
         // Do not turn one duplicated voice recognition into a repeated-needs signal.
+        // Reject exact and near-identical questions, including recognition
+        // duplicates with a different prefix, filler wording, or punctuation.
         $content=mb_strtolower(trim(preg_replace('/\\s+/u',' ',(string)($item['text']??''))??''),'UTF-8');
-        if($content===''||isset($evidenceText[$content]))continue;
-        $evidenceText[$content]=true;
+        if($content==='')continue;
+        $tokens=fm9f_keywords($content);
+        $tokens=array_values(array_unique($tokens));sort($tokens,SORT_STRING);
+        $signature=$tokens?implode('|',$tokens):$content;
+        if(isset($evidenceText[$signature]))continue;
+        $evidenceText[$signature]=true;
         $seen[$id]=true;$eligible[]=$id;
     }
     if(count($eligible)<2)return null;
@@ -52,21 +58,40 @@ function fm11d_verified_turn_suggestion(PDO $pdo,array $operator,array $pending,
     // One suggestion per employee per 20 minutes in the signed-in owner's
     // session. This does not write an employee progress assessment.
     $key=(int)$operator['organization_id'].':'.(int)$operator['id'].':'.$personId;
-    $last=(int)($_SESSION['fm11d_hint_times'][$key]??0);
-    if($last>time()-1200)return null;
-    // Do not repeatedly re-offer the same advice with the same two source
-    // messages. This is ephemeral in-session Agent Brain deduplication only.
-    $fingerprint=hash('sha256',$hint['type'].'|'.implode('|',$hint['sourceMessageIds']));
-    if(($_SESSION['fm12d_hint_fingerprints'][$key]??'')===$fingerprint)return null;
-    $_SESSION['fm11d_hint_times'][$key]=time();
-    $_SESSION['fm12d_hint_fingerprints'][$key]=$fingerprint;
-    if(count($_SESSION['fm12d_hint_fingerprints'])>32){
-      $_SESSION['fm12d_hint_fingerprints']=array_intersect_key(
-        $_SESSION['fm12d_hint_fingerprints'],$_SESSION['fm11d_hint_times']);
-    }
-    if(count($_SESSION['fm11d_hint_times'])>32){
-      asort($_SESSION['fm11d_hint_times'],SORT_NUMERIC);
-      $_SESSION['fm11d_hint_times']=array_slice($_SESSION['fm11d_hint_times'],-32,null,true);
-    }
+    if(!isset($_SESSION['fm11d_hint_times'])||!is_array($_SESSION['fm11d_hint_times']))
+        $_SESSION['fm11d_hint_times']=[];
+    if(!isset($_SESSION['fm12d_hint_fingerprints'])||!is_array($_SESSION['fm12d_hint_fingerprints']))
+        $_SESSION['fm12d_hint_fingerprints']=[];
+    if(!fm12d_advice_gate($_SESSION['fm11d_hint_times'],
+       $_SESSION['fm12d_hint_fingerprints'],$key,$hint,time()))return null;
     return $hint;
+}
+
+/**
+ * FM-G12D: deterministic, testable session-only Agent Brain suggestion policy.
+ * Prevent repeat offers even when source order changes or cooldown expires.
+ * Keep at most 32 people, 16 fingerprints per person, and a one-day horizon.
+ * A suggestion grants no task or account permissions.
+ */
+function fm12d_advice_gate(array &$times,array &$history,string $key,array $hint,int $now):bool
+{
+    if($key===''||$now<=0||!in_array($hint['type']??'', ['training_recap','ingredient_recap'],true))return false;
+    $ids=$hint['sourceMessageIds']??[];
+    if(!is_array($ids)||count($ids)!==2||count(array_unique($ids))!==2)return false;
+    foreach($ids as $id)if(!is_string($id)||!preg_match('/^msg-[a-f0-9]{20}$/D',$id))return false;
+    sort($ids,SORT_STRING);
+    $fingerprint=hash('sha256',$hint['type'].'|'.implode('|',$ids));
+    $latest=(int)($times[$key]??0);
+    if($latest>$now||($latest>0&&$latest>$now-1200))return false;
+    $seen=is_array($history[$key]??null)?$history[$key]:[];
+    foreach($seen as $hash=>$at)if((int)$at<=$now-86400||!preg_match('/^[a-f0-9]{64}$/D',(string)$hash))unset($seen[$hash]);
+    if(isset($seen[$fingerprint]))return false;
+    $seen[$fingerprint]=$now;
+    arsort($seen,SORT_NUMERIC);
+    $history[$key]=array_slice($seen,0,16,true);
+    $times[$key]=$now;
+    arsort($times,SORT_NUMERIC);
+    $times=array_slice($times,0,32,true);
+    $history=array_intersect_key($history,$times);
+    return true;
 }

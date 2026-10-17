@@ -42,6 +42,30 @@ try{
     fmllm_rate_limit($org,$uid);
     $history=fmllm_history($records,12);
     $personMemory=fm9e_llm_memory($pdo,$user,$threadId,$last);
+    // FM-G12E: a verified employee's model history must NEVER include the
+    // operator's mixed-speaker room transcript. Authorize the person mirror
+    // by canonical server evidence, not by browser names or person IDs.
+    if(($last['channel']??'')==='voice'&&fm9a_is_super_admin_session($user)){
+        $pendingKey='fm9d_pending_'.hash('sha256',$org.'|'.$uid.'|'.$threadId);
+        $pending=(array)($_SESSION[$pendingKey]??[]);
+        $personId=(int)($pending['personId']??0);
+        $personThread=(string)($pending['threadId']??'');
+        $verified=$personId>0
+            &&($pending['operatorThreadId']??'')===$threadId
+            &&(string)($pending['voiceEventId']??'')===(string)($last['voice_event_public_id']??'')
+            &&(string)($pending['voiceEventId']??'')!==''
+            &&time()-(int)($pending['createdAt']??0)<=120
+            &&time()>=(int)($pending['createdAt']??0)
+            &&preg_match('/^agent-[a-f0-9]{20}$/D',$personThread)===1;
+        $personHistory=[];
+        if($verified){
+            // Enforces current organization membership before person access.
+            fm9d_person_collections($pdo,$user,$personId);
+            $personRows=gaw_messages($pdo,$org,$personId,$personThread,12);
+            $personHistory=fmllm_history($personRows,12);
+        }
+        $history=fm12e_isolate_voice_history($history,$personHistory,$last,$verified);
+    }
     if(!$history||end($history)['role']!=='user')throw new InvalidArgumentException('A user message is required.');
     try{
         $key=app_decrypt_secret((string)$selected['credential']['encrypted_key'],(string)$selected['credential']['nonce'],(string)$selected['credential']['encryption_method']);

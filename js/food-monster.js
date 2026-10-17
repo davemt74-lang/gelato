@@ -218,6 +218,12 @@ window.addEventListener('gelato-voice-turn',event=>{
  }else return;
  updateMood();
 });
+// A verified speaker change may be acknowledged without displaying identities,
+ // impersonating a staff account, or initiating microphone/agent actions.
+window.addEventListener('gelato-agent-speaker-handoff',event=>{
+ if(event.detail?.verified!==true)return;
+ greet('I’m listening to the next speaker.');
+});
 window.addEventListener('gelato-agent-ready',()=>{performanceState.replyUntil=performance.now()+1200;updateMood();});
 fetch('assets/food-monster/chef-mascot.svg',{credentials:'same-origin'}).then(r=>{if(!r.ok)throw Error('artwork');return r.text()}).then(content=>{const doc=new DOMParser().parseFromString(content,'image/svg+xml');if(doc.documentElement.localName!=='svg'||doc.querySelector('parsererror'))throw Error('invalid svg');figure.append(document.importNode(doc.documentElement,true));state.pupil=figure.querySelector('[data-fm-pupil]');}).catch(()=>figure.textContent='👁️');
 function setFaceTarget(target){

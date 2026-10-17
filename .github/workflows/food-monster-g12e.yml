@@ -1,0 +1,97 @@
+name: FM-G12E Integrated Conversation Certification
+on:
+  pull_request:
+    paths:
+      - 'includes/food-monster-room-presence.php'
+      - 'api/agent-workspace.php'
+      - 'api/food-monster-approvals.php'
+      - 'api/food-monster-llm.php'
+      - 'includes/food-monster-llm.php'
+      - 'includes/food-monster-high-impact-approval.php'
+      - 'food-monster.php'
+      - 'agent-canvas.php'
+      - 'includes/food-monster-conversation-memory.php'
+      - 'includes/food-monster-g11d-followups.php'
+      - 'js/global-agent.js'
+      - 'js/food-monster.js'
+      - 'js/voice-turn-taking.js'
+      - 'js/food-monster-room-tracker.js'
+      - 'tests/food-monster-g11a-speaker.php'
+      - 'tests/food-monster-g11d-followups.php'
+      - 'tests/food-monster-g10b-turns.test.cjs'
+      - 'tests/food-monster-g11b-turns.test.cjs'
+      - 'tests/food-monster-g9f-approvals.php'
+      - 'tests/food-monster-g12e-llm-isolation.php'
+      - 'tests/food-monster-g12e-contract.php'
+      - 'docs/FOOD-MONSTER-G12E-REMEDIATION.md'
+      - '.github/workflows/food-monster-g12e.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'includes/food-monster-room-presence.php'
+      - 'api/agent-workspace.php'
+      - 'api/food-monster-approvals.php'
+      - 'api/food-monster-llm.php'
+      - 'includes/food-monster-llm.php'
+      - 'includes/food-monster-high-impact-approval.php'
+      - 'food-monster.php'
+      - 'agent-canvas.php'
+      - 'includes/food-monster-conversation-memory.php'
+      - 'includes/food-monster-g11d-followups.php'
+      - 'js/global-agent.js'
+      - 'js/food-monster.js'
+      - 'js/voice-turn-taking.js'
+      - 'js/food-monster-room-tracker.js'
+      - 'tests/food-monster-g11a-speaker.php'
+      - 'tests/food-monster-g11d-followups.php'
+      - 'tests/food-monster-g10b-turns.test.cjs'
+      - 'tests/food-monster-g11b-turns.test.cjs'
+      - 'tests/food-monster-g9f-approvals.php'
+      - 'tests/food-monster-g12e-llm-isolation.php'
+      - 'tests/food-monster-g12e-contract.php'
+      - 'docs/FOOD-MONSTER-G12E-REMEDIATION.md'
+      - '.github/workflows/food-monster-g12e.yml'
+jobs:
+  speaker-memory-and-voice:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Lint server and client
+        run: |
+          php -l includes/food-monster-room-presence.php
+          php -l includes/food-monster-conversation-memory.php
+          php -l includes/food-monster-g11d-followups.php
+          php -l api/agent-workspace.php
+          php -l api/food-monster-approvals.php
+          php -l api/food-monster-llm.php
+          php -l includes/food-monster-llm.php
+          php -l food-monster.php
+          php -l agent-canvas.php
+          node --check js/global-agent.js
+          node --check js/voice-turn-taking.js
+      - name: Speaker handoffs, employee memory, permissions boundary
+        run: |
+          php tests/food-monster-g11a-speaker.php
+          php tests/food-monster-g9c-presence.php
+          php tests/food-monster-g9d-conversations.php
+          php tests/food-monster-g9e-memory.php
+          php tests/food-monster-g11c-concepts.php
+          php tests/food-monster-g11d-followups.php
+          php tests/food-monster-g12e-contract.php
+          php tests/food-monster-g12e-llm-isolation.php
+          php tests/food-monster-g9f-approvals.php
+          php scripts/test-fm-g9f-relevance.php
+      - name: Conversation recovery, privacy, eight-person stress
+        run: |
+          node tests/food-monster-g10a-tracker.test.cjs
+          node tests/food-monster-g10b-turns.test.cjs
+          node tests/food-monster-g11b-turns.test.cjs
+          node tests/food-monster-g10e-certification.test.cjs
+          node tests/voice-diagnostics.test.js
