@@ -54,7 +54,16 @@ function fm11d_verified_turn_suggestion(PDO $pdo,array $operator,array $pending,
     $key=(int)$operator['organization_id'].':'.(int)$operator['id'].':'.$personId;
     $last=(int)($_SESSION['fm11d_hint_times'][$key]??0);
     if($last>time()-1200)return null;
+    // Do not repeatedly re-offer the same advice with the same two source
+    // messages. This is ephemeral in-session Agent Brain deduplication only.
+    $fingerprint=hash('sha256',$hint['type'].'|'.implode('|',$hint['sourceMessageIds']));
+    if(($_SESSION['fm12d_hint_fingerprints'][$key]??'')===$fingerprint)return null;
     $_SESSION['fm11d_hint_times'][$key]=time();
+    $_SESSION['fm12d_hint_fingerprints'][$key]=$fingerprint;
+    if(count($_SESSION['fm12d_hint_fingerprints'])>32){
+      $_SESSION['fm12d_hint_fingerprints']=array_intersect_key(
+        $_SESSION['fm12d_hint_fingerprints'],$_SESSION['fm11d_hint_times']);
+    }
     if(count($_SESSION['fm11d_hint_times'])>32){
       asort($_SESSION['fm11d_hint_times'],SORT_NUMERIC);
       $_SESSION['fm11d_hint_times']=array_slice($_SESSION['fm11d_hint_times'],-32,null,true);
