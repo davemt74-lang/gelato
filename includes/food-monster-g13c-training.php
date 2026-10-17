@@ -131,7 +131,7 @@ function fm13c_transition(?array $prior,array $command,?array $material,string $
             $answer=fm13c_answer($state,$material);
         }else{
             $answer=fm13c_answer($state,$material,
-                'The saved instructions do not establish additional reasons or safety details. Ask the kitchen manager if you need an explanation.');
+                'The saved instruction does not establish additional reasons or safety details. Ask the kitchen manager if you need an explanation.');
         }
     }
     $state['lastTurnId']=$turnId;$state['updatedAt']=$now;
