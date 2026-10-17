@@ -1,0 +1,59 @@
+name: FM-G13E Training Intelligence
+on:
+  pull_request:
+    paths:
+      - 'includes/food-monster-g13e-intelligence.php'
+      - 'api/food-monster-training-intelligence.php'
+      - 'api/food-monster-training.php'
+      - 'api/agent-workspace.php'
+      - 'includes/food-monster-g13c-training.php'
+      - 'includes/food-monster-g13d-dialogue.php'
+      - 'js/agent-canvas.js'
+      - 'agent-canvas.php'
+      - 'tests/food-monster-g13e-intelligence.php'
+      - '.github/workflows/food-monster-g13e.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'includes/food-monster-g13e-intelligence.php'
+      - 'api/food-monster-training-intelligence.php'
+      - 'api/food-monster-training.php'
+      - 'api/agent-workspace.php'
+      - 'includes/food-monster-g13c-training.php'
+      - 'includes/food-monster-g13d-dialogue.php'
+      - 'js/agent-canvas.js'
+      - 'agent-canvas.php'
+      - 'tests/food-monster-g13e-intelligence.php'
+      - '.github/workflows/food-monster-g13e.yml'
+jobs:
+  training-evidence-and-privacy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_mysql
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Lint training analytics, APIs and Agent Canvas
+        run: |
+          php -l includes/food-monster-g13e-intelligence.php
+          php -l api/food-monster-training-intelligence.php
+          php -l api/food-monster-training.php
+          php -l api/agent-workspace.php
+          php -l agent-canvas.php
+          php -l tests/food-monster-g13e-intelligence.php
+          node --check js/agent-canvas.js
+      - name: Training evidence, privacy and inherited safety regressions
+        run: |
+          php tests/food-monster-g13e-intelligence.php
+          php tests/food-monster-g13d-dialogue.php
+          php tests/food-monster-g13c-training.php
+          php tests/food-monster-g13b-knowledge.php
+          php tests/food-monster-g13a-engagement.php
+          php tests/food-monster-g12e-llm-isolation.php
+          php tests/food-monster-g9f-approvals.php
+          node tests/food-monster-g10b-turns.test.cjs
+          node tests/food-monster-g11b-turns.test.cjs
