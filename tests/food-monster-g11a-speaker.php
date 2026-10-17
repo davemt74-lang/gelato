@@ -50,5 +50,15 @@ $api=file_get_contents(__DIR__.'/../api/agent-workspace.php');
 check11(str_contains($api,"$"."roomSpeaker=$"."role==='user'")&&str_contains($api,'fm11a_room_voice_turn($user,$personSpeaker)'),
   'workspace records only committed voice speaker on user turn');
 check11(str_contains($api,"'roomSpeaker'=>$"."roomSpeaker"),'attribution has an explicit non-authority receipt');
+// G12A: only two independently verified, fresh turns can mark a handoff.
+$_SESSION['fm9c_room']=['org'=>8,'operator'=>4,'seen'=>$now,'people'=>[$first,$second]];
+$voiceA=['personId'=>12,'voiceEventId'=>'voice-'.str_repeat('c',20),'identityAssurance'=>'provisional_voice_match'];
+$voiceB=['personId'=>13,'voiceEventId'=>'voice-'.str_repeat('d',20),'identityAssurance'=>'provisional_voice_match'];
+check11(fm11a_room_voice_turn($owner,$voiceA,$now)['handoffFromPreviousVerifiedTurn']===false,'first verified speaker is not a handoff');
+check11(fm11a_room_voice_turn($owner,$voiceB,$now+1)['handoffFromPreviousVerifiedTurn']===true,'verified different speaker creates handoff');
+check11(fm11a_room_voice_turn($owner,$voiceB,$now+2)['handoffFromPreviousVerifiedTurn']===false,'repeated same speaker is not a handoff');
+fm11a_room_voice_turn($owner,null,$now+3);
+check11(fm11a_room_voice_turn($owner,$voiceA,$now+4)['handoffFromPreviousVerifiedTurn']===false,'unknown intermediary clears handoff continuity');
+check11(fm11a_room_voice_turn($owner,$voiceB,$now+11)===null,'stale room denies handoff');
 $_SESSION=$original;
 echo "FM-G11A room speaker attribution PASS ($n assertions)\n";
