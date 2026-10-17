@@ -23,6 +23,7 @@ on:
       - 'tests/food-monster-g9f-approvals.php'
       - 'tests/food-monster-g12e-llm-isolation.php'
       - 'tests/food-monster-g12e-contract.php'
+      - 'docs/FOOD-MONSTER-G12E-REMEDIATION.md'
       - '.github/workflows/food-monster-g12e.yml'
   push:
     branches: [main]
@@ -48,6 +49,7 @@ on:
       - 'tests/food-monster-g9f-approvals.php'
       - 'tests/food-monster-g12e-llm-isolation.php'
       - 'tests/food-monster-g12e-contract.php'
+      - 'docs/FOOD-MONSTER-G12E-REMEDIATION.md'
       - '.github/workflows/food-monster-g12e.yml'
 jobs:
   speaker-memory-and-voice:
