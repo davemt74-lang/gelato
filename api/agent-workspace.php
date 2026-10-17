@@ -15,6 +15,7 @@ require_once __DIR__.'/../includes/food-monster-room-presence.php';
 require_once __DIR__.'/../includes/food-monster-conversation-memory.php';
 require_once __DIR__.'/../includes/food-monster-g11d-followups.php';
 require_once __DIR__.'/../includes/food-monster-g13e-intelligence.php';
+require_once __DIR__.'/../includes/food-monster-g13f-procedure-review.php';
 require_once __DIR__.'/../includes/food-monster-g13c-training.php';
 require_once __DIR__.'/../includes/food-monster-g13b-knowledge.php';
 require_once __DIR__.'/../includes/food-monster-operational-followup.php';
@@ -162,6 +163,20 @@ try{
         // recent canonical turn and a server-resolved owner voice event only.
         // Do not trust a client-supplied participant, role, or channel flag.
         $roomThread=trim((string)($in['threadId']??''));
+        // Full menu-procedure publication requires typed Super Admin consent.
+        // No shared-room voice, camera match, or LLM output can approve.
+        $reviewIntent=fm13f_intent($message);
+        if($reviewIntent!==null
+            &&preg_match('/^agent-[a-f0-9]{20}$/D',$roomThread)
+            &&gaw_thread($pdo,$org,$uid,$roomThread)){
+            $reviewLast=gaw_messages($pdo,$org,$uid,$roomThread,1)[0]??[];
+            if(($reviewLast['role']??'')==='user'
+                &&trim((string)($reviewLast['content']??''))===$message
+                &&fm13f_authorized($user,(string)($reviewLast['channel']??'')))
+                app_json_response(['ok'=>true,
+                    'route'=>'api/food-monster-procedure-review.php?threadId='.rawurlencode($roomThread),
+                    'domain'=>'food_monster_procedure_review','nodeMode'=>'approval_required']);
+        }
         $insightIntent=fm13e_intent($message);
         if($insightIntent!==null
             &&preg_match('/^agent-[a-f0-9]{20}$/D',$roomThread)
