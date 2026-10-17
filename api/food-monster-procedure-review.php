@@ -78,7 +78,7 @@ try{
             $proposal=[
                 'id'=>'prp-'.bin2hex(random_bytes(10)),'ownerId'=>$uid,'orgId'=>$org,
                 'itemId'=>$itemId,'itemName'=>mb_substr((string)$item['name'],0,100,'UTF-8'),
-                'sourceHash'=>fm13f_notes_digest($old),'original'=>$old,
+                'sourceHash'=>fm13f_notes_digest($old),'sourceVersion'=>(int)($item['version']??0),'original'=>$old,
                 'replacement'=>$replacement,'createdAt'=>time(),
                 'status'=>'draft','approvedAt'=>null,'publishedAt'=>null
             ];
@@ -104,16 +104,25 @@ try{
                 ||(int)($proposal['itemId']??0)!==(int)$item['id'])
                 throw new DomainException('Proposal state changed during review.');
             $old=(string)($item['preparation_notes']??'');
+            if(isset($proposal['sourceVersion'])
+                &&(int)$proposal['sourceVersion']!==(int)($item['version']??-1))
+                throw new DomainException('The menu item version changed; start a new review.');
             $decision=fm13f_decide($proposal,$action,$old,time());
             if(!$decision['allowed'])throw new DomainException($decision['reason']);
             if($action==='approve')$proposal['approvedAt']=time();
             if($action==='publish'){
                 // The approved replacement is locked to the original exact
                 // procedure text; concurrent edits must force a fresh review.
-                $q=$pdo->prepare("UPDATE menu_items SET preparation_notes=?
+                $sql="UPDATE menu_items SET preparation_notes=?,version=version+1,updated_at=NOW(6)
                     WHERE organization_id=? AND id=? AND is_active=1
-                      AND COALESCE(preparation_notes,'')=?");
-                $q->execute([(string)$proposal['replacement'],$org,(int)$proposal['itemId'],$old]);
+                      AND COALESCE(preparation_notes,'')=?";
+                $args=[(string)$proposal['replacement'],$org,(int)$proposal['itemId'],$old];
+                if(isset($proposal['sourceVersion'])){
+                    $sql.=' AND version=?';
+                    $args[]=(int)$proposal['sourceVersion'];
+                }
+                $q=$pdo->prepare($sql);
+                $q->execute($args);
                 if($q->rowCount()!==1)
                     throw new DomainException('The menu procedure changed; nothing was published.');
                 $proposal['publishedAt']=time();
