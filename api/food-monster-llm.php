@@ -5,6 +5,7 @@ require_once __DIR__.'/../includes/agent-workspace-core.php';
 require_once __DIR__.'/../includes/food-monster-llm.php';
 require_once __DIR__.'/../includes/food-monster-person-conversations.php';
 require_once __DIR__.'/../includes/food-monster-conversation-memory.php';
+require_once __DIR__.'/../includes/food-monster-g13a-engagement.php';
 
 $user=app_require_auth();
 $org=(int)$user['organization_id'];$uid=(int)$user['id'];
@@ -37,11 +38,9 @@ try{
     $last=end($records);
     if(!$last||($last['role']??'')!=='user'||trim((string)($last['content']??''))!==$message)
         app_json_response(['ok'=>false,'message'=>'Send this message through the Gelato Agent chat.'],409);
-    $selected=fmllm_choose($credentials,$provider);
-    if($selected===null)app_json_response(['ok'=>false,'message'=>'Selected AI provider is not configured. Ask a Gelato administrator to configure an OpenAI or Anthropic API key.'],503);
-    fmllm_rate_limit($org,$uid);
     $history=fmllm_history($records,12);
     $personMemory=fm9e_llm_memory($pdo,$user,$threadId,$last);
+    $engagement=['mode'=>'ordinary','context'=>'','reply'=>null];
     // FM-G12E: a verified employee's model history must NEVER include the
     // operator's mixed-speaker room transcript. Authorize the person mirror
     // by canonical server evidence, not by browser names or person IDs.
@@ -58,6 +57,7 @@ try{
             &&time()>=(int)($pending['createdAt']??0)
             &&preg_match('/^agent-[a-f0-9]{20}$/D',$personThread)===1;
         $personHistory=[];
+        $personRows=[];
         if($verified){
             // Enforces current organization membership before person access.
             fm9d_person_collections($pdo,$user,$personId);
@@ -65,8 +65,25 @@ try{
             $personHistory=fmllm_history($personRows,12);
         }
         $history=fm12e_isolate_voice_history($history,$personHistory,$last,$verified);
+        $engagement=fm13a_engagement_plan($personRows,$last,$threadId,$verified,time());
+    }elseif(($last['channel']??'')==='voice'){
+        // Non-owner voice also receives no mixed room context by default.
+        $history=fm12e_isolate_voice_history($history,[],$last,false);
+        $engagement=fm13a_engagement_plan([],$last,$threadId,false,time());
+    }
+    // An ambiguous unidentified voice turn cannot inherit another employee's
+    // question. Ask an on-demand clarification without spending provider tokens.
+    if($engagement['mode']==='clarify'){
+        app_json_response(['ok'=>true,'skill'=>'agent.participant_clarification',
+            'answer'=>$engagement['reply'],'sources'=>[],'data'=>null]);
+    }
+    if($engagement['mode']==='continue'){
+        $personMemory=mb_substr((string)$engagement['context']."\n".$personMemory,0,1100,'UTF-8');
     }
     if(!$history||end($history)['role']!=='user')throw new InvalidArgumentException('A user message is required.');
+    $selected=fmllm_choose($credentials,$provider);
+    if($selected===null)app_json_response(['ok'=>false,'message'=>'Selected AI provider is not configured. Ask a Gelato administrator to configure an OpenAI or Anthropic API key.'],503);
+    fmllm_rate_limit($org,$uid);
     try{
         $key=app_decrypt_secret((string)$selected['credential']['encrypted_key'],(string)$selected['credential']['nonce'],(string)$selected['credential']['encryption_method']);
     }catch(Throwable $error){
