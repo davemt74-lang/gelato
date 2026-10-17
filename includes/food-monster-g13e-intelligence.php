@@ -125,7 +125,11 @@ function fm13e_answer(array $insights,string $scope,array $people):array
     foreach(array_slice($list,0,12) as $person){
         $current=$person['current'];
         $name=$scope==='self'?'Your training':($names[$person['personId']]??'Participant')."'s training";
-        $lines[]=$name.': '.$current['status'].', step '.($current['stepIndex']+1).
+        $source=empty($person['sourceAvailable'])
+            ?'source no longer confirmed'
+            :mb_substr((string)($person['sourceTitle']??''),0,100,'UTF-8');
+        if($source==='')$source='source not identified';
+        $lines[]=$name.' ('.$source.'): '.$current['status'].', step '.($current['stepIndex']+1).
             '/'.$current['stepCount'].'; recorded interactions in the last 60 days: '.$person['events'].
             '; recorded practice attempts (current session): '.$current['practiceAttempts'].
             ', correct selections: '.$current['practiceCorrect'].'.'.
