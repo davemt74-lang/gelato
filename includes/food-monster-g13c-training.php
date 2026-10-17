@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__.'/food-monster-g13b-knowledge.php';
 require_once __DIR__.'/food-monster-person-conversations.php';
+require_once __DIR__.'/food-monster-g13d-dialogue.php';
 
 /** Deliberate training utterances only; never hijack KDS next-ticket controls. */
 function fm13c_command(string $message):?array
@@ -16,9 +17,14 @@ function fm13c_command(string $message):?array
         'resume'=>'^(?:resume training|continue training|where were we in training)$',
         'restart'=>'^(?:restart training|start training over)$',
         'question'=>'^(?:why (?:this|that) step|explain (?:this|that|the current) step|what does (?:this|that) step mean|what temperature for this step)$',
+        'quiz'=>'^(?:quiz me|check my knowledge|training quiz|practice question)$',
+        'hint'=>'^(?:training hint|hint for (?:this|the current) step|give me a training hint)$',
+        'progress'=>'^(?:training progress|my training progress|training summary|summarize my training)$',
     ];
     foreach($actions as $action=>$regex)
         if(preg_match('/'.$regex.'/u',$s))return ['action'=>$action,'subject'=>''];
+    if(preg_match('/^(?:training answer|answer|my answer)(?: is)? ([1-3])$/u',$s,$m))
+        return ['action'=>'answer','choice'=>(int)$m[1],'subject'=>''];
     // Require a deliberate training request; do not hijack "show me sales".
     $starts=[
         '/^(?:start|begin)\s+(?:a\s+|the\s+)?(?:training|practice)\s+(?:on|for|about)\s+(.{2,160})$/u',
@@ -66,7 +72,11 @@ function fm13c_material(array $source,string $kind):?array
     $steps=fm13c_steps($source,$kind);
     if($id===''||$name===''||!$steps)return null;
     return ['kind'=>$kind,'id'=>$id,'name'=>mb_substr($name,0,120,'UTF-8'),
-        'steps'=>$steps,'digest'=>hash('sha256',json_encode([$kind,$id,$steps],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES))];
+        'steps'=>$steps,
+        'notes'=>mb_substr(trim((string)($kind==='menu'
+            ?($source['sectionNote']??''):($source['notes']??''))),0,1200,'UTF-8'),
+        'digest'=>hash('sha256',json_encode([$kind,$id,$steps],
+            JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES))];
 }
 function fm13c_answer(array $state,array $material,string $note=''):string
 {
@@ -91,10 +101,12 @@ function fm13c_transition(?array $prior,array $command,?array $material,string $
     if($action==='start'){
         if(!$material)return ['changed'=>false,'state'=>$prior,'answer'=>'I could not find a single active procedure with recorded steps. Please name the exact item or ask a manager to record its preparation steps.'];
         $state=['status'=>'active','kind'=>$material['kind'],'id'=>$material['id'],
-            'digest'=>$material['digest'],'index'=>0,'stepCount'=>count($material['steps'])];
+            'digest'=>$material['digest'],'index'=>0,'stepCount'=>count($material['steps']),
+            'practiceAttempts'=>0,'practiceCorrect'=>0,'quiz'=>null];
         $answer=fm13c_answer($state,$material,'Training started.');
     }else{
-        if(!$prior||!in_array($action,['next','repeat','previous','pause','resume','restart','question'],true))
+        if(!$prior||!in_array($action,['next','repeat','previous','pause','resume','restart','question',
+            'quiz','answer','hint','progress'],true))
             return $no;
         $state=$prior;
         if(!$material||$material['kind']!==($prior['kind']??'')||$material['id']!==($prior['id']??'')
@@ -102,21 +114,66 @@ function fm13c_transition(?array $prior,array $command,?array $material,string $
             $state['status']='paused';
             $answer='The recorded procedure was changed or is no longer available. I paused training. Ask a manager to verify it, then start training again.';
         }elseif($action==='pause'){
+            $state['quiz']=null;
             $state['status']='paused';
             $answer='Training paused for this participant. Say "resume training" to pick up at the same step.';
         }elseif($action==='restart'){
+            $state['quiz']=null;
             $state['status']='active';$state['index']=0;
             $answer=fm13c_answer($state,$material,'Training restarted.');
         }elseif($action==='resume'){
             if(($state['status']??'')==='completed'){
                 return ['changed'=>false,'state'=>$prior,'answer'=>'This procedure is completed. Say "restart training" to practice it again.'];
             }
-            $state['status']='active';
+            $state['status']='active';$state['quiz']=null;
             $answer=fm13c_answer($state,$material,'Welcome back.');
+        }elseif($action==='progress'){
+            $answer=fm13d_progress($state,$material);
         }elseif(($state['status']??'')!=='active'){
             return ['changed'=>false,'state'=>$prior,'answer'=>
                 'This training is paused or completed. Say "resume training" or "restart training".'];
+        }elseif($action==='quiz'){
+            $prompt=fm13d_quiz_question($state,$material);
+            if(!$prompt){
+                $answer='This procedure needs at least two distinct recorded steps for a multiple-choice practice check. You can repeat the current step.';
+                $state['quiz']=null;
+            }else{
+                $state['quiz']=['correct'=>$prompt['correct'],'stepIndex'=>(int)$state['index'],
+                    'digest'=>$material['digest'],'optionCount'=>$prompt['optionCount'],'tries'=>0];
+                $answer=$prompt['answer'];
+            }
+        }elseif($action==='answer'){
+            $quiz=is_array($state['quiz']??null)?$state['quiz']:null;
+            if(!$quiz||($quiz['digest']??'')!==$material['digest']
+                ||(int)($quiz['stepIndex']??-1)!==(int)$state['index']){
+                $state['quiz']=null;
+                $answer='No current practice question is open. Say "quiz me" to start one.';
+            }else{
+                $choice=(int)($command['choice']??0);
+                $max=(int)($quiz['optionCount']??0);
+                if($choice<1||$choice>$max){
+                    $answer='Please select one of the displayed practice options.';
+                }else{
+                    $state['practiceAttempts']=min(100000,(int)($state['practiceAttempts']??0)+1);
+                    $quiz['tries']=(int)($quiz['tries']??0)+1;
+                    if($choice===(int)$quiz['correct']){
+                        $state['practiceCorrect']=min(100000,(int)($state['practiceCorrect']??0)+1);
+                        $state['quiz']=null;
+                        $answer='That matches the recorded instruction for this step. Good practice—not an assessment or certification. '.fm13c_answer($state,$material);
+                    }elseif($quiz['tries']>=2){
+                        $state['quiz']=null;
+                        $answer='Not quite. The recorded instruction is: '.$material['steps'][(int)$state['index']].
+                            '. This question is closed. Say "quiz me" to practice again.';
+                    }else{
+                        $state['quiz']=$quiz;
+                        $answer='Not quite. Review the current recorded step, then try another displayed option or say "training hint".';
+                    }
+                }
+            }
+        }elseif($action==='hint'){
+            $answer='Practice hint: '.fm13d_explanation($state,$material);
         }elseif($action==='next'){
+            $state['quiz']=null;
             if((int)$state['index']+1>=count($material['steps'])){
                 $state['status']='completed';
                 $answer='You have reached the end of the recorded '.$material['name'].' procedure. This is not a skills assessment or certification. Say "restart training" to review it.';
@@ -125,13 +182,13 @@ function fm13c_transition(?array $prior,array $command,?array $material,string $
                 $answer=fm13c_answer($state,$material);
             }
         }elseif($action==='previous'){
+            $state['quiz']=null;
             $state['index']=max(0,(int)$state['index']-1);
             $answer=fm13c_answer($state,$material);
         }elseif($action==='repeat'){
             $answer=fm13c_answer($state,$material);
         }else{
-            $answer=fm13c_answer($state,$material,
-                'The saved instruction does not establish additional reasons or safety details. Ask the kitchen manager if you need an explanation.');
+            $answer=fm13d_explanation($state,$material);
         }
     }
     $state['lastTurnId']=$turnId;$state['updatedAt']=$now;

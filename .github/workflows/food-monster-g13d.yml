@@ -1,0 +1,61 @@
+name: FM-G13D Adaptive Training Dialogue
+on:
+  pull_request:
+    paths:
+      - 'includes/food-monster-g13c-training.php'
+      - 'includes/food-monster-g13d-dialogue.php'
+      - 'api/food-monster-training.php'
+      - 'api/agent-workspace.php'
+      - 'includes/food-monster-g13b-knowledge.php'
+      - 'includes/food-monster-person-conversations.php'
+      - 'includes/agent-workspace-core.php'
+      - 'includes/menu-training-knowledge.php'
+      - 'includes/restaurant-brain.php'
+      - 'tests/food-monster-g13c-training.php'
+      - 'tests/food-monster-g13d-dialogue.php'
+      - '.github/workflows/food-monster-g13d.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'includes/food-monster-g13c-training.php'
+      - 'includes/food-monster-g13d-dialogue.php'
+      - 'api/food-monster-training.php'
+      - 'api/agent-workspace.php'
+      - 'includes/food-monster-g13b-knowledge.php'
+      - 'includes/food-monster-person-conversations.php'
+      - 'includes/agent-workspace-core.php'
+      - 'includes/menu-training-knowledge.php'
+      - 'includes/restaurant-brain.php'
+      - 'tests/food-monster-g13c-training.php'
+      - 'tests/food-monster-g13d-dialogue.php'
+      - '.github/workflows/food-monster-g13d.yml'
+jobs:
+  dialogue-practice-and-isolation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_mysql
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Lint source and training API
+        run: |
+          php -l includes/food-monster-g13c-training.php
+          php -l includes/food-monster-g13d-dialogue.php
+          php -l api/food-monster-training.php
+          php -l api/agent-workspace.php
+          php -l tests/food-monster-g13d-dialogue.php
+      - name: Guided dialogue practice and inherited trust-boundary checks
+        run: |
+          php tests/food-monster-g13d-dialogue.php
+          php tests/food-monster-g13c-training.php
+          php tests/food-monster-g13b-knowledge.php
+          php tests/food-monster-g13a-engagement.php
+          php tests/food-monster-g12e-llm-isolation.php
+          php tests/food-monster-g11d-followups.php
+          php tests/food-monster-g9f-approvals.php
+          node tests/food-monster-g10b-turns.test.cjs
+          node tests/food-monster-g11b-turns.test.cjs
