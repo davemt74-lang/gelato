@@ -9,7 +9,7 @@ function fm13b_intent(string $message):?string
 {
     $text=mb_strtolower(trim($message),'UTF-8');
     if($text===''||mb_strlen($text,'UTF-8')>1000)return null;
-    if(preg_match('/^(?:hey gelato[, ]*)?(?:add|remove|delete|change|update|set|create|edit|publish|mark|approve|order|purchase|refund|void|run)\\b/u',$text))return null;
+    if(preg_match('/\\b(?:add|remove|delete|change|update|set|create|edit|publish|mark|approve|order|purchase|refund|void|execute|run)\\b/u',$text))return null;
     if(preg_match('/\\b(?:allergens?|allergies|allergic|gluten|dairy|milk|lactose|peanuts?|sesame|shellfish|tree nuts?|soy|wheat|eggs?)\\b/u',$text))return 'allergen';
     if(preg_match('/\\b(?:recipe|recipe standards?|batch formula|production standards?|yield)\\b/u',$text))return 'recipe';
     if(preg_match('/\\b(?:ingredients?|contains?|made of|what.s in|menu items?|menu price|toppings?|how much|sizes?)\\b/u',$text))return 'menu';
@@ -22,14 +22,15 @@ function fm13b_allowed(array $operator,string $intent,bool $operatorVoiceVerifie
     if(!in_array($intent,['menu','allergen','training','recipe'],true))return false;
     if($intent==='recipe')return (!$voice||$operatorVoiceVerified)
       &&app_has_permission('recipes.view',$operator)&&app_has_permission('recipes.agent',$operator);
-    return app_has_permission('menu.view',$operator);
+    return app_has_permission('menu.view',$operator)
+        ||(app_has_permission('employee.self',$operator)&&app_has_permission('training.self_view',$operator));
 }
 
 /** Strip request words and allergen labels from the menu-item search, not the displayed evidence. */
 function fm13b_subject(string $question):string
 {
     $s=mb_strtolower(trim($question),'UTF-8');
-    $s=preg_replace('/\\b(?:allerg(?:en|ens|y|ies|ic)|contains?|ingredients?|gluten|dairy|milk|lactose|egg|eggs|nuts?|peanuts?|sesame|shellfish|soy|wheat|safe|cross.contact|recipe|instructions?|steps?|how|what|which|where|does|do|can|is|are|the|this|that|it|in|of|on|for|to|i|we|you|do|would|should|a|an|some|please|show|me|tell|prepare|preparation|cook|make|made|much|price|menu)\\b/u',' ',$s)??$s;
+    $s=preg_replace('/\\b(?:allerg(?:en|ens|y|ies|ic)|contains?|ingredients?|gluten|dairy|milk|lactose|egg|eggs|nuts?|peanuts?|sesame|shellfish|soy|wheat|safe|cross.contact|recipe|instructions?|steps?|how|what|which|where|does|do|can|is|are|the|this|that|it|in|of|on|for|to|i|we|you|do|would|should|there|free|with|without|and|of|a|an|some|please|show|me|tell|prepare|preparation|cook|make|made|much|price|menu)\\b/u',' ',$s)??$s;
     return trim(preg_replace('/\\s+/u',' ',$s)??$s," .?!,'\"\\n\\r\\t");
 }
 function fm13b_allergen_key(string $q):?string
@@ -76,6 +77,19 @@ function fm13b_menu_answer(array $matches,string $intent,string $question):array
     }elseif($intent==='training'){
         $answer=$prefix.($prep!==''?'Recorded preparation notes: '.mb_substr($prep,0,650,'UTF-8'):'No verified preparation steps are recorded for this item.');
         $answer.=' Follow the approved kitchen procedure; ask a manager if steps or measurements are missing.';
+    }elseif(preg_match('/\\b(?:price|prices|how much|cost|sizes?)\\b/iu',$question)){
+        $prices=[];
+        foreach(array_slice((array)($item['prices']??[]),0,12) as $price){
+            $amount=$price['amount']??null;
+            if(!is_numeric($amount)||!is_finite((float)$amount)||(float)$amount<0)continue;
+            $label=trim((string)($price['label']??''));
+            $currency=trim((string)($price['currency']??''));
+            $prices[]=($label!==''?mb_substr($label,0,50,'UTF-8').': ':'')
+                .number_format((float)$amount,2,'.','').' '.mb_substr($currency,0,10,'UTF-8');
+        }
+        $answer=$prefix.($prices?'Recorded prices: '.implode('; ',$prices):
+            'No current price is recorded for this item.');
+        $answer.=' Confirm the location and current POS price before quoting a guest.';
     }else{
         $answer=$prefix.'Recorded ingredients: '.($ingredients?implode(', ',array_slice($ingredients,0,18)):'not recorded');
         $description=trim((string)($item['description']??''));
@@ -90,7 +104,7 @@ function fm13b_recipe_answer(array $matches,string $question):array
     $active=array_values(array_filter($matches,static fn($r)=>($r['status']??'')==='active'));
     if(count($active)!==1)return ['skill'=>'food_monster.recipe_knowledge','answer'=>
       count($active)>1?'Multiple active recipe records match. Please name the exact recipe.':
-      'No active approved recipe was found for that request. Please verify with the kitchen manager.',
+      'No active recipe record was found for that request. Please verify with the kitchen manager.',
       'sources'=>[],'data'=>['verified'=>false]];
     $r=$active[0];$name=mb_substr((string)$r['name'],0,100,'UTF-8');
     $ingredients=json_decode((string)($r['ingredients_json']??'[]'),true)?:[];
@@ -104,7 +118,7 @@ function fm13b_recipe_answer(array $matches,string $question):array
         foreach(array_slice($steps,0,10) as $i=>$it)$lines[]=($i+1).'. '.mb_substr(trim(is_array($it)?(string)($it['text']??''):(string)$it),0,180,'UTF-8');
         $answer='Recorded procedure for '.$name.': '.($lines?implode(' ',array_filter($lines)):'no instructions recorded').'.';
     }
-    $answer.=' Use the current approved standard; any missing ingredient or allergen detail must be checked with a manager. Never assume allergy safety.';
+    $answer.=' Verify the current approved standard; any missing ingredient or allergen detail must be checked with a manager. Never assume allergy safety.';
     return ['skill'=>'food_monster.recipe_knowledge','answer'=>$answer,
       'sources'=>['Gelato active recipe '.(string)($r['public_id']??'')],
       'data'=>['verified'=>false,'sourceType'=>'active_recipe']];
