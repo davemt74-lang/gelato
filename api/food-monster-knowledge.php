@@ -16,7 +16,7 @@ $input=app_json_input();app_verify_request_csrf($input);
 try{
     if(($input['action']??'')!=='ask')throw new InvalidArgumentException('Read-only knowledge questions only.');
     $question=trim((string)($input['message']??''));
-    $thread=trim((string)($input['threadId']??''));
+    $thread=trim((string)($input['threadId']??($_GET['threadId']??'')));
     if($question===''||mb_strlen($question,'UTF-8')>1000
        ||!preg_match('/^agent-[a-f0-9]{20}$/D',$thread))
         throw new InvalidArgumentException('Enter a valid question and conversation.');
