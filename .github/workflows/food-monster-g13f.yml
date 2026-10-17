@@ -1,0 +1,58 @@
+name: FM-G13F Governed Procedure Review
+on:
+  pull_request:
+    paths:
+      - 'includes/food-monster-g13f-procedure-review.php'
+      - 'api/food-monster-procedure-review.php'
+      - 'api/agent-workspace.php'
+      - 'api/food-monster-training.php'
+      - 'includes/food-monster-g13e-intelligence.php'
+      - 'includes/menu-training-knowledge.php'
+      - 'js/agent-canvas.js'
+      - 'agent-canvas.php'
+      - 'tests/food-monster-g13f-procedures.php'
+      - '.github/workflows/food-monster-g13f.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'includes/food-monster-g13f-procedure-review.php'
+      - 'api/food-monster-procedure-review.php'
+      - 'api/agent-workspace.php'
+      - 'api/food-monster-training.php'
+      - 'includes/food-monster-g13e-intelligence.php'
+      - 'includes/menu-training-knowledge.php'
+      - 'js/agent-canvas.js'
+      - 'agent-canvas.php'
+      - 'tests/food-monster-g13f-procedures.php'
+      - '.github/workflows/food-monster-g13f.yml'
+jobs:
+  review-approval-and-source-guards:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_mysql
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Lint procedure review, Agent Brain and permission boundaries
+        run: |
+          php -l includes/food-monster-g13f-procedure-review.php
+          php -l api/food-monster-procedure-review.php
+          php -l api/agent-workspace.php
+          php -l agent-canvas.php
+          php -l tests/food-monster-g13f-procedures.php
+          node --check js/agent-canvas.js
+      - name: Procedure review and inherited trust-boundary regressions
+        run: |
+          php tests/food-monster-g13f-procedures.php
+          php tests/food-monster-g13e-intelligence.php
+          php tests/food-monster-g13d-dialogue.php
+          php tests/food-monster-g13c-training.php
+          php tests/food-monster-g13b-knowledge.php
+          php tests/food-monster-g13a-engagement.php
+          php tests/food-monster-g9f-approvals.php
+          node tests/food-monster-g10b-turns.test.cjs
+          node tests/food-monster-g11b-turns.test.cjs
