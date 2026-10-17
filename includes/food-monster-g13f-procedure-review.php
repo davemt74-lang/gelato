@@ -127,7 +127,7 @@ function fm13f_decide(array $proposal,string $action,string $currentNotes,int $n
 }
 function fm13f_source_snapshot(PDO $pdo,int $org,int $menuId):?array
 {
-    $q=$pdo->prepare("SELECT id,name,preparation_notes FROM menu_items WHERE organization_id=?
+    $q=$pdo->prepare("SELECT id,name,preparation_notes,version FROM menu_items WHERE organization_id=?
       AND id=? AND is_active=1 LIMIT 1 FOR UPDATE");
     $q->execute([$org,$menuId]);
     $row=$q->fetch(PDO::FETCH_ASSOC);
