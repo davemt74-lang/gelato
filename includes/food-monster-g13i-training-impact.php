@@ -64,7 +64,7 @@ function fm13i_assess(array $state,?array $material,?array $revision):array
         :($status==='source_missing'
           ?'Ask a manager to verify the missing active procedure before resuming.'
           :($ack['acknowledgedUpdate']?'The revised source is acknowledged. Say "start updated training" for a guided review.'
-            :'Review the updated preparation steps. Say "review updated training", then acknowledge the change before refreshing practice.'))
+            :'Review the updated preparation steps, then explicitly restart training via the revised-source acknowledgement flow: say "review updated training", "acknowledge updated training", and "start updated training".'))
     ];
 }
 function fm13i_summary(array $people,string $scope,bool $partial):array
