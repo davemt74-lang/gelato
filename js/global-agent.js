@@ -25,7 +25,7 @@
     poll: null,
     voiceDraft: {owned: false, previous: '', committed: ''},
     conversation: false, conversationTimer: null, conversationDraft: '',
-    recentFinalSpeech: {text:'',at:0}, recognitionFaults:0,
+    recentFinalSpeech: {text:'',at:0}, recognitionFaults:0, recognitionRestarts:0,
   };
 
   const has = (permission) => S.permissions.includes('*') || S.permissions.includes(permission);
@@ -194,9 +194,16 @@
         S.usedVoiceEvents.add(freshSpeakerEvent);
         if(S.usedVoiceEvents.size>32)S.usedVoiceEvents.delete(S.usedVoiceEvents.values().next().value);
       }
+      // A handoff can only come from this turn's server-confirmed correlation.
+      const handoff=voice&&submitted?.roomSpeaker?.handoffFromPreviousVerifiedTurn===true
+        &&Boolean(submitted?.participant);
       if(voice)window.dispatchEvent(new CustomEvent('gelato-agent-speaker-turn',{
         detail:{verified:Boolean(freshSpeakerEvent)&&Boolean(submitted?.participant),
-          correlated:Boolean(submitted?.roomSpeaker),unverified:!submitted?.participant}
+          correlated:Boolean(submitted?.roomSpeaker),unverified:!submitted?.participant,
+          handoff:Boolean(handoff)}
+      }));
+      if(handoff)window.dispatchEvent(new CustomEvent('gelato-agent-speaker-handoff',{
+        detail:{verified:true,threadId:S.thread}
       }));
 
       const route = await post('api/agent-workspace.php', {action: 'route', message: text, threadId: S.thread});
@@ -595,7 +602,7 @@
       });
       S.savedListening=!!Number(data.preferences?.listening_enabled??Number(!!on));
       S.listening=!!on;
-      if(on)S.recognitionFaults=0;
+      if(on){S.recognitionFaults=0;S.recognitionRestarts=0;}
       if(!on){clearConversationTimer();S.conversationDraft='';if(S.conversation){S.conversation=false;renderConversation();}}
       S.wakeStandby=!!(keepWake||on);
       if(on){
@@ -617,6 +624,13 @@
     }catch(error){status(error.message,4500);return false;}
   }
   function diag(kind,details){window.GelatoVoiceDiagnostics?.record?.('global-agent',kind,details);}
+  // A fatal microphone failure must stop both visible voice modes and invalidate
+  // all timers; previously Conversation Mode stayed on while mic was disabled.
+  function haltVoiceAfterFailure(){
+    clearConversationTimer();S.conversationDraft='';resetVoiceDraft();
+    S.conversation=false;S.listening=false;S.wakeStandby=false;
+    stopPoll();stopContinuous();renderConversation();renderListening();
+  }
   function startContinuous(){
     const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
     if(!SpeechRecognition||document.hidden||(!S.listening&&!S.wakeStandby))return false;
@@ -631,6 +645,7 @@
       S.recognitionFaults=0;
       for(let index=event.resultIndex;index<event.results.length;index++){
         const result=event.results[index],text=String(result[0]?.transcript||'').trim();
+        if(result.isFinal&&text)S.recognitionRestarts=0;
         const evaluation=window.GelatoVoiceTurns?.evaluate?.(text,result[0]?.confidence,{wakeRequired:!S.listening});
         // FM-G7B2E: loudspeaker playback is never proof of a new user turn.
         // Do not treat "wake-required-while-speaking" as an interruption:
@@ -710,8 +725,7 @@
       const error=String(event.error||'unknown');diag('error',{error});
       if(!['no-speech','aborted'].includes(error))S.recognitionFaults++;
       if(['not-allowed','service-not-allowed','audio-capture'].includes(error)){
-        clearConversationTimer();S.conversationDraft='';resetVoiceDraft();
-        stopContinuous();S.listening=false;S.wakeStandby=false;stopPoll();diag('blocked',{error});
+        haltVoiceAfterFailure();diag('blocked',{error});
         status('Speech recognition blocked: '+error+'. Check browser microphone and speech-service settings.',6500);
         renderListening();return;
       }
@@ -721,24 +735,23 @@
       if(S.rec!==activeRec)return;
       S.micActive=false;diag('ended');renderListening();
       if((S.listening||S.wakeStandby)&&!document.hidden){
-        if(S.recognitionFaults>=5){
-          status('Speech service keeps failing. Microphone paused; press Listen to retry.',6500);
-          clearConversationTimer();S.conversationDraft='';resetVoiceDraft();
-          S.listening=false;S.wakeStandby=false;stopPoll();stopContinuous();renderListening();return;
+        S.recognitionRestarts++;
+        if(S.recognitionFaults>=5||S.recognitionRestarts>=5){
+          status('Speech service keeps restarting. Microphone paused; press Listen to retry.',6500);
+          haltVoiceAfterFailure();return;
         }
         const delay=Math.min(8000,650*Math.pow(2,Math.max(0,S.recognitionFaults-1)));
         diag('retry-scheduled',{delay,faults:S.recognitionFaults});
         setTimeout(()=>{if(S.rec===activeRec&&(S.listening||S.wakeStandby)&&!document.hidden){
           try{diag('retry');activeRec.start();}catch{
-            diag('failed',{error:'start-failed'});clearConversationTimer();S.conversationDraft='';
-            S.listening=false;S.wakeStandby=false;stopPoll();stopContinuous();
+            diag('failed',{error:'start-failed'});haltVoiceAfterFailure();
           }
         }},delay);
       }
     };
     try{activeRec.start();return true;}catch(error){diag('failed',{error:'start-failed'});
-      stopContinuous();status('Could not start microphone: '+(error.message||'unavailable'),3500);
-      renderListening();return false;
+      haltVoiceAfterFailure();status('Could not start microphone: '+(error.message||'unavailable'),3500);
+      return false;
     }
   }
   function stopContinuous(){
