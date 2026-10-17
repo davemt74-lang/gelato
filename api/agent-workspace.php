@@ -14,6 +14,7 @@ require_once __DIR__.'/../includes/food-monster-person-conversations.php';
 require_once __DIR__.'/../includes/food-monster-room-presence.php';
 require_once __DIR__.'/../includes/food-monster-conversation-memory.php';
 require_once __DIR__.'/../includes/food-monster-g11d-followups.php';
+require_once __DIR__.'/../includes/food-monster-g13c-training.php';
 require_once __DIR__.'/../includes/food-monster-g13b-knowledge.php';
 require_once __DIR__.'/../includes/food-monster-operational-followup.php';
 require_once __DIR__.'/../includes/food-monster-high-impact-approval.php';
@@ -157,6 +158,20 @@ try{
         // recent canonical turn and a server-resolved owner voice event only.
         // Do not trust a client-supplied participant, role, or channel flag.
         $roomThread=trim((string)($in['threadId']??''));
+        $trainingCommand=fm13c_command($message);
+        // Training is read-only guidance with person-scoped progress. This
+        // route is selected ONLY from exact deliberate training utterances,
+        // and the endpoint rechecks the canonical saved turn and speaker.
+        if($trainingCommand!==null
+            &&preg_match('/^agent-[a-f0-9]{20}$/D',$roomThread)
+            &&gaw_thread($pdo,$org,$uid,$roomThread)){
+            $trainingLast=gaw_messages($pdo,$org,$uid,$roomThread,1)[0]??[];
+            if(($trainingLast['role']??'')==='user'
+                &&trim((string)($trainingLast['content']??''))===$message)
+                app_json_response(['ok'=>true,
+                    'route'=>'api/food-monster-training.php?threadId='.rawurlencode($roomThread),
+                    'domain'=>'guided_employee_training','nodeMode'=>'read_only']);
+        }
         $knowledgeIntent=fm13b_intent($message);
         if(fm9a_is_super_admin_session($user)
             &&preg_match('/^agent-[a-f0-9]{20}$/D',$roomThread)
