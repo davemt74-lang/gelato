@@ -131,7 +131,7 @@ check13j(str_contains($api,'fm9d_person_collections($pdo,$user,$personId)')
     &&str_contains($api,'FOR UPDATE'),'existing speaker/participant isolation and transaction lock preserved');
 check13j(str_contains($api,'gaw_messages($pdo,$org,$uid,$room,1)')
     &&str_contains($api,'app_verify_request_csrf'),'fresh canonical chat and CSRF required');
-check13j(str_contains($api,"'fm13c_guided_training'")&&str_contains($api,"'action'=>$command['action']"),
+check13j(str_contains($api,"'fm13c_guided_training'")&&str_contains($api,"'action'=>".'$command['."'action'".']'),
     'G13J changes appear as canonical person-scoped training events');
 check13j(str_contains($card,'p.acknowledgedUpdate')&&str_contains($card,'p.refreshCompleted'),
     'Agent Canvas shows acknowledgement distinct from guided completion');
