@@ -1,0 +1,62 @@
+name: FM-G13B Grounded Staff Menu and Recipe Knowledge
+on:
+  pull_request:
+    paths:
+      - 'includes/food-monster-g13b-knowledge.php'
+      - 'includes/menu-training-knowledge.php'
+      - 'includes/restaurant-brain.php'
+      - 'includes/food-monster-g13a-engagement.php'
+      - 'api/food-monster-knowledge.php'
+      - 'api/agent-workspace.php'
+      - 'js/global-agent.js'
+      - 'food-monster.php'
+      - 'agent-canvas.php'
+      - 'tests/food-monster-g13b-knowledge.php'
+      - 'tests/food-monster-g6-contract.php'
+      - '.github/workflows/food-monster-g13b.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'includes/food-monster-g13b-knowledge.php'
+      - 'includes/menu-training-knowledge.php'
+      - 'includes/restaurant-brain.php'
+      - 'includes/food-monster-g13a-engagement.php'
+      - 'api/food-monster-knowledge.php'
+      - 'api/agent-workspace.php'
+      - 'js/global-agent.js'
+      - 'food-monster.php'
+      - 'agent-canvas.php'
+      - 'tests/food-monster-g13b-knowledge.php'
+      - 'tests/food-monster-g6-contract.php'
+      - '.github/workflows/food-monster-g13b.yml'
+jobs:
+  menu-recipe-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_mysql
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Lint canonical evidence integration
+        run: |
+          php -l includes/food-monster-g13b-knowledge.php
+          php -l includes/food-monster-g13a-engagement.php
+          php -l api/food-monster-knowledge.php
+          php -l api/agent-workspace.php
+          php -l food-monster.php
+          php -l agent-canvas.php
+          php -l tests/food-monster-g13b-knowledge.php
+          node --check js/global-agent.js
+      - name: Grounded menu safety and authorization behavior
+        run: |
+          php tests/food-monster-g13b-knowledge.php
+          php tests/food-monster-g13a-engagement.php
+          php tests/food-monster-g12e-llm-isolation.php
+          php tests/food-monster-g6-contract.php
+          php tests/food-monster-g9f-approvals.php
+          node tests/food-monster-g10b-turns.test.cjs
+          node tests/food-monster-g11b-turns.test.cjs
