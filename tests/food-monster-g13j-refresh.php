@@ -46,6 +46,11 @@ $none=fm13c_transition($prior,['action'=>'review_update'],$old,$turn(2),9000);
 check13j(!$none['changed']&&$none['state']===$prior,'review cannot create change without actual source drift');
 $noAck=fm13c_transition($prior,['action'=>'acknowledge_update'],$new,$turn(3),9001);
 check13j(!$noAck['changed']&&$noAck['state']===$prior,'acknowledgement requires prior review');
+$genericStart=fm13c_transition($prior,['action'=>'start'],$new,$turn(16),9002);
+check13j(!$genericStart['changed']&&$genericStart['state']===$prior,
+    'ordinary training start cannot bypass acknowledgement of a changed saved menu');
+check13j(str_contains($genericStart['answer'],'acknowledge updated training'),
+    'generic start explains the required explicit revised procedure review flow');
 $noStart=fm13c_transition($prior,['action'=>'start_refresh'],$new,$turn(4),9002);
 check13j(!$noStart['changed'],'cannot skip review and acknowledgement');
 $review=fm13c_transition($prior,['action'=>'review_update'],$new,$turn(5),9003);
