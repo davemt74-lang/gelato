@@ -78,7 +78,8 @@ check13b(str_contains($contents,'gaw_messages($pdo,$org,$uid,$thread,1)')&&str_c
  'knowledge endpoint requires canonical scoped chat and CSRF');
 check13b(str_contains($contents,'fm9d_person_collections($pdo,$user,$p)')&&str_contains($contents,'fm13a_engagement_plan'),
  'followup knowledge restricted to same authorized person and room');
-check13b(str_contains($router,"'nodeMode'=>'read_only'")&&str_contains($router,"'route'=>'api/food-monster-knowledge.php'"),
+check13b(str_contains($router,"'nodeMode'=>'read_only'")&&str_contains($router,"'route'=>'api/food-monster-knowledge.php?threadId='"),
  'routing explicitly offers read-only endpoint');
 check13b(str_contains($client,"'api/food-monster-knowledge.php'"),'client submits canonical thread to evidence route');
+check13b(str_contains($contents,"\$_GET['threadId']"),'older cached clients can use server-issued reference without claiming a participant');
 echo 'FM-G13B grounded staff knowledge PASS ('.$n.' assertions)'."\n";
