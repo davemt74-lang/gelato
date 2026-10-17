@@ -23,7 +23,7 @@ foreach(['my training insights','my learning history','my guided practice summar
 foreach(['training progress','next ticket','employee performance rating','my schedule',
     'my employee score','what do staff know','my training on pizza'] as $q)
     check13e(fm13e_intent($q)===null,'no hijack of unrelated route: '.$q);
-check13e(fm13e_scope($owner,'team','text',true)==='team','owner can read own team's activity');
+check13e(fm13e_scope($owner,'team','text',true)==='team','owner can read team activity');
 check13e(fm13e_scope($owner,'self','text',true)==='self','owner can read own activity');
 check13e(fm13e_scope($employee,'self','text',false)==='self','staff can read own practice history');
 check13e(fm13e_scope($employee,'team','text',false)===null,'staff cannot access coworker training');
