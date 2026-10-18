@@ -61,11 +61,12 @@ $history=fm14a_events(gaw_messages($pdo,$org,$owner,$thread,50),$owner);
 dbCheck14a(count($history)===1,'canonical start survives real JSON round trip');
 dbCheck14a(fm14a_state($history,time())['active'],'start recovered after database write');
 $records=[];
-foreach(fm14a_gates() as $i=>$gate){
+$eventNumber=2;
+foreach(fm14a_gates() as $gate=>$title){
     $event=['collection'=>'fm14a_kitchen_pilot','source'=>'gelato_server',
         'ownerId'=>$owner,'runId'=>$run,'action'=>'record',
-        'gate'=>$i,'outcome'=>'pass','evidence'=>'Operator observed field equipment behaviour for '.$i.' under real conditions.',
-        'recordedAt'=>time(),'sourceTurnId'=>'msg-'.str_pad(dechex($i+2),20,'0',STR_PAD_LEFT)];
+        'gate'=>$gate,'outcome'=>'pass','evidence'=>'Operator observed field equipment behaviour for '.$gate.' under real conditions.',
+        'recordedAt'=>time(),'sourceTurnId'=>'msg-'.str_pad(dechex($eventNumber++),20,'0',STR_PAD_LEFT)];
     $records[]=$event;
     gaw_append($pdo,$org,$owner,$thread,'system','Pilot field observation',[
         'structured'=>$event,'channel'=>'text']);
