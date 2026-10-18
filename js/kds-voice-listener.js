@@ -4,7 +4,7 @@
   const PreferenceKey='gelato.kds.listenPreference.v2';
   const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
   let mode='off',active=false,recognizer=null,restartTimer=null,failures=0,voiceBusy=false,pausedForSpeech=false,armedUntil=0;
-  let lastBargeIn=0;
+  let lastBargeIn=0,lastFinal={text:'',at:0},recognitionStartedAt=0;
   let preferred='off';
   try { preferred=localStorage.getItem(PreferenceKey)||'off'; } catch {}
   const status=(code,message)=>{
@@ -86,6 +86,13 @@
   function scheduleRestart(){
     cancelRestart();
     if(mode==='off'||document.hidden)return;
+    // Only a manual mode toggle may rearm an exhausted recognizer.
+    // Avoid unbounded rapid retries when a USB/HDMI audio device vanishes.
+    if(failures>=5){
+      mode='off';stopRecognition();
+      status('retry-exhausted','KDS microphone stopped after repeated rapid failures. Check the audio device and explicitly turn listening on again.');
+      return;
+    }
     const delay=Math.min(8000,500*Math.pow(2,Math.min(failures,4)));
     status('retrying','Microphone reconnecting in '+(delay/1000).toFixed(1)+'s…');
     restartTimer=setTimeout(()=>{restartTimer=null;startRecognition();},delay);
@@ -97,9 +104,9 @@
     try{
       const r=new SpeechRecognition();recognizer=r;
       r.lang='en-US';r.continuous=true;r.interimResults=true;r.maxAlternatives=1;
-      r.onstart=()=>{if(recognizer!==r)return;active=true;failures=0;status('listening',mode==='wake'?'Listening for “Hey Gelato”…':'Always-on listening · say read order 12 or any active order number.');};
+      r.onstart=()=>{if(recognizer!==r)return;active=true;recognitionStartedAt=Date.now();status('listening',mode==='wake'?'Listening for “Hey Gelato”…':'Always-on listening · say read order 12 or any active order number.');};
       r.onresult=e=>{
-        if(mode==='off')return;
+        if(mode==='off'||recognizer!==r)return;
         for(let i=e.resultIndex;i<e.results.length;i++){
           const result=e.results[i];
           const words=result[0]?.transcript||'';
@@ -114,6 +121,10 @@
           }
           if(Date.now()-lastBargeIn<1300&&/^(?:hey\s+gelato\s+)?(?:stop|stop speaking|interrupt)\b/i.test(words.trim()))continue;
           if(!result.isFinal||decision?.kind==='ignored')continue;
+          const normalized=normalize(words),stamp=Date.now();
+          // Web Speech may re-emit the same finalized event after a reconnect.
+          if(normalized&&normalized===lastFinal.text&&stamp-lastFinal.at<2200)continue;
+          lastFinal={text:normalized,at:stamp};failures=0;
           if(decision?.interrupt)window.GelatoVoiceTurns?.interrupt?.('kds-voice-barge-in');
           status('heard','Heard: '+words);
           Promise.resolve(handleCommand(words,{wakeRequired:mode==='wake'})).catch(err=>status('error',err.message||'Voice request failed.'));
@@ -127,7 +138,13 @@
         }
         if(code!=='no-speech'&&code!=='aborted')status('error','Speech recognition: '+code);
       };
-      r.onend=()=>{if(recognizer!==r)return;active=false;recognizer=null;if(mode!=='off'){failures++;scheduleRestart();}};
+      r.onend=()=>{if(recognizer!==r)return;active=false;recognizer=null;
+        if(mode!=='off'){
+          // A healthy long listening session is not a rapid restart loop.
+          failures=(recognitionStartedAt&&Date.now()-recognitionStartedAt>=10000)?0:failures+1;
+          scheduleRestart();
+        }
+      };
       r.start();status('starting','Requesting microphone…');
     }catch(e){
       active=false;recognizer=null;
@@ -143,7 +160,7 @@
       if(next==='off')return true;
       setMode('off');return true;
     }
-    stopRecognition();mode=next;armedUntil=0;pausedForSpeech=false;failures=0;
+    stopRecognition();mode=next;armedUntil=0;pausedForSpeech=false;failures=0;lastFinal={text:'',at:0};
     try {localStorage.setItem(PreferenceKey,next);} catch {}
     if(next==='off'){status('off','Microphone off · kitchen announcements can remain on.');return true;}
     if(document.hidden){status('paused','KDS tab is hidden. Return to the KDS to resume listening.');return true;}
