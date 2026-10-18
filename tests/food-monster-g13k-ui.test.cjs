@@ -21,7 +21,7 @@ function node(tag) {
   nodes.push(n);return n;
 }
 const parent=node('main'),bar=node('section'),field=node('textarea');bar.id='gelato-agent-bar';
-field.id='gaInput';parent.append(bar);
+field.id='gaInput';parent.append(bar,field);
 const document={
   getElementById(id){return nodes.find(n=>n.id===id&&n.parentNode!==null)||null;},
   querySelector(){return null;},
