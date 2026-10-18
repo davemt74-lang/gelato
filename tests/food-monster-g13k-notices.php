@@ -53,10 +53,10 @@ assert13k(!fm13k_policy($state,$recipe,null,9,$now),'private recipes out of scop
 assert13k(!fm13k_policy($state,$new,null,0,$now),'invalid participant denied');
 $previous=['personId'=>9,'sourceDigest'=>$new['digest'],'sentAt'=>$now-3600];
 assert13k(!fm13k_policy($state,$new,$previous,9,$now),'same revision suppressed for an hour');
-assert13k(!fm13k_policy($state,$new,$previous,9,$now+86399),
-    'same source suppressed within one full day');
-assert13k(fm13k_policy($state,$new,$previous,9,$now+86400),
-    'new day may show gentle reminder if still unacknowledged');
+assert13k(!fm13k_policy($state,$new,$previous,9,$now+82799),
+    'same source suppressed until 24 hours after the recorded send');
+assert13k(fm13k_policy($state,$new,$previous,9,$now+82800),
+    'one full day after actual send may show a reminder if still unacknowledged');
 assert13k(fm13k_policy($state,$new,$previous,10,$now),
     'person-specific suppression never leaks across employees');
 $acked=$state;$acked['refresh']=['ackDigest'=>$new['digest']];
