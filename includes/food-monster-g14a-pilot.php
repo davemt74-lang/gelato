@@ -104,8 +104,36 @@ function fm14a_state(array $events,int $now):array
         'allOperatorReportedPass'=>$run!==null&&$passed===count($results),
         'fieldCertified'=>false,'items'=>$results,
         'followUps'=>fm14c_followups($events,$now),
-        'evidenceType'=>'owner_reported_not_device_verified'];
+        'evidenceType'=>'owner_reported_not_device_verified',
+        'readiness'=>fm14d3_readiness($results,$run!==null&&!$closed,fm14c_followups($events,$now))];
 }
+/**
+ * G14D3: bounded field-readiness projection from canonical operator reports.
+ * Training events are deliberately never counted as pilot device evidence.
+ */
+function fm14d3_readiness(array $items,bool $active,array $followups):array
+{
+    $status=['pass'=>0,'fail'=>0,'blocked'=>0,'stale'=>0,'not_tested'=>0];
+    $next=[];
+    foreach($items as $item){
+        $gate=(string)($item['gate']??'');
+        if(!isset(fm14a_gates()[$gate]))continue;
+        $s=(string)($item['status']??'not_tested');
+        if(!isset($status[$s]))$s='not_tested';
+        $status[$s]++;
+        if($s!=='pass')$next[]=['gate'=>$gate,'status'=>$s];
+    }
+    $unresolved=max(0,min(7,(int)($followups['unresolved']??0)));
+    $allPassing=$active&&$status['pass']===count(fm14a_gates())
+        &&$unresolved===0;
+    return ['operatorReportComplete'=>$allPassing,'fieldCertified'=>false,
+        'statusCounts'=>$status,'unresolvedIssues'=>$unresolved,
+        'nextChecks'=>array_slice($next,0,7),
+        'trainingIncluded'=>false,'trainingCertification'=>false,
+        'trainingReviewCommand'=>'team training insights',
+        'basis'=>'owner_reported_not_device_verified'];
+}
+
 function fm14a_validate_action(array $intent,array $state,string $turnId,array $events):?string
 {
     foreach($events as $event){

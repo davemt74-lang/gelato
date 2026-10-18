@@ -12,6 +12,7 @@ on:
       - 'tests/food-monster-g14c-diagnostics.test.cjs'
       - 'tests/food-monster-g14d-guided.test.cjs'
       - 'tests/food-monster-g14d2-troubleshooting.test.cjs'
+      - 'tests/food-monster-g14d3-readiness.php'
       - '.github/workflows/food-monster-g14c.yml'
   push:
     branches: [main]
@@ -26,6 +27,7 @@ on:
       - 'tests/food-monster-g14c-diagnostics.test.cjs'
       - 'tests/food-monster-g14d-guided.test.cjs'
       - 'tests/food-monster-g14d2-troubleshooting.test.cjs'
+      - 'tests/food-monster-g14d3-readiness.php'
       - '.github/workflows/food-monster-g14c.yml'
 jobs:
   pilot-failure-to-fix-and-privacy:
@@ -46,6 +48,7 @@ jobs:
           php -l api/food-monster-pilot.php
           php -l agent-canvas.php
           php -l tests/food-monster-g14c-followups.php
+          php -l tests/food-monster-g14d3-readiness.php
           php -l tests/food-monster-g14c-mysql.php
           node --check js/agent-canvas.js
           node --check tests/food-monster-g14c-diagnostics.test.cjs
@@ -54,6 +57,7 @@ jobs:
       - name: Repair sequencing, private browser metrics and inherited safety gates
         run: |
           php tests/food-monster-g14c-followups.php
+          php tests/food-monster-g14d3-readiness.php
           node tests/food-monster-g14c-diagnostics.test.cjs
           node tests/food-monster-g14d-guided.test.cjs
           node tests/food-monster-g14d2-troubleshooting.test.cjs
