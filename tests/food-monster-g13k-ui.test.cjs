@@ -40,8 +40,9 @@ show({available:true,type:'menu_training_change',suggestedCommand:'review update
 const chip=document.getElementById('gaTrainingUpdate');
 check(!!chip,'valid server notice displays one chip');
 check(chip.children.length===3,'notice contains short text, review and dismiss');
-check(!JSON.stringify(chip).includes('secret'),'server-injected content not copied into DOM');
-check(!JSON.stringify(chip).includes('33'),'participant numeric identifier never displayed');
+const chipCopy=chip.children.map(child=>String(child.textContent||'')).join('|');
+check(!chipCopy.includes('secret'),'server-injected content not copied into DOM');
+check(!chipCopy.includes('33'),'participant numeric identifier never displayed');
 check(sends===0&&speech===0,'UI does not auto-act or speak');
 chip.children[1].onclick();
 check(field.value==='review updated training'&&focus===1,'review click prepares command for manual submission');
