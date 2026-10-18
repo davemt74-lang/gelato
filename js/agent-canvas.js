@@ -135,6 +135,46 @@
     return rows;
   }
 
+  // G14D1: operator-guided pilot checks. This is explanatory UI only:
+  // no microphone/camera permissions requested, no device writes, no auto-pass.
+  const pilotGuide = Object.freeze({
+    microphone:['Confirm browser microphone permission on the intended device.',
+      'Start listening, stop it, then repeat after reconnecting the microphone.',
+      'Check recognition state and restart/error counters in local diagnostics.'],
+    transcription:['Speak a short non-sensitive test phrase in a quiet location.',
+      'Verify a final result appears in the chat composer, not only an interim highlight.',
+      'Repeat after stopping and restarting listening. Do not save the spoken phrase.'],
+    handoff:['Invite an authorized test participant to speak after the active speaker.',
+      'Confirm unverified speakers remain isolated from private agent context.',
+      'Check verified handoff counts locally; do not record speaker identities.'],
+    camera:['Obtain consent before enabling the selected camera.',
+      'Verify tracking follows the test hand, then disconnect and reconnect once.',
+      'Ensure stale boxes disappear and recovery does not duplicate streams.'],
+    timeclock:['Use an approved test employee session and known active shift.',
+      'Verify clocked-in, break, and clocked-out responses without changing time entries.',
+      'Confirm employee-only queries cannot expose owner or other staff records.'],
+    kds:['Use a safe test ticket with no production preparation in progress.',
+      'Say Next Item and Next Ticket once each; confirm one intentional navigation per utterance.',
+      'Verify KDS voice cannot execute duplicate commands after mic recovery.'],
+    recovery:['Stop listening manually and confirm it stays stopped.',
+      'Test a controlled device disconnect and page reload, never during production.',
+      'Confirm any failure is reported and fresh retesting is required after repair.']
+  });
+  function pilotGuidance(gate,statusValue) {
+    if (!Object.prototype.hasOwnProperty.call(pilotGuide,gate)) return '';
+    const steps=pilotGuide[gate].map((step,i)=>
+      '<li>'+esc(String(i+1)+'. '+step)+'</li>').join('');
+    const repair=statusValue==='fail'||statusValue==='blocked'
+      ? '<p>Failure reported: use the existing planned-fix workflow and retest on real hardware.</p>'
+      : statusValue==='pass'
+        ? '<p>Operator-reported pass only; no automatic field certification.</p>'
+        : '<p>Complete this test manually before recording a result.</p>';
+    return '<details class="pilot-guide"><summary>Guided field check and troubleshooting</summary>'+
+      '<ol>'+steps+'</ol>'+repair+
+      '<p>Do not include transcripts, employee identities, order IDs or credentials in evidence.</p>'+
+      '</details>';
+  }
+
   function structuredCard(data, skill, sources = []) {
     if (data == null) return '<div class="empty">No structured result for this response.</div>';
     if (skill === 'food_monster.kitchen_pilot' && Array.isArray(data.items)) {
@@ -165,6 +205,7 @@
         '<div class="result-card"><h3>'+esc(g.title||g.gate)+'</h3>'+
         '<p>Operator report: '+esc(g.status||'not_tested')+'</p>'+
         (g.evidence?'<p>'+esc(g.evidence)+'</p>':'<p>Not yet recorded.</p>')+
+        pilotGuidance(String(g.gate||''),String(g.status||''))+
         '<p>Record: record kitchen pilot '+esc(g.gate)+
           ' pass: [20+ character non-sensitive evidence]</p></div>').join('');
       return '<div class="result-card"><h3>Kitchen pilot · '+esc(data.passed||0)+
