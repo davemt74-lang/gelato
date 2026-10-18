@@ -3,7 +3,7 @@ declare(strict_types=1);
 function app_has_permission(string $permission,array $user):bool {
     return in_array($permission,$user['permissions']??[],true);
 }
-function fm9a_is_super_admin_session(array $user):bool{
+function app_role_has_owner_authority(array $user):bool{
     return ($user['role_slug']??'')==='super_admin';
 }
 require_once __DIR__.'/../includes/food-monster-g13k-training-notice.php';
