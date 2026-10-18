@@ -694,7 +694,12 @@
     if(!SpeechRecognition||document.hidden||(!S.listening&&!S.wakeStandby))return false;
     stopContinuous();
     let activeRec;
-    try{activeRec=new SpeechRecognition();}catch(error){status('Could not initialize browser speech recognition.',4500);return false;}
+    try{activeRec=new SpeechRecognition();}catch(error){
+      diag('failed',{error:'start-failed'});
+      haltVoiceAfterFailure();
+      status('Could not initialize browser speech recognition. Listening was stopped.',4500);
+      return false;
+    }
     S.rec=activeRec;diag('starting');
     activeRec.lang='en-US';activeRec.continuous=true;activeRec.interimResults=true;
     activeRec.onstart=()=>{if(S.rec!==activeRec)return;S.micActive=true;diag('active');renderListening();};
