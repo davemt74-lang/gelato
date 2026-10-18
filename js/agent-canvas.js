@@ -226,6 +226,37 @@
     return rows;
   }
 
+  // G14D4: one compact owner-facing pilot overview, derived only from
+  // already-authorized pilot response data. Commands are examples, never run here.
+  function pilotCommandCenter(data) {
+    const allowed=['microphone','transcription','handoff','camera','timeclock','kds','recovery'];
+    const gates=Array.isArray(data.items)?data.items:[];
+    const unresolved=Number(data.readiness?.unresolvedIssues||0);
+    const pending=gates.filter(g=>allowed.includes(g.gate)&&g.status!=='pass');
+    const state=data.active?'Active':data.closed?'Closed':'Not started';
+    const safe=(v)=>esc(String(v??''));
+    const first=pending[0];
+    const next=(!data.active?'Start a new owner-controlled field pilot using: start kitchen pilot'
+      : unresolved>0?'Review failed checks and repair plans with: kitchen pilot fixes'
+      : first?'Test '+safe(first.gate)+' and record an operator result after a physical check.'
+      :'All gates have recent operator-reported passes; arrange independent physical certification.');
+    const checks=allowed.map(gate=>{
+      const item=gates.find(x=>x.gate===gate);
+      const status=['pass','fail','blocked','stale','not_tested'].includes(item?.status)
+        ?item.status:'not_tested';
+      return '<li><b>'+safe(gate)+'</b> — '+safe(status)+'</li>';
+    }).join('');
+    return '<div class="result-card"><h3>Pilot command center</h3>'+
+      '<p>Run: '+safe(state)+' · Checks awaiting passing reports: '+safe(pending.length)+
+      ' · Unresolved repairs: '+safe(Math.max(0,Math.min(7,unresolved)))+'</p>'+
+      '<details><summary>Seven-gate field checklist</summary><ul>'+checks+'</ul></details>'+
+      '<p>Next recommended action: '+next+'</p>'+
+      '<p>Training context: team training insights (Super Admin only); '+
+      'my training insights (authorized self-view). Neither certifies equipment.</p>'+
+      '<p>Field certification pending independent real-device review. '+
+      'No field evidence, device setting or production state was modified.</p></div>';
+  }
+
   function structuredCard(data, skill, sources = []) {
     if (data == null) return '<div class="empty">No structured result for this response.</div>';
     if (skill === 'food_monster.kitchen_pilot' && Array.isArray(data.items)) {
@@ -281,7 +312,7 @@
         '<p>Start: start kitchen pilot · Finish: close kitchen pilot</p>'+
         '<p>Unresolved follow-ups: '+esc(data.followUps?.unresolved||0)+
           ' · resolved: '+esc(data.followUps?.resolved||0)+'</p></div>'+
-        readinessHtml+
+        readinessHtml+pilotCommandCenter(data)+
         (followupHtml?'<div class="result-card"><h3>Failure-to-fix follow-ups</h3>'+
           '<p>A planned repair needs a NEW passing field test and explicit owner resolution.</p></div>'+
           followupHtml:'')+
