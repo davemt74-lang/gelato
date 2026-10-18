@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__.'/agent-workspace-core.php';
+require_once __DIR__.'/food-monster-identity-authority.php';
 
 /**
  * Kitchen pilot evidence is a MANUAL OPERATOR REPORT, never a device
