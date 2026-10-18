@@ -1,0 +1,94 @@
+name: FM-G13K Proactive Training Update Awareness
+on:
+  pull_request:
+    paths:
+      - 'includes/food-monster-g13k-training-notice.php'
+      - 'api/agent-workspace.php'
+      - 'js/global-agent.js'
+      - 'js/agent-canvas.js'
+      - 'food-monster.php'
+      - 'agent-canvas.php'
+      - 'includes/food-monster-g13j-refresh.php'
+      - 'includes/food-monster-g13c-training.php'
+      - 'tests/food-monster-g13k-notices.php'
+      - 'tests/food-monster-g13k-ui.test.cjs'
+      - 'tests/food-monster-g13k-mysql.php'
+      - '.github/workflows/food-monster-g13k.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'includes/food-monster-g13k-training-notice.php'
+      - 'api/agent-workspace.php'
+      - 'js/global-agent.js'
+      - 'js/agent-canvas.js'
+      - 'food-monster.php'
+      - 'agent-canvas.php'
+      - 'tests/food-monster-g13k-notices.php'
+      - 'tests/food-monster-g13k-ui.test.cjs'
+      - 'tests/food-monster-g13k-mysql.php'
+      - '.github/workflows/food-monster-g13k.yml'
+jobs:
+  notices-privacy-and-ux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_mysql
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: PHP and JavaScript parse checks
+        run: |
+          php -l includes/food-monster-g13k-training-notice.php
+          php -l api/agent-workspace.php
+          php -l food-monster.php
+          php -l agent-canvas.php
+          php -l tests/food-monster-g13k-notices.php
+          php -l tests/food-monster-g13k-mysql.php
+          node --check js/global-agent.js
+          node --check js/agent-canvas.js
+          node --check tests/food-monster-g13k-ui.test.cjs
+      - name: Nonintrusive notices, trust boundaries and prior regressions
+        run: |
+          php tests/food-monster-g13k-notices.php
+          node tests/food-monster-g13k-ui.test.cjs
+          php tests/food-monster-g13j-refresh.php
+          php tests/food-monster-g13i-impact.php
+          php tests/food-monster-g13h-audit.php
+          php tests/food-monster-g13g-history.php
+          php tests/food-monster-g13f-procedures.php
+          php tests/food-monster-g13e-intelligence.php
+          php tests/food-monster-g13d-dialogue.php
+          php tests/food-monster-g13c-training.php
+          php tests/food-monster-g13b-knowledge.php
+          php tests/food-monster-g13a-engagement.php
+          php tests/food-monster-g9f-approvals.php
+          node tests/food-monster-g10b-turns.test.cjs
+          node tests/food-monster-g11b-turns.test.cjs
+  real-mysql-cooldown-and-identity:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: g13k_cert_only
+          MYSQL_DATABASE: gelato_fm_cert
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -pg13k_cert_only"
+          --health-interval=10s --health-timeout=5s --health-retries=12
+    env:
+      G13K_MYSQL_DSN: mysql:host=127.0.0.1;port=3306;dbname=gelato_fm_cert;charset=utf8mb4
+      G13K_MYSQL_USER: root
+      G13K_MYSQL_PASS: g13k_cert_only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_mysql
+      - name: Check saved employee notice ledger and duplicate protection
+        run: php tests/food-monster-g13k-mysql.php
