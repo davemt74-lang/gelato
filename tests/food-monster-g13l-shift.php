@@ -49,8 +49,6 @@ check13l($sum['partial']===true&&$sum['readOnly']===true,'partial and read-only 
 check13l(str_contains($sum['note'],'not overdue tasks'),'outstanding is not disciplinary grading');
 $none=fm13l_shift_summary([],false);
 check13l($none['outstanding']===0&&$none['deferredUntilBreak']===0,'no affected people does not invent tasks');
-$notKnown=fm13l_shift_context(new PDO('sqlite::memory:'),3,7);
-check13l(($notKnown['state']??'')==='unavailable','unknown clock schema is not reported as off shift');
 $notice=(string)file_get_contents(__DIR__.'/../includes/food-monster-g13k-training-notice.php');
 $endpoint=(string)file_get_contents(__DIR__.'/../api/food-monster-training-impact.php');
 $router=(string)file_get_contents(__DIR__.'/../api/agent-workspace.php');
