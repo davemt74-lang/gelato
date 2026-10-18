@@ -269,6 +269,8 @@
   async function openThread(id) {
     const data = await req('api/agent-workspace.php?action=thread&id=' + encodeURIComponent(id));
     if (!data.thread) throw new Error('Conversation not found.');
+    // A notice about the previous speaker/thread must not remain visible.
+    document.getElementById('gaTrainingUpdate')?.remove();
     active = id;
     window.GelatoGlobalAgent?.selectThread?.(id);
     $('#threadTitle').textContent = data.thread.title || 'Restaurant Agent';
