@@ -141,6 +141,45 @@
     });
   }
 
+  // A quiet opt-in chip is shown only after a new server-authorized notice.
+  // It must never call send(), speak(), or infer who is in the room.
+  function showTrainingUpdateNotice(notice) {
+    let chip=document.getElementById('gaTrainingUpdate');
+    if(chip)chip.remove();
+    if(!notice||notice.available!==true
+       ||notice.type!=='menu_training_change'
+       ||notice.suggestedCommand!=='review updated training')return;
+    const bar=document.getElementById('gelato-agent-bar')
+      ||document.querySelector('.composer-wrap');
+    if(!bar||!bar.parentNode)return;
+    chip=document.createElement('div');
+    chip.id='gaTrainingUpdate';
+    chip.setAttribute('role','note');
+    chip.style.cssText='display:flex;flex-wrap:wrap;align-items:center;gap:8px;max-width:100%;padding:7px 12px;margin:3px 0;font-size:12px;line-height:1.4;border:1px solid var(--border,#64748b55);border-radius:10px;background:var(--panel,#1e293b);color:inherit';
+    const message=document.createElement('span');
+    message.textContent='Saved training instructions changed. Review when convenient.';
+    message.style.flex='1';
+    chip.append(message);
+    const button=document.createElement('button');
+    button.type='button';
+    button.textContent='Review';
+    button.setAttribute('aria-label','Prepare updated training review request');
+    button.onclick=()=>{
+      const field=document.getElementById('gaInput')||document.getElementById('canvasInput');
+      if(field){field.value='review updated training';field.focus();}
+      chip.remove();
+    };
+    chip.append(button);
+    const dismiss=document.createElement('button');
+    dismiss.type='button';
+    dismiss.textContent='×';
+    dismiss.setAttribute('aria-label','Dismiss training update notice');
+    dismiss.onclick=()=>chip.remove();
+    chip.append(dismiss);
+    if(bar.classList.contains('composer-wrap'))bar.insertBefore(chip,bar.firstChild);
+    else bar.parentNode.insertBefore(chip,bar);
+  }
+
   function capabilityMessage() {
     return 'I can use the restaurant tools your account is permitted to access. Try asking about your schedule, assigned prep/tasks, time clock, catering, wholesale, recipes, inventory, or equipment. Manager-only information and actions remain permission-gated.';
   }
@@ -148,6 +187,8 @@
   async function send(raw, voice = false) {
     if(!voice)interruptSpeech('typed-message');
     const text = String(raw || '').trim();
+    // Never retain a prior room participant's notice across new input/speaker.
+    showTrainingUpdateNotice(null);
     // Explicit spoken request; ordinary conversation NEVER requires voice verification.
     if(/^(?:(?:hey|hi)\\s+)?(?:gelato|food monster|monster)[,\\s]+(?:recognize|identify)\\s+(?:my\\s+)?voice[.!?]*$/i.test(text)
        ||/^(?:recognize|identify)\\s+(?:my\\s+)?voice[.!?]*$/i.test(text)){
@@ -244,6 +285,9 @@
         };
       }
 
+      // Display only, after the canonical turn has completed routing.
+      // Do not read aloud, append to the LLM answer, or auto-send a command.
+      showTrainingUpdateNotice(submitted?.trainingUpdateNotice);
       const followup=submitted?.operationalFollowup;
       const createdTaskId=followup&&typeof followup.taskId==='string'
         &&/^task-[a-f0-9]{20}$/.test(followup.taskId)?followup.taskId:'';
