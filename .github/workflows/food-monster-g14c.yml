@@ -6,6 +6,8 @@ on:
       - 'includes/food-monster-g14c-followups.php'
       - 'api/food-monster-pilot.php'
       - 'js/agent-canvas.js'
+      - 'js/global-agent.js'
+      - 'tests/food-monster-g14e1-init.test.cjs'
       - 'agent-canvas.php'
       - 'tests/food-monster-g14c-followups.php'
       - 'tests/food-monster-g14c-mysql.php'
@@ -22,6 +24,8 @@ on:
       - 'includes/food-monster-g14c-followups.php'
       - 'api/food-monster-pilot.php'
       - 'js/agent-canvas.js'
+      - 'js/global-agent.js'
+      - 'tests/food-monster-g14e1-init.test.cjs'
       - 'agent-canvas.php'
       - 'tests/food-monster-g14c-followups.php'
       - 'tests/food-monster-g14c-mysql.php'
@@ -53,6 +57,8 @@ jobs:
           php -l tests/food-monster-g14d3-readiness.php
           php -l tests/food-monster-g14c-mysql.php
           node --check js/agent-canvas.js
+          node --check js/global-agent.js
+          node --check tests/food-monster-g14e1-init.test.cjs
           node --check tests/food-monster-g14c-diagnostics.test.cjs
           node --check tests/food-monster-g14d-guided.test.cjs
           node --check tests/food-monster-g14d2-troubleshooting.test.cjs
@@ -81,6 +87,7 @@ jobs:
           node tests/food-monster-g10b-turns.test.cjs
           node tests/food-monster-g11b-turns.test.cjs
           node tests/food-monster-g14b-recovery.test.cjs
+          node tests/food-monster-g14e1-init.test.cjs
   real-mysql-repair-evidence:
     runs-on: ubuntu-latest
     services:
