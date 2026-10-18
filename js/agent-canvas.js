@@ -101,40 +101,6 @@
     });
   }
 
-  // Strictly project existing local diagnostic snapshots into fixed, non-identity
-  // fields. Never send any snapshot, event history, transcript or camera image.
-  function pilotDeviceSummary() {
-    let voice={},camera={};
-    try { voice=window.GelatoVoiceDiagnostics?.snapshot?.()||{}; } catch {}
-    try { camera=window.GelatoCameraRuntime?.snapshot?.()||{}; } catch {}
-    const clamp=(v,max=999)=>Math.max(0,Math.min(max,Math.trunc(Number(v)||0)));
-    const enumValue=(v,allowed)=>allowed.includes(v)?v:'unavailable';
-    const rows=[
-      ['Speech recognition',enumValue(voice.recognition,
-        ['off','starting','active','ended','retrying','blocked','failed','paused'])],
-      ['Microphone active',voice.microphoneActive===true?'Yes':'No / unavailable'],
-      ['Microphone restarts',clamp(voice.restarts)],
-      ['Echo blocks',clamp(voice.echoBlocks)],
-      ['Barge-in events',clamp(voice.bargeIns)],
-      ['Speech-service error',enumValue(voice.lastError,
-        ['none','not-allowed','service-not-allowed','audio-capture','network',
-         'no-speech','aborted','language-not-supported','start-failed','retry-limit'])],
-      ['KDS listening',enumValue(window.GelatoKdsVoice?.mode,['off','wake','always'])],
-      ['KDS mic active',window.GelatoKdsVoice?.active===true?'Yes':'No / unavailable']
-    ];
-    const cameras=Array.isArray(camera.cameras)?camera.cameras:[];
-    for(const slot of [1,2,3,4,5]){
-      const c=cameras.find(x=>Number(x?.slot)===slot);
-      if(!c)continue;
-      rows.push(['Camera '+slot,
-        (c.active===true?'active':'inactive')+' · '+
-        enumValue(c.state,['ready','off','recovering','starting','failed','disabled',
-          'stopped','device_changed','manual_stop','tab_hidden','page_closed','location_changed'])+
-        ' · retries '+clamp(c.retries,3)]);
-    }
-    return rows;
-  }
-
   // G14D1: operator-guided pilot checks. This is explanatory UI only:
   // no microphone/camera permissions requested, no device writes, no auto-pass.
   const pilotGuide = Object.freeze({
@@ -173,6 +139,40 @@
       '<ol>'+steps+'</ol>'+repair+
       '<p>Do not include transcripts, employee identities, order IDs or credentials in evidence.</p>'+
       '</details>';
+  }
+
+  // Strictly project existing local diagnostic snapshots into fixed, non-identity
+  // fields. Never send any snapshot, event history, transcript or camera image.
+  function pilotDeviceSummary() {
+    let voice={},camera={};
+    try { voice=window.GelatoVoiceDiagnostics?.snapshot?.()||{}; } catch {}
+    try { camera=window.GelatoCameraRuntime?.snapshot?.()||{}; } catch {}
+    const clamp=(v,max=999)=>Math.max(0,Math.min(max,Math.trunc(Number(v)||0)));
+    const enumValue=(v,allowed)=>allowed.includes(v)?v:'unavailable';
+    const rows=[
+      ['Speech recognition',enumValue(voice.recognition,
+        ['off','starting','active','ended','retrying','blocked','failed','paused'])],
+      ['Microphone active',voice.microphoneActive===true?'Yes':'No / unavailable'],
+      ['Microphone restarts',clamp(voice.restarts)],
+      ['Echo blocks',clamp(voice.echoBlocks)],
+      ['Barge-in events',clamp(voice.bargeIns)],
+      ['Speech-service error',enumValue(voice.lastError,
+        ['none','not-allowed','service-not-allowed','audio-capture','network',
+         'no-speech','aborted','language-not-supported','start-failed','retry-limit'])],
+      ['KDS listening',enumValue(window.GelatoKdsVoice?.mode,['off','wake','always'])],
+      ['KDS mic active',window.GelatoKdsVoice?.active===true?'Yes':'No / unavailable']
+    ];
+    const cameras=Array.isArray(camera.cameras)?camera.cameras:[];
+    for(const slot of [1,2,3,4,5]){
+      const c=cameras.find(x=>Number(x?.slot)===slot);
+      if(!c)continue;
+      rows.push(['Camera '+slot,
+        (c.active===true?'active':'inactive')+' · '+
+        enumValue(c.state,['ready','off','recovering','starting','failed','disabled',
+          'stopped','device_changed','manual_stop','tab_hidden','page_closed','location_changed'])+
+        ' · retries '+clamp(c.retries,3)]);
+    }
+    return rows;
   }
 
   function structuredCard(data, skill, sources = []) {
