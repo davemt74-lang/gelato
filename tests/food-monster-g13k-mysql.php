@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 function app_has_permission(string $p,array $u):bool{return in_array($p,$u['permissions']??[],true);}
-function fm9a_is_super_admin_session(array $u):bool{return ($u['role_slug']??'')==='super_admin';}
+function app_role_has_owner_authority(array $u):bool{return ($u['role_slug']??'')==='super_admin';}
 require_once __DIR__.'/../includes/food-monster-g13k-training-notice.php';
 $dsn=getenv('G13K_MYSQL_DSN')?:'';
 if(!str_starts_with($dsn,'mysql:'))throw new RuntimeException('FM-G13K requires real MySQL 8');
