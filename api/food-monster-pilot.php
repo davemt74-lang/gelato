@@ -29,8 +29,12 @@ try {
     try{
         // Serialize two tabs using the trusted current owner, not the
         // untrusted client conversation or any perceived speaker.
-        $lock=$pdo->prepare('SELECT id FROM users WHERE id=? AND organization_id=? FOR UPDATE');
-        $lock->execute([$uid,$org]);
+        $lock=$pdo->prepare("SELECT u.id FROM users u
+            INNER JOIN organization_memberships om ON om.user_id=u.id
+                AND om.organization_id=? AND om.status='active'
+            WHERE u.id=? AND u.status='active' AND u.archived_at IS NULL
+            FOR UPDATE");
+        $lock->execute([$org,$uid]);
         if(!$lock->fetchColumn())throw new DomainException('Owner account is unavailable.');
         $ledger=fm14a_thread($pdo,$org,$uid,$intent['action']!=='status');
         $messages=$ledger?gaw_messages($pdo,$org,$uid,$ledger,300):[];
