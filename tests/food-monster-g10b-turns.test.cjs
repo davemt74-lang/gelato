@@ -93,8 +93,9 @@ const flush=async()=>{for(let i=0;i<50;i++)await Promise.resolve()};
  ok(events.filter(e=>e.type==='gelato-agent-speaker-handoff').length===before,
    'unknown participant never inherits a prior handoff');
  ok(await agent.setListening(true),'listening restarts after fatal error');
- const restarted=recognizers.at(-1);
  for(let i=0;i<5;i++){
+  // Each recovered browser session gets a fresh SpeechRecognition instance.
+  const restarted=recognizers.at(-1);
   restarted.onend?.();
   if(i<4)restartTimers.shift()?.();
  }
