@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__.'/agent-workspace-core.php';
 require_once __DIR__.'/food-monster-identity-authority.php';
+require_once __DIR__.'/food-monster-g14c-followups.php';
 
 /**
  * Kitchen pilot evidence is a MANUAL OPERATOR REPORT, never a device
@@ -29,7 +30,7 @@ function fm14a_intent(string $message):?array
     if(preg_match('/^record kitchen pilot (microphone|transcription|handoff|camera|timeclock|kds|recovery) (pass|fail|blocked):\s*(.{20,500})$/ius',$message,$m))
         return ['action'=>'record','gate'=>strtolower($m[1]),
             'outcome'=>strtolower($m[2]),'evidence'=>trim($m[3])];
-    return null;
+    return fm14c_intent($message);
 }
 function fm14a_authorized(array $user,string $channel):bool
 {
@@ -102,6 +103,7 @@ function fm14a_state(array $events,int $now):array
         'passed'=>$passed,'total'=>count($results),'stale'=>$expired,
         'allOperatorReportedPass'=>$run!==null&&$passed===count($results),
         'fieldCertified'=>false,'items'=>$results,
+        'followUps'=>fm14c_followups($events,$now),
         'evidenceType'=>'owner_reported_not_device_verified'];
 }
 function fm14a_validate_action(array $intent,array $state,string $turnId,array $events):?string
@@ -111,9 +113,9 @@ function fm14a_validate_action(array $intent,array $state,string $turnId,array $
     }
     if($intent['action']==='status')return null;
     if($intent['action']==='start'&&$state['active'])return 'Close the existing pilot before starting another.';
-    if(in_array($intent['action'],['close','record'],true)&&!$state['active'])
+    if(in_array($intent['action'],['close','record','plan_fix','resolve_fix'],true)&&!$state['active'])
         return 'Start an active kitchen pilot before recording or closing.';
     if($intent['action']==='record'&&!fm14a_evidence_ok((string)($intent['evidence']??'')))
         return 'Enter 20–500 characters of non-sensitive test evidence.';
-    return null;
+    return fm14c_validate($intent,$state,$turnId,$events,time());
 }
