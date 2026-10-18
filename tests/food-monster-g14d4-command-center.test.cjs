@@ -4,7 +4,7 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 const code=fs.readFileSync('js/agent-canvas.js','utf8');
 const a=code.indexOf('  function pilotCommandCenter(data) {');
-const b=code.indexOf('  function structuredCard(',a);
+const b=code.indexOf('  // Strictly project existing local diagnostic snapshots',a);
 assert(a>=0&&b>a,'integrated pilot command center exists');
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const render=vm.runInNewContext('('+code.slice(a,b).trim()+')',{esc});
