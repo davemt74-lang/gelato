@@ -19,6 +19,7 @@ require_once __DIR__.'/../includes/food-monster-g13f-procedure-review.php';
 require_once __DIR__.'/../includes/food-monster-g13g-procedure-history.php';
 require_once __DIR__.'/../includes/food-monster-g13i-training-impact.php';
 require_once __DIR__.'/../includes/food-monster-g13l-shift-refresh.php';
+require_once __DIR__.'/../includes/food-monster-g14a-pilot.php';
 require_once __DIR__.'/../includes/food-monster-g13c-training.php';
 require_once __DIR__.'/../includes/food-monster-g13k-training-notice.php';
 require_once __DIR__.'/../includes/food-monster-g13b-knowledge.php';
@@ -184,6 +185,18 @@ try{
         $roomThread=trim((string)($in['threadId']??''));
         // Full menu-procedure publication requires typed Super Admin consent.
         // No shared-room voice, camera match, or LLM output can approve.
+        $pilotIntent=fm14a_intent($message);
+        if($pilotIntent!==null
+            &&preg_match('/^agent-[a-f0-9]{20}$/D',$roomThread)
+            &&gaw_thread($pdo,$org,$uid,$roomThread)){
+            $pilotLast=gaw_messages($pdo,$org,$uid,$roomThread,1)[0]??[];
+            if(($pilotLast['role']??'')==='user'
+                &&trim((string)($pilotLast['content']??''))===$message
+                &&fm14a_authorized($user,(string)($pilotLast['channel']??'')))
+                app_json_response(['ok'=>true,
+                    'route'=>'api/food-monster-pilot.php?threadId='.rawurlencode($roomThread),
+                    'domain'=>'food_monster_kitchen_pilot','nodeMode'=>'owner_review']);
+        }
         $shiftTrainingIntent=fm13l_intent($message);
         $trainingImpactIntent=$shiftTrainingIntent??fm13i_intent($message);
         if($trainingImpactIntent!==null

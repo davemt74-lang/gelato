@@ -15,6 +15,28 @@
   let active = '';
   let loading = false;
 
+  // Local, ephemeral diagnostics for the kitchen pilot sidebar only. Never
+  // collect/store transcripts, voiceprints, speaker IDs or camera images.
+  const pilotLocal = {micStarts:0,micStops:0,micErrors:0,speakerTurns:0,
+    verifiedSpeakerTurns:0,handoffs:0,conversationToggles:0,voiceReplies:0};
+  window.addEventListener('gelato-agent-listening-change',(event)=>{
+    const detail=event.detail||{};
+    if(detail.microphoneActive && detail.listening)pilotLocal.micStarts++;
+    if(!detail.microphoneActive)pilotLocal.micStops++;
+    if(/error|unavailable|failed|exhausted/i.test(String(detail.code||'')))pilotLocal.micErrors++;
+  });
+  window.addEventListener('gelato-agent-speaker-turn',(event)=>{
+    pilotLocal.speakerTurns++;
+    if(event.detail?.verified===true)pilotLocal.verifiedSpeakerTurns++;
+  });
+  window.addEventListener('gelato-agent-speaker-handoff',(event)=>{
+    if(event.detail?.verified===true)pilotLocal.handoffs++;
+  });
+  window.addEventListener('gelato-agent-conversation-change',()=>{pilotLocal.conversationToggles++;});
+  window.addEventListener('gelato-voice-turn',(event)=>{
+    if(event.detail?.kind==='started')pilotLocal.voiceReplies++;
+  });
+
   async function req(url, opt = {}) {
     const response = await fetch(url, {
       cache: 'no-store',
@@ -81,6 +103,36 @@
 
   function structuredCard(data, skill, sources = []) {
     if (data == null) return '<div class="empty">No structured result for this response.</div>';
+    if (skill === 'food_monster.kitchen_pilot' && Array.isArray(data.items)) {
+      const metrics=[
+        ['Microphone transitions',pilotLocal.micStarts],
+        ['Microphone off states',pilotLocal.micStops],
+        ['Mic error states',pilotLocal.micErrors],
+        ['Speaker turns',pilotLocal.speakerTurns],
+        ['Verified turns',pilotLocal.verifiedSpeakerTurns],
+        ['Verified handoffs',pilotLocal.handoffs],
+        ['Conversation toggles',pilotLocal.conversationToggles],
+        ['Spoken reply events',pilotLocal.voiceReplies]
+      ];
+      const metricsHtml=metrics.map(([label,value])=>'<b>'+esc(label)+'</b><span>'+
+        esc(value)+'</span>').join('');
+      const gates=data.items.slice(0,7).map(g=>
+        '<div class="result-card"><h3>'+esc(g.title||g.gate)+'</h3>'+
+        '<p>Operator report: '+esc(g.status||'not_tested')+'</p>'+
+        (g.evidence?'<p>'+esc(g.evidence)+'</p>':'<p>Not yet recorded.</p>')+
+        '<p>Record: record kitchen pilot '+esc(g.gate)+
+          ' pass: [20+ character non-sensitive evidence]</p></div>').join('');
+      return '<div class="result-card"><h3>Kitchen pilot · '+esc(data.passed||0)+
+        '/'+esc(data.total||7)+' recent operator passes</h3>'+
+        '<p>Field certification: NOT verified. All check outcomes are manually reported.</p>'+
+        '<p>Run: '+esc(data.runId||'not started')+
+        ' · '+(data.closed?'Closed':data.active?'Active':'Not started')+'</p>'+
+        (data.partialHistory?'<p>History is partial.</p>':'')+
+        '<p>Start: start kitchen pilot · Finish: close kitchen pilot</p></div>'+
+        '<div class="result-card"><h3>This browser session · local diagnostics</h3>'+
+        '<p>Counts reset on page reload, are not sent to the server, and do not certify equipment.</p>'+
+        '<div class="kv">'+metricsHtml+'</div></div>'+gates;
+    }
     if ((skill === 'food_monster.training_change_impact' || skill === 'food_monster.shift_training_refresh')
         && Array.isArray(data.participants)) {
       const cards=data.participants.slice(0,30).map(p =>
