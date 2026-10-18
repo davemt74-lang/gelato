@@ -101,6 +101,40 @@
     });
   }
 
+  // Strictly project existing local diagnostic snapshots into fixed, non-identity
+  // fields. Never send any snapshot, event history, transcript or camera image.
+  function pilotDeviceSummary() {
+    let voice={},camera={};
+    try { voice=window.GelatoVoiceDiagnostics?.snapshot?.()||{}; } catch {}
+    try { camera=window.GelatoCameraRuntime?.snapshot?.()||{}; } catch {}
+    const clamp=(v,max=999)=>Math.max(0,Math.min(max,Math.trunc(Number(v)||0)));
+    const enumValue=(v,allowed)=>allowed.includes(v)?v:'unavailable';
+    const rows=[
+      ['Speech recognition',enumValue(voice.recognition,
+        ['off','starting','active','ended','retrying','blocked','failed','paused'])],
+      ['Microphone active',voice.microphoneActive===true?'Yes':'No / unavailable'],
+      ['Microphone restarts',clamp(voice.restarts)],
+      ['Echo blocks',clamp(voice.echoBlocks)],
+      ['Barge-in events',clamp(voice.bargeIns)],
+      ['Speech-service error',enumValue(voice.lastError,
+        ['none','not-allowed','service-not-allowed','audio-capture','network',
+         'no-speech','aborted','language-not-supported','start-failed','retry-limit'])],
+      ['KDS listening',enumValue(window.GelatoKdsVoice?.mode,['off','wake','always'])],
+      ['KDS mic active',window.GelatoKdsVoice?.active===true?'Yes':'No / unavailable']
+    ];
+    const cameras=Array.isArray(camera.cameras)?camera.cameras:[];
+    for(const slot of [1,2,3,4,5]){
+      const c=cameras.find(x=>Number(x?.slot)===slot);
+      if(!c)continue;
+      rows.push(['Camera '+slot,
+        (c.active===true?'active':'inactive')+' · '+
+        enumValue(c.state,['ready','off','recovering','starting','failed','disabled',
+          'stopped','device_changed','manual_stop','tab_hidden','page_closed','location_changed'])+
+        ' · retries '+clamp(c.retries,3)]);
+    }
+    return rows;
+  }
+
   function structuredCard(data, skill, sources = []) {
     if (data == null) return '<div class="empty">No structured result for this response.</div>';
     if (skill === 'food_monster.kitchen_pilot' && Array.isArray(data.items)) {
@@ -114,8 +148,19 @@
         ['Conversation toggles',pilotLocal.conversationToggles],
         ['Spoken reply events',pilotLocal.voiceReplies]
       ];
-      const metricsHtml=metrics.map(([label,value])=>'<b>'+esc(label)+'</b><span>'+
+      const metricsHtml=[...metrics,...pilotDeviceSummary()].map(([label,value])=>'<b>'+esc(label)+'</b><span>'+
         esc(value)+'</span>').join('');
+      const fixes=Array.isArray(data.followUps?.issues)?data.followUps.issues.slice(0,7):[];
+      const followupHtml=fixes.map(issue=>
+        '<div class="result-card"><h3>'+esc(issue.title||issue.gate)+'</h3>'+
+        '<p>Follow-up status: '+esc(issue.status||'open')+'</p>'+
+        '<p>Original issue (operator report): '+esc(issue.failureEvidence||'not provided')+'</p>'+
+        (issue.plan?'<p>Planned repair: '+esc(issue.plan)+'</p>':'')+
+        (issue.resolution?'<p>Reported resolution: '+esc(issue.resolution)+'</p>':'')+
+        '<p>Plan: plan kitchen pilot fix '+esc(issue.gate)+
+        ': [20+ character plan]</p>'+
+        '<p>After a NEW passing field check, resolve: resolve kitchen pilot fix '+
+          esc(issue.gate)+': [20+ character resolution note]</p></div>').join('');
       const gates=data.items.slice(0,7).map(g=>
         '<div class="result-card"><h3>'+esc(g.title||g.gate)+'</h3>'+
         '<p>Operator report: '+esc(g.status||'not_tested')+'</p>'+
@@ -128,7 +173,12 @@
         '<p>Run: '+esc(data.runId||'not started')+
         ' · '+(data.closed?'Closed':data.active?'Active':'Not started')+'</p>'+
         (data.partialHistory?'<p>History is partial.</p>':'')+
-        '<p>Start: start kitchen pilot · Finish: close kitchen pilot</p></div>'+
+        '<p>Start: start kitchen pilot · Finish: close kitchen pilot</p>'+
+        '<p>Unresolved follow-ups: '+esc(data.followUps?.unresolved||0)+
+          ' · resolved: '+esc(data.followUps?.resolved||0)+'</p></div>'+
+        (followupHtml?'<div class="result-card"><h3>Failure-to-fix follow-ups</h3>'+
+          '<p>A planned repair needs a NEW passing field test and explicit owner resolution.</p></div>'+
+          followupHtml:'')+
         '<div class="result-card"><h3>This browser session · local diagnostics</h3>'+
         '<p>Counts reset on page reload, are not sent to the server, and do not certify equipment.</p>'+
         '<div class="kv">'+metricsHtml+'</div></div>'+gates;

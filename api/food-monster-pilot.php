@@ -24,7 +24,7 @@ try {
     if(!fm14a_authorized($user,(string)$turn['channel']))
         throw new DomainException('Only the Super Admin may review or record kitchen pilot checks.');
     $intent=fm14a_intent($message);
-    if($intent===null)throw new InvalidArgumentException('Use kitchen pilot readiness, start kitchen pilot, record kitchen pilot GATE OUTCOME: evidence, or close kitchen pilot.');
+    if($intent===null)throw new InvalidArgumentException('Use kitchen pilot readiness, start kitchen pilot, record kitchen pilot GATE OUTCOME: evidence, plan kitchen pilot fix GATE: note, resolve kitchen pilot fix GATE: note, or close kitchen pilot.');
     $pdo->beginTransaction();
     try{
         // Serialize two tabs using the trusted current owner, not the
@@ -51,6 +51,9 @@ try {
             if($action==='record'){
                 $event['gate']=$intent['gate'];$event['outcome']=$intent['outcome'];
                 $event['evidence']=$intent['evidence'];
+            }elseif(in_array($action,['plan_fix','resolve_fix'],true)){
+                $event['gate']=$intent['gate'];
+                $event['note']=$intent['note'];
             }
             gaw_append($pdo,$org,$uid,$ledger,'system','Kitchen pilot field check recorded',[
                 'channel'=>'text','structured'=>$event]);
@@ -73,6 +76,10 @@ try {
         $answer.=$snapshot['passed'].' of '.$snapshot['total'].' checks have fresh, operator-reported passes. ';
         if($snapshot['allOperatorReportedPass'])$answer.='All check results are self-reported; independent device and kitchen certification remains outstanding. ';
         else $answer.='Open the Agent Brain result panel for remaining checks. ';
+        $fixes=$snapshot['followUps']??['unresolved'=>0,'resolved'=>0];
+        $answer.=(int)($fixes['unresolved']??0).' follow-up(s) remain unresolved. ';
+        if(($fixes['unresolved']??0)>0)
+            $answer.='Plan each fix, retest the gate with a new pass, then explicitly resolve it. ';
         $answer.='Do not include employee names, biometrics, audio or private customer data in evidence. ';
         if($partial)$answer.='History is partial; earlier pilot events may be omitted.';
         app_json_response(['ok'=>true,'skill'=>'food_monster.kitchen_pilot',
