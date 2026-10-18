@@ -81,7 +81,8 @@
 
   function structuredCard(data, skill, sources = []) {
     if (data == null) return '<div class="empty">No structured result for this response.</div>';
-    if (skill === 'food_monster.training_change_impact' && Array.isArray(data.participants)) {
+    if ((skill === 'food_monster.training_change_impact' || skill === 'food_monster.shift_training_refresh')
+        && Array.isArray(data.participants)) {
       const cards=data.participants.slice(0,30).map(p =>
         '<div class="result-card"><h3>' + esc(p.displayName || 'Participant') + '</h3>' +
         '<p>' + esc(p.sourceName || 'Menu source unavailable') + '</p>' +
@@ -90,10 +91,18 @@
         '<b>Guided practice</b><span>' + esc(p.trainingStatus || 'unknown') + '</span>' +
         '<b>Revision acknowledged</b><span>' + (p.acknowledgedUpdate ? 'Yes — refresh needed' : 'Not pending') + '</span>' +
         '<b>Guided refresh</b><span>' + (p.refreshCompleted ? 'Walkthrough complete (not certified)' :
-          p.refreshInProgress ? 'In progress' : 'Not started') + '</span></div>' +
+          p.refreshInProgress ? 'In progress' : 'Not started') + '</span>' +
+        (skill === 'food_monster.shift_training_refresh'
+          ? '<b>Clock status</b><span>' + esc(p.shiftState || 'unavailable') + '</span>' +
+            '<b>Review window</b><span>' + esc(p.reviewWindow || '') + '</span>'
+          : '') + '</div>' +
         '<p>' + esc(p.recommendation || '') + '</p></div>').join('');
-      return '<div class="result-card"><h3>Procedure change impact</h3>' +
-        '<p>' + esc(data.affected || 0) + ' training sessions may need review. No progress was reset or rated.</p>' +
+      return '<div class="result-card"><h3>' +
+        (skill === 'food_monster.shift_training_refresh' ? 'Shift training review' : 'Procedure change impact') +
+        '</h3><p>' + esc(data.affected || 0) + ' training sessions may need review. No progress was reset or rated.</p>' +
+        (data.shiftSummary ? '<p>' + esc(data.shiftSummary.deferredUntilBreak || 0) +
+          ' active-shift reminder(s) deferred; ' + esc(data.shiftSummary.reviewOpportunity || 0) +
+          ' optional review opportunity/ies.</p>' : '') +
         (data.partial?'<span class="pill">Partial result</span>':'') + '</div>' +
         (cards||'<div class="empty">No saved menu-guided training was found for this view.</div>');
     }

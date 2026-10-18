@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__.'/food-monster-g13c-training.php';
 require_once __DIR__.'/food-monster-g13j-refresh.php';
+require_once __DIR__.'/food-monster-g13l-shift-refresh.php';
 
 /**
  * G13K: return a generic, optional notice only for a fresh authenticated
@@ -95,6 +96,11 @@ function fm13k_try_notice(PDO $pdo,array $user,int $personId):?array
         }
         $material=fm13c_fetch_material($pdo,$org,$state);
         if(!fm13j_source_changed($state,$material)){$pdo->commit();return null;}
+        // Quiet on active production shifts. Leave the pending revision
+        // unconsumed until a recorded break or a later off-shift conversation.
+        // No KDS state, audio, or background process is touched.
+        $shift=fm13l_shift_context($pdo,$org,$personId);
+        if(!fm13l_notice_window($shift)){$pdo->commit();return null;}
         $noticeThread=fm13k_notice_thread($pdo,$org,$personId,false);
         $previous=fm13k_latest_notice($pdo,$org,$personId,$noticeThread);
         $now=time();

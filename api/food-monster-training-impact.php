@@ -3,6 +3,7 @@ declare(strict_types=1);
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/agent-workspace-core.php';
 require_once __DIR__.'/../includes/food-monster-g13i-training-impact.php';
+require_once __DIR__.'/../includes/food-monster-g13l-shift-refresh.php';
 $user=app_require_auth();$pdo=app_pdo();
 $org=(int)$user['organization_id'];$uid=(int)$user['id'];
 if($_SERVER['REQUEST_METHOD']!=='POST'){
@@ -20,9 +21,13 @@ try{
     if(($last['role']??'')!=='user'||($last['channel']??'')!=='text'
        ||trim((string)($last['content']??''))!==$message)
         throw new DomainException('A fresh, authenticated typed request is required.');
-    $intent=fm13i_intent($message);
+    $shiftIntent=fm13l_intent($message);
+    $intent=$shiftIntent??fm13i_intent($message);
     $owner=fm9a_is_super_admin_session($user);
-    if($intent===null||!fm13i_allowed($user,$intent,'text',$owner))
+    if($intent===null
+        ||($shiftIntent!==null
+            ?!fm13l_allowed($user,$intent,'text')
+            :!fm13i_allowed($user,$intent,'text',$owner)))
         throw new DomainException('This training impact view is not authorized.');
     $sql="SELECT u.id,u.display_name FROM users u
          JOIN organization_memberships om ON om.user_id=u.id
@@ -55,9 +60,27 @@ try{
         $assessment['displayName']=$intent==='self'?'Your training':
             mb_substr((string)($person['display_name']??'Participant'),0,70,'UTF-8');
         $assessment['personId']=$intent==='team'?$personId:null;
+        if($shiftIntent!==null){
+            $context=fm13l_shift_context($pdo,$org,$personId);
+            $assessment['shiftState']=$context['state'];
+            $assessment['reviewWindow']=$context['state']==='on_shift'
+                ?'Deferred during production; offer at recorded break or off shift'
+                :'Optional review during a quiet conversation';
+            if($context['state']==='unavailable')$partial=true;
+        }
         $list[]=$assessment;
     }
     $result=fm13i_summary($list,$intent,$partial);
+    if($shiftIntent!==null){
+        $summary=fm13l_shift_summary($list,$partial);
+        $result['skill']='food_monster.shift_training_refresh';
+        $result['answer']=$summary['outstanding'].' authorized saved training session(s) need procedure review. '.
+            $summary['deferredUntilBreak'].' are currently on shift, so routine prompts are deferred. '.
+            'Review is optional and does not affect time-clock, KDS, grades or training history.'.
+            ($partial?' This report is partial or shift data is unavailable.':'');
+        $result['data']['shiftSummary']=$summary;
+        $result['data']['partial']=$partial;
+    }
     app_audit($pdo,$org,$uid,'food_monster.training_change_impact_read',
         'agent_conversation',$room,null,['scope'=>$intent,'count'=>count($list),
             'affected'=>$result['data']['affected'],'partial'=>$partial]);
