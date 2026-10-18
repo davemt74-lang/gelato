@@ -12,7 +12,7 @@ function fm14c_intent(string $message):?array
     if(preg_match('/^(?:kitchen pilot fixes|show kitchen pilot failures|kitchen pilot followups)[.!]?$/iu',$message))
         return ['action'=>'status'];
     if(preg_match('/^(plan|resolve) kitchen pilot fix (microphone|transcription|handoff|camera|timeclock|kds|recovery):\s*(.{20,500})$/ius',$message,$m))
-        return ['action'=>$m[1]==='plan'?'plan_fix':'resolve_fix',
+        return ['action'=>strtolower($m[1])==='plan'?'plan_fix':'resolve_fix',
             'gate'=>strtolower($m[2]),'note'=>trim($m[3])];
     return null;
 }
