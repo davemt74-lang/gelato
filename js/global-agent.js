@@ -149,7 +149,8 @@
     if(!notice||notice.available!==true
        ||notice.type!=='menu_training_change'
        ||notice.suggestedCommand!=='review updated training')return;
-    const bar=document.getElementById('gelato-agent-bar');
+    const bar=document.getElementById('gelato-agent-bar')
+      ||document.querySelector('.composer-wrap');
     if(!bar||!bar.parentNode)return;
     chip=document.createElement('div');
     chip.id='gaTrainingUpdate';
@@ -164,7 +165,7 @@
     button.textContent='Review';
     button.setAttribute('aria-label','Prepare updated training review request');
     button.onclick=()=>{
-      const field=document.getElementById('gaInput');
+      const field=document.getElementById('gaInput')||document.getElementById('canvasInput');
       if(field){field.value='review updated training';field.focus();}
       chip.remove();
     };
@@ -175,7 +176,8 @@
     dismiss.setAttribute('aria-label','Dismiss training update notice');
     dismiss.onclick=()=>chip.remove();
     chip.append(dismiss);
-    bar.parentNode.insertBefore(chip,bar);
+    if(bar.classList.contains('composer-wrap'))bar.insertBefore(chip,bar.firstChild);
+    else bar.parentNode.insertBefore(chip,bar);
   }
 
   function capabilityMessage() {
