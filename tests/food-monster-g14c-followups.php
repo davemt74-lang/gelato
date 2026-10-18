@@ -29,6 +29,8 @@ $validPlan=fm14c_intent('plan kitchen pilot fix microphone: '.$plan['note']);
 $validResolve=fm14c_intent('resolve kitchen pilot fix microphone: '.$resolved['note']);
 ok14c($validPlan['action']==='plan_fix'&&$validPlan['gate']==='microphone','plan grammar');
 ok14c($validResolve['action']==='resolve_fix','explicit resolve grammar');
+ok14c((fm14c_intent('PLAN kitchen pilot fix microphone: '.$plan['note'])['action']??'')==='plan_fix',
+    'uppercase plan remains a plan, never a resolution');
 foreach(['kitchen pilot fixes','show kitchen pilot failures','kitchen pilot followups'] as $cmd)
     ok14c((fm14c_intent($cmd)['action']??'')==='status','read-only status alias');
 foreach(['plan kitchen pilot fix customer: an unintended update',
