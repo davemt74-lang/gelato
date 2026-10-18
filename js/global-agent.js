@@ -26,6 +26,7 @@
     voiceDraft: {owned: false, previous: '', committed: ''},
     conversation: false, conversationTimer: null, conversationDraft: '',
     recentFinalSpeech: {text:'',at:0}, recognitionFaults:0, recognitionRestarts:0,
+    recognitionRetryTimer:null, wakeFinal:{text:'',at:0},
   };
 
   const has = (permission) => S.permissions.includes('*') || S.permissions.includes(permission);
@@ -646,7 +647,7 @@
       });
       S.savedListening=!!Number(data.preferences?.listening_enabled??Number(!!on));
       S.listening=!!on;
-      if(on){S.recognitionFaults=0;S.recognitionRestarts=0;}
+      if(on){S.recognitionFaults=0;S.recognitionRestarts=0;S.wakeFinal={text:'',at:0};}
       if(!on){clearConversationTimer();S.conversationDraft='';if(S.conversation){S.conversation=false;renderConversation();}}
       S.wakeStandby=!!(keepWake||on);
       if(on){
@@ -670,6 +671,19 @@
   function diag(kind,details){window.GelatoVoiceDiagnostics?.record?.('global-agent',kind,details);}
   // A fatal microphone failure must stop both visible voice modes and invalidate
   // all timers; previously Conversation Mode stayed on while mic was disabled.
+  function cancelRecognitionRetry(){
+    if(S.recognitionRetryTimer!==null){
+      clearTimeout(S.recognitionRetryTimer);S.recognitionRetryTimer=null;
+    }
+  }
+  // Final wake phrases may be repeated by browser result callbacks. This
+  // suppresses only the immediate duplicate, never a later genuine request.
+  function isDuplicateWakeTurn(text,now=Date.now()){
+    const normalized=String(text||'').toLocaleLowerCase().trim().replace(/\s+/g,' ');
+    if(!normalized)return true;
+    if(S.wakeFinal.text===normalized&&now-S.wakeFinal.at<2200)return true;
+    S.wakeFinal={text:normalized,at:now};return false;
+  }
   function haltVoiceAfterFailure(){
     clearConversationTimer();S.conversationDraft='';resetVoiceDraft();
     S.conversation=false;S.listening=false;S.wakeStandby=false;
@@ -760,6 +774,7 @@
         if(/^hey\s+gelato\b/i.test(text)){
           if(evaluation?.interrupt)interruptSpeech('voice-barge-in');
           window.dispatchEvent(new CustomEvent('gelato-agent-voice-transcript',{detail:{text}}));
+          if(isDuplicateWakeTurn(text)){diag('duplicate-final-suppressed');continue;}
           void send(text,true);
         }
       }
@@ -784,13 +799,17 @@
           status('Speech service keeps restarting. Microphone paused; press Listen to retry.',6500);
           haltVoiceAfterFailure();return;
         }
-        const delay=Math.min(8000,650*Math.pow(2,Math.max(0,S.recognitionFaults-1)));
+        // Create a NEW recognition instance after an end event. Reusing the
+        // just-ended browser object can throw InvalidStateError indefinitely.
+        const delay=Math.min(8000,650*Math.pow(2,Math.max(0,S.recognitionRestarts-1)));
         diag('retry-scheduled',{delay,faults:S.recognitionFaults});
-        setTimeout(()=>{if(S.rec===activeRec&&(S.listening||S.wakeStandby)&&!document.hidden){
-          try{diag('retry');activeRec.start();}catch{
-            diag('failed',{error:'start-failed'});haltVoiceAfterFailure();
-          }
-        }},delay);
+        cancelRecognitionRetry();
+        S.recognitionRetryTimer=setTimeout(()=>{
+          S.recognitionRetryTimer=null;
+          if(S.rec!==activeRec||(!S.listening&&!S.wakeStandby)||document.hidden)return;
+          diag('retry');
+          startContinuous();
+        },delay);
       }
     };
     try{activeRec.start();return true;}catch(error){diag('failed',{error:'start-failed'});
@@ -799,6 +818,7 @@
     }
   }
   function stopContinuous(){
+    cancelRecognitionRetry();
     if(S.rec){
       const old=S.rec;S.rec=null;
       old.onend=null;old.onresult=null;old.onerror=null;

@@ -12,14 +12,14 @@ const conf=()=>window.GelatoCameraConfiguration;
 const aux=()=>window.GelatoGlassesMultiCamera;
 function row(slot) {
   if(!S.slots.has(slot))S.slots.set(slot,{slot,desired:false,retries:0,nextRetry:0,lastFrame:0,
-    lastCapture:0,lastError:'',state:'off',fps:0,frameCount:0,lastFrameAt:0,
+    lastCapture:0,lastError:'',state:'off',startPending:false,startGeneration:0,fps:0,frameCount:0,lastFrameAt:0,
     activity:'unknown',quality:0,ready:false,activitySince:0,stability:0,detector:'not_configured',
     detectorConfidence:null,modelName:null});
   return S.slots.get(slot);
 }
 function status(slot){const v=row(slot);return {...v,active:!!conf()?.isStreaming?.(slot),enabled:!!conf()?.isEnabled?.(slot)};}
 function stop(slot,reason='stopped'){
-  const s=row(slot);s.desired=false;s.nextRetry=0;s.retries=0;s.state=reason;
+  const s=row(slot);s.desired=false;s.startGeneration++;s.nextRetry=0;s.retries=0;s.state=reason;
   S.samples.delete(slot);calibration?.clear(slot);calibrationKeys.delete(slot);if(slot>1)aux()?.stop?.(slot,{reason:reason.toUpperCase()});
   else window.GelatoGlassesPrimaryCamera?.stop?.();
 }
@@ -30,19 +30,28 @@ async function start(slot){
     s.state='disabled';return false;
   }
   if(slot===1){s.state=conf()?.isStreaming?.(1)?'ready':'manual_start_required';return s.state==='ready';}
-  s.desired=true;s.state='starting';
+  if(s.startPending)return false;
+  s.desired=true;s.state='starting';s.startPending=true;
+  const generation=++s.startGeneration;
   try{
     await aux()?.start?.(slot);
+    // Permission revocation, location switch or user Stop during await must
+    // never leave a secretly restarted camera behind.
+    if(generation!==s.startGeneration||!s.desired){
+      aux()?.stop?.(slot,{reason:'CANCELLED_DURING_START'});
+      return false;
+    }
     const ok=!!conf()?.isStreaming?.(slot);
     s.state=ok?'ready':'unavailable';
     if(ok){s.retries=0;s.nextRetry=0;s.lastError='';return true;}
     s.lastError='camera_unavailable';
   }catch(e){s.lastError=String(e?.name||'camera_failure');s.state='failed';}
+  finally{s.startPending=false;}
   return false;
 }
 function trackStopped(slot,reason) {
   const s=row(slot);
-  if(!s.desired||document.hidden||!conf()?.isEnabled?.(slot))return;
+  if(!s.desired||s.startPending||document.hidden||!conf()?.isEnabled?.(slot))return;
   if(/permission|not.allowed|security/i.test(reason)){s.desired=false;s.state='permission_blocked';return;}
   s.state='recovering';s.lastError=reason;
   if(s.retries>=3){s.desired=false;s.state='retry_exhausted';return;}
@@ -116,7 +125,7 @@ async function poll(){
       if(s.state!=='ready')s.state='ready';
       sample(slot);
     }else if(s.desired&&slot>1&&s.state==='ready'){trackStopped(slot,'disconnected');}
-    if(!active&&s.desired&&s.nextRetry&&now()>=s.nextRetry){
+    if(!active&&s.desired&&!s.startPending&&s.nextRetry&&now()>=s.nextRetry){
       s.nextRetry=0;
       if(!await start(slot))trackStopped(slot,s.lastError||'camera_unavailable');
     }

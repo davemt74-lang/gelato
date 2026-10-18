@@ -1,0 +1,68 @@
+name: FM-G14B Voice Camera KDS Recovery
+on:
+  pull_request:
+    paths:
+      - 'js/global-agent.js'
+      - 'js/kds-voice-listener.js'
+      - 'assets/js/glasses-camera-runtime.js'
+      - 'food-monster.php'
+      - 'agent-canvas.php'
+      - 'kds.php'
+      - 'glasses-simulator.php'
+      - 'tests/food-monster-g14b-recovery.test.cjs'
+      - 'tests/food-monster-g6-contract.php'
+      - 'tests/kds-slot-voice-contract.php'
+      - '.github/workflows/food-monster-g14b.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'js/global-agent.js'
+      - 'js/kds-voice-listener.js'
+      - 'assets/js/glasses-camera-runtime.js'
+      - 'food-monster.php'
+      - 'agent-canvas.php'
+      - 'kds.php'
+      - 'glasses-simulator.php'
+      - 'tests/food-monster-g14b-recovery.test.cjs'
+      - '.github/workflows/food-monster-g14b.yml'
+jobs:
+  recovery-privacy-and-regressions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_mysql
+      - name: Parse changed JS and PHP
+        run: |
+          node --check js/global-agent.js
+          node --check js/kds-voice-listener.js
+          node --check assets/js/glasses-camera-runtime.js
+          node --check tests/food-monster-g14b-recovery.test.cjs
+          php -l food-monster.php
+          php -l agent-canvas.php
+          php -l kds.php
+          php -l glasses-simulator.php
+      - name: Simulate device failure/retry and inherited kitchen boundaries
+        run: |
+          node tests/food-monster-g14b-recovery.test.cjs
+          node tests/glasses-camera-runtime.test.js
+          node tests/voice-turn-taking.test.js
+          node tests/voice-diagnostics.test.js
+          node tests/kds-natural-order-voice.test.js
+          php tests/kds-slot-voice-contract.php
+          php tests/kds-voice-agent-contract.php
+          php tests/food-monster-g6-contract.php
+          php tests/food-monster-g14a-pilot.php
+          php tests/food-monster-g13l-shift.php
+          php tests/food-monster-g13k-notices.php
+          node tests/food-monster-g13k-ui.test.cjs
+          php tests/food-monster-g13j-refresh.php
+          php tests/food-monster-g13i-impact.php
+          php tests/food-monster-g9f-approvals.php
+          node tests/food-monster-g10b-turns.test.cjs
+          node tests/food-monster-g11b-turns.test.cjs
