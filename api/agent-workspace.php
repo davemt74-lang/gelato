@@ -19,6 +19,7 @@ require_once __DIR__.'/../includes/food-monster-g13f-procedure-review.php';
 require_once __DIR__.'/../includes/food-monster-g13g-procedure-history.php';
 require_once __DIR__.'/../includes/food-monster-g13i-training-impact.php';
 require_once __DIR__.'/../includes/food-monster-g13c-training.php';
+require_once __DIR__.'/../includes/food-monster-g13k-training-notice.php';
 require_once __DIR__.'/../includes/food-monster-g13b-knowledge.php';
 require_once __DIR__.'/../includes/food-monster-operational-followup.php';
 require_once __DIR__.'/../includes/food-monster-high-impact-approval.php';
@@ -152,7 +153,22 @@ try{
                 error_log('FM-G11D conversational follow-up unavailable: '.get_class($hintError));
             }
         }
+        // Training updates are nonintrusive UI suggestions, never automatic
+        // audio, credential grants, personnel grades or workflow commands.
+        $trainingUpdateNotice=null;
+        if($role==='user' && !in_array((fm13c_command((string)($in['content']??''))['action']??''),
+            ['review_update','acknowledge_update','start_refresh'],true)){
+            $notifyPerson=fm13k_eligible($user,$personSpeaker,$role,$channel);
+            if($notifyPerson!==null){
+                try{
+                    $trainingUpdateNotice=fm13k_try_notice($pdo,$user,$notifyPerson);
+                }catch(Throwable $noticeError){
+                    error_log('FM-G13K nonblocking training notice failed: '.get_class($noticeError));
+                }
+            }
+        }
         app_json_response(['ok'=>true,'message'=>$message,'roomSpeaker'=>$roomSpeaker,
+            'trainingUpdateNotice'=>$trainingUpdateNotice,
             'conversationalSuggestion'=>$conversationalSuggestion,'operationalFollowup'=>$followup,
             'greeting'=>$greeting?['text'=>$greeting,'verified'=>true]:null,
             'participant'=>($personSpeaker&&(int)$personSpeaker['personId']!==$uid)
