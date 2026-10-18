@@ -43,6 +43,6 @@ check(!printable.includes('<')&&!printable.includes('onerror'),'no HTML diagnost
 check(!code.includes('JSON.stringify(window.GelatoVoiceDiagnostics?.snapshot'),
   'raw diagnostic snapshot is not serialized in Agent Chat code');
 check(code.includes('data.followUps?.issues'),'repair summaries stay inside the pilot result sidebar');
-check(code.includes('esc(issue.plan)')&&code.includes('esc(issue.failureEvidence)'),
+check(code.includes('esc(issue.plan)')&&code.includes('esc(issue.failureEvidence||'),
   'operator narrative is escaped before sidebar rendering');
 console.log('FM-G14C sanitized browser and camera diagnostics PASS ('+count+' assertions)');
