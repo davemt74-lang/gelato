@@ -32,8 +32,7 @@ function fm14a_intent(string $message):?array
 }
 function fm14a_authorized(array $user,string $channel):bool
 {
-    return $channel==='text'&&fm9a_is_super_admin_session($user)
-        &&app_has_permission('agent.manage',$user);
+    return $channel==='text'&&fm9a_is_super_admin_session($user);
 }
 function fm14a_evidence_ok(string $value):bool
 {
