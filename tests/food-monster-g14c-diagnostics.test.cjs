@@ -43,6 +43,9 @@ check(!printable.includes('<')&&!printable.includes('onerror'),'no HTML diagnost
 check(!code.includes('JSON.stringify(window.GelatoVoiceDiagnostics?.snapshot'),
   'raw diagnostic snapshot is not serialized in Agent Chat code');
 check(code.includes('data.followUps?.issues'),'repair summaries stay inside the pilot result sidebar');
+const page=fs.readFileSync('agent-canvas.php','utf8');
+check(page.includes('js/voice-diagnostics.js?v='),
+  'main Agent Canvas loads already-existing sanitized voice diagnostic service');
 check(code.includes('esc(issue.plan)')&&code.includes('esc(issue.failureEvidence||'),
   'operator narrative is escaped before sidebar rendering');
 console.log('FM-G14C sanitized browser and camera diagnostics PASS ('+count+' assertions)');
