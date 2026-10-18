@@ -141,6 +141,57 @@
       '</details>';
   }
 
+  // G14D2: deterministic advisory rules over existing privacy-safe local fields.
+  // Does not send diagnostics to the server, invoke devices, or mark pilot passes.
+  function pilotTroubleshooting(rows) {
+    const states=new Map(rows.map(([key,value])=>[key,String(value)]));
+    const recognition=states.get('Speech recognition')||'unavailable';
+    const error=states.get('Speech-service error')||'unavailable';
+    const suggestions=[];
+    const add=(subject,reason,next)=>suggestions.push({subject,reason,next});
+    if(error==='not-allowed'||error==='service-not-allowed'||recognition==='blocked'){
+      add('Microphone permission','Browser speech access is blocked.',
+        'Check site microphone permission and operating-system privacy settings; retry only after consent.');
+    }else if(error==='audio-capture'){
+      add('Microphone source','The speech service reported an audio-capture error.',
+        'Check device connection and input selection; perform a controlled offline reconnect test.');
+    }else if(error==='network'){
+      add('Speech service','The recognition service reported a network error.',
+        'Check connectivity and service availability; keep production voice commands disabled until retested.');
+    }else if(error==='retry-limit'||recognition==='failed'){
+      add('Speech recovery','The speech recognizer is in a failed or retry-exhausted state.',
+        'Stop listening, inspect the intended input device, and retest manually after recovery.');
+    }else if(recognition==='retrying'){
+      add('Speech recovery','The microphone is attempting recovery.',
+        'Observe whether it returns to active; do not start overlapping listeners.');
+    }else if(recognition==='unavailable'){
+      add('Speech diagnostics','Speech recognition status is unavailable in this browser session.',
+        'Open the pilot from the device being tested and confirm permission and browser support.');
+    }
+    if(states.get('KDS listening')!=='off'&&states.get('KDS mic active')==='No / unavailable'){
+      add('KDS voice','KDS voice mode is enabled but the microphone is not confirmed active.',
+        'Check the KDS voice input state using a safe test ticket; avoid production navigation until verified.');
+    }
+    for(let slot=1;slot<=5;slot++){
+      const state=states.get('Camera '+slot);
+      if(!state)continue;
+      if(/ · (failed|recovering|device_changed) · /.test(state)){
+        add('Camera '+slot,'The camera is not confirmed ready ('+state+').',
+          'Inspect consent and physical connection, then verify tracking and a single recovered stream.');
+      }
+    }
+    return suggestions.slice(0,8);
+  }
+  function pilotTroubleshootingHtml(rows) {
+    const tips=pilotTroubleshooting(rows);
+    return '<div class="result-card"><h3>Assisted device troubleshooting</h3>'+
+      '<p>Browser-local advisory guidance only. No repairs or field results were applied.</p>'+
+      (tips.length?tips.map(t=>'<div class="pilot-advice"><b>'+esc(t.subject)+'</b>'+
+        '<p>'+esc(t.reason)+'</p><p>Suggested check: '+esc(t.next)+'</p></div>').join(''):
+        '<p>No known diagnostic warning is visible. This does not establish device readiness.</p>')+
+      '</div>';
+  }
+
   // Strictly project existing local diagnostic snapshots into fixed, non-identity
   // fields. Never send any snapshot, event history, transcript or camera image.
   function pilotDeviceSummary() {
@@ -222,7 +273,7 @@
           followupHtml:'')+
         '<div class="result-card"><h3>This browser session · local diagnostics</h3>'+
         '<p>Counts reset on page reload, are not sent to the server, and do not certify equipment.</p>'+
-        '<div class="kv">'+metricsHtml+'</div></div>'+gates;
+        '<div class="kv">'+metricsHtml+'</div></div>'+pilotTroubleshootingHtml(pilotDeviceSummary())+gates;
     }
     if ((skill === 'food_monster.training_change_impact' || skill === 'food_monster.shift_training_refresh')
         && Array.isArray(data.participants)) {
