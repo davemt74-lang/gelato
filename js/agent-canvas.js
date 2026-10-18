@@ -229,6 +229,19 @@
   function structuredCard(data, skill, sources = []) {
     if (data == null) return '<div class="empty">No structured result for this response.</div>';
     if (skill === 'food_monster.kitchen_pilot' && Array.isArray(data.items)) {
+      const ready=data.readiness||{};
+      const count=ready.statusCounts||{};
+      const readinessHtml='<div class="result-card"><h3>Field pilot readiness · operator reports</h3>'+
+        '<p>'+esc(count.pass||0)+' passes · '+esc(count.fail||0)+' failures · '+
+        esc(count.blocked||0)+' blocked · '+esc(count.stale||0)+' stale · '+
+        esc(count.not_tested||0)+' not tested</p>'+
+        '<p>Unresolved device follow-ups: '+esc(ready.unresolvedIssues||0)+'</p>'+
+        '<p>All recent operator checks reported passing: '+
+        (ready.operatorReportComplete===true?'Yes':'No')+
+        '. Physical certification remains pending.</p>'+
+        '<p>Employee guided practice is separate evidence; never proof of device readiness. '+
+        'Use authorized typed Agent Chat: team training insights. '+
+        'Staff may request their own history with: my training insights.</p></div>';
       const metrics=[
         ['Microphone transitions',pilotLocal.micStarts],
         ['Microphone off states',pilotLocal.micStops],
@@ -268,6 +281,7 @@
         '<p>Start: start kitchen pilot · Finish: close kitchen pilot</p>'+
         '<p>Unresolved follow-ups: '+esc(data.followUps?.unresolved||0)+
           ' · resolved: '+esc(data.followUps?.resolved||0)+'</p></div>'+
+        readinessHtml+
         (followupHtml?'<div class="result-card"><h3>Failure-to-fix follow-ups</h3>'+
           '<p>A planned repair needs a NEW passing field test and explicit owner resolution.</p></div>'+
           followupHtml:'')+
