@@ -1,0 +1,17 @@
+'use strict';
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const source=fs.readFileSync('js/global-agent.js','utf8');
+const start=source.indexOf('  function startContinuous(){');
+const end=source.indexOf('    S.rec=activeRec;diag(\'starting\');',start);
+assert(start>=0&&end>start,'recognition initialization found');
+const code=source.slice(start,end);
+assert.match(code,/try\{activeRec=new SpeechRecognition\(\);\}catch\(error\)\{/);
+assert.match(code,/diag\('failed',\{error:'start-failed'\}\)/);
+assert.match(code,/haltVoiceAfterFailure\(\)/);
+assert.match(code,/Listening was stopped/);
+assert.ok(code.indexOf("haltVoiceAfterFailure()")<code.lastIndexOf("return false;"),'fail-closed state before return');
+const old=source.slice(source.indexOf('  function haltVoiceAfterFailure(){'),start);
+assert.match(old,/S\.conversation=false;S\.listening=false;S\.wakeStandby=false/);
+assert.match(old,/stopPoll\(\);stopContinuous\(\);renderConversation\(\);renderListening\(\)/);
+console.log('FM-G14E1 constructor failure fail-closed PASS (7 assertions)');
