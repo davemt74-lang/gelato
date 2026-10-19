@@ -9,6 +9,7 @@ on:
       - 'js/global-agent.js'
       - 'tests/food-monster-g14e1-init.test.cjs'
       - 'tests/food-monster-g14e2-finals.test.cjs'
+      - 'tests/food-monster-g14e3a-continuity.test.cjs'
       - 'agent-canvas.php'
       - 'tests/food-monster-g14c-followups.php'
       - 'tests/food-monster-g14c-mysql.php'
@@ -28,6 +29,7 @@ on:
       - 'js/global-agent.js'
       - 'tests/food-monster-g14e1-init.test.cjs'
       - 'tests/food-monster-g14e2-finals.test.cjs'
+      - 'tests/food-monster-g14e3a-continuity.test.cjs'
       - 'agent-canvas.php'
       - 'tests/food-monster-g14c-followups.php'
       - 'tests/food-monster-g14c-mysql.php'
@@ -62,6 +64,7 @@ jobs:
           node --check js/global-agent.js
           node --check tests/food-monster-g14e1-init.test.cjs
           node --check tests/food-monster-g14e2-finals.test.cjs
+          node --check tests/food-monster-g14e3a-continuity.test.cjs
           node --check tests/food-monster-g14c-diagnostics.test.cjs
           node --check tests/food-monster-g14d-guided.test.cjs
           node --check tests/food-monster-g14d2-troubleshooting.test.cjs
@@ -92,6 +95,7 @@ jobs:
           node tests/food-monster-g14b-recovery.test.cjs
           node tests/food-monster-g14e1-init.test.cjs
           node tests/food-monster-g14e2-finals.test.cjs
+          node tests/food-monster-g14e3a-continuity.test.cjs
   real-mysql-repair-evidence:
     runs-on: ubuntu-latest
     services:
