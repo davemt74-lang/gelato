@@ -491,7 +491,6 @@
     // Repeated browser final callbacks are not a second human utterance.
     if(final&&autoSend&&S.recentFinalSpeech.text===text.toLowerCase()
       &&Date.now()-S.recentFinalSpeech.at<2200){diag('duplicate-final-suppressed');return false;}
-    if(final&&autoSend)S.recentFinalSpeech={text:text.toLowerCase(),at:Date.now()};
     let draft=S.voiceDraft;
     if(draft.owned&&field.value!==draft.previous){
       resetVoiceDraft();
@@ -499,6 +498,9 @@
       draft=S.voiceDraft;
     }
     if(!draft.owned&&field.value.trim()!=='')return false;
+    // Only accept a final as delivered after the composer ownership checks.
+    // Otherwise a blocked final could suppress a later legitimate retry.
+    if(final&&autoSend)S.recentFinalSpeech={text:text.toLowerCase(),at:Date.now()};
     const value=(draft.committed?draft.committed+' ':'')+text;
     field.value=value;field.dataset.voiceInterim=final?'false':'true';
     draft.owned=true;draft.previous=value;
