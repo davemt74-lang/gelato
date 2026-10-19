@@ -26,7 +26,7 @@
     voiceDraft: {owned: false, previous: '', committed: ''},
     conversation: false, conversationTimer: null, conversationDraft: '',
     recentFinalSpeech: {text:'',at:0}, recognitionFaults:0, recognitionRestarts:0,
-    recognitionRetryTimer:null, wakeFinal:{text:'',at:0},
+    recognitionRetryTimer:null, wakeFinal:{text:'',at:0}, recoveryPendingTurn:null,
   };
 
   const has = (permission) => S.permissions.includes('*') || S.permissions.includes(permission);
@@ -453,13 +453,13 @@
     renderConversation();
   }
   async function setConversationMode(enabled){
-    if(!enabled){S.conversation=false;clearConversationTimer();S.conversationDraft='';interruptSpeech('conversation-off');renderConversation();
+    if(!enabled){S.conversation=false;S.recoveryPendingTurn=null;clearConversationTimer();S.conversationDraft='';interruptSpeech('conversation-off');renderConversation();
       status(S.listening?'Conversation Mode off · Listening still auto-sends after you pause.':'Conversation Mode off.',3000);return true;}
     if(!has('voice.agent')){status('Conversation Mode requires Voice Agent permission.',4500);return false;}
     if(!window.speechSynthesis){status('This browser cannot speak Agent responses.',4500);return false;}
     const ready=S.listening||await setListening(true);
     if(!ready){renderConversation();return false;}
-    S.conversation=true;S.conversationDraft='';clearConversationTimer();renderConversation();
+    S.conversation=true;S.recoveryPendingTurn=null;S.conversationDraft='';clearConversationTimer();renderConversation();
     status('Conversation Mode on · speak naturally and pause to send. Interrupt Gelato by talking.',6500);
     return true;
   }
@@ -480,6 +480,32 @@
       try{await send(phrase,true);}catch(error){status('Conversation request failed: '+String(error.message||error),6500);}
     },1200);
   }
+  // G14E3A: hold a finalized, not-yet-submitted voice turn while a browser
+  // recognizer reconnects. Do not submit while microphone state is unknown.
+  // The user's editable composer remains the source of truth throughout.
+  function suspendSpokenTurnForReconnect(){
+    if(!S.listening||S.conversationTimer===null||!S.conversationDraft||!S.voiceDraft.owned)return false;
+    const field=document.getElementById('gaInput');
+    if(!field||field.value!==S.voiceDraft.previous)return false;
+    S.recoveryPendingTurn={
+      text:S.conversationDraft,fieldValue:field.value,at:Date.now()
+    };
+    clearConversationTimer();
+    return true;
+  }
+  function resumeSpokenTurnAfterReconnect(){
+    const pending=S.recoveryPendingTurn;
+    S.recoveryPendingTurn=null;
+    if(!pending||!S.listening||document.hidden||S.busy)return false;
+    const field=document.getElementById('gaInput');
+    if(!field||!S.voiceDraft.owned||field.value!==pending.fieldValue||
+       S.voiceDraft.previous!==pending.fieldValue)return false;
+    // Never silently send an old draft after a prolonged loss of microphone.
+    if(Date.now()-pending.at>15000)return false;
+    scheduleSpokenTurn(pending.text,true);
+    return true;
+  }
+
   // Finalized speech auto-sends while Listening is active; typed text never auto-sends.
   function resetVoiceDraft(){
     S.voiceDraft={owned:false,previous:'',committed:''};
@@ -612,7 +638,7 @@
     }
     // Wake standby uses ordinary browser speech recognition, not a biometric challenge.
     S.listening=false;S.wakeStandby=true;
-    clearConversationTimer();S.conversationDraft='';
+    S.recoveryPendingTurn=null;clearConversationTimer();S.conversationDraft='';
     stopPoll();
     const started=S.rec?true:startContinuous();
     if(!started){S.wakeStandby=false;renderListening();return false;}
@@ -650,7 +676,7 @@
       S.savedListening=!!Number(data.preferences?.listening_enabled??Number(!!on));
       S.listening=!!on;
       if(on){S.recognitionFaults=0;S.recognitionRestarts=0;S.wakeFinal={text:'',at:0};}
-      if(!on){clearConversationTimer();S.conversationDraft='';if(S.conversation){S.conversation=false;renderConversation();}}
+      if(!on){S.recoveryPendingTurn=null;clearConversationTimer();S.conversationDraft='';if(S.conversation){S.conversation=false;renderConversation();}}
       S.wakeStandby=!!(keepWake||on);
       if(on){
         const started=S.rec?true:startContinuous();
@@ -687,7 +713,7 @@
     S.wakeFinal={text:normalized,at:now};return false;
   }
   function haltVoiceAfterFailure(){
-    clearConversationTimer();S.conversationDraft='';resetVoiceDraft();
+    S.recoveryPendingTurn=null;clearConversationTimer();S.conversationDraft='';resetVoiceDraft();
     S.conversation=false;S.listening=false;S.wakeStandby=false;
     stopPoll();stopContinuous();renderConversation();renderListening();
   }
@@ -704,7 +730,7 @@
     }
     S.rec=activeRec;diag('starting');
     activeRec.lang='en-US';activeRec.continuous=true;activeRec.interimResults=true;
-    activeRec.onstart=()=>{if(S.rec!==activeRec)return;S.micActive=true;diag('active');renderListening();};
+    activeRec.onstart=()=>{if(S.rec!==activeRec)return;S.micActive=true;diag('active');renderListening();resumeSpokenTurnAfterReconnect();};
     activeRec.onresult=event=>{
       if(S.rec!==activeRec)return;
       S.recognitionFaults=0;
@@ -801,6 +827,7 @@
       if(S.rec!==activeRec)return;
       S.micActive=false;diag('ended');renderListening();
       if((S.listening||S.wakeStandby)&&!document.hidden){
+        suspendSpokenTurnForReconnect();
         S.recognitionRestarts++;
         if(S.recognitionFaults>=5||S.recognitionRestarts>=5){
           status('Speech service keeps restarting. Microphone paused; press Listen to retry.',6500);
@@ -810,6 +837,9 @@
         // just-ended browser object can throw InvalidStateError indefinitely.
         const delay=Math.min(8000,650*Math.pow(2,Math.max(0,S.recognitionRestarts-1)));
         diag('retry-scheduled',{delay,faults:S.recognitionFaults});
+        // Preserve the conversation toggle and any unsent, editable draft.
+        // A transient recognizer end is not a user request to stop listening.
+        if(S.conversation)status('Microphone reconnecting · conversation remains on.',Math.min(6500,delay+1000));
         cancelRecognitionRetry();
         S.recognitionRetryTimer=setTimeout(()=>{
           S.recognitionRetryTimer=null;
@@ -899,7 +929,7 @@
   }
 
   document.addEventListener('visibilitychange',()=>{
-    if(document.hidden){clearConversationTimer();S.conversationDraft='';stopContinuous();diag('paused');if(S.listening||S.wakeStandby)status('Microphone paused · tab hidden.');}
+    if(document.hidden){S.recoveryPendingTurn=null;clearConversationTimer();S.conversationDraft='';stopContinuous();diag('paused');if(S.listening||S.wakeStandby)status('Microphone paused · tab hidden.');}
     else if(S.listening||S.wakeStandby)startContinuous();
   });
   window.addEventListener('beforeunload',()=>{stopContinuous();interruptSpeech('page-unload');});
