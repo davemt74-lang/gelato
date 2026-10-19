@@ -810,6 +810,9 @@
         // just-ended browser object can throw InvalidStateError indefinitely.
         const delay=Math.min(8000,650*Math.pow(2,Math.max(0,S.recognitionRestarts-1)));
         diag('retry-scheduled',{delay,faults:S.recognitionFaults});
+        // Preserve the conversation toggle and any unsent, editable draft.
+        // A transient recognizer end is not a user request to stop listening.
+        if(S.conversation)status('Microphone reconnecting · conversation remains on.',Math.min(6500,delay+1000));
         cancelRecognitionRetry();
         S.recognitionRetryTimer=setTimeout(()=>{
           S.recognitionRetryTimer=null;
