@@ -1,0 +1,64 @@
+name: FM-KB5A Food Monster Knowledge Manifest
+on:
+  pull_request:
+    paths:
+      - 'includes/food-monster-knowledge-manifest.php'
+      - 'api/food-monster-vp3.php'
+      - 'tests/food-monster-kb5a-manifest.php'
+      - 'tests/food-monster-kb5a-mysql.php'
+      - 'docs/FOOD_MONSTER_KB5A_MANIFEST.md'
+      - '.github/workflows/food-monster-kb5a.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'includes/food-monster-knowledge-manifest.php'
+      - 'api/food-monster-vp3.php'
+      - 'tests/food-monster-kb5a-manifest.php'
+      - 'tests/food-monster-kb5a-mysql.php'
+      - 'docs/FOOD_MONSTER_KB5A_MANIFEST.md'
+      - '.github/workflows/food-monster-kb5a.yml'
+jobs:
+  manifest-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_mysql
+      - name: Verify PHP syntax and read-only manifest permissions
+        run: |
+          php -l includes/food-monster-knowledge-manifest.php
+          php -l api/food-monster-vp3.php
+          php -l tests/food-monster-kb5a-manifest.php
+          php -l tests/food-monster-kb5a-mysql.php
+          php tests/food-monster-kb5a-manifest.php
+          php tests/food-monster-kb2-link.php
+          php tests/food-monster-kb1-api.php
+  mysql-collection-enumeration:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: kb2_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_mysql
+      - name: Tenant-safe paging, revision and revoked credential tests
+        env:
+          FM_KB2_TEST_DSN: mysql:host=127.0.0.1;port=3306;dbname=kb2_test;charset=utf8mb4
+          FM_KB2_TEST_USER: root
+          FM_KB2_TEST_PASSWORD: root
+        run: php tests/food-monster-kb5a-mysql.php
