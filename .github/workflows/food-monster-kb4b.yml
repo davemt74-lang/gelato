@@ -1,0 +1,62 @@
+name: FM-KB4B Food Monster Source Token Revocation
+on:
+  pull_request:
+    paths:
+      - 'includes/food-monster-vp3-link.php'
+      - 'api/food-monster-vp3.php'
+      - 'tests/food-monster-kb4b-mysql.php'
+      - 'docs/FOOD_MONSTER_KB4B_REVOCATION.md'
+      - '.github/workflows/food-monster-kb4b.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'includes/food-monster-vp3-link.php'
+      - 'api/food-monster-vp3.php'
+      - 'tests/food-monster-kb4b-mysql.php'
+      - 'docs/FOOD_MONSTER_KB4B_REVOCATION.md'
+      - '.github/workflows/food-monster-kb4b.yml'
+jobs:
+  revocation-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_mysql
+      - name: PHP source and API syntax
+        run: |
+          php -l includes/food-monster-vp3-link.php
+          php -l api/food-monster-vp3.php
+          php -l tests/food-monster-kb4b-mysql.php
+      - name: Owner and bearer contract regressions
+        run: |
+          php tests/food-monster-kb2-link.php
+          php tests/food-monster-kb1-api.php
+  live-mysql-revocation:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: kb2_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_mysql
+      - name: Transactional source-side self revocation, bearer replay and tenant isolation
+        env:
+          FM_KB2_TEST_DSN: mysql:host=127.0.0.1;port=3306;dbname=kb2_test;charset=utf8mb4
+          FM_KB2_TEST_USER: root
+          FM_KB2_TEST_PASSWORD: root
+        run: php tests/food-monster-kb4b-mysql.php
