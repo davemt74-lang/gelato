@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/food-monster-vp3-link.php';
+require_once __DIR__.'/../includes/food-monster-knowledge-manifest.php';
 
 header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: no-referrer');
@@ -16,7 +17,7 @@ if($method==='GET'){
     try{
         app_json_response(['ok'=>true,'schema'=>'food-monster-vp3-v1',
             'instanceId'=>fm_kb2_instance(app_pdo()),
-            'capabilities'=>['knowledge.search'],
+            'capabilities'=>['knowledge.search','knowledge.manifest'],
             'pairing'=>'admin-issued-one-time-code',
             'authentication'=>'bearer']);
     }catch(Throwable $e){
@@ -57,6 +58,23 @@ try{
             (int)$grant['user']['id'],'vp3.knowledge_read','vp3_connection',
             $grant['connectionId'],null,
             ['types'=>$result['types'],'count'=>$result['count']]);
+        app_json_response($result);
+    }
+    if($action==='manifest'){
+        // A full bounded sweep is required for safe deletion reconciliation.
+        // Callers cannot supply a user ID, organization or wider scopes.
+        $grant=fm_kb2_grant(app_pdo(),fm_kb2_bearer($_SERVER));
+        $type=(string)($input['type']??'');
+        $afterId=$input['afterId']??0;
+        $limit=$input['limit']??20;
+        if(!is_int($afterId)||!is_int($limit))
+            throw new InvalidArgumentException('Collection cursor and limit must be integers.');
+        $result=fm_kb5a_page(app_pdo(),$grant['user'],$type,$afterId,$limit);
+        app_audit(app_pdo(),(int)$grant['user']['organization_id'],
+            (int)$grant['user']['id'],'vp3.knowledge_manifest_read',
+            'vp3_connection',$grant['connectionId'],null,
+            ['collection'=>$result['collection'],'count'=>$result['count'],
+             'complete'=>$result['complete']]);
         app_json_response($result);
     }
     throw new InvalidArgumentException('Unknown connector action.');
