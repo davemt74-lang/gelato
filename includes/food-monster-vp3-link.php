@@ -174,3 +174,43 @@ function fm_kb2_revoke(PDO $pdo,array $owner,string $id): bool
     $q->execute([$id,(int)$owner['organization_id'],(int)$owner['id']]);
     return $q->rowCount()===1;
 }
+
+/**
+ * KB4B: bearer-holder self-revocation for this single Food Monster instance.
+ *
+ * This is deliberately distinct from fm_kb2_grant(): a revoked or suspended
+ * owner must still be able to destroy a bearer credential, but can never
+ * use that credential to read knowledge. No caller-provided org/owner/id is
+ * accepted and no different connection may be revoked by bearer.
+ */
+function fm_kb4b_revoke_self(PDO $pdo,string $token): array
+{
+    if(!preg_match('/^fm2_[A-Za-z0-9_-]{43}$/D',$token))
+        throw new DomainException('Invalid connection credential.');
+    $digest=fm_kb2_hash($token);
+    $pdo->beginTransaction();
+    try{
+        $q=$pdo->prepare("SELECT id,public_id FROM fm_vp3_connections
+            WHERE access_token_sha256=? AND status='active' AND revoked_at IS NULL
+            LIMIT 1 FOR UPDATE");
+        $q->execute([$digest]);
+        $row=$q->fetch(PDO::FETCH_ASSOC);
+        if(!$row)throw new DomainException('Connection is already revoked or unavailable.');
+        $q=$pdo->prepare("UPDATE fm_vp3_connections
+            SET status='revoked',revoked_at=NOW(6),
+                access_token_sha256=NULL,pairing_code_sha256=NULL
+            WHERE id=? AND access_token_sha256=? AND status='active'
+                AND revoked_at IS NULL");
+        $q->execute([(int)$row['id'],$digest]);
+        if($q->rowCount()!==1)throw new DomainException('Connection revocation conflict.');
+        $instanceId=fm_kb2_instance($pdo);
+        $pdo->commit();
+        return [
+            'ok'=>true,'schema'=>'food-monster-vp3-v1','revoked'=>true,
+            'instanceId'=>$instanceId,'connectionId'=>(string)$row['public_id']
+        ];
+    }catch(Throwable $e){
+        if($pdo->inTransaction())$pdo->rollBack();
+        throw $e;
+    }
+}
