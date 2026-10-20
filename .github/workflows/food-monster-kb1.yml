@@ -1,0 +1,36 @@
+name: FM-KB1 Food Monster Knowledge API
+on:
+  pull_request:
+    paths:
+      - 'includes/food-monster-knowledge-api.php'
+      - 'api/food-monster-knowledge-v1.php'
+      - 'tests/food-monster-kb1-api.php'
+      - 'docs/FOOD_MONSTER_KNOWLEDGE_API_V1.md'
+      - '.github/workflows/food-monster-kb1.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'includes/food-monster-knowledge-api.php'
+      - 'api/food-monster-knowledge-v1.php'
+      - 'tests/food-monster-kb1-api.php'
+      - 'docs/FOOD_MONSTER_KNOWLEDGE_API_V1.md'
+      - '.github/workflows/food-monster-kb1.yml'
+jobs:
+  knowledge-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_mysql
+      - name: Lint knowledge API
+        run: |
+          php -l includes/food-monster-knowledge-api.php
+          php -l api/food-monster-knowledge-v1.php
+          php -l tests/food-monster-kb1-api.php
+      - name: Enforce tenant, permission and evidence contracts
+        run: |
+          php tests/food-monster-kb1-api.php
+          php tests/food-monster-g13b-knowledge.php
+          php tests/food-monster-g6-contract.php
