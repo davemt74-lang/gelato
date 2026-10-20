@@ -1,0 +1,69 @@
+name: FM-KB2 Private VP3 Owner Pairing
+on:
+  pull_request:
+    paths:
+      - 'database/20261020_fm_vp3_kb2_owner_pairing.sql'
+      - 'includes/food-monster-vp3-link.php'
+      - 'api/food-monster-vp3.php'
+      - 'vp3-connections.php'
+      - 'tests/food-monster-kb2-link.php'
+      - 'tests/food-monster-kb2-mysql.php'
+      - 'docs/FOOD_MONSTER_VP3_KB2_LINK.md'
+      - '.github/workflows/food-monster-kb2.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'database/20261020_fm_vp3_kb2_owner_pairing.sql'
+      - 'includes/food-monster-vp3-link.php'
+      - 'api/food-monster-vp3.php'
+      - 'vp3-connections.php'
+      - 'tests/food-monster-kb2-link.php'
+      - 'tests/food-monster-kb2-mysql.php'
+      - 'docs/FOOD_MONSTER_VP3_KB2_LINK.md'
+      - '.github/workflows/food-monster-kb2.yml'
+jobs:
+  authorization-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_mysql
+      - name: PHP parse and authorization contract
+        run: |
+          php -l includes/food-monster-vp3-link.php
+          php -l api/food-monster-vp3.php
+          php -l vp3-connections.php
+          php -l tests/food-monster-kb2-link.php
+          php -l tests/food-monster-kb2-mysql.php
+          php tests/food-monster-kb2-link.php
+          php tests/food-monster-kb1-api.php
+          php tests/food-monster-g13b-knowledge.php
+  mysql-grant-revocation:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: kb2_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_mysql
+      - name: Real database security and lifecycle acceptance
+        env:
+          FM_KB2_TEST_DSN: mysql:host=127.0.0.1;port=3306;dbname=kb2_test;charset=utf8mb4
+          FM_KB2_TEST_USER: root
+          FM_KB2_TEST_PASSWORD: root
+        run: php tests/food-monster-kb2-mysql.php
