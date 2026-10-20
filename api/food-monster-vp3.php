@@ -39,6 +39,12 @@ try{
         $code=(string)($input['code']??'');
         app_json_response(fm_kb2_redeem(app_pdo(),$code));
     }
+    if($action==='revoke'){
+        // Holder may destroy only its own bearer credential. This does not
+        // require a still-active owner role, unlike reading private data.
+        // No caller-supplied owner ID, connection ID, or scope is trusted.
+        app_json_response(fm_kb4b_revoke_self(app_pdo(),fm_kb2_bearer($_SERVER)));
+    }
     if($action==='search'){
         $token=fm_kb2_bearer($_SERVER);
         $grant=fm_kb2_grant(app_pdo(),$token);
