@@ -1,5 +1,5 @@
 :root{--fm-cyan:#20d8ff}
-#food-monster-root{position:fixed;inset:0;z-index:2147482950;pointer-events:none;--fm-size:180px;--fm-x:60vw;--fm-y:35vh}
+#food-monster-root{position:fixed;inset:0;z-index:2147483300;pointer-events:none;--fm-size:180px;--fm-x:60vw;--fm-y:35vh}
 #food-monster-root .fm-actor{position:fixed;top:var(--fm-y);left:var(--fm-x);width:var(--fm-size);aspect-ratio:5/6;pointer-events:auto;touch-action:none;cursor:grab;filter:drop-shadow(0 20px 24px #00152650)}
 #food-monster-root .fm-actor:active{cursor:grabbing}
 #food-monster-root .fm-figure{width:100%;height:100%;animation:fm-float 5s ease-in-out infinite}

@@ -11,7 +11,7 @@ $user = app_require_auth();
 <meta name="gelato-csrf" content="<?= app_escape(app_csrf_token()) ?>">
 <meta name="theme-color" content="#081b2e">
 <title>Food Monster · Gelato Agent</title>
-<link rel="stylesheet" href="css/food-monster.css?v=20261015-fmg8reset">
+<link rel="stylesheet" href="css/food-monster.css?v=20261023-manual-chat1">
 </head>
 <body class="food-monster-stage-page">
 <main id="food-monster-stage" aria-label="Food Monster Agent stage">
@@ -22,7 +22,7 @@ $user = app_require_auth();
 <script src="js/proactive-listening-commands.js?v=20261013-listening1"></script>
 <script src="js/voice-diagnostics.js?v=20261016-fmg11e"></script>
 <script src="js/global-agent.js?v=20261018-fmg14b"></script>
-<script src="js/food-monster.js?v=20261017-fmg12e"></script>
+<script src="js/food-monster.js?v=20261023-manual-chat1"></script>
 <script src="js/food-monster-clock-popup.js?v=20261016-fmg9b"></script>
 <script src="js/food-monster-room-tracker.js?v=20261016-fmg11e"></script>
 <script src="js/food-monster-room.js?v=20261016-fmg11e"></script>

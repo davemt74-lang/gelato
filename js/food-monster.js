@@ -4,7 +4,7 @@ if(window.GelatoFoodMonster)return;
 const stage=document.body.classList.contains('food-monster-stage-page');
 if(document.body.dataset.agentCanvas==='1'&&!stage)return;
 if(!document.querySelector('link[rel="stylesheet"][href^="css/food-monster.css"]')){
- const stylesheet=document.createElement('link');stylesheet.rel='stylesheet';stylesheet.href='css/food-monster.css?v=20261015-fmg8a';document.head.append(stylesheet);
+ const stylesheet=document.createElement('link');stylesheet.rel='stylesheet';stylesheet.href='css/food-monster.css?v=20261023-manual-chat1';document.head.append(stylesheet);
 }
 const root=document.createElement('div');root.id='food-monster-root';if(stage)root.classList.add('fm-is-stage');
 root.innerHTML='<div class="fm-actor" role="group" aria-label="Floating Food Monster"><div class="fm-speech" role="status"></div><div class="fm-figure" aria-hidden="true"></div><div class="fm-actions"><button type="button" data-size="-1" aria-label="Make Food Monster smaller">−</button><button type="button" data-size="1" aria-label="Make Food Monster larger">+</button><button type="button" data-fm-camera aria-label="Start room camera" title="Start room camera" aria-pressed="false">◎</button><button type="button" data-fm-roam aria-label="Pause autonomous floating" aria-pressed="true" title="Pause autonomous floating">◌</button>'+(stage?'':'<a href="food-monster.php" aria-label="Open Food Monster page">↗</a>')+'</div></div>';document.body.append(root);
@@ -41,10 +41,16 @@ const clamp=(v,min,max)=>Math.min(max,Math.max(min,v));
 const minSize=stage?190:90;
 const maxSize=()=>Math.max(minSize,Math.min(stage?520:310,innerWidth*.83,innerHeight*.76));
 function movementBounds(size){
-  // Keep the mascot clear of the real composer, even when its height changes.
+  // Keep the mascot clear of the composer AND an explicitly opened Agent Chat.
+  // The chat may expand upward over much of the viewport on a small screen.
   const bar=document.getElementById('gelato-agent-bar');
   const rect=bar?.getBoundingClientRect();
-  const composerTop=rect&&rect.top>innerHeight*.45&&rect.bottom>innerHeight-135?rect.top:innerHeight-(stage?110:70);
+  let composerTop=rect&&rect.top>innerHeight*.45&&rect.bottom>innerHeight-135?rect.top:innerHeight-(stage?110:70);
+  const drawer=document.getElementById('gelato-agent-response-drawer');
+  if(drawer?.classList.contains('open')){
+    const drawerRect=drawer.getBoundingClientRect();
+    if(drawerRect.height>0&&drawerRect.top<composerTop)composerTop=drawerRect.top;
+  }
   const top=root.classList.contains('fm-has-speech')?Math.min(68,innerHeight*.09):8;
   return {minX:8,maxX:Math.max(8,innerWidth-size-8),minY:Math.min(top,Math.max(8,composerTop-size*1.2-12)),maxY:Math.max(8,composerTop-size*1.2-12)};
 }

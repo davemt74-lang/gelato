@@ -44,7 +44,7 @@ $csrf = app_csrf_token();
 <script src="js/agent-page-context.js?v=20260916-1"></script>
 <script src="js/equipment-agent-context.js?v=20260916-2"></script>
 <script src="js/global-agent.js?v=20260916-1"></script>
-<script src="js/dynamic-agent-canvas.js?v=20260916-1"></script>
+<script src="js/dynamic-agent-canvas.js?v=20261023-manual-chat1"></script>
 <script src="js/universal-admin-page-shell.js?v=20260915-3"></script>
 <script>
 (()=>{'use strict';const CSRF=<?=json_encode($csrf,JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_THROW_ON_ERROR)?>,CAN_EDIT=<?=$canEdit?'true':'false'?>,CAN_SERVICE=<?=$canService?'true':'false'?>,CAN_CONTACTS=<?=$canContacts?'true':'false'?>,$=id=>document.getElementById(id);let state={assets:[],contacts:[],events:[],summary:{},selected:null};

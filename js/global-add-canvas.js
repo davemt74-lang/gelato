@@ -37,14 +37,14 @@
     ensureScript('js/proactive-listening-commands.js?v=20261013-listening1','data-gelato-listening-controls-loader');
     ensureScript('js/voice-diagnostics.js?v=20261013-diagnostics1','data-gelato-voice-diagnostics-loader');
     if (!window.GelatoGlobalAgent) ensureScript('js/global-agent.js?v=20261016-fmg11e', 'data-gelato-global-agent-loader');
-    ensureScript('js/dynamic-agent-canvas.js?v=20260915-drawer1', 'data-dynamic-agent-canvas-loader');
+    ensureScript('js/dynamic-agent-canvas.js?v=20261023-manual-chat1', 'data-dynamic-agent-canvas-loader');
     ensureScript('js/food-monster-clock-popup.js?v=20261016-fmg9b','data-food-monster-clock-popup-loader');
     ensureScript('js/food-monster-room-tracker.js?v=20261016-fmg9c','data-food-monster-room-tracker-loader');
     ensureScript('js/food-monster-room.js?v=20261016-fmg9c','data-food-monster-room-loader');
     ensureScript('js/agent-next-moves.js?v=20261014-fmg6', 'data-agent-next-moves-loader');
     // One companion UI for the existing authenticated Agent session; never a second brain.
     if (page !== 'food-monster.php' && page !== 'agent-canvas.php') {
-      ensureScript('js/food-monster.js?v=20261015-fmg8a', 'data-food-monster-loader');
+      ensureScript('js/food-monster.js?v=20261023-manual-chat1', 'data-food-monster-loader');
     }
   }
 

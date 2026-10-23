@@ -42,6 +42,7 @@ on:
       - 'docs/FOOD-MONSTER-FM-G8B-FACE-PIN.md'
       - 'tests/food-monster-g7b1-*'
       - 'tests/food-monster-g7b2-*'
+      - 'tests/food-monster-manual-chat-browser.test.cjs'
       - 'api/food-monster-read.php'
       - 'includes/food-monster-read-tools.php'
       - 'includes/food-monster-skill-registry.php'
@@ -188,3 +189,4 @@ jobs:
           node tests/food-monster-g8b-pin-browser.test.cjs
           node tests/food-monster-g7b1-browser.test.cjs
           node tests/food-monster-g7b2-browser.test.cjs
+          node tests/food-monster-manual-chat-browser.test.cjs

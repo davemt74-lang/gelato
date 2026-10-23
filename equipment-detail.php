@@ -19,7 +19,7 @@ if (!preg_match('/^[a-zA-Z0-9_.?=&%\/-]+$/', $return)) $return = 'equipment.php'
 <script src="js/agent-page-context.js?v=20260916-1"></script>
 <script src="js/equipment-agent-context.js?v=20260916-1"></script>
 <script src="js/global-agent.js?v=20260916-1"></script>
-<script src="js/dynamic-agent-canvas.js?v=20260916-1"></script>
+<script src="js/dynamic-agent-canvas.js?v=20261023-manual-chat1"></script>
 <script src="js/universal-admin-page-shell.js?v=20260915-3"></script>
 <script>
 (()=>{'use strict';const ASSET_ID=<?= json_encode($assetId,JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_THROW_ON_ERROR) ?>,RETURN=<?= json_encode($return,JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_THROW_ON_ERROR) ?>,CAN_AGENT=<?= $canAgent?'true':'false' ?>,$=id=>document.getElementById(id);let asset=null,events=[];
