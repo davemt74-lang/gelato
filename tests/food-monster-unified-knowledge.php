@@ -170,6 +170,46 @@ foreach($serviceRows as $topic=>$rows){
         $topic.' contact and payment details excluded');
 }
 
+
+fmuk_assert(in_array('training',fmuk_topics('Show my training assignments'),true),
+    'training assignment question recognized');
+fmuk_assert(in_array('training',fmuk_topics('Which certifications have expired?'),true),
+    'certification question recognized');
+fmuk_assert(!in_array('training',fmuk_topics('Start training'),true),
+    'guided training command remains on specialist workflow');
+$trainingSelf=['id'=>61,'organization_id'=>7,'permissions'=>['training.self_view']];
+$trainingManager=['id'=>62,'organization_id'=>7,'permissions'=>['training.view_all_progress']];
+fmuk_assert(fmuk_allowed($trainingSelf,'training',false,false),'employee may read own training');
+fmuk_assert(fmuk_allowed($trainingManager,'training',false,false),'training manager may read team records');
+fmuk_assert(!fmuk_allowed($outsider,'training',false,false),'unassigned principal cannot read training');
+fmuk_assert(!fmuk_allowed($trainingSelf,'training',true,false),'unverified speaker cannot read training');
+fmuk_assert(fmuk_allowed($trainingSelf,'training',true,true),'verified speaker can read own training');
+fmuk_assert(fmuk_prefers_broker('Show my training assignments',$trainingSelf),
+    'training status routed to read-only broker');
+fmuk_assert(in_array('employee training assignments and certifications',
+    fmuk_capabilities($trainingSelf,false,false),true),
+    'training capability visible to authorized employee');
+fmuk_assert(!in_array('employee training assignments and certifications',
+    fmuk_capabilities($trainingManager,true,false),true),
+    'unverified voice must not advertise private training');
+[$assignmentLines,$assignmentSources]=fmuk_render_training_rows('assignment',[[
+    'id'=>12,'display_name'=>'Team Member','assignment_type'=>'food_safety',
+    'assignment_reference_id'=>'safety-12','status'=>'assigned',
+    'due_at'=>'2026-11-03','completed_at'=>null,
+    'quiz_answer'=>'PRIVATE_QUIZ_ANSWER','private_note'=>'PRIVATE_MANAGER_NOTE']]);
+fmuk_assert(count($assignmentLines)===1&&$assignmentSources===['Gelato training assignment #12'],
+    'training assignment evidence and record id');
+fmuk_assert(!str_contains(implode('|',$assignmentLines),'PRIVATE_'),
+    'training answer excludes quiz answers and manager notes');
+[$certificateLines,$certificateSources]=fmuk_render_training_rows('certification',[[
+    'id'=>13,'display_name'=>'Team Member','certification_type'=>'Pizza safety',
+    'status'=>'issued','issued_at'=>'2026-10-01','expires_at'=>'2027-10-01',
+    'internal_review'=>'PRIVATE_CERT_REVIEW']]);
+fmuk_assert(count($certificateLines)===1&&$certificateSources===['Gelato certification #13'],
+    'certification status and record id');
+fmuk_assert(!str_contains(implode('|',$certificateLines),'PRIVATE_'),
+    'certification answer excludes private review data');
+
 $domainExamples=[
     'crm'=>[['public_id'=>'customer-1','display_name'=>'Guest Alpha','status'=>'active','email'=>'PRIVATE_CRM_EMAIL','phone'=>'PRIVATE_CRM_PHONE','notes'=>'PRIVATE_CRM_NOTES']],
     'equipment'=>[['public_id'=>'asset-1','name'=>'Deck Oven','operational_status'=>'active','condition_status'=>'good','location_name'=>'Kitchen','next_service_on'=>'2026-11-01','serial_number'=>'PRIVATE_SERIAL']],
@@ -242,6 +282,17 @@ fmuk_assert(str_contains($broker,'$stmt->execute(array_merge([$org],$locations))
     'location identifiers passed as bound SQL parameters');
 fmuk_assert(!str_contains($broker,'SELECT r.guest_email')&&!str_contains($broker,'SELECT r.guest_phone'),
     'guest contact details are not retrieved for agent display');
+
+fmuk_assert(str_contains($broker,'FROM training_assignments a')
+    &&str_contains($broker,'WHERE a.organization_id=?')
+    &&str_contains($broker,'a.user_id=?'),'training query is tenant and self-scoped');
+fmuk_assert(str_contains($broker,'FROM certifications c')
+    &&str_contains($broker,'WHERE c.organization_id=?')
+    &&str_contains($broker,'c.user_id=?'),'certification query is tenant and self-scoped');
+fmuk_assert(str_contains($broker,"app_has_permission('training.view_all_progress',\$user)"),
+    'organization-wide training requires explicit progress grant');
+fmuk_assert(str_contains($broker,"om.status='active'") && str_contains($broker,"u.status='active'"),
+    'training progress excludes inactive members');
 
 fmuk_assert(str_contains($broker,'FROM knowledge_documents WHERE organization_id=?'),'knowledge query is organization-scoped');
 fmuk_assert(str_contains($broker,"status='published'")&&str_contains($broker,'agent_enabled=1 AND archived_at IS NULL'),'only approved agent-enabled current documents');
