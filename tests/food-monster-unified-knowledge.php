@@ -71,6 +71,26 @@ foreach($businessPerms as $topic=>$permissions){
         fmuk_assert(!fmuk_allowed($partial,$topic,false,false),$topic.' partial grant denied');
     }
 }
+
+fmuk_assert(in_array('knowledge',fmuk_topics('What does our employee handbook say?'),true),'Knowledge Center intent');
+fmuk_assert(in_array('knowledge',fmuk_topics('Show policy documents for kitchen safety'),true),'policy document intent');
+fmuk_assert(fmuk_topics('Delete the policy document')===[],'document mutation stays governed');
+fmuk_assert(fmuk_knowledge_search_term('What is our overtime policy?')==='overtime','specific policy retrieval term');
+fmuk_assert(fmuk_knowledge_search_term('Show our knowledge documents')==='','knowledge overview has no forced keyword');
+$docViewer=['id'=>45,'organization_id'=>7,'permissions'=>['knowledge.view']];
+fmuk_assert(fmuk_allowed($docViewer,'knowledge',false,false),'Knowledge Center viewer can read approved documents');
+fmuk_assert(fmuk_allowed($docViewer,'knowledge',true,true),'verified owner voice can read Knowledge Center');
+fmuk_assert(!fmuk_allowed($docViewer,'knowledge',true,false),'unverified voice cannot read private documents');
+fmuk_assert(!fmuk_allowed($employee,'knowledge',false,false),'no implied Knowledge Center permission');
+fmuk_assert(fmuk_prefers_broker('What does the overtime policy say?',$docViewer),'policy questions reach unified broker');
+fmuk_assert(in_array('published Knowledge Center documents and policies',fmuk_capabilities($docViewer,false,false),true),'capability inventory advertises authorized docs');
+[$docLines,$docSources]=fmuk_render_knowledge_rows([[
+    'public_id'=>'doc-1','title'=>'<b>Overtime policy</b>',
+    'excerpt'=>'Recorded rules <i>for overtime</i> require manager review.']]);
+fmuk_assert(count($docLines)===1&&count($docSources)===1,'document renderer supplies record and source');
+fmuk_assert(str_contains($docLines[0],'Recorded rules for overtime')&&!str_contains($docLines[0],'<i>'),'document excerpt renders as plain text');
+fmuk_assert($docSources[0]==='Gelato Knowledge Center document doc-1','document source identifier');
+
 $domainExamples=[
     'crm'=>[['public_id'=>'customer-1','display_name'=>'Guest Alpha','status'=>'active','email'=>'PRIVATE_CRM_EMAIL','phone'=>'PRIVATE_CRM_PHONE','notes'=>'PRIVATE_CRM_NOTES']],
     'equipment'=>[['public_id'=>'asset-1','name'=>'Deck Oven','operational_status'=>'active','condition_status'=>'good','location_name'=>'Kitchen','next_service_on'=>'2026-11-01','serial_number'=>'PRIVATE_SERIAL']],
@@ -124,6 +144,12 @@ fmuk_assert(!str_contains($broker,'restaurant_brain_wholesale_search('),
     'wholesale evidence only selects displayed columns');
 fmuk_assert(!str_contains($broker,'catering_operation_list('),
     'catering evidence excludes unrelated contact columns');
+
+fmuk_assert(str_contains($broker,'FROM knowledge_documents WHERE organization_id=?'),'knowledge query is organization-scoped');
+fmuk_assert(str_contains($broker,"status='published'")&&str_contains($broker,'agent_enabled=1 AND archived_at IS NULL'),'only approved agent-enabled current documents');
+fmuk_assert(str_contains($broker,'LOCATE(?,LOWER(content))'),'search returns excerpt near relevant term without loading whole document');
+fmuk_assert(str_contains($route,"in_array('knowledge',fmuk_topics(\$message),true)"),'documentation questions route before generic model');
+
 fmuk_assert(str_contains($route,'api/food-monster-unified-knowledge.php?threadId='),'router chooses unified read');
 fmuk_assert(str_contains($api,"\$_GET['threadId']"),'existing browser route carries server-issued thread reference');
 echo 'FM-UK read broker authorization and evidence: PASS ('.$checks.' assertions)' . "\n";

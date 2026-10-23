@@ -290,6 +290,10 @@ try{
                     app_json_response(['ok'=>true,
                         'route'=>'api/food-monster-unified-knowledge.php?threadId='.rawurlencode($roomThread),
                         'domain'=>'food_monster_unified_knowledge','nodeMode'=>'read_only']);
+                if(in_array('knowledge',fmuk_topics($message),true)&&$knowledgeIntent!=='allergen')
+                    app_json_response(['ok'=>true,
+                        'route'=>'api/food-monster-unified-knowledge.php?threadId='.rawurlencode($roomThread),
+                        'domain'=>'food_monster_unified_knowledge','nodeMode'=>'read_only']);
                 if($knowledgeIntent!==null)app_json_response(['ok'=>true,
                     'route'=>'api/food-monster-knowledge.php?threadId='.rawurlencode($roomThread),
                     'domain'=>'food_monster_grounded_knowledge','nodeMode'=>'read_only']);
@@ -304,6 +308,10 @@ try{
         // Explicit staff-facing factual requests use the same read-only
         // evidence layer; mutating requests keep established governed routes.
         if(fmuk_menu_overview_question($message)&&$knowledgeIntent!=='allergen')
+            app_json_response(['ok'=>true,
+                'route'=>'api/food-monster-unified-knowledge.php?threadId='.rawurlencode($roomThread),
+                'domain'=>'food_monster_unified_knowledge','nodeMode'=>'read_only']);
+        if(in_array('knowledge',fmuk_topics($message),true)&&$knowledgeIntent!=='allergen')
             app_json_response(['ok'=>true,
                 'route'=>'api/food-monster-unified-knowledge.php?threadId='.rawurlencode($roomThread),
                 'domain'=>'food_monster_unified_knowledge','nodeMode'=>'read_only']);
