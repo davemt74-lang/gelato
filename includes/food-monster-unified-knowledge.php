@@ -28,6 +28,7 @@ function fmuk_topics(string $question): array
         'purchasing'=>'/\b(?:purchasing|vendors?|suppliers?|purchase orders?|po numbers?|receiving|deliveries)\b/u',
         'catering'=>'/\b(?:catering|banquets?|event bookings?|event readiness)\b/u',
         'wholesale'=>'/\b(?:wholesale|business accounts?|distributors?|b2b)\b/u',
+        'knowledge'=>'/\b(?:knowledge (?:center|base|documents?)|handbooks?|polic(?:y|ies)|procedures?|sops?|manuals?|training documents?|reference materials?|staff guides?)\b/u',
     ];
     $topics=[];
     foreach($patterns as $name=>$pattern)if(preg_match($pattern,$text))$topics[]=$name;
@@ -54,7 +55,7 @@ function fmuk_prefers_broker(string $question,array $user): bool
     $topics=fmuk_topics($question);
     if(!$topics&&!fmuk_capability_question($question))return false;
     return fmuk_capability_question($question)||fmuk_menu_overview_question($question)
-        ||fmuk_roster_question($question)||count($topics)>1
+        ||fmuk_roster_question($question)||count($topics)>1||in_array('knowledge',$topics,true)
         ||(in_array('schedule',$topics,true)&&!app_has_permission('schedule.agent',$user));
 }
 
@@ -88,6 +89,7 @@ function fmuk_allowed(array $user,string $topic,bool $voice,bool $ownerVoiceVeri
         'purchasing'=>app_has_permission('purchasing.view',$user)&&app_has_permission('purchasing.agent',$user),
         'catering'=>app_has_permission('catering.view',$user)&&app_has_permission('catering.agent',$user),
         'wholesale'=>app_has_permission('wholesale.view',$user)&&app_has_permission('wholesale.agent',$user),
+        'knowledge'=>app_has_permission('knowledge.view',$user),
         default=>false,
     };
 }
@@ -99,7 +101,8 @@ function fmuk_capabilities(array $user,bool $voice,bool $ownerVoiceVerified): ar
         'schedule'=>'shift schedules','employees'=>'staff roster','inventory'=>'inventory and stock',
         'tasks'=>'restaurant tasks','sales'=>'recorded sales','crm'=>'customer CRM',
         'equipment'=>'equipment and maintenance','purchasing'=>'vendors and purchasing',
-        'catering'=>'catering','wholesale'=>'wholesale'];
+        'catering'=>'catering','wholesale'=>'wholesale',
+        'knowledge'=>'published Knowledge Center documents and policies'];
     $result=[];
     foreach($names as $topic=>$description)
         if(fmuk_allowed($user,$topic,$voice,$ownerVoiceVerified))$result[]=$description;
@@ -207,6 +210,35 @@ function fmuk_render_business_rows(string $topic,array $rows): array
     return [$lines,$sources];
 }
 
+
+/** Extract the most distinctive search word without allowing SQL syntax. */
+function fmuk_knowledge_search_term(string $question): string
+{
+    $ignore=['what','which','where','when','does','have','that','this','tell','show','please',
+        'about','your','ours','there','with','from','into','and','the','are','can',
+        'policy','policies','knowledge','center','base','documents','document','manual',
+        'manuals','handbook','handbooks','procedure','procedures','training','guide',
+        'guides','sops','employee','employees','staff','restaurant','gelato'];
+    $words=preg_split('/[^\p{L}\p{N}]+/u',mb_strtolower($question,'UTF-8'))?:[];
+    $terms=[];
+    foreach($words as $word)if(mb_strlen($word,'UTF-8')>=4&&!in_array($word,$ignore,true))$terms[]=$word;
+    usort($terms,static fn(string $a,string $b):int=>mb_strlen($b,'UTF-8')<=>mb_strlen($a,'UTF-8'));
+    return (string)($terms[0]??'');
+}
+
+/** Never display unpublished, agent-disabled or arbitrary raw document payloads. */
+function fmuk_render_knowledge_rows(array $rows): array
+{
+    $lines=[];$sources=[];
+    foreach(array_slice($rows,0,6) as $row){
+        $title=mb_substr(trim(strip_tags((string)($row['title']??''))),0,160,'UTF-8');
+        $excerpt=trim(preg_replace('/\s+/u',' ',strip_tags((string)($row['excerpt']??'')))??'');
+        $lines[]='Document: '.$title.' | recorded excerpt: '.mb_substr($excerpt,0,800,'UTF-8');
+        $sources[]='Gelato Knowledge Center document '.(string)($row['public_id']??'');
+    }
+    return [$lines,$sources];
+}
+
 /** @return array{context:string,sources:array,topics:array} */
 function fmuk_evidence(PDO $pdo,array $user,string $question,bool $voice=false,bool $ownerVoiceVerified=false): array
 {
@@ -289,6 +321,26 @@ function fmuk_evidence(PDO $pdo,array $user,string $question,bool $voice=false,b
             }elseif($topic==='sales'){
                 $result=fm_read_execute($pdo,$user,'recorded_sales',$question);
                 $lines[]=$result['answer'];$used=(array)($result['sources']??[]);
+            }elseif($topic==='knowledge'){
+                require_once __DIR__.'/restaurant-brain.php';
+                if(restaurant_brain_table_ready($pdo,'knowledge_documents')){
+                    $term=fmuk_knowledge_search_term($question);
+                    // Only current documents explicitly enabled for agent use.
+                    // Locate text on the DB server and return a short matching
+                    // excerpt; avoid loading entire uploads into Agent Chat.
+                    $sql="SELECT public_id,title,
+                        SUBSTRING(content,GREATEST(1,LOCATE(?,LOWER(content))-180),820) excerpt
+                        FROM knowledge_documents WHERE organization_id=? AND status='published'
+                        AND agent_enabled=1 AND archived_at IS NULL";
+                    $parameters=[$term,$org];
+                    if($term!==''){
+                        $sql.=" AND (title LIKE ? OR content LIKE ?)";
+                        $parameters[]='%'.$term.'%';$parameters[]='%'.$term.'%';
+                    }
+                    $sql.=" ORDER BY updated_at DESC,id DESC LIMIT 6";
+                    $stmt=$pdo->prepare($sql);$stmt->execute($parameters);
+                    [$lines,$used]=fmuk_render_knowledge_rows($stmt->fetchAll(PDO::FETCH_ASSOC));
+                }
             }elseif($topic==='crm'){
                 require_once __DIR__.'/customer-crm-core.php';
                 if(crm_ready($pdo)){
