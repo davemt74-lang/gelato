@@ -91,6 +91,46 @@ fmuk_assert(count($docLines)===1&&count($docSources)===1,'document renderer supp
 fmuk_assert(str_contains($docLines[0],'Recorded rules for overtime')&&!str_contains($docLines[0],'<i>'),'document excerpt renders as plain text');
 fmuk_assert($docSources[0]==='Gelato Knowledge Center document doc-1','document source identifier');
 
+
+foreach([
+    'kds'=>'Show active kitchen tickets',
+    'online_orders'=>'Show pickup orders',
+    'attendance'=>'Who is clocked in?',
+] as $topic=>$question)fmuk_assert(in_array($topic,fmuk_topics($question),true),$topic.' live operational intent');
+fmuk_assert(fmuk_topics('Clock in')===[],'time clock write not routed as read');
+$kitchen=['id'=>46,'organization_id'=>7,'permissions'=>['kds.view']];
+$online=['id'=>47,'organization_id'=>7,'permissions'=>['crm.view']];
+$clockSelf=['id'=>48,'organization_id'=>7,'permissions'=>['timeclock.self']];
+$clockManager=['id'=>49,'organization_id'=>7,'permissions'=>['timeclock.view']];
+fmuk_assert(fmuk_allowed($kitchen,'kds',false,false),'kitchen staff read KDS');
+fmuk_assert(!fmuk_allowed($kitchen,'kds',true,false),'unverified voice denied KDS');
+fmuk_assert(!fmuk_allowed($outsider,'kds',false,false),'outsider cannot read KDS');
+fmuk_assert(fmuk_allowed($online,'online_orders',false,false),'online order view parity with existing agent');
+fmuk_assert(!fmuk_allowed($online,'online_orders',true,false),'unverified voice denied online orders');
+fmuk_assert(!fmuk_allowed($outsider,'online_orders',false,false),'outsider cannot read online orders');
+fmuk_assert(fmuk_allowed($clockSelf,'attendance',false,false),'employee can access own time clock');
+fmuk_assert(!fmuk_allowed($clockSelf,'attendance',true,false),'unverified voice denied time clock');
+fmuk_assert(fmuk_allowed($clockManager,'attendance',false,false),'manager can access time clock');
+fmuk_assert(!fmuk_allowed($outsider,'attendance',false,false),'outsider cannot read attendance');
+fmuk_assert(!in_array('time clock and attendance',fmuk_capabilities($clockSelf,true,false),true),
+    'unverified voice does not advertise private attendance');
+$liveRows=[
+    'kds'=>[['public_id'=>'ticket-12','item_name_snapshot'=>'House Pizza','quantity'=>2,
+        'status'=>'queued','station_name'=>'Oven','check_number'=>'42','sent_at'=>'2026-10-23','special_instructions'=>'PRIVATE_KDS_NOTES']],
+    'online_orders'=>[['public_id'=>'order-12','check_number'=>'44','status'=>'submitted',
+        'requested_ready_at'=>'2026-10-23','fulfilled_at'=>null,'total_amount'=>20,'location_name'=>'Main',
+        'customer_email'=>'PRIVATE_CUSTOMER_EMAIL','customer_phone'=>'PRIVATE_CUSTOMER_PHONE']],
+    'attendance'=>[['public_id'=>'clock-12','display_name'=>'Staff Member','status'=>'open',
+        'clocked_in_at'=>'2026-10-23','clocked_out_at'=>null,'pay_rate'=>'PRIVATE_PAY']],
+];
+foreach($liveRows as $topic=>$rows){
+    [$lines,$sources]=fmuk_render_live_rows($topic,$rows);
+    fmuk_assert(count($lines)===1&&count($sources)===1,$topic.' live display and evidence');
+    fmuk_assert(str_contains($sources[0],$rows[0]['public_id']),$topic.' source provenance');
+    fmuk_assert(!str_contains(implode('|',$lines).'|'.implode('|',$sources),'PRIVATE_'),
+        $topic.' excludes sensitive and unrelated fields');
+}
+
 $domainExamples=[
     'crm'=>[['public_id'=>'customer-1','display_name'=>'Guest Alpha','status'=>'active','email'=>'PRIVATE_CRM_EMAIL','phone'=>'PRIVATE_CRM_PHONE','notes'=>'PRIVATE_CRM_NOTES']],
     'equipment'=>[['public_id'=>'asset-1','name'=>'Deck Oven','operational_status'=>'active','condition_status'=>'good','location_name'=>'Kitchen','next_service_on'=>'2026-11-01','serial_number'=>'PRIVATE_SERIAL']],
@@ -144,6 +184,13 @@ fmuk_assert(!str_contains($broker,'restaurant_brain_wholesale_search('),
     'wholesale evidence only selects displayed columns');
 fmuk_assert(!str_contains($broker,'catering_operation_list('),
     'catering evidence excludes unrelated contact columns');
+
+
+fmuk_assert(str_contains($broker,'FROM kds_order_items k')&&str_contains($broker,'WHERE k.organization_id=?'),'KDS query is organization-scoped');
+fmuk_assert(str_contains($broker,'FROM online_orders oo')&&str_contains($broker,'WHERE oo.organization_id=?'),'online order query is organization-scoped');
+fmuk_assert(str_contains($broker,'FROM time_clock_entries t')&&str_contains($broker,'t.organization_id=?'),'attendance query is organization-scoped');
+fmuk_assert(str_contains($broker,'if($self)$sql.=" AND t.user_id=?"'),'timeclock self records retain exact account restriction');
+fmuk_assert(str_contains($broker,'JOIN organization_memberships om'),'attendance excludes inactive organization members');
 
 fmuk_assert(str_contains($broker,'FROM knowledge_documents WHERE organization_id=?'),'knowledge query is organization-scoped');
 fmuk_assert(str_contains($broker,"status='published'")&&str_contains($broker,'agent_enabled=1 AND archived_at IS NULL'),'only approved agent-enabled current documents');

@@ -29,6 +29,9 @@ function fmuk_topics(string $question): array
         'catering'=>'/\b(?:catering|banquets?|event bookings?|event readiness)\b/u',
         'wholesale'=>'/\b(?:wholesale|business accounts?|distributors?|b2b)\b/u',
         'knowledge'=>'/\b(?:knowledge (?:center|base|documents?)|handbooks?|polic(?:y|ies)|procedures?|sops?|manuals?|training documents?|reference materials?|staff guides?)\b/u',
+        'kds'=>'/\b(?:kds|kitchen tickets?|kitchen display|expo tickets?|station load)\b/u',
+        'online_orders'=>'/\b(?:online orders?|pickup orders?|web orders?|pickup queues?|fulfillment status|curbside orders?)\b/u',
+        'attendance'=>'/\b(?:attendance|time ?clock|clocked in|clocked out|on break|break status|labor hours)\b/u',
     ];
     $topics=[];
     foreach($patterns as $name=>$pattern)if(preg_match($pattern,$text))$topics[]=$name;
@@ -90,6 +93,10 @@ function fmuk_allowed(array $user,string $topic,bool $voice,bool $ownerVoiceVeri
         'catering'=>app_has_permission('catering.view',$user)&&app_has_permission('catering.agent',$user),
         'wholesale'=>app_has_permission('wholesale.view',$user)&&app_has_permission('wholesale.agent',$user),
         'knowledge'=>app_has_permission('knowledge.view',$user),
+        'kds'=>app_has_permission('kds.view',$user),
+        'online_orders'=>fmuk_online_order_view_allowed($user),
+        'attendance'=>app_has_permission('timeclock.view',$user)
+            ||app_has_permission('attendance.view',$user)||app_has_permission('timeclock.self',$user),
         default=>false,
     };
 }
@@ -102,15 +109,15 @@ function fmuk_capabilities(array $user,bool $voice,bool $ownerVoiceVerified): ar
         'tasks'=>'restaurant tasks','sales'=>'recorded sales','crm'=>'customer CRM',
         'equipment'=>'equipment and maintenance','purchasing'=>'vendors and purchasing',
         'catering'=>'catering','wholesale'=>'wholesale',
-        'knowledge'=>'published Knowledge Center documents and policies'];
+        'knowledge'=>'published Knowledge Center documents and policies',
+        'kds'=>'live kitchen tickets','online_orders'=>'pickup and online order status',
+        'attendance'=>'time clock and attendance'];
     $result=[];
     foreach($names as $topic=>$description)
         if(fmuk_allowed($user,$topic,$voice,$ownerVoiceVerified))$result[]=$description;
     if(!$voice||$ownerVoiceVerified){
         $specialists=[
-            ['kds.view'=>'kitchen display tickets'],
-            ['online_orders.fulfill'=>'online orders'],
-            ['timeclock.agent'=>'time clock and attendance'],
+            ['timeclock.agent'=>'time clock actions'],
         ];
         foreach($specialists as $entry)foreach($entry as $permission=>$label)
             if(app_has_permission($permission,$user))$result[]=$label;
@@ -210,6 +217,49 @@ function fmuk_render_business_rows(string $topic,array $rows): array
     return [$lines,$sources];
 }
 
+
+
+/** Match the Online Order Agent's read grants, without importing its write tools. */
+function fmuk_online_order_view_allowed(array $user): bool
+{
+    foreach(['online_orders.fulfill','pos.use','pos.manage','kds.view','kds.update','kds.configure',
+        'crm.view','crm.manage','order_recovery.view','order_recovery.manage','order_recovery.refund'] as $grant)
+        if(app_has_permission($grant,$user))return true;
+    return false;
+}
+
+/** Render only operational fields, never customer contacts or payment tokens. */
+function fmuk_render_live_rows(string $topic,array $rows): array
+{
+    $lines=[];$sources=[];
+    foreach(array_slice($rows,0,20) as $row){
+        $id=(string)($row['public_id']??'');
+        if($topic==='kds'){
+            $lines[]=mb_substr((string)($row['item_name_snapshot']??''),0,100,'UTF-8')
+                .' | quantity: '.(string)($row['quantity']??'')
+                .' | kitchen status: '.(string)($row['status']??'')
+                .' | station: '.(string)($row['station_name']??'unassigned')
+                .' | check: '.(string)($row['check_number']??'')
+                .' | sent: '.(string)($row['sent_at']??'');
+            $sources[]='Gelato KDS item '.$id;
+        }elseif($topic==='online_orders'){
+            $lines[]='Order '.(string)($row['check_number']??'')
+                .' | status: '.(string)($row['status']??'')
+                .' | location: '.mb_substr((string)($row['location_name']??''),0,100,'UTF-8')
+                .' | total: '.(string)($row['total_amount']??'not recorded')
+                .' | promised: '.(string)($row['requested_ready_at']??'not recorded')
+                .' | fulfilled: '.(string)($row['fulfilled_at']??'not yet');
+            $sources[]='Gelato online order '.$id;
+        }elseif($topic==='attendance'){
+            $lines[]=mb_substr((string)($row['display_name']??'Employee'),0,100,'UTF-8')
+                .' | status: '.(string)($row['status']??'')
+                .' | clocked in: '.(string)($row['clocked_in_at']??'')
+                .' | clocked out: '.(string)($row['clocked_out_at']??'not yet');
+            $sources[]='Gelato time clock entry '.$id;
+        }
+    }
+    return [$lines,$sources];
+}
 
 /** Extract the most distinctive search word without allowing SQL syntax. */
 function fmuk_knowledge_search_term(string $question): string
@@ -321,6 +371,45 @@ function fmuk_evidence(PDO $pdo,array $user,string $question,bool $voice=false,b
             }elseif($topic==='sales'){
                 $result=fm_read_execute($pdo,$user,'recorded_sales',$question);
                 $lines[]=$result['answer'];$used=(array)($result['sources']??[]);
+            }elseif($topic==='kds'){
+                require_once __DIR__.'/kds-production.php';
+                if(kds_ready($pdo)){
+                    $stmt=$pdo->prepare("SELECT k.public_id,k.status,k.sent_at,i.item_name_snapshot,i.quantity,
+                        s.name station_name,c.check_number FROM kds_order_items k
+                        JOIN pos_checks c ON c.organization_id=k.organization_id AND c.id=k.check_id
+                        JOIN pos_check_items i ON i.organization_id=k.organization_id AND i.id=k.pos_check_item_id
+                        LEFT JOIN kds_stations s ON s.organization_id=k.organization_id AND s.id=k.station_id
+                        WHERE k.organization_id=? AND k.status NOT IN ('completed','cancelled')
+                        ORDER BY k.sent_at,k.id LIMIT 20");
+                    $stmt->execute([$org]);
+                    [$lines,$used]=fmuk_render_live_rows($topic,$stmt->fetchAll(PDO::FETCH_ASSOC));
+                }
+            }elseif($topic==='online_orders'){
+                require_once __DIR__.'/pickup-fulfillment-core.php';
+                if(pickup_fulfillment_ready($pdo)){
+                    $stmt=$pdo->prepare("SELECT oo.public_id,oo.status,oo.requested_ready_at,oo.fulfilled_at,
+                        c.check_number,c.total_amount,l.name location_name FROM online_orders oo
+                        JOIN pos_checks c ON c.organization_id=oo.organization_id AND c.id=oo.pos_check_id
+                        JOIN locations l ON l.organization_id=oo.organization_id AND l.id=oo.location_id
+                        WHERE oo.organization_id=? AND oo.fulfilled_at IS NULL AND c.status<>'cancelled'
+                        ORDER BY COALESCE(oo.requested_ready_at,oo.submitted_at),oo.id LIMIT 20");
+                    $stmt->execute([$org]);
+                    [$lines,$used]=fmuk_render_live_rows($topic,$stmt->fetchAll(PDO::FETCH_ASSOC));
+                }
+            }elseif($topic==='attendance'){
+                require_once __DIR__.'/timeclock-voice-core.php';
+                if(tv_ready($pdo)){
+                    $self=!app_has_permission('timeclock.view',$user)&&!app_has_permission('attendance.view',$user);
+                    $sql="SELECT t.public_id,t.status,t.clocked_in_at,t.clocked_out_at,u.display_name
+                        FROM time_clock_entries t JOIN users u ON u.id=t.user_id
+                        JOIN organization_memberships om ON om.organization_id=t.organization_id
+                            AND om.user_id=t.user_id AND om.status='active'
+                        WHERE t.organization_id=?";
+                    if($self)$sql.=" AND t.user_id=?";
+                    $sql.=" ORDER BY t.clocked_in_at DESC,t.id DESC LIMIT 20";
+                    $stmt=$pdo->prepare($sql);$stmt->execute($self?[$org,$uid]:[$org]);
+                    [$lines,$used]=fmuk_render_live_rows($topic,$stmt->fetchAll(PDO::FETCH_ASSOC));
+                }
             }elseif($topic==='knowledge'){
                 require_once __DIR__.'/restaurant-brain.php';
                 if(restaurant_brain_table_ready($pdo,'knowledge_documents')){
