@@ -32,6 +32,8 @@ function fmuk_topics(string $question): array
         'kds'=>'/\b(?:kds|kitchen tickets?|kitchen display|expo tickets?|station load)\b/u',
         'online_orders'=>'/\b(?:online orders?|pickup orders?|web orders?|pickup queues?|fulfillment status|curbside orders?)\b/u',
         'attendance'=>'/\b(?:attendance|time ?clock|clocked in|clocked out|on break|break status|labor hours)\b/u',
+        'pos'=>'/\b(?:pos|open checks?|open tabs?|table checks?|table service|unpaid checks?|dine.?in checks?)\b/u',
+        'reservations'=>'/\b(?:reservations?|waitlist|guest parties?|upcoming bookings?|host stand|seating)\b/u',
     ];
     $topics=[];
     foreach($patterns as $name=>$pattern)if(preg_match($pattern,$text))$topics[]=$name;
@@ -59,6 +61,7 @@ function fmuk_prefers_broker(string $question,array $user): bool
     if(!$topics&&!fmuk_capability_question($question))return false;
     return fmuk_capability_question($question)||fmuk_menu_overview_question($question)
         ||fmuk_roster_question($question)||count($topics)>1||in_array('knowledge',$topics,true)
+        ||in_array('pos',$topics,true)||in_array('reservations',$topics,true)
         ||(in_array('schedule',$topics,true)&&!app_has_permission('schedule.agent',$user));
 }
 
@@ -97,6 +100,11 @@ function fmuk_allowed(array $user,string $topic,bool $voice,bool $ownerVoiceVeri
         'online_orders'=>fmuk_online_order_view_allowed($user),
         'attendance'=>app_has_permission('timeclock.view',$user)
             ||app_has_permission('attendance.view',$user)||app_has_permission('timeclock.self',$user),
+        'pos'=>app_has_permission('pos.use',$user)||app_has_permission('pos.manage',$user)
+            ||app_has_permission('table_service.view',$user),
+        'reservations'=>app_has_permission('host.view',$user)
+            &&(app_has_permission('table_service.view',$user)||app_has_permission('host.use',$user)
+                ||app_has_permission('host.manage',$user)),
         default=>false,
     };
 }
@@ -111,7 +119,9 @@ function fmuk_capabilities(array $user,bool $voice,bool $ownerVoiceVerified): ar
         'catering'=>'catering','wholesale'=>'wholesale',
         'knowledge'=>'published Knowledge Center documents and policies',
         'kds'=>'live kitchen tickets','online_orders'=>'pickup and online order status',
-        'attendance'=>'time clock and attendance'];
+        'attendance'=>'time clock and attendance',
+        'pos'=>'open POS checks and table service',
+        'reservations'=>'guest reservations and waitlist'];
     $result=[];
     foreach($names as $topic=>$description)
         if(fmuk_allowed($user,$topic,$voice,$ownerVoiceVerified))$result[]=$description;
@@ -218,6 +228,36 @@ function fmuk_render_business_rows(string $topic,array $rows): array
 }
 
 
+
+
+/** Only display restaurant service fields; exclude guest contact and payment details. */
+function fmuk_render_service_rows(string $topic,array $rows): array
+{
+    $lines=[];$sources=[];
+    foreach(array_slice($rows,0,20) as $row){
+        $id=(string)($row['public_id']??'');
+        if($topic==='pos'){
+            $lines[]='Check '.(string)($row['check_number']??'')
+                .' | service: '.(string)($row['service_mode']??'')
+                .' | table: '.mb_substr((string)($row['table_name']??'unassigned'),0,80,'UTF-8')
+                .' | guests: '.(string)($row['guest_count']??'')
+                .' | total: '.(string)($row['total_amount']??'')
+                .' | paid: '.(string)($row['amount_paid']??'')
+                .' | location: '.mb_substr((string)($row['location_name']??''),0,80,'UTF-8')
+                .' | opened: '.(string)($row['opened_at']??'');
+            $sources[]='Gelato POS check '.$id;
+        }elseif($topic==='reservations'){
+            $lines[]=mb_substr((string)($row['guest_name']??'Guest'),0,90,'UTF-8')
+                .' | party size: '.(string)($row['party_size']??'')
+                .' | status: '.(string)($row['status']??'')
+                .' | type: '.(string)($row['reservation_type']??'')
+                .' | expected: '.(string)($row['scheduled_at']??'not recorded')
+                .' | location: '.mb_substr((string)($row['location_name']??''),0,80,'UTF-8');
+            $sources[]='Gelato guest reservation '.$id;
+        }
+    }
+    return [$lines,$sources];
+}
 
 /** Match the Online Order Agent's read grants, without importing its write tools. */
 function fmuk_online_order_view_allowed(array $user): bool
@@ -371,6 +411,29 @@ function fmuk_evidence(PDO $pdo,array $user,string $question,bool $voice=false,b
             }elseif($topic==='sales'){
                 $result=fm_read_execute($pdo,$user,'recorded_sales',$question);
                 $lines[]=$result['answer'];$used=(array)($result['sources']??[]);
+            }elseif($topic==='pos'){
+                require_once __DIR__.'/pos-core.php';
+                if(pos_ready($pdo)){
+                    $stmt=$pdo->prepare("SELECT c.public_id,c.check_number,c.service_mode,c.table_name,
+                        c.guest_count,c.total_amount,c.amount_paid,c.opened_at,l.name location_name
+                        FROM pos_checks c JOIN locations l ON l.organization_id=c.organization_id
+                        AND l.id=c.location_id WHERE c.organization_id=? AND c.status='open'
+                        ORDER BY c.opened_at DESC,c.id DESC LIMIT 20");
+                    $stmt->execute([$org]);
+                    [$lines,$used]=fmuk_render_service_rows($topic,$stmt->fetchAll(PDO::FETCH_ASSOC));
+                }
+            }elseif($topic==='reservations'){
+                require_once __DIR__.'/restaurant-brain.php';
+                if(restaurant_brain_table_ready($pdo,'guest_reservations')){
+                    $stmt=$pdo->prepare("SELECT r.public_id,r.guest_name,r.party_size,r.status,
+                        r.reservation_type,r.scheduled_at,l.name location_name
+                        FROM guest_reservations r JOIN locations l
+                        ON l.organization_id=r.organization_id AND l.id=r.location_id
+                        WHERE r.organization_id=? AND r.status NOT IN ('completed','cancelled','no_show')
+                        ORDER BY r.scheduled_at IS NULL,r.scheduled_at,r.id DESC LIMIT 20");
+                    $stmt->execute([$org]);
+                    [$lines,$used]=fmuk_render_service_rows($topic,$stmt->fetchAll(PDO::FETCH_ASSOC));
+                }
             }elseif($topic==='kds'){
                 require_once __DIR__.'/kds-production.php';
                 if(kds_ready($pdo)){
