@@ -231,10 +231,15 @@ fmuk_assert(str_contains($broker,'FROM time_clock_entries t')&&str_contains($bro
 fmuk_assert(str_contains($broker,'if($self)$sql.=" AND t.user_id=?"'),'timeclock self records retain exact account restriction');
 fmuk_assert(str_contains($broker,'JOIN organization_memberships om'),'attendance excludes inactive organization members');
 
-fmuk_assert(str_contains($broker,'FROM pos_checks c')&&str_contains($broker,'WHERE c.organization_id=?'),
-    'POS selects open checks within tenant');
-fmuk_assert(str_contains($broker,'FROM guest_reservations r')&&str_contains($broker,'WHERE r.organization_id=?'),
-    'reservations select active rows within tenant');
+fmuk_assert(str_contains($broker,'FROM pos_checks c')&&str_contains($broker,'WHERE c.organization_id=?')
+    &&str_contains($broker,'c.location_id IN ($marks)'),'POS selects only assigned locations within tenant');
+fmuk_assert(str_contains($broker,'FROM guest_reservations r')&&str_contains($broker,'WHERE r.organization_id=?')
+    &&str_contains($broker,'r.location_id IN ($marks)'),'reservations select only assigned locations within tenant');
+fmuk_assert(str_contains($broker,'operational_location_allowed($pdo,$user,\'host.view\',$id)')
+    &&str_contains($broker,'operational_location_allowed($pdo,$user,\'table_service.view\',$id)'),
+    'reservation location scope requires host access and complementary operating grant');
+fmuk_assert(str_contains($broker,'$stmt->execute(array_merge([$org],$locations))'),
+    'location identifiers passed as bound SQL parameters');
 fmuk_assert(!str_contains($broker,'SELECT r.guest_email')&&!str_contains($broker,'SELECT r.guest_phone'),
     'guest contact details are not retrieved for agent display');
 

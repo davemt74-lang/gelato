@@ -230,6 +230,31 @@ function fmuk_render_business_rows(string $topic,array $rows): array
 
 
 
+/** Reduce read evidence to the same assigned locations used by POS and Host Stand. */
+function fmuk_service_location_ids(PDO $pdo,array $user,string $topic,int $org): array
+{
+    require_once __DIR__.'/pos-core.php';
+    require_once __DIR__.'/operational-access.php';
+    $locations=pos_locations($pdo,$org);
+    $allowed=[];
+    foreach($locations as $location){
+        $id=(int)($location['id']??0);
+        if($id<1)continue;
+        if($topic==='reservations'){
+            $permit=operational_location_allowed($pdo,$user,'host.view',$id)
+                &&(operational_location_allowed($pdo,$user,'table_service.view',$id)
+                    ||operational_location_allowed($pdo,$user,'host.use',$id)
+                    ||operational_location_allowed($pdo,$user,'host.manage',$id));
+        }else{
+            $permit=operational_location_allowed($pdo,$user,'pos.use',$id)
+                ||operational_location_allowed($pdo,$user,'pos.manage',$id)
+                ||operational_location_allowed($pdo,$user,'table_service.view',$id);
+        }
+        if($permit)$allowed[]=$id;
+    }
+    return $allowed;
+}
+
 /** Only display restaurant service fields; exclude guest contact and payment details. */
 function fmuk_render_service_rows(string $topic,array $rows): array
 {
@@ -414,25 +439,34 @@ function fmuk_evidence(PDO $pdo,array $user,string $question,bool $voice=false,b
             }elseif($topic==='pos'){
                 require_once __DIR__.'/pos-core.php';
                 if(pos_ready($pdo)){
-                    $stmt=$pdo->prepare("SELECT c.public_id,c.check_number,c.service_mode,c.table_name,
-                        c.guest_count,c.total_amount,c.amount_paid,c.opened_at,l.name location_name
-                        FROM pos_checks c JOIN locations l ON l.organization_id=c.organization_id
-                        AND l.id=c.location_id WHERE c.organization_id=? AND c.status='open'
-                        ORDER BY c.opened_at DESC,c.id DESC LIMIT 20");
-                    $stmt->execute([$org]);
-                    [$lines,$used]=fmuk_render_service_rows($topic,$stmt->fetchAll(PDO::FETCH_ASSOC));
+                    $locations=fmuk_service_location_ids($pdo,$user,$topic,$org);
+                    if($locations){
+                        $marks=implode(',',array_fill(0,count($locations),'?'));
+                        $stmt=$pdo->prepare("SELECT c.public_id,c.check_number,c.service_mode,c.table_name,
+                            c.guest_count,c.total_amount,c.amount_paid,c.opened_at,l.name location_name
+                            FROM pos_checks c JOIN locations l ON l.organization_id=c.organization_id
+                            AND l.id=c.location_id WHERE c.organization_id=? AND c.location_id IN ($marks)
+                            AND c.status='open' ORDER BY c.opened_at DESC,c.id DESC LIMIT 20");
+                        $stmt->execute(array_merge([$org],$locations));
+                        [$lines,$used]=fmuk_render_service_rows($topic,$stmt->fetchAll(PDO::FETCH_ASSOC));
+                    }
                 }
             }elseif($topic==='reservations'){
                 require_once __DIR__.'/restaurant-brain.php';
                 if(restaurant_brain_table_ready($pdo,'guest_reservations')){
-                    $stmt=$pdo->prepare("SELECT r.public_id,r.guest_name,r.party_size,r.status,
-                        r.reservation_type,r.scheduled_at,l.name location_name
-                        FROM guest_reservations r JOIN locations l
-                        ON l.organization_id=r.organization_id AND l.id=r.location_id
-                        WHERE r.organization_id=? AND r.status NOT IN ('completed','cancelled','no_show')
-                        ORDER BY r.scheduled_at IS NULL,r.scheduled_at,r.id DESC LIMIT 20");
-                    $stmt->execute([$org]);
-                    [$lines,$used]=fmuk_render_service_rows($topic,$stmt->fetchAll(PDO::FETCH_ASSOC));
+                    $locations=fmuk_service_location_ids($pdo,$user,$topic,$org);
+                    if($locations){
+                        $marks=implode(',',array_fill(0,count($locations),'?'));
+                        $stmt=$pdo->prepare("SELECT r.public_id,r.guest_name,r.party_size,r.status,
+                            r.reservation_type,r.scheduled_at,l.name location_name
+                            FROM guest_reservations r JOIN locations l
+                            ON l.organization_id=r.organization_id AND l.id=r.location_id
+                            WHERE r.organization_id=? AND r.location_id IN ($marks)
+                            AND r.status NOT IN ('completed','cancelled','no_show')
+                            ORDER BY r.scheduled_at IS NULL,r.scheduled_at,r.id DESC LIMIT 20");
+                        $stmt->execute(array_merge([$org],$locations));
+                        [$lines,$used]=fmuk_render_service_rows($topic,$stmt->fetchAll(PDO::FETCH_ASSOC));
+                    }
                 }
             }elseif($topic==='kds'){
                 require_once __DIR__.'/kds-production.php';
