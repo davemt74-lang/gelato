@@ -65,7 +65,8 @@ const {chromium}=require('playwright');
         drawerZ:Number(getComputedStyle(drawer).zIndex)};
     });
     ok(desktop.mascotZ>desktop.drawerZ,'Mascot always stays in front of the chat drawer');
-    ok(desktop.actorBottom<=desktop.drawerTop+2,'Mascot moves clear of the open desktop drawer');
+    ok(desktop.actorBottom<=desktop.drawerTop+2,
+      'Mascot moves clear of the open desktop drawer: '+JSON.stringify(desktop));
     await page.locator('.gar-close').click();
     await page.locator('#gaInput').fill('Tell me about the menu again');
     await page.locator('#gaInput').press('Enter');
@@ -83,7 +84,8 @@ const {chromium}=require('playwright');
       const dr=document.querySelector('#gelato-agent-response-drawer').getBoundingClientRect();
       return {actorBottom:ar.bottom,drawerTop:dr.top};
     });
-    ok(mobile.actorBottom<=mobile.drawerTop+2,'Mascot avoids the open mobile drawer');
+    ok(mobile.actorBottom<=mobile.drawerTop+2,
+      'Mascot avoids the open mobile drawer: '+JSON.stringify(mobile));
     ok(errors.length===0,'No browser exceptions: '+errors.join('; '));
     console.log('Food Monster manual chat UI PASS ('+checks+' assertions)');
   }finally{await browser.close();}

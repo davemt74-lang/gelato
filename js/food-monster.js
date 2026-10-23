@@ -52,7 +52,11 @@ function movementBounds(size){
     if(drawerRect.height>0&&drawerRect.top<composerTop)composerTop=drawerRect.top;
   }
   const top=root.classList.contains('fm-has-speech')?Math.min(68,innerHeight*.09):8;
-  return {minX:8,maxX:Math.max(8,innerWidth-size-8),minY:Math.min(top,Math.max(8,composerTop-size*1.2-12)),maxY:Math.max(8,composerTop-size*1.2-12)};
+  // The controls under the SVG can make the actor's rendered box taller
+  // than its 5:6 illustration. Measure the actual box and reserve a margin.
+  const actorClearance=Math.max(size*1.2,actor.getBoundingClientRect().height||0)+24;
+  const maxY=Math.max(8,composerTop-actorClearance-12);
+  return {minX:8,maxX:Math.max(8,innerWidth-size-8),minY:Math.min(top,maxY),maxY};
 }
 function layout(){
   state.size=clamp(state.size,minSize,maxSize());
