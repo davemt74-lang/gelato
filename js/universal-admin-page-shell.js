@@ -34,7 +34,7 @@
   function ensureAddCanvas() {
     if (document.querySelector('script[data-global-add-canvas]')) return;
     const script = document.createElement('script');
-    script.src = 'js/global-add-canvas.js?v=20261015-fmg8a';
+    script.src = 'js/global-add-canvas.js?v=20261023-manual-chat1';
     script.dataset.globalAddCanvas = '1';
     document.head.appendChild(script);
   }

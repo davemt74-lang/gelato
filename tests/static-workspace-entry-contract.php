@@ -10,7 +10,7 @@ entry_assert(str_contains($workspace,"window.RESTAURANT_SERVER_SESSION=true"),'s
 entry_assert(str_contains($workspace,'Cache-Control: private, no-store'),'dynamic route cache disabled');
 entry_assert(!str_contains($workspace, '$sidebarRoutes'), 'duplicate PHP sidebar injection removed');
 entry_assert(str_contains($workspace, 'gelato-server-navigation'), 'server-side admin tools fallback remains available');
-entry_assert(str_contains($workspace, 'js/workspace-shell-sync.js?v=20261014-fmg6'), 'authorized sidebar synchronized by canonical client');
+entry_assert(str_contains($workspace, 'js/workspace-shell-sync.js?v=20261023-manual-chat1'), 'authorized sidebar synchronized by canonical client');
 entry_assert(str_contains($workspace,'admin_shell_filtered_navigation($user)'),'permission-filtered nav');
 entry_assert(str_contains($workspace,'?v='),'asset cache bust on PHP-rendered shell');
 entry_assert(str_contains($workspace,"'<body>'"), 'workspace body injection');
