@@ -299,6 +299,17 @@ fmuk_assert(str_contains($broker,"status='published'")&&str_contains($broker,'ag
 fmuk_assert(str_contains($broker,'LOCATE(?,LOWER(content))'),'search returns excerpt near relevant term without loading whole document');
 fmuk_assert(str_contains($route,"in_array('knowledge',fmuk_topics(\$message),true)"),'documentation questions route before generic model');
 
+fmuk_assert(substr_count($route,"fmuk_prefers_broker(\$message,\$user)&&\$knowledgeIntent!=='allergen'")===2,
+    'owner conversation and ordinary Agent Chat prioritize mixed local knowledge reads');
+$specialistSegments=explode('if($knowledgeIntent!==null)app_json_response(',$route);
+fmuk_assert(count($specialistSegments)===3,'both grounded knowledge specialist fallbacks are present');
+fmuk_assert(str_contains($specialistSegments[0],"fmuk_prefers_broker(\$message,\$user)")
+    &&str_contains($specialistSegments[1],"fmuk_prefers_broker(\$message,\$user)"),
+    'unified broker is tried before domain-specific fallback in both conversation modes');
+fmuk_assert(fmuk_prefers_broker('Show menu prices and employee shifts today',$owner),
+    'mixed restaurant read is served by local broker');
+fmuk_assert(fmuk_topics('Approve a shift')===[],'governed actions must bypass the read broker');
+
 fmuk_assert(str_contains($route,'api/food-monster-unified-knowledge.php?threadId='),'router chooses unified read');
 fmuk_assert(str_contains($api,"\$_GET['threadId']"),'existing browser route carries server-issued thread reference');
 echo 'FM-UK read broker authorization and evidence: PASS ('.$checks.' assertions)' . "\n";
