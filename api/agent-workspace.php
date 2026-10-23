@@ -23,6 +23,7 @@ require_once __DIR__.'/../includes/food-monster-g14a-pilot.php';
 require_once __DIR__.'/../includes/food-monster-g13c-training.php';
 require_once __DIR__.'/../includes/food-monster-g13k-training-notice.php';
 require_once __DIR__.'/../includes/food-monster-g13b-knowledge.php';
+require_once __DIR__.'/../includes/food-monster-unified-knowledge.php';
 require_once __DIR__.'/../includes/food-monster-operational-followup.php';
 require_once __DIR__.'/../includes/food-monster-high-impact-approval.php';
 
@@ -285,18 +286,34 @@ try{
                 // Food and allergen questions are safe read-only skills only.
                 // The endpoint rechecks this exact canonical voice turn and
                 // uses staff-facing menu data, never the owner's private tools.
+                if(fmuk_menu_overview_question($message)&&$knowledgeIntent!=='allergen')
+                    app_json_response(['ok'=>true,
+                        'route'=>'api/food-monster-unified-knowledge.php?threadId='.rawurlencode($roomThread),
+                        'domain'=>'food_monster_unified_knowledge','nodeMode'=>'read_only']);
                 if($knowledgeIntent!==null)app_json_response(['ok'=>true,
                     'route'=>'api/food-monster-knowledge.php?threadId='.rawurlencode($roomThread),
                     'domain'=>'food_monster_grounded_knowledge','nodeMode'=>'read_only']);
+                if(fmuk_topics($message)||fmuk_capability_question($message))
+                    app_json_response(['ok'=>true,
+                        'route'=>'api/food-monster-unified-knowledge.php?threadId='.rawurlencode($roomThread),
+                        'domain'=>'food_monster_unified_knowledge','nodeMode'=>'read_only']);
                 app_json_response(['ok'=>true,'route'=>null,
                     'domain'=>'participant_conversation','nodeMode'=>'conversation_only']);
             }
         }
         // Explicit staff-facing factual requests use the same read-only
         // evidence layer; mutating requests keep established governed routes.
+        if(fmuk_menu_overview_question($message)&&$knowledgeIntent!=='allergen')
+            app_json_response(['ok'=>true,
+                'route'=>'api/food-monster-unified-knowledge.php?threadId='.rawurlencode($roomThread),
+                'domain'=>'food_monster_unified_knowledge','nodeMode'=>'read_only']);
         if($knowledgeIntent!==null)app_json_response(['ok'=>true,
             'route'=>'api/food-monster-knowledge.php?threadId='.rawurlencode($roomThread),
             'domain'=>'food_monster_grounded_knowledge','nodeMode'=>'read_only']);
+        if(fmuk_prefers_broker($message,$user))
+            app_json_response(['ok'=>true,
+                'route'=>'api/food-monster-unified-knowledge.php?threadId='.rawurlencode($roomThread),
+                'domain'=>'food_monster_unified_knowledge','nodeMode'=>'read_only']);
         $text=mb_strtolower(preg_replace('/^hey\s+gelato[,\s]*/iu','',$message)??$message,'UTF-8');
         // Owner-authenticated high-impact staging uses a deterministic grammar,
         // never a model-selected endpoint. Only an owner may approve; an approval
@@ -502,6 +519,12 @@ try{
             if(!$otherSpecialized&&!$posIntent){$naturalMenuMatch=(bool)menu_training_search_items($pdo,$org,$message,1);}
             if(!$otherSpecialized&&($posIntent||$naturalMenuMatch))app_json_response(['ok'=>true]+gaw_node_route('pos'));
         }
+        // Reuse specialist routes wherever available; cover unrecognized
+        // factual questions with the local read broker before model fallback.
+        if(empty($fallback['route'])&&fmuk_topics($message))
+            app_json_response(['ok'=>true,
+                'route'=>'api/food-monster-unified-knowledge.php?threadId='.rawurlencode($roomThread),
+                'domain'=>'food_monster_unified_knowledge','nodeMode'=>'read_only']);
         app_json_response(gaw_normalize_node_route($fallback));
     }
     if($action==='record_action'){$thread=trim((string)($in['threadId']??''));$public=gaw_record_action($pdo,$org,$uid,$thread,['messageDatabaseId'=>isset($in['messageDatabaseId'])?(int)$in['messageDatabaseId']:null,'skill'=>$in['skill']??'unknown','route'=>$in['route']??'unknown','status'=>$in['status']??'completed','request'=>$in['request']??null,'result'=>$in['result']??null]);app_json_response(['ok'=>true,'actionId'=>$public]);}
