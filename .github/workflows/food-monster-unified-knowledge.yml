@@ -1,0 +1,42 @@
+name: FM Unified Restaurant Knowledge
+on:
+  pull_request:
+    paths:
+      - 'includes/food-monster-unified-knowledge.php'
+      - 'api/food-monster-unified-knowledge.php'
+      - 'api/agent-workspace.php'
+      - 'js/global-agent.js'
+      - 'includes/food-monster-llm.php'
+      - 'tests/food-monster-unified-knowledge.php'
+      - '.github/workflows/food-monster-unified-knowledge.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'includes/food-monster-unified-knowledge.php'
+      - 'api/food-monster-unified-knowledge.php'
+      - 'api/agent-workspace.php'
+      - 'js/global-agent.js'
+      - 'includes/food-monster-llm.php'
+      - 'tests/food-monster-unified-knowledge.php'
+      - '.github/workflows/food-monster-unified-knowledge.yml'
+jobs:
+  knowledge-contract:
+    name: Unified evidence, scope and authorization
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_mysql
+      - name: Syntax and authorization contracts
+        run: |
+          php -l includes/food-monster-unified-knowledge.php
+          php -l includes/food-monster-llm.php
+          php -l api/food-monster-unified-knowledge.php
+          php -l api/agent-workspace.php
+          php -l tests/food-monster-unified-knowledge.php
+          node --check js/global-agent.js
+          php tests/food-monster-unified-knowledge.php
+          php tests/food-monster-g13b-knowledge.php
+          php tests/food-monster-g4-contract.php
