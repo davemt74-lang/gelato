@@ -131,6 +131,45 @@ foreach($liveRows as $topic=>$rows){
         $topic.' excludes sensitive and unrelated fields');
 }
 
+
+foreach([
+    'pos'=>'Show open POS checks',
+    'reservations'=>'Any reservations on the waitlist?',
+] as $topic=>$question){
+    fmuk_assert(in_array($topic,fmuk_topics($question),true),$topic.' restaurant service intent');
+    fmuk_assert(fmuk_prefers_broker($question,$owner),$topic.' read query routed through unified broker');
+    fmuk_assert(!fmuk_allowed($outsider,$topic,false,false),$topic.' unauthorized viewer denied');
+}
+$posViewer=['id'=>50,'organization_id'=>7,'permissions'=>['pos.use']];
+$reservationViewer=['id'=>51,'organization_id'=>7,'permissions'=>['host.view','table_service.view']];
+fmuk_assert(fmuk_allowed($posViewer,'pos',false,false),'POS user can read open checks');
+fmuk_assert(!fmuk_allowed($posViewer,'pos',true,false),'unverified POS voice denied');
+fmuk_assert(fmuk_allowed($reservationViewer,'reservations',false,false),'host can read reservation status');
+fmuk_assert(!fmuk_allowed($reservationViewer,'reservations',true,false),'unverified reservation voice denied');
+fmuk_assert(!fmuk_allowed(['id'=>52,'organization_id'=>7,'permissions'=>['host.view']],
+    'reservations',false,false),'partial reservation permissions cannot read guest list');
+fmuk_assert(in_array('open POS checks and table service',fmuk_capabilities($posViewer,false,false),true),
+    'POS capability shown to authorized operator');
+fmuk_assert(!in_array('guest reservations and waitlist',fmuk_capabilities($reservationViewer,true,false),true),
+    'unverified voice cannot advertise guest reservations');
+$serviceRows=[
+    'pos'=>[['public_id'=>'check-71','check_number'=>'71','service_mode'=>'dine_in',
+        'table_name'=>'Table 2','guest_count'=>4,'total_amount'=>'54.00','amount_paid'=>'10.00',
+        'location_name'=>'Dining Room','opened_at'=>'2026-10-23',
+        'external_reference'=>'PRIVATE_PAYMENT_TOKEN','customer_phone'=>'PRIVATE_PHONE']],
+    'reservations'=>[['public_id'=>'reservation-9','guest_name'=>'Guest Smith','party_size'=>3,
+        'status'=>'confirmed','reservation_type'=>'reservation','scheduled_at'=>'2026-10-23 19:00',
+        'location_name'=>'Main','guest_email'=>'PRIVATE_GUEST_EMAIL',
+        'guest_phone'=>'PRIVATE_GUEST_PHONE','notes'=>'PRIVATE_RESERVATION_NOTES']],
+];
+foreach($serviceRows as $topic=>$rows){
+    [$lines,$sources]=fmuk_render_service_rows($topic,$rows);
+    fmuk_assert(count($lines)===1&&count($sources)===1,$topic.' live restaurant status and source');
+    fmuk_assert(str_contains($sources[0],$rows[0]['public_id']),$topic.' source preserves record id');
+    fmuk_assert(!str_contains(implode('|',$lines).'|'.implode('|',$sources),'PRIVATE_'),
+        $topic.' contact and payment details excluded');
+}
+
 $domainExamples=[
     'crm'=>[['public_id'=>'customer-1','display_name'=>'Guest Alpha','status'=>'active','email'=>'PRIVATE_CRM_EMAIL','phone'=>'PRIVATE_CRM_PHONE','notes'=>'PRIVATE_CRM_NOTES']],
     'equipment'=>[['public_id'=>'asset-1','name'=>'Deck Oven','operational_status'=>'active','condition_status'=>'good','location_name'=>'Kitchen','next_service_on'=>'2026-11-01','serial_number'=>'PRIVATE_SERIAL']],
@@ -191,6 +230,18 @@ fmuk_assert(str_contains($broker,'FROM online_orders oo')&&str_contains($broker,
 fmuk_assert(str_contains($broker,'FROM time_clock_entries t')&&str_contains($broker,'t.organization_id=?'),'attendance query is organization-scoped');
 fmuk_assert(str_contains($broker,'if($self)$sql.=" AND t.user_id=?"'),'timeclock self records retain exact account restriction');
 fmuk_assert(str_contains($broker,'JOIN organization_memberships om'),'attendance excludes inactive organization members');
+
+fmuk_assert(str_contains($broker,'FROM pos_checks c')&&str_contains($broker,'WHERE c.organization_id=?')
+    &&str_contains($broker,'c.location_id IN ($marks)'),'POS selects only assigned locations within tenant');
+fmuk_assert(str_contains($broker,'FROM guest_reservations r')&&str_contains($broker,'WHERE r.organization_id=?')
+    &&str_contains($broker,'r.location_id IN ($marks)'),'reservations select only assigned locations within tenant');
+fmuk_assert(str_contains($broker,'operational_location_allowed($pdo,$user,\'host.view\',$id)')
+    &&str_contains($broker,'operational_location_allowed($pdo,$user,\'table_service.view\',$id)'),
+    'reservation location scope requires host access and complementary operating grant');
+fmuk_assert(str_contains($broker,'$stmt->execute(array_merge([$org],$locations))'),
+    'location identifiers passed as bound SQL parameters');
+fmuk_assert(!str_contains($broker,'SELECT r.guest_email')&&!str_contains($broker,'SELECT r.guest_phone'),
+    'guest contact details are not retrieved for agent display');
 
 fmuk_assert(str_contains($broker,'FROM knowledge_documents WHERE organization_id=?'),'knowledge query is organization-scoped');
 fmuk_assert(str_contains($broker,"status='published'")&&str_contains($broker,'agent_enabled=1 AND archived_at IS NULL'),'only approved agent-enabled current documents');
