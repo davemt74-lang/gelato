@@ -23,6 +23,11 @@ function fmuk_topics(string $question): array
         'inventory'=>'/\b(?:inventory|stock|on hand|reorder|shortage|supplies)\b/u',
         'tasks'=>'/\b(?:tasks?|checklists?|to.do|prep list|opening duties|closing duties)\b/u',
         'sales'=>'/\b(?:sales|revenue|tickets|average check|gross|net sales)\b/u',
+        'crm'=>'/\b(?:crm|customers?|guests?|customer relationships?|loyalty|regulars?)\b/u',
+        'equipment'=>'/\b(?:equipment|appliances?|assets?|maintenance|repairs?|warranty|service history)\b/u',
+        'purchasing'=>'/\b(?:purchasing|vendors?|suppliers?|purchase orders?|po numbers?|receiving|deliveries)\b/u',
+        'catering'=>'/\b(?:catering|banquets?|event bookings?|event readiness)\b/u',
+        'wholesale'=>'/\b(?:wholesale|business accounts?|distributors?|b2b)\b/u',
     ];
     $topics=[];
     foreach($patterns as $name=>$pattern)if(preg_match($pattern,$text))$topics[]=$name;
@@ -78,6 +83,11 @@ function fmuk_allowed(array $user,string $topic,bool $voice,bool $ownerVoiceVeri
         'inventory'=>app_has_permission('inventory.view',$user),
         'tasks'=>app_has_permission('tasks.view',$user)||app_has_permission('tasks.self',$user),
         'sales'=>app_has_permission('sales.view',$user)&&app_has_permission('sales.agent',$user),
+        'crm'=>app_has_permission('crm.view',$user),
+        'equipment'=>app_has_permission('equipment.view',$user)&&app_has_permission('agent.equipment_skills',$user),
+        'purchasing'=>app_has_permission('purchasing.view',$user)&&app_has_permission('purchasing.agent',$user),
+        'catering'=>app_has_permission('catering.view',$user)&&app_has_permission('catering.agent',$user),
+        'wholesale'=>app_has_permission('wholesale.view',$user)&&app_has_permission('wholesale.agent',$user),
         default=>false,
     };
 }
@@ -87,17 +97,14 @@ function fmuk_capabilities(array $user,bool $voice,bool $ownerVoiceVerified): ar
 {
     $names=['menu'=>'active menu and prices','recipes'=>'approved recipes and production standards',
         'schedule'=>'shift schedules','employees'=>'staff roster','inventory'=>'inventory and stock',
-        'tasks'=>'restaurant tasks','sales'=>'recorded sales'];
+        'tasks'=>'restaurant tasks','sales'=>'recorded sales','crm'=>'customer CRM',
+        'equipment'=>'equipment and maintenance','purchasing'=>'vendors and purchasing',
+        'catering'=>'catering','wholesale'=>'wholesale'];
     $result=[];
     foreach($names as $topic=>$description)
         if(fmuk_allowed($user,$topic,$voice,$ownerVoiceVerified))$result[]=$description;
     if(!$voice||$ownerVoiceVerified){
         $specialists=[
-            ['crm.view'=>'customer CRM'],
-            ['equipment.view'=>'equipment and maintenance'],
-            ['catering.agent'=>'catering'],
-            ['wholesale.agent'=>'wholesale'],
-            ['purchasing.agent'=>'vendors and purchasing'],
             ['kds.view'=>'kitchen display tickets'],
             ['online_orders.fulfill'=>'online orders'],
             ['timeclock.agent'=>'time clock and attendance'],
@@ -155,6 +162,47 @@ function fmuk_render_recipes(array $recipes): array
             .(string)($recipe['yield_quantity']??'not recorded').' '.(string)($recipe['yield_unit']??'')
             .' | ingredients: '.implode(', ',$parts).' | steps: '.implode('; ',$directions);
         $sources[]='Gelato active recipe '.(string)($recipe['public_id']??'');
+    }
+    return [$lines,$sources];
+}
+
+/** Strict display allowlist for business records; no contact details or notes. */
+function fmuk_render_business_rows(string $topic,array $rows): array
+{
+    $lines=[];$sources=[];
+    foreach(array_slice($rows,0,25) as $row){
+        $id=(string)($row['public_id']??'');
+        if($topic==='crm'){
+            $lines[]=mb_substr((string)($row['display_name']??''),0,100,'UTF-8')
+                .' | status: '.(string)($row['status']??'');
+            $sources[]='Gelato CRM customer '.$id;
+        }elseif($topic==='equipment'){
+            $lines[]=mb_substr((string)($row['name']??''),0,110,'UTF-8')
+                .' | status: '.(string)($row['operational_status']??'')
+                .' | condition: '.(string)($row['condition_status']??'')
+                .' | location: '.(string)($row['location_name']??'')
+                .' | next service: '.(string)($row['next_service_on']??'not recorded');
+            $sources[]='Gelato equipment '.$id;
+        }elseif($topic==='purchasing'){
+            $lines[]=(string)($row['order_number']??'').' | vendor: '
+                .mb_substr((string)($row['vendor_name']??''),0,100,'UTF-8')
+                .' | status: '.(string)($row['status']??'')
+                .' | total: '.(string)($row['total_amount']??'not recorded')
+                .' | expected: '.(string)($row['expected_delivery_date']??'not recorded');
+            $sources[]='Gelato purchase order '.$id;
+        }elseif($topic==='catering'){
+            if(($row['source_type']??'')!=='catering')continue;
+            $lines[]=mb_substr((string)($row['title']??'Event'),0,110,'UTF-8')
+                .' | event date: '.(string)($row['service_start_at']??'not recorded')
+                .' | status: '.(string)($row['status']??'')
+                .' | readiness: '.(string)($row['readiness_percent']??'not recorded');
+            $sources[]='Gelato catering operation '.$id;
+        }elseif($topic==='wholesale'){
+            $lines[]=mb_substr((string)($row['business_name']??''),0,110,'UTF-8')
+                .' | pipeline: '.(string)($row['pipeline_stage']??'')
+                .' | monthly volume: '.(string)($row['estimated_monthly_volume']??'not recorded');
+            $sources[]='Gelato wholesale lead '.$id;
+        }
     }
     return [$lines,$sources];
 }
@@ -241,6 +289,51 @@ function fmuk_evidence(PDO $pdo,array $user,string $question,bool $voice=false,b
             }elseif($topic==='sales'){
                 $result=fm_read_execute($pdo,$user,'recorded_sales',$question);
                 $lines[]=$result['answer'];$used=(array)($result['sources']??[]);
+            }elseif($topic==='crm'){
+                require_once __DIR__.'/customer-crm-core.php';
+                if(crm_ready($pdo)){
+                    $stmt=$pdo->prepare("SELECT public_id,display_name,status FROM crm_customers
+                        WHERE organization_id=? AND status='active' ORDER BY updated_at DESC LIMIT 20");
+                    $stmt->execute([$org]);
+                    [$lines,$used]=fmuk_render_business_rows($topic,$stmt->fetchAll(PDO::FETCH_ASSOC));
+                }
+            }elseif($topic==='equipment'){
+                require_once __DIR__.'/equipment-brain.php';
+                if(equipment_brain_table_ready($pdo,'equipment_assets')){
+                    $stmt=$pdo->prepare("SELECT public_id,name,operational_status,condition_status,location_name,next_service_on
+                        FROM equipment_assets WHERE organization_id=? AND archived_at IS NULL ORDER BY name LIMIT 25");
+                    $stmt->execute([$org]);
+                    [$lines,$used]=fmuk_render_business_rows($topic,$stmt->fetchAll(PDO::FETCH_ASSOC));
+                }
+            }elseif($topic==='purchasing'){
+                require_once __DIR__.'/purchasing-core.php';
+                if(purchasing_ready($pdo)){
+                    $stmt=$pdo->prepare("SELECT po.public_id,po.order_number,po.status,po.expected_delivery_date,
+                        po.total_amount,v.name vendor_name FROM purchase_orders po JOIN vendors v
+                        ON v.id=po.vendor_id AND v.organization_id=po.organization_id
+                        WHERE po.organization_id=? AND po.archived_at IS NULL
+                        ORDER BY po.created_at DESC LIMIT 20");
+                    $stmt->execute([$org]);
+                    [$lines,$used]=fmuk_render_business_rows($topic,$stmt->fetchAll(PDO::FETCH_ASSOC));
+                }
+            }elseif($topic==='catering'){
+                require_once __DIR__.'/restaurant-brain.php';
+                if(restaurant_brain_table_ready($pdo,'restaurant_operations')){
+                    $stmt=$pdo->prepare("SELECT public_id,source_type,title,service_start_at,status,readiness_percent
+                        FROM restaurant_operations WHERE organization_id=? AND archived_at IS NULL
+                        AND source_type='catering' AND status<>'cancelled' ORDER BY service_start_at,id LIMIT 20");
+                    $stmt->execute([$org]);
+                    [$lines,$used]=fmuk_render_business_rows($topic,$stmt->fetchAll(PDO::FETCH_ASSOC));
+                    }
+            }elseif($topic==='wholesale'){
+                require_once __DIR__.'/restaurant-brain.php';
+                if(restaurant_brain_table_ready($pdo,'wholesale_leads')){
+                    $stmt=$pdo->prepare("SELECT public_id,business_name,pipeline_stage,estimated_monthly_volume
+                        FROM wholesale_leads WHERE organization_id=? AND archived_at IS NULL
+                        ORDER BY updated_at DESC LIMIT 20");
+                    $stmt->execute([$org]);
+                    [$lines,$used]=fmuk_render_business_rows($topic,$stmt->fetchAll(PDO::FETCH_ASSOC));
+                    }
             }
             $served[]=$topic;
             $sections[]=$topic.': '.($lines?implode("\n",array_slice($lines,0,26)):'No matching recorded data was available. Do not assume zero or absence of activity.');
@@ -274,7 +367,7 @@ function fmuk_answer(PDO $pdo,array $user,string $question,bool $voice=false,boo
         $detail=trim(implode("\n",$sections));
         $answer="Here is what Gelato currently has recorded for your question:\n".$detail;
         if($detail==='')
-            $answer='I could not match this request to an authorized read-only information source. Please specify the menu item, employee, shift, recipe, inventory item, task or sales period.';
+            $answer='I could not match this request to an authorized read-only information source. Please specify the relevant item, person, department or date.';
         if(str_contains((string)$evidence['context'],'menu:'))
             $answer.="\nAllergen and ingredient details require verification against current recipes, supplier labels and cross-contact conditions.";
     }

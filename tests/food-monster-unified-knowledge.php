@@ -24,6 +24,13 @@ fmuk_assert(in_array('employees',fmuk_topics('Who are the employees?'),true),'em
 fmuk_assert(in_array('inventory',fmuk_topics('What inventory is low on stock?'),true),'inventory intent');
 fmuk_assert(in_array('tasks',fmuk_topics('Show my tasks.'),true),'task intent');
 fmuk_assert(in_array('sales',fmuk_topics('What are net sales?'),true),'sales intent');
+foreach([
+    'crm'=>'Show our CRM customers',
+    'equipment'=>'What equipment needs maintenance?',
+    'purchasing'=>'Show pending purchase orders',
+    'catering'=>'Which catering events are scheduled?',
+    'wholesale'=>'Show wholesale distributors',
+] as $topic=>$question)fmuk_assert(in_array($topic,fmuk_topics($question),true),$topic.' domain intent');
 fmuk_assert(fmuk_topics('Create a recipe')===[],'writes excluded from read broker');
 fmuk_assert(fmuk_topics('Approve the employee shift')===[],'approvals excluded');
 fmuk_assert(count(fmuk_topics('Show employees schedules, inventory, tasks and sales'))===3,'retrieval bounded');
@@ -46,6 +53,40 @@ fmuk_assert(!fmuk_allowed($employee,'employees',false,false),'employee cannot re
 fmuk_assert(!fmuk_allowed($outsider,'menu',false,false),'no menu access without permission');
 fmuk_assert(!in_array('staff roster',fmuk_capabilities($employee,false,false),true),'capabilities filter employee roster');
 fmuk_assert(!in_array('recorded sales',fmuk_capabilities($owner,true,false),true),'unknown voice capabilities are bounded');
+$businessPerms=[
+    'crm'=>['crm.view'],
+    'equipment'=>['equipment.view','agent.equipment_skills'],
+    'purchasing'=>['purchasing.view','purchasing.agent'],
+    'catering'=>['catering.view','catering.agent'],
+    'wholesale'=>['wholesale.view','wholesale.agent'],
+];
+foreach($businessPerms as $topic=>$permissions){
+    $businessUser=['id'=>44,'organization_id'=>7,'permissions'=>$permissions];
+    fmuk_assert(fmuk_allowed($businessUser,$topic,false,false),$topic.' proper grants authorize');
+    fmuk_assert(fmuk_allowed($businessUser,$topic,true,true),$topic.' verified voice authorizes');
+    fmuk_assert(!fmuk_allowed($businessUser,$topic,true,false),$topic.' unverified voice denied');
+    fmuk_assert(!fmuk_allowed($outsider,$topic,false,false),$topic.' outsider denied');
+    if(count($permissions)>1){
+        $partial=$businessUser;$partial['permissions']=[$permissions[0]];
+        fmuk_assert(!fmuk_allowed($partial,$topic,false,false),$topic.' partial grant denied');
+    }
+}
+$domainExamples=[
+    'crm'=>[['public_id'=>'customer-1','display_name'=>'Guest Alpha','status'=>'active','email'=>'PRIVATE_CRM_EMAIL','phone'=>'PRIVATE_CRM_PHONE','notes'=>'PRIVATE_CRM_NOTES']],
+    'equipment'=>[['public_id'=>'asset-1','name'=>'Deck Oven','operational_status'=>'active','condition_status'=>'good','location_name'=>'Kitchen','next_service_on'=>'2026-11-01','serial_number'=>'PRIVATE_SERIAL']],
+    'purchasing'=>[['public_id'=>'po-1','order_number'=>'PO-113','vendor_name'=>'Produce Supplier','status'=>'submitted','total_amount'=>'125.00','expected_delivery_date'=>'2026-11-01','account_number'=>'PRIVATE_VENDOR_ACCOUNT']],
+    'catering'=>[['public_id'=>'event-1','source_type'=>'catering','title'=>'Private Event','service_start_at'=>'2026-11-03','status'=>'planning','readiness_percent'=>42,'contact_name'=>'PRIVATE_CATERING_CONTACT']],
+    'wholesale'=>[['public_id'=>'lead-1','business_name'=>'Partner Alpha','pipeline_stage'=>'quoted','estimated_monthly_volume'=>'200 lbs','email'=>'PRIVATE_WHOLESALE_EMAIL','notes'=>'PRIVATE_WHOLESALE_NOTES']],
+];
+foreach($domainExamples as $topic=>$rows){
+    [$rendered,$provenance]=fmuk_render_business_rows($topic,$rows);
+    fmuk_assert(count($rendered)===1&&count($provenance)===1,$topic.' evidence and source');
+    fmuk_assert(str_contains($provenance[0],$rows[0]['public_id']),$topic.' evidence provenance matches ID');
+    fmuk_assert(!str_contains(implode('|',$rendered).'|'.implode('|',$provenance),'PRIVATE_'),$topic.' sensitive columns excluded');
+}
+[$notCatering,$notCateringSources]=fmuk_render_business_rows('catering',[
+    ['public_id'=>'unrelated','source_type'=>'internal','title'=>'Confidential operation']]);
+fmuk_assert($notCatering===[]&&$notCateringSources===[],'catering excludes unrelated operations');
 $items=[['id'=>21,'name'=>'Margherita','ingredients'=>['Tomato','Mozzarella'],
     'prices'=>[['label'=>'12 inch','amount'=>17.5,'currency'=>'USD']]]];
 [$lines,$sources]=fmuk_render_menu($items);
@@ -73,6 +114,16 @@ fmuk_assert(!str_contains($broker,'operations_task_list(') || str_contains($brok
     'task reads avoid side-effecting operations task list');
 fmuk_assert(str_contains($broker,'restaurant_task_assignments a')&&str_contains($broker,'a.user_id=?'),
     'self-task lookups retain explicit assignment scope');
+foreach(['FROM crm_customers','FROM equipment_assets','FROM purchase_orders po',
+    'FROM restaurant_operations','FROM wholesale_leads'] as $table)
+    fmuk_assert(str_contains($broker,$table),$table.' live database path');
+fmuk_assert(str_contains($broker,'v.organization_id=po.organization_id'),'purchasing vendor joins preserve tenant isolation');
+fmuk_assert(!str_contains($broker,'SELECT * FROM crm_customers')&&!str_contains($broker,'crm_search('),
+    'CRM evidence only selects displayed columns');
+fmuk_assert(!str_contains($broker,'restaurant_brain_wholesale_search('),
+    'wholesale evidence only selects displayed columns');
+fmuk_assert(!str_contains($broker,'catering_operation_list('),
+    'catering evidence excludes unrelated contact columns');
 fmuk_assert(str_contains($route,'api/food-monster-unified-knowledge.php?threadId='),'router chooses unified read');
 fmuk_assert(str_contains($api,"\$_GET['threadId']"),'existing browser route carries server-issued thread reference');
 echo 'FM-UK read broker authorization and evidence: PASS ('.$checks.' assertions)' . "\n";
