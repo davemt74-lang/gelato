@@ -294,6 +294,10 @@ try{
                     app_json_response(['ok'=>true,
                         'route'=>'api/food-monster-unified-knowledge.php?threadId='.rawurlencode($roomThread),
                         'domain'=>'food_monster_unified_knowledge','nodeMode'=>'read_only']);
+                if(fmuk_prefers_broker($message,$user)&&$knowledgeIntent!=='allergen')
+                    app_json_response(['ok'=>true,
+                        'route'=>'api/food-monster-unified-knowledge.php?threadId='.rawurlencode($roomThread),
+                        'domain'=>'food_monster_unified_knowledge','nodeMode'=>'read_only']);
                 if($knowledgeIntent!==null)app_json_response(['ok'=>true,
                     'route'=>'api/food-monster-knowledge.php?threadId='.rawurlencode($roomThread),
                     'domain'=>'food_monster_grounded_knowledge','nodeMode'=>'read_only']);
@@ -315,13 +319,13 @@ try{
             app_json_response(['ok'=>true,
                 'route'=>'api/food-monster-unified-knowledge.php?threadId='.rawurlencode($roomThread),
                 'domain'=>'food_monster_unified_knowledge','nodeMode'=>'read_only']);
-        if($knowledgeIntent!==null)app_json_response(['ok'=>true,
-            'route'=>'api/food-monster-knowledge.php?threadId='.rawurlencode($roomThread),
-            'domain'=>'food_monster_grounded_knowledge','nodeMode'=>'read_only']);
-        if(fmuk_prefers_broker($message,$user))
+        if(fmuk_prefers_broker($message,$user)&&$knowledgeIntent!=='allergen')
             app_json_response(['ok'=>true,
                 'route'=>'api/food-monster-unified-knowledge.php?threadId='.rawurlencode($roomThread),
                 'domain'=>'food_monster_unified_knowledge','nodeMode'=>'read_only']);
+        if($knowledgeIntent!==null)app_json_response(['ok'=>true,
+            'route'=>'api/food-monster-knowledge.php?threadId='.rawurlencode($roomThread),
+            'domain'=>'food_monster_grounded_knowledge','nodeMode'=>'read_only']);
         $text=mb_strtolower(preg_replace('/^hey\s+gelato[,\s]*/iu','',$message)??$message,'UTF-8');
         // Owner-authenticated high-impact staging uses a deterministic grammar,
         // never a model-selected endpoint. Only an owner may approve; an approval
