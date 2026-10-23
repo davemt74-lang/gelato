@@ -34,6 +34,7 @@ function fmuk_topics(string $question): array
         'attendance'=>'/\b(?:attendance|time ?clock|clocked in|clocked out|on break|break status|labor hours)\b/u',
         'pos'=>'/\b(?:pos|open checks?|open tabs?|table checks?|table service|unpaid checks?|dine.?in checks?)\b/u',
         'reservations'=>'/\b(?:reservations?|waitlist|guest parties?|upcoming bookings?|host stand|seating)\b/u',
+        'training'=>'/\b(?:training (?:assignments?|progress|status|records?|due|overdue|courses?)|(?:my|our|employee|staff|team) training|certifications?|certificates?|learning progress|training requirements?)\b/u',
     ];
     $topics=[];
     foreach($patterns as $name=>$pattern)if(preg_match($pattern,$text))$topics[]=$name;
@@ -61,7 +62,7 @@ function fmuk_prefers_broker(string $question,array $user): bool
     if(!$topics&&!fmuk_capability_question($question))return false;
     return fmuk_capability_question($question)||fmuk_menu_overview_question($question)
         ||fmuk_roster_question($question)||count($topics)>1||in_array('knowledge',$topics,true)
-        ||in_array('pos',$topics,true)||in_array('reservations',$topics,true)
+        ||in_array('pos',$topics,true)||in_array('reservations',$topics,true)||in_array('training',$topics,true)
         ||(in_array('schedule',$topics,true)&&!app_has_permission('schedule.agent',$user));
 }
 
@@ -105,6 +106,8 @@ function fmuk_allowed(array $user,string $topic,bool $voice,bool $ownerVoiceVeri
         'reservations'=>app_has_permission('host.view',$user)
             &&(app_has_permission('table_service.view',$user)||app_has_permission('host.use',$user)
                 ||app_has_permission('host.manage',$user)),
+        'training'=>app_has_permission('training.self_view',$user)
+            ||app_has_permission('training.view_all_progress',$user),
         default=>false,
     };
 }
@@ -121,7 +124,8 @@ function fmuk_capabilities(array $user,bool $voice,bool $ownerVoiceVerified): ar
         'kds'=>'live kitchen tickets','online_orders'=>'pickup and online order status',
         'attendance'=>'time clock and attendance',
         'pos'=>'open POS checks and table service',
-        'reservations'=>'guest reservations and waitlist'];
+        'reservations'=>'guest reservations and waitlist',
+        'training'=>'employee training assignments and certifications'];
     $result=[];
     foreach($names as $topic=>$description)
         if(fmuk_allowed($user,$topic,$voice,$ownerVoiceVerified))$result[]=$description;
@@ -326,6 +330,32 @@ function fmuk_render_live_rows(string $topic,array $rows): array
     return [$lines,$sources];
 }
 
+/** Read-only display projection of training progress; never show private quiz answers. */
+function fmuk_render_training_rows(string $type,array $rows): array
+{
+    $lines=[];$sources=[];
+    foreach(array_slice($rows,0,20) as $row){
+        $id=(int)($row['id']??0);
+        if($id<1)continue;
+        $person=mb_substr((string)($row['display_name']??'Employee'),0,110,'UTF-8');
+        if($type==='assignment'){
+            $lines[]=$person.' | training: '.mb_substr((string)($row['assignment_type']??''),0,80,'UTF-8')
+                .' | reference: '.mb_substr((string)($row['assignment_reference_id']??''),0,120,'UTF-8')
+                .' | status: '.(string)($row['status']??'')
+                .' | due: '.(string)($row['due_at']??'not set')
+                .' | completed: '.(string)($row['completed_at']??'not yet');
+            $sources[]='Gelato training assignment #'.$id;
+        }elseif($type==='certification'){
+            $lines[]=$person.' | certification: '.mb_substr((string)($row['certification_type']??''),0,110,'UTF-8')
+                .' | status: '.(string)($row['status']??'')
+                .' | issued: '.(string)($row['issued_at']??'not recorded')
+                .' | expires: '.(string)($row['expires_at']??'not set');
+            $sources[]='Gelato certification #'.$id;
+        }
+    }
+    return [$lines,$sources];
+}
+
 /** Extract the most distinctive search word without allowing SQL syntax. */
 function fmuk_knowledge_search_term(string $question): string
 {
@@ -506,6 +536,35 @@ function fmuk_evidence(PDO $pdo,array $user,string $question,bool $voice=false,b
                     $sql.=" ORDER BY t.clocked_in_at DESC,t.id DESC LIMIT 20";
                     $stmt=$pdo->prepare($sql);$stmt->execute($self?[$org,$uid]:[$org]);
                     [$lines,$used]=fmuk_render_live_rows($topic,$stmt->fetchAll(PDO::FETCH_ASSOC));
+                }
+            }elseif($topic==='training'){
+                require_once __DIR__.'/restaurant-brain.php';
+                $all=app_has_permission('training.view_all_progress',$user);
+                if(restaurant_brain_table_ready($pdo,'training_assignments')){
+                    $selfFilter=$all?'':' AND a.user_id=?';
+                    $sql="SELECT a.id,a.assignment_type,a.assignment_reference_id,a.status,
+                        a.due_at,a.completed_at,u.display_name FROM training_assignments a
+                        JOIN users u ON u.id=a.user_id AND u.status='active' AND u.archived_at IS NULL
+                        JOIN organization_memberships om ON om.organization_id=a.organization_id
+                            AND om.user_id=a.user_id AND om.status='active'
+                        WHERE a.organization_id=?".$selfFilter."
+                        ORDER BY a.completed_at IS NULL DESC,a.due_at IS NULL,a.due_at,a.id DESC LIMIT 20";
+                    $stmt=$pdo->prepare($sql);$stmt->execute($all?[$org]:[$org,$uid]);
+                    [$items,$evidence]=fmuk_render_training_rows('assignment',$stmt->fetchAll(PDO::FETCH_ASSOC));
+                    $lines=array_merge($lines,$items);$used=array_merge($used,$evidence);
+                }
+                if(restaurant_brain_table_ready($pdo,'certifications')){
+                    $selfFilter=$all?'':' AND c.user_id=?';
+                    $sql="SELECT c.id,c.certification_type,c.status,c.issued_at,c.expires_at,u.display_name
+                        FROM certifications c JOIN users u ON u.id=c.user_id
+                            AND u.status='active' AND u.archived_at IS NULL
+                        JOIN organization_memberships om ON om.organization_id=c.organization_id
+                            AND om.user_id=c.user_id AND om.status='active'
+                        WHERE c.organization_id=?".$selfFilter."
+                        ORDER BY c.expires_at IS NULL,c.expires_at,c.id DESC LIMIT 20";
+                    $stmt=$pdo->prepare($sql);$stmt->execute($all?[$org]:[$org,$uid]);
+                    [$items,$evidence]=fmuk_render_training_rows('certification',$stmt->fetchAll(PDO::FETCH_ASSOC));
+                    $lines=array_merge($lines,$items);$used=array_merge($used,$evidence);
                 }
             }elseif($topic==='knowledge'){
                 require_once __DIR__.'/restaurant-brain.php';
