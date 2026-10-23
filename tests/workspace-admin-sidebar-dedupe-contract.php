@@ -40,7 +40,7 @@ sidebarCheck(str_contains($sync, "'.nav-btn:not([data-nav])'"), 'late-added lega
 sidebarCheck(str_contains($sync, 'new MutationObserver('), 'late module injections not reconciled');
 sidebarCheck(str_contains($accordion, "{id: 'vision', label: 'Vision & AR Glasses'}"), 'Vision sidebar category absent');
 sidebarCheck(str_contains($theme, 'gelato-canonical-nav-link') && str_contains($theme, 'opacity:1!important'), 'canonical links remain faded or inaccessible');
-sidebarCheck(str_contains($workspace, 'js/workspace-shell-sync.js?v=20261014-fmg6'), 'new sidebar script cache version missing');
+sidebarCheck(str_contains($workspace, 'js/workspace-shell-sync.js?v=20261023-manual-chat1'), 'new sidebar script cache version missing');
 sidebarCheck(str_contains($workspace, 'css/admin-tech-theme.css?v=20261013-nav1'), 'new admin theme cache version missing');
 sidebarCheck(str_contains($loader, 'admin-shell-consolidation.js?v=20261013-nav1'), 'new accordion cache version missing');
 echo "workspace-admin-sidebar-dedupe=ok\n";

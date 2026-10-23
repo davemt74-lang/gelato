@@ -554,7 +554,7 @@ function app_boot_admin_shell_injection(): void
 
     ob_start(static function (string $html): string {
         if ($html === '' || stripos($html, '</body>') === false) return $html;
-        $asset = 'js/universal-admin-page-shell.js?v=20261012-ui1';
+        $asset = 'js/universal-admin-page-shell.js?v=20261023-manual-chat1';
         if (str_contains($html, 'js/universal-admin-page-shell.js')) {
             return (string)preg_replace(
                 '#js/universal-admin-page-shell\.js(?:\?v=[^"\']*)?#',

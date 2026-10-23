@@ -187,14 +187,11 @@
   function renderDrawerError(error) {state.drawerPending=false;state.drawerRefreshQueued=false;const root=document.querySelector('.gar-messages');if(!root)return;root.innerHTML=`<div class="gar-empty">${esc(error?.message||'Gelato could not load this conversation.')}</div>`;}
   async function submit() {const input=document.querySelector('.gda-input'),text=String(input?.value||'').trim();if(!text||!window.GelatoGlobalAgent)return;input.value='';setStatus('Gelato is checking the restaurant context…');try{await window.GelatoGlobalAgent.send(text,false);}catch(error){setStatus(error.message||'Gelato could not complete that request.');}}
   function routeFooterToAgentView() {
-    // The training workspace owns its inline composer and quiz flow.
-    // Never cover its answers with the global Agent modal.
-    if(isWorkspacePage()&&document.querySelector('#workspaceSwitch [data-workspace-mode="training"].active')){
+    // Sending and speaking remain independent of the response view. The
+    // participant sees Food Monster's speech bubble until they explicitly
+    // open Agent Chat; an Agent response must not steal page focus.
+    if(isWorkspacePage()&&document.querySelector('#workspaceSwitch [data-workspace-mode="training"].active'))
       document.getElementById('chatInput')?.focus();
-      return;
-    }
-    if(isWorkspacePage())open();
-    else openDrawer({pending:true});
   }
   function hookFooter() {
     removeLegacyCanvasButton();ensureDrawerToggle();
@@ -209,8 +206,8 @@
     // create a modal over an in-progress training quiz.
     if(state.open){setStatus('');refreshThreadsAndMessages().catch(error=>setStatus(error.message));}
     return;
-  }state.drawerPending=false;if(!state.drawerOpen)openDrawer();refreshDrawer().catch(error=>renderDrawerError(error));});
-  window.addEventListener('gelato-agent-error',(event)=>{const message=event.detail?.message||'Gelato could not complete that request.';if(isWorkspacePage()){setStatus(message);return;}state.drawerPending=false;if(!state.drawerOpen)openDrawer({skipRefresh:true});renderDrawerError(new Error(message));});
+  }state.drawerPending=false;if(state.drawerOpen)refreshDrawer().catch(error=>renderDrawerError(error));});
+  window.addEventListener('gelato-agent-error',(event)=>{const message=event.detail?.message||'Gelato could not complete that request.';if(isWorkspacePage()){setStatus(message);return;}state.drawerPending=false;if(state.drawerOpen)renderDrawerError(new Error(message));});
   window.addEventListener('gelato-agent-context-change',(event)=>{if(state.drawerOpen&&event.detail){const context=document.querySelector('.gar-context');if(context)context.textContent=window.GelatoAgentPageContext?.description?.(event.detail)||pageContext();}});
 
   window.GelatoDynamicAgentCanvas={open,close,refresh,openDrawer,closeDrawer,get isOpen(){return state.open;},get isDrawerOpen(){return state.drawerOpen;}};

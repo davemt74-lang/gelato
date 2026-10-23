@@ -16,20 +16,21 @@ $llm=$read('api/food-monster-llm.php');
 $suggestions=$read('js/food-monster-suggestions.js');
 $version='20261014-fmg6';
 $agentVersion='20261016-fmg11e';
-$mascotVersion='20261015-fmg8a';
-// The stage can deploy a newer Agent and mascot without requiring all global loaders to bump simultaneously.
+$manualChatVersion='20261023-manual-chat1';
+// Stage, workspace and global admin loaders must all fetch the current mascot/chat UI.
 $stageAgentVersion='20261018-fmg14b';
-$stageMascotVersion='20261017-fmg12e';
-$stageCssVersion='20261015-fmg8reset';
+$stageMascotVersion=$manualChatVersion;
+$stageCssVersion=$manualChatVersion;
 foreach([
- 'js/global-add-canvas.js'=>$global,'js/universal-admin-page-shell.js'=>$universal,
- 'js/workspace-shell-sync.js'=>$workspace,'js/food-monster.js'=>$actor
-] as $path=>$body)check_g6(str_contains($body,'v='.$mascotVersion),'FM-G7A release stamp is missing in '.$path);
+ 'js/global-add-canvas.js'=>$global,'js/food-monster.js'=>$actor
+] as $path=>$body)check_g6(str_contains($body,'v='.$manualChatVersion),'Current Food Monster release stamp is missing in '.$path);
+foreach(['js/universal-admin-page-shell.js'=>$universal,'js/workspace-shell-sync.js'=>$workspace] as $path=>$body)
+ check_g6(str_contains($body,'v='.$manualChatVersion),'Current shared loader release stamp is missing in '.$path);
 check_g6(str_contains($global,'js/global-agent.js?v='.$agentVersion),'Global Agent fallback cache must update');
 check_g6(str_contains($global,'js/agent-next-moves.js?v='.$version),'Shared Next Moves dismissal cache must update');
-check_g6(str_contains($global,'js/food-monster.js?v='.$mascotVersion),'Mascot cache must update on global pages');
-check_g6(str_contains($universal,'js/global-add-canvas.js?v='.$mascotVersion),'Universal admin shell must request new loader');
-check_g6(str_contains($workspace,'js/global-add-canvas.js?v='.$mascotVersion),'Workspace shell must request new loader');
+check_g6(str_contains($global,'js/food-monster.js?v='.$manualChatVersion),'Mascot cache must update on global pages');
+check_g6(str_contains($universal,'js/global-add-canvas.js?v='.$manualChatVersion),'Universal admin shell must request new loader');
+check_g6(str_contains($workspace,'js/global-add-canvas.js?v='.$manualChatVersion),'Workspace shell must request new loader');
 check_g6(str_contains($page,'css/food-monster.css?v='.$stageCssVersion),'Stage CSS must be fresh');
 check_g6(str_contains($page,'js/global-agent.js?v='.$stageAgentVersion),'Stage global Agent must be fresh');
 check_g6(str_contains($page,'js/food-monster.js?v='.$stageMascotVersion),'Stage mascot must be fresh');

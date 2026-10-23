@@ -43,10 +43,10 @@ contract(str_contains($dynamic,"file === 'workspace.php'"),'main Workplace route
 contract(str_contains($dynamic,"drawer.id='gelato-agent-response-drawer'"),'non-Workplace Agent response drawer is missing',26);
 contract(str_contains($dynamic,"button.id='gaResponseToggle'"),'chat bar does not expose a response drawer toggle',27);
 contract(str_contains($dynamic,'function routeFooterToAgentView()'),'footer Agent routing is not page-aware',28);
-contract(str_contains($dynamic,'openDrawer({pending:true})'),'non-Workplace footer messages do not open the response drawer',29);
+contract(!str_contains($dynamic,'openDrawer({pending:true})'),'footer messages must never auto-open Agent Chat',29);
 contract(str_contains($dynamic,'aria-live'),'response drawer is not announced accessibly',30);
 contract(str_contains($dynamic,'window.addEventListener(\'resize\',syncDrawerPosition)'),'response drawer does not stay anchored to the chat bar',31);
-contract(str_contains($globalAdd,'20260915-drawer1'),'shared loader does not bust the dynamic Agent drawer cache',32);
+contract(str_contains($globalAdd,'20261023-manual-chat1'),'shared loader does not bust the manual Agent drawer cache',32);
 contract(str_contains($dynamic,'drawerRefreshQueued'),'response drawer does not queue a refresh that arrives during an in-flight load',33);
 contract(str_contains($dynamic,"window.addEventListener('gelato-agent-error'"),'response drawer does not surface Agent request failures',34);
 contract(str_contains($dynamic,"'\"':'&quot;'"),'Agent response escaping must encode double quotes correctly',35);
