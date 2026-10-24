@@ -182,7 +182,7 @@ function menu_training_search_items(PDO $pdo,int $organizationId,string $query,i
         $clauses[]='(LOWER(i.name) LIKE ? OR LOWER(COALESCE(i.description,\'\')) LIKE ? OR LOWER(COALESCE(i.preparation_notes,\'\')) LIKE ? OR LOWER(s.name) LIKE ? OR LOWER(COALESCE(mi.display_name,ing.canonical_name,\'\')) LIKE ?)';
         array_push($args,$like,$like,$like,$like,$like);
     }
-    $q=$pdo->prepare("SELECT DISTINCT i.id
+    $q=$pdo->prepare("SELECT DISTINCT i.id,i.name
         FROM menu_items i
         JOIN menu_sections s ON s.id=i.section_id AND s.organization_id=i.organization_id
         LEFT JOIN menu_item_ingredients mi ON mi.menu_item_id=i.id
