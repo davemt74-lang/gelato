@@ -6,6 +6,7 @@ require_once __DIR__.'/food-monster-b8d4-scheduling.php';
 require_once __DIR__.'/food-monster-b8d5-menu-recipes.php';
 require_once __DIR__.'/food-monster-b8d6-training.php';
 require_once __DIR__.'/food-monster-b8d7-vision.php';
+require_once __DIR__.'/food-monster-b8d8-vision-actions.php';
 
 /**
  * FM-B8D3: model-selected tools, executed exclusively by the signed-in
@@ -54,7 +55,7 @@ function fm8d3_catalogue(array $principal,array $context=[]):array
                 fm8d3_hours_read(app_pdo(),$actor,$args),
         ];
     }
-    return array_merge($base,fm8d4_schedule_catalogue($principal),fm8d5_catalogue($principal),fm8d6_training_catalogue($principal,$context),fm8d7_vision_catalogue($principal));
+    return array_merge($base,fm8d4_schedule_catalogue($principal),fm8d5_catalogue($principal),fm8d6_training_catalogue($principal,$context),fm8d7_vision_catalogue($principal),fm8d8_vision_catalogue($principal,$context));
 }
 function fm8d3_provider_tools(string $provider,array $catalogue):array
 {
@@ -138,7 +139,7 @@ function fm8d3_turn(
     $payload['tools']=fm8d3_provider_tools($provider,$catalogue);
     $payload['tool_choice']=$provider==='openai'?'auto':['type'=>'auto'];
     $today=(new DateTimeImmutable('now',new DateTimeZone('America/Phoenix')))->format('Y-m-d l');
-    $instruction=" Today at the restaurant in America/Phoenix is ".$today.". Interpret relative dates such as Friday against that date; when time is missing, ask rather than inventing it. Select an appropriate available Gelato skill for a user’s account, hours, staff schedule, roster, availability, shift creation, menu item ingredient, price, or in-house recipe request. For a named menu item first consult get_menu_item rather than claiming menu data is missing. For generic cooking science questions such as why honey helps pizza dough, answer conversationally without requiring private recipe access. Shift creation selects propose_staff_shift and requires a separate explicit human Confirm before any database change. Do not say live data is unavailable without attempting the authorized tool. Use model-selected get_my_training_progress or run_training_step for the employee's saved training and training dialogue; do not require exact command phrases. Never invent training steps; use recorded procedures only. Do not invent records or change business data.";
+    $instruction=" Today at the restaurant in America/Phoenix is ".$today.". Interpret relative dates such as Friday against that date; when time is missing, ask rather than inventing it. Select an appropriate available Gelato skill for a user’s account, hours, staff schedule, roster, availability, shift creation, menu item ingredient, price, or in-house recipe request. For a named menu item first consult get_menu_item rather than claiming menu data is missing. For generic cooking science questions such as why honey helps pizza dough, answer conversationally without requiring private recipe access. Shift creation selects propose_staff_shift and requires a separate explicit human Confirm before any database change. Do not say live data is unavailable without attempting the authorized tool. Use model-selected get_my_training_progress or run_training_step for the employee's saved training and training dialogue; do not require exact command phrases. Never invent training steps; use recorded procedures only. For questions on Vision Lab, its camera device health, recorded observations, models, mission statuses, and datasets, select the authorized Vision Lab read skill and cite recorded history, never assume live perception. For explicit authorized requests to create a Vision Lab collection mission or an empty DRAFT dataset version, select the corresponding routine creation tool with a clear name/title; do not infer creation from a question. Never activate vision models, modify device configuration, approve samples, or freeze datasets through these routine skills. Do not invent records.";
     if($provider==='openai')$payload['instructions'].=$instruction;
     else $payload['system'].=$instruction;
     $response=fm8d3_provider_request($provider,$key,$payload,$transport);
