@@ -111,11 +111,11 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq mariadb-client
-          mariadb -h 127.0.0.1 -uroot -proot gelato_ci < database/install.sql
-          mariadb -h 127.0.0.1 -uroot -proot gelato_ci < database/20260912_floor_planner.sql
-          mariadb -h 127.0.0.1 -uroot -proot gelato_ci < database/20260912_equipment_catalog_brain.sql
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_ci < database/install.sql
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_ci < database/20260912_floor_planner.sql
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_ci < database/20260912_equipment_catalog_brain.sql
       - name: Verify persisted equipment schema
         run: |
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_ci' AND table_name IN ('floor_plans','equipment_assets','equipment_service_contacts','equipment_asset_service_contacts','equipment_service_events','agent_knowledge_records');")" = "6"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('floorplans.view','floorplans.edit','equipment.view','equipment.edit','equipment.service','equipment.contacts','agent.equipment_skills');")" = "7"
-          mariadb -N -h 127.0.0.1 -uroot -proot gelato_ci -e "SHOW INDEX FROM agent_knowledge_records WHERE Key_name='ft_agent_knowledge_title_content';" | grep -q ft_agent_knowledge_title_content
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_ci' AND table_name IN ('floor_plans','equipment_assets','equipment_service_contacts','equipment_asset_service_contacts','equipment_service_events','agent_knowledge_records');")" = "6"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('floorplans.view','floorplans.edit','equipment.view','equipment.edit','equipment.service','equipment.contacts','agent.equipment_skills');")" = "7"
+          mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_ci -e "SHOW INDEX FROM agent_knowledge_records WHERE Key_name='ft_agent_knowledge_title_content';" | grep -q ft_agent_knowledge_title_content

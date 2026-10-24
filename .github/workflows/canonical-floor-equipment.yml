@@ -121,16 +121,16 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq mariadb-client
-          mariadb -h 127.0.0.1 -uroot -proot gelato_ci < database/install.sql
-          mariadb -h 127.0.0.1 -uroot -proot gelato_ci < database/20260912_floor_planner.sql
-          mariadb -h 127.0.0.1 -uroot -proot gelato_ci < database/20260912_equipment_catalog_brain.sql
-          mariadb -h 127.0.0.1 -uroot -proot gelato_ci < database/20260912_canonical_floor_equipment.sql
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_ci < database/install.sql
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_ci < database/20260912_floor_planner.sql
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_ci < database/20260912_equipment_catalog_brain.sql
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_ci < database/20260912_canonical_floor_equipment.sql
 
       - name: Verify placement schema and database guard
         run: |
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_ci' AND table_name='equipment_assets' AND column_name IN ('floor_plan_x_ft','floor_plan_y_ft','floor_plan_rotation_deg','floor_plan_z_index','floor_plan_locked','floor_plan_placed_at');")" = "6"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_ci -e "SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_schema='gelato_ci' AND trigger_name IN ('trg_equipment_assets_canonical_insert','trg_equipment_assets_canonical_update','trg_floor_plans_canonical_archive');")" = "3"
-          mariadb -N -h 127.0.0.1 -uroot -proot gelato_ci > /tmp/canonical-guard.txt <<'SQL'
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_ci' AND table_name='equipment_assets' AND column_name IN ('floor_plan_x_ft','floor_plan_y_ft','floor_plan_rotation_deg','floor_plan_z_index','floor_plan_locked','floor_plan_placed_at');")" = "6"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_ci -e "SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_schema='gelato_ci' AND trigger_name IN ('trg_equipment_assets_canonical_insert','trg_equipment_assets_canonical_update','trg_floor_plans_canonical_archive');")" = "3"
+          mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_ci > /tmp/canonical-guard.txt <<'SQL'
           SET FOREIGN_KEY_CHECKS=0;
           INSERT INTO floor_plans (organization_id, public_id, name, plan_json, width_ft, depth_ft, scale_px_per_ft)
           VALUES (999999, 'plan-ci', 'CI Plan', JSON_OBJECT(), 50, 34, 24);
@@ -155,16 +155,16 @@ jobs:
       - name: Verify boundary and archive protection
         run: |
           set +e
-          mariadb -h 127.0.0.1 -uroot -proot gelato_ci -e "SET @gelato_allow_floor_placement=1; UPDATE equipment_assets SET floor_plan_x_ft=49 WHERE public_id='ci-canonical-asset';" >/tmp/bounds.log 2>&1
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_ci -e "SET @gelato_allow_floor_placement=1; UPDATE equipment_assets SET floor_plan_x_ft=49 WHERE public_id='ci-canonical-asset';" >/tmp/bounds.log 2>&1
           bounds_status=$?
-          mariadb -h 127.0.0.1 -uroot -proot gelato_ci -e "UPDATE floor_plans SET archived_at=NOW(6) WHERE public_id='plan-ci';" >/tmp/archive.log 2>&1
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_ci -e "UPDATE floor_plans SET archived_at=NOW(6) WHERE public_id='plan-ci';" >/tmp/archive.log 2>&1
           archive_status=$?
           set -e
           test "$bounds_status" -ne 0
           grep -q "exceeds the floor-plan boundary" /tmp/bounds.log
           test "$archive_status" -ne 0
           grep -q "Move or unplace equipment" /tmp/archive.log
-          mariadb -h 127.0.0.1 -uroot -proot gelato_ci <<'SQL'
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_ci <<'SQL'
           SET FOREIGN_KEY_CHECKS=0;
           SET @gelato_allow_floor_placement=1;
           UPDATE equipment_assets

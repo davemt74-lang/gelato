@@ -70,7 +70,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq mariadb-client
-          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
           cat > config.php <<'PHP'
           <?php
           return [
@@ -91,10 +91,10 @@ jobs:
           PHP
       - name: Verify account schema
         run: |
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='crm_customers' AND column_name='user_id';")" = "1"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('customer.portal','online_ordering.use');")" = "2"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_schema='gelato_restaurant_ai_ci' AND trigger_name='roles_seed_customer_account_permissions';")" = "1"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20261002_customer_accounts_online_ordering_foundation';")" = "1"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='crm_customers' AND column_name='user_id';")" = "1"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('customer.portal','online_ordering.use');")" = "2"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_schema='gelato_restaurant_ai_ci' AND trigger_name='roles_seed_customer_account_permissions';")" = "1"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20261002_customer_accounts_online_ordering_foundation';")" = "1"
       - name: Customer account behavioral contract
         run: php tests/customer-account-contract.php
       - name: Customer CRM regression

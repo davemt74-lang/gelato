@@ -79,7 +79,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq mariadb-client
-          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
           cat > config.php <<'PHP'
           <?php
           return [
@@ -100,9 +100,9 @@ jobs:
           PHP
       - name: Verify dining visit schema
         run: |
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='service_check_contexts' AND column_name='visit_group_id';")" = "1"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',') FROM information_schema.statistics WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='service_check_contexts' AND index_name='idx_service_context_visit';")" = "organization_id,location_id,visit_group_id,status"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260922_dining_visit_lifecycle';")" = "1"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='service_check_contexts' AND column_name='visit_group_id';")" = "1"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',') FROM information_schema.statistics WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='service_check_contexts' AND index_name='idx_service_context_visit';")" = "organization_id,location_id,visit_group_id,status"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260922_dining_visit_lifecycle';")" = "1"
       - name: Upcoming reservation protection regression
         run: php tests/upcoming-reservation-protection-contract.php
       - name: Dining visit lifecycle behavioral contract

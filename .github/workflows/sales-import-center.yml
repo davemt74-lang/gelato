@@ -54,7 +54,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq mariadb-client
-          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
           cat > config.php <<'PHP'
           <?php
           return [
@@ -75,10 +75,10 @@ jobs:
           PHP
       - name: Verify schema and permissions
         run: |
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='sales_import_profiles';")" = "1"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='sales_import_batches' AND column_name='import_profile_id';")" = "1"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key='sales.import_profiles.manage';")" = "1"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260915_sales_import_center';")" = "1"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='sales_import_profiles';")" = "1"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='sales_import_batches' AND column_name='import_profile_id';")" = "1"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key='sales.import_profiles.manage';")" = "1"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260915_sales_import_center';")" = "1"
       - name: Sales Import Center behavioral contract
         run: php tests/sales-import-center-contract.php
       - name: Existing Sales + Demand regression

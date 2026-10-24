@@ -59,7 +59,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq mariadb-client
-          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
           cat > config.php <<'PHP'
           <?php
           return [
@@ -80,9 +80,9 @@ jobs:
           PHP
       - name: Verify lifecycle schema
         run: |
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('wholesale_planning_settings','wholesale_purchase_worksheets','wholesale_lifecycle','wholesale_lifecycle_events','wholesale_tastings');")" = "5"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='wholesale_purchase_worksheets' AND column_name='starter_order_public_id';")" = "1"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key IN ('20260928_wholesale_purchasing_lifecycle','20260928_zz_wholesale_purchasing_lifecycle_hardening');")" = "2"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('wholesale_planning_settings','wholesale_purchase_worksheets','wholesale_lifecycle','wholesale_lifecycle_events','wholesale_tastings');")" = "5"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='wholesale_purchase_worksheets' AND column_name='starter_order_public_id';")" = "1"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key IN ('20260928_wholesale_purchasing_lifecycle','20260928_zz_wholesale_purchasing_lifecycle_hardening');")" = "2"
       - name: Wholesale purchasing behavior
         run: php tests/wholesale-purchasing-lifecycle-contract.php
       - name: W1 commerce + acquisition regression

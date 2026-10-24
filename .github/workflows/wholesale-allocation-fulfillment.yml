@@ -56,7 +56,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq mariadb-client
-          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
           cat > config.php <<'PHP'
           <?php
           return [
@@ -77,9 +77,9 @@ jobs:
           PHP
       - name: Verify W3 schema
         run: |
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('wholesale_fulfillments','wholesale_fulfillment_items','wholesale_fulfillment_consumptions');")" = "3"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='wholesale_orders' AND column_name IN ('wholesale_account_location_id','requested_window_start','requested_window_end','promised_window_start','promised_window_end');")" = "5"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260929_wholesale_allocation_fulfillment';")" = "1"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('wholesale_fulfillments','wholesale_fulfillment_items','wholesale_fulfillment_consumptions');")" = "3"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='wholesale_orders' AND column_name IN ('wholesale_account_location_id','requested_window_start','requested_window_end','promised_window_start','promised_window_end');")" = "5"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260929_wholesale_allocation_fulfillment';")" = "1"
       - name: W3 allocation + fulfillment behavior
         run: php tests/wholesale-allocation-fulfillment-contract.php
       - name: W2 demand commitment regression

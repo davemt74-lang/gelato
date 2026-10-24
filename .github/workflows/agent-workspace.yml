@@ -203,7 +203,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq mariadb-client
-          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
           cat > config.php <<'PHP'
           <?php
           return [
@@ -219,9 +219,9 @@ jobs:
           PHP
       - name: Verify schema and permissions
         run: |
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('agent_conversations','agent_messages','restaurant_agent_actions');")" = "3"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('agent.workspace','agent.history_all');")" = "2"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260913_zzzzzz_agent_workspace';")" = "1"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('agent_conversations','agent_messages','restaurant_agent_actions');")" = "3"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('agent.workspace','agent.history_all');")" = "2"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260913_zzzzzz_agent_workspace';")" = "1"
       - name: Verify conversation isolation, routing and action receipts
         run: php tests/agent-workspace-contract.php
       - name: Inline Training Chat and Voice acceptance

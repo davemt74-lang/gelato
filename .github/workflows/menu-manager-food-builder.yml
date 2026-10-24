@@ -82,7 +82,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq mariadb-client
-          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
           cat > config.php <<'PHP'
           <?php
           return [
@@ -103,10 +103,10 @@ jobs:
           PHP
       - name: Verify Menu Manager schema
         run: |
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('menu_item_profiles','menu_item_location_availability','menu_modifier_groups','menu_modifier_options','menu_modifier_option_prices','pos_check_item_modifiers');")" = "6"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='pos_check_items' AND column_name='modifier_amount';")" = "1"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='menu_sections' AND column_name='updated_at';")" = "1"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('menu.view','menu.manage');")" = "2"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('menu_item_profiles','menu_item_location_availability','menu_modifier_groups','menu_modifier_options','menu_modifier_option_prices','pos_check_item_modifiers');")" = "6"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='pos_check_items' AND column_name='modifier_amount';")" = "1"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='menu_sections' AND column_name='updated_at';")" = "1"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('menu.view','menu.manage');")" = "2"
       - name: Menu Manager Food builder contract
         run: php tests/menu-manager-food-builder-contract.php
       - name: Global Add Canvas regression

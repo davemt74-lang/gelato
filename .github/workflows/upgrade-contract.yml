@@ -82,7 +82,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq mariadb-client
-          mariadb -h 127.0.0.1 -uroot -proot gelato_upgrade_ci < database/install.sql
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_upgrade_ci < database/install.sql
           cat > config.php <<'PHP'
           <?php
           return [
@@ -119,18 +119,18 @@ jobs:
       - name: Verify upgraded schema
         run: |
           expected=$(find database -maxdepth 1 -type f -regextype posix-extended -regex '.*/[0-9]{8}_.*\.sql' ! -iname '*_demo_*' ! -iname '*_sample_*' ! -iname '*_seed_*' | wc -l | tr -d ' ')
-          tracked=$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_upgrade_ci -e "SELECT COUNT(*) FROM schema_migrations")
+          tracked=$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_upgrade_ci -e "SELECT COUNT(*) FROM schema_migrations")
           test "$tracked" = "$expected"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_upgrade_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_upgrade_ci' AND table_name IN ('floor_plans','equipment_assets','equipment_service_contacts','equipment_service_events','agent_knowledge_records');")" = "5"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_upgrade_ci -e "SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_schema='gelato_upgrade_ci' AND trigger_name IN ('trg_equipment_assets_canonical_insert','trg_equipment_assets_canonical_update','trg_floor_plans_canonical_archive');")" = "3"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_upgrade_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('floorplans.view','floorplans.edit','equipment.view','equipment.edit','equipment.service','equipment.contacts','agent.equipment_skills');")" = "7"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_upgrade_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_upgrade_ci' AND table_name IN ('prep_plans','prep_recommendations','prep_plan_tasks','prep_plan_events','prep_demand_signals','inventory_forecasts');")" = "6"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_upgrade_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('prep.intelligence.view','prep.intelligence.manage','prep.intelligence.agent','inventory.forecast.view');")" = "4"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_upgrade_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260913_zzzzzzzz_prep_inventory_intelligence';")" = "1"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_upgrade_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_upgrade_ci' AND table_name IN ('floor_plans','equipment_assets','equipment_service_contacts','equipment_service_events','agent_knowledge_records');")" = "5"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_upgrade_ci -e "SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_schema='gelato_upgrade_ci' AND trigger_name IN ('trg_equipment_assets_canonical_insert','trg_equipment_assets_canonical_update','trg_floor_plans_canonical_archive');")" = "3"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_upgrade_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('floorplans.view','floorplans.edit','equipment.view','equipment.edit','equipment.service','equipment.contacts','agent.equipment_skills');")" = "7"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_upgrade_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_upgrade_ci' AND table_name IN ('prep_plans','prep_recommendations','prep_plan_tasks','prep_plan_events','prep_demand_signals','inventory_forecasts');")" = "6"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_upgrade_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('prep.intelligence.view','prep.intelligence.manage','prep.intelligence.agent','inventory.forecast.view');")" = "4"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_upgrade_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260913_zzzzzzzz_prep_inventory_intelligence';")" = "1"
 
       - name: Verify Menu Manager partial-upgrade recovery
         run: |
-          mariadb -h 127.0.0.1 -uroot -proot gelato_upgrade_ci <<'SQL'
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_upgrade_ci <<'SQL'
           DELETE FROM schema_migrations WHERE migration_key='20261008_menu_manager_food_builder';
           DROP TABLE IF EXISTS pos_check_item_modifiers;
           ALTER TABLE pos_check_items DROP COLUMN modifier_amount;
@@ -151,8 +151,8 @@ jobs:
           }
           echo "Menu Manager partial migration recovery: ok\n";
           PHP
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_upgrade_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_upgrade_ci' AND table_name='pos_check_items' AND column_name='modifier_amount';")" = "1"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_upgrade_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_upgrade_ci' AND table_name='pos_check_item_modifiers';")" = "1"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_upgrade_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_upgrade_ci' AND table_name='pos_check_items' AND column_name='modifier_amount';")" = "1"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_upgrade_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_upgrade_ci' AND table_name='pos_check_item_modifiers';")" = "1"
 
       - name: Verify Prep + Inventory Intelligence behavior
         run: php tests/prep-inventory-intelligence-contract.php

@@ -1,0 +1,28 @@
+name: MariaDB CI Client Compatibility
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/**'
+
+permissions:
+  contents: read
+
+jobs:
+  no-implicit-test-tls:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require explicit non-TLS for local-only CI MariaDB
+        shell: bash
+        run: |
+          set -euo pipefail
+          if rg -n --pcre2 '\bmariadb(?!\s+--skip-ssl)\s+-' .github/workflows --glob '*.yml'; then
+            echo 'CI MariaDB client invocation does not explicitly disable TLS against the local test container.'
+            exit 1
+          fi
+          echo 'All local MariaDB invocations declare --skip-ssl.'

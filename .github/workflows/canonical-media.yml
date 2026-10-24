@@ -73,7 +73,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq mariadb-client
-          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
           cat > config.php <<'PHP'
           <?php
           return [
@@ -94,7 +94,7 @@ jobs:
           PHP
       - name: Verify media schema
         run: |
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND ((table_name='menu_items' AND column_name='main_image_file_id') OR (table_name='ingredients' AND column_name='image_file_id') OR (table_name='locations' AND column_name='cover_image_file_id'));")" = "3"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND ((table_name='menu_items' AND column_name='main_image_file_id') OR (table_name='ingredients' AND column_name='image_file_id') OR (table_name='locations' AND column_name='cover_image_file_id'));")" = "3"
       - name: Canonical media behavioral contract
         run: php tests/canonical-media-contract.php
       - name: Food builder regression
