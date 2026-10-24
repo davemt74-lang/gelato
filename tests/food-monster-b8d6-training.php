@@ -30,7 +30,7 @@ menu_manager_save_item($pdo,$org,null,[
 ],$uid);
 $room=(string)gaw_create_thread($pdo,$org,$uid,'text','Training via Agent')['public_id'];
 $first=gaw_append($pdo,$org,$uid,$room,'user','Teach me to make Practice Pizza');
-$ctx=['threadId'=>$room,'messageId'=>(string)$first['public_id'],
+$ctx=['threadId'=>$room,'messageId'=>(string)$first['id'],
     'channel'=>'text','voiceEventId'=>'','verifiedSameUser'=>true];
 $tools=fm8d6_training_catalogue($actor,$ctx);
 b8d6_check(isset($tools['get_my_training_progress'],$tools['run_training_step']),'training and progress tools discoverable for employee');
@@ -48,7 +48,7 @@ $replay=$tools['run_training_step']['execute'](['action'=>'next'],$actor);
 $afterReplay=fm13c_read_state($pdo,$org,$uid,$thread);
 b8d6_check(($afterReplay['index']??-1)===0,'same saved chat message cannot advance twice');
 $second=gaw_append($pdo,$org,$uid,$room,'user','Okay, move to the next instruction');
-$ctx2=array_replace($ctx,['messageId'=>(string)$second['public_id']]);
+$ctx2=array_replace($ctx,['messageId'=>(string)$second['id']]);
 $tools2=fm8d6_training_catalogue($actor,$ctx2);
 $advance=$tools2['run_training_step']['execute'](['action'=>'next'],$actor);
 b8d6_check(str_contains($advance['data']['answer'],'Add cheese')&&
@@ -61,7 +61,7 @@ b8d6_check($bad===null,'browser-forged turn id rejected');
 $third=gaw_append($pdo,$org,$uid,$room,'user','Can we continue?');
 $stale=fm8d6_canonical_turn($pdo,$actor,$ctx2);
 b8d6_check($stale===null,'superseded message cannot advance after newer turn');
-$ctx3=array_replace($ctx,['messageId'=>(string)$third['public_id']]);
+$ctx3=array_replace($ctx,['messageId'=>(string)$third['id']]);
 $catalogue=fm8d3_catalogue($actor,$ctx3);
 $transport=static fn($url,$headers,$payload):array=>[
     'output'=>[['type'=>'function_call','name'=>'run_training_step',
