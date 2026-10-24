@@ -6,6 +6,8 @@ require_once __DIR__.'/../includes/food-monster-llm.php';
 require_once __DIR__.'/../includes/food-monster-person-conversations.php';
 require_once __DIR__.'/../includes/food-monster-conversation-memory.php';
 require_once __DIR__.'/../includes/food-monster-g13a-engagement.php';
+require_once __DIR__.'/../includes/agent-voice-conversation.php';
+require_once __DIR__.'/../includes/food-monster-b8d3-tool-runtime.php';
 
 $user=app_require_auth();
 $org=(int)$user['organization_id'];$uid=(int)$user['id'];
@@ -90,14 +92,36 @@ try{
         error_log('Food Monster credential decrypt failure: '.get_class($error));
         app_json_response(['ok'=>false,'code'=>'credential_decryption','message'=>'Gelato cannot decrypt the saved API key. Re-save it in Gelato LLM Settings and preserve storage/keys during deployment.'],503);
     }
-    // Release session lock while the external API responds so unrelated app requests stay responsive.
+    // Website authentication authorizes typed tools. A room voice may use
+    // private tools only if its canonical voice event verifies this SAME
+    // logged-in account. Other/unknown voices remain conversation-only.
+    $allowTools=($last['channel']??'text')!=='voice';
+    if(!$allowTools){
+        $event=(string)($last['voice_event_public_id']??'');
+        try{
+            $speaker=avc_verified_speaker($pdo,$org,$user,$event);
+            $allowTools=is_array($speaker)&&(int)($speaker['userId']??0)===$uid;
+        }catch(Throwable){$allowTools=false;}
+    }
+    // Release session lock while the external API responds.
     if(session_status()===PHP_SESSION_ACTIVE)session_write_close();
-    try{$answer=fmllm_exchange($selected['provider'],$key,$history,null,$personMemory);}
-    finally{if(function_exists('sodium_memzero'))sodium_memzero($key);}
-    app_audit($pdo,$org,$uid,'agent.llm_conversation','agent_conversation',$threadId,null,['provider'=>$selected['provider'],'messageCharacters'=>mb_strlen($message,'UTF-8')]);
-    app_json_response(['ok'=>true,'skill'=>'agent.llm.conversation','answer'=>$answer,
+    try{
+        $result=$allowTools
+            ?fm8d3_turn($pdo,$user,$selected['provider'],$key,$history,$personMemory)
+            :['ok'=>true,'skill'=>'agent.llm.conversation',
+                'answer'=>fmllm_exchange($selected['provider'],$key,$history,null,$personMemory),
+                'sources'=>[],'data'=>['toolCalls'=>0,'privateToolsAvailable'=>false]];
+    }finally{if(function_exists('sodium_memzero'))sodium_memzero($key);}
+    app_audit($pdo,$org,$uid,'agent.llm_conversation','agent_conversation',$threadId,null,[
+        'provider'=>$selected['provider'],
+        'messageCharacters'=>mb_strlen($message,'UTF-8'),
+        'toolCalls'=>(int)($result['data']['toolCalls']??0),
+        'privateToolsAvailable'=>$allowTools,
+    ]);
+    app_json_response(['ok'=>true,'skill'=>$result['skill']??'agent.llm.conversation',
+        'answer'=>$result['answer'],
         'provider'=>$selected['provider'],'model'=>fmllm_model($selected['provider']),
-        'sources'=>[],'data'=>null]);
+        'sources'=>$result['sources']??[],'data'=>$result['data']??null]);
 }catch(InvalidArgumentException $e){
     app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);
 }catch(FmLlmProviderException $e){

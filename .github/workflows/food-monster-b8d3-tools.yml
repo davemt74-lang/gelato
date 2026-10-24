@@ -1,0 +1,67 @@
+name: Food Monster B8D3 Model-Selected Skills
+
+on:
+  pull_request:
+    paths:
+      - 'api/food-monster-llm.php'
+      - 'includes/food-monster-b8d3-timecard.php'
+      - 'includes/food-monster-b8d3-tool-runtime.php'
+      - 'tests/food-monster-b8d3-tool-selection.php'
+      - 'tests/food-monster-b8d3-mariadb.php'
+      - 'config/food-monster-capability-map.json'
+      - '.github/workflows/food-monster-b8d3-tools.yml'
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  model-tool-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_sqlite, pdo_mysql, curl
+      - name: Lint B8D3 modules
+        run: |
+          php -l includes/food-monster-b8d3-timecard.php
+          php -l includes/food-monster-b8d3-tool-runtime.php
+          php -l api/food-monster-llm.php
+          php -l tests/food-monster-b8d3-tool-selection.php
+          php -l tests/food-monster-b8d3-mariadb.php
+      - name: Model-selected tools, authorization, personal-hours calculations and provider isolation
+        run: php tests/food-monster-b8d3-tool-selection.php
+      - name: Existing conversational LLM isolation regression
+        run: php tests/food-monster-g12e-llm-isolation.php
+      - name: Existing B8D1 conversation regression
+        run: php tests/food-monster-b8d1-conversation-foundation.php
+      - name: Existing B8D2 execution-loop regression
+        run: php tests/food-monster-b8d2-execution-loop.php
+
+  personal-hours-mariadb:
+    runs-on: ubuntu-24.04
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: testroot
+          MARIADB_DATABASE: b8d3_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring
+      - name: Live SQL tenant-isolation and historical personal-hours evidence
+        env:
+          B8D3_MYSQL_DSN: mysql:host=127.0.0.1;port=3306;dbname=b8d3_test;charset=utf8mb4
+          B8D3_MYSQL_PASSWORD: testroot
+        run: php tests/food-monster-b8d3-mariadb.php
