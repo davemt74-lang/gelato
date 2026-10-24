@@ -13,6 +13,7 @@ if($_SERVER['REQUEST_METHOD']!=='POST'){
     app_json_response(['ok'=>false,'message'=>'Method not allowed.'],405);
 }
 $input=app_json_input();app_verify_request_csrf($input);
+$authorizedForFallback=false;
 try{
     if(($input['action']??'')!=='ask')throw new InvalidArgumentException('Read-only knowledge questions only.');
     $question=trim((string)($input['message']??''));
@@ -40,6 +41,7 @@ try{
     // voice, or their explicitly typed authorized request.
     if(!fm13b_allowed($user,$intent,$ownerVoiceVerified,$voice))
         throw new DomainException('You do not have permission to read that information.');
+    $authorizedForFallback=true;
     $referent='';
     if($voice&&fm13a_needs_context($question)&&fm9a_is_super_admin_session($user)){
         $key='fm9d_pending_'.hash('sha256',$org.'|'.$uid.'|'.$thread);
@@ -73,6 +75,25 @@ try{
 }catch(InvalidArgumentException $e){
     app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);
 }catch(Throwable $e){
-    error_log('FM-G13B knowledge error: '.get_class($e));
-    app_json_response(['ok'=>false,'message'=>'Menu or recipe evidence is unavailable. Ask a manager to verify current records.'],503);
+    $reference=substr(hash('sha256',$org.'|'.$uid.'|'.microtime(true)),0,12);
+    error_log('FM-G13B knowledge read '.$reference.' failed: '.get_class($e).' '.$e->getMessage());
+    // A failure in a narrow menu/recipe search must not disable the entire
+    // authorized conversation. Reuse the local, scoped evidence broker.
+    // Never weaken the separate allergen safety handling or any access check.
+    if($authorizedForFallback && isset($question,$intent,$voice,$ownerVoiceVerified)
+       && $intent!=='allergen'){
+        try{
+            require_once __DIR__.'/../includes/food-monster-unified-knowledge.php';
+            if(fmuk_topics($question)){
+                $fallback=fmuk_answer($pdo,$user,$question,$voice,$ownerVoiceVerified);
+                app_audit($pdo,$org,$uid,'food_monster.knowledge_fallback','agent_conversation',$thread,null,
+                    ['reference'=>$reference,'sourceCount'=>count($fallback['sources']??[])]);
+                app_json_response(['ok'=>true]+$fallback);
+            }
+        }catch(Throwable $fallbackError){
+            error_log('FM-G13B broker fallback '.$reference.' failed: '.get_class($fallbackError));
+        }
+    }
+    app_json_response(['ok'=>false,
+        'message'=>'Gelato could not retrieve that information right now. Please retry or open the source module. Reference: '.$reference],503);
 }

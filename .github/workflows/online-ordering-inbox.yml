@@ -93,7 +93,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq mariadb-client zip
-          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
           cat > config.php <<'PHP'
           <?php
           return [
@@ -114,11 +114,11 @@ jobs:
           PHP
       - name: Verify ordering dependency schema
         run: |
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('sales_integrations','pos_settings','pos_checks','pos_check_items','pos_tenders','crm_customers','customer_inbox_messages','customer_inbox_recipients','customer_inbox_preferences','online_orders');")" = "10"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='locations' AND column_name IN ('public_slug','pickup_enabled','online_ordering_enabled','pickup_lead_minutes');")" = "4"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='crm_customers' AND column_name='user_id';")" = "1"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('customer.portal','online_ordering.use','customer_promotions.manage');")" = "3"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key IN ('20260914_zzzzzzz_sales_demand_intelligence','20260916_native_pos','20260917_customer_crm','20261001_system_user_types_pos_order_types','20261002_customer_accounts_online_ordering_foundation','20261003_location_foundation','20261004_online_ordering_customer_inbox');")" = "7"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('sales_integrations','pos_settings','pos_checks','pos_check_items','pos_tenders','crm_customers','customer_inbox_messages','customer_inbox_recipients','customer_inbox_preferences','online_orders');")" = "10"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='locations' AND column_name IN ('public_slug','pickup_enabled','online_ordering_enabled','pickup_lead_minutes');")" = "4"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_restaurant_ai_ci' AND table_name='crm_customers' AND column_name='user_id';")" = "1"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('customer.portal','online_ordering.use','customer_promotions.manage');")" = "3"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key IN ('20260914_zzzzzzz_sales_demand_intelligence','20260916_native_pos','20260917_customer_crm','20261001_system_user_types_pos_order_types','20261002_customer_accounts_online_ordering_foundation','20261003_location_foundation','20261004_online_ordering_customer_inbox');")" = "7"
       - name: Online ordering and Inbox behavioral contract
         run: php tests/online-ordering-inbox-contract.php
       - name: Customer account regression

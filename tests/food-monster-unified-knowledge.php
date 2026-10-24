@@ -312,4 +312,24 @@ fmuk_assert(fmuk_topics('Approve a shift')===[],'governed actions must bypass th
 
 fmuk_assert(str_contains($route,'api/food-monster-unified-knowledge.php?threadId='),'router chooses unified read');
 fmuk_assert(str_contains($api,"\$_GET['threadId']"),'existing browser route carries server-issued thread reference');
+// B8A: all direct menu/recipe questions use the authenticated local evidence broker
+// before the legacy specialist, while allergen questions retain dedicated safety.
+fmuk_assert(fmuk_prefers_broker('How much is the Margherita pizza?',$owner),
+    'single menu-price questions use unified evidence');
+fmuk_assert(fmuk_prefers_broker('What is our house dough recipe?',$owner),
+    'single recipe questions use unified evidence');
+fmuk_assert(!fmuk_prefers_broker('Approve the recipe change',$owner),
+    'explicit recipe writes remain governed, never treated as reads');
+$menuSql=file_get_contents(__DIR__.'/../includes/menu-training-knowledge.php');
+fmuk_assert(is_string($menuSql)&&str_contains($menuSql,'SELECT DISTINCT i.id,i.name'),
+    'MySQL 8 menu search can order by a projected distinct name');
+$specialist=file_get_contents(__DIR__.'/../api/food-monster-knowledge.php');
+fmuk_assert(is_string($specialist)
+    &&str_contains($specialist,"if(\$authorizedForFallback && isset(\$question,\$intent,\$voice,\$ownerVoiceVerified)")
+    &&str_contains($specialist,"\$intent!=='allergen'")
+    &&str_contains($specialist,'fmuk_answer($pdo,$user,$question,$voice,$ownerVoiceVerified)'),
+    'only already-authorized non-allergen reads fall back to the local scoped broker');
+fmuk_assert(!str_contains($specialist,'Menu or recipe evidence is unavailable. Ask a manager'),
+    'unexpected errors no longer direct the Super Admin to ask a manager');
+
 echo 'FM-UK read broker authorization and evidence: PASS ('.$checks.' assertions)' . "\n";
