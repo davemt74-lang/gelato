@@ -1,0 +1,61 @@
+name: Publish Food Monster B7 Direct Deployment
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/publish-food-monster-b7-direct.yml
+  pull_request:
+    paths:
+      - .github/workflows/publish-food-monster-b7-direct.yml
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish-certified-package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download certified full deployment ZIP
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p payload
+          gh run download 40009624441 --repo davemt74-lang/gelato --name gelato-full-deploy --dir payload
+          test -s payload/gelato-full-deploy.zip
+          test -s payload/gelato-full-deploy.sha256
+
+      - name: Verify exact B7 deploy archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd payload
+          printf '%s\n' '14b20e4ba97f990553abfe00c7545debedf43097f4d26a0e877518d800d1bdb8  gelato-full-deploy.zip' | sha256sum --check -
+          unzip -tq gelato-full-deploy.zip
+          unzip -p gelato-full-deploy.zip DEPLOY_SHA.txt | grep -Fx 'f7b2f80d1752a557244bc105173727ffc117b5b4'
+          for path in index.php upgrade.php api/agent-workspace.php includes/food-monster-unified-knowledge.php; do
+            unzip -Z1 gelato-full-deploy.zip | grep -Fx "$path"
+          done
+          if unzip -Z1 gelato-full-deploy.zip | grep -Eq '^(config\.php$|\.env$|uploads/|storage/)'; then
+            echo 'Live private configuration or user data unexpectedly bundled.'
+            exit 1
+          fi
+          printf '%s\n' '14b20e4ba97f990553abfe00c7545debedf43097f4d26a0e877518d800d1bdb8  gelato-full-deploy.zip' > gelato-full-deploy.sha256
+
+      - name: Publish unwrapped ZIP as a direct release asset
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create gelato-food-monster-b7 \
+            payload/gelato-full-deploy.zip \
+            payload/gelato-full-deploy.sha256 \
+            --repo davemt74-lang/gelato \
+            --target 27b0e3aa41cdf5f8e1cc7a32a38102ea38949382 \
+            --title 'Gelato Food Monster B7 — Full Deployment' \
+            --notes 'Certified single ZIP from full-deploy workflow 40009624441 (43/43 checks green). Download gelato-full-deploy.zip directly, extract into the Gelato application root while preserving live config.php, .env, uploads/ and storage/, then run upgrade.php. Includes Food Monster chat layout, authenticated 19-domain knowledge, POS/reservations, training and reliable routing.'

@@ -49,7 +49,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq mariadb-client
-          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
           cat > config.php <<'PHP'
           <?php
           return [
@@ -65,9 +65,9 @@ jobs:
           PHP
       - name: Verify schema and permissions
         run: |
-          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('employee_shift_messages','employee_shift_message_reads')" | grep -qx '2'
-          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -N -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('employee.handoffs.view','employee.handoffs.create','employee.handoffs.manage')" | grep -qx '3'
-          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -N -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260914_zzzzz_shift_handoff_communications'" | grep -qx '1'
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('employee_shift_messages','employee_shift_message_reads')" | grep -qx '2'
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -N -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('employee.handoffs.view','employee.handoffs.create','employee.handoffs.manage')" | grep -qx '3'
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -N -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260914_zzzzz_shift_handoff_communications'" | grep -qx '1'
       - name: Employee Home regression
         run: php tests/employee-home-contract.php
       - name: Shift handoff behavior
