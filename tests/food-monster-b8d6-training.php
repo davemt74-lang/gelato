@@ -23,11 +23,12 @@ $actor=['id'=>$uid,'organization_id'=>$org,'display_name'=>'Training Student',
     'permissions'=>['menu.view','employee.self','training.self_view','recipes.view','recipes.agent']];
 b8d6_check(gaw_ready($pdo)&&menu_manager_ready($pdo),'training, conversation and menu schema installed');
 $category=menu_manager_category_save($pdo,$org,null,['name'=>'Pizzas','description'=>'Pizza','sortOrder'=>1,'status'=>'active']);
-menu_manager_save_item($pdo,$org,null,[
+$saved=menu_manager_save_item($pdo,$org,null,[
     'name'=>'Practice Pizza','categoryId'=>(int)$category['id'],
     'preparationNotes'=>"1. Stretch dough.\n2. Add cheese.\n3. Bake the pizza.",
     'sizes'=>[['label'=>'12-inch','sizeCode'=>'12','amount'=>12.00,'sortOrder'=>1]],
 ],$uid);
+menu_manager_set_status($pdo,$org,(int)$saved['id'],'publish',$uid);
 $room=(string)gaw_create_thread($pdo,$org,$uid,'text','Training via Agent')['public_id'];
 $first=gaw_append($pdo,$org,$uid,$room,'user','Teach me to make Practice Pizza');
 $ctx=['threadId'=>$room,'messageId'=>(string)$first['id'],
