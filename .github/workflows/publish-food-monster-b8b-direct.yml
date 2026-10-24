@@ -33,10 +33,10 @@ jobs:
         run: |
           set -euo pipefail
           cd payload
-          expected="$(sed -nE 's/^([0-9a-f]{64})[[:space:]]+.*gelato-full-deploy\\.zip$/\\1/p' gelato-full-deploy.sha256)"
+          expected="$(sed -nE 's/^([0-9a-f]{64})[[:space:]]+.*gelato-full-deploy\.zip$/\1/p' gelato-full-deploy.sha256)"
           test "${#expected}" -eq 64
-          printf '%s  gelato-full-deploy.zip\\n' "$expected" | sha256sum --check -
-          printf '%s  gelato-full-deploy.zip\\n' "$expected" > gelato-full-deploy.sha256
+          printf '%s  gelato-full-deploy.zip\n' "$expected" | sha256sum --check -
+          printf '%s  gelato-full-deploy.zip\n' "$expected" > gelato-full-deploy.sha256
           unzip -tq gelato-full-deploy.zip
           unzip -p gelato-full-deploy.zip DEPLOY_SHA.txt | grep -Fx 'b505360a6ae8086da19c5f14a17eabf4711b66c7'
           for path in index.php upgrade.php api/agent-workspace.php includes/food-monster-unified-knowledge.php includes/glasses-vision-lab.php; do
