@@ -273,17 +273,20 @@
         result = await response.json().catch(() => ({ok: false, message: 'Invalid Agent tool response.'}));
         if (!response.ok || !result.ok) throw new Error(result.message || 'The requested Agent skill is unavailable.');
       } else if (window.GelatoFoodMonsterLLM?.ask) {
-        // No specialized tool route: use the server-side LLM conversation adapter.
-        // Domain actions remain exclusively owned by the permission-gated routes above.
+        // General chat is always a model conversation, never a static
+        // inventory of the app's features.
         result = await window.GelatoFoodMonsterLLM.ask({text,threadId:S.thread,csrf:S.csrf});
       } else {
-        result = {
-          ok: true,
-          skill: 'agent.capabilities',
-          answer: capabilityMessage(),
-          data: null,
-          sources: [],
-        };
+        // The optional model-selector UI may fail to load on some pages.
+        // Keep the server-side Auto provider available in Agent Chat itself.
+        const response=await fetch('api/food-monster-llm.php',{
+          method:'POST',cache:'no-store',
+          headers:{Accept:'application/json','Content-Type':'application/json','X-CSRF-Token':S.csrf},
+          body:JSON.stringify({action:'chat',message:text,threadId:S.thread,provider:'auto',csrf_token:S.csrf})
+        });
+        result=await response.json().catch(()=>({ok:false,message:'Invalid AI service response.'}));
+        if(!response.ok||!result.ok)
+          throw new Error(result.message||'The configured AI service is unavailable.');
       }
 
       // Display only, after the canonical turn has completed routing.

@@ -24,6 +24,7 @@ require_once __DIR__.'/../includes/food-monster-g13c-training.php';
 require_once __DIR__.'/../includes/food-monster-g13k-training-notice.php';
 require_once __DIR__.'/../includes/food-monster-g13b-knowledge.php';
 require_once __DIR__.'/../includes/food-monster-unified-knowledge.php';
+require_once __DIR__.'/../includes/food-monster-conversation-router.php';
 require_once __DIR__.'/../includes/food-monster-operational-followup.php';
 require_once __DIR__.'/../includes/food-monster-high-impact-approval.php';
 
@@ -184,6 +185,15 @@ try{
         // recent canonical turn and a server-resolved owner voice event only.
         // Do not trust a client-supplied participant, role, or channel flag.
         $roomThread=trim((string)($in['threadId']??''));
+
+        // B8D1: general explanations must reach the conversational model,
+        // never a static keyword-based restaurant report. Governed actions
+        // and real record lookups continue through existing server endpoints.
+        $conversationPlan=fmcr_plan($message);
+        if($conversationPlan['intent']==='general_reasoning')
+            app_json_response(['ok'=>true,'route'=>null,
+                'domain'=>'conversation_reasoning','nodeMode'=>'conversation']);
+
         // Full menu-procedure publication requires typed Super Admin consent.
         // No shared-room voice, camera match, or LLM output can approve.
         $pilotIntent=fm14a_intent($message);
