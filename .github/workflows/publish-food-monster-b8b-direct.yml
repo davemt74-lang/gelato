@@ -1,0 +1,59 @@
+name: Publish Food Monster B8B Direct Deployment
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-food-monster-b8b-direct.yml
+  pull_request:
+    paths:
+      - .github/workflows/publish-food-monster-b8b-direct.yml
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish-certified-package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download full merged-revision deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p payload
+          gh run download 40106618831 --repo davemt74-lang/gelato --name gelato-full-deploy --dir payload
+          test -s payload/gelato-full-deploy.zip
+          test -s payload/gelato-full-deploy.sha256
+
+      - name: Verify exact B8B deploy contents and archive integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd payload
+          sha256sum --check gelato-full-deploy.sha256
+          unzip -tq gelato-full-deploy.zip
+          unzip -p gelato-full-deploy.zip DEPLOY_SHA.txt | grep -Fx 'b505360a6ae8086da19c5f14a17eabf4711b66c7'
+          for path in index.php upgrade.php api/agent-workspace.php includes/food-monster-unified-knowledge.php includes/glasses-vision-lab.php; do
+            unzip -Z1 gelato-full-deploy.zip | grep -Fx "$path"
+          done
+          if unzip -Z1 gelato-full-deploy.zip | grep -Eq '^(config\.php$|\.env$|uploads/|storage/)'; then
+            echo 'Deployment contains live private data or configuration.'
+            exit 1
+          fi
+
+      - name: Publish unwrapped, direct-download ZIP and checksum
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create gelato-food-monster-b8b \
+            payload/gelato-full-deploy.zip \
+            payload/gelato-full-deploy.sha256 \
+            --repo davemt74-lang/gelato \
+            --target b505360a6ae8086da19c5f14a17eabf4711b66c7 \
+            --title 'Gelato Food Monster B8B — Full Deployment' \
+            --notes 'Certified single ZIP from merged Gelato main (B8A+B8B). Menu/recipe recovery and authenticated Vision Lab knowledge. Upload directly into Gelato application root, preserving live config.php, .env, uploads and storage; then run upgrade.php and hard-refresh. SHA-256 manifest is included separately. No nested ZIP.'
