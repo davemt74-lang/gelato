@@ -20,7 +20,7 @@ jobs:
     steps:
       - name: Download exact merged-main full deployment
         env:
-          GH_TOKEN: \${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           mkdir -p payload
@@ -34,7 +34,7 @@ jobs:
           set -euo pipefail
           cd payload
           expected="$(sed -nE 's/^([0-9a-f]{64})[[:space:]]+.*gelato-full-deploy\.zip$/\1/p' gelato-full-deploy.sha256)"
-          test "\${#expected}" -eq 64
+          test "${#expected}" -eq 64
           printf '%s  gelato-full-deploy.zip\n' "$expected" | sha256sum --check -
           printf '%s  gelato-full-deploy.zip\n' "$expected" > gelato-full-deploy.sha256
           unzip -tq gelato-full-deploy.zip
@@ -54,7 +54,7 @@ jobs:
       - name: Publish one direct-download ZIP and checksum
         if: github.event_name != 'pull_request'
         env:
-          GH_TOKEN: \${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           gh release create gelato-food-monster-b8c \
