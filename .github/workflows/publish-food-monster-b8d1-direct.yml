@@ -1,0 +1,70 @@
+name: Publish Food Monster B8D1 Direct Deployment
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-food-monster-b8d1-direct.yml
+  pull_request:
+    paths:
+      - .github/workflows/publish-food-monster-b8d1-direct.yml
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish-certified-package:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Verify release build reference
+        run: test -n '2b338c7aad4f8dac348e93ce24e07f228b1e586b'
+      - name: Download exact merged-main full deployment
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p payload
+          gh run download 40119112998 --repo davemt74-lang/gelato --name gelato-full-deploy --dir payload
+          test -s payload/gelato-full-deploy.zip
+          test -s payload/gelato-full-deploy.sha256
+
+      - name: Verify archive, checksum, commit and root-level app layout
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd payload
+          expected="$(sed -nE 's/^([0-9a-f]{64})[[:space:]]+.*gelato-full-deploy\.zip$/\1/p' gelato-full-deploy.sha256)"
+          test "${#expected}" -eq 64
+          printf '%s  gelato-full-deploy.zip\n' "$expected" | sha256sum --check -
+          printf '%s  gelato-full-deploy.zip\n' "$expected" > gelato-full-deploy.sha256
+          unzip -tq gelato-full-deploy.zip
+          unzip -p gelato-full-deploy.zip DEPLOY_SHA.txt | grep -Fx '2b338c7aad4f8dac348e93ce24e07f228b1e586b'
+          for file in index.php upgrade.php api/agent-workspace.php config/food-monster-capability-map.json config/.htaccess tests/food-monster-b8d1-conversation-foundation.php includes/food-monster-conversation-router.php; do
+            unzip -Z1 gelato-full-deploy.zip | grep -Fx "$file"
+          done
+          if unzip -Z1 gelato-full-deploy.zip | grep -Eq '^(config\.php$|\.env$|uploads/|storage/)'; then
+            echo 'Deployment archive includes a private live path.'
+            exit 1
+          fi
+          if unzip -Z1 gelato-full-deploy.zip | grep -Eq '^(gelato-full-deploy\.zip|deploy\.zip|package\.zip)$'; then
+            echo 'Nested deployment ZIP detected.'
+            exit 1
+          fi
+
+      - name: Publish one direct-download ZIP and checksum
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create gelato-food-monster-b8d1 \
+            payload/gelato-full-deploy.zip \
+            payload/gelato-full-deploy.sha256 \
+            --repo davemt74-lang/gelato \
+            --target 2b338c7aad4f8dac348e93ce24e07f228b1e586b \
+            --title 'Gelato Food Monster B8D1 — Conversation Foundation' \
+            --notes 'Verified full single ZIP from merged Gelato main (FM-B8D1). Conversation-first routing, natural cooking explanations, named menu ingredient answers, clean permission-aware evidence, and 73 targeted assertions; all existing write permissions remain enforced. Upload into the Gelato app root, preserving config.php, .env, uploads and storage; run upgrade.php, then hard-refresh. SHA-256 manifest published separately. No nested ZIP.'
