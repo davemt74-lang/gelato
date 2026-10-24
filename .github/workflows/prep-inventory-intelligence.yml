@@ -79,7 +79,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq mariadb-client
-          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
           cat > config.php <<'PHP'
           <?php
           return [
@@ -100,9 +100,9 @@ jobs:
           PHP
       - name: Verify schema and permissions
         run: |
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('prep_plans','prep_recommendations','prep_plan_tasks','prep_plan_events','prep_demand_signals','inventory_forecasts');")" = "6"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('prep.intelligence.view','prep.intelligence.manage','prep.intelligence.agent','inventory.forecast.view');")" = "4"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260913_zzzzzzzz_prep_inventory_intelligence';")" = "1"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('prep_plans','prep_recommendations','prep_plan_tasks','prep_plan_events','prep_demand_signals','inventory_forecasts');")" = "6"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('prep.intelligence.view','prep.intelligence.manage','prep.intelligence.agent','inventory.forecast.view');")" = "4"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260913_zzzzzzzz_prep_inventory_intelligence';")" = "1"
       - name: Historical planning, forecast and publish contract
         run: php tests/prep-inventory-intelligence-contract.php
       - name: Verify upgrader idempotence

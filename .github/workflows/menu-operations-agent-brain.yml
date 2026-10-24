@@ -86,7 +86,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq mariadb-client
-          mariadb -h 127.0.0.1 -uroot -proot gelato_menu_ops_ci < database/install.sql
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_menu_ops_ci < database/install.sql
           cat > config.php <<'PHP'
           <?php
           return [
@@ -108,8 +108,8 @@ jobs:
 
       - name: Verify Menu Operations schema
         run: |
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_menu_ops_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_menu_ops_ci' AND table_name IN ('menu_item_operational_status','menu_price_operational_status','menu_item_availability_schedules','menu_operation_events');")" = "4"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_menu_ops_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_menu_ops_ci' AND table_name='menu_items' AND column_name='sort_order';")" = "1"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_menu_ops_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_menu_ops_ci' AND table_name IN ('menu_item_operational_status','menu_price_operational_status','menu_item_availability_schedules','menu_operation_events');")" = "4"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_menu_ops_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='gelato_menu_ops_ci' AND table_name='menu_items' AND column_name='sort_order';")" = "1"
 
       - name: Menu Operations + Agent Brain behavior
         run: php tests/menu-operations-agent-brain-contract.php

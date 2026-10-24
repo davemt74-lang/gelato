@@ -101,7 +101,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq mariadb-client
-          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
           cat > config.php <<'PHP'
           <?php
           return [
@@ -117,8 +117,8 @@ jobs:
           PHP
       - name: Verify canonical schema and permissions
         run: |
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('time_clock_entries','time_clock_breaks','attendance_events','voice_identity_profiles','voice_identity_samples','voice_identity_events','proactive_agent_preferences','proactive_agent_events');")" = "8"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('timeclock.self','timeclock.view','timeclock.manage','timeclock.agent','attendance.view','voice.self','voice.manage','voice.agent','agent.proactive');")" = "9"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('time_clock_entries','time_clock_breaks','attendance_events','voice_identity_profiles','voice_identity_samples','voice_identity_events','proactive_agent_preferences','proactive_agent_events');")" = "8"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('timeclock.self','timeclock.view','timeclock.manage','timeclock.agent','attendance.view','voice.self','voice.manage','voice.agent','agent.proactive');")" = "9"
       - name: DB-backed first-class Agent lifecycle
         run: php tests/timeclock-agent-lifecycle.php
       - name: Existing voice, privacy and clock regression

@@ -73,7 +73,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq mariadb-client
-          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
           cat > config.php <<'PHP'
           <?php
           return [
@@ -94,9 +94,9 @@ jobs:
           PHP
       - name: Verify schema
         run: |
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('wholesale_products','wholesale_skus','wholesale_price_lists','wholesale_price_list_items','wholesale_account_price_lists','wholesale_quote_items','wholesale_order_items','wholesale_quote_events','wholesale_order_events','wholesale_acquisition_profiles');")" = "10"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key IN ('20260926_wholesale_commerce_acquisition','20260926_zz_wholesale_commerce_fks');")" = "2"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.referential_constraints WHERE constraint_schema=DATABASE() AND constraint_name IN ('fk_wholesale_quotes_price_list','fk_wholesale_orders_price_list');")" = "2"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('wholesale_products','wholesale_skus','wholesale_price_lists','wholesale_price_list_items','wholesale_account_price_lists','wholesale_quote_items','wholesale_order_items','wholesale_quote_events','wholesale_order_events','wholesale_acquisition_profiles');")" = "10"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key IN ('20260926_wholesale_commerce_acquisition','20260926_zz_wholesale_commerce_fks');")" = "2"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.referential_constraints WHERE constraint_schema=DATABASE() AND constraint_name IN ('fk_wholesale_quotes_price_list','fk_wholesale_orders_price_list');")" = "2"
       - name: Commerce and acquisition behavior
         run: php tests/wholesale-commerce-acquisition-contract.php
       - name: Existing wholesale Operations regression

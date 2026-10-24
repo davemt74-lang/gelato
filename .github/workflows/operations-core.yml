@@ -117,7 +117,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq mariadb-client
-          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
           cat > config.php <<'PHP'
           <?php
           return [
@@ -139,9 +139,9 @@ jobs:
 
       - name: Verify Operations Core schema
         run: |
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('inventory_items','inventory_item_sources','inventory_transactions','task_categories','restaurant_tasks','restaurant_task_assignments','restaurant_task_time_entries','restaurant_task_events','restaurant_task_proofs');")" = "9"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260913_zzz_operations_core';")" = "1"
-          test "$(mariadb -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('inventory.view','inventory.manage','inventory.agent','tasks.view','tasks.manage','tasks.self','tasks.proof','tasks.agent');")" = "8"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='gelato_restaurant_ai_ci' AND table_name IN ('inventory_items','inventory_item_sources','inventory_transactions','task_categories','restaurant_tasks','restaurant_task_assignments','restaurant_task_time_entries','restaurant_task_events','restaurant_task_proofs');")" = "9"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260913_zzz_operations_core';")" = "1"
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('inventory.view','inventory.manage','inventory.agent','tasks.view','tasks.manage','tasks.self','tasks.proof','tasks.agent');")" = "8"
 
       - name: Verify menu inventory, universal prep tasks, timing and catering sync
         run: |
