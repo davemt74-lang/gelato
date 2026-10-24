@@ -61,6 +61,7 @@ function fmuk_prefers_broker(string $question,array $user): bool
     $topics=fmuk_topics($question);
     if(!$topics&&!fmuk_capability_question($question))return false;
     return fmuk_capability_question($question)||fmuk_menu_overview_question($question)
+        ||in_array('menu',$topics,true)||in_array('recipes',$topics,true)
         ||fmuk_roster_question($question)||count($topics)>1||in_array('knowledge',$topics,true)
         ||in_array('pos',$topics,true)||in_array('reservations',$topics,true)||in_array('training',$topics,true)
         ||(in_array('schedule',$topics,true)&&!app_has_permission('schedule.agent',$user));
