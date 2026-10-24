@@ -48,7 +48,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq mariadb-client
-          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
           cat > config.php <<'PHP'
           <?php
           return [
@@ -64,9 +64,9 @@ jobs:
           PHP
       - name: Verify schema and permissions
         run: |
-          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('employee_coaching_notes','employee_recognitions','employee_development_goals')" | grep -qx '3'
-          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -N -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('employee.performance.view','employee.performance.manage','employee.recognition.manage')" | grep -qx '3'
-          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -N -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260914_zzzzzz_employee_performance_coaching'" | grep -qx '1'
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('employee_coaching_notes','employee_recognitions','employee_development_goals')" | grep -qx '3'
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -N -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('employee.performance.view','employee.performance.manage','employee.recognition.manage')" | grep -qx '3'
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -N -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260914_zzzzzz_employee_performance_coaching'" | grep -qx '1'
       - name: Employee development behavior
         run: php tests/employee-performance-contract.php
       - name: Existing Employee Home regression

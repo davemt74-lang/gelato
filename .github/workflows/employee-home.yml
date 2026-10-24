@@ -53,7 +53,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq mariadb-client
-          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
           cat > config.php <<'PHP'
           <?php
           return [
@@ -69,9 +69,9 @@ jobs:
           PHP
       - name: Verify schema and permissions
         run: |
-          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('employee_lifecycle_profiles','employee_announcements','employee_announcement_reads','employee_policy_documents','employee_policy_acknowledgements','employee_checklist_items')" | grep -qx '6'
-          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -N -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('employee.self','employee.manage','employee.announcements.manage','employee.policies.manage')" | grep -qx '4'
-          mariadb -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -N -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260914_zzzz_employee_home_lifecycle'" | grep -qx '1'
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('employee_lifecycle_profiles','employee_announcements','employee_announcement_reads','employee_policy_documents','employee_policy_acknowledgements','employee_checklist_items')" | grep -qx '6'
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -N -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('employee.self','employee.manage','employee.announcements.manage','employee.policies.manage')" | grep -qx '4'
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -N -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260914_zzzz_employee_home_lifecycle'" | grep -qx '1'
       - name: Employee Home behavior
         run: php tests/employee-home-contract.php
       - name: Verify upgrader idempotence
