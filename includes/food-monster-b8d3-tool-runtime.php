@@ -4,13 +4,14 @@ require_once __DIR__.'/food-monster-b8d2-execution-loop.php';
 require_once __DIR__.'/food-monster-b8d3-timecard.php';
 require_once __DIR__.'/food-monster-b8d4-scheduling.php';
 require_once __DIR__.'/food-monster-b8d5-menu-recipes.php';
+require_once __DIR__.'/food-monster-b8d6-training.php';
 
 /**
  * FM-B8D3: model-selected tools, executed exclusively by the signed-in
  * Gelato server. Tool responses containing personal or business records are
  * terminal local answers, never round-tripped to the external LLM provider.
  */
-function fm8d3_catalogue(array $principal):array
+function fm8d3_catalogue(array $principal,array $context=[]):array
 {
     $base=[
         'get_current_user'=>[
@@ -52,7 +53,7 @@ function fm8d3_catalogue(array $principal):array
                 fm8d3_hours_read(app_pdo(),$actor,$args),
         ];
     }
-    return array_merge($base,fm8d4_schedule_catalogue($principal),fm8d5_catalogue($principal));
+    return array_merge($base,fm8d4_schedule_catalogue($principal),fm8d5_catalogue($principal),fm8d6_training_catalogue($principal,$context));
 }
 function fm8d3_provider_tools(string $provider,array $catalogue):array
 {
@@ -121,11 +122,11 @@ function fm8d3_provider_request(string $provider,string $key,array $payload,?cal
 function fm8d3_turn(
     PDO $pdo,array $principal,string $provider,string $key,array $history,string $memory='',
     ?callable $transport=null,?array $catalogueOverride=null,?callable $refreshOverride=null,
-    ?callable $auditOverride=null
+    ?callable $auditOverride=null,array $context=[]
 ):array{
     $provider=fmllm_allowed_provider($provider);
     if($provider==='auto')throw new InvalidArgumentException('Choose configured provider.');
-    $catalogue=$catalogueOverride??fm8d3_catalogue($principal);
+    $catalogue=$catalogueOverride??fm8d3_catalogue($principal,$context);
     // Confirm/cancel is explicit user consent for an existing server proposal,
     // never a phrase-based dispatch of a new business intent.
     if($catalogueOverride===null){
@@ -136,7 +137,7 @@ function fm8d3_turn(
     $payload['tools']=fm8d3_provider_tools($provider,$catalogue);
     $payload['tool_choice']=$provider==='openai'?'auto':['type'=>'auto'];
     $today=(new DateTimeImmutable('now',new DateTimeZone('America/Phoenix')))->format('Y-m-d l');
-    $instruction=" Today at the restaurant in America/Phoenix is ".$today.". Interpret relative dates such as Friday against that date; when time is missing, ask rather than inventing it. Select an appropriate available Gelato skill for a user’s account, hours, staff schedule, roster, availability, shift creation, menu item ingredient, price, or in-house recipe request. For a named menu item first consult get_menu_item rather than claiming menu data is missing. For generic cooking science questions such as why honey helps pizza dough, answer conversationally without requiring private recipe access. Shift creation selects propose_staff_shift and requires a separate explicit human Confirm before any database change. Do not say live data is unavailable without attempting the authorized tool. Do not invent records or change business data.";
+    $instruction=" Today at the restaurant in America/Phoenix is ".$today.". Interpret relative dates such as Friday against that date; when time is missing, ask rather than inventing it. Select an appropriate available Gelato skill for a user’s account, hours, staff schedule, roster, availability, shift creation, menu item ingredient, price, or in-house recipe request. For a named menu item first consult get_menu_item rather than claiming menu data is missing. For generic cooking science questions such as why honey helps pizza dough, answer conversationally without requiring private recipe access. Shift creation selects propose_staff_shift and requires a separate explicit human Confirm before any database change. Do not say live data is unavailable without attempting the authorized tool. Use model-selected get_my_training_progress or run_training_step for the employee's saved training and training dialogue; do not require exact command phrases. Never invent training steps; use recorded procedures only. Do not invent records or change business data.";
     if($provider==='openai')$payload['instructions'].=$instruction;
     else $payload['system'].=$instruction;
     $response=fm8d3_provider_request($provider,$key,$payload,$transport);
@@ -158,7 +159,13 @@ function fm8d3_turn(
             return ['ok'=>true,'skill'=>'agent.invalid_tool',
                 'answer'=>'I could not validate the requested skill. Please try again.',
                 'sources'=>[],'data'=>['status'=>'denied']];
-        $plan[]=['tool'=>$name,'arguments'=>$call['arguments']];
+        $step=['tool'=>$name,'arguments'=>$call['arguments']];
+        if(($catalogue[$name]['impact']??'')==='routine'){
+            $messageId=(string)($context['messageId']??'');
+            if(!preg_match('/^msg-[a-f0-9]{20}$/D',$messageId))return ['ok'=>true,'skill'=>'agent.missing_canonical_turn','answer'=>'Save this message to Agent Chat before I can update training.','sources'=>[],'data'=>['status'=>'needs_input']];
+            $step['idempotencyKey']='fm-b8d6-'.substr(hash('sha256',$messageId.'|'.$name.'|'.count($plan)),0,32);
+        }
+        $plan[]=$step;
     }
     $org=(int)$principal['organization_id'];$uid=(int)$principal['id'];
     $refresh=$refreshOverride??static fn():?array=>fm8d2_refresh_operator($pdo,$principal);

@@ -107,7 +107,11 @@ try{
     if(session_status()===PHP_SESSION_ACTIVE)session_write_close();
     try{
         $result=$allowTools
-            ?fm8d3_turn($pdo,$user,$selected['provider'],$key,$history,$personMemory)
+            ?fm8d3_turn($pdo,$user,$selected['provider'],$key,$history,$personMemory,
+                context:['threadId'=>$threadId,'messageId'=>(string)$last['public_id'],
+                    'channel'=>(string)($last['channel']??'text'),
+                    'voiceEventId'=>(string)($last['voice_event_public_id']??''),
+                    'verifiedSameUser'=>$allowTools])
             :['ok'=>true,'skill'=>'agent.llm.conversation',
                 'answer'=>fmllm_exchange($selected['provider'],$key,$history,null,$personMemory),
                 'sources'=>[],'data'=>['toolCalls'=>0,'privateToolsAvailable'=>false]];
