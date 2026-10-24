@@ -183,7 +183,7 @@
     {
       "path": "api/agent-workspace.php",
       "feature": "agent_core",
-      "sourceBlob": "69d7c9c19a618ab2a31b08bf6d5c2d66efa9ea75",
+      "sourceBlob": "206213da3aa72354d540697f0fda2128f620a02c",
       "discoveredActions": [
         "append",
         "archive",

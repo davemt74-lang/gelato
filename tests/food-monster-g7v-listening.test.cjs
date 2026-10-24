@@ -70,6 +70,6 @@ const flush=async()=>{for(let i=0;i<40;i++)await Promise.resolve()};
  once.say('Review orders today',true);await result;await flush();
  ok(sent.some(x=>x.body.action==='append'&&x.body.content==='Review orders today'),'One-shot final reaches Agent');
  ok(recognizers.at(-1)!==once&&agent.listeningStatus.microphoneActive,'Always-on session restored');
- ok(!sent.some(x=>x.url.includes('food-monster-llm.php')),'No LLM key needed for speech recognition');
+ ok(sent.some(x=>x.url.includes('food-monster-llm.php')&&x.body.message==='Review orders today'),'Voice sends through server AI provider without a browser API key');
  console.log('FM-G7V dictation and permission tests: PASS ('+n+' assertions)');
 })().catch(e=>{console.error(e);process.exitCode=1});

@@ -1,8 +1,8 @@
 <?php
 declare(strict_types=1);
-if(!function_exists('mb_strtolower'))function mb_strtolower(string $s,?string $enc=null):string{return strtolower($s);}
-if(!function_exists('mb_strlen'))function mb_strlen(string $s,?string $enc=null):int{return strlen($s);}
-if(!function_exists('mb_substr'))function mb_substr(string $s,int $start,?int $len=null,?string $enc=null):string{return substr($s,$start,$len);}
+if(!function_exists('mb_strtolower')){function mb_strtolower(string $s,?string $enc=null):string{return strtolower($s);}}
+if(!function_exists('mb_strlen')){function mb_strlen(string $s,?string $enc=null):int{return strlen($s);}}
+if(!function_exists('mb_substr')){function mb_substr(string $s,int $start,?int $len=null,?string $enc=null):string{return substr($s,$start,$len);}}
 function app_has_permission(string $permission,array $user):bool
 {
     $p=(array)($user['permissions']??[]);return in_array('*',$p,true)||in_array($permission,$p,true);
