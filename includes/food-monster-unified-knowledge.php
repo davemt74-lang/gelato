@@ -39,6 +39,14 @@ function fmuk_topics(string $question): array
     ];
     $topics=[];
     foreach($patterns as $name=>$pattern)if(preg_match($pattern,$text))$topics[]=$name;
+    // A menu-item ingredient question is not a request to disclose a private
+    // production recipe. Voice guests can ask what's listed on a pizza
+    // without provoking an unrelated "recipe not authorized" diagnostic.
+    $namedMenuIngredients=preg_match('/\b(?:pizza|pasta|dish|menu item|entree)\b/u',$text)
+        &&preg_match('/\b(?:ingredients?|toppings?|contains?|what.s in|made of)\b/u',$text);
+    $productionRecipe=preg_match('/\b(?:recipe|formula|batch|production|dough|yield|mixing|kneading)\b/u',$text);
+    if($namedMenuIngredients&&!$productionRecipe&&in_array('menu',$topics,true))
+        $topics=array_values(array_filter($topics,static fn(string $topic):bool=>$topic!=='recipes'));
     return array_slice($topics,0,3);
 }
 
@@ -151,8 +159,17 @@ function fmuk_menu_items(PDO $pdo,int $org,string $question): array
     // item request is searched against active menu evidence first.
     $overview=fmuk_menu_overview_question($question)||preg_match('/\b(?:menu|specials?|options?|what (?:do|can) (?:you|we) (?:have|serve|offer))\b/iu',$question)===1
         &&mb_strlen($subject,'UTF-8')<3;
-    if(!$overview&&mb_strlen($subject,'UTF-8')>=2)
-        return menu_training_search_items($pdo,$org,$subject,12);
+    if(!$overview&&mb_strlen($subject,'UTF-8')>=2){
+        $matches=menu_training_search_items($pdo,$org,$subject,12);
+        if(!$matches){
+            // "Testarosa Pizza" might be saved as "Testarosa". Narrow the
+            // fallback to the item name; never replace a miss with a full menu.
+            $name=trim(preg_replace('/\b(?:pizza|pie|dish|item)\b/iu',' ',$subject)??$subject);
+            if($name!==$subject&&mb_strlen($name,'UTF-8')>=3)
+                $matches=menu_training_search_items($pdo,$org,$name,12);
+        }
+        return $matches;
+    }
     $stmt=$pdo->prepare("SELECT i.id FROM menu_items i JOIN menu_sections s ON s.id=i.section_id AND s.organization_id=i.organization_id WHERE i.organization_id=? AND i.is_active=1 AND s.status='active' ORDER BY s.name,i.name LIMIT 20");
     $stmt->execute([$org]);
     return menu_training_items_by_ids($pdo,$org,array_map('intval',$stmt->fetchAll(PDO::FETCH_COLUMN)),20);
@@ -708,26 +725,72 @@ function fmuk_evidence(PDO $pdo,array $user,string $question,bool $voice=false,b
 }
 
 /** Respond directly from Gelato's server. Never send raw records to a hosted LLM. */
+/**
+ * Turn scoped, permission-filtered facts become a conversational answer.
+ * The broker's internal diagnostics and missing-source sentinels must never
+ * be delivered verbatim as if they were a restaurant answer.
+ */
+function fmuk_reply_from_evidence(array $evidence,string $question): string
+{
+    $context=(string)($evidence['context']??'');
+    $firstNewline=strpos($context,"\n");
+    $body=$firstNewline===false?'':substr($context,$firstNewline+1);
+    $blocks=preg_split('/\n\s*\n/u',$body)?:[];
+    $available=[];$denied=[];$missing=[];$unavailable=[];
+    foreach($blocks as $block){
+        if(!preg_match('/^([a-z_]+):\s*(.*)$/us',trim($block),$match))continue;
+        $topic=str_replace('_',' ',$match[1]);$detail=trim($match[2]);
+        if(str_starts_with($detail,'NOT AUTHORIZED')){$denied[]=$topic;continue;}
+        if(str_starts_with($detail,'No matching recorded data')){$missing[]=$topic;continue;}
+        if(str_starts_with($detail,'Source temporarily unavailable')){$unavailable[]=$topic;continue;}
+        if($detail!=='')$available[$topic]=$detail;
+    }
+    if(!$available){
+        if($denied)
+            return 'I cannot access the '.implode(' and ',$denied).' records with this session’s current permissions or voice verification. General questions are still welcome.';
+        if($unavailable)
+            return 'That Gelato data source is temporarily unavailable. Please try again in a moment.';
+        if($missing){
+            if(in_array('menu',$missing,true))
+                return 'I could not find a matching item in Gelato’s active menu. Can you confirm the item name or spelling?';
+            return 'I could not find matching records for that request. Can you tell me which item, person, or date you mean?';
+        }
+        return 'Which Gelato item, person, or date would you like me to check?';
+    }
+    if(count($available)===1&&isset($available['menu'])){
+        $lines=explode("\n",$available['menu']);
+        if(count($lines)===1&&preg_match('/^(.+?)\s+\|\s+prices:\s*(.+?)\s+\|\s+ingredients:\s*(.*)$/us',$lines[0],$match)){
+            $name=trim($match[1]);$prices=trim($match[2]);$ingredients=trim($match[3]);
+            if(preg_match('/\b(?:ingredients?|toppings?|contains?|what.s in|made of)\b/iu',$question)){
+                return $ingredients!==''
+                    ?'Gelato’s active menu lists these ingredients for '.$name.': '.$ingredients.'.'
+                    :'I found '.$name.' in Gelato’s menu, but its ingredients are not recorded there.';
+            }
+            if(preg_match('/\b(?:price|cost|how much)\b/iu',$question))
+                return $prices!=='not recorded'?'Gelato lists '.$name.' at '.$prices.'.'
+                    :'I found '.$name.', but its price is not recorded.';
+            return 'Gelato’s active menu lists '.$name.'.'
+                .($ingredients!==''?' Ingredients: '.$ingredients.'.':'')
+                .($prices!=='not recorded'?' Prices: '.$prices.'.':'');
+        }
+    }
+    $sentences=[];
+    foreach($available as $topic=>$detail)$sentences[]=ucfirst($topic).":\n".$detail;
+    return implode("\n\n",$sentences);
+}
+
 function fmuk_answer(PDO $pdo,array $user,string $question,bool $voice=false,bool $ownerVoiceVerified=false): array
 {
     $capabilities=fmuk_capabilities($user,$voice,$ownerVoiceVerified);
     if(fmuk_capability_question($question)){
         $answer=$capabilities
-            ?'Yes. Through this Gelato Agent Chat I can read your authorized restaurant information: '.implode(', ',$capabilities).'. Ask a specific question and I will check the current records. Other operational actions use Gelato\'s existing permission and approval workflows.'
-            :'This session does not have permission to read restaurant records. A Gelato administrator can review your access.';
+            ?'I can read your authorized Gelato information, including '.implode(', ',$capabilities).'. I can also help with actions through the available skills, subject to your permissions and required approvals.'
+            :'This session does not have access to restaurant records. Ask a Gelato administrator to review your permissions.';
         return ['skill'=>'food_monster.unified_capabilities','answer'=>$answer,'sources'=>[],
             'data'=>['evidenceTopics'=>[],'readOnly'=>true]];
-    }else{
-        $evidence=fmuk_evidence($pdo,$user,$question,$voice,$ownerVoiceVerified);
-        $sections=explode("\n",(string)$evidence['context']);
-        array_shift($sections); // Capability inventory is separate from the actual response.
-        $detail=trim(implode("\n",$sections));
-        $answer="Here is what Gelato currently has recorded for your question:\n".$detail;
-        if($detail==='')
-            $answer='I could not match this request to an authorized read-only information source. Please specify the relevant item, person, department or date.';
-        if(str_contains((string)$evidence['context'],'menu:'))
-            $answer.="\nAllergen and ingredient details require verification against current recipes, supplier labels and cross-contact conditions.";
     }
+    $evidence=fmuk_evidence($pdo,$user,$question,$voice,$ownerVoiceVerified);
+    $answer=fmuk_reply_from_evidence($evidence,$question);
     return ['skill'=>'food_monster.unified_knowledge','answer'=>mb_substr($answer,0,6900,'UTF-8'),
         'sources'=>$evidence['sources'],'data'=>['evidenceTopics'=>$evidence['topics'],'readOnly'=>true]];
 }
