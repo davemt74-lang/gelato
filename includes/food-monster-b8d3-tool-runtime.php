@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__.'/food-monster-b8d2-execution-loop.php';
 require_once __DIR__.'/food-monster-b8d3-timecard.php';
+require_once __DIR__.'/food-monster-b8d4-scheduling.php';
 
 /**
  * FM-B8D3: model-selected tools, executed exclusively by the signed-in
@@ -50,7 +51,7 @@ function fm8d3_catalogue(array $principal):array
                 fm8d3_hours_read(app_pdo(),$actor,$args),
         ];
     }
-    return $base;
+    return array_merge($base,fm8d4_schedule_catalogue($principal));
 }
 function fm8d3_provider_tools(string $provider,array $catalogue):array
 {
@@ -124,10 +125,17 @@ function fm8d3_turn(
     $provider=fmllm_allowed_provider($provider);
     if($provider==='auto')throw new InvalidArgumentException('Choose configured provider.');
     $catalogue=$catalogueOverride??fm8d3_catalogue($principal);
+    // Confirm/cancel is explicit user consent for an existing server proposal,
+    // never a phrase-based dispatch of a new business intent.
+    if($catalogueOverride===null){
+        $confirmed=fm8d4_confirm_pending($pdo,$principal,$history);
+        if($confirmed!==null)return $confirmed;
+    }
     $payload=fmllm_payload($provider,$history,$memory);
     $payload['tools']=fm8d3_provider_tools($provider,$catalogue);
     $payload['tool_choice']=$provider==='openai'?'auto':['type'=>'auto'];
-    $instruction=" When a user asks for Gelato account identity or actual personal time-clock hours, select the matching available tool. Do not say this data is unavailable without attempting an authorized tool. Do not invent records or change business data.";
+    $today=(new DateTimeImmutable('now',new DateTimeZone('America/Phoenix')))->format('Y-m-d l');
+    $instruction=" Today at the restaurant in America/Phoenix is ".$today.". Interpret relative dates such as Friday against that date; when time is missing, ask rather than inventing it. Select an appropriate available Gelato skill for a user’s account, hours, staff schedule, roster, availability, or shift creation request. Shift creation selects propose_staff_shift and requires a separate explicit human Confirm before any database change. Do not say live data is unavailable without attempting the authorized tool. Do not invent records or change business data.";
     if($provider==='openai')$payload['instructions'].=$instruction;
     else $payload['system'].=$instruction;
     $response=fm8d3_provider_request($provider,$key,$payload,$transport);
