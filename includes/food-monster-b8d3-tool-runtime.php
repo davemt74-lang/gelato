@@ -5,6 +5,7 @@ require_once __DIR__.'/food-monster-b8d3-timecard.php';
 require_once __DIR__.'/food-monster-b8d4-scheduling.php';
 require_once __DIR__.'/food-monster-b8d5-menu-recipes.php';
 require_once __DIR__.'/food-monster-b8d6-training.php';
+require_once __DIR__.'/food-monster-b8d7-vision.php';
 
 /**
  * FM-B8D3: model-selected tools, executed exclusively by the signed-in
@@ -53,7 +54,7 @@ function fm8d3_catalogue(array $principal,array $context=[]):array
                 fm8d3_hours_read(app_pdo(),$actor,$args),
         ];
     }
-    return array_merge($base,fm8d4_schedule_catalogue($principal),fm8d5_catalogue($principal),fm8d6_training_catalogue($principal,$context));
+    return array_merge($base,fm8d4_schedule_catalogue($principal),fm8d5_catalogue($principal),fm8d6_training_catalogue($principal,$context),fm8d7_vision_catalogue($principal));
 }
 function fm8d3_provider_tools(string $provider,array $catalogue):array
 {
