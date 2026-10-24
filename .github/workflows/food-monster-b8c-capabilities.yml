@@ -1,0 +1,33 @@
+name: Food Monster B8C Capability Coverage
+
+on:
+  pull_request:
+    paths:
+      - 'api/**'
+      - 'includes/agent-node-registry.php'
+      - 'config/food-monster-capability-map.json'
+      - 'config/.htaccess'
+      - 'tests/food-monster-b8c-capability-map.php'
+      - '.github/workflows/food-monster-b8c-capabilities.yml'
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fm-b8c-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  inventory-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+      - name: Validate syntax
+        run: php -l tests/food-monster-b8c-capability-map.php
+      - name: Check source-to-map coverage without DB or network
+        run: php tests/food-monster-b8c-capability-map.php
