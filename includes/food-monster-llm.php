@@ -34,6 +34,23 @@ function fmllm_history(array $rows,int $max=12): array
         $role=$row['role']??null;
         if(!in_array($role,['user','agent'],true))continue;
         $text=trim((string)($row['content']??''));
+        // FM-B8D5: privately executed model tools are terminal observations.
+        // Stored chat bubbles remain visible to the user, but the following
+        // request MUST NOT round-trip those private hours/schedule/menu/recipe
+        // facts to OpenAI or Claude as ordinary conversation history.
+        if($role==='agent'){
+            $skill=(string)($row['skill']??'');
+            $sources=is_array($row['sources']??null)?$row['sources']:[];
+            $privateSource=false;
+            foreach($sources as $source){
+                if(is_string($source)&&preg_match('/(?:Time Clock|Staff Scheduling|Recipe Library|Menu Manager)/i',$source)){
+                    $privateSource=true;break;
+                }
+            }
+            if($skill==='agent.model_selected_tools'||str_starts_with($skill,'schedule.action_')
+                ||$privateSource)
+                $text='[A previous private Gelato tool answer was shown locally. Re-run the authorized tool if fresh facts are needed.]';
+        }
         if($text==='')continue;
         $text=mb_substr($text,0,1800,'UTF-8');
         $who=$role==='agent'?'assistant':'user';
