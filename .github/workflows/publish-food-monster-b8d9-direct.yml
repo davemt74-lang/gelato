@@ -1,0 +1,70 @@
+name: Publish Food Monster B8D9 Direct Deployment
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-food-monster-b8d9-direct.yml
+  pull_request:
+    paths:
+      - .github/workflows/publish-food-monster-b8d9-direct.yml
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish-certified-package:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Verify release build reference
+        run: test -n 'a40fef9986fbd26db917560dbcda2027812bdef9'
+      - name: Download exact merged-main full deployment
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p payload
+          gh run download 40132278065 --repo davemt74-lang/gelato --name gelato-full-deploy --dir payload
+          test -s payload/gelato-full-deploy.zip
+          test -s payload/gelato-full-deploy.sha256
+
+      - name: Verify archive, checksum, commit and root-level app layout
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd payload
+          expected="$(sed -nE 's/^([0-9a-f]{64})[[:space:]]+.*gelato-full-deploy\.zip$/\1/p' gelato-full-deploy.sha256)"
+          test "${#expected}" -eq 64
+          printf '%s  gelato-full-deploy.zip\n' "$expected" | sha256sum --check -
+          printf '%s  gelato-full-deploy.zip\n' "$expected" > gelato-full-deploy.sha256
+          unzip -tq gelato-full-deploy.zip
+          unzip -p gelato-full-deploy.zip DEPLOY_SHA.txt | grep -Fx 'a40fef9986fbd26db917560dbcda2027812bdef9'
+          for file in index.php upgrade.php api/agent-workspace.php config/food-monster-capability-map.json config/.htaccess tests/food-monster-b8d9-review-governance.php includes/food-monster-b8d9-review-governance.php database/20261217_food_monster_b8d8_action_receipts.sql includes/food-monster-b8d3-tool-runtime.php api/food-monster-llm.php; do
+            unzip -Z1 gelato-full-deploy.zip | grep -Fx "$file"
+          done
+          if unzip -Z1 gelato-full-deploy.zip | grep -Eq '^(config\.php$|\.env$|uploads/|storage/)'; then
+            echo 'Deployment archive includes a private live path.'
+            exit 1
+          fi
+          if unzip -Z1 gelato-full-deploy.zip | grep -Eq '^(gelato-full-deploy\.zip|deploy\.zip|package\.zip)$'; then
+            echo 'Nested deployment ZIP detected.'
+            exit 1
+          fi
+
+      - name: Publish one direct-download ZIP and checksum
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create gelato-food-monster-b8d9 \
+            payload/gelato-full-deploy.zip \
+            payload/gelato-full-deploy.sha256 \
+            --repo davemt74-lang/gelato \
+            --target a40fef9986fbd26db917560dbcda2027812bdef9 \
+            --title 'Gelato Food Monster B8D9 — Vision Sample Review and Release Governance Skills' \
+            --notes 'Verified single deploy ZIP from merged Gelato main (FM-B8D9). Four new model-selected, read-only Vision Lab skills report current sample-review queues, exact sample review status, recorded annotation QA and manager-restricted model release-candidate status. Review evidence, model artifacts, raw images and biometric data remain on Gelato server and are never returned to AI providers. Any sample approval/rejection, dataset freeze, model rollout, or device changes still require existing governance. Includes prior B8D3-B8D8 skills, including B8D8 routine creation receipts. Deploy ZIP into Gelato app root preserving config.php, .env, uploads and storage; run upgrade.php; hard-refresh. SHA-256 manifest separate. No nested ZIP.'
