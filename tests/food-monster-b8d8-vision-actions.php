@@ -28,7 +28,8 @@ $pdo->prepare("INSERT INTO organization_memberships (organization_id,user_id,sta
     VALUES (?,?,'active')")->execute([$org,$uid]);
 $actor=['id'=>$uid,'organization_id'=>$org,'display_name'=>'Vision Manager',
     'permissions'=>['glasses.view','glasses.manage']];
-b8d8_check(gaw_ready($pdo)&&glasses_vision_lab_ready($pdo),'Agent Chat and Vision Lab schemas upgraded');
+b8d8_check(gaw_ready($pdo)&&glasses_vision_lab_ready($pdo)&&fm8d8_receipts_ready($pdo),
+    'Agent Chat, Vision Lab and durable agent receipt schemas upgraded');
 $room=(string)gaw_create_thread($pdo,$org,$uid,'text','Vision routine actions')['public_id'];
 $first=gaw_append($pdo,$org,$uid,$room,'user','Create a collection mission for cheese portioning');
 $context=['threadId'=>$room,'messageId'=>(string)$first['id'],
@@ -105,6 +106,17 @@ $datasetRepeat=$cat2['create_vision_dataset_draft']['execute']([
 b8d8_check(str_contains($datasetRepeat['data']['answer'],'already exists')
     &&b8d8_count($pdo,'glasses_vision_dataset_versions',$org)===1,
     'dataset version creation is idempotent');
+$altered=$cat2['create_vision_dataset_draft']['execute']([
+    'name'=>'Injected different dataset','version_label'=>'v42'],$actor);
+b8d8_check(str_contains($altered['data']['answer'],'Cheese QC')
+    &&!str_contains($altered['data']['answer'],'Injected different dataset')
+    &&b8d8_count($pdo,'glasses_vision_dataset_versions',$org)===1,
+    'one verified Agent Chat turn cannot create multiple draft datasets by changing arguments');
+$q=$pdo->prepare("SELECT resource_public_id FROM food_monster_agent_action_receipts
+    WHERE organization_id=? AND actor_user_id=? AND turn_public_id=?
+        AND action='create_vision_dataset_draft'");
+$q->execute([$org,$uid,$ctx2['messageId']]);
+b8d8_check((bool)$q->fetchColumn(),'durable receipt binds draft dataset to signed-in chat turn');
 $datasetList=$cat2['list_vision_dataset_versions']['execute']([], $actor);
 b8d8_check(str_contains($datasetList['data']['answer'],'Cheese QC')
     &&str_contains($datasetList['data']['answer'],'draft'),

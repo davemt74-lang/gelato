@@ -15,6 +15,12 @@ function fm8d8_observe(string $answer):array
     return ['ok'=>true,'data'=>['answer'=>mb_strcut($answer,0,2600,'UTF-8'),
         'source'=>'Gelato Vision Lab mission/dataset ledger']];
 }
+function fm8d8_receipts_ready(PDO $pdo):bool
+{
+    $q=$pdo->query("SELECT COUNT(*) FROM information_schema.tables
+        WHERE table_schema=DATABASE() AND table_name='food_monster_agent_action_receipts'");
+    return (int)$q->fetchColumn()===1;
+}
 function fm8d8_can_manage(array $actor):bool
 {
     return app_has_permission('glasses.view',$actor)&&app_has_permission('glasses.manage',$actor);
@@ -41,7 +47,8 @@ function fm8d8_create_mission(PDO $pdo,array $actor,array $context,array $args):
     $pdo->beginTransaction();
     try{
         fm8d8_lock_actor($pdo,$org,$uid);
-        $turn=fm8d6_canonical_turn($pdo,$actor,$context);
+        try{$turn=fm8d6_canonical_turn($pdo,$actor,$context);}
+        catch(InvalidArgumentException){$turn=null;}
         if($turn===null)throw new DomainException('The latest verified chat turn changed. No mission was created.');
         $source='agentchat:'.$turn;
         $q=$pdo->prepare("SELECT public_id FROM glasses_vision_training_missions
@@ -72,19 +79,34 @@ function fm8d8_create_dataset(PDO $pdo,array $actor,array $context,array $args):
     $version=trim((string)($args['version_label']??''));
     if($name===''||$version===''||mb_strlen($name,'UTF-8')>190
        ||mb_strlen($version,'UTF-8')>80)throw new InvalidArgumentException('Invalid dataset version.');
-    if(!glasses_vision_lab_ready($pdo))return fm8d8_observe('Vision Lab is not installed. No dataset was created.');
+    if(!glasses_vision_lab_ready($pdo)||!fm8d8_receipts_ready($pdo))
+        return fm8d8_observe('Vision Lab agent receipt migration is pending. No dataset was created.');
     $pdo->beginTransaction();
     try{
         fm8d8_lock_actor($pdo,$org,$uid);
-        if(fm8d6_canonical_turn($pdo,$actor,$context)===null)
+        try{$turn=fm8d6_canonical_turn($pdo,$actor,$context);}
+        catch(InvalidArgumentException){$turn=null;}
+        if($turn===null)
             throw new DomainException('The latest verified chat turn changed. No dataset was created.');
-        $q=$pdo->prepare("SELECT public_id FROM glasses_vision_dataset_versions
-            WHERE organization_id=? AND name=? AND version_label=? LIMIT 1");
-        $q->execute([$org,$name,$version]);
-        $existing=(string)($q->fetchColumn()?:'');
-        if($existing!==''){$d=glasses_vision_lab_dataset($pdo,$org,$existing);$reused=true;}
-        else{$d=glasses_vision_lab_create_dataset($pdo,$org,[
-            'name'=>$name,'versionLabel'=>$version],$uid);$reused=false;}
+        $q=$pdo->prepare("SELECT resource_public_id FROM food_monster_agent_action_receipts
+            WHERE organization_id=? AND actor_user_id=? AND turn_public_id=?
+                AND action='create_vision_dataset_draft' LIMIT 1");
+        $q->execute([$org,$uid,$turn]);
+        $receipt=(string)($q->fetchColumn()?:'');
+        if($receipt!==''){$d=glasses_vision_lab_dataset($pdo,$org,$receipt);$reused=true;}
+        else{
+            $q=$pdo->prepare("SELECT public_id FROM glasses_vision_dataset_versions
+                WHERE organization_id=? AND name=? AND version_label=? LIMIT 1");
+            $q->execute([$org,$name,$version]);
+            $existing=(string)($q->fetchColumn()?:'');
+            if($existing!==''){$d=glasses_vision_lab_dataset($pdo,$org,$existing);$reused=true;}
+            else{$d=glasses_vision_lab_create_dataset($pdo,$org,[
+                'name'=>$name,'versionLabel'=>$version],$uid);$reused=false;}
+            $pdo->prepare("INSERT INTO food_monster_agent_action_receipts
+                (organization_id,actor_user_id,turn_public_id,action,resource_public_id)
+                VALUES (?,?,?,'create_vision_dataset_draft',?)")
+                ->execute([$org,$uid,$turn,(string)$d['publicId']]);
+        }
         $pdo->commit();
     }catch(Throwable $e){
         if($pdo->inTransaction())$pdo->rollBack();

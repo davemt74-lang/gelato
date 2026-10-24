@@ -5,6 +5,7 @@ on:
     paths:
       - 'includes/food-monster-b8d3-tool-runtime.php'
       - 'includes/food-monster-b8d8-vision-actions.php'
+      - 'database/20261217_food_monster_b8d8_action_receipts.sql'
       - 'tests/food-monster-b8d8-vision-actions.php'
       - '.github/workflows/food-monster-b8d8-vision-actions.yml'
   push:
@@ -13,6 +14,7 @@ on:
       - 'includes/food-monster-b8d3-tool-runtime.php'
       - 'includes/food-monster-llm.php'
       - 'includes/food-monster-b8d8-vision-actions.php'
+      - 'database/20261217_food_monster_b8d8_action_receipts.sql'
       - 'tests/food-monster-b8d8-vision-actions.php'
       - '.github/workflows/food-monster-b8d8-vision-actions.yml'
 
@@ -49,6 +51,7 @@ jobs:
           php -l includes/food-monster-llm.php
           php -l includes/food-monster-b8d3-tool-runtime.php
           php -l includes/food-monster-b8d8-vision-actions.php
+          test -f database/20261217_food_monster_b8d8_action_receipts.sql
           php -l tests/food-monster-b8d8-vision-actions.php
           php -l tests/scheduling-contract.php
           php -l tests/scheduling-agent-context-contract.php
