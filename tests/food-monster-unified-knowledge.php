@@ -332,4 +332,45 @@ fmuk_assert(is_string($specialist)
 fmuk_assert(!str_contains($specialist,'Menu or recipe evidence is unavailable. Ask a manager'),
     'unexpected errors no longer direct the Super Admin to ask a manager');
 
+// B8B: Vision Lab is a first-class, permission-scoped source of live evidence.
+$visionUser=['id'=>52,'organization_id'=>7,'permissions'=>['glasses.view']];
+fmuk_assert(in_array('vision_lab',fmuk_topics('What is happening in the Vision Lab?'),true),
+    'Vision Lab intent reaches unified broker');
+fmuk_assert(fmuk_prefers_broker('Show Vision Lab datasets and missions',$visionUser),
+    'Vision Lab reads route before generic chat fallback');
+fmuk_assert(fmuk_allowed($visionUser,'vision_lab',false,false),
+    'glasses.view grants typed vision read');
+fmuk_assert(fmuk_allowed($visionUser,'vision_lab',true,true),
+    'verified owner voice can read Vision Lab');
+fmuk_assert(!fmuk_allowed($visionUser,'vision_lab',true,false),
+    'unknown room voice cannot borrow Vision Lab authority');
+fmuk_assert(!fmuk_allowed($outsider,'vision_lab',false,false),
+    'unprivileged account cannot read Vision Lab');
+fmuk_assert(in_array('Vision Lab missions, datasets, samples and drift',
+    fmuk_capabilities($visionUser,false,false),true),
+    'authorized capability inventory includes Vision Lab');
+[$visionLines,$visionSources]=fmuk_render_vision_lab([
+    'ready'=>true,'assignments'=>[['releasedAt'=>null,'employeeNumber'=>'PRIVATE_EMPLOYEE']],
+    'devices'=>[['displayName'=>'Camera 1']],'samples'=>[['reviewStatus'=>'pending','notes'=>'PRIVATE_NOTE']],
+    'missions'=>[['publicId'=>'mission-1','title'=>'Vision Trial','status'=>'active','approvedCount'=>3,
+        'assignedUserName'=>'PRIVATE_PERSON']],
+    'datasets'=>[['publicId'=>'dataset-1','name'=>'Pizza Images','versionLabel'=>'v1','status'=>'draft','itemCount'=>17,
+        'quality'=>['secret'=>'PRIVATE_QUALITY']]],
+    'driftIncidents'=>[['publicId'=>'drift-1','severity'=>'high','category'=>'camera','recoveryStatus'=>'open',
+        'reasons'=>['PRIVATE_REASON']]],
+]);
+fmuk_assert(count($visionLines)>=4&&count($visionSources)===4,
+    'vision evidence has bounded counts, mission/dataset/drift sources');
+fmuk_assert(str_contains(implode(' ', $visionLines),'Pizza Images')
+    &&str_contains(implode(' ', $visionLines),'Vision Trial'),
+    'vision renderer surfaces real dataset and mission names');
+fmuk_assert(!str_contains(implode('|',$visionLines).'|'.implode('|',$visionSources),'PRIVATE_'),
+    'Vision Lab chat excludes identities, private notes, raw media and annotations');
+[$emptyVision,$emptySources]=fmuk_render_vision_lab(['ready'=>false]);
+fmuk_assert(count($emptyVision)===1&&$emptySources===[],
+    'missing Vision Lab schema is reported without fabricated data');
+$visionBrokerCode=file_get_contents(__DIR__.'/../includes/food-monster-unified-knowledge.php');
+fmuk_assert(str_contains($visionBrokerCode,'glasses_vision_lab_catalog($pdo,$user)'),
+    'Vision Lab evidence is loaded through existing tenant-scoped Gelato service');
+
 echo 'FM-UK read broker authorization and evidence: PASS ('.$checks.' assertions)' . "\n";

@@ -18,6 +18,7 @@ function fmuk_topics(string $question): array
     $patterns=[
         'menu'=>'/\b(?:menu|pizza|pasta|dish|dishes|entree|food items?|prices?|toppings?|specials?|gelato flavors?)\b/u',
         'recipes'=>'/\b(?:recipes?|batch formula|dough formula|ingredients?|production standards?|how (?:do|to) (?:make|prepare|cook|bake))\b/u',
+        'vision_lab'=>'/\b(?:vision lab|vision operations?|vision models?|vision datasets?|vision training|machine vision|computer vision|camera learning|visual recognition|vision missions?|vision samples?|vision drift|model benchmarks?|model rollouts?|glasses? vision)\b/u',
         'schedule'=>'/\b(?:schedules?|shifts?|roster|working (?:today|tonight|tomorrow)|staffing|coverage|who works|when (?:am|are|is) .*working)\b/u',
         'employees'=>'/\b(?:employees?|staff|crew|team members?|personnel|workers?|who works here|who is our)\b/u',
         'inventory'=>'/\b(?:inventory|stock|on hand|reorder|shortage|supplies)\b/u',
@@ -62,6 +63,7 @@ function fmuk_prefers_broker(string $question,array $user): bool
     if(!$topics&&!fmuk_capability_question($question))return false;
     return fmuk_capability_question($question)||fmuk_menu_overview_question($question)
         ||in_array('menu',$topics,true)||in_array('recipes',$topics,true)
+        ||in_array('vision_lab',$topics,true)
         ||fmuk_roster_question($question)||count($topics)>1||in_array('knowledge',$topics,true)
         ||in_array('pos',$topics,true)||in_array('reservations',$topics,true)||in_array('training',$topics,true)
         ||(in_array('schedule',$topics,true)&&!app_has_permission('schedule.agent',$user));
@@ -87,6 +89,7 @@ function fmuk_allowed(array $user,string $topic,bool $voice,bool $ownerVoiceVeri
     if(!$safe)return false;
     return match($topic){
         'recipes'=>app_has_permission('recipes.view',$user)&&app_has_permission('recipes.agent',$user),
+        'vision_lab'=>app_has_permission('glasses.view',$user),
         'schedule'=>app_has_permission('schedule.view',$user)||app_has_permission('schedule.manage',$user)||app_has_permission('schedule.self',$user),
         'employees'=>app_has_permission('staff.view',$user)||app_has_permission('staff.manage',$user)||app_has_permission('schedule.view',$user),
         'inventory'=>app_has_permission('inventory.view',$user),
@@ -117,6 +120,7 @@ function fmuk_allowed(array $user,string $topic,bool $voice,bool $ownerVoiceVeri
 function fmuk_capabilities(array $user,bool $voice,bool $ownerVoiceVerified): array
 {
     $names=['menu'=>'active menu and prices','recipes'=>'approved recipes and production standards',
+        'vision_lab'=>'Vision Lab missions, datasets, samples and drift',
         'schedule'=>'shift schedules','employees'=>'staff roster','inventory'=>'inventory and stock',
         'tasks'=>'restaurant tasks','sales'=>'recorded sales','crm'=>'customer CRM',
         'equipment'=>'equipment and maintenance','purchasing'=>'vendors and purchasing',
@@ -385,6 +389,58 @@ function fmuk_render_knowledge_rows(array $rows): array
     return [$lines,$sources];
 }
 
+/**
+ * Sanitize and summarize the existing Vision Lab catalog. No media bytes,
+ * employee identifiers, annotations, or model-management actions enter chat.
+ */
+function fmuk_render_vision_lab(array $catalog): array
+{
+    if(empty($catalog['ready']))
+        return [['Vision Lab tables are not initialized on this installation.'],[]];
+    $assignments=(array)($catalog['assignments']??[]);
+    $missions=(array)($catalog['missions']??[]);
+    $samples=(array)($catalog['samples']??[]);
+    $datasets=(array)($catalog['datasets']??[]);
+    $devices=(array)($catalog['devices']??[]);
+    $drift=(array)($catalog['driftIncidents']??[]);
+    $activeAssignments=count(array_filter($assignments,
+        static fn($row):bool=>is_array($row)&&empty($row['releasedAt'])));
+    $pendingSamples=count(array_filter($samples,
+        static fn($row):bool=>is_array($row)&&in_array((string)($row['reviewStatus']??''),
+            ['pending','needs_adjudication'],true)));
+    $lines=['Active vision device assignments: '.$activeAssignments
+        .' | devices: '.count($devices).' | missions: '.count($missions)
+        .' | datasets: '.count($datasets).' | samples awaiting review: '.$pendingSamples
+        .' | unresolved drift incidents: '.count($drift)];
+    $sources=['Gelato Vision Lab catalog'];
+    foreach(array_slice($missions,0,6) as $row){
+        if(!is_array($row))continue;
+        $id=(string)($row['publicId']??'');
+        $title=mb_substr(trim(strip_tags((string)($row['title']??'Untitled mission'))),0,100,'UTF-8');
+        $lines[]='Mission: '.$title.' | '.mb_substr((string)($row['status']??'unknown'),0,32,'UTF-8')
+            .' | approved samples: '.(int)($row['approvedCount']??0);
+        if($id!=='')$sources[]='Gelato Vision Lab mission '.$id;
+    }
+    foreach(array_slice($datasets,0,6) as $row){
+        if(!is_array($row))continue;
+        $id=(string)($row['publicId']??'');
+        $title=mb_substr(trim(strip_tags((string)($row['name']??'Untitled dataset'))),0,100,'UTF-8');
+        $lines[]='Dataset: '.$title.' | version: '.mb_substr((string)($row['versionLabel']??''),0,40,'UTF-8')
+            .' | '.mb_substr((string)($row['status']??'unknown'),0,32,'UTF-8')
+            .' | items: '.(int)($row['itemCount']??0);
+        if($id!=='')$sources[]='Gelato Vision Lab dataset '.$id;
+    }
+    foreach(array_slice($drift,0,6) as $row){
+        if(!is_array($row))continue;
+        $id=(string)($row['publicId']??'');
+        $lines[]='Vision drift: '.mb_substr((string)($row['severity']??'unknown'),0,24,'UTF-8')
+            .' | '.mb_substr((string)($row['category']??'uncategorized'),0,80,'UTF-8')
+            .' | '.mb_substr((string)($row['recoveryStatus']??'open'),0,32,'UTF-8');
+        if($id!=='')$sources[]='Gelato Vision Lab drift '.$id;
+    }
+    return [$lines,$sources];
+}
+
 /** @return array{context:string,sources:array,topics:array} */
 function fmuk_evidence(PDO $pdo,array $user,string $question,bool $voice=false,bool $ownerVoiceVerified=false): array
 {
@@ -401,6 +457,9 @@ function fmuk_evidence(PDO $pdo,array $user,string $question,bool $voice=false,b
             if($topic==='menu'){
                 require_once __DIR__.'/menu-training-knowledge.php';
                 [$lines,$used]=fmuk_render_menu(fmuk_menu_items($pdo,$org,$question));
+            }elseif($topic==='vision_lab'){
+                require_once __DIR__.'/glasses-vision-lab.php';
+                [$lines,$used]=fmuk_render_vision_lab(glasses_vision_lab_catalog($pdo,$user));
             }elseif($topic==='recipes'){
                 require_once __DIR__.'/restaurant-brain.php';
                 if(restaurant_brain_table_ready($pdo,'recipes')){
