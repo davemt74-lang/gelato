@@ -58,6 +58,9 @@ function fm8d2_run(array $plan,array $principal,array $catalogue,array $policy):
     $maxMs=max(50,min(10000,(int)($policy['maxMs']??4000)));
     $started=microtime(true);
     $trace=[];$keys=[];$requested=count($plan);
+    $priorTrace=$policy['priorTrace']??[];
+    if(!is_array($priorTrace)||!array_is_list($priorTrace))
+        throw new InvalidArgumentException('Invalid server checkpoint list.');
     $finish=static function(string $status,string $reason='',?int $blockedAt=null)use(&$trace,$requested,$started):array{
         return [
             'status'=>$status,'reason'=>$reason,'completed'=>count(array_filter($trace,
@@ -105,6 +108,19 @@ function fm8d2_run(array $plan,array $principal,array $catalogue,array $policy):
         if(!is_array($missing)||array_filter($missing,static fn($v)=>!is_string($v)||!preg_match('/^[a-zA-Z][a-zA-Z0-9_]{0,60}$/D',$v)))
             return $finish('denied','Invalid skill input contract.',$i);
         if($missing)return $finish('needs_input','Additional details required: '.implode(', ',$missing),$i);
+        // FM-B8D13C: reuse only verified, server-owned read checkpoints
+        // after rechecking the current actor, permissions and arguments.
+        if(isset($priorTrace[$i])){
+            $prior=$priorTrace[$i];
+            if($impact!=='read'||!is_array($prior)
+                ||($prior['index']??null)!==$i
+                ||($prior['tool']??null)!==$id
+                ||($prior['status']??null)!=='completed'
+                ||!is_array($prior['observation']??null))
+                return $finish('denied','Saved task checkpoint is not authorized.',$i);
+            $trace[]=$prior;
+            continue;
+        }
         if($impact==='routine'){
             $key=$step['idempotencyKey']??null;
             // This prevents duplicates within this run only. B8D3 must add
@@ -139,6 +155,15 @@ function fm8d2_run(array $plan,array $principal,array $catalogue,array $policy):
                 // An executed operation must never be silently retried after
                 // an audit failure; explicitly surface uncertain audit state.
                 return $finish('audit_failed','Skill completed but its audit record failed.',$i);
+            }
+        }
+        // Persist each completed step after its normal audit. A failure
+        // stops execution immediately; a routine mutation is never retried.
+        if(is_callable($policy['onStep']??null)){
+            try{($policy['onStep'])(end($trace));}
+            catch(Throwable){
+                return $finish('checkpoint_failed',
+                    'Tool completed but durable checkpoint could not be verified.',$i);
             }
         }
     }
