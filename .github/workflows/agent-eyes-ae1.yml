@@ -1,0 +1,40 @@
+name: Agent Eyes AE1 Live Room Canvas
+
+on:
+  pull_request:
+    paths:
+      - 'js/food-monster-room.js'
+      - 'js/food-monster-room-tracker.js'
+      - 'tests/food-monster-g9c-room-browser.test.cjs'
+      - 'tests/food-monster-g9c-presence.php'
+      - '.github/workflows/agent-eyes-ae1.yml'
+      - 'docs/AGENT-EYES-AE1.md'
+  push:
+    branches: [main]
+    paths:
+      - 'js/food-monster-room.js'
+      - 'js/food-monster-room-tracker.js'
+      - 'tests/food-monster-g9c-room-browser.test.cjs'
+      - 'tests/food-monster-g9c-presence.php'
+      - '.github/workflows/agent-eyes-ae1.yml'
+      - 'docs/AGENT-EYES-AE1.md'
+
+permissions:
+  contents: read
+
+jobs:
+  live-canvas:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax and tracking contracts
+        run: |
+          node --check js/food-monster-room.js
+          node --check js/food-monster-room-tracker.js
+          node --check tests/food-monster-g9c-room-browser.test.cjs
+          php tests/food-monster-g9c-presence.php
+      - name: Browser preview, participant overlays, privacy and stop lifecycle
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.0
+          npx playwright install --with-deps chromium
+          node tests/food-monster-g9c-room-browser.test.cjs

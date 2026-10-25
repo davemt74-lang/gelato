@@ -4,6 +4,51 @@ if(window.GelatoRoomPresence)return;
 const endpoint='api/food-monster-presence.php',profileDB='gelato-fm-face-pin-v1';
 const state={active:false,stream:null,video:null,faceApi:null,nativeDetector:null,profiles:[],tracker:null,timer:null,busy:false,csrf:'',room:null,changeKey:'',lastContext:0,lastStatus:'',generation:0,modelReady:false,idleCycles:0,failures:0,intervalMs:1700,lastInferenceMs:0};
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const eyes={panel:null,frame:null,overlay:null,video:null,button:null,open:false};
+function eyesEnsure(){
+ if(eyes.panel)return;
+ const style=document.createElement('style');style.dataset.fmEyesStyle='1';
+ style.textContent=`#fm-eyes-panel{position:fixed;right:16px;bottom:86px;width:min(440px,calc(100vw - 24px));max-height:calc(100dvh - 110px);overflow:auto;z-index:2147482990;background:#0d1825;color:#f3f7fb;border:1px solid #3b536a;border-radius:16px;box-shadow:0 18px 58px #0008;padding:12px;font:13px/1.5 system-ui,sans-serif}#fm-eyes-panel[hidden]{display:none}#fm-eyes-panel button{border:1px solid #607992;border-radius:8px;background:#22374b;color:inherit;padding:5px 9px;cursor:pointer}#fm-eyes-panel .fm-eyes-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}#fm-eyes-panel .fm-eyes-frame{position:relative;background:#050b12;overflow:hidden;border-radius:12px;aspect-ratio:4/3}#fm-eyes-panel video{display:block;width:100%;height:100%;object-fit:fill}#fm-eyes-panel .fm-eyes-overlay{position:absolute;inset:0;pointer-events:none}#fm-eyes-panel .fm-eyes-box{position:absolute;border:2px solid #60dfa3;border-radius:5px;box-sizing:border-box}#fm-eyes-panel .fm-eyes-box.unknown{border-color:#efc87a}#fm-eyes-panel .fm-eyes-tag{position:absolute;bottom:100%;left:-2px;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:#163a38;color:#fff;padding:1px 5px;border-radius:4px;font:11px system-ui}#fm-eyes-panel .fm-eyes-box.unknown .fm-eyes-tag{background:#5a421e}#fm-eyes-panel .fm-eyes-list{padding:8px 0 0;margin:0;list-style:none}#fm-eyes-panel .fm-eyes-list li{padding:3px 0;border-bottom:1px solid #263f56}#fm-eyes-panel .fm-eyes-note{font-size:11px;color:#a8bece;margin-top:8px}#fm-eyes-open{margin-left:5px}@media(max-width:600px){#fm-eyes-panel{right:6px;bottom:70px;width:calc(100vw - 12px);max-height:calc(100dvh - 80px)}}`;
+ document.head.append(style);
+ const panel=document.createElement('section');panel.id='fm-eyes-panel';panel.hidden=true;panel.setAttribute('role','region');panel.setAttribute('aria-label','Agent Eyes live camera');
+ const head=document.createElement('div');head.className='fm-eyes-head';
+ const title=document.createElement('strong');title.textContent='Agent Eyes · Room camera';
+ const close=document.createElement('button');close.type='button';close.textContent='Close';close.setAttribute('aria-label','Close Agent Eyes');close.addEventListener('click',()=>eyesShow(false));
+ head.append(title,close);panel.append(head);
+ const status=document.createElement('div');status.id='fm-eyes-status';status.setAttribute('role','status');panel.append(status);
+ const frame=document.createElement('div');frame.className='fm-eyes-frame';const overlay=document.createElement('div');overlay.className='fm-eyes-overlay';frame.append(overlay);panel.append(frame);
+ const list=document.createElement('ul');list.className='fm-eyes-list';list.id='fm-eyes-people';panel.append(list);
+ const note=document.createElement('div');note.className='fm-eyes-note';note.textContent='Visual identities are provisional. Camera is local; no video frames or face vectors are uploaded.';panel.append(note);
+ document.body.append(panel);eyes.panel=panel;eyes.frame=frame;eyes.overlay=overlay;
+ const button=document.createElement('button');button.type='button';button.id='fm-eyes-open';button.textContent='Agent Eyes';button.setAttribute('aria-controls','fm-eyes-panel');button.setAttribute('aria-expanded','false');button.addEventListener('click',()=>eyesShow(!eyes.open));
+ const anchor=document.querySelector('[data-fm-camera]');if(anchor)anchor.after(button);else document.body.append(button);eyes.button=button;
+ eyesRender();
+}
+function eyesShow(open){
+ eyesEnsure();eyes.open=!!open;eyes.panel.hidden=!eyes.open;eyes.button.setAttribute('aria-expanded',String(eyes.open));
+ if(eyes.open&&state.video){eyes.frame.prepend(state.video);state.video.style.cssText='';}
+ else if(state.video){document.body.append(state.video);state.video.style.cssText='position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;top:-10px;left:-10px';}
+ eyesRender();
+}
+function eyesRender(){
+ if(!eyes.panel)return;
+ const status=eyes.panel.querySelector('#fm-eyes-status');
+ status.textContent=state.active?(state.lastStatus||'Camera active · '+(state.room?.people?.length||0)+' tracked'):'Camera off · enable using the camera control';
+ eyes.overlay.replaceChildren();
+ const list=eyes.panel.querySelector('#fm-eyes-people');list.replaceChildren();
+ if(!eyes.open||!state.active)return;
+ for(const person of state.room?.people||[]){
+  if(!Array.isArray(person.box)||person.box.length!==4)continue;
+  const box=person.box.map(Number);if(box.some(x=>!Number.isFinite(x)||x<0||x>1))continue;
+  const known=person.identitySource==='local_face_profile'&&!!person.displayName;
+  const label=known?String(person.displayName).slice(0,70)+' · provisional':'Unknown participant';
+  const outline=document.createElement('div');outline.className='fm-eyes-box'+(known?'':' unknown');
+  outline.style.left=(box[0]*100)+'%';outline.style.top=(box[1]*100)+'%';outline.style.width=(box[2]*100)+'%';outline.style.height=(box[3]*100)+'%';
+  const tag=document.createElement('span');tag.className='fm-eyes-tag';tag.textContent=label;outline.append(tag);eyes.overlay.append(outline);
+  const item=document.createElement('li');item.textContent=label;list.append(item);
+ }
+}
+
 const $=s=>document.querySelector(s);
 function ui(){
  const buttons=[...document.querySelectorAll('[data-fm-camera]')];
@@ -91,6 +136,7 @@ async function observe(){
   }
  }catch(e){if(state.active){state.failures=Math.min(6,state.failures+1);state.lastStatus='Camera on · room connection unavailable';}}
  finally{
+  eyesRender();
   state.lastInferenceMs=Math.max(0,Date.now()-started);
   state.busy=false;ui();
   if(state.active&&generation===state.generation&&!document.hidden){
@@ -108,7 +154,7 @@ async function stop(){
  if(state.video){state.video.pause();state.video.srcObject=null;state.video.remove();state.video=null;}
  state.tracker?.clear();state.room=null;state.lastStatus='';state.changeKey='';state.profiles=[];
  state.idleCycles=0;state.failures=0;
- ui();
+ ui();eyesRender();
  if(running){try{await request('stop',{});}catch{}window.dispatchEvent(new CustomEvent('gelato-room-presence-updated',{detail:{room:{status:'not_connected',people:[],currentSpeaker:null}}}));void window.GelatoGlobalAgent?.refreshContext?.().catch(()=>{});}
 }
 async function start(){
@@ -129,10 +175,11 @@ async function start(){
    if(typeof window.FaceDetector==='function'){state.faceApi=null;state.nativeDetector=new window.FaceDetector({fastMode:true,maxDetectedFaces:8});}
    else throw e;
   }
+  if(eyes.open)eyesShow(true);
   state.tracker=window.GelatoRoomTracker.create();state.lastStatus='';
   await observe();
  }catch(e){await stop();throw e;}
- ui();
+ ui();eyesRender();
 }
 async function toggle(){
  if(state.active){await stop();return;}
@@ -148,9 +195,9 @@ function mount(){
  if(document.body.dataset.agentCanvas==='1'&&!document.querySelector('[data-fm-camera]')){
   const button=document.createElement('button');button.type='button';button.dataset.fmCamera='';button.title='Start room camera';button.setAttribute('aria-label','Start room camera');button.textContent='◎';document.getElementById('canvasMic')?.after(button);
  }
- ui();
+ eyesEnsure();ui();
 }
-window.GelatoRoomPresence={start,stop,toggle,get active(){return state.active;},get room(){return state.room;},
+window.GelatoRoomPresence={start,stop,toggle,openEyes:()=>eyesShow(true),closeEyes:()=>eyesShow(false),get active(){return state.active;},get room(){return state.room;},
  get diagnostics(){return {active:state.active,intervalMs:state.intervalMs,
    lastInferenceMs:state.lastInferenceMs,modelCached:state.modelReady,failures:state.failures};}};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
