@@ -32,6 +32,9 @@ foreach([
 foreach([
     'Hello there!',
     'What is a pizza?',
+    'What is inventory?',
+    'What is a schedule?',
+    'What is an employee?',
     'Why does honey improve pizza dough?',
     'Explain why pizza crust browns',
     'Is pizza better than pasta?',
