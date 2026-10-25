@@ -45,7 +45,7 @@ const base=path.resolve(__dirname,'..');
      const action=opt.method==='POST'?JSON.parse(opt.body).action:'status';
      if(action!=='status')window.calls.push(JSON.parse(opt.body));
      const observations=action==='observe'?JSON.parse(opt.body).tracks:[];
-     const people=observations.map(x=>({trackId:x.trackId,personId:x.localProfileEmail==='cook@example.test'?22:null,displayName:x.localProfileEmail==='cook@example.test'?'Test Cook':null,identitySource:x.localProfileEmail?'local_face_profile':'unknown',identityAssurance:x.localProfileEmail?'provisional_visual_match':'none',agentAdministration:false,websiteAuthenticated:false}));
+     const people=observations.map(x=>({trackId:x.trackId,box:x.box,personId:x.localProfileEmail==='cook@example.test'?22:null,displayName:x.localProfileEmail==='cook@example.test'?'Test Cook':null,identitySource:x.localProfileEmail?'local_face_profile':'unknown',identityAssurance:x.localProfileEmail?'provisional_visual_match':'none',agentAdministration:false,websiteAuthenticated:false}));
      return {ok:true,json:async()=>({ok:true,room:{status:action==='stop'?'not_connected':'active',people,currentSpeaker:null}})};
    };
   });
