@@ -1,0 +1,70 @@
+name: Publish Food Monster B8D13A Direct Deployment
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-food-monster-b8d13a-direct.yml
+  pull_request:
+    paths:
+      - .github/workflows/publish-food-monster-b8d13a-direct.yml
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish-certified-package:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Verify release build reference
+        run: test -n 'b60a32027f713469d0baf41a394022f66e92ebc6'
+      - name: Download exact merged-main full deployment
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p payload
+          gh run download 40198196500 --repo davemt74-lang/gelato --name gelato-full-deploy --dir payload
+          test -s payload/gelato-full-deploy.zip
+          test -s payload/gelato-full-deploy.sha256
+
+      - name: Verify archive, checksum, commit and root-level app layout
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd payload
+          expected="$(sed -nE 's/^([0-9a-f]{64})[[:space:]]+.*gelato-full-deploy\.zip$/\1/p' gelato-full-deploy.sha256)"
+          test "${#expected}" -eq 64
+          printf '%s  gelato-full-deploy.zip\n' "$expected" | sha256sum --check -
+          printf '%s  gelato-full-deploy.zip\n' "$expected" > gelato-full-deploy.sha256
+          unzip -tq gelato-full-deploy.zip
+          unzip -p gelato-full-deploy.zip DEPLOY_SHA.txt | grep -Fx 'b60a32027f713469d0baf41a394022f66e92ebc6'
+          for file in index.php upgrade.php api/agent-workspace.php config/food-monster-capability-map.json config/.htaccess tests/food-monster-b8d10-approvals.php includes/food-monster-b8d10-approvals.php database/20261217_food_monster_b8d8_action_receipts.sql database/20261218_food_monster_b8d10_approvals.sql api/food-monster-b8d10-approvals.php js/global-agent.js includes/food-monster-b8d3-tool-runtime.php api/food-monster-llm.php js/food-monster-llm.js includes/food-monster-b8d11-domain-routing.php tests/food-monster-b8d11-model-routing.php tests/food-monster-g7-contract.php includes/food-monster-b8d12-pending-actions.php tests/food-monster-b8d12-pending-actions.php includes/food-monster-b8d13-preflight.php tests/food-monster-b8d13a-plan-preflight.php; do
+            unzip -Z1 gelato-full-deploy.zip | grep -Fx "$file"
+          done
+          if unzip -Z1 gelato-full-deploy.zip | grep -Eq '^(config\.php$|\.env$|uploads/|storage/)'; then
+            echo 'Deployment archive includes a private live path.'
+            exit 1
+          fi
+          if unzip -Z1 gelato-full-deploy.zip | grep -Eq '^(gelato-full-deploy\.zip|deploy\.zip|package\.zip)$'; then
+            echo 'Nested deployment ZIP detected.'
+            exit 1
+          fi
+
+      - name: Publish one direct-download ZIP and checksum
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create gelato-food-monster-b8d13a \
+            payload/gelato-full-deploy.zip \
+            payload/gelato-full-deploy.sha256 \
+            --repo davemt74-lang/gelato \
+            --target b60a32027f713469d0baf41a394022f66e92ebc6 \
+            --title 'Gelato Food Monster B8D13A — Whole-Plan Safety Preflight' \
+            --notes 'Certified exact Cloud deployment ZIP from merged Gelato main (FM-B8D13A). The model-selected Agent execution layer now validates every selected skill, every argument, user permissions and missing inputs across the whole plan before any tool executes. It can answer up to four independent read-only questions in one chat turn; routine writes and delegated operations remain isolated and governed by the existing confirmation, idempotency, and audit controls. Private observations stay local to Gelato and never roundtrip to the model provider. Includes prior B8D3-B8D12 native skills, runtime and database migrations. Deploy into the existing Gelato application root, preserve config.php, .env, uploads and storage, run upgrade.php and hard-refresh. Separate SHA-256 manifest, no nested ZIP.'
