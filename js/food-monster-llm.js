@@ -1,4 +1,4 @@
-/* FM-G4: user-selectable language model for un-routed Food Monster chat.
+/* FM-B8D11: model-first Food Monster chat and task routing.
  * No API keys or tool permissions live in this browser module.
  */
 (() => {
@@ -14,7 +14,7 @@ function init(){
  if(!['auto','anthropic','openai'].includes(selected))selected='auto';
  const dialog=document.createElement('dialog');dialog.id='fm-llm-dialog';dialog.setAttribute('aria-label','Food Monster language model settings');
  dialog.innerHTML='<div class="fm-llm-title"><strong>Food Monster · AI</strong><button type="button" data-fm-llm-close aria-label="Close language model settings">×</button></div>'+
- '<p>Choose the model for general conversation. Gelato’s restaurant tools and permissions are unchanged.</p>'+
+ '<p>Choose the model for conversation and skill discovery. Gelato enforces your existing restaurant permissions and approvals.</p>'+
  '<label class="fm-llm-choose">Language model<select data-fm-provider><option value="auto">Auto</option><option value="anthropic">Anthropic Claude</option><option value="openai">OpenAI</option></select></label>'+
  '<p class="fm-llm-status" role="status">Checking Gelato provider configuration…</p>'+
  '<p class="fm-llm-info">Only Gelato administrators configure API keys in LLM Settings. Credentials stay on the server.</p>';
@@ -35,7 +35,7 @@ function init(){
    const available=Object.entries(status).filter(([,ready])=>ready).map(([name])=>name);
    message.textContent=available.length
       ?'Configured: '+available.map(name=>name==='anthropic'?'Claude Haiku 5.5':'OpenAI').join(' · ')+'.'
-      :'No model key is configured. The existing restaurant tools remain available.';
+      :'No model key is configured. Model-selected restaurant skills require an OpenAI or Anthropic provider.';
    for(const option of selector.options)
      option.disabled=option.value!=='auto'&&!status[option.value];
  }
@@ -59,9 +59,7 @@ function init(){
  async function ask({text,threadId,csrf}){
    const providers=status||await refresh();
    if(!providers||(!providers.openai&&!providers.anthropic)){
-     return {ok:true,skill:'agent.capabilities',
-       answer:'I can still use Gelato’s authorized restaurant tools. For general AI conversation, ask an administrator to configure an OpenAI or Anthropic key in Gelato LLM Settings.',
-       sources:[],data:null};
+     throw Error('Model-selected chat and restaurant skills require a configured OpenAI or Anthropic API key. Ask a Gelato administrator to configure one in LLM Settings.');
    }
    if(selected!=='auto'&&!providers[selected])throw Error('Selected AI provider is not configured. Open Food Monster AI model settings.');
    const response=await fetch('api/food-monster-llm.php',{
