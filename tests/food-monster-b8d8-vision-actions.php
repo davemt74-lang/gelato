@@ -152,16 +152,22 @@ b8d8_check(!str_contains(json_encode($providerRequest),'Cheese Portion Check')
     'private mission and dataset records never returned to LLM provider');
 $claude=static fn():array=>['content'=>[['type'=>'tool_use','id'=>'b8d8-anthropic',
     'name'=>'list_vision_dataset_versions','input'=>[]]]];
+// Each distinct Agent Chat request gets a distinct canonical message ID.
+// FM-B8D13B intentionally prevents changing a completed turn's tool plan.
+$fourth=gaw_append($pdo,$org,$uid,$room,'user','Which vision datasets have we made?');
+$ctxRead=array_replace($context,['messageId'=>(string)$fourth['id']]);
 $read=fm8d3_turn($pdo,$actor,'anthropic','fake',
     [['role'=>'user','content'=>'Which vision datasets have we made?']],'',
-    $claude,$skills,static fn():array=>$actor,static function(array $event):void{},$ctx3);
+    $claude,$skills,static fn():array=>$actor,static function(array $event):void{},$ctxRead);
 b8d8_check(str_contains($read['answer'],'Cheese QC')
     &&($read['data']['tools'][0]??'')==='list_vision_dataset_versions',
     'Claude selects authorized dataset read');
+$fifth=gaw_append($pdo,$org,$uid,$room,'user','Create another mission');
+$ctxDenied=array_replace($context,['messageId'=>(string)$fifth['id']]);
 $denied=fm8d3_turn($pdo,$actor,'openai','fake',
     [['role'=>'user','content'=>'Create another mission']],'',
     $openai,$skills,static fn():array=>array_replace($actor,['permissions'=>[]]),
-    static function(array $event):void{},$ctx3);
+    static function(array $event):void{},$ctxDenied);
 b8d8_check(($denied['data']['status']??'')==='denied'
     &&b8d8_count($pdo,'glasses_vision_training_missions',$org)===2,
     'freshly revoked authority prevents model-requested write');
