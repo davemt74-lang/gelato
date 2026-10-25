@@ -35,7 +35,7 @@ function init(){
    const available=Object.entries(status).filter(([,ready])=>ready).map(([name])=>name);
    message.textContent=available.length
       ?'Configured: '+available.map(name=>name==='anthropic'?'Claude Haiku 5.5':'OpenAI').join(' · ')+'.'
-      :'No model key is configured. Model-selected restaurant skills require an OpenAI or Anthropic provider.';
+      :'No model key is configured. Some built-in tools remain available; natural-language skill discovery requires an AI provider.';
    for(const option of selector.options)
      option.disabled=option.value!=='auto'&&!status[option.value];
  }
@@ -59,7 +59,9 @@ function init(){
  async function ask({text,threadId,csrf}){
    const providers=status||await refresh();
    if(!providers||(!providers.openai&&!providers.anthropic)){
-     throw Error('Model-selected chat and restaurant skills require a configured OpenAI or Anthropic API key. Ask a Gelato administrator to configure one in LLM Settings.');
+     return {ok:true,skill:'agent.capabilities',
+      answer:'No AI provider is configured. Built-in Gelato restaurant agents may still answer recognized requests, but natural-language skill discovery needs an administrator to configure OpenAI or Anthropic in LLM Settings.',
+      sources:[],data:{offlineFallback:true}};
    }
    if(selected!=='auto'&&!providers[selected])throw Error('Selected AI provider is not configured. Open Food Monster AI model settings.');
    const response=await fetch('api/food-monster-llm.php',{

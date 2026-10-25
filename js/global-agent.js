@@ -329,6 +329,22 @@
           throw new Error(result.message||'The configured AI service is unavailable.');
       }
 
+      // Degraded/no-provider mode: retain previously authorized built-in
+      // tools without pretending a model understood the message. This
+      // compatibility parser is never invoked when an AI model is configured.
+      if(result?.data?.offlineFallback===true){
+        const offline=await post('api/agent-workspace.php',{
+          action:'route',message:text,threadId:S.thread
+        });
+        if(offline?.route){
+          result={ok:true,skill:'agent.offline_builtin',
+            data:{delegation:{
+              route:offline.route,domain:offline.domain,
+              threadId:S.thread,sourceMessageId:String(submitted?.message?.id||'')
+            }}};
+        }
+      }
+
       const delegation=result?.data?.delegation;
       if(delegation){
         const endpoint=String(delegation.route||'');

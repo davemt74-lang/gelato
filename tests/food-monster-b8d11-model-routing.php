@@ -31,6 +31,12 @@ b8d11_check(fm8d11_catalogue($actor)===[],
 $restricted=array_replace($actor,['permissions'=>[]]);
 b8d11_check(fm8d11_catalogue($restricted,$context)===[],
     'unprivileged user sees no destination list');
+$owner=array_replace($actor,['role_slug'=>'super_admin','permissions'=>['*']]);
+$ownerDomains=fm8d11_available_domains($owner);
+b8d11_check(($ownerDomains['high_impact_approval']['route']??'')==='api/food-monster-approvals.php',
+    'owner can still reach typed high-impact approval governance');
+b8d11_check(!isset($known['high_impact_approval']),
+    'regular staff cannot discover owner approval gate');
 $tools=fm8d11_catalogue($actor,$context);
 b8d11_check(isset($tools['delegate_restaurant_domain'])
     &&$tools['delegate_restaurant_domain']['impact']==='read',
@@ -104,8 +110,10 @@ b8d11_check(($r['data']['delegation']['node']??'')==='scheduling',
     'Claude selects a different permitted domain by intent');
 
 $client=file_get_contents(dirname(__DIR__).'/js/global-agent.js');
-b8d11_check(is_string($client)&&!str_contains($client,"action: 'route'"),
-    'global Agent Chat no longer calls phrase router');
+b8d11_check(is_string($client)
+    &&!str_contains($client,"const route = await post('api/agent-workspace.php'")
+    &&str_contains($client,"result?.data?.offlineFallback===true"),
+    'main Agent Chat is model-first; phrase route only in explicit no-provider fallback');
 b8d11_check(str_contains($client,"const delegation=result?.data?.delegation;")
     &&str_contains($client,"serverMessage!==String(submitted?.message?.id||'')"),
     'client verifies delegation tied to exact turn');

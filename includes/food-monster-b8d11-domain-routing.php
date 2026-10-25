@@ -60,6 +60,11 @@ function fm8d11_available_domains(array $actor):array
        &&$has('wholesale_portal.agent'))$allowed['wholesale_portal']=[
             'label'=>'Wholesale Customer Portal','route'=>'api/wholesale-portal-agent.php',
             'domain'=>'wholesale_portal','mode'=>'read_confirmed_write'];
+    // Legacy owner gate remains a typed, nonexecuting approval protocol.
+    // This is a governance exception, not general keyword intent routing.
+    if(($actor['role_slug']??'')==='super_admin')$allowed['high_impact_approval']=[
+        'label'=>'High-Impact Owner Approval','route'=>'api/food-monster-approvals.php',
+        'domain'=>'high_impact_approval','mode'=>'human_approval_only'];
     return $allowed;
 }
 
@@ -75,7 +80,7 @@ function fm8d11_catalogue(array $principal,array $context=[]):array
         $descriptions[]=$name.' = '.$node['label'];
     }
     return ['delegate_restaurant_domain'=>[
-        'description'=>'Hand a restaurant-specific request to an EXISTING Gelato operational agent when no dedicated model tool can complete it. Choose the best authorized domain by meaning, not by keywords. Especially use for operational status, customers, employee records, tasks, receiving, purchase orders, sales, production, equipment, and follow-up on a pending confirmation. Authorized domains: '.implode('; ',$descriptions).'. The receiving agent independently checks permissions and any required human approval. Do not use this tool for general questions or when a dedicated model-selected native tool is available.',
+        'description'=>'Hand a restaurant-specific request to an EXISTING Gelato operational agent when no dedicated model tool can complete it. Choose the best authorized domain by meaning, not by keywords. Especially use for operational status, customers, employee records, tasks, receiving, purchase orders, sales, production, equipment, and follow-up on a pending confirmation. Authorized domains: '.implode('; ',$descriptions).'. The receiving agent independently checks permissions and any required human approval. For explicit owner requests to propose, approve, reject or confirm a high-impact purchase, refund, task archive or permission change, use high_impact_approval if present; that older module requires typed verified approval phrases and independently prevents execution without its confirmation. Do not use this tool for general questions or when a dedicated model-selected native tool is available.',
         'parameters'=>['type'=>'object','properties'=>[
             'domain'=>['type'=>'string','enum'=>array_keys($available),
                 'description'=>'Exact allowed existing agent domain, never a URL'],

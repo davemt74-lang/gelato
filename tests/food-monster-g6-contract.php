@@ -37,7 +37,10 @@ check_g6(str_contains($page,'js/food-monster.js?v='.$stageMascotVersion),'Stage 
 check_g6(str_contains($actor,'document.querySelector(\'link[rel="stylesheet"][href^="css/food-monster.css"]\')'),'Do not insert second stage stylesheet');
 check_g6(str_contains($page,'app_require_auth()'),'Stage must require logged-in Gelato user');
 check_g6(!str_contains($page,'<aside'),'Stage cannot load a sidebar');
-check_g6(str_contains($agent,'if (route.route)')&&str_contains($agent,'else if (window.GelatoFoodMonsterLLM?.ask)'),'Existing tool route precedes model');
+check_g6(str_contains($agent,'if(window.GelatoFoodMonsterLLM?.ask)')
+    &&str_contains($agent,'const delegation=result?.data?.delegation;')
+    &&str_contains($agent,'result?.data?.offlineFallback===true'),
+    'Model-first routing retains no-provider legacy compatibility');
 check_g6(str_contains($llm,'app_verify_request_csrf'),'LLM endpoint requires CSRF');
 check_g6(str_contains($llm,'gaw_thread($pdo,$org,$uid'),'LLM history is user/organization isolated');
 check_g6(str_contains($suggestions,'agent.send(question,false)'),'Recommendations require human Review interaction');
