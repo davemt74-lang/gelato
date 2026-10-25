@@ -43,7 +43,7 @@ jobs:
           printf '%s  gelato-full-deploy.zip\n' "$expected" > gelato-full-deploy.sha256
           unzip -tq gelato-full-deploy.zip
           unzip -p gelato-full-deploy.zip DEPLOY_SHA.txt | grep -Fx '93061edec110e49eb737d9619dfc0bd4bbee3ec1'
-          for file in index.php upgrade.php api/agent-workspace.php config/food-monster-capability-map.json config/.htaccess tests/food-monster-b8d11-approvals.php includes/food-monster-b8d11-approvals.php database/20261217_food_monster_b8d8_action_receipts.sql database/20261218_food_monster_b8d11_approvals.sql api/food-monster-b8d11-approvals.php js/global-agent.js includes/food-monster-b8d3-tool-runtime.php api/food-monster-llm.php js/food-monster-llm.js includes/food-monster-b8d11-domain-routing.php tests/food-monster-b8d11-model-routing.php tests/food-monster-g7-contract.php; do
+          for file in index.php upgrade.php api/agent-workspace.php config/food-monster-capability-map.json config/.htaccess tests/food-monster-b8d10-approvals.php includes/food-monster-b8d10-approvals.php database/20261217_food_monster_b8d8_action_receipts.sql database/20261218_food_monster_b8d10_approvals.sql api/food-monster-b8d10-approvals.php js/global-agent.js includes/food-monster-b8d3-tool-runtime.php api/food-monster-llm.php js/food-monster-llm.js includes/food-monster-b8d11-domain-routing.php tests/food-monster-b8d11-model-routing.php tests/food-monster-g7-contract.php; do
             unzip -Z1 gelato-full-deploy.zip | grep -Fx "$file"
           done
           if unzip -Z1 gelato-full-deploy.zip | grep -Eq '^(config\.php$|\.env$|uploads/|storage/)'; then
