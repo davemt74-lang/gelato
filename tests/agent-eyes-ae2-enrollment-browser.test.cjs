@@ -33,10 +33,10 @@ const {chromium}=require('playwright');
   await page.locator('#fm-eyes-consent').check();
   for(let i=0;i<3;i++){
    await page.locator('#fm-eyes-capture').click();
-   await ok(page.locator('#fm-eyes-capture').textContent().then(s=>s.includes(i===2?'Save enrollment':'Capture sample '+(i+2))),'guided stage advances');
+   await page.waitForFunction(expected=>document.querySelector('#fm-eyes-capture')?.textContent.includes(expected),i===2?'Save enrollment':'Capture sample '+(i+2),{timeout:10000});
   }
   await page.locator('#fm-eyes-capture').click();
-  await ok(page.locator('#fm-eyes-enroll-status').textContent().then(s=>s.includes('saved locally')),'enrollment completed');
+  await page.waitForFunction(()=>document.querySelector('#fm-eyes-enroll-status')?.textContent.includes('saved locally'),{timeout:10000});
   const stored=await page.evaluate(async()=>{
    const db=await new Promise((resolve,reject)=>{const r=indexedDB.open('gelato-fm-face-pin-v1',1);r.onsuccess=()=>resolve(r.result);r.onerror=()=>reject(r.error);});
    const rows=await new Promise((resolve,reject)=>{const tx=db.transaction('profiles','readonly'),req=tx.objectStore('profiles').getAll();req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error);});db.close();return rows;
@@ -59,7 +59,7 @@ const {chromium}=require('playwright');
   await page.locator('#fm-eyes-person').selectOption('22');
   await page.locator('#fm-eyes-consent').check();
   await page.locator('#fm-eyes-revoke').click();
-  await ok(page.locator('#fm-eyes-enroll-status').textContent().then(s=>s.includes('revoked')),'revocation acknowledged');
+  await page.waitForFunction(()=>document.querySelector('#fm-eyes-enroll-status')?.textContent.includes('revoked'),{timeout:10000});
   console.log('Agent Eyes AE2 local enrollment browser PASS');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e.stack||e);process.exit(1)});
