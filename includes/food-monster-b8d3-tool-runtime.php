@@ -15,6 +15,7 @@ require_once __DIR__.'/food-monster-b8d13-preflight.php';
 require_once __DIR__.'/food-monster-b8d13b-task-journal.php';
 require_once __DIR__.'/food-monster-b8d13c-step-checkpoints.php';
 require_once __DIR__.'/food-monster-b8d13d-task-controls.php';
+require_once __DIR__.'/food-monster-b8d14-grounded-fallback.php';
 
 /**
  * FM-B8D3: model-selected tools, executed exclusively by the signed-in
@@ -165,6 +166,11 @@ function fm8d3_turn(
         $calls=fm8d3_decode_calls($provider,$response);
     }
     if(!$calls){
+        // The model may opt to answer in prose despite an explicit request
+        // for Gelato's recorded facts. Resolve an authorized, read-only
+        // source locally before displaying any ungrounded disclaimer.
+        $grounded=fm8d14_no_tool_read($pdo,$principal,$history,$context);
+        if($grounded!==null)return $grounded;
         $answer=fmllm_parse($provider,$response);
         if($answer==='')throw new RuntimeException('The AI provider returned no answer.');
         return ['ok'=>true,'skill'=>'agent.llm.conversation',
