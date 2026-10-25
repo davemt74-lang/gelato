@@ -32,17 +32,24 @@
  // An appearance mismatch cannot steal an existing track by occupying its
  // old position. Without descriptors, associate only small spatial movement
  // and never carry a provisional identity through a missing observation.
- function cost(observation,track){
-  const delta=separation(observation.box,track.box);
+ function predicted(track,at){
+  const old=track.rawBox||track.box,elapsed=Math.max(0,Math.min(2500,at-track.seen));
+  const vx=Number(track.velocity?.[0])||0,vy=Number(track.velocity?.[1])||0;
+  const x=old[0]+vx*elapsed,y=old[1]+vy*elapsed;
+  return [Math.max(0,Math.min(1-old[2],x)),Math.max(0,Math.min(1-old[3],y)),old[2],old[3]];
+ }
+ function cost(observation,track,at){
+  const delta=separation(observation.box,predicted(track,at));
+  const gap=Math.max(0,at-track.seen);
   if(validDescriptor(observation.descriptor)&&validDescriptor(track.descriptor)){
    const appearance=distance(observation.descriptor,track.descriptor);
    return appearance<.38&&delta<.72 ? appearance*.8+delta*.2 : Infinity;
   }
-  return delta<.16 ? .25+delta : Infinity;
+  return gap<2200&&delta<.16 ? .25+delta : Infinity;
  }
  // Bounded global assignment prevents order-dependent identity swaps.
  // Up to 8 people / 8*2^8 states; unmatched observations become new tracks.
- function associate(observations,active){
+ function associate(observations,active,at){
   const memo=new Map();
   function solve(index,used){
    if(index===observations.length)return {cost:0,assignments:[]};
@@ -52,7 +59,7 @@
    let best={cost:.67+fresh.cost,assignments:[-1,...fresh.assignments]};
    for(let j=0;j<active.length;j++){
     if(used&(1<<j))continue;
-    const edge=cost(observations[index],active[j]);
+    const edge=cost(observations[index],active[j],at);
     if(!Number.isFinite(edge))continue;
     const tail=solve(index+1,used|(1<<j));
     if(edge+tail.cost<best.cost-1e-9)
@@ -70,16 +77,24 @@
    const normalized=(observations||[]).slice(0,8).map(x=>({box:geometry(x?.box),descriptor:x?.descriptor}))
     .filter(x=>x.box);
    const active=[...tracks.values()];
-   const assignment=associate(normalized,active);
+   const assignment=associate(normalized,active,t);
    const rows=[];
    for(let i=0;i<normalized.length;i++){
     const x=normalized[i],previous=assignment[i]===-1?null:active[assignment[i]];
-    const record=previous||{trackId:id(),box:x.box,seen:t,descriptor:null,candidate:null,streak:0};
+    const record=previous||{trackId:id(),box:x.box,rawBox:x.box,seen:t,descriptor:null,candidate:null,streak:0,velocity:[0,0]};
     if(previous&&t-record.seen>3500){record.candidate=null;record.streak=0;}
     const proposed=candidate(x.descriptor,profiles);
     if(proposed&&record.candidate===proposed)record.streak=Math.min(10,record.streak+1);
     else{record.candidate=proposed;record.streak=proposed?1:0;}
-    record.box=x.box;record.seen=t;
+    if(previous){
+     const dt=Math.max(1,t-record.seen),old=record.rawBox||record.box;
+     const dx=x.box[0]-old[0],dy=x.box[1]-old[1];
+     const step=separation(old,x.box);
+     // Smooth only presentation geometry; use raw observations for association.
+     record.box=step>.24?x.box:record.box.map((v,k)=>+(v*.48+x.box[k]*.52).toFixed(4));
+     record.velocity=[Math.max(-.00025,Math.min(.00025,dx/dt)),Math.max(-.00025,Math.min(.00025,dy/dt))];
+    }else record.box=x.box;
+    record.rawBox=x.box;record.seen=t;
     record.descriptor=validDescriptor(x.descriptor)?x.descriptor.slice():null;
     tracks.set(record.trackId,record);rows.push(record);
    }

@@ -1,0 +1,36 @@
+name: Agent Eyes AE4 Stable Movement Tracking
+
+on:
+  pull_request:
+    paths:
+      - 'js/food-monster-room-tracker.js'
+      - 'tests/agent-eyes-ae4-motion.test.cjs'
+      - '.github/workflows/agent-eyes-ae4.yml'
+      - 'docs/AGENT-EYES-AE4.md'
+  push:
+    branches: [main]
+    paths:
+      - 'js/food-monster-room-tracker.js'
+      - 'tests/agent-eyes-ae4-motion.test.cjs'
+      - '.github/workflows/agent-eyes-ae4.yml'
+      - 'docs/AGENT-EYES-AE4.md'
+
+permissions:
+  contents: read
+
+jobs:
+  stable-tracks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Motion and identity separation regression
+        run: |
+          node --check js/food-monster-room-tracker.js
+          node --check tests/agent-eyes-ae4-motion.test.cjs
+          node tests/agent-eyes-ae4-motion.test.cjs
+          node tests/food-monster-g9c-tracker.test.cjs
+      - name: Chromium live bounding-box acceptance
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.0
+          npx playwright install --with-deps chromium
+          node tests/food-monster-g9c-room-browser.test.cjs
