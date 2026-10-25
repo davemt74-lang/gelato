@@ -14,9 +14,12 @@ const src=fs.readFileSync(path.join(__dirname,'../js/global-agent.js'),'utf8');
     const data=options.body?JSON.parse(options.body):{};window.__calls.push({url,data});let result={ok:true};
     if(url.includes('action=bootstrap'))result={ok:true,csrf:'token',activeThread:'t-1',permissions:[],user:{id:11,name:'Chef'}};
     else if(url.includes('action=preferences'))result={ok:true,preferences:{listening_enabled:0,proactive_voice_enabled:0}};
-    else if(url.includes('agent-workspace.php')&&data.action==='route')result={ok:true,route:'api/food-monster-read.php',domain:'governed_verified_read',nodeMode:'read_only'};
+    else if(url.includes('food-monster-llm.php')&&data.action==='chat')
+      result={ok:true,skill:'agent.model_selected_tools',
+        answer:'You are signed into Gelato as Chef.',
+        data:{status:'completed',toolCalls:1,tools:['get_current_user']},
+        sources:['Gelato authenticated session']};
     else if(url.includes('agent-workspace.php')&&data.action==='append')result={ok:true,message:{databaseId:101}};
-    else if(url.includes('food-monster-read.php'))result={ok:true,skill:'session.current_user',answer:'You are signed into Gelato as Chef.',data:{sessionUserId:11},sources:['Gelato authenticated session']};
     else if(url.includes('proactive-agent.php'))result={ok:true,events:[]};
     return {ok:true,json:async()=>result};
    };
@@ -25,11 +28,11 @@ const src=fs.readFileSync(path.join(__dirname,'../js/global-agent.js'),'utf8');
   await page.addScriptTag({content:src});await page.waitForFunction(()=>window.GelatoGlobalAgent?.user?.id===11);
   await page.evaluate(()=>window.GelatoGlobalAgent.send('Who is signed in?',false));
   const calls=await page.evaluate(()=>window.__calls),answer=await page.evaluate(()=>window.__reply[0]);
-  ok(calls.some(x=>x.data.action==='route'),'Server router used');
-  ok(calls.some(x=>x.url.includes('food-monster-read.php')&&x.data.threadId==='t-1'),'Read has authenticated thread');
+  ok(calls.some(x=>x.url.includes('food-monster-llm.php')&&x.data.action==='chat'),'Model-selected identity skill used');
+  ok(calls.some(x=>x.url.includes('food-monster-llm.php')&&x.data.threadId==='t-1'),'Identity skill has authenticated thread');
   ok(calls.some(x=>x.data.action==='append'&&x.data.role==='user'),'User message persisted');
-  ok(calls.some(x=>x.data.action==='append'&&x.data.role==='agent'&&x.data.skill==='session.current_user'),'Tool receipt persisted');
-  ok(calls.some(x=>x.data.action==='record_action'&&x.data.route==='api/food-monster-read.php'),'Execution recorded');
+  ok(calls.some(x=>x.data.action==='append'&&x.data.role==='agent'&&x.data.skill==='agent.model_selected_tools'),'Tool receipt persisted');
+  ok(calls.some(x=>x.data.action==='record_action'&&x.data.route==='capabilities'),'Execution recorded');
   ok(answer.result.sources[0]==='Gelato authenticated session','Source preserved');
   ok(answer.answer.includes('signed into Gelato as Chef'),'Verified answer used');
   ok(errors.length===0,'No JS errors: '+errors.join(';'));

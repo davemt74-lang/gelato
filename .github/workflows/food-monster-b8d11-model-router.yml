@@ -12,6 +12,7 @@ on:
       - 'includes/food-monster-b8d11-domain-routing.php'
       - 'tests/food-monster-b8d11-model-routing.php'
       - 'js/food-monster-llm.js'
+      - 'api/food-monster-llm.php'
       - '.github/workflows/food-monster-b8d11-model-router.yml'
   push:
     branches: [main]
@@ -26,6 +27,7 @@ on:
       - 'includes/food-monster-b8d11-domain-routing.php'
       - 'tests/food-monster-b8d11-model-routing.php'
       - 'js/food-monster-llm.js'
+      - 'api/food-monster-llm.php'
       - '.github/workflows/food-monster-b8d11-model-router.yml'
 
 jobs:
@@ -59,6 +61,7 @@ jobs:
           php -l api/agent-workspace.php
           php -l includes/scheduling-core.php
           php -l includes/food-monster-llm.php
+          php -l api/food-monster-llm.php
           php -l includes/food-monster-b8d3-tool-runtime.php
           php -l includes/food-monster-b8d10-approvals.php
           php -l includes/food-monster-b8d11-domain-routing.php

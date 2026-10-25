@@ -60,6 +60,12 @@ function fm8d11_available_domains(array $actor):array
        &&$has('wholesale_portal.agent'))$allowed['wholesale_portal']=[
             'label'=>'Wholesale Customer Portal','route'=>'api/wholesale-portal-agent.php',
             'domain'=>'wholesale_portal','mode'=>'read_confirmed_write'];
+    // Existing multi-area Brain reads retain their own per-domain and
+    // fresh-session permission checks; only managers can discover the node.
+    if(function_exists('admin_dashboard_allowed')&&admin_dashboard_allowed($actor))
+        $allowed['multi_node_read']=[
+            'label'=>'Multi-area Restaurant Status','route'=>'api/food-monster-orchestrate.php',
+            'domain'=>'multi_node_read','mode'=>'read_orchestrator'];
     // Legacy owner gate remains a typed, nonexecuting approval protocol.
     // This is a governance exception, not general keyword intent routing.
     if(($actor['role_slug']??'')==='super_admin')$allowed['high_impact_approval']=[

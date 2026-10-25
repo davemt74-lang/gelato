@@ -325,8 +325,13 @@
           body:JSON.stringify({action:'chat',message:text,threadId:S.thread,provider:'auto',csrf_token:S.csrf})
         });
         result=await response.json().catch(()=>({ok:false,message:'Invalid AI service response.'}));
-        if(!response.ok||!result.ok)
-          throw new Error(result.message||'The configured AI service is unavailable.');
+        if(!response.ok||!result.ok){
+          if(result?.code==='provider_not_configured'){
+            result={ok:true,skill:'agent.capabilities',
+              answer:'No AI provider is configured. Built-in Gelato tools may still answer recognized requests; natural-language skill discovery requires an administrator to configure an AI provider.',
+              sources:[],data:{offlineFallback:true}};
+          }else throw new Error(result.message||'The configured AI service is unavailable.');
+        }
       }
 
       // Degraded/no-provider mode: retain previously authorized built-in

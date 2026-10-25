@@ -117,6 +117,10 @@ b8d11_check(is_string($client)
 b8d11_check(str_contains($client,"const delegation=result?.data?.delegation;")
     &&str_contains($client,"serverMessage!==String(submitted?.message?.id||'')"),
     'client verifies delegation tied to exact turn');
+$providerApi=file_get_contents(dirname(__DIR__).'/api/food-monster-llm.php');
+b8d11_check(str_contains((string)$providerApi,"'code'=>'provider_not_configured'")
+    &&str_contains($client,"result?.code==='provider_not_configured'"),
+    'no-provider fallback is explicit and never masks ordinary provider failures');
 b8d11_check(str_contains($client,"!/^api\\/"),
     'client rejects external or arbitrary handoff destinations');
 echo "FM-B8D11 model-first domain routing: PASS ($n assertions)\n";

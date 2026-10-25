@@ -38,7 +38,11 @@ check_b2(str_contains($api,'app_require_auth()')&&str_contains($api,'app_verify_
 check_b2(str_contains($api,'gaw_thread(')&&str_contains($api,'gaw_messages('),'Thread ownership and message binding');
 check_b2(str_contains($api,'app_audit('),'Audit recorded');
 check_b2(str_contains($router,'fm_read_intent($message)'),'Server-selected intent');
-check_b2(str_contains($js,"'api/food-monster-read.php'"),'Canonical thread passed');
+$toolRuntime=file_get_contents(__DIR__.'/../includes/food-monster-b8d3-tool-runtime.php');
+check_b2(str_contains($js,"api/food-monster-llm.php")
+    &&str_contains($js,"const delegation=result?.data?.delegation;")
+    &&str_contains($toolRuntime,"'get_current_user'"),
+    'model-selected identity and canonical Agent Chat thread remain available');
 check_b2(str_contains($api,'fm_read_allowed($user,$intent)'),'Permission rechecked');
 check_b2(!str_contains($api,'eval('),'No arbitrary execution');
 echo "FM-G7B2 governed data reads PASS ($n assertions)\n";
