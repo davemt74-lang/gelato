@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once __DIR__.'/food-monster-identity-authority.php';
 require_once __DIR__.'/food-monster-pin.php';
 require_once __DIR__.'/agent-eyes-enrollment.php';
+require_once __DIR__.'/agent-eyes-presence-timeline.php';
 
 /**
  * FM-G9C: ephemeral room observation. A camera observation is NOT an account
@@ -150,7 +151,7 @@ function fm9c_local_staff(PDO $pdo,int $org,string $email): ?array
     return $q->fetch(PDO::FETCH_ASSOC)?:null;
 }
 
-function fm9c_room_update(PDO $pdo,array $operator,array $observations,int $seenAt=null): array
+function fm9c_room_update(PDO $pdo,array $operator,array $observations,int $seenAt=null,bool $allowGreeting=false): array
 {
     if(!fm9a_is_super_admin_session($operator))throw new DomainException('Super Admin session required.');
     $now=$seenAt??time();
@@ -183,11 +184,13 @@ function fm9c_room_update(PDO $pdo,array $operator,array $observations,int $seen
         $session['speaker']=$old['speaker'];
     }
     $_SESSION['fm9c_room']=$session;
-    return fm9c_room_context($operator,$_SESSION['fm9c_room'],$now);
+    $greetings=fmeyes5_observe($pdo,$operator,$people,$now,$allowGreeting);
+    return fm9c_room_context($operator,$_SESSION['fm9c_room'],$now)+['proactiveGreetings'=>$greetings];
 }
 
-function fm9c_room_stop(array $operator): void
+function fm9c_room_stop(array $operator,?PDO $pdo=null): void
 {
     if(!fm9a_is_super_admin_session($operator))throw new DomainException('Super Admin session required.');
+    if($pdo)fmeyes5_stop($pdo,$operator,time());
     unset($_SESSION['fm9c_room']);
 }

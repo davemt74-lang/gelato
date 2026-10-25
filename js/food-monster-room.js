@@ -2,14 +2,14 @@
 (()=>{'use strict';
 if(window.GelatoRoomPresence)return;
 const endpoint='api/food-monster-presence.php',profileDB='gelato-fm-face-pin-v1';
-const state={active:false,stream:null,video:null,faceApi:null,nativeDetector:null,profiles:[],tracker:null,timer:null,busy:false,csrf:'',room:null,changeKey:'',lastContext:0,lastStatus:'',generation:0,modelReady:false,idleCycles:0,failures:0,intervalMs:1700,lastInferenceMs:0};
+const state={active:false,stream:null,video:null,faceApi:null,nativeDetector:null,profiles:[],tracker:null,timer:null,busy:false,csrf:'',room:null,changeKey:'',lastContext:0,lastStatus:'',generation:0,modelReady:false,idleCycles:0,failures:0,intervalMs:1700,lastInferenceMs:0,lastTimeline:0,timelineBusy:false,lastGreeting:''};
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const eyes={panel:null,frame:null,overlay:null,video:null,button:null,open:false};
 const speakerLabel=room=>window.GelatoEyesSpeaker?.resolve(room)||null;
 function eyesEnsure(){
  if(eyes.panel)return;
  const style=document.createElement('style');style.dataset.fmEyesStyle='1';
- style.textContent=`#fm-eyes-panel{position:fixed;right:16px;bottom:86px;width:min(440px,calc(100vw - 24px));max-height:calc(100dvh - 110px);overflow:auto;z-index:2147482990;background:#0d1825;color:#f3f7fb;border:1px solid #3b536a;border-radius:16px;box-shadow:0 18px 58px #0008;padding:12px;font:13px/1.5 system-ui,sans-serif}#fm-eyes-panel[hidden]{display:none}#fm-eyes-panel button{border:1px solid #607992;border-radius:8px;background:#22374b;color:inherit;padding:5px 9px;cursor:pointer}#fm-eyes-panel .fm-eyes-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}#fm-eyes-panel .fm-eyes-frame{position:relative;background:#050b12;overflow:hidden;border-radius:12px;aspect-ratio:4/3}#fm-eyes-panel video{display:block;width:100%;height:100%;object-fit:fill}#fm-eyes-panel .fm-eyes-overlay{position:absolute;inset:0;pointer-events:none}#fm-eyes-panel .fm-eyes-box{position:absolute;border:2px solid #60dfa3;border-radius:5px;box-sizing:border-box}#fm-eyes-panel .fm-eyes-box.unknown{border-color:#efc87a}#fm-eyes-panel .fm-eyes-box.speaking{border-color:#5b9bff;box-shadow:0 0 0 2px #5b9bff55}#fm-eyes-panel .fm-eyes-speaker{margin-top:7px;padding:7px 9px;background:#192d42;border:1px solid #355678;border-radius:9px}#fm-eyes-panel .fm-eyes-speaker[hidden]{display:none}#fm-eyes-panel .fm-eyes-tag{position:absolute;bottom:100%;left:-2px;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:#163a38;color:#fff;padding:1px 5px;border-radius:4px;font:11px system-ui}#fm-eyes-panel .fm-eyes-box.unknown .fm-eyes-tag{background:#5a421e}#fm-eyes-panel .fm-eyes-list{padding:8px 0 0;margin:0;list-style:none}#fm-eyes-panel .fm-eyes-list li{padding:3px 0;border-bottom:1px solid #263f56}#fm-eyes-panel .fm-eyes-note{font-size:11px;color:#a8bece;margin-top:8px}#fm-eyes-open{margin-left:5px}@media(max-width:600px){#fm-eyes-panel{right:6px;bottom:70px;width:calc(100vw - 12px);max-height:calc(100dvh - 80px)}}`;
+ style.textContent=`#fm-eyes-panel{position:fixed;right:16px;bottom:86px;width:min(440px,calc(100vw - 24px));max-height:calc(100dvh - 110px);overflow:auto;z-index:2147482990;background:#0d1825;color:#f3f7fb;border:1px solid #3b536a;border-radius:16px;box-shadow:0 18px 58px #0008;padding:12px;font:13px/1.5 system-ui,sans-serif}#fm-eyes-panel[hidden]{display:none}#fm-eyes-panel button{border:1px solid #607992;border-radius:8px;background:#22374b;color:inherit;padding:5px 9px;cursor:pointer}#fm-eyes-panel .fm-eyes-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}#fm-eyes-panel .fm-eyes-frame{position:relative;background:#050b12;overflow:hidden;border-radius:12px;aspect-ratio:4/3}#fm-eyes-panel video{display:block;width:100%;height:100%;object-fit:fill}#fm-eyes-panel .fm-eyes-overlay{position:absolute;inset:0;pointer-events:none}#fm-eyes-panel .fm-eyes-box{position:absolute;border:2px solid #60dfa3;border-radius:5px;box-sizing:border-box}#fm-eyes-panel .fm-eyes-box.unknown{border-color:#efc87a}#fm-eyes-panel .fm-eyes-box.speaking{border-color:#5b9bff;box-shadow:0 0 0 2px #5b9bff55}#fm-eyes-panel .fm-eyes-speaker{margin-top:7px;padding:7px 9px;background:#192d42;border:1px solid #355678;border-radius:9px}#fm-eyes-panel .fm-eyes-speaker[hidden]{display:none}#fm-eyes-panel .fm-eyes-tag{position:absolute;bottom:100%;left:-2px;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:#163a38;color:#fff;padding:1px 5px;border-radius:4px;font:11px system-ui}#fm-eyes-panel .fm-eyes-box.unknown .fm-eyes-tag{background:#5a421e}#fm-eyes-panel .fm-eyes-timeline{margin-top:10px;border-top:1px solid #38516a;padding-top:8px}#fm-eyes-panel .fm-eyes-timeline ul{padding:4px 0 0;margin:0;list-style:none}#fm-eyes-panel .fm-eyes-timeline li{font-size:11px;padding:3px 0;color:#bcd0e2}#fm-eyes-panel .fm-eyes-greeting{color:#a4f0c7;margin:5px 0;font-size:12px}#fm-eyes-panel .fm-eyes-list{padding:8px 0 0;margin:0;list-style:none}#fm-eyes-panel .fm-eyes-list li{padding:3px 0;border-bottom:1px solid #263f56}#fm-eyes-panel .fm-eyes-note{font-size:11px;color:#a8bece;margin-top:8px}#fm-eyes-open{margin-left:5px}@media(max-width:600px){#fm-eyes-panel{right:6px;bottom:70px;width:calc(100vw - 12px);max-height:calc(100dvh - 80px)}}`;
  document.head.append(style);
  const panel=document.createElement('section');panel.id='fm-eyes-panel';panel.hidden=true;panel.setAttribute('role','region');panel.setAttribute('aria-label','Agent Eyes live camera');
  const head=document.createElement('div');head.className='fm-eyes-head';
@@ -19,7 +19,11 @@ function eyesEnsure(){
  const status=document.createElement('div');status.id='fm-eyes-status';status.setAttribute('role','status');panel.append(status);
  const frame=document.createElement('div');frame.className='fm-eyes-frame';const overlay=document.createElement('div');overlay.className='fm-eyes-overlay';frame.append(overlay);panel.append(frame);
  const speaker=document.createElement('div');speaker.id='fm-eyes-speaker';speaker.className='fm-eyes-speaker';speaker.setAttribute('role','status');speaker.setAttribute('aria-live','polite');panel.append(speaker);
+ const greeting=document.createElement('div');greeting.id='fm-eyes-greeting';greeting.className='fm-eyes-greeting';greeting.setAttribute('role','status');panel.append(greeting);
  const list=document.createElement('ul');list.className='fm-eyes-list';list.id='fm-eyes-people';panel.append(list);
+ const timeline=document.createElement('details');timeline.className='fm-eyes-timeline';
+ const timelineTitle=document.createElement('summary');timelineTitle.textContent='Participant timeline';timeline.append(timelineTitle);
+ const events=document.createElement('ul');events.id='fm-eyes-events';timeline.append(events);panel.append(timeline);
  const note=document.createElement('div');note.className='fm-eyes-note';note.textContent='Visual identities are provisional. Camera is local; no video frames or face vectors are uploaded.';panel.append(note);
  document.body.append(panel);eyes.panel=panel;eyes.frame=frame;eyes.overlay=overlay;
  if(!document.querySelector('script[data-fm-eyes-speaker]')){
@@ -37,12 +41,13 @@ function eyesShow(open){
  eyesEnsure();eyes.open=!!open;eyes.panel.hidden=!eyes.open;eyes.button.setAttribute('aria-expanded',String(eyes.open));
  if(eyes.open&&state.video){eyes.frame.prepend(state.video);state.video.style.cssText='';}
  else if(state.video){document.body.append(state.video);state.video.style.cssText='position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;top:-10px;left:-10px';}
- eyesRender();
+ eyesRender();if(eyes.open&&state.active)void refreshTimeline();
 }
 function eyesRender(){
  if(!eyes.panel)return;
  const status=eyes.panel.querySelector('#fm-eyes-status');
  status.textContent=state.active?(state.lastStatus||'Camera active · '+(state.room?.people?.length||0)+' tracked'):'Camera off · enable using the camera control';
+ const greeting=eyes.panel.querySelector('#fm-eyes-greeting');if(greeting)greeting.textContent=state.active?state.lastGreeting:'';
  eyes.overlay.replaceChildren();
  const speaker=speakerLabel(state.active?state.room:null);
  const speakerStatus=eyes.panel.querySelector('#fm-eyes-speaker');
@@ -130,6 +135,20 @@ async function detect(){
  }
  return [];
 }
+const nowTime=()=>Date.now();
+async function refreshTimeline(){
+ if(state.timelineBusy||!state.active||!eyes.open)return;
+ state.timelineBusy=true;
+ try{
+  const response=await fetch(endpoint+'?action=timeline',{credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}});
+  const data=await response.json();if(!response.ok||!data.ok||!Array.isArray(data.events))return;
+  const list=eyes.panel?.querySelector('#fm-eyes-events');if(!list)return;
+  list.replaceChildren();for(const event of data.events.slice(0,30)){
+   const li=document.createElement('li');li.textContent=String(event.occurredAt||'')+' · '+String(event.displayName||'Participant')+' · '+String(event.type||'event').replaceAll('_',' ');list.append(li);
+  }
+  state.lastTimeline=nowTime();
+ }catch{}finally{state.timelineBusy=false;}
+}
 async function observe(){
  if(!state.active||state.busy||document.hidden)return;
  state.busy=true;const generation=state.generation,started=Date.now();
@@ -137,9 +156,16 @@ async function observe(){
   const faces=await detect();if(!state.active||generation!==state.generation)return;
   state.idleCycles=faces.length?0:Math.min(20,state.idleCycles+1);
   const tracks=state.tracker.update(faces,state.profiles);
-  const result=await request('observe',{tracks});
+  const result=await request('observe',{tracks,allowGreeting:window.GelatoGlobalAgent?.proactiveGreetingEnabled===true});
   if(!state.active||generation!==state.generation)return;
   state.room=result.room;state.lastStatus='';state.failures=0;
+  for(const greeting of result.room?.proactiveGreetings||[]){
+   if(typeof greeting?.text==='string'&&greeting.provisional===true){
+    state.lastGreeting='Greeting offered · '+greeting.text;
+    window.GelatoGlobalAgent?.proactiveGreet?.(greeting.text);
+   }
+  }
+  if(eyes.open&&nowTime()-state.lastTimeline>12000)void refreshTimeline();
   const key=JSON.stringify({people:(result.room?.people||[]).map(p=>[p.trackId,p.personId,p.identitySource]),speaker:window.GelatoEyesSpeaker?.key(result.room)||result.room?.currentSpeaker||null});
   const now=Date.now();
   if(key!==state.changeKey||now-state.lastContext>10000){
@@ -165,7 +191,7 @@ async function stop(){
  if(state.timer){clearTimeout(state.timer);state.timer=null;}
  if(state.stream){state.stream.getTracks().forEach(t=>t.stop());state.stream=null;}
  if(state.video){state.video.pause();state.video.srcObject=null;state.video.remove();state.video=null;}
- state.tracker?.clear();state.room=null;state.lastStatus='';state.changeKey='';state.profiles=[];
+ state.tracker?.clear();state.room=null;state.lastStatus='';state.changeKey='';state.profiles=[];state.lastGreeting='';state.lastTimeline=0;
  state.idleCycles=0;state.failures=0;
  ui();eyesRender();
  if(running){try{await request('stop',{});}catch{}window.dispatchEvent(new CustomEvent('gelato-room-presence-updated',{detail:{room:{status:'not_connected',people:[],currentSpeaker:null}}}));void window.GelatoGlobalAgent?.refreshContext?.().catch(()=>{});}

@@ -1054,7 +1054,18 @@
   });
   window.addEventListener('beforeunload',()=>{stopContinuous();interruptSpeech('page-unload');});
 
+  function proactiveGreet(text){
+    if(!S.proactiveVoiceEnabled||!has('agent.proactive')||document.hidden
+       ||typeof text!=='string'||!/^Welcome, [^.!?]{1,45}\.$/u.test(text)
+       ||window.GelatoVoiceTurns?.speaking||window.speechSynthesis?.speaking)return false;
+    if(!window.speechSynthesis&&!window.GelatoVoiceTurns?.speak)return false;
+    speak(text);
+    window.dispatchEvent(new CustomEvent('gelato-agent-proactive-greeting',{detail:{text,source:'agent_eyes'}}));
+    return true;
+  }
   window.GelatoGlobalAgent = {
+    proactiveGreet,
+    get proactiveGreetingEnabled(){return S.proactiveVoiceEnabled&&has('agent.proactive');},
     send,
     setListening,
     setConversationMode,
