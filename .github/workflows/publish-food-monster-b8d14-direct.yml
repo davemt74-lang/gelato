@@ -1,0 +1,64 @@
+name: Publish Food Monster B8D14 Verified Knowledge Cloud Deployment
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/publish-food-monster-b8d14-direct.yml'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-food-monster-b8d14-direct.yml'
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish-certified-package:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Verify pinned reference
+        run: |
+          test -n '5642612bcb9bf5a7c903829d932f1b276abbe4e3'
+          test -n '40226622908'
+      - name: Download merged-main deployment artifact
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p payload
+          gh run download 40226622908 --repo davemt74-lang/gelato --name gelato-full-deploy --dir payload
+          test -s payload/gelato-full-deploy.zip
+          test -s payload/gelato-full-deploy.sha256
+      - name: Verify checksum, exact commit, required files and privacy exclusions
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          cd payload
+          expected="$(sed -nE 's/^([0-9a-f]{64})[[:space:]]+.*gelato-full-deploy\.zip$/\1/p' gelato-full-deploy.sha256)"
+          test "${#expected}" -eq 64
+          printf '%s  gelato-full-deploy.zip\n' "$expected" | sha256sum --check -
+          printf '%s  gelato-full-deploy.zip\n' "$expected" > gelato-full-deploy.sha256
+          unzip -tq gelato-full-deploy.zip
+          unzip -p gelato-full-deploy.zip DEPLOY_SHA.txt | grep -Fx '5642612bcb9bf5a7c903829d932f1b276abbe4e3'
+          for file in index.php upgrade.php js/global-agent.js api/food-monster-llm.php includes/food-monster-b8d3-tool-runtime.php includes/food-monster-b8d14-grounded-fallback.php includes/food-monster-unified-knowledge.php tests/food-monster-b8d14-grounded-fallback.php; do
+            unzip -Z1 gelato-full-deploy.zip | grep -Fx "$file"
+          done
+          if unzip -Z1 gelato-full-deploy.zip | grep -Eq '^(config\.php$|\.env$|uploads/|storage/|gelato-full-deploy\.zip$|deploy\.zip$)'; then
+            echo 'Private paths or nested deployment package present.'
+            exit 1
+          fi
+      - name: Publish B8D14 ZIP and SHA256
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create gelato-food-monster-b8d14 \
+            payload/gelato-full-deploy.zip \
+            payload/gelato-full-deploy.sha256 \
+            --repo davemt74-lang/gelato \
+            --target 5642612bcb9bf5a7c903829d932f1b276abbe4e3 \
+            --title 'Gelato Food Monster B8D14 — Verified Restaurant Knowledge Fallback' \
+            --notes 'Certified exact Cloud package from FM-B8D14 merged main. When model-first Agent Chat returns no tool call to an explicit restaurant-fact request, a server-only read-only fallback returns authorized tenant-scoped Gelato facts instead of a generic LLM disclaimer. Includes menus, prices, named ingredients, employees, schedules and other covered domains. Generic conversation and governed writes retain their existing paths; unverified room speakers cannot inherit account access. No private records are sent to the AI model. Deploy to the application root preserving config.php, .env, uploads and storage and hard-refresh. No new B8D14 database migration; live venue acceptance pending.'
