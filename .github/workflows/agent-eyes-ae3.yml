@@ -1,0 +1,39 @@
+name: Agent Eyes AE3 Voice + Visual Participant Handoff
+
+on:
+  pull_request:
+    paths:
+      - 'js/agent-eyes-speaker.js'
+      - 'js/food-monster-room.js'
+      - 'tests/agent-eyes-ae3-speaker-browser.test.cjs'
+      - '.github/workflows/agent-eyes-ae3.yml'
+      - 'docs/AGENT-EYES-AE3.md'
+  push:
+    branches: [main]
+    paths:
+      - 'js/agent-eyes-speaker.js'
+      - 'js/food-monster-room.js'
+      - 'tests/agent-eyes-ae3-speaker-browser.test.cjs'
+      - '.github/workflows/agent-eyes-ae3.yml'
+      - 'docs/AGENT-EYES-AE3.md'
+
+permissions:
+  contents: read
+
+jobs:
+  speaker-handoff:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax and server verification contract
+        run: |
+          node --check js/agent-eyes-speaker.js
+          node --check js/food-monster-room.js
+          node --check tests/agent-eyes-ae3-speaker-browser.test.cjs
+          php tests/food-monster-g11a-speaker.php
+      - name: Chromium speaker and room regression
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.0
+          npx playwright install --with-deps chromium
+          node tests/agent-eyes-ae3-speaker-browser.test.cjs
+          node tests/food-monster-g9c-room-browser.test.cjs
