@@ -14,6 +14,7 @@ require_once __DIR__.'/food-monster-b8d12-pending-actions.php';
 require_once __DIR__.'/food-monster-b8d13-preflight.php';
 require_once __DIR__.'/food-monster-b8d13b-task-journal.php';
 require_once __DIR__.'/food-monster-b8d13c-step-checkpoints.php';
+require_once __DIR__.'/food-monster-b8d13d-task-controls.php';
 
 /**
  * FM-B8D3: model-selected tools, executed exclusively by the signed-in
@@ -237,12 +238,14 @@ function fm8d3_turn(
     $result=fm8d2_run($plan,$principal,$catalogue,[
         'refreshActor'=>$refresh,'audit'=>$audit,'maxSteps'=>4,'maxMs'=>9000,
         'priorTrace'=>$priorTrace,'onStep'=>$checkpoint,
+        'shouldStop'=>static fn():bool=>fm8d13d_should_stop($pdo,$claim),
     ]);
     if($result['status']!=='completed'){
         $stop=match($result['status']){
             'needs_input'=>'I need one more detail to complete this request: '.$result['reason'],
             'approval_required'=>'This operation needs the existing Gelato approval workflow.',
             'denied'=>'That information or action is not authorized for this signed-in account.',
+            'cancelled'=>'You stopped this task. Completed steps remain in the audit history; no next step was started.',
             default=>'I stopped safely because the requested tool could not be verified.',
         };
         return $save(['ok'=>true,'skill'=>'agent.tool_stopped','answer'=>$stop,

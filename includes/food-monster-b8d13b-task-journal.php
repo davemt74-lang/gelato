@@ -89,8 +89,18 @@ function fm8d13b_prior(PDO $pdo,array $principal,array $context,
     if($state==='running'){
         if(strtotime((string)$row['lease_expires_at'].' UTC')>time())
             return ['kind'=>'response','result'=>fm8d13b_stop('I am still processing that task. Please check again shortly.','in_progress')];
-        if((string)$row['impact']==='read')
+        if((string)$row['impact']==='read'){
+            // An explicit cancellation survives request loss and reload.
+            if(!empty($row['cancel_requested_at'])){
+                $q=$pdo->prepare("UPDATE food_monster_agent_task_runs SET state='cancelled',
+                    resolved_at=UTC_TIMESTAMP(6)
+                    WHERE id=? AND state='running' AND lease_expires_at<=UTC_TIMESTAMP(6)");
+                $q->execute([(int)$row['id']]);
+                return ['kind'=>'response','result'=>fm8d13b_stop(
+                    'You cancelled the interrupted read-only task. No further steps ran.','cancelled')];
+            }
             return ['kind'=>'resume','plan'=>$plan];
+        }
         // Mark a lost write lease uncertain, without executing it again.
         $q=$pdo->prepare("UPDATE food_monster_agent_task_runs SET state='unverified',
             resolved_at=UTC_TIMESTAMP(6) WHERE id=? AND state='running'
@@ -149,6 +159,15 @@ function fm8d13b_claim(PDO $pdo,array $principal,array $context,
                 return ['kind'=>'response','result'=>fm8d13b_stop(
                     'This task was already finalized. No action was repeated.','already_finalized')];
             }
+            if(!empty($row['cancel_requested_at'])&&(string)$row['impact']==='read'){
+                $q=$pdo->prepare("UPDATE food_monster_agent_task_runs
+                    SET state='cancelled',resolved_at=UTC_TIMESTAMP(6)
+                    WHERE id=? AND state='running'");
+                $q->execute([(int)$row['id']]);
+                $pdo->commit();
+                return ['kind'=>'response','result'=>fm8d13b_stop(
+                    'This read-only task was cancelled.','cancelled')];
+            }
             if(strtotime((string)$row['lease_expires_at'].' UTC')>time()){
                 $pdo->commit();
                 return ['kind'=>'response','result'=>fm8d13b_stop(
@@ -182,7 +201,8 @@ function fm8d13b_finish(PDO $pdo,array $id,string $token,array $response,
     if(strlen($json)>24000)throw new RuntimeException('Verified task result is too large.');
     $state=(string)($response['data']['status']??'');
     $status=$state==='completed'?'completed':
-        ($state==='execution_unverified'||$state==='unverified'?'unverified':'stopped');
+        ($state==='cancelled'?'cancelled':
+        ($state==='execution_unverified'||$state==='unverified'?'unverified':'stopped'));
     [$org,$user,$thread,$turn]=$id;
     $q=$pdo->prepare("UPDATE food_monster_agent_task_runs
         SET state=?,result_json=?,completed_steps=?,planned_steps=?,

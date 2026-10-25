@@ -683,7 +683,7 @@
     {
       "path": "api/food-monster-llm.php",
       "feature": "food_monster",
-      "sourceBlob": "87bb024c06733923ca5f6605b88318b40725b02a",
+      "sourceBlob": "ab49c9db48eab413f7138ca062876bbc5fd34c7d",
       "discoveredActions": [],
       "permissionTokensSeen": [],
       "directAppRequireAuthCall": true,

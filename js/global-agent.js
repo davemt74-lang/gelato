@@ -295,6 +295,9 @@
         channel: voice ? 'voice' : 'text',
         voiceEventId: freshSpeakerEvent,
       });
+      window.dispatchEvent(new CustomEvent('gelato-agent-task-start',{
+        detail:{threadId:S.thread,turnId:String(submitted?.message?.id||'')}
+      }));
       if(freshSpeakerEvent){
         S.usedVoiceEvents.add(freshSpeakerEvent);
         if(S.usedVoiceEvents.size>32)S.usedVoiceEvents.delete(S.usedVoiceEvents.values().next().value);
@@ -1010,7 +1013,11 @@
     return S.foodMonsterContext;
   }
   function selectThread(id) {
-    if (id){S.thread = String(id);void loadPendingVisionApproval();}
+    if(id&&S.thread!==String(id)){
+      S.thread=String(id);
+      window.dispatchEvent(new CustomEvent('gelato-agent-thread-change',{detail:{threadId:S.thread}}));
+      void loadPendingVisionApproval();
+    }
   }
 
   async function init() {
@@ -1022,6 +1029,14 @@
       S.user = data.user || null;
       S.foodMonsterContext=data.foodMonsterContext||null;
       mount();
+      if(typeof document.createElement==='function'
+         &&typeof document.querySelector==='function'
+         &&!document.querySelector('script[data-fm-task-controls]')){
+        const script=document.createElement('script');
+        script.dataset.fmTaskControls='1';
+        script.src='js/food-monster-task-controls.js?v=20261025-b8d13d';
+        document.head.append(script);
+      }
       ensureConversationButton();renderConversation();
       void loadPendingVisionApproval();
       await loadListeningPreference();
@@ -1056,6 +1071,7 @@
     refreshContext,
     get foodMonsterContext(){return S.foodMonsterContext;},
     get threadId() { return S.thread; },
+    get csrf() { return S.csrf; },
     get user() { return S.user; },
     get permissions() { return [...S.permissions]; },
     get listening() { return S.listening; },

@@ -14,18 +14,28 @@ $org=(int)$user['organization_id'];$uid=(int)$user['id'];
 $pdo=app_pdo();
 if(!gaw_ready($pdo))app_json_response(['ok'=>false,'message'=>'Run the Gelato Agent Workspace migration.'],503);
 try{
-    $credentials=fmllm_providers($pdo,$org);
     if($_SERVER['REQUEST_METHOD']==='GET'){
+        if(($_GET['action']??'status')==='task_list'){
+            $taskThread=(string)($_GET['threadId']??'');
+            if(!gaw_thread($pdo,$org,$uid,$taskThread))
+                app_json_response(['ok'=>false,'message'=>'Conversation not found.'],404);
+            if(!fm8d13d_ready($pdo))
+                app_json_response(['ok'=>false,'message'=>'Run the Gelato B8D13D database upgrade.'],503);
+            app_json_response(['ok'=>true,'tasks'=>fm8d13d_list($pdo,$user,$taskThread)]);
+        }
         if(($_GET['action']??'status')==='task_status'){
             $taskThread=(string)($_GET['threadId']??'');
             $taskTurn=(string)($_GET['turnId']??'');
             if(!gaw_thread($pdo,$org,$uid,$taskThread))
                 app_json_response(['ok'=>false,'message'=>'Conversation not found.'],404);
-            $task=fm8d13b_status($pdo,$user,$taskThread,$taskTurn);
+            $task=fm8d13d_ready($pdo)
+                ?fm8d13d_status($pdo,$user,$taskThread,$taskTurn)
+                :fm8d13b_status($pdo,$user,$taskThread,$taskTurn);
             if($task===null)app_json_response(['ok'=>false,'message'=>'Task not found or migration required.'],404);
             app_json_response(['ok'=>true,'task'=>$task]);
         }
         if(($_GET['action']??'status')!=='status')app_json_response(['ok'=>false,'message'=>'Unknown action.'],422);
+        $credentials=fmllm_providers($pdo,$org);
         // Expose configuration status only, never key prefixes, last four or decryptable material.
         app_json_response(['ok'=>true,'providers'=>[
             'anthropic'=>is_array($credentials['anthropic']??null),
@@ -37,7 +47,24 @@ try{
         app_json_response(['ok'=>false,'message'=>'Method not allowed.'],405);
     }
     $in=app_json_input();app_verify_request_csrf($in);
+    if(($in['action']??'')==='task_cancel'){
+        $taskThread=(string)($in['threadId']??'');
+        $taskTurn=(string)($in['turnId']??'');
+        // Authenticate the original conversation owner; a browser-selected
+        // user or organization is never accepted for a cancellation.
+        if(!gaw_thread($pdo,$org,$uid,$taskThread))
+            app_json_response(['ok'=>false,'message'=>'Conversation not found.'],404);
+        $task=fm8d13d_request_cancel($pdo,$user,$taskThread,$taskTurn);
+        if($task===null)
+            app_json_response(['ok'=>false,'message'=>'Task not found or B8D13D upgrade required.'],404);
+        app_audit($pdo,$org,$uid,'agent.task_cancel_requested','agent_task',$taskTurn,null,[
+            'state'=>$task['state'],'impact'=>$task['impact'],
+            'interrupted'=>$task['interrupted']??false,
+        ]);
+        app_json_response(['ok'=>true,'task'=>$task]);
+    }
     if(($in['action']??'')!=='chat')app_json_response(['ok'=>false,'message'=>'Unknown action.'],422);
+    $credentials=fmllm_providers($pdo,$org);
     $provider=fmllm_allowed_provider((string)($in['provider']??'auto'));
     $threadId=trim((string)($in['threadId']??''));
     $message=trim((string)($in['message']??''));
