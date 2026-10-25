@@ -719,7 +719,7 @@
     {
       "path": "api/food-monster-presence.php",
       "feature": "food_monster",
-      "sourceBlob": "a5477be3698d00105ae063944273ea7afde5977c",
+      "sourceBlob": "e8906b9f1faaf98b806b1fd1c383789e74a39ad5",
       "discoveredActions": [
         "enroll_commit",
         "enroll_revoke",
