@@ -24,7 +24,7 @@ function fm8d14_needs_grounded_read(string $question): bool
     // A business topic word alone ("inventory", "staff", "pizza") must not
     // turn generic questions into a private database lookup. Require clear
     // evidence of an actual restaurant record or explicit retrieval intent.
-    return preg_match('/\b(?:gelato|restaurant|our|my|current|today|tonight|tomorrow|yesterday|this week|last week|recorded|saved|active|available|availability|actual|show|list|find|look up|check|retrieve|read|prices?|costs?|how much|specials?|(?:we|you)\s+(?:serve|sell|offer))\b/iu',$question)===1;
+    return preg_match('/\b(?:gelato|restaurant|our|my|current|today|tonight|tomorrow|yesterday|this week|last week|recorded|saved|active|available|availability|actual|show|list|find|look up|check|retrieve|read|prices?|costs?|how much|ingredients?|toppings?|specials?|(?:we|you)\s+(?:serve|sell|offer))\b/iu',$question)===1;
 }
 
 /**
