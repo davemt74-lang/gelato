@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__.'/food-monster-identity-authority.php';
 require_once __DIR__.'/food-monster-pin.php';
+require_once __DIR__.'/agent-eyes-enrollment.php';
 
 /**
  * FM-G9C: ephemeral room observation. A camera observation is NOT an account
@@ -136,7 +137,17 @@ function fm9c_local_staff(PDO $pdo,int $org,string $email): ?array
        LIMIT 1");
     $query->execute([$org,(int)$device['id'],$email]);
     $r=$query->fetch(PDO::FETCH_ASSOC);
-    return $r?:null;
+    if($r)return $r;
+    // AE2 is separate from Face/PIN authentication; even an owner can have
+    // a provisional room label without gaining identity-based tool authority.
+    if(!fmeyes_ready($pdo))return null;
+    $q=$pdo->prepare("SELECT u.id,u.display_name FROM users u
+       INNER JOIN organization_memberships om ON om.user_id=u.id AND om.organization_id=? AND om.status='active'
+       INNER JOIN fm_eyes_local_enrollments e ON e.user_id=u.id AND e.organization_id=om.organization_id
+         AND e.device_id=? AND e.revoked_at IS NULL
+       WHERE u.email=? AND u.status='active' AND u.archived_at IS NULL LIMIT 1");
+    $q->execute([$org,(int)$device['id'],$email]);
+    return $q->fetch(PDO::FETCH_ASSOC)?:null;
 }
 
 function fm9c_room_update(PDO $pdo,array $operator,array $observations,int $seenAt=null): array
