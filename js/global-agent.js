@@ -363,11 +363,21 @@
            ||serverMessage!==String(submitted?.message?.id||''))
           throw new Error('Agent handoff could not be verified. No operation was sent.');
         route={route:endpoint,domain:String(delegation.domain||'restaurant_agent')};
+        // A model-selected confirmation is only an explicit decision about
+        // an existing owner-scoped proposal. Never send model-generated free
+        // text or an arbitrary action to the destination Agent.
+        let delegatedMessage=text;
+        if(delegation.continuation===true){
+          if(!['Confirm','Cancel'].includes(delegation.forwardMessage)
+             ||!String(delegation.node||'').match(/^[a-z][a-z0-9_]{2,45}$/))
+            throw new Error('Pending Agent decision could not be verified.');
+          delegatedMessage=delegation.forwardMessage;
+        }
         const response=await fetch(endpoint,{
           method:'POST',cache:'no-store',
           headers:{Accept:'application/json','Content-Type':'application/json','X-CSRF-Token':S.csrf},
           body:JSON.stringify({
-            action:'ask',message:text,voice:Boolean(voice),
+            action:'ask',message:delegatedMessage,voice:Boolean(voice),
             voiceEventId:voice?freshSpeakerEvent:'',
             threadId:S.thread,csrf_token:S.csrf
           })
