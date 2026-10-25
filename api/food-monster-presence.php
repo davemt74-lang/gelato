@@ -10,6 +10,8 @@ header('Cache-Control: no-store, private');
 header('X-Content-Type-Options: nosniff');
 try{
     if($_SERVER['REQUEST_METHOD']==='GET'){
+        if(($_GET['action']??'status')==='timeline')
+            app_json_response(['ok'=>true,'events'=>fmeyes5_timeline(app_pdo(),$user,(int)($_GET['personId']??0),40)]);
         if(($_GET['action']??'status')==='enroll_candidates')
             app_json_response(['ok'=>true,'people'=>fmeyes_candidates(app_pdo(),$user)]);
         if(($_GET['action']??'status')!=='status')throw new InvalidArgumentException('Invalid camera action.');
@@ -30,13 +32,13 @@ try{
         app_json_response(['ok'=>true]+$result);
     }
     if($action==='stop'){
-        fm9c_room_stop($user);
+        fm9c_room_stop($user,app_pdo());
         app_json_response(['ok'=>true,'room'=>fm9c_empty_room()]);
     }
     if($action==='observe'){
         $tracks=$in['tracks']??null;
         if(!is_array($tracks))throw new InvalidArgumentException('Camera tracks required.');
-        $room=fm9c_room_update(app_pdo(),$user,$tracks);
+        $room=fm9c_room_update(app_pdo(),$user,$tracks,null,($in['allowGreeting']??false)===true);
         app_json_response(['ok'=>true,'room'=>$room]);
     }
     throw new InvalidArgumentException('Unsupported room presence action.');

@@ -1,0 +1,96 @@
+name: Agent Eyes AE5 Presence Timeline + Proactive Greetings
+
+on:
+  pull_request:
+    paths:
+      - 'includes/agent-eyes-presence-timeline.php'
+      - 'includes/food-monster-room-presence.php'
+      - 'api/food-monster-presence.php'
+      - 'js/global-agent.js'
+      - 'js/food-monster-room.js'
+      - 'database/20261223_agent_eyes_ae5_presence_timeline.sql'
+      - 'tests/agent-eyes-ae5-timeline.php'
+      - 'tests/agent-eyes-ae5-timeline-browser.test.cjs'
+      - '.github/workflows/agent-eyes-ae5.yml'
+      - 'docs/AGENT-EYES-AE5.md'
+  push:
+    branches: [main]
+    paths:
+      - 'includes/agent-eyes-presence-timeline.php'
+      - 'includes/food-monster-room-presence.php'
+      - 'api/food-monster-presence.php'
+      - 'js/global-agent.js'
+      - 'js/food-monster-room.js'
+      - 'database/20261223_agent_eyes_ae5_presence_timeline.sql'
+      - 'tests/agent-eyes-ae5-timeline.php'
+      - 'tests/agent-eyes-ae5-timeline-browser.test.cjs'
+      - '.github/workflows/agent-eyes-ae5.yml'
+      - 'docs/AGENT-EYES-AE5.md'
+
+permissions:
+  contents: read
+
+jobs:
+  presence-and-greetings:
+    runs-on: ubuntu-24.04
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - name: Syntax and privacy contract
+        run: |
+          php -l includes/agent-eyes-presence-timeline.php
+          php -l includes/food-monster-room-presence.php
+          php -l api/food-monster-presence.php
+          php -l tests/agent-eyes-ae5-timeline.php
+          node --check js/global-agent.js
+          node --check js/food-monster-room.js
+          node --check tests/agent-eyes-ae5-timeline-browser.test.cjs
+      - name: Migrate MariaDB
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app' => ['name'=>'Gelato AE5 CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database' => ['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security' => ['session_name'=>'gelato_ae5_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $service=new UpgradeService(app_pdo(),__DIR__);
+          $service->ensureTrackingTables();
+          $service->bootstrapLegacyHistory(null);
+          $service->applyPending(null);
+          if($service->pendingMigrations())exit(1);
+          PHP
+      - name: Tenant isolation, unknown persons, cooldown, departure and stop
+        run: |
+          php tests/agent-eyes-ae5-timeline.php
+          php tests/agent-eyes-ae2-enrollment.php
+      - name: Chromium greeting and timestamped timeline UI
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.0
+          npx playwright install --with-deps chromium
+          node tests/agent-eyes-ae5-timeline-browser.test.cjs
+          node tests/food-monster-g9c-room-browser.test.cjs
