@@ -1,0 +1,64 @@
+name: Publish Agent Eyes AE3 Certified Cloud Deployment
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/publish-agent-eyes-ae3.yml'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-agent-eyes-ae3.yml'
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish-certified-package:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Verify pinned reference
+        run: |
+          test -n '21b46e8ba0291748fbb9db1bb4b3d71e7a069d02'
+          test -n '40215395229'
+      - name: Download merged-main deployment artifact
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p payload
+          gh run download 40215395229 --repo davemt74-lang/gelato --name gelato-full-deploy --dir payload
+          test -s payload/gelato-full-deploy.zip
+          test -s payload/gelato-full-deploy.sha256
+      - name: Verify checksum, exact commit, required files and privacy exclusions
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          cd payload
+          expected="$(sed -nE 's/^([0-9a-f]{64})[[:space:]]+.*gelato-full-deploy\.zip$/\1/p' gelato-full-deploy.sha256)"
+          test "${#expected}" -eq 64
+          printf '%s  gelato-full-deploy.zip\n' "$expected" | sha256sum --check -
+          printf '%s  gelato-full-deploy.zip\n' "$expected" > gelato-full-deploy.sha256
+          unzip -tq gelato-full-deploy.zip
+          unzip -p gelato-full-deploy.zip DEPLOY_SHA.txt | grep -Fx '21b46e8ba0291748fbb9db1bb4b3d71e7a069d02'
+          for file in index.php upgrade.php js/food-monster-room.js js/agent-eyes-speaker.js js/agent-eyes-enrollment.js includes/agent-eyes-enrollment.php includes/food-monster-room-presence.php api/food-monster-presence.php tests/agent-eyes-ae3-speaker-browser.test.cjs docs/AGENT-EYES-AE3.md; do
+            unzip -Z1 gelato-full-deploy.zip | grep -Fx "$file"
+          done
+          if unzip -Z1 gelato-full-deploy.zip | grep -Eq '^(config\.php$|\.env$|uploads/|storage/|gelato-full-deploy\.zip$|deploy\.zip$)'; then
+            echo 'Private paths or nested deployment package present.'
+            exit 1
+          fi
+      - name: Publish AE3 ZIP and SHA256
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create gelato-agent-eyes-ae3 \
+            payload/gelato-full-deploy.zip \
+            payload/gelato-full-deploy.sha256 \
+            --repo davemt74-lang/gelato \
+            --target 21b46e8ba0291748fbb9db1bb4b3d71e7a069d02 \
+            --title 'Gelato Agent Eyes AE3 — Voice + Visual Participant Handoffs' \
+            --notes 'Certified exact Cloud package from AE3 merged main. Adds server-verified voice + provisional visual participant speaker highlights, verified handoff notices, explicit unattributed state, and Agent Brain presence change events. No camera-driven authentication or raw biometric uploads. Deploy to the application root, preserve config.php, .env, uploads and storage, and hard-refresh. No AE3 database migration; run upgrade.php when updating from pre-AE2. Physical camera and voice accuracy field acceptance remain separate.'
