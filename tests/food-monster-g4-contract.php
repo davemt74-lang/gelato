@@ -41,5 +41,8 @@ $test(str_contains($source,'gaw_messages($pdo,$org,$uid'),'history is server-sid
 $test(str_contains($source,'fmllm_rate_limit'),'rate limit enforced before provider billing');
 $test(str_contains($source,'session_write_close'),'avoid blocking other Gelato requests while model responds');
 $test(!str_contains($source,'apiKey')&&!str_contains($front,'api_key'),'keys never handled by browser or POST payload');
-$test(str_contains($front,'if (route.route)')&&str_contains($front,'else if (window.GelatoFoodMonsterLLM?.ask)'),'tools before model fallback');
+$test(str_contains($front,'if(window.GelatoFoodMonsterLLM?.ask)')
+    &&str_contains($front,'const delegation=result?.data?.delegation;')
+    &&str_contains($front,'result?.data?.offlineFallback===true'),
+    'model-first skills with explicit no-provider built-in fallback');
 echo "FM-G4 provider, privacy, route contracts: PASS ({$checks} checks)\n";

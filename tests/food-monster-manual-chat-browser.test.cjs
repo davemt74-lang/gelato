@@ -30,7 +30,12 @@ const {chromium}=require('playwright');
         else if(body.action==='route')data={ok:true,route:'api/food-monster-knowledge.php',domain:'food_monster_grounded_knowledge'};
         else if(url.searchParams.get('action')==='thread')data={ok:true,thread:{title:'Conversation'},messages:[]};
         else if(url.searchParams.get('action')==='threads')data={ok:true,threads:[]};
-      }else if(url.pathname==='/api/food-monster-knowledge.php')
+      }else if(url.pathname==='/api/food-monster-llm.php')
+        data={ok:true,skill:'agent.model_selected_tools',
+          answer:'The current menu includes a margherita pizza.',
+          data:{status:'completed',toolCalls:1,tools:['get_menu_item']},
+          sources:['Gelato active menu']};
+      else if(url.pathname==='/api/food-monster-knowledge.php')
         data={ok:true,skill:'food_monster.menu_knowledge',
           answer:'The current menu includes a margherita pizza.',sources:['Gelato active menu']};
       return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});

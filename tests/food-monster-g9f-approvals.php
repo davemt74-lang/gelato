@@ -40,8 +40,12 @@ check_it(str_contains($api,'gaw_messages($pdo,$org,$uid,$thread,1)')
     &&str_contains($api,'app_verify_request_csrf'),'only canonical authenticated chat messages stage approval');
 check_it(str_contains($api,"'fm9f_high_impact_decision'")
     &&str_contains($api,"'executed'=>false"),'approval decisions are auditable and nonexecuting');
+$domainRouter=(string)file_get_contents(__DIR__.'/../includes/food-monster-b8d11-domain-routing.php');
 check_it(str_contains($workspace,'fm9f_approval_chat_intent')
-    &&str_contains($client,'api/food-monster-approvals.php'),'Agent Chat routes owner approval');
+    &&str_contains($domainRouter,"'route'=>'api/food-monster-approvals.php'")
+    &&str_contains($domainRouter,"'high_impact_approval'")
+    &&str_contains($client,'const delegation=result?.data?.delegation;'),
+    'Model-first chat retains the owner-only legacy approval gate');
 $p2=fm9f_approval_propose($owner,'large_refund','Review a refund proposal','agent-'.str_repeat('e',20));
 $d2=fm9f_approval_decide($owner,$p2['proposalId'],'reject');
 check_it($d2['decision']==='reject'&&!$d2['executed'],'owner rejection is nonexecuting');

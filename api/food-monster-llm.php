@@ -84,7 +84,7 @@ try{
     }
     if(!$history||end($history)['role']!=='user')throw new InvalidArgumentException('A user message is required.');
     $selected=fmllm_choose($credentials,$provider);
-    if($selected===null)app_json_response(['ok'=>false,'message'=>'Selected AI provider is not configured. Ask a Gelato administrator to configure an OpenAI or Anthropic API key.'],503);
+    if($selected===null)app_json_response(['ok'=>false,'code'=>'provider_not_configured','message'=>'Selected AI provider is not configured. Ask a Gelato administrator to configure an OpenAI or Anthropic API key.'],503);
     fmllm_rate_limit($org,$uid);
     try{
         $key=app_decrypt_secret((string)$selected['credential']['encrypted_key'],(string)$selected['credential']['nonce'],(string)$selected['credential']['encryption_method']);

@@ -80,6 +80,9 @@ check13b(str_contains($contents,'fm9d_person_collections($pdo,$user,$p)')&&str_c
  'followup knowledge restricted to same authorized person and room');
 check13b(str_contains($router,"'nodeMode'=>'read_only'")&&str_contains($router,"'route'=>'api/food-monster-knowledge.php?threadId='"),
  'routing explicitly offers read-only endpoint');
-check13b(str_contains($client,"'api/food-monster-knowledge.php'"),'client submits canonical thread to evidence route');
+check13b(str_contains($client,"api/food-monster-llm.php")
+    &&str_contains($client,"const delegation=result?.data?.delegation;")
+    &&str_contains($client,"serverMessage!==String(submitted?.message?.id||'')"),
+    'model-first client binds evidence retrieval and delegation to canonical chat turn');
 check13b(str_contains($contents,"\$_GET['threadId']"),'older cached clients can use server-issued reference without claiming a participant');
 echo 'FM-G13B grounded staff knowledge PASS ('.$n.' assertions)'."\n";

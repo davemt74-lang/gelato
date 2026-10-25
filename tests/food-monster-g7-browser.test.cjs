@@ -16,9 +16,16 @@ try{
    let response={ok:true};
    if(name==='/api/agent-workspace.php'){
      if(url.searchParams.get('action')==='bootstrap')response={ok:true,csrf:'g7-csrf',activeThread:'own-thread',permissions:[],user:{id:7,name:'Test User',firstName:'Test'}};
-     else if(body.action==='append')response={ok:true,message:{databaseId:96}};
-     else if(body.action==='route')response={ok:true,route:'api/food-monster-orchestrate.php',domain:'multi_node_read',node:'brain',nodeMode:'read_orchestrator'};
+     else if(body.action==='append')response={ok:true,message:{id:'msg-aaaaaaaaaaaaaaaaaaaa',databaseId:96}};
+
      else if(body.action==='record_action')response={ok:true,id:'audit-1'};
+   }else if(name==='/api/food-monster-llm.php'){
+     response={ok:true,skill:'agent.model_selected_tools',
+       answer:'Handoff prepared.',data:{delegation:{
+         route:'api/food-monster-orchestrate.php',
+         domain:'multi_node_read',
+         threadId:'own-thread',sourceMessageId:'msg-aaaaaaaaaaaaaaaaaaaa'
+       }}};
    }else if(name==='/api/food-monster-orchestrate.php'){
      response={ok:true,skill:'agent.multi_node.read_only',answer:'Reviewed orders and inventory. No changes made.',data:{mode:'read_only',steps:[{domain:'kitchen'},{domain:'inventory'}]},sources:['Gelato Agent Brain']};
    }else return route.fulfill({status:404,contentType:'application/json',body:JSON.stringify({ok:false})});
@@ -32,6 +39,10 @@ try{
  ok(result?.skill==='agent.multi_node.read_only','Read-only tool result returned to chat');
  const call=calls.find(c=>c.path==='/api/food-monster-orchestrate.php');
  ok(!!call,'Multi-node route executes only existing server endpoint');
+ ok(calls.some(c=>c.path==='/api/food-monster-llm.php'&&c.body.action==='chat'),
+   'Model-selected skill discovery happens before domain delegation');
+ ok(!calls.some(c=>c.body.action==='route'),
+   'Configured model does not use legacy keyword router');
  ok(call.body.threadId==='own-thread','Canonical session thread accompanies request');
  ok(call.body.csrf_token==='g7-csrf','CSRF included in original tool call');
  ok(call.body.action==='ask','No write action from client');

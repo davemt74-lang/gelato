@@ -311,45 +311,70 @@
         detail:{verified:true,threadId:S.thread}
       }));
 
-      const route = await post('api/agent-workspace.php', {action: 'route', message: text, threadId: S.thread});
+      // FM-B8D11: every chat turn goes through the configured AI provider
+      // for model-selected native skills or a permission-scoped existing
+      // restaurant-agent delegation. No regex/phrase routing runs first.
+      let route={route:null,domain:'model_selected'};
       let result;
-
-      if (route.route) {
-        const response = await fetch(route.route, {
-          method: 'POST',
-          cache: 'no-store',
-          headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-            'X-CSRF-Token': S.csrf,
-          },
-          body: JSON.stringify({
-            action: 'ask',
-            message: text,
-            voice: Boolean(voice),
-            voiceEventId: voice ? freshSpeakerEvent : '',
-            // Thread comes from existing Agent Chat, never from an LLM tool suggestion.
-            ...(['api/food-monster-orchestrate.php','api/food-monster-read.php','api/food-monster-approvals.php','api/food-monster-knowledge.php'].includes(route.route) ? {threadId:S.thread} : {}),
-            csrf_token: S.csrf,
-          }),
-        });
-        result = await response.json().catch(() => ({ok: false, message: 'Invalid Agent tool response.'}));
-        if (!response.ok || !result.ok) throw new Error(result.message || 'The requested Agent skill is unavailable.');
-      } else if (window.GelatoFoodMonsterLLM?.ask) {
-        // General chat is always a model conversation, never a static
-        // inventory of the app's features.
-        result = await window.GelatoFoodMonsterLLM.ask({text,threadId:S.thread,csrf:S.csrf});
-      } else {
-        // The optional model-selector UI may fail to load on some pages.
-        // Keep the server-side Auto provider available in Agent Chat itself.
+      if(window.GelatoFoodMonsterLLM?.ask){
+        result=await window.GelatoFoodMonsterLLM.ask({text,threadId:S.thread,csrf:S.csrf});
+      }else{
         const response=await fetch('api/food-monster-llm.php',{
           method:'POST',cache:'no-store',
           headers:{Accept:'application/json','Content-Type':'application/json','X-CSRF-Token':S.csrf},
           body:JSON.stringify({action:'chat',message:text,threadId:S.thread,provider:'auto',csrf_token:S.csrf})
         });
         result=await response.json().catch(()=>({ok:false,message:'Invalid AI service response.'}));
+        if(!response.ok||!result.ok){
+          if(result?.code==='provider_not_configured'){
+            result={ok:true,skill:'agent.capabilities',
+              answer:'No AI provider is configured. Built-in Gelato tools may still answer recognized requests; natural-language skill discovery requires an administrator to configure an AI provider.',
+              sources:[],data:{offlineFallback:true}};
+          }else throw new Error(result.message||'The configured AI service is unavailable.');
+        }
+      }
+
+      // Degraded/no-provider mode: retain previously authorized built-in
+      // tools without pretending a model understood the message. This
+      // compatibility parser is never invoked when an AI model is configured.
+      if(result?.data?.offlineFallback===true){
+        const offline=await post('api/agent-workspace.php',{
+          action:'route',message:text,threadId:S.thread
+        });
+        if(offline?.route){
+          result={ok:true,skill:'agent.offline_builtin',
+            data:{delegation:{
+              route:offline.route,domain:offline.domain,
+              threadId:S.thread,sourceMessageId:String(submitted?.message?.id||'')
+            }}};
+        }
+      }
+
+      const delegation=result?.data?.delegation;
+      if(delegation){
+        const endpoint=String(delegation.route||'');
+        const serverThread=String(delegation.threadId||'');
+        const serverMessage=String(delegation.sourceMessageId||'');
+        // A delegation applies to this exact server-committed user turn and
+        // resolves only to a known local PHP Agent. It cannot be used as a
+        // browser-provided URL, model-suggested arbitrary endpoint, or replay.
+        if(!/^api\/[a-z][a-z0-9-]{1,80}\.php$/.test(endpoint)
+           ||serverThread!==S.thread
+           ||serverMessage!==String(submitted?.message?.id||''))
+          throw new Error('Agent handoff could not be verified. No operation was sent.');
+        route={route:endpoint,domain:String(delegation.domain||'restaurant_agent')};
+        const response=await fetch(endpoint,{
+          method:'POST',cache:'no-store',
+          headers:{Accept:'application/json','Content-Type':'application/json','X-CSRF-Token':S.csrf},
+          body:JSON.stringify({
+            action:'ask',message:text,voice:Boolean(voice),
+            voiceEventId:voice?freshSpeakerEvent:'',
+            threadId:S.thread,csrf_token:S.csrf
+          })
+        });
+        result=await response.json().catch(()=>({ok:false,message:'Invalid destination Agent response.'}));
         if(!response.ok||!result.ok)
-          throw new Error(result.message||'The configured AI service is unavailable.');
+          throw new Error(result.message||'The authorized restaurant Agent could not complete the request.');
       }
 
       // Display only, after the canonical turn has completed routing.

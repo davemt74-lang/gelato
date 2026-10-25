@@ -46,6 +46,6 @@ fm7test(str_contains($api,"'fm_g7_briefing'")||str_contains($api,'fm_g7_briefing
 fm7test(str_contains($api,'agent_brain_orchestration_snapshot'),'Use existing Brain data source');
 fm7test(!str_contains($api,'curl_exec(')&&!str_contains($api,'apiKey'),'No custom model or URL execution');
 fm7test(str_contains($route,"'nodeMode'=>'read_orchestrator'"),'Planner route cannot write');
-fm7test(str_contains($front,"{threadId:S.thread}"),'Authenticated conversation passed from footer');
-fm7test(str_contains($front,'if (route.route)'),'Existing tool routes retained');
+fm7test(str_contains($front,'window.GelatoFoodMonsterLLM.ask({text,threadId:S.thread,csrf:S.csrf}'),'Authenticated model-first conversation from footer');
+fm7test(str_contains($front,'const delegation=result?.data?.delegation')&&str_contains($front,'serverMessage!==String(submitted?.message?.id'), 'Existing tool routes require a verified model handoff');
 echo "FM-G7 safe multi-node orchestration: PASS ($n checks)\n";
