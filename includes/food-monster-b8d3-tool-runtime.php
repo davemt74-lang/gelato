@@ -12,6 +12,7 @@ require_once __DIR__.'/food-monster-b8d10-approvals.php';
 require_once __DIR__.'/food-monster-b8d11-domain-routing.php';
 require_once __DIR__.'/food-monster-b8d12-pending-actions.php';
 require_once __DIR__.'/food-monster-b8d13-preflight.php';
+require_once __DIR__.'/food-monster-b8d13b-task-journal.php';
 
 /**
  * FM-B8D3: model-selected tools, executed exclusively by the signed-in
@@ -134,6 +135,10 @@ function fm8d3_turn(
     $provider=fmllm_allowed_provider($provider);
     if($provider==='auto')throw new InvalidArgumentException('Choose configured provider.');
     $catalogue=$catalogueOverride??fm8d3_catalogue($principal,$context);
+    $refresh=$refreshOverride??static fn():?array=>fm8d2_refresh_operator($pdo,$principal);
+    $prior=fm8d13b_prior($pdo,$principal,$context,$catalogue,$refresh);
+    if(($prior['kind']??'')==='response')return $prior['result'];
+    $resumePlan=(($prior['kind']??'')==='resume')?$prior['plan']:null;
     // Confirm/cancel is explicit user consent for an existing server proposal,
     // never a phrase-based dispatch of a new business intent.
     if($catalogueOverride===null){
@@ -147,8 +152,16 @@ function fm8d3_turn(
     $instruction=" Today at the restaurant in America/Phoenix is ".$today.". Interpret relative dates such as Friday against that date; when time is missing, ask rather than inventing it. Select an appropriate available Gelato skill for a user’s account, hours, staff schedule, roster, availability, shift creation, menu item ingredient, price, or in-house recipe request. For a named menu item first consult get_menu_item rather than claiming menu data is missing. For generic cooking science questions such as why honey helps pizza dough, answer conversationally without requiring private recipe access. Shift creation selects propose_staff_shift and requires a separate explicit human Confirm before any database change. Do not say live data is unavailable without attempting the authorized tool. Use model-selected get_my_training_progress or run_training_step for the employee's saved training and training dialogue; do not require exact command phrases. Never invent training steps; use recorded procedures only. For multi-part questions, select up to four independent authorized read skills in one tool-selection response; their verified results are combined locally in Agent Chat, never transmitted back to the AI provider. Never batch routine changes with reads or with other writes, never depend on an unread result to choose a write, and use the existing pending proposal confirmation for changes. For questions on Vision Lab, its camera device health, recorded observations, models, mission statuses, and datasets, select the authorized Vision Lab read skill and cite recorded history, never assume live perception. For explicit authorized requests to create a Vision Lab collection mission or an empty DRAFT dataset version, select the corresponding routine creation tool with a clear name/title; do not infer creation from a question. For Vision Lab training-sample review queues, annotation-quality reports and model release candidates, select the authorized read-only review/governance skill. Samples may be pending, disputed, approved or rejected; never claim a review decision was executed. Approval, dataset freeze, model release and device changes require the dedicated Gelato governance workflow. When a manager explicitly requests a Vision Lab training-sample review decision, use request_vision_sample_review to prepare a durable proposal; do not claim a sample was changed until the signed-in user clicks Approve in Agent Chat and the server verifies the original sample is unchanged. The proposal never executes a review. Never activate vision models, modify device configuration, approve samples, or freeze datasets through routine model-selected tools. For requests not covered by a native tool, call delegate_restaurant_domain to choose the best accessible existing Gelato operations agent. Select the domain by intent, not fixed words, and let the destination enforce its permission and confirmation contract. When an existing Gelato Agent has a server-recorded pending proposal, use continue_pending_restaurant_action ONLY for the user's explicit, unambiguous confirmation or cancellation; do not infer consent from a vague acknowledgement. This tool sends a canonical single-use decision to that specific pending Agent and never bypasses its separate approval gate. Do not use generic delegation for confirmation if this native pending tool is available. Follow-ups that ask questions (without approval) should use the same domain. Do not delegate general chat or generic cooking science; answer it directly. Do not invent records.";
     if($provider==='openai')$payload['instructions'].=$instruction;
     else $payload['system'].=$instruction;
-    $response=fm8d3_provider_request($provider,$key,$payload,$transport);
-    $calls=fm8d3_decode_calls($provider,$response);
+    // An interrupted read-only task can resume from its server-owned plan;
+    // no new provider selection or hidden observation is required.
+    if($resumePlan!==null){
+        $calls=array_map(static fn(array $step):array=>[
+            'name'=>$step['tool'],'arguments'=>$step['arguments']??[]],$resumePlan);
+        $response=[];
+    }else{
+        $response=fm8d3_provider_request($provider,$key,$payload,$transport);
+        $calls=fm8d3_decode_calls($provider,$response);
+    }
     if(!$calls){
         $answer=fmllm_parse($provider,$response);
         if($answer==='')throw new RuntimeException('The AI provider returned no answer.');
@@ -185,7 +198,6 @@ function fm8d3_turn(
         $plan[]=$step;
     }
     $org=(int)$principal['organization_id'];$uid=(int)$principal['id'];
-    $refresh=$refreshOverride??static fn():?array=>fm8d2_refresh_operator($pdo,$principal);
     $audit=$auditOverride??static function(array $event)use($pdo,$org,$uid):void{
         app_audit($pdo,$org,$uid,'agent.model_selected_tool','agent_skill',$event['tool'],null,$event);
     };
@@ -204,6 +216,17 @@ function fm8d3_turn(
             'data'=>['status'=>$preflight['status'],'steps'=>0,
                 'planned'=>$preflight['planned'],'blockedAt'=>$preflight['blockedAt']]];
     }
+    // FM-B8D13B: one persistent lease per canonical signed-in chat turn.
+    // A failed/uncertain write can never be replayed as a fresh effect.
+    $claim=fm8d13b_claim($pdo,$principal,$context,$plan,$catalogue);
+    if(($claim['kind']??'')==='response')return $claim['result'];
+    $save=static function(array $response,int $completed)use($pdo,$claim,$plan):array{
+        if(($claim['kind']??'')==='acquired'
+            &&!fm8d13b_finish($pdo,$claim['identity'],$claim['lease'],
+                $response,$completed,count($plan)))
+            return fm8d13b_stop('The task receipt changed before completion. Verify the outcome before retrying.','execution_unverified');
+        return $response;
+    };
     $result=fm8d2_run($plan,$principal,$catalogue,[
         'refreshActor'=>$refresh,'audit'=>$audit,'maxSteps'=>4,'maxMs'=>9000,
     ]);
@@ -214,8 +237,9 @@ function fm8d3_turn(
             'denied'=>'That information or action is not authorized for this signed-in account.',
             default=>'I stopped safely because the requested tool could not be verified.',
         };
-        return ['ok'=>true,'skill'=>'agent.tool_stopped','answer'=>$stop,
-            'sources'=>[],'data'=>['status'=>$result['status'],'steps'=>$result['completed']]];
+        return $save(['ok'=>true,'skill'=>'agent.tool_stopped','answer'=>$stop,
+            'sources'=>[],'data'=>['status'=>$result['status'],'steps'=>$result['completed']]],
+            (int)$result['completed']);
     }
     $answers=[];$sources=[];$pendingApproval=null;$delegation=null;
     foreach($result['steps'] as $step){
@@ -230,16 +254,16 @@ function fm8d3_turn(
         $source=trim((string)($obs['source']??''));
         if($source!=='')$sources[]=$source;
     }
-    if(!$answers)return ['ok'=>true,'skill'=>'agent.tool_stopped',
+    if(!$answers)return $save(['ok'=>true,'skill'=>'agent.tool_stopped',
         'answer'=>'The skill completed without a verified answer. I will not invent a result.',
-        'sources'=>[],'data'=>['status'=>'unverified']];
+        'sources'=>[],'data'=>['status'=>'unverified']],(int)$result['completed']);
     // Terminal local response: personal timecard facts never go back to OpenAI/Claude.
     $data=['status'=>'completed','toolCalls'=>count($calls),
         'tools'=>array_values(array_map(static fn($c)=>$c['name'],$calls))];
     if($pendingApproval!==null)$data['approval']=$pendingApproval;
     if($delegation!==null)$data['delegation']=$delegation;
-    return ['ok'=>true,'skill'=>'agent.model_selected_tools',
+    return $save(['ok'=>true,'skill'=>'agent.model_selected_tools',
         'answer'=>implode("\n\n",$answers),
         'sources'=>array_values(array_unique($sources)),
-        'data'=>$data];
+        'data'=>$data],(int)$result['completed']);
 }
