@@ -8,6 +8,7 @@ require_once __DIR__.'/food-monster-b8d6-training.php';
 require_once __DIR__.'/food-monster-b8d7-vision.php';
 require_once __DIR__.'/food-monster-b8d8-vision-actions.php';
 require_once __DIR__.'/food-monster-b8d9-review-governance.php';
+require_once __DIR__.'/food-monster-b8d10-approvals.php';
 
 /**
  * FM-B8D3: model-selected tools, executed exclusively by the signed-in
@@ -56,7 +57,7 @@ function fm8d3_catalogue(array $principal,array $context=[]):array
                 fm8d3_hours_read(app_pdo(),$actor,$args),
         ];
     }
-    return array_merge($base,fm8d4_schedule_catalogue($principal),fm8d5_catalogue($principal),fm8d6_training_catalogue($principal,$context),fm8d7_vision_catalogue($principal),fm8d8_vision_catalogue($principal,$context),fm8d9_catalogue($principal));
+    return array_merge($base,fm8d4_schedule_catalogue($principal),fm8d5_catalogue($principal),fm8d6_training_catalogue($principal,$context),fm8d7_vision_catalogue($principal),fm8d8_vision_catalogue($principal,$context),fm8d9_catalogue($principal),fm8d10_catalogue($principal,$context));
 }
 function fm8d3_provider_tools(string $provider,array $catalogue):array
 {
@@ -140,7 +141,7 @@ function fm8d3_turn(
     $payload['tools']=fm8d3_provider_tools($provider,$catalogue);
     $payload['tool_choice']=$provider==='openai'?'auto':['type'=>'auto'];
     $today=(new DateTimeImmutable('now',new DateTimeZone('America/Phoenix')))->format('Y-m-d l');
-    $instruction=" Today at the restaurant in America/Phoenix is ".$today.". Interpret relative dates such as Friday against that date; when time is missing, ask rather than inventing it. Select an appropriate available Gelato skill for a user’s account, hours, staff schedule, roster, availability, shift creation, menu item ingredient, price, or in-house recipe request. For a named menu item first consult get_menu_item rather than claiming menu data is missing. For generic cooking science questions such as why honey helps pizza dough, answer conversationally without requiring private recipe access. Shift creation selects propose_staff_shift and requires a separate explicit human Confirm before any database change. Do not say live data is unavailable without attempting the authorized tool. Use model-selected get_my_training_progress or run_training_step for the employee's saved training and training dialogue; do not require exact command phrases. Never invent training steps; use recorded procedures only. For questions on Vision Lab, its camera device health, recorded observations, models, mission statuses, and datasets, select the authorized Vision Lab read skill and cite recorded history, never assume live perception. For explicit authorized requests to create a Vision Lab collection mission or an empty DRAFT dataset version, select the corresponding routine creation tool with a clear name/title; do not infer creation from a question. For Vision Lab training-sample review queues, annotation-quality reports and model release candidates, select the authorized read-only review/governance skill. Samples may be pending, disputed, approved or rejected; never claim a review decision was executed. Approval, dataset freeze, model release and device changes require the dedicated Gelato governance workflow. Never activate vision models, modify device configuration, approve samples, or freeze datasets through these routine skills. Do not invent records.";
+    $instruction=" Today at the restaurant in America/Phoenix is ".$today.". Interpret relative dates such as Friday against that date; when time is missing, ask rather than inventing it. Select an appropriate available Gelato skill for a user’s account, hours, staff schedule, roster, availability, shift creation, menu item ingredient, price, or in-house recipe request. For a named menu item first consult get_menu_item rather than claiming menu data is missing. For generic cooking science questions such as why honey helps pizza dough, answer conversationally without requiring private recipe access. Shift creation selects propose_staff_shift and requires a separate explicit human Confirm before any database change. Do not say live data is unavailable without attempting the authorized tool. Use model-selected get_my_training_progress or run_training_step for the employee's saved training and training dialogue; do not require exact command phrases. Never invent training steps; use recorded procedures only. For questions on Vision Lab, its camera device health, recorded observations, models, mission statuses, and datasets, select the authorized Vision Lab read skill and cite recorded history, never assume live perception. For explicit authorized requests to create a Vision Lab collection mission or an empty DRAFT dataset version, select the corresponding routine creation tool with a clear name/title; do not infer creation from a question. For Vision Lab training-sample review queues, annotation-quality reports and model release candidates, select the authorized read-only review/governance skill. Samples may be pending, disputed, approved or rejected; never claim a review decision was executed. Approval, dataset freeze, model release and device changes require the dedicated Gelato governance workflow. When a manager explicitly requests a Vision Lab training-sample review decision, use request_vision_sample_review to prepare a durable proposal; do not claim a sample was changed until the signed-in user clicks Approve in Agent Chat and the server verifies the original sample is unchanged. The proposal never executes a review. Never activate vision models, modify device configuration, approve samples, or freeze datasets through routine model-selected tools. Do not invent records.";
     if($provider==='openai')$payload['instructions'].=$instruction;
     else $payload['system'].=$instruction;
     $response=fm8d3_provider_request($provider,$key,$payload,$transport);
@@ -188,9 +189,12 @@ function fm8d3_turn(
         return ['ok'=>true,'skill'=>'agent.tool_stopped','answer'=>$stop,
             'sources'=>[],'data'=>['status'=>$result['status'],'steps'=>$result['completed']]];
     }
-    $answers=[];$sources=[];
+    $answers=[];$sources=[];$pendingApproval=null;
     foreach($result['steps'] as $step){
         $obs=$step['observation']??[];
+        if(($obs['approval']['type']??'')==='vision_sample_review'
+           &&($obs['approval']['state']??'')==='pending')
+            $pendingApproval=$obs['approval'];
         $answer=trim((string)($obs['answer']??''));
         if($answer!=='')$answers[]=$answer;
         $source=trim((string)($obs['source']??''));
@@ -200,9 +204,11 @@ function fm8d3_turn(
         'answer'=>'The skill completed without a verified answer. I will not invent a result.',
         'sources'=>[],'data'=>['status'=>'unverified']];
     // Terminal local response: personal timecard facts never go back to OpenAI/Claude.
+    $data=['status'=>'completed','toolCalls'=>count($calls),
+        'tools'=>array_values(array_map(static fn($c)=>$c['name'],$calls))];
+    if($pendingApproval!==null)$data['approval']=$pendingApproval;
     return ['ok'=>true,'skill'=>'agent.model_selected_tools',
         'answer'=>implode("\n\n",$answers),
         'sources'=>array_values(array_unique($sources)),
-        'data'=>['status'=>'completed','toolCalls'=>count($calls),
-            'tools'=>array_values(array_map(static fn($c)=>$c['name'],$calls))]];
+        'data'=>$data];
 }

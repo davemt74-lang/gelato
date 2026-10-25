@@ -63,7 +63,7 @@ foreach (($map['apiEndpoints'] ?? []) as $api) {
 $actualMap = array_keys($declaredApi);
 sort($actualMap);
 fm_b8c_check($actualApi === $actualMap, 'All current API files mapped exactly once');
-fm_b8c_check(count($actualApi) === 135, '135 current API files accounted for');
+fm_b8c_check(count($actualApi) === 136, '136 current API files accounted for');
 fm_b8c_check(count($visionActions) === 123, '123 Vision Lab action comparisons discovered');
 fm_b8c_check($discoveredActionCount >= 550, 'Broad static action discovery');
 

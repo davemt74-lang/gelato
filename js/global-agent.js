@@ -144,6 +144,69 @@
 
   // A quiet opt-in chip is shown only after a new server-authorized notice.
   // It must never call send(), speak(), or infer who is in the room.
+  // FM-B8D10: signed-in human approval card. Never executes via LLM output,
+  // speech recognition, a programmatic event, or matching chat phrases.
+  function showVisionApproval(approval) {
+    let card=document.getElementById('gaVisionApproval');
+    if(card)card.remove();
+    if(!approval||approval.type!=='vision_sample_review'
+       ||approval.state!=='pending'
+       ||!/^fmapproval-[a-f0-9]{24}$/.test(String(approval.id||''))
+       ||!S.thread)return;
+    const bar=document.getElementById('gelato-agent-bar')||document.querySelector('.composer-wrap');
+    if(!bar?.parentNode)return;
+    const thread=S.thread;
+    card=document.createElement('div');card.id='gaVisionApproval';
+    card.setAttribute('role','group');
+    card.setAttribute('aria-label','Vision Lab approval required');
+    card.style.cssText='display:flex;flex-wrap:wrap;align-items:center;gap:8px;max-width:100%;padding:10px 12px;margin:5px 0;border:1px solid #8b5cf680;border-radius:12px;background:var(--panel,#f5f3ff);color:inherit;font:13px/1.45 system-ui,sans-serif;box-shadow:0 5px 22px #0001;';
+    const title=document.createElement('strong');title.textContent='Human approval required';
+    const detail=document.createElement('span');detail.textContent=String(approval.summary||'Review Vision Lab sample').slice(0,390);
+    detail.style.flex='1 1 250px';
+    const controls=document.createElement('div');controls.style.cssText='display:flex;gap:8px;flex-wrap:wrap;';
+    const approve=document.createElement('button');approve.type='button';approve.textContent='Approve review';
+    const dismiss=document.createElement('button');dismiss.type='button';dismiss.textContent='Dismiss';
+    for(const button of [approve,dismiss]){
+      button.style.cssText='width:auto;min-width:88px;height:36px;padding:0 12px;border:1px solid #a78bfa;border-radius:9px;background:transparent;color:inherit;cursor:pointer;';
+      controls.append(button);
+    }
+    approve.style.background='#15803d';approve.style.color='#fff';approve.style.borderColor='#15803d';
+    card.append(title,detail,controls);
+    if(bar.classList.contains('composer-wrap'))bar.insertBefore(card,bar.firstChild);
+    else bar.parentNode.insertBefore(card,bar);
+    async function decide(decision) {
+      if(thread!==S.thread){card.remove();return;}
+      approve.disabled=true;dismiss.disabled=true;detail.textContent='Verifying current permissions and recorded sample…';
+      try{
+        const result=await post('api/food-monster-b8d10-approvals.php',{
+          action:'decide',threadId:thread,proposalId:approval.id,decision
+        });
+        card.remove();
+        const answer=String(result.answer||'Approval recorded.');
+        await append('agent',answer,{channel:'text',
+          skill:'food_monster.vision_sample_review_approval',
+          structured:{approvalId:approval.id,state:result.state,executed:result.executed===true}});
+        status(answer,9000);
+        window.dispatchEvent(new CustomEvent('gelato-agent-response',{
+          detail:{answer,result,threadId:thread}
+        }));
+      }catch(error){
+        detail.textContent=String(error.message||'Approval could not be verified. No change was made.');
+        approve.disabled=false;dismiss.disabled=false;
+      }
+    }
+    approve.onclick=()=>void decide('approve');
+    dismiss.onclick=()=>void decide('dismiss');
+  }
+  async function loadPendingVisionApproval() {
+    if(!S.thread||!S.csrf)return;
+    const thread=S.thread;
+    try{
+      const data=await req('api/food-monster-b8d10-approvals.php?action=pending&threadId='+encodeURIComponent(thread));
+      if(S.thread===thread)showVisionApproval(data.approval??null);
+    }catch{ /* A missing migration or revoked permission must never block Agent Chat. */ }
+  }
+
   function showTrainingUpdateNotice(notice) {
     let chip=document.getElementById('gaTrainingUpdate');
     if(chip)chip.remove();
@@ -321,6 +384,9 @@
         structured: createdTaskId ? {responseData:result.data??null,operationalFollowup:{taskId:createdTaskId,reportMessageId:String(followup.reportMessageId||''),alreadyCreated:followup.alreadyCreated===true}} : (result.data ?? null),
         sources: Array.isArray(result.sources) ? result.sources : [],
       });
+
+      if(result?.data?.approval?.type==='vision_sample_review')
+        showVisionApproval(result.data.approval);
 
       await post('api/agent-workspace.php', {
         action: 'record_action',
@@ -909,7 +975,7 @@
     return S.foodMonsterContext;
   }
   function selectThread(id) {
-    if (id) S.thread = String(id);
+    if (id){S.thread = String(id);void loadPendingVisionApproval();}
   }
 
   async function init() {
@@ -922,6 +988,7 @@
       S.foodMonsterContext=data.foodMonsterContext||null;
       mount();
       ensureConversationButton();renderConversation();
+      void loadPendingVisionApproval();
       await loadListeningPreference();
       window.dispatchEvent(new CustomEvent('gelato-agent-ready', {
         detail: {threadId: S.thread, user: S.user},
