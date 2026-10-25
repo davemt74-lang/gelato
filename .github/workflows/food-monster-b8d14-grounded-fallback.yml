@@ -1,0 +1,38 @@
+name: Food Monster B8D14 Verified Knowledge Fallback
+
+on:
+  pull_request:
+    paths:
+      - 'includes/food-monster-b8d14-grounded-fallback.php'
+      - 'includes/food-monster-b8d3-tool-runtime.php'
+      - 'tests/food-monster-b8d14-grounded-fallback.php'
+      - '.github/workflows/food-monster-b8d14-grounded-fallback.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'includes/food-monster-b8d14-grounded-fallback.php'
+      - 'includes/food-monster-b8d3-tool-runtime.php'
+      - 'tests/food-monster-b8d14-grounded-fallback.php'
+      - '.github/workflows/food-monster-b8d14-grounded-fallback.yml'
+
+jobs:
+  verified-read-regression:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_sqlite, sodium
+      - name: Syntax checks
+        run: |
+          php -l includes/food-monster-b8d14-grounded-fallback.php
+          php -l includes/food-monster-b8d3-tool-runtime.php
+          php -l tests/food-monster-b8d14-grounded-fallback.php
+      - name: Model abstention and privacy contract
+        run: php tests/food-monster-b8d14-grounded-fallback.php
+      - name: Existing unified knowledge and model-selected tool regressions
+        run: |
+          php tests/food-monster-unified-knowledge.php
+          php tests/food-monster-b8d3-tool-selection.php
+          php tests/food-monster-b8d11-model-routing.php
