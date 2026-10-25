@@ -13,6 +13,7 @@ require_once __DIR__.'/food-monster-b8d11-domain-routing.php';
 require_once __DIR__.'/food-monster-b8d12-pending-actions.php';
 require_once __DIR__.'/food-monster-b8d13-preflight.php';
 require_once __DIR__.'/food-monster-b8d13b-task-journal.php';
+require_once __DIR__.'/food-monster-b8d13c-step-checkpoints.php';
 
 /**
  * FM-B8D3: model-selected tools, executed exclusively by the signed-in
@@ -227,8 +228,15 @@ function fm8d3_turn(
             return fm8d13b_stop('The task receipt changed before completion. Verify the outcome before retrying.','execution_unverified');
         return $response;
     };
+    // FM-B8D13C: resume exact saved step observations after fresh full
+    // preflight; only still-authorized read steps can be skipped.
+    $priorTrace=fm8d13c_trace($pdo,$claim,$plan);
+    $checkpoint=static function(array $step)use($pdo,$claim,$plan):void{
+        fm8d13c_checkpoint($pdo,$claim,$plan,$step);
+    };
     $result=fm8d2_run($plan,$principal,$catalogue,[
         'refreshActor'=>$refresh,'audit'=>$audit,'maxSteps'=>4,'maxMs'=>9000,
+        'priorTrace'=>$priorTrace,'onStep'=>$checkpoint,
     ]);
     if($result['status']!=='completed'){
         $stop=match($result['status']){
