@@ -67,6 +67,18 @@ const base=path.resolve(__dirname,'..');
   ok(await page.evaluate(()=>window.GelatoRoomPresence.room.people.some(p=>p.personId===22)),'server-scoped identity displayed only after lookup');
   ok(await page.evaluate(()=>window.GelatoRoomPresence.room.people.some(p=>p.personId===null)),'unrecognized person remains anonymous');
   ok(await page.evaluate(()=>window.GelatoRoomPresence.room.currentSpeaker===null),'video never fabricates current speaker');
+  ok(await page.locator('#fm-eyes-open').isVisible(),'Agent Eyes launcher visible');
+  ok(await page.locator('#fm-eyes-panel').isHidden(),'live preview closed by default');
+  await page.locator('#fm-eyes-open').click();
+  ok(await page.locator('#fm-eyes-panel').isVisible(),'live Agent Eyes canvas opens');
+  ok(await page.locator('#fm-eyes-panel video').count()===1,'existing camera stream reused in preview');
+  ok(await page.locator('#fm-eyes-panel .fm-eyes-box').count()===2,'both participant bounding boxes displayed');
+  ok(await page.locator('#fm-eyes-people li').count()===2,'participant list mirrors active tracks');
+  ok(await page.locator('#fm-eyes-panel').textContent().then(x=>x.includes('Test Cook · provisional')&&x.includes('Unknown participant')),'recognized and unknown participants labeled honestly');
+  await page.locator('#fm-eyes-panel button[aria-label="Close Agent Eyes"]').click();
+  ok(await page.locator('#fm-eyes-panel').isHidden(),'closing preview leaves detection running');
+  ok(await page.evaluate(()=>window.GelatoRoomPresence.active),'preview close does not stop room camera');
+
   ok(await page.evaluate(()=>window.GelatoRoomPresence.diagnostics.modelCached===true
     &&window.GelatoRoomPresence.diagnostics.intervalMs===1450),'active room uses responsive adaptive rate');
   ok(await page.evaluate(()=>window.loadedModels===3),'model weights loaded only once on first camera start');
