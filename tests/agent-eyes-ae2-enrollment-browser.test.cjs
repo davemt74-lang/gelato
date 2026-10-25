@@ -6,7 +6,8 @@ const {chromium}=require('playwright');
  const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
  try{
   const page=await browser.newPage();
-  await page.goto('http://localhost/',{waitUntil:'domcontentloaded'}).catch(()=>{});
+  await page.route('http://localhost/**',route=>route.fulfill({status:200,contentType:'text/html',body:'<!doctype html><title>AE2</title>'}));
+  await page.goto('http://localhost/');
   await page.setContent('<!doctype html><html><head><meta name="gelato-csrf" content="ae2-ci"></head><body><section id="fm-eyes-panel"><div class="fm-eyes-head"></div><video></video></section></body></html>');
   await page.evaluate(()=>{
    window.apiCalls=[];window.GelatoRoomPresence={active:true,refreshProfiles:async()=>{window.refreshed=true;}};
