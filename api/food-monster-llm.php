@@ -16,6 +16,15 @@ if(!gaw_ready($pdo))app_json_response(['ok'=>false,'message'=>'Run the Gelato Ag
 try{
     $credentials=fmllm_providers($pdo,$org);
     if($_SERVER['REQUEST_METHOD']==='GET'){
+        if(($_GET['action']??'status')==='task_status'){
+            $taskThread=(string)($_GET['threadId']??'');
+            $taskTurn=(string)($_GET['turnId']??'');
+            if(!gaw_thread($pdo,$org,$uid,$taskThread))
+                app_json_response(['ok'=>false,'message'=>'Conversation not found.'],404);
+            $task=fm8d13b_status($pdo,$user,$taskThread,$taskTurn);
+            if($task===null)app_json_response(['ok'=>false,'message'=>'Task not found or migration required.'],404);
+            app_json_response(['ok'=>true,'task'=>$task]);
+        }
         if(($_GET['action']??'status')!=='status')app_json_response(['ok'=>false,'message'=>'Unknown action.'],422);
         // Expose configuration status only, never key prefixes, last four or decryptable material.
         app_json_response(['ok'=>true,'providers'=>[
