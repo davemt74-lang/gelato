@@ -1,0 +1,112 @@
+name: Food Monster B8D13D Chat Brain Task Controls
+
+on:
+  pull_request:
+    paths:
+      - 'includes/food-monster-b8d13d-task-controls.php'
+      - 'includes/food-monster-b8d13b-task-journal.php'
+      - 'includes/food-monster-b8d2-execution-loop.php'
+      - 'includes/food-monster-b8d3-tool-runtime.php'
+      - 'api/food-monster-llm.php'
+      - 'database/20261221_food_monster_b8d13d_task_controls.sql'
+      - 'tests/food-monster-b8d13d-task-controls.php'
+      - 'js/food-monster-task-controls.js'
+      - 'js/global-agent.js'
+      - 'agent-canvas.php'
+      - 'food-monster.php'
+      - '.github/workflows/food-monster-b8d13d-task-controls.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'includes/food-monster-b8d13d-task-controls.php'
+      - 'includes/food-monster-b8d13b-task-journal.php'
+      - 'includes/food-monster-b8d2-execution-loop.php'
+      - 'includes/food-monster-b8d3-tool-runtime.php'
+      - 'api/food-monster-llm.php'
+      - 'database/20261221_food_monster_b8d13d_task_controls.sql'
+      - 'tests/food-monster-b8d13d-task-controls.php'
+      - 'js/food-monster-task-controls.js'
+      - 'js/global-agent.js'
+      - 'agent-canvas.php'
+      - 'food-monster.php'
+      - '.github/workflows/food-monster-b8d13d-task-controls.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  durable-task-journal:
+    runs-on: ubuntu-24.04
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_restaurant_ai_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - name: Lint changed code and schema
+        run: |
+          php -l includes/food-monster-b8d13d-task-controls.php
+          php -l includes/food-monster-b8d13b-task-journal.php
+          php -l includes/food-monster-b8d13c-step-checkpoints.php
+          php -l includes/food-monster-b8d2-execution-loop.php
+          php -l includes/food-monster-b8d3-tool-runtime.php
+          php -l api/food-monster-llm.php
+          php -l tests/food-monster-b8d13d-task-controls.php
+          php -l agent-canvas.php
+          php -l food-monster.php
+          node --check js/global-agent.js
+          node --check js/food-monster-task-controls.js
+          test -s database/20261221_food_monster_b8d13d_task_controls.sql
+      - name: Install Gelato database and all pending migrations
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app' => ['name'=>'Gelato Restaurant AI CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database' => ['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_restaurant_ai_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security' => ['session_name'=>'gelato_restaurant_ai_ci','session_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $service=new UpgradeService(app_pdo(),__DIR__);
+          $service->ensureTrackingTables();
+          $service->bootstrapLegacyHistory(null);
+          $service->applyPending(null);
+          if($service->pendingMigrations()) exit(1);
+          PHP
+      - name: Certification of cancellation intent, scope, progress and no-write-replay
+        run: |
+          php tests/food-monster-b8d13d-task-controls.php
+          php tests/food-monster-b8d13a-plan-preflight.php
+          php tests/food-monster-b8d12-pending-actions.php
+          php tests/food-monster-b8d11-model-routing.php
+      - name: Migration exists and second upgrade is clean
+        run: |
+          test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='food_monster_agent_task_runs' AND column_name='cancel_requested_at';")" = "1"
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $service=new UpgradeService(app_pdo(),__DIR__);
+          $service->ensureTrackingTables();
+          if(count($service->applyPending(null))!==0 || count($service->pendingMigrations())!==0) exit(1);
+          PHP

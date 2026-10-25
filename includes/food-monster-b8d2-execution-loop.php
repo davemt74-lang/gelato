@@ -73,6 +73,11 @@ function fm8d2_run(array $plan,array $principal,array $catalogue,array $policy):
     if($requested===0)return $finish('needs_input','No registered tasks were selected.',0);
     if($requested>$maxSteps)return $finish('budget_exhausted','Step limit exceeded.',0);
     foreach(array_values($plan) as $i=>$step){
+        if(is_callable($policy['shouldStop']??null)){
+            try{$cancelled=($policy['shouldStop'])()===true;}
+            catch(Throwable){return $finish('denied','Task stop state could not be verified.',$i);}
+            if($cancelled)return $finish('cancelled','Task was stopped before its next action.',$i);
+        }
         if((microtime(true)-$started)*1000>$maxMs)
             return $finish('budget_exhausted','Execution time budget exhausted.',$i);
         if(!is_array($step)||!is_string($step['tool']??null)
@@ -129,6 +134,13 @@ function fm8d2_run(array $plan,array $principal,array $catalogue,array $policy):
                 ||isset($keys[$key])||!is_callable($policy['audit']??null))
                 return $finish('denied','Routine execution requires a unique operation key and audit.',$i);
             $keys[$key]=true;
+        }
+        // One final stop check immediately before dispatch. A cancellation
+        // during an already-running write is only a request, not a rollback.
+        if(is_callable($policy['shouldStop']??null)){
+            try{$cancelled=($policy['shouldStop'])()===true;}
+            catch(Throwable){return $finish('denied','Task stop state could not be verified.',$i);}
+            if($cancelled)return $finish('cancelled','Task was stopped before execution.',$i);
         }
         try{$observation=($tool['execute'])($args,$actor);}
         catch(Throwable){$observation=null;}
