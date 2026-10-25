@@ -15,10 +15,10 @@ $agent=$read('js/global-agent.js');
 $llm=$read('api/food-monster-llm.php');
 $suggestions=$read('js/food-monster-suggestions.js');
 $version='20261014-fmg6';
-$agentVersion='20261016-fmg11e';
+$agentVersion='20261025-b8d13d';
 $manualChatVersion='20261023-manual-chat1';
 // Stage, workspace and global admin loaders must all fetch the current mascot/chat UI.
-$stageAgentVersion='20261018-fmg14b';
+$stageAgentVersion='20261025-b8d13d';
 $stageMascotVersion=$manualChatVersion;
 $stageCssVersion=$manualChatVersion;
 foreach([

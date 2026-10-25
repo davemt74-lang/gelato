@@ -15,6 +15,10 @@ on:
       - 'agent-canvas.php'
       - 'food-monster.php'
       - '.github/workflows/food-monster-b8d13d-task-controls.yml'
+      - 'tests/food-monster-b8d13d-browser.test.cjs'
+      - 'tests/food-monster-g6-contract.php'
+      - 'js/global-add-canvas.js'
+      - 'config/food-monster-capability-map.json'
   push:
     branches: [main]
     paths:
@@ -30,6 +34,10 @@ on:
       - 'agent-canvas.php'
       - 'food-monster.php'
       - '.github/workflows/food-monster-b8d13d-task-controls.yml'
+      - 'tests/food-monster-b8d13d-browser.test.cjs'
+      - 'tests/food-monster-g6-contract.php'
+      - 'js/global-add-canvas.js'
+      - 'config/food-monster-capability-map.json'
 
 permissions:
   contents: read
@@ -69,6 +77,7 @@ jobs:
           php -l food-monster.php
           node --check js/global-agent.js
           node --check js/food-monster-task-controls.js
+          node --check tests/food-monster-b8d13d-browser.test.cjs
           test -s database/20261221_food_monster_b8d13d_task_controls.sql
       - name: Install Gelato database and all pending migrations
         run: |
@@ -99,6 +108,13 @@ jobs:
           php tests/food-monster-b8d13a-plan-preflight.php
           php tests/food-monster-b8d12-pending-actions.php
           php tests/food-monster-b8d11-model-routing.php
+          php tests/food-monster-g6-contract.php
+          php tests/food-monster-b8c-capability-map.php
+      - name: Browser acceptance of Chat, Brain and safe stop controls
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.0
+          npx playwright install --with-deps chromium
+          node tests/food-monster-b8d13d-browser.test.cjs
       - name: Migration exists and second upgrade is clean
         run: |
           test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='food_monster_agent_task_runs' AND column_name='cancel_requested_at';")" = "1"

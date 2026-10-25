@@ -1029,7 +1029,9 @@
       S.user = data.user || null;
       S.foodMonsterContext=data.foodMonsterContext||null;
       mount();
-      if(!document.querySelector('script[data-fm-task-controls]')){
+      if(typeof document.createElement==='function'
+         &&typeof document.querySelector==='function'
+         &&!document.querySelector('script[data-fm-task-controls]')){
         const script=document.createElement('script');
         script.dataset.fmTaskControls='1';
         script.src='js/food-monster-task-controls.js?v=20261025-b8d13d';
