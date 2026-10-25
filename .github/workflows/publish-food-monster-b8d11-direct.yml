@@ -1,0 +1,70 @@
+name: Publish Food Monster B8D11 Direct Deployment
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-food-monster-b8d11-direct.yml
+  pull_request:
+    paths:
+      - .github/workflows/publish-food-monster-b8d11-direct.yml
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish-certified-package:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Verify release build reference
+        run: test -n '93061edec110e49eb737d9619dfc0bd4bbee3ec1'
+      - name: Download exact merged-main full deployment
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p payload
+          gh run download 40168883778 --repo davemt74-lang/gelato --name gelato-full-deploy --dir payload
+          test -s payload/gelato-full-deploy.zip
+          test -s payload/gelato-full-deploy.sha256
+
+      - name: Verify archive, checksum, commit and root-level app layout
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd payload
+          expected="$(sed -nE 's/^([0-9a-f]{64})[[:space:]]+.*gelato-full-deploy\.zip$/\1/p' gelato-full-deploy.sha256)"
+          test "${#expected}" -eq 64
+          printf '%s  gelato-full-deploy.zip\n' "$expected" | sha256sum --check -
+          printf '%s  gelato-full-deploy.zip\n' "$expected" > gelato-full-deploy.sha256
+          unzip -tq gelato-full-deploy.zip
+          unzip -p gelato-full-deploy.zip DEPLOY_SHA.txt | grep -Fx '93061edec110e49eb737d9619dfc0bd4bbee3ec1'
+          for file in index.php upgrade.php api/agent-workspace.php config/food-monster-capability-map.json config/.htaccess tests/food-monster-b8d11-approvals.php includes/food-monster-b8d11-approvals.php database/20261217_food_monster_b8d8_action_receipts.sql database/20261218_food_monster_b8d11_approvals.sql api/food-monster-b8d11-approvals.php js/global-agent.js includes/food-monster-b8d3-tool-runtime.php api/food-monster-llm.php js/food-monster-llm.js includes/food-monster-b8d11-domain-routing.php tests/food-monster-b8d11-model-routing.php tests/food-monster-g7-contract.php; do
+            unzip -Z1 gelato-full-deploy.zip | grep -Fx "$file"
+          done
+          if unzip -Z1 gelato-full-deploy.zip | grep -Eq '^(config\.php$|\.env$|uploads/|storage/)'; then
+            echo 'Deployment archive includes a private live path.'
+            exit 1
+          fi
+          if unzip -Z1 gelato-full-deploy.zip | grep -Eq '^(gelato-full-deploy\.zip|deploy\.zip|package\.zip)$'; then
+            echo 'Nested deployment ZIP detected.'
+            exit 1
+          fi
+
+      - name: Publish one direct-download ZIP and checksum
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create gelato-food-monster-b8d11 \
+            payload/gelato-full-deploy.zip \
+            payload/gelato-full-deploy.sha256 \
+            --repo davemt74-lang/gelato \
+            --target 93061edec110e49eb737d9619dfc0bd4bbee3ec1 \
+            --title 'Gelato Food Monster B8D11 — Model-First Restaurant Agent Delegation' \
+            --notes 'Verified single deploy ZIP from merged Gelato main (FM-B8D11). Agent Chat routes prompts to the configured AI provider first, discovers user-permitted native skills, and can delegate by meaning to existing authenticated restaurant domain agents through server-allowlisted routes. Delegation is bound to the current user, conversation and message and cannot select arbitrary URLs. Without a configured provider, the legacy parser is explicitly marked as degraded fallback; configured provider errors never invoke it. Retains B8D3-B8D10 tools, high-impact approvals and database migrations. Deploy ZIP into Gelato app root preserving config.php, .env, uploads and storage; run upgrade.php; hard-refresh. SHA-256 manifest separate. No nested ZIP.'
