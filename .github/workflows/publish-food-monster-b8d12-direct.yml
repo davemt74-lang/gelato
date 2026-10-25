@@ -1,0 +1,70 @@
+name: Publish Food Monster B8D12 Direct Deployment
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-food-monster-b8d12-direct.yml
+  pull_request:
+    paths:
+      - .github/workflows/publish-food-monster-b8d12-direct.yml
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish-certified-package:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Verify release build reference
+        run: test -n '806d33aed8e0488b766a0920fccf12dcfdb04539'
+      - name: Download exact merged-main full deployment
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p payload
+          gh run download 40170568046 --repo davemt74-lang/gelato --name gelato-full-deploy --dir payload
+          test -s payload/gelato-full-deploy.zip
+          test -s payload/gelato-full-deploy.sha256
+
+      - name: Verify archive, checksum, commit and root-level app layout
+        if: github.event_name != 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd payload
+          expected="$(sed -nE 's/^([0-9a-f]{64})[[:space:]]+.*gelato-full-deploy\.zip$/\1/p' gelato-full-deploy.sha256)"
+          test "${#expected}" -eq 64
+          printf '%s  gelato-full-deploy.zip\n' "$expected" | sha256sum --check -
+          printf '%s  gelato-full-deploy.zip\n' "$expected" > gelato-full-deploy.sha256
+          unzip -tq gelato-full-deploy.zip
+          unzip -p gelato-full-deploy.zip DEPLOY_SHA.txt | grep -Fx '806d33aed8e0488b766a0920fccf12dcfdb04539'
+          for file in index.php upgrade.php api/agent-workspace.php config/food-monster-capability-map.json config/.htaccess tests/food-monster-b8d10-approvals.php includes/food-monster-b8d10-approvals.php database/20261217_food_monster_b8d8_action_receipts.sql database/20261218_food_monster_b8d10_approvals.sql api/food-monster-b8d10-approvals.php js/global-agent.js includes/food-monster-b8d3-tool-runtime.php api/food-monster-llm.php js/food-monster-llm.js includes/food-monster-b8d11-domain-routing.php tests/food-monster-b8d11-model-routing.php tests/food-monster-g7-contract.php includes/food-monster-b8d12-pending-actions.php tests/food-monster-b8d12-pending-actions.php; do
+            unzip -Z1 gelato-full-deploy.zip | grep -Fx "$file"
+          done
+          if unzip -Z1 gelato-full-deploy.zip | grep -Eq '^(config\.php$|\.env$|uploads/|storage/)'; then
+            echo 'Deployment archive includes a private live path.'
+            exit 1
+          fi
+          if unzip -Z1 gelato-full-deploy.zip | grep -Eq '^(gelato-full-deploy\.zip|deploy\.zip|package\.zip)$'; then
+            echo 'Nested deployment ZIP detected.'
+            exit 1
+          fi
+
+      - name: Publish one direct-download ZIP and checksum
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create gelato-food-monster-b8d12 \
+            payload/gelato-full-deploy.zip \
+            payload/gelato-full-deploy.sha256 \
+            --repo davemt74-lang/gelato \
+            --target 806d33aed8e0488b766a0920fccf12dcfdb04539 \
+            --title 'Gelato Food Monster B8D12 — Governed Pending Agent Continuation' \
+            --notes 'Verified single Cloud deployment ZIP from merged Gelato main (FM-B8D12). For a server-recorded pending restaurant Agent proposal, the configured AI can interpret an explicit natural-language Confirm/Cancel decision, while the server verifies the active account, tenant, current permissions, pending proposal and bound Agent Chat turn. Only the server chooses an allowlisted destination and canonical decision; all existing destination confirmations and high-impact owner approvals remain enforced. Includes B8D3-B8D11 native and delegated tools. Install into existing Gelato app root preserving config.php, .env, uploads and storage; run upgrade.php; hard-refresh. SHA-256 manifest separate. No nested ZIP.'
