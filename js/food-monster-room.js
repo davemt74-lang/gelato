@@ -5,10 +5,11 @@ const endpoint='api/food-monster-presence.php',profileDB='gelato-fm-face-pin-v1'
 const state={active:false,stream:null,video:null,faceApi:null,nativeDetector:null,profiles:[],tracker:null,timer:null,busy:false,csrf:'',room:null,changeKey:'',lastContext:0,lastStatus:'',generation:0,modelReady:false,idleCycles:0,failures:0,intervalMs:1700,lastInferenceMs:0};
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const eyes={panel:null,frame:null,overlay:null,video:null,button:null,open:false};
+const speakerLabel=room=>window.GelatoEyesSpeaker?.resolve(room)||null;
 function eyesEnsure(){
  if(eyes.panel)return;
  const style=document.createElement('style');style.dataset.fmEyesStyle='1';
- style.textContent=`#fm-eyes-panel{position:fixed;right:16px;bottom:86px;width:min(440px,calc(100vw - 24px));max-height:calc(100dvh - 110px);overflow:auto;z-index:2147482990;background:#0d1825;color:#f3f7fb;border:1px solid #3b536a;border-radius:16px;box-shadow:0 18px 58px #0008;padding:12px;font:13px/1.5 system-ui,sans-serif}#fm-eyes-panel[hidden]{display:none}#fm-eyes-panel button{border:1px solid #607992;border-radius:8px;background:#22374b;color:inherit;padding:5px 9px;cursor:pointer}#fm-eyes-panel .fm-eyes-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}#fm-eyes-panel .fm-eyes-frame{position:relative;background:#050b12;overflow:hidden;border-radius:12px;aspect-ratio:4/3}#fm-eyes-panel video{display:block;width:100%;height:100%;object-fit:fill}#fm-eyes-panel .fm-eyes-overlay{position:absolute;inset:0;pointer-events:none}#fm-eyes-panel .fm-eyes-box{position:absolute;border:2px solid #60dfa3;border-radius:5px;box-sizing:border-box}#fm-eyes-panel .fm-eyes-box.unknown{border-color:#efc87a}#fm-eyes-panel .fm-eyes-tag{position:absolute;bottom:100%;left:-2px;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:#163a38;color:#fff;padding:1px 5px;border-radius:4px;font:11px system-ui}#fm-eyes-panel .fm-eyes-box.unknown .fm-eyes-tag{background:#5a421e}#fm-eyes-panel .fm-eyes-list{padding:8px 0 0;margin:0;list-style:none}#fm-eyes-panel .fm-eyes-list li{padding:3px 0;border-bottom:1px solid #263f56}#fm-eyes-panel .fm-eyes-note{font-size:11px;color:#a8bece;margin-top:8px}#fm-eyes-open{margin-left:5px}@media(max-width:600px){#fm-eyes-panel{right:6px;bottom:70px;width:calc(100vw - 12px);max-height:calc(100dvh - 80px)}}`;
+ style.textContent=`#fm-eyes-panel{position:fixed;right:16px;bottom:86px;width:min(440px,calc(100vw - 24px));max-height:calc(100dvh - 110px);overflow:auto;z-index:2147482990;background:#0d1825;color:#f3f7fb;border:1px solid #3b536a;border-radius:16px;box-shadow:0 18px 58px #0008;padding:12px;font:13px/1.5 system-ui,sans-serif}#fm-eyes-panel[hidden]{display:none}#fm-eyes-panel button{border:1px solid #607992;border-radius:8px;background:#22374b;color:inherit;padding:5px 9px;cursor:pointer}#fm-eyes-panel .fm-eyes-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}#fm-eyes-panel .fm-eyes-frame{position:relative;background:#050b12;overflow:hidden;border-radius:12px;aspect-ratio:4/3}#fm-eyes-panel video{display:block;width:100%;height:100%;object-fit:fill}#fm-eyes-panel .fm-eyes-overlay{position:absolute;inset:0;pointer-events:none}#fm-eyes-panel .fm-eyes-box{position:absolute;border:2px solid #60dfa3;border-radius:5px;box-sizing:border-box}#fm-eyes-panel .fm-eyes-box.unknown{border-color:#efc87a}#fm-eyes-panel .fm-eyes-box.speaking{border-color:#5b9bff;box-shadow:0 0 0 2px #5b9bff55}#fm-eyes-panel .fm-eyes-speaker{margin-top:7px;padding:7px 9px;background:#192d42;border:1px solid #355678;border-radius:9px}#fm-eyes-panel .fm-eyes-speaker[hidden]{display:none}#fm-eyes-panel .fm-eyes-tag{position:absolute;bottom:100%;left:-2px;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:#163a38;color:#fff;padding:1px 5px;border-radius:4px;font:11px system-ui}#fm-eyes-panel .fm-eyes-box.unknown .fm-eyes-tag{background:#5a421e}#fm-eyes-panel .fm-eyes-list{padding:8px 0 0;margin:0;list-style:none}#fm-eyes-panel .fm-eyes-list li{padding:3px 0;border-bottom:1px solid #263f56}#fm-eyes-panel .fm-eyes-note{font-size:11px;color:#a8bece;margin-top:8px}#fm-eyes-open{margin-left:5px}@media(max-width:600px){#fm-eyes-panel{right:6px;bottom:70px;width:calc(100vw - 12px);max-height:calc(100dvh - 80px)}}`;
  document.head.append(style);
  const panel=document.createElement('section');panel.id='fm-eyes-panel';panel.hidden=true;panel.setAttribute('role','region');panel.setAttribute('aria-label','Agent Eyes live camera');
  const head=document.createElement('div');head.className='fm-eyes-head';
@@ -17,9 +18,13 @@ function eyesEnsure(){
  head.append(title,close);panel.append(head);
  const status=document.createElement('div');status.id='fm-eyes-status';status.setAttribute('role','status');panel.append(status);
  const frame=document.createElement('div');frame.className='fm-eyes-frame';const overlay=document.createElement('div');overlay.className='fm-eyes-overlay';frame.append(overlay);panel.append(frame);
+ const speaker=document.createElement('div');speaker.id='fm-eyes-speaker';speaker.className='fm-eyes-speaker';speaker.setAttribute('role','status');speaker.setAttribute('aria-live','polite');panel.append(speaker);
  const list=document.createElement('ul');list.className='fm-eyes-list';list.id='fm-eyes-people';panel.append(list);
  const note=document.createElement('div');note.className='fm-eyes-note';note.textContent='Visual identities are provisional. Camera is local; no video frames or face vectors are uploaded.';panel.append(note);
  document.body.append(panel);eyes.panel=panel;eyes.frame=frame;eyes.overlay=overlay;
+ if(!document.querySelector('script[data-fm-eyes-speaker]')){
+  const script=document.createElement('script');script.dataset.fmEyesSpeaker='1';script.src='js/agent-eyes-speaker.js?v=20261025-ae3';script.onload=eyesRender;document.head.append(script);
+ }
  if(!document.querySelector('script[data-fm-eyes-enrollment]')){
   const script=document.createElement('script');script.dataset.fmEyesEnrollment='1';
   script.src='js/agent-eyes-enrollment.js?v=20261025-ae2';document.head.append(script);
@@ -39,6 +44,9 @@ function eyesRender(){
  const status=eyes.panel.querySelector('#fm-eyes-status');
  status.textContent=state.active?(state.lastStatus||'Camera active · '+(state.room?.people?.length||0)+' tracked'):'Camera off · enable using the camera control';
  eyes.overlay.replaceChildren();
+ const speaker=speakerLabel(state.active?state.room:null);
+ const speakerStatus=eyes.panel.querySelector('#fm-eyes-speaker');
+ if(speakerStatus)speakerStatus.textContent=speaker?.message||(state.active?'Speaker not attributed · awaiting a verified voice turn':'Speaker tracking off');
  const list=eyes.panel.querySelector('#fm-eyes-people');list.replaceChildren();
  if(!eyes.open||!state.active)return;
  for(const person of state.room?.people||[]){
@@ -46,10 +54,11 @@ function eyesRender(){
   const box=person.box.map(Number);if(box.some(x=>!Number.isFinite(x)||x<0||x>1))continue;
   const known=person.identitySource==='local_face_profile'&&!!person.displayName;
   const label=known?String(person.displayName).slice(0,70)+' · provisional':'Unknown participant';
-  const outline=document.createElement('div');outline.className='fm-eyes-box'+(known?'':' unknown');
+  const isSpeaker=known&&speaker?.trackId===person.trackId;
+  const outline=document.createElement('div');outline.className='fm-eyes-box'+(known?'':' unknown')+(isSpeaker?' speaking':'');
   outline.style.left=(box[0]*100)+'%';outline.style.top=(box[1]*100)+'%';outline.style.width=(box[2]*100)+'%';outline.style.height=(box[3]*100)+'%';
-  const tag=document.createElement('span');tag.className='fm-eyes-tag';tag.textContent=label;outline.append(tag);eyes.overlay.append(outline);
-  const item=document.createElement('li');item.textContent=label;list.append(item);
+  const tag=document.createElement('span');tag.className='fm-eyes-tag';tag.textContent=isSpeaker?'Speaking · '+label:label;outline.append(tag);eyes.overlay.append(outline);
+  const item=document.createElement('li');item.textContent=isSpeaker?'Speaking · '+label:label;list.append(item);
  }
 }
 
@@ -131,7 +140,7 @@ async function observe(){
   const result=await request('observe',{tracks});
   if(!state.active||generation!==state.generation)return;
   state.room=result.room;state.lastStatus='';state.failures=0;
-  const key=JSON.stringify((result.room?.people||[]).map(p=>[p.trackId,p.personId,p.identitySource]));
+  const key=JSON.stringify({people:(result.room?.people||[]).map(p=>[p.trackId,p.personId,p.identitySource]),speaker:window.GelatoEyesSpeaker?.key(result.room)||result.room?.currentSpeaker||null});
   const now=Date.now();
   if(key!==state.changeKey||now-state.lastContext>10000){
    state.changeKey=key;state.lastContext=now;
