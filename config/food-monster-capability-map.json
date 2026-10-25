@@ -637,6 +637,17 @@
       "notes": "Direct app_require_auth() marker found; additional checks may apply."
     },
     {
+      "path": "api/food-monster-b8d10-approvals.php",
+      "feature": "food_monster",
+      "sourceBlob": "d6ee8455674edaa44612bbfe652dcc1e627bfa03",
+      "discoveredActions": [],
+      "permissionTokensSeen": [],
+      "directAppRequireAuthCall": true,
+      "dispatch": "discovery_only",
+      "permissionStatus": "needs_endpoint_contract_review",
+      "notes": "Direct app_require_auth() marker found; additional checks may apply."
+    },
+    {
       "path": "api/food-monster-followup.php",
       "feature": "food_monster",
       "sourceBlob": "cedb0da7daaad8a20395f232e33d3d19261ed14a",
