@@ -20,6 +20,10 @@ function eyesEnsure(){
  const list=document.createElement('ul');list.className='fm-eyes-list';list.id='fm-eyes-people';panel.append(list);
  const note=document.createElement('div');note.className='fm-eyes-note';note.textContent='Visual identities are provisional. Camera is local; no video frames or face vectors are uploaded.';panel.append(note);
  document.body.append(panel);eyes.panel=panel;eyes.frame=frame;eyes.overlay=overlay;
+ if(!document.querySelector('script[data-fm-eyes-enrollment]')){
+  const script=document.createElement('script');script.dataset.fmEyesEnrollment='1';
+  script.src='js/agent-eyes-enrollment.js?v=20261025-ae2';document.head.append(script);
+ }
  const button=document.createElement('button');button.type='button';button.id='fm-eyes-open';button.textContent='Agent Eyes';button.setAttribute('aria-controls','fm-eyes-panel');button.setAttribute('aria-expanded','false');button.addEventListener('click',()=>eyesShow(!eyes.open));
  const anchor=document.querySelector('[data-fm-camera]');if(anchor)anchor.after(button);else document.body.append(button);eyes.button=button;
  eyesRender();
@@ -197,7 +201,7 @@ function mount(){
  }
  eyesEnsure();ui();
 }
-window.GelatoRoomPresence={start,stop,toggle,openEyes:()=>eyesShow(true),closeEyes:()=>eyesShow(false),get active(){return state.active;},get room(){return state.room;},
+window.GelatoRoomPresence={start,stop,toggle,openEyes:()=>eyesShow(true),closeEyes:()=>eyesShow(false),refreshProfiles:async()=>{state.profiles=await dbProfiles();return state.profiles.length;},get active(){return state.active;},get room(){return state.room;},
  get diagnostics(){return {active:state.active,intervalMs:state.intervalMs,
    lastInferenceMs:state.lastInferenceMs,modelCached:state.modelReady,failures:state.failures};}};
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
