@@ -45,6 +45,12 @@ foreach([
     'What are the pros and cons of more dough hydration?',
     'Tell me a joke about pizza',
 ] as $question)b8d14_check(!fm8d14_needs_grounded_read($question),'leave conversation/write to owner: '.$question);
+b8d14_check(fmuk_menu_subject("What's on the Testarossa Pizza?")==='testarossa pizza',
+    'apostrophe question yields clean named menu subject');
+b8d14_check(fmuk_menu_subject('What toppings are on the Testarossa Pizza?')==='testarossa pizza',
+    'toppings question yields clean named menu subject');
+b8d14_check(fmuk_menu_subject('How much is the Testarossa Pizza?')==='testarossa pizza',
+    'price question yields clean named menu subject');
 foreach([
     "What's on the Testarossa Pizza?",
     'What toppings are on the Testarossa Pizza?',
