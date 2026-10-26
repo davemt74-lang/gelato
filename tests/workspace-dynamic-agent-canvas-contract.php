@@ -46,7 +46,7 @@ contract(str_contains($dynamic,'function routeFooterToAgentView()'),'footer Agen
 contract(!str_contains($dynamic,'openDrawer({pending:true})'),'footer messages must never auto-open Agent Chat',29);
 contract(str_contains($dynamic,'aria-live'),'response drawer is not announced accessibly',30);
 contract(str_contains($dynamic,'window.addEventListener(\'resize\',syncDrawerPosition)'),'response drawer does not stay anchored to the chat bar',31);
-contract(str_contains($globalAdd,'20261023-manual-chat1'),'shared loader does not bust the manual Agent drawer cache',32);
+contract(str_contains($globalAdd,'global-agent.js?v=20261026-b8d16a-voice1'),'shared loader must bust the private-voice Agent drawer cache',32);
 contract(str_contains($dynamic,'drawerRefreshQueued'),'response drawer does not queue a refresh that arrives during an in-flight load',33);
 contract(str_contains($dynamic,"window.addEventListener('gelato-agent-error'"),'response drawer does not surface Agent request failures',34);
 contract(str_contains($dynamic,"'\"':'&quot;'"),'Agent response escaping must encode double quotes correctly',35);

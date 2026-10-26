@@ -21,9 +21,10 @@ $manualChatVersion='20261023-manual-chat1';
 $stageAgentVersion=$agentVersion;
 $stageMascotVersion='20261026-b8d16a-mascot1';
 $stageCssVersion=$manualChatVersion;
-foreach([
- 'js/global-add-canvas.js'=>$global,'js/food-monster.js'=>$actor
-] as $path=>$body)check_g6(str_contains($body,'v='.$manualChatVersion),'Current Food Monster release stamp is missing in '.$path);
+check_g6(str_contains($global,'js/food-monster.js?v='.$stageMascotVersion),
+    'Current shared mascot loader must request the updated asset');
+check_g6(str_contains($actor,'v='.$manualChatVersion),
+    'Mascot preserves its current stylesheet cache stamp');
 foreach(['js/universal-admin-page-shell.js'=>$universal,'js/workspace-shell-sync.js'=>$workspace] as $path=>$body)
  check_g6(str_contains($body,'v='.$manualChatVersion),'Current shared loader release stamp is missing in '.$path);
 check_g6(str_contains($global,'js/global-agent.js?v='.$agentVersion),'Global Agent fallback cache must update');
