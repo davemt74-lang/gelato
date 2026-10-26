@@ -16,7 +16,7 @@ function fmuk_topics(string $question): array
     // converted into a read snapshot or interpreted as model authorization.
     if(preg_match('/\b(?:create|add|delete|remove|edit|change|update|approve|publish|refund|void|charge|assign|clock in|clock out|place an order|make a purchase)\b/u',$text))return [];
     $patterns=[
-        'menu'=>'/\b(?:menu|pizzas?|pastas?|dishes?|entrees?|appetizers?|desserts?|beverages?|drinks?|food items?|prices?|toppings?|specials?|gelato flavors?)\b/u',
+        'menu'=>'/\b(?:menu|pizza|pasta|dish|dishes|entree|food items?|prices?|toppings?|specials?|gelato flavors?)\b/u',
         'recipes'=>'/\b(?:recipes?|batch formula|dough formula|ingredients?|production standards?|how (?:do|to) (?:make|prepare|cook|bake))\b/u',
         'vision_lab'=>'/\b(?:vision lab|vision operations?|vision models?|vision datasets?|vision training|machine vision|computer vision|camera learning|visual recognition|vision missions?|vision samples?|vision drift|model benchmarks?|model rollouts?|glasses? vision)\b/u',
         'schedule'=>'/\b(?:schedules?|shifts?|roster|working (?:today|tonight|tomorrow)|staffing|coverage|who works|when (?:am|are|is) .*working)\b/u',
@@ -57,7 +57,7 @@ function fmuk_capability_question(string $question): bool
 
 function fmuk_menu_overview_question(string $question): bool
 {
-    return preg_match('/\b(?:what(?:\x27s| is) on the menu|show (?:me )?(?:the |our )?menu|menu (?:overview|list|items|options|specials)|what (?:food|dishes|pizzas|pastas) (?:do|can) (?:you|we) (?:have|serve|offer)|(?:show|list)\b[^?.!]*\b(?:pizzas?|pastas?|appetizers?|desserts?|drinks?|entrees?|specials?)|(?:which|what)\b[^?.!]*\b(?:pizzas|pastas|appetizers|desserts|drinks|entrees|specials))\b/iu',$question)===1;
+    return preg_match('/\b(?:what(?:\x27s| is) on the menu|show (?:me )?(?:the |our )?menu|menu (?:overview|list|items|options|specials)|what (?:food|dishes|pizzas|pastas) (?:do|can) (?:you|we) (?:have|serve|offer))\b/iu',$question)===1;
 }
 
 /**

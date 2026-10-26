@@ -145,6 +145,9 @@ try{
         $menuCatalogue=fm8d5_catalogue($user);
         if(isset($menuCatalogue['list_available_menu_items']))
             $publicVoiceCatalogue['list_available_menu_items']=$menuCatalogue['list_available_menu_items'];
+        // A room speaker who is not verified as this account also cannot
+        // inherit the signed-in owner's personalized LLM memory.
+        if(($last['channel']??'')==='voice')$personMemory='';
     }
     // Release session lock while the external API responds.
     if(session_status()===PHP_SESSION_ACTIVE)session_write_close();

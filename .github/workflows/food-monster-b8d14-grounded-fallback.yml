@@ -1,4 +1,4 @@
-name: Food Monster B8D14 Verified Knowledge Fallback
+name: Food Monster B8D14 Cognitive Read Retry
 
 on:
   pull_request:
@@ -16,7 +16,7 @@ on:
       - '.github/workflows/food-monster-b8d14-grounded-fallback.yml'
 
 jobs:
-  verified-read-regression:
+  cognitive-read-regression:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -29,7 +29,7 @@ jobs:
           php -l includes/food-monster-b8d14-grounded-fallback.php
           php -l includes/food-monster-b8d3-tool-runtime.php
           php -l tests/food-monster-b8d14-grounded-fallback.php
-      - name: Model abstention and privacy contract
+      - name: Bounded model retry and read-only permission contract
         run: php tests/food-monster-b8d14-grounded-fallback.php
       - name: Existing unified knowledge and model-selected tool regressions
         run: |

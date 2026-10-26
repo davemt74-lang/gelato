@@ -80,10 +80,10 @@ b8d5_assert(str_contains($menuList['data']['answer'],'Testarosa Pizza')
 b8d5_assert(!str_contains($menuList['data']['answer'],'Secret Draft')
     &&!str_contains($menuList['data']['answer'],'99.99'),
     'menu-list tool excludes draft items');
-$brokerPizzas=fmuk_answer($pdo,$principal,'Show me the pizzas');
+$brokerPizzas=fmuk_answer($pdo,$principal,'Show me the menu');
 b8d5_assert(str_contains($brokerPizzas['answer'],'Testarosa Pizza')
     &&!str_contains($brokerPizzas['answer'],'Secret Draft'),
-    'legacy fallback handles plural pizzas using only published records');
+    'offline menu broker uses only published records');
 $draftDetail=fm8d5_menu_find($pdo,$org,'Secret Draft Pizza');
 b8d5_assert(isset($draftDetail['error']),
     'named-item lookup cannot disclose draft details');
@@ -107,11 +107,28 @@ foreach([
     'What toppings are on the Testarossa Pizza?',
     'How much is the Testarossa Pizza?',
 ] as $question){
+    $firstAttempt=true;
+    $priceQuestion=str_contains($question,'How much');
+    $cognitiveNamed=static function($endpoint,$headers,$payload)use(
+        &$providerCalls,&$firstAttempt,$priceQuestion
+    ):array{
+        $providerCalls++;
+        if($firstAttempt){
+            $firstAttempt=false;
+            return ['output'=>[['type'=>'message','content'=>[[
+                'type'=>'output_text','text'=>"I can't verify this pizza without a menu read."
+            ]]]]];
+        }
+        $args=json_encode(['item_name'=>'Testarosa Pizza','include_prices'=>$priceQuestion],JSON_THROW_ON_ERROR);
+        return ['output'=>[['type'=>'function_call','call_id'=>'named-menu',
+            'name'=>'get_menu_item','arguments'=>$args]]];
+    };
     $grounded=fm8d3_turn($pdo,$principal,'openai','fake',
-        [['role'=>'user','content'=>$question]],'',$providerRefusal,null,
+        [['role'=>'user','content'=>$question]],'',$cognitiveNamed,null,
         static fn():array=>$principal,static function(array $event):void{},$activeMenuContext);
-    b8d5_assert(($grounded['data']['groundedNamedMenuItem']??false)===true,
-        'named menu question uses mandatory local DB lookup: '.$question);
+    b8d5_assert(($grounded['data']['cognitiveRetrySelectedRead']??false)===true
+        &&($grounded['data']['tools'][0]??'')==='get_menu_item',
+        'second cognitive attempt selects real named-item DB tool: '.$question);
     if(!str_contains($grounded['answer'],'Testarosa Pizza')){
         fwrite(STDERR,'B8D5 named menu diagnosis: '.json_encode([
             'question'=>$question,'subject'=>fmuk_menu_subject($question),
@@ -121,7 +138,7 @@ foreach([
     }
     b8d5_assert(str_contains($grounded['answer'],'Testarosa Pizza'),
         'recorded name is returned even for a one-letter spelling difference');
-    if(str_contains($question,'How much')){
+    if($priceQuestion){
         b8d5_assert(str_contains($grounded['answer'],'18.00'),
             'recorded menu price replaces model refusal: '.$question);
     }else{
@@ -132,16 +149,19 @@ foreach([
     b8d5_assert(!empty($grounded['sources']),
         'grounded menu item includes verifiable source: '.$question);
 }
-b8d5_assert($providerCalls===0,'named menu facts never depend on model tool selection');
+b8d5_assert($providerCalls===6,'three named questions received precisely one cognitive retry each');
+$verifiedNamedProvider=static fn():array=>['output'=>[['type'=>'function_call',
+    'call_id'=>'owner-voice','name'=>'get_menu_item',
+    'arguments'=>'{"item_name":"Testarosa Pizza"}']]];
 $verifiedMenuVoice=fm8d3_turn($pdo,$principal,'openai','fake',
     [['role'=>'user','content'=>"What's on the Testarossa Pizza?"]],'',
-    $providerRefusal,null,static fn():array=>$principal,
+    $verifiedNamedProvider,null,static fn():array=>$principal,
     static function(array $event):void{},['channel'=>'voice','verifiedSameUser'=>true]);
 b8d5_assert(str_contains($verifiedMenuVoice['answer'],'Roasted Garlic'),
     'verified owner voice can read authorized menu item');
 $unverifiedMenuVoice=fm8d3_turn($pdo,$principal,'openai','fake',
     [['role'=>'user','content'=>"What's on the Testarossa Pizza?"]],'',
-    $providerRefusal,null,static fn():array=>$principal,
+    $providerRefusal,$publicOnly,static fn():array=>$principal,
     static function(array $event):void{},['channel'=>'voice','verifiedSameUser'=>false]);
 b8d5_assert(!str_contains($unverifiedMenuVoice['answer'],'Roasted Garlic'),
     'unverified participant speech cannot read owner menu data');
@@ -160,14 +180,23 @@ b8d5_assert(str_contains($unverifiedPublicVoice['answer'],'Testarosa Pizza')
 b8d5_assert(!str_contains($unverifiedPublicVoice['answer'],'Secret Draft')
     &&!str_contains($unverifiedPublicVoice['answer'],'Roasted Garlic'),
     'unknown voice has published menu only, not private item details');
+$cognitiveMenu=static function($endpoint,$headers,$payload)use(&$providerCalls):array{
+    $providerCalls++;
+    if(($payload['tool_choice']??'')==='required')
+        return ['output'=>[['type'=>'function_call','call_id'=>'retry-public-menu',
+            'name'=>'list_available_menu_items','arguments'=>'{"category":"pizzas"}']]];
+    return ['output'=>[['type'=>'message','content'=>[[
+        'type'=>'output_text','text'=>"I can't access the menu in this reply."
+    ]]]]];
+};
 $abstainingVoice=fm8d3_turn($pdo,$principal,'openai','fake',
     [['role'=>'user','content'=>'Show me the pizzas']],'',
-    $providerRefusal,$publicOnly,static fn():array=>$principal,
+    $cognitiveMenu,$publicOnly,static fn():array=>$principal,
     static function(array $event):void{},['channel'=>'voice','verifiedSameUser'=>false]);
 b8d5_assert(str_contains($abstainingVoice['answer'],'Testarosa Pizza')
     &&!str_contains($abstainingVoice['answer'],'Roasted Garlic')
-    &&($abstainingVoice['data']['groundedMenuOverview']??false),
-    'no-tool voice refusal is replaced with real public menu, never private details');
+    &&($abstainingVoice['data']['cognitiveRetrySelectedRead']??false),
+    'LLM retry turns voice abstention into authorized public-menu read');
 $modelFirstMenu=fm8d3_turn($pdo,$principal,'openai','fake',
     [['role'=>'user','content'=>'Pizzas available today?']],'',
     $listingProvider,$reg,static fn():array=>$principal,
@@ -177,11 +206,27 @@ b8d5_assert(str_contains($modelFirstMenu['answer'],'Testarosa Pizza')
     'typed natural-language menu question uses the LLM-selected read tool');
 $abstainingText=fm8d3_turn($pdo,$principal,'openai','fake',
     [['role'=>'user','content'=>'Show me the pizzas']],'',
-    $providerRefusal,$reg,static fn():array=>$principal,
+    $cognitiveMenu,$reg,static fn():array=>$principal,
     static function(array $event):void{},['channel'=>'text','verifiedSameUser'=>false]);
 b8d5_assert(str_contains($abstainingText['answer'],'Testarosa Pizza')
-    &&($abstainingText['data']['groundedMenuOverview']??false),
-    'no-tool typed refusal receives the same published menu as voice');
+    &&($abstainingText['data']['cognitiveRetrySelectedRead']??false),
+    'LLM retry turns typed abstention into the same published menu as voice');
+$maliciousVoiceModel=static function($endpoint,$headers,$payload):array{
+    if(($payload['tool_choice']??'')==='required')
+        return ['output'=>[['type'=>'function_call','call_id'=>'malicious',
+            'name'=>'get_recipe_details',
+            'arguments'=>'{"recipe_name":"Stonefellows Dough","include_method":true}']]];
+    return ['output'=>[['type'=>'message','content'=>[[
+        'type'=>'output_text','text'=>'I cannot use a private recipe here.'
+    ]]]]];
+};
+$blockedVoice=fm8d3_turn($pdo,$principal,'openai','fake',
+    [['role'=>'user','content'=>'Give me the private dough recipe']],'',
+    $maliciousVoiceModel,$publicOnly,static fn():array=>$principal,
+    static function(array $event):void{},['channel'=>'voice','verifiedSameUser'=>false]);
+b8d5_assert(!str_contains($blockedVoice['answer'],'1000 g')
+    &&($blockedVoice['data']['toolCalls']??-1)===0,
+    'unverified voice cannot exploit retry to obtain a private production recipe');
 
 $priced=$getMenu(['item_name'=>'Testarosa Pizza','include_prices'=>true],$principal);
 b8d5_assert(str_contains($priced['data']['answer'],'18.00'),'real menu price is returned');
@@ -253,6 +298,10 @@ $delegationSource=file_get_contents(dirname(__DIR__).'/js/global-agent.js');
 b8d5_assert(is_string($delegationSource)
     &&str_contains($delegationSource,"routeQuery==='?threadId='+encodeURIComponent(S.thread)"),
     'offline knowledge-agent handoff permits only the canonical same-thread query');
+$voiceApiSource=file_get_contents(dirname(__DIR__).'/api/food-monster-llm.php');
+b8d5_assert(is_string($voiceApiSource)
+    &&str_contains($voiceApiSource,"if((\$last['channel']??'')==='voice')\$personMemory='';"),
+    'unknown room speakers cannot inherit the signed-in owner memory');
 $ordinary=fmllm_history([
     ['role'=>'user','content'=>'Why honey?'],['role'=>'agent',
         'skill'=>'agent.llm.conversation','content'=>'Honey helps browning.'],

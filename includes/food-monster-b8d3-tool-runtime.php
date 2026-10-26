@@ -148,29 +148,6 @@ function fm8d3_turn(
         $confirmed=fm8d4_confirm_pending($pdo,$principal,$history);
         if($confirmed!==null)return $confirmed;
     }
-    // A specific item still gets a confidential server-side lookup before
-    // model selection; general menu lists are now selected by the model,
-    // with a read-only published-menu fallback if the model abstains.
-    $latest=end($history);
-    $groundedQuestion=is_array($latest)&&($latest['role']??'')==='user'
-        ?trim((string)($latest['content']??'')):'';
-    $verifiedRead=($context['channel']??'text')!=='voice'
-        ||($context['verifiedSameUser']??false)===true;
-    $menuOverview=fmuk_menu_overview_question($groundedQuestion);
-    // Catalogue overrides are used by explicitly model-driven tool tests.
-    // Production calls have no override and always ground named menu facts.
-    $namedMenuItem=$catalogueOverride===null
-        &&fmuk_named_menu_item_question($groundedQuestion);
-    if($verifiedRead&&$groundedQuestion!==''&&$namedMenuItem){
-        $grounded=fmuk_answer($pdo,$principal,$groundedQuestion,
-            ($context['channel']??'text')==='voice',
-            ($context['verifiedSameUser']??false)===true);
-        $grounded['ok']=true;
-        $grounded['data']=array_merge((array)($grounded['data']??[]),
-            ['toolCalls'=>0,'groundedReadFallback'=>true,
-                'groundedMenuOverview'=>$menuOverview,'groundedNamedMenuItem'=>$namedMenuItem]);
-        return $grounded;
-    }
     $payload=fmllm_payload($provider,$history,$memory);
     $payload['tools']=fm8d3_provider_tools($provider,$catalogue);
     $payload['tool_choice']=$provider==='openai'?'auto':['type'=>'auto'];
@@ -188,32 +165,24 @@ function fm8d3_turn(
         $response=fm8d3_provider_request($provider,$key,$payload,$transport);
         $calls=fm8d3_decode_calls($provider,$response);
     }
-    if(!$calls){
-        // Keep menu-list retrieval reliable even if the LLM chooses prose
-        // instead of an available tool. An unidentified voice can receive
-        // ONLY the public menu; never the private menu/recipe broker.
-        if($menuOverview&&isset($catalogue['list_available_menu_items'])){
-            $publicTool=$catalogue['list_available_menu_items'];
-            $publicArgs=['category'=>fmuk_menu_subject($groundedQuestion)];
-            if(($publicTool['authorize'])($principal,$publicArgs)){
-                $observation=($publicTool['execute'])($publicArgs,$principal);
-                $text=trim((string)($observation['data']['answer']??''));
-                if($text!=='')return ['ok'=>true,'skill'=>'agent.published_menu',
-                    'answer'=>$text,'sources'=>[(string)($observation['data']['source']??'Gelato published menu')],
-                    'data'=>['toolCalls'=>0,'groundedReadFallback'=>true,
-                        'groundedMenuOverview'=>true,'publicMenuOnly'=>true]];
-            }
+    $cognitiveRetry=false;
+    if(!$calls&&$resumePlan===null){
+        // A model abstention is not a PHP classifier. Give the same model one
+        // final structured decision among authorized READ tools or normal
+        // conversation, without reusing the initial prose as a tool grant.
+        try{
+            $calls=fm8d14_cognitive_read_retry($provider,$key,$payload,$catalogue,$transport);
+            $cognitiveRetry=$calls!==[];
+        }catch(Throwable $e){
+            error_log('Food Monster cognitive read retry failed: '.get_class($e));
         }
-        // The model may opt to answer in prose despite an explicit request
-        // for Gelato's recorded facts. Resolve an authorized, read-only
-        // source locally before displaying any ungrounded disclaimer.
-        $grounded=fm8d14_no_tool_read($pdo,$principal,$history,$context);
-        if($grounded!==null)return $grounded;
+    }
+    if(!$calls){
         $answer=fmllm_parse($provider,$response);
         if($answer==='')throw new RuntimeException('The AI provider returned no answer.');
         return ['ok'=>true,'skill'=>'agent.llm.conversation',
             'answer'=>mb_substr($answer,0,6000,'UTF-8'),
-            'sources'=>[],'data'=>['toolCalls'=>0]];
+            'sources'=>[],'data'=>['toolCalls'=>0,'cognitiveRetrySelectedRead'=>false]];
     }
     if(count($calls)>4)return ['ok'=>true,'skill'=>'agent.tool_limit',
         'answer'=>'This request includes too many tool actions. Please split it into smaller steps.',
@@ -314,7 +283,8 @@ function fm8d3_turn(
         'sources'=>[],'data'=>['status'=>'unverified']],(int)$result['completed']);
     // Terminal local response: personal timecard facts never go back to OpenAI/Claude.
     $data=['status'=>'completed','toolCalls'=>count($calls),
-        'tools'=>array_values(array_map(static fn($c)=>$c['name'],$calls))];
+        'tools'=>array_values(array_map(static fn($c)=>$c['name'],$calls)),
+        'cognitiveRetrySelectedRead'=>$cognitiveRetry];
     if($pendingApproval!==null)$data['approval']=$pendingApproval;
     if($delegation!==null)$data['delegation']=$delegation;
     return $save(['ok'=>true,'skill'=>'agent.model_selected_tools',
