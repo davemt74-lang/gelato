@@ -1,0 +1,53 @@
+name: B8D16A Private Voice Tool Authorization
+
+on:
+  pull_request:
+    paths:
+      - 'api/agent-workspace.php'
+      - 'api/food-monster-llm.php'
+      - 'includes/agent-voice-conversation.php'
+      - 'includes/agent-private-voice.php'
+      - 'includes/food-monster-b8d3-tool-runtime.php'
+      - 'js/global-agent.js'
+      - 'js/food-monster-llm.js'
+      - 'tests/agent-private-voice-turn.php'
+      - 'tests/agent-private-voice-contract.test.cjs'
+      - '.github/workflows/food-monster-b8d16a-private-voice.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'api/agent-workspace.php'
+      - 'api/food-monster-llm.php'
+      - 'includes/agent-voice-conversation.php'
+      - 'includes/agent-private-voice.php'
+      - 'includes/food-monster-b8d3-tool-runtime.php'
+      - 'js/global-agent.js'
+      - 'js/food-monster-llm.js'
+      - 'tests/agent-private-voice-turn.php'
+      - 'tests/agent-private-voice-contract.test.cjs'
+      - '.github/workflows/food-monster-b8d16a-private-voice.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  privacy-and-replay:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: PHP and browser syntax
+        run: |
+          php -l api/agent-workspace.php
+          php -l api/food-monster-llm.php
+          php -l includes/agent-voice-conversation.php
+          php -l includes/agent-private-voice.php
+          php -l includes/food-monster-b8d3-tool-runtime.php
+          node --check js/global-agent.js
+          node --check js/food-monster-llm.js
+          node --check tests/agent-private-voice-contract.test.cjs
+      - name: One-use session grant security tests
+        run: php tests/agent-private-voice-turn.php
+      - name: Authorization and no-fallback regression tests
+        run: node tests/agent-private-voice-contract.test.cjs
+      - name: Existing speaker capture and skill registry regression
+        run: node tests/agent-voice-capability-continuity.test.cjs

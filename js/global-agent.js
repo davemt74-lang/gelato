@@ -260,6 +260,56 @@
     return 'I can use the restaurant tools your account is permitted to access. Try asking about your schedule, assigned prep/tasks, time clock, catering, wholesale, recipes, inventory, or equipment. Manager-only information and actions remain permission-gated.';
   }
 
+  // Recognition is provisional speaker context, NEVER an access grant.
+  // A signed-in operator must explicitly approve the exact spoken question
+  // before protected restaurant tools can run in a shared room.
+  function voiceMayNeedPrivateAccess(text){
+    if(/\b(on the menu|public menu|menu price|menu items?|sold out|eighty.?six)\b/i.test(text)&&!/\b(inventory|staff|employee|recipe|cost|sales)\b/i.test(text))return false;
+    return /\b(my|our|employee|employees|staff|roster|schedule|scheduled|shift|shifts|payroll|availability|attendance|clock|timecard|recipe|recipes|batch|inventory|stock|cost|profit|sales|orders|tasks|training|customer|crm|purchase|vendor|supplier|private|report|records|kds|equipment|maintenance|reservation|catering)\b|\bwho\s+(?:is\s+)?(?:working|works)\b/i.test(text);
+  }
+  function requestPrivateVoiceConfirmation(question){
+    return new Promise(resolve=>{
+      if(typeof HTMLDialogElement==='undefined'||!document.body){resolve(false);return;}
+      const dialog=document.createElement('dialog');
+      dialog.setAttribute('aria-label','Approve private Gelato voice request');
+      dialog.style.cssText='width:min(480px,calc(100vw - 28px));max-width:95vw;border:1px solid #bac8bf;border-radius:18px;padding:22px;color:#122119;background:#fff;box-shadow:0 20px 70px #0005;z-index:2147483647;font:500 14px/1.5 Inter,system-ui,sans-serif';
+      const title=document.createElement('strong');title.textContent='Private Gelato information';
+      title.style.cssText='font-size:18px;display:block;margin-bottom:8px';
+      const intro=document.createElement('p');intro.textContent='Approve using your signed-in permissions for this one spoken request? Voice recognition alone does not unlock employee or restaurant records.';
+      const utterance=document.createElement('blockquote');utterance.textContent=question;
+      utterance.style.cssText='border-left:3px solid #1b805e;margin:14px 0;padding:5px 12px;color:#31433a;max-height:100px;overflow:auto';
+      const actions=document.createElement('div');actions.style.cssText='display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap';
+      const publicButton=document.createElement('button');publicButton.type='button';publicButton.textContent='Keep public';
+      const approveButton=document.createElement('button');approveButton.type='button';approveButton.textContent='Approve this request';
+      [publicButton,approveButton].forEach(button=>button.style.cssText='padding:11px 13px;border-radius:10px;border:1px solid #ced9d0;cursor:pointer;font:inherit');
+      approveButton.style.background='#13563e';approveButton.style.color='#fff';
+      actions.append(publicButton,approveButton);
+      dialog.append(title,intro,utterance,actions);document.body.append(dialog);
+      let done=false;
+      let timeout=null;
+      const finish=value=>{
+        if(done)return;done=true;if(timeout!==null)clearTimeout(timeout);
+        try{if(dialog.open)dialog.close();}catch{}
+        dialog.remove();resolve(value);
+      };
+      timeout=setTimeout(()=>finish(false),20000);
+      publicButton.addEventListener('click',()=>finish(false));
+      approveButton.addEventListener('click',()=>finish(true));
+      dialog.addEventListener('cancel',event=>{event.preventDefault();finish(false);});
+      try{dialog.showModal();}catch{finish(false);}
+    });
+  }
+  async function approvedPrivateVoiceToken(text,submitted){
+    if(!voiceMayNeedPrivateAccess(text))return '';
+    const messageId=String(submitted?.message?.id||'');
+    if(!/^msg-[a-f0-9]{20}$/.test(messageId))return '';
+    if(!await requestPrivateVoiceConfirmation(text))return '';
+    const response=await post('api/agent-workspace.php',{
+      action:'authorize_private_voice',threadId:S.thread,messageId
+    });
+    return String(response.privateTurnToken||'');
+  }
+
   async function send(raw, voice = false) {
     if(!voice)interruptSpeech('typed-message');
     const text = String(raw || '').trim();
@@ -312,10 +362,7 @@
             possibleVoiceEvent=String(verification.match.eventId||'');
         }catch(error){diag('voice-turn-unverified',{reason:String(error?.name||'unavailable')});}
       }
-      // A manual match remains valid for one turn only.
-      if(!possibleVoiceEvent&&voice&&S.verifiedSpeaker?.sessionUserMatch
-         &&Date.now()-(S.verifiedSpeaker.verifiedAt||0)<60000)
-        possibleVoiceEvent=String(S.verifiedSpeaker.eventId||'');
+      // Never reuse a prior manual voice match for a new utterance.
       const freshSpeakerEvent=/^voice-[a-zA-Z0-9-]{8,90}$/.test(possibleVoiceEvent)
         &&!S.usedVoiceEvents.has(possibleVoiceEvent)?possibleVoiceEvent:'';
       const submitted = await append('user', text, {
@@ -341,44 +388,28 @@
         detail:{verified:true,threadId:S.thread}
       }));
 
+      // This consent is bound to the committed transcript, not a voiceprint.
+      const privateTurnToken=voice
+        ?await approvedPrivateVoiceToken(text,submitted):'';
+
       // FM-B8D11: every chat turn goes through the configured AI provider
       // for model-selected native skills or a permission-scoped existing
       // restaurant-agent delegation. No regex/phrase routing runs first.
       let route={route:null,domain:'model_selected'};
       let result;
       if(window.GelatoFoodMonsterLLM?.ask){
-        result=await window.GelatoFoodMonsterLLM.ask({text,threadId:S.thread,csrf:S.csrf});
+        result=await window.GelatoFoodMonsterLLM.ask({text,threadId:S.thread,csrf:S.csrf,privateTurnToken});
       }else{
         const response=await fetch('api/food-monster-llm.php',{
           method:'POST',cache:'no-store',
           headers:{Accept:'application/json','Content-Type':'application/json','X-CSRF-Token':S.csrf},
-          body:JSON.stringify({action:'chat',message:text,threadId:S.thread,provider:'auto',csrf_token:S.csrf})
+          body:JSON.stringify({action:'chat',message:text,threadId:S.thread,provider:'auto',privateTurnToken,csrf_token:S.csrf})
         });
         result=await response.json().catch(()=>({ok:false,message:'Invalid AI service response.'}));
-        if(!response.ok||!result.ok){
-          if(result?.code==='provider_not_configured'){
-            result={ok:true,skill:'agent.capabilities',
-              answer:'No AI provider is configured. Built-in Gelato tools may still answer recognized requests; natural-language skill discovery requires an administrator to configure an AI provider.',
-              sources:[],data:{offlineFallback:true}};
-          }else throw new Error(result.message||'The configured AI service is unavailable.');
-        }
+        if(!response.ok||!result.ok)throw new Error(result.message||'The configured AI service is unavailable.');
       }
 
-      // Degraded/no-provider mode: retain previously authorized built-in
-      // tools without pretending a model understood the message. This
-      // compatibility parser is never invoked when an AI model is configured.
-      if(result?.data?.offlineFallback===true){
-        const offline=await post('api/agent-workspace.php',{
-          action:'route',message:text,threadId:S.thread
-        });
-        if(offline?.route){
-          result={ok:true,skill:'agent.offline_builtin',
-            data:{delegation:{
-              route:offline.route,domain:offline.domain,
-              threadId:S.thread,sourceMessageId:String(submitted?.message?.id||'')
-            }}};
-        }
-      }
+      // Missing providers must not route room speech to owner-scoped agents.
 
       const delegation=result?.data?.delegation;
       if(delegation){

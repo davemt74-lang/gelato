@@ -43,6 +43,6 @@ $test(str_contains($source,'session_write_close'),'avoid blocking other Gelato r
 $test(!str_contains($source,'apiKey')&&!str_contains($front,'api_key'),'keys never handled by browser or POST payload');
 $test(str_contains($front,'if(window.GelatoFoodMonsterLLM?.ask)')
     &&str_contains($front,'const delegation=result?.data?.delegation;')
-    &&str_contains($front,'result?.data?.offlineFallback===true'),
-    'model-first skills with explicit no-provider built-in fallback');
+    &&!str_contains($front,'result?.data?.offlineFallback===true'),
+    'model-first skills deny offline private-tool fallbacks');
 echo "FM-G4 provider, privacy, route contracts: PASS ({$checks} checks)\n";

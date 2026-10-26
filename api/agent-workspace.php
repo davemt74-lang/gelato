@@ -76,6 +76,25 @@ if($_SERVER['REQUEST_METHOD']==='GET'){
 if($_SERVER['REQUEST_METHOD']!=='POST'){header('Allow: GET, POST');app_json_response(['ok'=>false,'message'=>'Method not allowed.'],405);}
 $in=app_json_input();app_verify_request_csrf($in);$action=(string)($in['action']??'');
 try{
+    if($action==='authorize_private_voice'){
+        // Only a deliberate click in the authenticated user's UI may request
+        // private tool access for this exact committed voice turn. Acoustic
+        // matching cannot mint a private-tool grant.
+        if(!app_has_permission('voice.agent',$user))
+            throw new DomainException('Voice Agent permission is required.');
+        $thread=trim((string)($in['threadId']??''));
+        $messageId=trim((string)($in['messageId']??''));
+        if(!gaw_thread($pdo,$org,$uid,$thread))
+            throw new InvalidArgumentException('Agent conversation not found.');
+        $last=gaw_messages($pdo,$org,$uid,$thread,1)[0]??[];
+        if(($last['role']??'')!=='user'||($last['channel']??'')!=='voice'
+            ||(string)($last['public_id']??'')!==$messageId)
+            throw new InvalidArgumentException('The approval must refer to the latest spoken request.');
+        require_once __DIR__.'/../includes/agent-private-voice.php';
+        $token=gavp_issue($org,$uid,$thread,$messageId);
+        app_audit($pdo,$org,$uid,'agent.private_voice_turn_approved','agent_message',$messageId);
+        app_json_response(['ok'=>true,'privateTurnToken'=>$token,'expiresInSeconds'=>45]);
+    }
     if($action==='resolve_person_report'){
         $personId=(int)($in['personId']??0);
         $messageId=trim((string)($in['reportMessageId']??''));
@@ -93,17 +112,23 @@ try{
         $voiceEvent=(string)($in['voiceEventId']??'');
         $greeting=null;
         $speaker=null;
-        // Speaker event is server evidence, not an employee login or role grant.
-        if($role==='user'&&$channel==='voice'){
-            $speaker=avc_verified_speaker($pdo,$org,$user,$voiceEvent);
-            if($speaker&&(int)$speaker['userId']===$uid)
-                $greeting=avc_greeting($pdo,$org,$uid,(string)$speaker['firstName']);
-        }
-        $personSpeaker=$role==='user'&&$channel==='voice'
-            ?fm9d_resolve_speaker($pdo,$user,$voiceEvent):null;
+        $personSpeaker=null;
+        // Voiceprints are provisional attribution only. Claim an event inside
+        // the same transaction as the canonical message: concurrent/replayed
+        // acoustic IDs must never label a different spoken turn.
+        if($role!=='user'||$channel!=='voice')$voiceEvent='';
         $pendingKey='fm9d_pending_'.hash('sha256',$org.'|'.$uid.'|'.$thread);
         $pdo->beginTransaction();
         try{
+            if($role==='user'&&$channel==='voice'){
+                if(!avc_claim_unused_event($pdo,$org,$user,$voiceEvent))$voiceEvent='';
+                if($voiceEvent!==''){
+                    $speaker=avc_verified_speaker($pdo,$org,$user,$voiceEvent);
+                    if($speaker&&(int)$speaker['userId']===$uid)
+                        $greeting=avc_greeting($pdo,$org,$uid,(string)$speaker['firstName']);
+                    $personSpeaker=fm9d_resolve_speaker($pdo,$user,$voiceEvent);
+                }
+            }
             $message=gaw_append($pdo,$org,$uid,$thread,$role,(string)($in['content']??''),[
                 'channel'=>$channel,'skill'=>$in['skill']??null,'tool'=>$in['tool']??null,
                 'voiceEventId'=>$voiceEvent,'structured'=>$in['structured']??null,

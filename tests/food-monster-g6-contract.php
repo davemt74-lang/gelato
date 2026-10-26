@@ -39,8 +39,8 @@ check_g6(str_contains($page,'app_require_auth()'),'Stage must require logged-in 
 check_g6(!str_contains($page,'<aside'),'Stage cannot load a sidebar');
 check_g6(str_contains($agent,'if(window.GelatoFoodMonsterLLM?.ask)')
     &&str_contains($agent,'const delegation=result?.data?.delegation;')
-    &&str_contains($agent,'result?.data?.offlineFallback===true'),
-    'Model-first routing retains no-provider legacy compatibility');
+    &&!str_contains($agent,'result?.data?.offlineFallback===true'),
+    'Model-first routing fails closed when no provider is configured');
 check_g6(str_contains($llm,'app_verify_request_csrf'),'LLM endpoint requires CSRF');
 check_g6(str_contains($llm,'gaw_thread($pdo,$org,$uid'),'LLM history is user/organization isolated');
 check_g6(str_contains($suggestions,'agent.send(question,false)'),'Recommendations require human Review interaction');
