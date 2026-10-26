@@ -42,7 +42,7 @@
     }
 
     loadScript(`js/employee-home-module.js?v=${ASSET_VERSION}`, 'data-gelato-employee-home-nav');
-    loadScript(`js/global-agent.js?v=${ASSET_VERSION}`, 'data-gelato-global-agent');
+    loadScript('js/global-agent.js?v=20261026-chat-mic1', 'data-gelato-global-agent');
     loadScript(`js/form-media-admin.js?v=${ASSET_VERSION}`, 'data-form-media-admin');
     if (canUseAgentAdmin) {
       loadScript(`js/public-agent-admin.js?v=${ASSET_VERSION}`, 'data-public-agent-admin');
