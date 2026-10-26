@@ -1079,8 +1079,20 @@
     window.dispatchEvent(new CustomEvent('gelato-agent-proactive-greeting',{detail:{text,source:'agent_eyes'}}));
     return true;
   }
+  // Agent Eyes can offer enrollment, but must never start biometric capture.
+  function proactiveEnrollmentInvite(){
+    const text='Hello. I am Gelato. Would you like me to remember your face? We can begin enrollment with your permission.';
+    if(!S.proactiveVoiceEnabled||!has('agent.proactive')||document.hidden
+       ||window.GelatoVoiceTurns?.speaking||window.speechSynthesis?.speaking)return false;
+    if(!window.speechSynthesis&&!window.GelatoVoiceTurns?.speak)return false;
+    speak(text);
+    window.dispatchEvent(new CustomEvent('gelato-agent-enrollment-invitation',
+      {detail:{source:'agent_eyes',spoken:true}}));
+    return true;
+  }
   window.GelatoGlobalAgent = {
     proactiveGreet,
+    proactiveEnrollmentInvite,
     get proactiveGreetingEnabled(){return S.proactiveVoiceEnabled&&has('agent.proactive');},
     send,
     setListening,

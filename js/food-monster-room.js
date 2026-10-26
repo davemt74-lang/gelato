@@ -159,6 +159,7 @@ async function observe(){
   const result=await request('observe',{tracks,allowGreeting:window.GelatoGlobalAgent?.proactiveGreetingEnabled===true});
   if(!state.active||generation!==state.generation)return;
   state.room=result.room;state.lastStatus='';state.failures=0;
+   window.GelatoEyesEnrollment?.onRoom?.(result.room);
   for(const greeting of result.room?.proactiveGreetings||[]){
    if(typeof greeting?.text==='string'&&greeting.provisional===true){
     state.lastGreeting='Greeting offered · '+greeting.text;
@@ -192,6 +193,7 @@ async function stop(){
  if(state.stream){state.stream.getTracks().forEach(t=>t.stop());state.stream=null;}
  if(state.video){state.video.pause();state.video.srcObject=null;state.video.remove();state.video=null;}
  state.tracker?.clear();state.room=null;state.lastStatus='';state.changeKey='';state.profiles=[];state.lastGreeting='';state.lastTimeline=0;
+ window.GelatoEyesEnrollment?.resetRoom?.();
  state.idleCycles=0;state.failures=0;
  ui();eyesRender();
  if(running){try{await request('stop',{});}catch{}window.dispatchEvent(new CustomEvent('gelato-room-presence-updated',{detail:{room:{status:'not_connected',people:[],currentSpeaker:null}}}));void window.GelatoGlobalAgent?.refreshContext?.().catch(()=>{});}

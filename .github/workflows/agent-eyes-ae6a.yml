@@ -1,0 +1,42 @@
+name: Agent Eyes AE6A Proactive Enrollment Invitation
+
+on:
+  pull_request:
+    paths:
+      - 'js/agent-eyes-enrollment.js'
+      - 'js/food-monster-room.js'
+      - 'js/global-agent.js'
+      - 'tests/agent-eyes-ae6a-invitation-browser.test.cjs'
+      - '.github/workflows/agent-eyes-ae6a.yml'
+      - 'docs/AGENT-EYES-AE6A.md'
+  push:
+    branches: [main]
+    paths:
+      - 'js/agent-eyes-enrollment.js'
+      - 'js/food-monster-room.js'
+      - 'js/global-agent.js'
+      - 'tests/agent-eyes-ae6a-invitation-browser.test.cjs'
+      - '.github/workflows/agent-eyes-ae6a.yml'
+      - 'docs/AGENT-EYES-AE6A.md'
+
+permissions:
+  contents: read
+
+jobs:
+  invitation-and-privacy:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax
+        run: |
+          node --check js/agent-eyes-enrollment.js
+          node --check js/food-monster-room.js
+          node --check js/global-agent.js
+          node --check tests/agent-eyes-ae6a-invitation-browser.test.cjs
+      - name: Chromium enrollment and live-room regressions
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.0
+          npx playwright install --with-deps chromium
+          node tests/agent-eyes-ae6a-invitation-browser.test.cjs
+          node tests/agent-eyes-ae2-enrollment-browser.test.cjs
+          node tests/agent-eyes-ae5-timeline-browser.test.cjs

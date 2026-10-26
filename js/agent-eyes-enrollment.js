@@ -6,6 +6,10 @@ if(window.GelatoEyesEnrollment)return;
 const root=document.getElementById('fm-eyes-panel');if(!root)return;
 const endpoint='api/food-monster-presence.php',dbName='gelato-fm-face-pin-v1';
 let modal=null,select=null,consent=null,capture=null,status=null,step=0,vectors=[],people=[];
+let invitation=null,invitationMessage=null,invitationTrack='',firstSeenAt=0,lastSpokenAt=0;
+const declinedTracks=new Set(),spokenTracks=new Set();
+const stableTrack=/^r-[a-f0-9]{16,32}$/;
+const enrollmentOffer='Someone new is in view. Ask whether they want a face profile. Samples are collected only after their consent.';
 const stages=['Front: look straight at the camera','Left angle: slowly turn your head left','Right angle: slowly turn your head right'];
 const report=t=>{if(status)status.textContent=String(t).slice(0,300);};
 const dist=(a,b)=>Math.sqrt(a.reduce((sum,v,i)=>sum+(v-b[i])**2,0));
@@ -99,6 +103,40 @@ function updateStage(){
  capture.textContent=step<3?'Capture sample '+(step+1):'Save enrollment';
 }
 function clear(){step=0;vectors=[];if(consent)consent.checked=false;updateStage();}
+function hideInvitation(){
+ invitationTrack='';firstSeenAt=0;
+ if(invitation)invitation.hidden=true;
+}
+function onRoom(room){
+ if(!window.GelatoRoomPresence?.active||room?.status!=='active'||modal&&!modal.hidden){hideInvitation();return;}
+ // Shared camera/mic cannot reliably attribute a request when multiple people are visible.
+ const present=Array.isArray(room.people)?room.people:[];
+ const p=present.length===1?present[0]:null;
+ const track=p?.identitySource==='unknown'&&p?.identityAssurance==='none'
+   &&stableTrack.test(String(p?.trackId||''))?String(p.trackId):'';
+ if(!track||declinedTracks.has(track)){hideInvitation();return;}
+ if(invitationTrack!==track){invitationTrack=track;firstSeenAt=Date.now();invitation.hidden=true;return;}
+ if(Date.now()-firstSeenAt<3000)return;
+ invitation.hidden=false;invitationMessage.textContent=enrollmentOffer;
+ if(!spokenTracks.has(track)&&Date.now()-lastSpokenAt>=60000
+    &&window.GelatoGlobalAgent?.proactiveGreetingEnabled===true){
+   if(window.GelatoGlobalAgent?.proactiveEnrollmentInvite?.()===true){
+    lastSpokenAt=Date.now();spokenTracks.add(track);
+   }
+ }
+}
+function openForInvitation(){
+ if(!invitationTrack||!window.GelatoRoomPresence?.active)return false;
+ const track=invitationTrack;
+ window.GelatoRoomPresence.openEyes?.();
+ if(modal.hidden){modal.hidden=false;clear();void loadCandidates().catch(e=>report(e.message));}
+ declinedTracks.add(track);hideInvitation();
+ return true;
+}
+function resetRoom(){
+ hideInvitation();declinedTracks.clear();spokenTracks.clear();
+ if(modal&&!modal.hidden){clear();modal.hidden=true;}
+}
 async function loadCandidates(){
  people=await candidates();select.replaceChildren();
  const prompt=document.createElement('option');prompt.value='';prompt.textContent='Select an existing person';select.append(prompt);
@@ -136,6 +174,16 @@ async function revoke(){
  }catch(e){report(e.message);}
 }
 function mount(){
+ invitation=document.createElement('section');invitation.id='fm-eyes-enrollment-invitation';invitation.hidden=true;
+ invitation.setAttribute('role','status');invitation.setAttribute('aria-label','Optional participant enrollment');
+ invitation.style.cssText='border:1px solid #6b8aa1;border-radius:12px;padding:10px;margin:10px 0;background:#15293b';
+ invitationMessage=document.createElement('p');invitationMessage.id='fm-eyes-enrollment-invitation-text';
+ invitationMessage.textContent=enrollmentOffer;invitation.append(invitationMessage);
+ const accept=document.createElement('button');accept.type='button';accept.id='fm-eyes-invitation-enroll';accept.textContent='Start consented enrollment';
+ accept.addEventListener('click',openForInvitation);
+ const decline=document.createElement('button');decline.type='button';decline.id='fm-eyes-invitation-decline';decline.textContent='Not now';
+ decline.addEventListener('click',()=>{if(invitationTrack)declinedTracks.add(invitationTrack);hideInvitation();});
+ invitation.append(accept,decline);root.querySelector('.fm-eyes-list')?.before(invitation);
  const button=document.createElement('button');button.type='button';button.textContent='Enroll participant';
  button.id='fm-eyes-enroll-open';root.querySelector('.fm-eyes-head')?.append(button);
  modal=document.createElement('section');modal.id='fm-eyes-enrollment';modal.hidden=true;
@@ -155,5 +203,5 @@ function mount(){
  select.addEventListener('change',clear);
 }
 mount();
-window.GelatoEyesEnrollment={get open(){return !!modal&&!modal.hidden;}};
+window.GelatoEyesEnrollment={onRoom,resetRoom,openForInvitation,get open(){return !!modal&&!modal.hidden;}};
 })();
