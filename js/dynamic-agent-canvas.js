@@ -89,7 +89,7 @@
   }
 
   function mountDrawer() {
-    if (isWorkspacePage() || state.drawerMounted) return;
+    if (state.drawerMounted) return;
     installStyles();
     const drawer=document.createElement('section');drawer.id='gelato-agent-response-drawer';drawer.setAttribute('role','region');drawer.setAttribute('aria-label','Gelato Agent responses');drawer.setAttribute('aria-live','polite');
     drawer.innerHTML=`<header class="gar-head"><div class="gar-orb">G</div><div class="gar-copy"><strong>Gelato Agent</strong><span class="gar-context"></span></div><button class="gar-close" type="button" aria-label="Close Agent responses">×</button></header><div class="gar-messages"></div>`;
@@ -111,7 +111,6 @@
     try{const bootstrap=await json('api/agent-workspace.php?action=bootstrap');state.activeThread=state.activeThread||window.GelatoGlobalAgent?.threadId||bootstrap.activeThread||'';renderThreads(bootstrap.threads||[]);if(state.activeThread){const thread=await json('api/agent-workspace.php?action=thread&id='+encodeURIComponent(state.activeThread));renderMessages(thread.messages||[]);const h=document.querySelector('.gda-head h2');if(h)h.textContent=thread.thread?.title||'Gelato Agent';}else renderMessages([]);}finally{state.loading=false;}
   }
   async function refreshDrawer() {
-    if(isWorkspacePage())return;
     if(state.drawerLoading){state.drawerRefreshQueued=true;return;}
     mountDrawer();state.drawerLoading=true;
     try{const bootstrap=await json('api/agent-workspace.php?action=bootstrap');state.activeThread=window.GelatoGlobalAgent?.threadId||state.activeThread||bootstrap.activeThread||'';if(!state.activeThread){renderDrawerMessages([]);return;}const thread=await json('api/agent-workspace.php?action=thread&id='+encodeURIComponent(state.activeThread));renderDrawerMessages(thread.messages||[]);}
@@ -179,9 +178,9 @@
     state.context=options.context||pageContext();const ctx=root.querySelector('.gda-context');if(ctx)ctx.textContent='From '+state.context+' · page remains open underneath';state.activeThread=window.GelatoGlobalAgent?.threadId||state.activeThread;refresh().catch(error=>setStatus(error.message));requestAnimationFrame(()=>root.querySelector('.gda-input')?.focus());
   }
   function close() {const root=document.getElementById('gelato-dynamic-agent');if(!root||!state.open)return;root.classList.remove('open');document.body.classList.remove('gda-open');document.documentElement.style.overflow=state.previousOverflow;state.open=false;setStatus('');if(state.lastFocus instanceof HTMLElement)state.lastFocus.focus({preventScroll:true});}
-  function ensureDrawerToggle() {if(isWorkspacePage())return;removeLegacyCanvasButton();const bar=document.getElementById('gelato-agent-bar');if(!bar||document.getElementById('gaResponseToggle'))return;const button=document.createElement('button');button.id='gaResponseToggle';button.type='button';button.title='Open Agent Chat transcript';button.setAttribute('aria-label','Open Agent Chat transcript');button.setAttribute('aria-controls','gelato-agent-response-drawer');button.setAttribute('aria-expanded','false');button.textContent='Chat';const send=bar.querySelector('#gaSend');bar.insertBefore(button,send||null);button.addEventListener('click',toggleDrawer);}
-  function syncDrawerPosition() {if(isWorkspacePage())return;const drawer=document.getElementById('gelato-agent-response-drawer'),bar=document.getElementById('gelato-agent-bar');if(!drawer||!bar)return;const rect=bar.getBoundingClientRect();drawer.style.left=Math.max(6,rect.left)+'px';drawer.style.width=Math.min(rect.width,window.innerWidth-12)+'px';drawer.style.bottom=Math.max(66,window.innerHeight-rect.top+8)+'px';}
-  function openDrawer(options={}) {if(isWorkspacePage()){open(options);return;}mountDrawer();ensureDrawerToggle();syncDrawerPosition();const drawer=document.getElementById('gelato-agent-response-drawer');if(!drawer)return;state.drawerOpen=true;if(options.pending)state.drawerPending=true;drawer.classList.add('open');const context=drawer.querySelector('.gar-context');if(context)context.textContent=options.context||pageContext();const toggle=document.getElementById('gaResponseToggle');if(toggle){toggle.classList.add('on');toggle.setAttribute('aria-expanded','true');toggle.title='Hide Agent Chat transcript';}if(!options.skipRefresh)refreshDrawer().catch(error=>renderDrawerError(error));}
+  function ensureDrawerToggle() {removeLegacyCanvasButton();const bar=document.getElementById('gelato-agent-bar');if(!bar||document.getElementById('gaResponseToggle'))return;const button=document.createElement('button');button.id='gaResponseToggle';button.type='button';button.title='Open Agent Chat transcript';button.setAttribute('aria-label','Open Agent Chat transcript');button.setAttribute('aria-controls','gelato-agent-response-drawer');button.setAttribute('aria-expanded','false');button.textContent='CHAT';const send=bar.querySelector('#gaSend');bar.insertBefore(button,send||null);button.addEventListener('click',toggleDrawer);}
+  function syncDrawerPosition() {const drawer=document.getElementById('gelato-agent-response-drawer'),bar=document.getElementById('gelato-agent-bar');if(!drawer||!bar)return;const rect=bar.getBoundingClientRect();drawer.style.left=Math.max(6,rect.left)+'px';drawer.style.width=Math.min(rect.width,window.innerWidth-12)+'px';drawer.style.bottom=Math.max(66,window.innerHeight-rect.top+8)+'px';}
+  function openDrawer(options={}) {mountDrawer();ensureDrawerToggle();syncDrawerPosition();const drawer=document.getElementById('gelato-agent-response-drawer');if(!drawer)return;state.drawerOpen=true;if(options.pending)state.drawerPending=true;drawer.classList.add('open');const context=drawer.querySelector('.gar-context');if(context)context.textContent=options.context||pageContext();const toggle=document.getElementById('gaResponseToggle');if(toggle){toggle.classList.add('on');toggle.setAttribute('aria-expanded','true');toggle.title='Hide Agent Chat transcript';}if(!options.skipRefresh)refreshDrawer().catch(error=>renderDrawerError(error));}
   function closeDrawer() {const drawer=document.getElementById('gelato-agent-response-drawer');if(!drawer)return;drawer.classList.remove('open');state.drawerOpen=false;const toggle=document.getElementById('gaResponseToggle');if(toggle){toggle.classList.remove('on');toggle.setAttribute('aria-expanded','false');toggle.title='Open Agent Chat transcript';}}
   function toggleDrawer() {if(state.drawerOpen){closeDrawer();return;}state.drawerPending=false;openDrawer();}
   function renderDrawerError(error) {state.drawerPending=false;state.drawerRefreshQueued=false;const root=document.querySelector('.gar-messages');if(!root)return;root.innerHTML=`<div class="gar-empty">${esc(error?.message||'Gelato could not load this conversation.')}</div>`;}
@@ -201,13 +200,15 @@
   }
 
   window.addEventListener('gelato-agent-ready',()=>{removeLegacyCanvasButton();ensureDrawerToggle();if(state.open)refresh().catch(()=>{});if(state.drawerOpen)refreshDrawer().catch(()=>{});});
-  window.addEventListener('gelato-agent-response',(event)=>{state.activeThread=event.detail?.threadId||window.GelatoGlobalAgent?.threadId||state.activeThread;if(isWorkspacePage()){
-    // Refresh only after explicit user opening. An Agent reply must never
-    // create a modal over an in-progress training quiz.
-    if(state.open){setStatus('');refreshThreadsAndMessages().catch(error=>setStatus(error.message));}
-    return;
-  }state.drawerPending=false;if(state.drawerOpen)refreshDrawer().catch(error=>renderDrawerError(error));});
-  window.addEventListener('gelato-agent-error',(event)=>{const message=event.detail?.message||'Gelato could not complete that request.';if(isWorkspacePage()){setStatus(message);return;}state.drawerPending=false;if(state.drawerOpen)renderDrawerError(new Error(message));});
+  window.addEventListener('gelato-agent-response',(event)=>{state.activeThread=event.detail?.threadId||window.GelatoGlobalAgent?.threadId||state.activeThread;
+    // Never open a response view automatically, including in workspace.
+    if(isWorkspacePage()){
+      if(state.open){setStatus('');refreshThreadsAndMessages().catch(error=>setStatus(error.message));}
+    }
+    state.drawerPending=false;
+    if(state.drawerOpen)refreshDrawer().catch(error=>renderDrawerError(error));
+  });
+  window.addEventListener('gelato-agent-error',(event)=>{const message=event.detail?.message||'Gelato could not complete that request.';if(isWorkspacePage()&&state.open)setStatus(message);state.drawerPending=false;if(state.drawerOpen)renderDrawerError(new Error(message));});
   window.addEventListener('gelato-agent-context-change',(event)=>{if(state.drawerOpen&&event.detail){const context=document.querySelector('.gar-context');if(context)context.textContent=window.GelatoAgentPageContext?.description?.(event.detail)||pageContext();}});
 
   window.GelatoDynamicAgentCanvas={open,close,refresh,openDrawer,closeDrawer,get isOpen(){return state.open;},get isDrawerOpen(){return state.drawerOpen;}};

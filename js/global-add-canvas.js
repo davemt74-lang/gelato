@@ -36,8 +36,8 @@
     ensureScript('js/voice-turn-taking.js?v=20261015-fmg7b2e','data-gelato-voice-turn-loader');
     ensureScript('js/proactive-listening-commands.js?v=20261013-listening1','data-gelato-listening-controls-loader');
     ensureScript('js/voice-diagnostics.js?v=20261013-diagnostics1','data-gelato-voice-diagnostics-loader');
-    if (!window.GelatoGlobalAgent) ensureScript('js/global-agent.js?v=20261025-b8d13d', 'data-gelato-global-agent-loader');
-    ensureScript('js/dynamic-agent-canvas.js?v=20261025-chat-restore1', 'data-dynamic-agent-canvas-loader');
+    if (!window.GelatoGlobalAgent) ensureScript('js/global-agent.js?v=20261026-chat-mic1', 'data-gelato-global-agent-loader');
+    ensureScript('js/dynamic-agent-canvas.js?v=20261026-chat-universal1', 'data-dynamic-agent-canvas-loader');
     ensureScript('js/food-monster-clock-popup.js?v=20261016-fmg9b','data-food-monster-clock-popup-loader');
     ensureScript('js/food-monster-room-tracker.js?v=20261016-fmg9c','data-food-monster-room-tracker-loader');
     ensureScript('js/food-monster-room.js?v=20261016-fmg9c','data-food-monster-room-loader');

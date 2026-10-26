@@ -15,7 +15,7 @@ $agent=$read('js/global-agent.js');
 $llm=$read('api/food-monster-llm.php');
 $suggestions=$read('js/food-monster-suggestions.js');
 $version='20261014-fmg6';
-$agentVersion='20261025-b8d13d';
+$agentVersion='20261026-chat-mic1';
 $manualChatVersion='20261023-manual-chat1';
 // Stage, workspace and global admin loaders must all fetch the current mascot/chat UI.
 $stageAgentVersion='20261025-b8d13d';
