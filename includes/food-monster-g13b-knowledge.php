@@ -31,7 +31,7 @@ function fm13b_subject(string $question):string
 {
     $s=mb_strtolower(trim($question),'UTF-8');
     $s=preg_replace('/\\b(?:allerg(?:en|ens|y|ies|ic)|contains?|ingredients?|gluten|dairy|milk|lactose|egg|eggs|nuts?|peanuts?|sesame|shellfish|soy|wheat|safe|cross.contact|recipe|instructions?|steps?|how|what|which|where|does|do|can|is|are|the|this|that|it|in|of|on|for|to|i|we|you|do|would|should|there|free|with|without|and|of|a|an|some|please|show|me|tell|prepare|preparation|cook|make|made|much|price|menu)\\b/u',' ',$s)??$s;
-    return trim(preg_replace('/\\s+/u',' ',$s)??$s," .?!,'\"\\n\\r\\t");
+    return trim(preg_replace('/\\s+/u',' ',$s)??$s," .?!,'\"\n\r\t");
 }
 function fm13b_allergen_key(string $q):?string
 {

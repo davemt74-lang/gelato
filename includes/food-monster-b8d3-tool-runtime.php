@@ -148,23 +148,28 @@ function fm8d3_turn(
         $confirmed=fm8d4_confirm_pending($pdo,$principal,$history);
         if($confirmed!==null)return $confirmed;
     }
-    // Explicit menu overview requests are answered from the current tenant's
-    // permission-scoped active menu, even when a model would choose a general
-    // conversation/delegation tool instead of the local menu lookup. No menu
-    // records are forwarded to the external model.
+    // Explicit menu overviews and named-item questions must resolve against
+    // the tenant's active Menu Manager records before any model delegation.
+    // Model tool selection previously missed named items and produced a
+    // generic "I can't verify" refusal. No menu records reach the provider.
     $latest=end($history);
     $groundedQuestion=is_array($latest)&&($latest['role']??'')==='user'
         ?trim((string)($latest['content']??'')):'';
     $verifiedRead=($context['channel']??'text')!=='voice'
         ||($context['verifiedSameUser']??false)===true;
-    if($verifiedRead&&$groundedQuestion!==''
-        &&fmuk_menu_overview_question($groundedQuestion)){
+    $menuOverview=fmuk_menu_overview_question($groundedQuestion);
+    // Catalogue overrides are used by explicitly model-driven tool tests.
+    // Production calls have no override and always ground named menu facts.
+    $namedMenuItem=$catalogueOverride===null
+        &&fmuk_named_menu_item_question($groundedQuestion);
+    if($verifiedRead&&$groundedQuestion!==''&&($menuOverview||$namedMenuItem)){
         $grounded=fmuk_answer($pdo,$principal,$groundedQuestion,
             ($context['channel']??'text')==='voice',
             ($context['verifiedSameUser']??false)===true);
         $grounded['ok']=true;
         $grounded['data']=array_merge((array)($grounded['data']??[]),
-            ['toolCalls'=>0,'groundedReadFallback'=>true,'groundedMenuOverview'=>true]);
+            ['toolCalls'=>0,'groundedReadFallback'=>true,
+                'groundedMenuOverview'=>$menuOverview,'groundedNamedMenuItem'=>$namedMenuItem]);
         return $grounded;
     }
     $payload=fmllm_payload($provider,$history,$memory);
