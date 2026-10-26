@@ -27,6 +27,7 @@ $item=menu_manager_save_item($pdo,$org,null,[
     'name'=>'Testarosa Pizza','categoryId'=>(int)$category['id'],
     'description'=>'Wood-fired white pizza with roasted garlic and ricotta.',
     'sizes'=>[['label'=>'12-inch','sizeCode'=>'12','amount'=>18.00,'sortOrder'=>1]],
+    'distribution'=>['publicMenu'=>true,'onlineOrder'=>true],
     'ingredients'=>[
         ['name'=>'Pizza Dough','canRemove'=>false],
         ['name'=>'Roasted Garlic','canRemove'=>true],
@@ -38,6 +39,12 @@ b8d5_assert((int)$item['id']>0,'Testarosa fixture saved to real menu database');
 menu_manager_set_status($pdo,$org,(int)$item['id'],'publish',$uid);
 b8d5_assert(menu_training_search_items($pdo,$org,'Testarosa Pizza')!==[],
     'acceptance fixture is published and available to the active-menu broker');
+$draft=menu_manager_save_item($pdo,$org,null,[
+    'name'=>'Secret Draft Pizza','categoryId'=>(int)$category['id'],
+    'sizes'=>[['label'=>'12-inch','sizeCode'=>'12','amount'=>99.99,'sortOrder'=>1]],
+    'distribution'=>['publicMenu'=>true],
+],$uid);
+b8d5_assert((int)$draft['id']>0,'private draft fixture saved');
 $ingredients=[
  ['quantity'=>'1000','unit'=>'g','ingredient'=>'pizza flour','notes'=>''],
  ['quantity'=>'600','unit'=>'g','ingredient'=>'water','notes'=>'cold'],
@@ -52,14 +59,34 @@ $pdo->prepare("INSERT INTO recipes
     json_encode($ingredients,JSON_THROW_ON_ERROR),json_encode(['Mix the dough.','Ferment cold.'],JSON_THROW_ON_ERROR),
     'Test batch only.',$uid,$uid]);
 $reg=fm8d3_catalogue($principal);
-b8d5_assert(isset($reg['get_menu_item'],$reg['search_menu_ingredients'],
+b8d5_assert(isset($reg['get_menu_item'],$reg['list_available_menu_items'],
+    $reg['search_menu_ingredients'],
     $reg['get_recipe_details'],$reg['find_recipes_using_ingredient']),'all approved menu and recipe tools registered');
 $none=fm8d3_catalogue(array_replace($principal,['permissions'=>[]]));
-b8d5_assert(!isset($none['get_menu_item'],$none['get_recipe_details']),
+b8d5_assert(!isset($none['get_menu_item'],$none['get_recipe_details'],
+    $none['list_available_menu_items']),
     'users without menu/recipe permissions cannot discover tools');
 $menuOnly=fm8d3_catalogue(array_replace($principal,['permissions'=>['menu.view']]));
 b8d5_assert(isset($menuOnly['get_menu_item'])&&!isset($menuOnly['get_recipe_details']),
     'menu viewer is not silently granted private recipe access');
+$publicOnly=['list_available_menu_items'=>$reg['list_available_menu_items']];
+b8d5_assert(!isset($publicOnly['get_menu_item'],$publicOnly['get_recipe_details']),
+    'unknown room speakers receive no private menu ingredients or recipes');
+$listMenu=$reg['list_available_menu_items']['execute'];
+$menuList=$listMenu(['category'=>'pizzas'],$principal);
+b8d5_assert(str_contains($menuList['data']['answer'],'Testarosa Pizza')
+    &&str_contains($menuList['data']['answer'],'18.00'),
+    'published menu-list tool retrieves live pizza and price without names hardcoded');
+b8d5_assert(!str_contains($menuList['data']['answer'],'Secret Draft')
+    &&!str_contains($menuList['data']['answer'],'99.99'),
+    'menu-list tool excludes draft items');
+$brokerPizzas=fmuk_answer($pdo,$principal,'Show me the pizzas');
+b8d5_assert(str_contains($brokerPizzas['answer'],'Testarosa Pizza')
+    &&!str_contains($brokerPizzas['answer'],'Secret Draft'),
+    'legacy fallback handles plural pizzas using only published records');
+$draftDetail=fm8d5_menu_find($pdo,$org,'Secret Draft Pizza');
+b8d5_assert(isset($draftDetail['error']),
+    'named-item lookup cannot disclose draft details');
 $getMenu=$reg['get_menu_item']['execute'];
 $details=$getMenu(['item_name'=>'Testarosa Pizza'],$principal);
 b8d5_assert(str_contains($details['data']['answer'],'Roasted Garlic')&&
@@ -118,6 +145,43 @@ $unverifiedMenuVoice=fm8d3_turn($pdo,$principal,'openai','fake',
     static function(array $event):void{},['channel'=>'voice','verifiedSameUser'=>false]);
 b8d5_assert(!str_contains($unverifiedMenuVoice['answer'],'Roasted Garlic'),
     'unverified participant speech cannot read owner menu data');
+$listingProvider=static function()use(&$providerCalls):array{
+    $providerCalls++;
+    return ['output'=>[['type'=>'function_call','call_id'=>'public-menu',
+        'name'=>'list_available_menu_items','arguments'=>'{"category":"pizzas"}']]];
+};
+$unverifiedPublicVoice=fm8d3_turn($pdo,$principal,'openai','fake',
+    [['role'=>'user','content'=>'Show me the pizzas']],'',
+    $listingProvider,$publicOnly,static fn():array=>$principal,
+    static function(array $event):void{},['channel'=>'voice','verifiedSameUser'=>false]);
+b8d5_assert(str_contains($unverifiedPublicVoice['answer'],'Testarosa Pizza')
+    &&($unverifiedPublicVoice['data']['tools'][0]??'')==='list_available_menu_items',
+    'unknown voice can ask the same natural-language public-menu question');
+b8d5_assert(!str_contains($unverifiedPublicVoice['answer'],'Secret Draft')
+    &&!str_contains($unverifiedPublicVoice['answer'],'Roasted Garlic'),
+    'unknown voice has published menu only, not private item details');
+$abstainingVoice=fm8d3_turn($pdo,$principal,'openai','fake',
+    [['role'=>'user','content'=>'Show me the pizzas']],'',
+    $providerRefusal,$publicOnly,static fn():array=>$principal,
+    static function(array $event):void{},['channel'=>'voice','verifiedSameUser'=>false]);
+b8d5_assert(str_contains($abstainingVoice['answer'],'Testarosa Pizza')
+    &&!str_contains($abstainingVoice['answer'],'Roasted Garlic')
+    &&($abstainingVoice['data']['groundedMenuOverview']??false),
+    'no-tool voice refusal is replaced with real public menu, never private details');
+$modelFirstMenu=fm8d3_turn($pdo,$principal,'openai','fake',
+    [['role'=>'user','content'=>'Pizzas available today?']],'',
+    $listingProvider,$reg,static fn():array=>$principal,
+    static function(array $event):void{},['channel'=>'text','verifiedSameUser'=>false]);
+b8d5_assert(str_contains($modelFirstMenu['answer'],'Testarosa Pizza')
+    &&($modelFirstMenu['data']['tools'][0]??'')==='list_available_menu_items',
+    'typed natural-language menu question uses the LLM-selected read tool');
+$abstainingText=fm8d3_turn($pdo,$principal,'openai','fake',
+    [['role'=>'user','content'=>'Show me the pizzas']],'',
+    $providerRefusal,$reg,static fn():array=>$principal,
+    static function(array $event):void{},['channel'=>'text','verifiedSameUser'=>false]);
+b8d5_assert(str_contains($abstainingText['answer'],'Testarosa Pizza')
+    &&($abstainingText['data']['groundedMenuOverview']??false),
+    'no-tool typed refusal receives the same published menu as voice');
 
 $priced=$getMenu(['item_name'=>'Testarosa Pizza','include_prices'=>true],$principal);
 b8d5_assert(str_contains($priced['data']['answer'],'18.00'),'real menu price is returned');
@@ -175,6 +239,20 @@ b8d5_assert(!str_contains($encoded,'57h 12m')&&!str_contains($encoded,'2341'),
     'previous private timecard result redacted from next model call');
 b8d5_assert(str_contains($encoded,'Re-run the authorized tool'),
     'redacted context suggests tool refresh');
+$brokerHistory=fmllm_history([
+    ['role'=>'user','content'=>'Which pizzas are listed?'],
+    ['role'=>'agent','skill'=>'food_monster.unified_knowledge',
+        'content'=>'PRIVATE MENU: Chef Only Pizza costs $900.00',
+        'sources'=>['Gelato published menu']],
+    ['role'=>'user','content'=>'And the desserts?'],
+],12);
+b8d5_assert(!str_contains(json_encode($brokerHistory,JSON_THROW_ON_ERROR),'Chef Only Pizza')
+    &&!str_contains(json_encode($brokerHistory,JSON_THROW_ON_ERROR),'$900.00'),
+    'unified knowledge results never leak into the next external model request');
+$delegationSource=file_get_contents(dirname(__DIR__).'/js/global-agent.js');
+b8d5_assert(is_string($delegationSource)
+    &&str_contains($delegationSource,"routeQuery==='?threadId='+encodeURIComponent(S.thread)"),
+    'offline knowledge-agent handoff permits only the canonical same-thread query');
 $ordinary=fmllm_history([
     ['role'=>'user','content'=>'Why honey?'],['role'=>'agent',
         'skill'=>'agent.llm.conversation','content'=>'Honey helps browning.'],

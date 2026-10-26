@@ -130,7 +130,8 @@ try{
     }
     // Website authentication authorizes typed tools. A room voice may use
     // private tools only if its canonical voice event verifies this SAME
-    // logged-in account. Other/unknown voices remain conversation-only.
+    // logged-in account. Other/unknown voices can still ask about the
+    // published menu through the existing read-only tool runtime.
     $allowTools=($last['channel']??'text')!=='voice';
     if(!$allowTools){
         $event=(string)($last['voice_event_public_id']??'');
@@ -139,18 +140,30 @@ try{
             $allowTools=is_array($speaker)&&(int)($speaker['userId']??0)===$uid;
         }catch(Throwable){$allowTools=false;}
     }
+    $publicVoiceCatalogue=[];
+    if(!$allowTools){
+        $menuCatalogue=fm8d5_catalogue($user);
+        if(isset($menuCatalogue['list_available_menu_items']))
+            $publicVoiceCatalogue['list_available_menu_items']=$menuCatalogue['list_available_menu_items'];
+    }
     // Release session lock while the external API responds.
     if(session_status()===PHP_SESSION_ACTIVE)session_write_close();
     try{
-        $result=$allowTools
-            ?fm8d3_turn($pdo,$user,$selected['provider'],$key,$history,$personMemory,
-                context:['threadId'=>$threadId,'messageId'=>(string)$last['public_id'],
-                    'channel'=>(string)($last['channel']??'text'),
-                    'voiceEventId'=>(string)($last['voice_event_public_id']??''),
-                    'verifiedSameUser'=>$allowTools])
-            :['ok'=>true,'skill'=>'agent.llm.conversation',
+        $context=['threadId'=>$threadId,'messageId'=>(string)$last['public_id'],
+            'channel'=>(string)($last['channel']??'text'),
+            'voiceEventId'=>(string)($last['voice_event_public_id']??''),
+            'verifiedSameUser'=>$allowTools];
+        if($allowTools){
+            $result=fm8d3_turn($pdo,$user,$selected['provider'],$key,$history,$personMemory,
+                context:$context);
+        }elseif($publicVoiceCatalogue!==[]){
+            $result=fm8d3_turn($pdo,$user,$selected['provider'],$key,$history,$personMemory,
+                catalogueOverride:$publicVoiceCatalogue,context:$context);
+        }else{
+            $result=['ok'=>true,'skill'=>'agent.llm.conversation',
                 'answer'=>fmllm_exchange($selected['provider'],$key,$history,null,$personMemory),
                 'sources'=>[],'data'=>['toolCalls'=>0,'privateToolsAvailable'=>false]];
+        }
     }finally{if(function_exists('sodium_memzero'))sodium_memzero($key);}
     app_audit($pdo,$org,$uid,'agent.llm_conversation','agent_conversation',$threadId,null,[
         'provider'=>$selected['provider'],

@@ -16,7 +16,7 @@ function fmuk_topics(string $question): array
     // converted into a read snapshot or interpreted as model authorization.
     if(preg_match('/\b(?:create|add|delete|remove|edit|change|update|approve|publish|refund|void|charge|assign|clock in|clock out|place an order|make a purchase)\b/u',$text))return [];
     $patterns=[
-        'menu'=>'/\b(?:menu|pizza|pasta|dish|dishes|entree|food items?|prices?|toppings?|specials?|gelato flavors?)\b/u',
+        'menu'=>'/\b(?:menu|pizzas?|pastas?|dishes?|entrees?|appetizers?|desserts?|beverages?|drinks?|food items?|prices?|toppings?|specials?|gelato flavors?)\b/u',
         'recipes'=>'/\b(?:recipes?|batch formula|dough formula|ingredients?|production standards?|how (?:do|to) (?:make|prepare|cook|bake))\b/u',
         'vision_lab'=>'/\b(?:vision lab|vision operations?|vision models?|vision datasets?|vision training|machine vision|computer vision|camera learning|visual recognition|vision missions?|vision samples?|vision drift|model benchmarks?|model rollouts?|glasses? vision)\b/u',
         'schedule'=>'/\b(?:schedules?|shifts?|roster|working (?:today|tonight|tomorrow)|staffing|coverage|who works|when (?:am|are|is) .*working)\b/u',
@@ -57,7 +57,7 @@ function fmuk_capability_question(string $question): bool
 
 function fmuk_menu_overview_question(string $question): bool
 {
-    return preg_match('/\b(?:what(?:\x27s| is) on the menu|show (?:me )?(?:the |our )?menu|menu (?:overview|list|items|options|specials)|what (?:food|dishes|pizzas|pastas) (?:do|can) (?:you|we) (?:have|serve|offer))\b/iu',$question)===1;
+    return preg_match('/\b(?:what(?:\x27s| is) on the menu|show (?:me )?(?:the |our )?menu|menu (?:overview|list|items|options|specials)|what (?:food|dishes|pizzas|pastas) (?:do|can) (?:you|we) (?:have|serve|offer)|(?:show|list)\b[^?.!]*\b(?:pizzas?|pastas?|appetizers?|desserts?|drinks?|entrees?|specials?)|(?:which|what)\b[^?.!]*\b(?:pizzas|pastas|appetizers|desserts|drinks|entrees|specials))\b/iu',$question)===1;
 }
 
 /**
@@ -180,49 +180,65 @@ function fmuk_capabilities(array $user,bool $voice,bool $ownerVoiceVerified): ar
 function fmuk_menu_items(PDO $pdo,int $org,string $question): array
 {
     $subject=fmuk_menu_subject($question);
-    // Menu-wide requests return an actual bounded menu slice. A specific
-    // item request is searched against active menu evidence first.
-    $overview=fmuk_menu_overview_question($question)||preg_match('/\b(?:menu|specials?|options?|what (?:do|can) (?:you|we) (?:have|serve|offer))\b/iu',$question)===1
-        &&mb_strlen($subject,'UTF-8')<3;
-    if(!$overview&&mb_strlen($subject,'UTF-8')>=2){
-        $matches=menu_training_search_items($pdo,$org,$subject,12);
-        if(!$matches){
-            // "Testarosa Pizza" might be saved as "Testarosa". Narrow the
-            // fallback to the item name; never replace a miss with a full menu.
-            $name=trim(preg_replace('/\b(?:pizza|pie|dish|item)\b/iu',' ',$subject)??$subject);
-            if($name!==$subject&&mb_strlen($name,'UTF-8')>=3)
-                $matches=menu_training_search_items($pdo,$org,$name,12);
+    if(!menu_manager_ready($pdo))return [];
+    // Reuse the same published, channel-enabled menu that the public site
+    // renders. The previous parallel SQL search could leak draft products.
+    $public=[];$publishedPrices=[];
+    foreach(menu_manager_channel_menu($pdo,$org,'public_menu') as $section)
+        foreach($section['items'] as $item){
+            $public[]=['id'=>(int)$item['id'],'name'=>(string)$item['name'],
+                'section'=>(string)$section['name']];
+            $publishedPrices[(int)$item['id']]=array_map(static fn(array $price):array=>[
+                'id'=>(int)$price['id'],'label'=>(string)$price['optionName'],
+                'amount'=>(float)$price['amount'],'currency'=>(string)$price['currency'],
+            ],$item['prices']);
         }
-        if(!$matches&&mb_strlen($name??$subject,'UTF-8')>=5){
-            // Narrowly tolerate an extra/missing letter in a distinctive name:
-            // "Testarossa" may be stored as "Testarosa". Never guess a record
-            // from a different organization or an inactive menu section.
-            $needle=mb_strtolower(trim($name??$subject),'UTF-8');
-            $needle=preg_replace('/[^\p{L}\p{N}]/u','',$needle)??$needle;
-            if(strlen($needle)>=5&&strlen($needle)<=80){
-                $q=$pdo->prepare("SELECT i.id,i.name FROM menu_items i
-                    JOIN menu_sections s ON s.id=i.section_id AND s.organization_id=i.organization_id
-                    WHERE i.organization_id=? AND i.is_active=1 AND s.status='active'
-                    ORDER BY i.id LIMIT 500");
-                $q->execute([$org]);
-                $best=[];$bestDistance=3;
-                foreach($q->fetchAll(PDO::FETCH_ASSOC) as $row){
-                    $candidate=mb_strtolower((string)$row['name'],'UTF-8');
-                    $candidate=trim(preg_replace('/\b(?:pizza|pie|pasta|dish|item)\b/iu',' ',$candidate)??$candidate);
-                    $candidate=preg_replace('/[^\p{L}\p{N}]/u','',$candidate)??$candidate;
-                    $distance=levenshtein($needle,$candidate);
-                    if($distance<$bestDistance){$bestDistance=$distance;$best=[(int)$row['id']];}
-                    elseif($distance===$bestDistance)$best[]=(int)$row['id'];
-                }
-                if($bestDistance<=2&&count($best)===1)
-                    $matches=menu_training_items_by_ids($pdo,$org,$best,1);
-            }
+    $resolve=static function(array $ids,int $limit)use($pdo,$org,$publishedPrices):array{
+        $items=menu_training_items_by_ids($pdo,$org,array_slice($ids,0,$limit),$limit);
+        foreach($items as &$item)$item['prices']=$publishedPrices[(int)$item['id']]??[];
+        unset($item);
+        return $items;
+    };
+    $overview=fmuk_menu_overview_question($question)||(
+        preg_match('/\b(?:menu|specials?|options?)\b/iu',$question)===1
+        &&mb_strlen($subject,'UTF-8')<3);
+    $needle=mb_strtolower($subject,'UTF-8');
+    if($overview){
+        $filter=preg_replace('/(?:es|s)$/u','',$needle)??$needle;
+        $ids=[];
+        foreach($public as $row){
+            $section=mb_strtolower($row['section'],'UTF-8');
+            $name=mb_strtolower($row['name'],'UTF-8');
+            if($filter===''||str_contains($section,$filter)||str_contains($name,$filter))
+                $ids[]=$row['id'];
         }
-        return $matches;
+        return $resolve($ids,20);
     }
-    $stmt=$pdo->prepare("SELECT i.id FROM menu_items i JOIN menu_sections s ON s.id=i.section_id AND s.organization_id=i.organization_id WHERE i.organization_id=? AND i.is_active=1 AND s.status='active' ORDER BY s.name,i.name LIMIT 20");
-    $stmt->execute([$org]);
-    return menu_training_items_by_ids($pdo,$org,array_map('intval',$stmt->fetchAll(PDO::FETCH_COLUMN)),20);
+    if(mb_strlen($needle,'UTF-8')<2)return [];
+    $name=trim(preg_replace('/\b(?:pizza|pie|pasta|dish|item)\b/iu',' ',$needle)??$needle);
+    $ids=[];$candidates=[];
+    foreach($public as $row){
+        $label=mb_strtolower($row['name'],'UTF-8');
+        if(str_contains($label,$needle)||($name!==''&&str_contains($label,$name)))
+            $ids[]=$row['id'];
+        $candidates[]=['id'=>$row['id'],'name'=>trim(preg_replace(
+            '/\b(?:pizza|pie|pasta|dish|item)\b/iu',' ',$label)??$label)];
+    }
+    if(!$ids&&mb_strlen($name,'UTF-8')>=5){
+        // Typo tolerance is limited to the official published items.
+        $compact=preg_replace('/[^\p{L}\p{N}]/u','',$name)??$name;
+        if(strlen($compact)>=5&&strlen($compact)<=80){
+            $best=[];$distanceLimit=3;
+            foreach($candidates as $row){
+                $candidate=preg_replace('/[^\p{L}\p{N}]/u','',$row['name'])??$row['name'];
+                $distance=levenshtein($compact,$candidate);
+                if($distance<$distanceLimit){$distanceLimit=$distance;$best=[$row['id']];}
+                elseif($distance===$distanceLimit)$best[]=$row['id'];
+            }
+            if($distanceLimit<=2&&count($best)===1)$ids=$best;
+        }
+    }
+    return $resolve($ids,12);
 }
 
 function fmuk_render_menu(array $items): array

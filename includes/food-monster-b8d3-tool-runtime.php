@@ -148,10 +148,9 @@ function fm8d3_turn(
         $confirmed=fm8d4_confirm_pending($pdo,$principal,$history);
         if($confirmed!==null)return $confirmed;
     }
-    // Explicit menu overviews and named-item questions must resolve against
-    // the tenant's active Menu Manager records before any model delegation.
-    // Model tool selection previously missed named items and produced a
-    // generic "I can't verify" refusal. No menu records reach the provider.
+    // A specific item still gets a confidential server-side lookup before
+    // model selection; general menu lists are now selected by the model,
+    // with a read-only published-menu fallback if the model abstains.
     $latest=end($history);
     $groundedQuestion=is_array($latest)&&($latest['role']??'')==='user'
         ?trim((string)($latest['content']??'')):'';
@@ -162,7 +161,7 @@ function fm8d3_turn(
     // Production calls have no override and always ground named menu facts.
     $namedMenuItem=$catalogueOverride===null
         &&fmuk_named_menu_item_question($groundedQuestion);
-    if($verifiedRead&&$groundedQuestion!==''&&($menuOverview||$namedMenuItem)){
+    if($verifiedRead&&$groundedQuestion!==''&&$namedMenuItem){
         $grounded=fmuk_answer($pdo,$principal,$groundedQuestion,
             ($context['channel']??'text')==='voice',
             ($context['verifiedSameUser']??false)===true);
@@ -190,6 +189,21 @@ function fm8d3_turn(
         $calls=fm8d3_decode_calls($provider,$response);
     }
     if(!$calls){
+        // Keep menu-list retrieval reliable even if the LLM chooses prose
+        // instead of an available tool. An unidentified voice can receive
+        // ONLY the public menu; never the private menu/recipe broker.
+        if($menuOverview&&isset($catalogue['list_available_menu_items'])){
+            $publicTool=$catalogue['list_available_menu_items'];
+            $publicArgs=['category'=>fmuk_menu_subject($groundedQuestion)];
+            if(($publicTool['authorize'])($principal,$publicArgs)){
+                $observation=($publicTool['execute'])($publicArgs,$principal);
+                $text=trim((string)($observation['data']['answer']??''));
+                if($text!=='')return ['ok'=>true,'skill'=>'agent.published_menu',
+                    'answer'=>$text,'sources'=>[(string)($observation['data']['source']??'Gelato published menu')],
+                    'data'=>['toolCalls'=>0,'groundedReadFallback'=>true,
+                        'groundedMenuOverview'=>true,'publicMenuOnly'=>true]];
+            }
+        }
         // The model may opt to answer in prose despite an explicit request
         // for Gelato's recorded facts. Resolve an authorized, read-only
         // source locally before displaying any ungrounded disclaimer.

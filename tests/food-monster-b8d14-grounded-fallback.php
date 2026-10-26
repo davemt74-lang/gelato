@@ -59,6 +59,12 @@ foreach([
     'How much is the Testarossa Pizza?',
 ] as $question)b8d14_check(fmuk_named_menu_item_question($question),
     'named menu read: '.$question);
+b8d14_check(fmuk_menu_overview_question('Show me the pizzas'),
+    'plural pizza menu request is a menu overview, not a named item');
+b8d14_check(fmuk_menu_overview_question('Which dinner appetizers are available?'),
+    'dinner appetizers are a broad menu listing request');
+b8d14_check(!fmuk_menu_overview_question('What is a pizza?'),
+    'general cooking discussion is not mistaken for a live menu listing');
 foreach([
     'What is a pizza?',
     'Tell me a joke about pizza',

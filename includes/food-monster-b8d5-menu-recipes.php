@@ -34,11 +34,69 @@ function fm8d5_menu_find(PDO $pdo,int $org,string $name):array
     $name=trim($name);
     if(mb_strlen($name,'UTF-8')<2||mb_strlen($name,'UTF-8')>140)
         return ['error'=>'Tell me the menu item name, please.'];
-    $q=$pdo->prepare('SELECT id,name FROM menu_items WHERE organization_id=? AND name LIKE ? ORDER BY name,id LIMIT 35');
-    $q->execute([$org,'%'.$name.'%']);
-    $picked=fm8d5_named_match($q->fetchAll(PDO::FETCH_ASSOC),$name);
+    // The conversational menu is the same published, channel-enabled menu
+    // customers see. Draft, paused and archived items are not live offers.
+    $rows=[];$publicItems=[];
+    foreach(menu_manager_channel_menu($pdo,$org,'public_menu') as $section)
+        foreach($section['items'] as $item){
+            $rows[]=['id'=>(int)$item['id'],'name'=>(string)$item['name']];
+            $publicItems[(int)$item['id']]=$item;
+        }
+    $picked=fm8d5_named_match($rows,$name);
     if(!isset($picked['item']))return $picked;
-    return ['item'=>menu_manager_item_payload($pdo,$org,(int)$picked['item']['id'])];
+    $id=(int)$picked['item']['id'];
+    $details=menu_manager_item_payload($pdo,$org,$id);
+    // The detail payload is an editor view. Prices in conversation must
+    // instead match the currently published price options and effective dates.
+    $details['sizes']=array_map(static fn(array $price):array=>[
+        'label'=>(string)$price['optionName'],'amount'=>(float)$price['amount'],
+    ],$publicItems[$id]['prices']);
+    return ['item'=>$details];
+}
+function fm8d5_normalize_menu_filter(string $value):string
+{
+    $value=mb_strtolower(trim(preg_replace('/\s+/u',' ',$value)??$value),'UTF-8');
+    return preg_replace('/(?:es|s)$/u','',$value)??$value;
+}
+/** Format the existing published channel menu, never editor/draft records. */
+function fm8d5_available_menu_summary(array $sections,string $category='',string $itemName='',int $limit=40):string
+{
+    $limit=max(1,min(75,$limit));
+    $category=fm8d5_normalize_menu_filter($category);
+    $itemName=fm8d5_normalize_menu_filter($itemName);
+    $rows=[];
+    foreach($sections as $section){
+        $sectionName=(string)($section['name']??'Menu');
+        $sectionSearch=fm8d5_normalize_menu_filter($sectionName);
+        foreach((array)($section['items']??[]) as $item){
+            $name=trim((string)($item['name']??''));
+            if($name==='')continue;
+            $search=fm8d5_normalize_menu_filter($name);
+            if($category!==''&&!str_contains($sectionSearch,$category)
+                &&!str_contains($search,$category))continue;
+            if($itemName!==''&&!str_contains($search,$itemName))continue;
+            $prices=[];
+            foreach(array_slice((array)($item['prices']??[]),0,5) as $price){
+                if(!is_numeric($price['amount']??null))continue;
+                $currency=(string)($price['currency']??'USD');
+                $label=trim((string)($price['optionName']??''));
+                $prices[]=($label!==''?$label.' ':'').($currency==='USD'?'$':$currency.' ')
+                    .number_format((float)$price['amount'],2);
+            }
+            $rows[]=mb_substr($sectionName.' — '.$name
+                .($prices?' | '.implode('; ',$prices):' | price not recorded'),0,240,'UTF-8');
+        }
+    }
+    if(!$rows)return 'No matching published items are currently recorded in Gelato’s menu.';
+    $shown=[];$chars=0;
+    foreach($rows as $row){
+        $len=mb_strlen($row,'UTF-8')+1;
+        if(count($shown)>=$limit||$chars+$len>2600)break;
+        $shown[]=$row;$chars+=$len;
+    }
+    return 'Gelato’s published menu ('.count($shown).' of '.count($rows).' matching items):'
+        ."\n".implode("\n",$shown)
+        .(count($shown)<count($rows)?"\nAsk for a category to see more items.":'');
 }
 function fm8d5_recipe_find(PDO $pdo,int $org,string $name):array
 {
@@ -99,6 +157,34 @@ function fm8d5_observation(string $message,string $source):array
 function fm8d5_catalogue(array $principal):array
 {
     $tools=[];
+    $canReadMenu=app_has_permission('menu.view',$principal)
+        ||(app_has_permission('employee.self',$principal)
+            &&app_has_permission('training.self_view',$principal));
+    if($canReadMenu){
+        $tools['list_available_menu_items']=[
+            'description'=>'Read the ACTUAL currently published Gelato menu. Use when the user asks which pizzas, appetizers, drinks, specials or other dishes are available, wants a menu category, asks to see all items, or asks about an item by name. Optional category can be pizza, appetizers, dinner or another category; optional item_name narrows to a menu item. Unlike the editor, this never lists draft or inactive products.',
+            'parameters'=>['type'=>'object','properties'=>[
+                'category'=>['type'=>'string','description'=>'Optional menu category, e.g. pizza or appetizers'],
+                'item_name'=>['type'=>'string','description'=>'Optional menu item name or distinctive part'],
+                'limit'=>['type'=>'integer','minimum'=>1,'maximum'=>75],
+            ],'additionalProperties'=>false],
+            'allowedArguments'=>['category','item_name','limit'],'impact'=>'read',
+            'authorize'=>static fn(array $actor,array $args):bool=>
+                app_has_permission('menu.view',$actor)
+                ||(app_has_permission('employee.self',$actor)
+                    &&app_has_permission('training.self_view',$actor)),
+            'validate'=>static fn(array $args,array $actor):array=>[],
+            'execute'=>static function(array $args,array $actor):array{
+                $pdo=app_pdo();
+                if(!menu_manager_ready($pdo))return fm8d5_observation(
+                    'The Menu Manager database is not installed or upgraded.','Gelato published menu');
+                return fm8d5_observation(fm8d5_available_menu_summary(
+                    menu_manager_channel_menu($pdo,(int)$actor['organization_id'],'public_menu'),
+                    (string)($args['category']??''),(string)($args['item_name']??''),
+                    (int)($args['limit']??40)),'Gelato published menu');
+            },
+        ];
+    }
     if(app_has_permission('menu.view',$principal)){
         $tools['get_menu_item']=[
             'description'=>'Look up a live Gelato menu item by name and return its recorded ingredients, description, optionally price and sizes. Use for questions like "what ingredients are on Testarosa Pizza?", "what is on this pizza?", "does a menu item contain cheese?", or "what does this cost?" Never infer missing ingredients from the description; a specific menu item name is required.',
