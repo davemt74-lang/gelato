@@ -76,11 +76,13 @@ function fmuk_named_menu_item_question(string $question): bool
     return mb_strlen($name,'UTF-8')>=3;
 }
 
-/** Remove question phrasing; keep the distinctive item name for SQL matching. */
+/** Preserve item names while removing menu-question wording and contractions. */
 function fmuk_menu_subject(string $question): string
 {
-    $subject=fm13b_subject($question);
-    return trim(preg_replace('/\b(?:s|toppings?|listed|details?|about|serve|served|has|have)\b/iu',' ',$subject)??$subject);
+    $subject=mb_strtolower(trim($question),'UTF-8');
+    $subject=preg_replace('/[^\\p{L}\\p{N}\\s-]+/u',' ',$subject)??$subject;
+    $subject=preg_replace('/\\b(?:what|which|where|does|do|can|is|are|the|this|that|it|in|of|on|for|to|i|we|you|s|would|should|there|with|without|and|a|an|some|please|show|me|tell|about|how|much|price|prices|cost|menu|item|items|ingredients?|toppings?|contains?|listed|details?|serve|served|has|have)\\b/iu',' ',$subject)??$subject;
+    return trim(preg_replace('/\\s+/u',' ',$subject)??$subject);
 }
 
 function fmuk_roster_question(string $question): bool
