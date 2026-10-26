@@ -246,7 +246,7 @@ $api=(string)file_get_contents($root.'/api/food-monster-unified-knowledge.php');
 $route=(string)file_get_contents($root.'/api/agent-workspace.php');
 fmuk_assert(str_contains($api,'app_require_auth()')&&str_contains($api,'app_verify_request_csrf'),'endpoint requires auth and CSRF');
 fmuk_assert(str_contains($api,'gaw_thread($pdo,$org,$uid,$thread)')&&str_contains($api,'gaw_messages($pdo,$org,$uid,$thread,1)'),'canonical tenant-bound latest turn required');
-fmuk_assert(str_contains($api,'avc_verified_speaker')&&str_contains($api,'voice_event_public_id'),'server-based voice verification');
+fmuk_assert(str_contains($api,'gavp_was_approved')&&!str_contains($api,'avc_verified_speaker'),'server-based approval is required for private voice evidence');
 fmuk_assert(!str_contains($api,'fmllm_exchange')&&!str_contains($api,'curl_'),'records remain in Gelato server');
 $broker=(string)file_get_contents($root.'/includes/food-monster-unified-knowledge.php');
 fmuk_assert(!str_contains($broker,'operations_task_list(') || str_contains($broker,'Do not call operations_task_list()'),

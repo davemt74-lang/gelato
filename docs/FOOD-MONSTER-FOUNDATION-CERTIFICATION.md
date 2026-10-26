@@ -16,6 +16,10 @@ has passed all required CI checks, been reviewed, merged, and verified.
   unlock private records using an acoustic match, including delegated requests.
 - Clear approval when a new canonical user turn is appended, then verify expiry
   and original thread/message scoping across asynchronous evidence endpoints.
+- Preserve safe routing for older cached chat clients: deny any non-public
+  legacy voice route without consent for its latest canonical user message.
+- Refresh Agent/LLM/mascot asset version URLs in the deployment and verify
+  cache-miss browser tests after an upgrade; avoid stale JavaScript dispatch.
 
 **Important:** The explicit UI confirmation is consent from an already authenticated
 browser session. It is not multi-factor authentication, and a physically unattended
@@ -40,6 +44,17 @@ signed-in workstation still requires ordinary screen lock and staff privacy cont
    with merged main and previous full releases.
 8. Real workflow acceptance: select one simple domain action, capture browser
    request IDs, server logs, tool invocation and persisted result end-to-end.
+
+## Honest capability inventory
+
+The source capability map currently lists 73 `contract_candidate_not_granted`
+entries. These describe potential endpoint contracts; they do **not** prove
+that the model can execute those calls. Certification must enumerate the actual
+`fm8d3_catalogue` registrations separately from the map, require a successful
+permission-scoped tool invocation for every claimed domain, and visibly report
+`not connected`, `missing permission`, or `unavailable` without improvising a
+substitute answer. Include staff schedules, rostering, recipes, inventory and
+employee training in the first production smoke matrix.
 
 ## Sections B–E
 

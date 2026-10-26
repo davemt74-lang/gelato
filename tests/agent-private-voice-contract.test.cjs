@@ -41,6 +41,12 @@ for(const [name,src] of [['knowledge',knowledge],['unified knowledge',unified],[
 assert(!knowledge.includes('avc_verified_speaker(')&&!unified.includes('avc_verified_speaker('),'provisional voice biometrics cannot unlock direct private evidence');
 assert(trainingNative.includes("($context['privateVoiceApproved']??false)!==true"),'native training actions also require approved turn');
 assert(workspace.includes('gavp_clear_approved()'),'next user turn revokes previous approval');
+assert(workspace.includes('if($voiceRoute){')&&workspace.includes('if(!$approved){'),
+ 'legacy Agent route fails closed for unapproved canonical room speech');
+assert(workspace.includes("'domain'=>'participant_conversation'"),
+ 'unapproved legacy routing stays conversational except public menu evidence');
+assert(!workspace.includes('$ownerMatch=is_array($speaker)'),
+ 'legacy route cannot use a speaker match as private access authorization');
 
 // This classification only decides when to ASK for approval. It never selects
 // a restaurant tool or bypasses server permission checks.

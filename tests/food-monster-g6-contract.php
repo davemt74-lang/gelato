@@ -15,11 +15,11 @@ $agent=$read('js/global-agent.js');
 $llm=$read('api/food-monster-llm.php');
 $suggestions=$read('js/food-monster-suggestions.js');
 $version='20261014-fmg6';
-$agentVersion='20261026-chat-mic1';
+$agentVersion='20261026-b8d16a-voice1';
 $manualChatVersion='20261023-manual-chat1';
 // Stage, workspace and global admin loaders must all fetch the current mascot/chat UI.
-$stageAgentVersion='20261025-b8d13d';
-$stageMascotVersion=$manualChatVersion;
+$stageAgentVersion=$agentVersion;
+$stageMascotVersion='20261026-b8d16a-mascot1';
 $stageCssVersion=$manualChatVersion;
 foreach([
  'js/global-add-canvas.js'=>$global,'js/food-monster.js'=>$actor
@@ -28,7 +28,7 @@ foreach(['js/universal-admin-page-shell.js'=>$universal,'js/workspace-shell-sync
  check_g6(str_contains($body,'v='.$manualChatVersion),'Current shared loader release stamp is missing in '.$path);
 check_g6(str_contains($global,'js/global-agent.js?v='.$agentVersion),'Global Agent fallback cache must update');
 check_g6(str_contains($global,'js/agent-next-moves.js?v='.$version),'Shared Next Moves dismissal cache must update');
-check_g6(str_contains($global,'js/food-monster.js?v='.$manualChatVersion),'Mascot cache must update on global pages');
+check_g6(str_contains($global,'js/food-monster.js?v='.$stageMascotVersion),'Mascot cache must update on global pages');
 check_g6(str_contains($universal,'js/global-add-canvas.js?v='.$manualChatVersion),'Universal admin shell must request new loader');
 check_g6(str_contains($workspace,'js/global-add-canvas.js?v='.$manualChatVersion),'Workspace shell must request new loader');
 check_g6(str_contains($page,'css/food-monster.css?v='.$stageCssVersion),'Stage CSS must be fresh');

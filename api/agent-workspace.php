@@ -212,6 +212,33 @@ try{
         // recent canonical turn and a server-resolved owner voice event only.
         // Do not trust a client-supplied participant, role, or channel flag.
         $roomThread=trim((string)($in['threadId']??''));
+        $routeLast=[];
+        if(preg_match('/^agent-[a-f0-9]{20}$/D',$roomThread)
+            &&gaw_thread($pdo,$org,$uid,$roomThread))
+            $routeLast=gaw_messages($pdo,$org,$uid,$roomThread,1)[0]??[];
+        $voiceRoute=($routeLast['channel']??'')==='voice'||($in['channel']??'')==='voice';
+        if($voiceRoute){
+            // Legacy/cached clients can still call the route endpoint directly.
+            // Do not let them bypass the model's private-turn consent check.
+            $canonical=($routeLast['role']??'')==='user'
+                &&($routeLast['channel']??'')==='voice'
+                &&trim((string)($routeLast['content']??''))===$message;
+            $approved=$canonical&&gavp_was_approved($org,$uid,$roomThread,
+                (string)($routeLast['public_id']??''));
+            if(!$approved){
+                $publicIntent=fm13b_intent($message);
+                if($canonical&&fmuk_menu_overview_question($message))
+                    app_json_response(['ok'=>true,
+                        'route'=>'api/food-monster-unified-knowledge.php?threadId='.rawurlencode($roomThread),
+                        'domain'=>'food_monster_unified_knowledge','nodeMode'=>'read_only']);
+                if($canonical&&in_array($publicIntent,['menu','allergen','training'],true))
+                    app_json_response(['ok'=>true,
+                        'route'=>'api/food-monster-knowledge.php?threadId='.rawurlencode($roomThread),
+                        'domain'=>'food_monster_grounded_knowledge','nodeMode'=>'read_only']);
+                app_json_response(['ok'=>true,'route'=>null,
+                    'domain'=>'participant_conversation','nodeMode'=>'conversation_only']);
+            }
+        }
 
         // B8D1: general explanations must reach the conversational model,
         // never a static keyword-based restaurant report. Governed actions
@@ -315,9 +342,7 @@ try{
             $ownerMatch=false;
             if(($latest['role']??'')==='user'&&($latest['channel']??'')==='voice'
                 &&trim((string)($latest['content']??''))===$message){
-                $voiceId=(string)($latest['voice_event_public_id']??'');
-                $speaker=$voiceId!==''?avc_verified_speaker($pdo,$org,$user,$voiceId):null;
-                $ownerMatch=is_array($speaker)&&(int)($speaker['userId']??0)===$uid;
+                $ownerMatch=gavp_was_approved($org,$uid,$roomThread,(string)$latest['public_id']);
             }
             if(fm13a_voice_route_mode($latest,$message,$ownerMatch)==='conversation_only'){
                 // Food and allergen questions are safe read-only skills only.

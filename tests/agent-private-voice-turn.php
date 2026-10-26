@@ -16,7 +16,7 @@ gavp_assert(!gavp_was_approved(8,19,$thread,$turn,1003),'Other organization has 
 gavp_assert(!gavp_was_approved(7,20,$thread,$turn,1003),'Other user has no approved turn');
 gavp_assert(!gavp_was_approved(7,19,'agent-other',$turn,1003),'Other thread has no approved turn');
 gavp_assert(!gavp_was_approved(7,19,$thread,'msg-bbbbbbbbbbbbbbbbbbbb',1003),'Other turn has no approval');
-gavp_assert(!gavp_was_approved(7,19,$thread,$turn,1091),'Delegated approval expires');
+gavp_assert(!gavp_was_approved(7,19,$thread,$turn,1093),'Delegated approval expires');
 gavp_assert(!gavp_consume(7,19,$thread,$turn,$token,1003),'Consumed approval must not replay');
 $token=gavp_issue(7,19,$thread,$turn,1000);
 gavp_assert(!gavp_consume(7,19,$thread,'msg-bbbbbbbbbbbbbbbbbbbb',$token,1001),'Wrong message rejected');
