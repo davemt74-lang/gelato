@@ -6,7 +6,11 @@ on:
       - 'includes/food-monster-b8d3-tool-runtime.php'
       - 'includes/food-monster-llm.php'
       - 'includes/food-monster-b8d5-menu-recipes.php'
+      - 'includes/food-monster-unified-knowledge.php'
+      - 'api/food-monster-llm.php'
+      - 'js/global-agent.js'
       - 'tests/food-monster-b8d5-menu-recipes.php'
+      - 'tests/food-monster-b8d14-grounded-fallback.php'
       - '.github/workflows/food-monster-b8d5-menu-recipes.yml'
   push:
     branches: [main]
@@ -14,7 +18,11 @@ on:
       - 'includes/food-monster-b8d3-tool-runtime.php'
       - 'includes/food-monster-llm.php'
       - 'includes/food-monster-b8d5-menu-recipes.php'
+      - 'includes/food-monster-unified-knowledge.php'
+      - 'api/food-monster-llm.php'
+      - 'js/global-agent.js'
       - 'tests/food-monster-b8d5-menu-recipes.php'
+      - 'tests/food-monster-b8d14-grounded-fallback.php'
       - '.github/workflows/food-monster-b8d5-menu-recipes.yml'
 
 jobs:
@@ -38,7 +46,7 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
-          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+          extensions: pdo_mysql, pdo_sqlite, mbstring, curl, fileinfo, sodium
 
       - name: Syntax checks
         run: |
@@ -50,7 +58,10 @@ jobs:
           php -l includes/food-monster-llm.php
           php -l includes/food-monster-b8d3-tool-runtime.php
           php -l includes/food-monster-b8d5-menu-recipes.php
+          php -l includes/food-monster-unified-knowledge.php
+          php -l api/food-monster-llm.php
           php -l tests/food-monster-b8d5-menu-recipes.php
+          php -l tests/food-monster-b8d14-grounded-fallback.php
           php -l tests/scheduling-contract.php
           php -l tests/scheduling-agent-context-contract.php
           node --check js/scheduling.js
@@ -61,6 +72,7 @@ jobs:
           node --check js/pos-agent-context.js
           node --check js/floor-planner-module.js
           node --check js/restaurant-agent-bridge.js
+          node --check js/global-agent.js
 
       - name: Scheduling architecture contract
         run: |
@@ -151,4 +163,6 @@ jobs:
           php tests/menu-manager-food-builder-contract.php
           php tests/recipe-agent-db-lifecycle.php
       - name: Model-selected Menu + Recipe skills, live MariaDB, permission and history isolation
-        run: php tests/food-monster-b8d5-menu-recipes.php
+        run: |
+          php tests/food-monster-b8d5-menu-recipes.php
+          php tests/food-monster-b8d14-grounded-fallback.php

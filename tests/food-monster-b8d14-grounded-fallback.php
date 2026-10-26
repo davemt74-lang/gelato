@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-/** FM-B8D14: authorized restaurant facts survive model tool abstention. */
+/** B8D14: no keyword intent classifier; one read-only model retry instead. */
 if(!function_exists('mb_substr')){function mb_substr(string $s,int $o,?int $l=null,?string $e=null):string{return substr($s,$o,$l);}}
 if(!function_exists('mb_strlen')){function mb_strlen(string $s,?string $e=null):int{return strlen($s);}}
 if(!function_exists('mb_strtolower')){function mb_strtolower(string $s,?string $e=null):string{return strtolower($s);}}
@@ -16,120 +16,91 @@ function b8d14_check(bool $pass,string $description):void{
     if(!$pass){fwrite(STDERR,'B8D14 FAIL: '.$description."\n");exit(1);}
     ++$n;
 }
-foreach([
-    'What is on the menu?',
-    'Show me the menu',
-    'What are your current menu prices?',
-    'How much does Testarosa Pizza cost?',
-    'What ingredients are listed for Testarosa Pizza?',
-    'Do you have access to the menu?',
-    'What are our employee schedules?',
-    'Show my training assignments',
-    'List our inventory and sales',
-    'Which kitchen tickets are active today?',
-    'Read our policy documents',
-] as $question)b8d14_check(fm8d14_needs_grounded_read($question),'grounded read: '.$question);
-foreach([
-    'Hello there!',
-    'What is a pizza?',
-    'What is inventory?',
-    'What is a schedule?',
-    'What is an employee?',
-    'Why does honey improve pizza dough?',
-    'Explain why pizza crust browns',
-    'Is pizza better than pasta?',
-    'Can you schedule Sam for tomorrow?',
-    'Create an order',
-    'Approve the refund',
-    'Delete our menu item',
-    'What are the pros and cons of more dough hydration?',
-    'Tell me a joke about pizza',
-] as $question)b8d14_check(!fm8d14_needs_grounded_read($question),'leave conversation/write to owner: '.$question);
-b8d14_check(fm13b_subject('What toppings are on the Testarossa Pizza?')==='toppings testarossa pizza',
-    'shared subject normalizer retains leading T and full item name');
-b8d14_check(fmuk_menu_subject("What's on the Testarossa Pizza?")==='testarossa pizza',
-    'apostrophe question yields clean named menu subject');
-b8d14_check(fmuk_menu_subject('What toppings are on the Testarossa Pizza?')==='testarossa pizza',
-    'toppings question yields clean named menu subject');
-b8d14_check(fmuk_menu_subject('How much is the Testarossa Pizza?')==='testarossa pizza',
-    'price question yields clean named menu subject');
-foreach([
-    "What's on the Testarossa Pizza?",
-    'What toppings are on the Testarossa Pizza?',
-    'How much is the Testarossa Pizza?',
-] as $question)b8d14_check(fmuk_named_menu_item_question($question),
-    'named menu read: '.$question);
-foreach([
-    'What is a pizza?',
-    'Tell me a joke about pizza',
-    'Why does pizza dough rise?',
-    'Delete the Testarossa Pizza',
-    'Does the Testarossa Pizza contain nuts?',
-] as $question)b8d14_check(!fmuk_named_menu_item_question($question),
-    'general, governed or allergen question is not a named menu read: '.$question);
 
+$read=['description'=>'Read live published restaurant menu',
+    'parameters'=>['type'=>'object','properties'=>['category'=>['type'=>'string']],
+        'additionalProperties'=>false],
+    'impact'=>'read'];
+$write=['description'=>'Governed write requiring human approval',
+    'parameters'=>['type'=>'object','properties'=>new stdClass(),
+        'additionalProperties'=>false],
+    'impact'=>'routine'];
+$catalogue=['list_available_menu_items'=>$read,'update_employee_record'=>$write];
+$history=[['role'=>'user','content'=>'Show me the pizzas available tonight']];
+$payload=fmllm_payload('openai',$history);
+$captured=[];
+$selected=static function($endpoint,$headers,$request)use(&$captured):array{
+    $captured[]=$request;
+    return ['output'=>[['type'=>'function_call','call_id'=>'retry-1',
+        'name'=>'list_available_menu_items','arguments'=>'{"category":"pizza"}']]];
+};
+$calls=fm8d14_cognitive_read_retry('openai','fake',$payload,$catalogue,$selected);
+b8d14_check(count($calls)===1&&$calls[0]['name']==='list_available_menu_items',
+    'OpenAI cognitive retry selects a real menu tool');
+b8d14_check(($captured[0]['tool_choice']??'')==='required',
+    'second model request requires an explicit cognitive choice');
+$offered=array_column($captured[0]['tools'],'name');
+b8d14_check(in_array('list_available_menu_items',$offered,true)
+    &&in_array('answer_without_restaurant_tools',$offered,true),
+    'read and ordinary-conversation choices are offered');
+b8d14_check(!in_array('update_employee_record',$offered,true),
+    'retry never offers governed or routine write tools');
+b8d14_check(!str_contains(json_encode($captured,JSON_THROW_ON_ERROR),'Roasted Garlic'),
+    'no private database observation is supplied to model retry');
+
+$anthropicPayload=fmllm_payload('anthropic',$history);
+$claude=static function($endpoint,$headers,$request):array{
+    b8d14_check(($request['tool_choice']['type']??'')==='any',
+        'Anthropic cognitive retry requires a tool decision');
+    return ['content'=>[['type'=>'tool_use','id'=>'claude-1',
+        'name'=>'list_available_menu_items','input'=>['category'=>'pizza']]]];
+};
+$calls=fm8d14_cognitive_read_retry('anthropic','fake',$anthropicPayload,$catalogue,$claude);
+b8d14_check(count($calls)===1&&$calls[0]['arguments']['category']==='pizza',
+    'Claude cognitive retry chooses an authorized read');
+
+$ordinary=static fn():array=>['output'=>[['type'=>'function_call','call_id'=>'general',
+    'name'=>'answer_without_restaurant_tools','arguments'=>'{}']]];
+b8d14_check(fm8d14_cognitive_read_retry('openai','fake',$payload,$catalogue,$ordinary)===[],
+    'LLM can choose ordinary conversation without a database tool');
+$unsafe=static fn():array=>['output'=>[['type'=>'function_call','call_id'=>'bad',
+    'name'=>'update_employee_record','arguments'=>'{}']]];
+b8d14_check(fm8d14_cognitive_read_retry('openai','fake',$payload,$catalogue,$unsafe)===[],
+    'forged write call from retry is discarded');
+$mixed=static fn():array=>['output'=>[
+    ['type'=>'function_call','call_id'=>'one','name'=>'list_available_menu_items','arguments'=>'{}'],
+    ['type'=>'function_call','call_id'=>'two','name'=>'answer_without_restaurant_tools','arguments'=>'{}'],
+]];
+b8d14_check(fm8d14_cognitive_read_retry('openai','fake',$payload,$catalogue,$mixed)===[],
+    'ambiguous mixed read and conversation decision is discarded');
+$invalidArgs=static fn():array=>['output'=>[['type'=>'function_call','call_id'=>'bad-args',
+    'name'=>'list_available_menu_items','arguments'=>'bad-json']]];
+b8d14_check(fm8d14_cognitive_read_retry('openai','fake',$payload,$catalogue,$invalidArgs)===[],
+    'malformed model-selected arguments are not executed');
+$unexpectedCall=static function():array{throw new RuntimeException('No provider call expected');};
+b8d14_check(fm8d14_cognitive_read_retry('openai','fake',$payload,
+    ['update_employee_record'=>$write],$unexpectedCall)===[],
+    'catalogues without read tools do not consume retry tokens');
+
+// On a general question the initial conversational answer survives when the
+// second model pass explicitly chooses no database tool.
 $db=new PDO('sqlite::memory:');
-$principal=['id'=>17,'organization_id'=>31,'display_name'=>'Dave','permissions'=>['menu.view','schedule.view']];
-$context=['channel'=>'text','verifiedSameUser'=>false,'threadId'=>'agent-'.str_repeat('a',20),
-    'messageId'=>'msg-'.str_repeat('b',20)];
-$refresh=static fn():array=>$principal;
-$audit=static function(array $event):void{};
-$noToolOpenAi=static fn():array=>['output'=>[['type'=>'message','content'=>[[
-    'type'=>'output_text','text'=>"I can't pull the live menu or verified prices in this reply."
-]]]]];
-$question='Do you have access to the menu?';
-$history=[['role'=>'user','content'=>$question]];
-$result=fm8d3_turn($db,$principal,'openai','mock',$history,'',$noToolOpenAi,[],$refresh,$audit,$context);
-b8d14_check(($result['data']['groundedReadFallback']??false)===true,'no-tool OpenAI invokes local read');
-b8d14_check($result['skill']==='food_monster.unified_capabilities','canonical broker used');
-b8d14_check(str_contains($result['answer'],'active menu and prices'),'capabilities speak for actual authorization');
-b8d14_check(!str_contains($result['answer'],"can't pull"),'generic refusal discarded');
-b8d14_check(($result['data']['toolCalls']??-1)===0,'no model-selected tools falsely counted');
-
-$result=fm8d3_turn($db,$principal,'openai','mock',
-    [['role'=>'user','content'=>'What is on the menu?']],
-    '',$noToolOpenAi,[],$refresh,$audit,$context);
-b8d14_check(($result['data']['groundedReadFallback']??false)===true,
-    'menu overview always attempts verified broker');
-b8d14_check(!str_contains($result['answer'],"can't pull"),
-    'menu overview never repeats ungrounded model refusal');
-b8d14_check(str_contains($result['answer'],'temporarily unavailable')
-    || str_contains($result['answer'],'matching'), 'missing fixture reports missing source truthfully');
-
-$noToolClaude=static fn():array=>['content'=>[[
-    'type'=>'text','text'=>"I cannot access your live schedule."
-]]];
-$result=fm8d3_turn($db,$principal,'anthropic','mock',$history,'',$noToolClaude,[],$refresh,$audit,$context);
-b8d14_check(($result['data']['groundedReadFallback']??false)===true,
-    'no-tool Claude also invokes broker');
-
-$unprivileged=array_replace($principal,['permissions'=>[]]);
-$refreshDenied=static fn():array=>$unprivileged;
-$result=fm8d3_turn($db,$unprivileged,'openai','mock',
-    [['role'=>'user','content'=>'What is on the menu?']],
-    '',$noToolOpenAi,[],$refreshDenied,$audit,$context);
-b8d14_check(str_contains($result['answer'],'cannot access'),'unauthorized menu denied');
-b8d14_check(empty($result['sources']),'unauthorized user obtains no source IDs');
-
-$unverifiedVoice=array_replace($context,['channel'=>'voice','verifiedSameUser'=>false]);
-$result=fm8d3_turn($db,$principal,'openai','mock',
-    [['role'=>'user','content'=>'What is on the menu?']],
-    '',$noToolOpenAi,[],$refresh,$audit,$unverifiedVoice);
-b8d14_check(($result['data']['groundedReadFallback']??false)!==true,
-    'unverified shared-room speech cannot borrow logged-in tools');
-$verifiedVoice=array_replace($context,['channel'=>'voice','verifiedSameUser'=>true]);
-$result=fm8d3_turn($db,$principal,'openai','mock',$history,'',
-    $noToolOpenAi,[],$refresh,$audit,$verifiedVoice);
-b8d14_check(($result['data']['groundedReadFallback']??false)===true,
-    'verified same-user voice retains authorized broker access');
-$result=fm8d3_turn($db,$principal,'openai','mock',
-    [['role'=>'user','content'=>'Why does honey improve pizza dough?']],
-    '',$noToolOpenAi,[],$refresh,$audit,$context);
-b8d14_check(($result['data']['groundedReadFallback']??false)!==true,
-    'general reasoning remains model-first conversation');
-$result=fm8d3_turn($db,$principal,'openai','mock',
-    [['role'=>'user','content'=>'Approve the refund']],
-    '',$noToolOpenAi,[],$refresh,$audit,$context);
-b8d14_check(($result['data']['groundedReadFallback']??false)!==true,
-    'model abstention cannot silently route writes');
-echo "Food Monster B8D14 grounded fallback: PASS ($n assertions)\n";
+$actor=['id'=>17,'organization_id'=>31,'display_name'=>'Dave','permissions'=>['menu.view']];
+$attempt=0;
+$generalTransport=static function()use(&$attempt):array{
+    $attempt++;
+    if($attempt===1)return ['output'=>[['type'=>'message','content'=>[[
+        'type'=>'output_text','text'=>'Honey helps browning by increasing surface sugars.'
+    ]]]]];
+    return ['output'=>[['type'=>'function_call','call_id'=>'ordinary',
+        'name'=>'answer_without_restaurant_tools','arguments'=>'{}']]];
+};
+$reply=fm8d3_turn($db,$actor,'openai','fake',
+    [['role'=>'user','content'=>'Why does honey help browning?']],'',
+    $generalTransport,['list_available_menu_items'=>$read],
+    static fn():array=>$actor,static function(array $event):void{});
+b8d14_check($attempt===2&&str_contains($reply['answer'],'surface sugars'),
+    'one retry keeps natural conversation and preserves initial LLM answer');
+b8d14_check(($reply['data']['toolCalls']??-1)===0,
+    'ordinary conversation does not falsely claim a database tool ran');
+echo "Food Monster B8D14 cognitive retry: PASS ($n assertions)\n";

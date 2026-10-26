@@ -369,10 +369,20 @@
         const endpoint=String(delegation.route||'');
         const serverThread=String(delegation.threadId||'');
         const serverMessage=String(delegation.sourceMessageId||'');
+        const routePath=endpoint.split('?')[0];
+        const routeQuery=endpoint.slice(routePath.length);
+        // The existing offline knowledge route binds the same thread in
+        // its query string. Permit only this exact server-issued query;
+        // reject arbitrary URL parameters and external redirects.
+        const validQuery=routeQuery===''||(
+          routePath==='api/food-monster-unified-knowledge.php'
+          &&routeQuery==='?threadId='+encodeURIComponent(S.thread)
+        );
         // A delegation applies to this exact server-committed user turn and
         // resolves only to a known local PHP Agent. It cannot be used as a
         // browser-provided URL, model-suggested arbitrary endpoint, or replay.
-        if(!/^api\/[a-z][a-z0-9-]{1,80}\.php$/.test(endpoint)
+        if(!/^api\/[a-z][a-z0-9-]{1,80}\.php$/.test(routePath)
+           ||!validQuery
            ||serverThread!==S.thread
            ||serverMessage!==String(submitted?.message?.id||''))
           throw new Error('Agent handoff could not be verified. No operation was sent.');

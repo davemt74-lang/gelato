@@ -148,30 +148,6 @@ function fm8d3_turn(
         $confirmed=fm8d4_confirm_pending($pdo,$principal,$history);
         if($confirmed!==null)return $confirmed;
     }
-    // Explicit menu overviews and named-item questions must resolve against
-    // the tenant's active Menu Manager records before any model delegation.
-    // Model tool selection previously missed named items and produced a
-    // generic "I can't verify" refusal. No menu records reach the provider.
-    $latest=end($history);
-    $groundedQuestion=is_array($latest)&&($latest['role']??'')==='user'
-        ?trim((string)($latest['content']??'')):'';
-    $verifiedRead=($context['channel']??'text')!=='voice'
-        ||($context['verifiedSameUser']??false)===true;
-    $menuOverview=fmuk_menu_overview_question($groundedQuestion);
-    // Catalogue overrides are used by explicitly model-driven tool tests.
-    // Production calls have no override and always ground named menu facts.
-    $namedMenuItem=$catalogueOverride===null
-        &&fmuk_named_menu_item_question($groundedQuestion);
-    if($verifiedRead&&$groundedQuestion!==''&&($menuOverview||$namedMenuItem)){
-        $grounded=fmuk_answer($pdo,$principal,$groundedQuestion,
-            ($context['channel']??'text')==='voice',
-            ($context['verifiedSameUser']??false)===true);
-        $grounded['ok']=true;
-        $grounded['data']=array_merge((array)($grounded['data']??[]),
-            ['toolCalls'=>0,'groundedReadFallback'=>true,
-                'groundedMenuOverview'=>$menuOverview,'groundedNamedMenuItem'=>$namedMenuItem]);
-        return $grounded;
-    }
     $payload=fmllm_payload($provider,$history,$memory);
     $payload['tools']=fm8d3_provider_tools($provider,$catalogue);
     $payload['tool_choice']=$provider==='openai'?'auto':['type'=>'auto'];
@@ -189,17 +165,24 @@ function fm8d3_turn(
         $response=fm8d3_provider_request($provider,$key,$payload,$transport);
         $calls=fm8d3_decode_calls($provider,$response);
     }
+    $cognitiveRetry=false;
+    if(!$calls&&$resumePlan===null){
+        // A model abstention is not a PHP classifier. Give the same model one
+        // final structured decision among authorized READ tools or normal
+        // conversation, without reusing the initial prose as a tool grant.
+        try{
+            $calls=fm8d14_cognitive_read_retry($provider,$key,$payload,$catalogue,$transport);
+            $cognitiveRetry=$calls!==[];
+        }catch(Throwable $e){
+            error_log('Food Monster cognitive read retry failed: '.get_class($e));
+        }
+    }
     if(!$calls){
-        // The model may opt to answer in prose despite an explicit request
-        // for Gelato's recorded facts. Resolve an authorized, read-only
-        // source locally before displaying any ungrounded disclaimer.
-        $grounded=fm8d14_no_tool_read($pdo,$principal,$history,$context);
-        if($grounded!==null)return $grounded;
         $answer=fmllm_parse($provider,$response);
         if($answer==='')throw new RuntimeException('The AI provider returned no answer.');
         return ['ok'=>true,'skill'=>'agent.llm.conversation',
             'answer'=>mb_substr($answer,0,6000,'UTF-8'),
-            'sources'=>[],'data'=>['toolCalls'=>0]];
+            'sources'=>[],'data'=>['toolCalls'=>0,'cognitiveRetrySelectedRead'=>false]];
     }
     if(count($calls)>4)return ['ok'=>true,'skill'=>'agent.tool_limit',
         'answer'=>'This request includes too many tool actions. Please split it into smaller steps.',
@@ -300,7 +283,8 @@ function fm8d3_turn(
         'sources'=>[],'data'=>['status'=>'unverified']],(int)$result['completed']);
     // Terminal local response: personal timecard facts never go back to OpenAI/Claude.
     $data=['status'=>'completed','toolCalls'=>count($calls),
-        'tools'=>array_values(array_map(static fn($c)=>$c['name'],$calls))];
+        'tools'=>array_values(array_map(static fn($c)=>$c['name'],$calls)),
+        'cognitiveRetrySelectedRead'=>$cognitiveRetry];
     if($pendingApproval!==null)$data['approval']=$pendingApproval;
     if($delegation!==null)$data['delegation']=$delegation;
     return $save(['ok'=>true,'skill'=>'agent.model_selected_tools',
