@@ -26,7 +26,8 @@
     voiceDraft: {owned: false, previous: '', committed: ''},
     conversation: false, conversationTimer: null, conversationDraft: '',
     recentFinalSpeech: {text:'',at:0}, recognitionFaults:0, recognitionRestarts:0,
-    recognitionRetryTimer:null, wakeFinal:{text:'',at:0}, recoveryPendingTurn:null,
+    recognitionRetryTimer:null, recognitionStartedAt:0, recognitionLastError:'',
+    wakeFinal:{text:'',at:0}, recoveryPendingTurn:null,
   };
 
   const has = (permission) => S.permissions.includes('*') || S.permissions.includes(permission);
@@ -74,6 +75,16 @@
       @media(max-width:620px){#gelato-agent-bar{bottom:8px;width:calc(100% - 12px);border-radius:18px}}
     `;
     document.head.appendChild(style);
+  }
+
+  function ensureChatPopupScript() {
+    // Load the same transcript drawer on pages using the agent bar directly.
+    if (!document.getElementById('gelato-agent-bar') || window.GelatoDynamicAgentCanvas
+        || document.querySelector('script[src*="dynamic-agent-canvas.js"]')) return;
+    const script = document.createElement('script');
+    script.src = 'js/dynamic-agent-canvas.js?v=20261026-chat-universal1';
+    script.dataset.gelatoChatPopup = '1';
+    document.head.appendChild(script);
   }
 
   function mount() {
@@ -837,13 +848,11 @@
     }
     S.rec=activeRec;diag('starting');
     activeRec.lang='en-US';activeRec.continuous=true;activeRec.interimResults=true;
-    activeRec.onstart=()=>{if(S.rec!==activeRec)return;S.micActive=true;diag('active');renderListening();resumeSpokenTurnAfterReconnect();};
+    activeRec.onstart=()=>{if(S.rec!==activeRec)return;S.recognitionStartedAt=Date.now();S.recognitionLastError='';S.micActive=true;diag('active');renderListening();resumeSpokenTurnAfterReconnect();};
     activeRec.onresult=event=>{
       if(S.rec!==activeRec)return;
-      S.recognitionFaults=0;
       for(let index=event.resultIndex;index<event.results.length;index++){
         const result=event.results[index],text=String(result[0]?.transcript||'').trim();
-        if(result.isFinal&&text)S.recognitionRestarts=0;
         const evaluation=window.GelatoVoiceTurns?.evaluate?.(text,result[0]?.confidence,{wakeRequired:!S.listening});
         // FM-G7B2E: loudspeaker playback is never proof of a new user turn.
         // Do not treat "wake-required-while-speaking" as an interruption:
@@ -921,11 +930,11 @@
     };
     activeRec.onerror=event=>{
       if(S.rec!==activeRec)return;
-      const error=String(event.error||'unknown');diag('error',{error});
+      const error=String(event.error||'unknown');S.recognitionLastError=error;diag('error',{error});
       if(!['no-speech','aborted'].includes(error))S.recognitionFaults++;
-      if(['not-allowed','service-not-allowed','audio-capture'].includes(error)){
+      if(['not-allowed','service-not-allowed','audio-capture','network','language-not-supported'].includes(error)){
         haltVoiceAfterFailure();diag('blocked',{error});
-        status('Speech recognition blocked: '+error+'. Check browser microphone and speech-service settings.',6500);
+        status(error==='network' ? 'Speech recognition service cannot connect. Microphone stopped; check your network or browser speech service, then press Listen to retry.' : 'Speech recognition stopped: '+error+'. Check browser microphone and speech-service settings, then press Listen to retry.',8500);
         renderListening();return;
       }
       if(!['no-speech','aborted'].includes(error))status('Speech recognition: '+error+'. No transcript was received.',5000);
@@ -935,6 +944,12 @@
       S.micActive=false;diag('ended');renderListening();
       if((S.listening||S.wakeStandby)&&!document.hidden){
         suspendSpokenTurnForReconnect();
+        // Long healthy sessions may rotate recognition instances normally.
+        // Short start/end cycles must share one finite retry budget.
+        if(Date.now()-S.recognitionStartedAt>=30000
+           &&(!S.recognitionLastError||S.recognitionLastError==='no-speech')){
+          S.recognitionRestarts=0;S.recognitionFaults=0;
+        }
         S.recognitionRestarts++;
         if(S.recognitionFaults>=5||S.recognitionRestarts>=5){
           status('Speech service keeps restarting. Microphone paused; press Listen to retry.',6500);
@@ -1029,6 +1044,7 @@
       S.user = data.user || null;
       S.foodMonsterContext=data.foodMonsterContext||null;
       mount();
+      ensureChatPopupScript();
       if(typeof document.createElement==='function'
          &&typeof document.querySelector==='function'
          &&!document.querySelector('script[data-fm-task-controls]')){
