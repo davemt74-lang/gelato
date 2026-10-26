@@ -26,4 +26,4 @@ gavp_assert(!gavp_consume(7,19,$thread,$turn,$token,1046),'Expired grant rejecte
 $token=gavp_issue(7,19,$thread,$turn,1000);
 gavp_assert(!gavp_consume(7,19,$thread,$turn,str_repeat('0',48),1001),'Forged grant rejected');
 gavp_assert(!gavp_consume(7,19,$thread,$turn,$token,1001),'Correct grant cannot follow forgery');
-fwrite(STDOUT,"Private voice turn grant: 10 security assertions passed.\n");
+fwrite(STDOUT,"Private voice turn grant: replay, expiry and scope checks passed.\n");
