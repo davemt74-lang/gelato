@@ -1,0 +1,52 @@
+name: Publish Gelato Menu, CHAT and Microphone deployment
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-gelato-menu-chat-voice-20261026.yml'
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish-certified-package:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Verify exact certified merged-main ZIP
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/gelato-release"
+          actual_sha="$(gh run view 40361078430 -R "$GITHUB_REPOSITORY" --json headSha --jq .headSha)"
+          test "$actual_sha" = 'd3874ae61482a6acc747d19d075cbf9484741b3b'
+          conclusion="$(gh run view 40361078430 -R "$GITHUB_REPOSITORY" --json conclusion --jq .conclusion)"
+          test "$conclusion" = 'success'
+          gh run download 40361078430 -R "$GITHUB_REPOSITORY" -n gelato-full-deploy -D "$RUNNER_TEMP/gelato-release"
+          cd "$RUNNER_TEMP/gelato-release"
+          test -s gelato-full-deploy.zip
+          test -s gelato-full-deploy.sha256
+          actual_hash="$(sha256sum gelato-full-deploy.zip | cut -d' ' -f1)"
+          test "$actual_hash" = '33f8c46199778d0be95c0f1b6d629710199c48fd0cb2b5af95b7a48d4da6ff37'
+          printf '%s  %s\n' "$actual_hash" gelato-full-deploy.zip > gelato-full-deploy.sha256
+          sha256sum -c gelato-full-deploy.sha256
+          unzip -t gelato-full-deploy.zip | tail -n 1
+          if zipinfo -1 gelato-full-deploy.zip | grep -Eq '^(config\.php$|\.env$|uploads/|storage/)'; then
+            echo 'Live configuration or state unexpectedly included.' >&2
+            exit 1
+          fi
+          echo "Verified gelato-full-deploy.zip SHA-256: $actual_hash" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish permanent direct GitHub Release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag='gelato-chat-menu-voice-d3874ae6'
+          if ! gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$tag" -R "$GITHUB_REPOSITORY" --target 'd3874ae61482a6acc747d19d075cbf9484741b3b' --title 'Gelato Menu, CHAT and Microphone — certified Cloud deployment' --notes 'Includes merged PR #442 (named-item grounded restaurant menu lookup) and PR #443 (CHAT transcript button across authenticated chat-bar pages and finite microphone reconnection recovery). Source PR #443 passed 50/50 checks and the merged-main Full Deploy Package passed. Download the single ZIP, preserve live config.php, uploads/, and storage/, and run upgrade.php.'
+          fi
+          gh release upload "$tag" "$RUNNER_TEMP/gelato-release/gelato-full-deploy.zip" "$RUNNER_TEMP/gelato-release/gelato-full-deploy.sha256" -R "$GITHUB_REPOSITORY" --clobber
+          gh release view "$tag" -R "$GITHUB_REPOSITORY" --json assets --jq '.assets[] | select(.name == "gelato-full-deploy.zip" or .name == "gelato-full-deploy.sha256") | .name + " " + .url'
