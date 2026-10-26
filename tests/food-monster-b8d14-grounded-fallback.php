@@ -45,6 +45,21 @@ foreach([
     'What are the pros and cons of more dough hydration?',
     'Tell me a joke about pizza',
 ] as $question)b8d14_check(!fm8d14_needs_grounded_read($question),'leave conversation/write to owner: '.$question);
+foreach([
+    "What's on the Testarossa Pizza?",
+    'What toppings are on the Testarossa Pizza?',
+    'How much is the Testarossa Pizza?',
+] as $question)b8d14_check(fmuk_named_menu_item_question($question),
+    'named menu read: '.$question);
+foreach([
+    'What is a pizza?',
+    'Tell me a joke about pizza',
+    'Why does pizza dough rise?',
+    'Delete the Testarossa Pizza',
+    'Does the Testarossa Pizza contain nuts?',
+] as $question)b8d14_check(!fmuk_named_menu_item_question($question),
+    'general, governed or allergen question is not a named menu read: '.$question);
+
 $db=new PDO('sqlite::memory:');
 $principal=['id'=>17,'organization_id'=>31,'display_name'=>'Dave','permissions'=>['menu.view','schedule.view']];
 $context=['channel'=>'text','verifiedSameUser'=>false,'threadId'=>'agent-'.str_repeat('a',20),
