@@ -45,6 +45,8 @@ foreach([
     'What are the pros and cons of more dough hydration?',
     'Tell me a joke about pizza',
 ] as $question)b8d14_check(!fm8d14_needs_grounded_read($question),'leave conversation/write to owner: '.$question);
+b8d14_check(fm13b_subject('What toppings are on the Testarossa Pizza?')==='toppings testarossa pizza',
+    'shared subject normalizer retains leading T and full item name');
 b8d14_check(fmuk_menu_subject("What's on the Testarossa Pizza?")==='testarossa pizza',
     'apostrophe question yields clean named menu subject');
 b8d14_check(fmuk_menu_subject('What toppings are on the Testarossa Pizza?')==='testarossa pizza',
