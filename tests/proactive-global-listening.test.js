@@ -44,7 +44,7 @@ function build(){
     navigator:{mediaDevices:{getUserMedia:async()=>{captureCalls++;return {getTracks(){return [{stop(){}}]}};}}},
     Float64Array,Uint8Array,Array,Math,
     setInterval:fn=>{fn();return 1;},clearInterval:()=>{},
-    setTimeout:(fn,ms)=>{if(ms<4000)queueMicrotask(fn);return 1;},clearTimeout:()=>{}};
+    setTimeout:(fn,ms)=>{if(ms<=8000)queueMicrotask(fn);return 1;},clearTimeout:()=>{}};
   vm.runInNewContext(parse,context,{filename:'proactive-listening-commands.js'});
   vm.runInNewContext(global,context,{filename:'global-agent.js'});
   return {win,events};
@@ -87,5 +87,39 @@ const settle=async()=>{for(let i=0;i<24;i++)await Promise.resolve();};
  const second=build();await settle();
  assert.equal(second.win.GelatoGlobalAgent.listeningStatus.savedListening,false);
  assert.equal(second.win.GelatoGlobalAgent.listeningStatus.microphoneActive,false);
+ const network=build();await settle();
+ const networkAgent=network.win.GelatoGlobalAgent;
+ assert.equal(await networkAgent.setListening(true),true);
+ await settle();
+ const networkRecognizer=micStarts.at(-1),beforeNetwork=micStarts.length;
+ networkRecognizer.onerror?.({error:'network'});
+ await settle();
+ assert.equal(networkAgent.listeningStatus.listenActive,false,
+   'A speech-service network failure must stop listening instead of reconnecting');
+ assert.equal(networkAgent.listeningStatus.microphoneActive,false,
+   'A speech-service network failure must release the microphone');
+ assert.equal(micStarts.length,beforeNetwork,'No automatic connection loop after network failure');
+ assert.ok(network.events.some(e=>e.type==='gelato-agent-status'
+   &&e.message?.includes('service cannot connect')),
+   'UI explains why the microphone stopped');
+ const retries=build();await settle();
+ const retryAgent=retries.win.GelatoGlobalAgent;
+ assert.equal(await retryAgent.setListening(true),true);await settle();
+ const originalMicStarts=micStarts.length;
+ for(let n=1;n<=4;n++){
+   const shortLived=micStarts.at(-1);
+   shortLived.phrase('dictation'); // Final transcriptions cannot reset the failure budget.
+   shortLived.onend?.();await settle();
+   assert.equal(micStarts.length,originalMicStarts+n,
+     'One bounded retry per short-lived speech recognizer, attempt '+n);
+ }
+ micStarts.at(-1).onend?.();await settle();
+ assert.equal(retryAgent.listeningStatus.listenActive,false,
+   'Five unstable restarts must pause listening');
+ assert.equal(retryAgent.listeningStatus.microphoneActive,false,
+   'Retry exhaustion releases the microphone');
+ const cappedAt=micStarts.length;
+ await settle();
+ assert.equal(micStarts.length,cappedAt,'No further queued retries after cap');
  console.log('proactive-global-listening-lifecycle=ok');
 })().catch(error=>{console.error(error);process.exitCode=1});
