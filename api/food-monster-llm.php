@@ -173,11 +173,16 @@ try{
         'messageCharacters'=>mb_strlen($message,'UTF-8'),
         'toolCalls'=>(int)($result['data']['toolCalls']??0),
         'privateToolsAvailable'=>$allowTools,
+        'voiceIdentityRequired'=>(($last['channel']??'')==='voice'&&!$allowTools),
     ]);
     app_json_response(['ok'=>true,'skill'=>$result['skill']??'agent.llm.conversation',
         'answer'=>$result['answer'],
         'provider'=>$selected['provider'],'model'=>fmllm_model($selected['provider']),
-        'sources'=>$result['sources']??[],'data'=>$result['data']??null]);
+        'sources'=>$result['sources']??[],
+        'data'=>array_replace((array)($result['data']??[]),[
+            'privateToolsAvailable'=>$allowTools,
+            'voiceIdentityRequired'=>(($last['channel']??'')==='voice'&&!$allowTools),
+        ])]);
 }catch(InvalidArgumentException $e){
     app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);
 }catch(FmLlmProviderException $e){

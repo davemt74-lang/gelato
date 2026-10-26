@@ -14,6 +14,7 @@
     voiceUntil: 0,
     verifiedSpeaker: null,
     usedVoiceEvents:new Set(),
+    voiceMonitor:null, voiceMonitorStarting:false, voiceSample:null,
     listening: false,
     savedListening: false,
     wakeStandby: false,
@@ -297,9 +298,24 @@
     try {
       // One signed voice event is evidence for ONE completed transcript only.
       // A subsequent turn without fresh verification is deliberately unknown.
-      const possibleVoiceEvent=voice&&S.verifiedSpeaker
-        &&Date.now()-(S.verifiedSpeaker.verifiedAt||0)<60000
-        ?String(S.verifiedSpeaker.eventId||''):'';
+      // A new acoustic match is required for THIS speech turn. Never reuse
+      // an earlier participant's identity to grant private reads.
+      let possibleVoiceEvent='';
+      const sample=voice?S.voiceSample:null;
+      S.voiceSample=null;
+      if(voice&&sample&&sample.text===text&&Date.now()-sample.at<7000){
+        try{
+          const verification=await post('api/voice-identity.php',{
+            action:'verify',features:sample.vector,matchAny:false
+          });
+          if(verification.match?.matched&&verification.match?.sessionUserMatch)
+            possibleVoiceEvent=String(verification.match.eventId||'');
+        }catch(error){diag('voice-turn-unverified',{reason:String(error?.name||'unavailable')});}
+      }
+      // A manual match remains valid for one turn only.
+      if(!possibleVoiceEvent&&voice&&S.verifiedSpeaker?.sessionUserMatch
+         &&Date.now()-(S.verifiedSpeaker.verifiedAt||0)<60000)
+        possibleVoiceEvent=String(S.verifiedSpeaker.eventId||'');
       const freshSpeakerEvent=/^voice-[a-zA-Z0-9-]{8,90}$/.test(possibleVoiceEvent)
         &&!S.usedVoiceEvents.has(possibleVoiceEvent)?possibleVoiceEvent:'';
       const submitted = await append('user', text, {
@@ -485,6 +501,71 @@
     try {speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(String(text).slice(0,1600));speechSynthesis.speak(utterance);} catch {}
   }
 
+
+  // Auto-reverify every completed spoken turn with a fresh, non-replayable
+  // identity event. Only consented/enrolled profiles enable this local sampler.
+  // Raw audio is not stored or uploaded; the rolling features expire in memory.
+  function voiceSampleFromMonitor(text){
+    const monitor=S.voiceMonitor;if(!monitor)return;
+    const frames=monitor.frames.filter(row=>row.at>=Date.now()-3200&&row.level>=0.03);
+    if(frames.length<4)return;
+    const bands=Array(24).fill(0);
+    for(const frame of frames)for(let i=0;i<24;i++)bands[i]+=frame.bands[i];
+    const vector=bands.map(value=>value/frames.length);
+    const norm=Math.sqrt(vector.reduce((total,value)=>total+value*value,0));
+    if(norm>=0.03)S.voiceSample={text:String(text||'').trim(),
+      at:Date.now(),vector:vector.map(value=>value/norm)};
+  }
+  function stopVoiceMonitor(){
+    const monitor=S.voiceMonitor;S.voiceMonitor=null;S.voiceSample=null;
+    if(!monitor)return;
+    clearInterval(monitor.timer);
+    try{monitor.stream.getTracks().forEach(track=>track.stop());}catch{}
+    try{void monitor.context.close();}catch{}
+  }
+  async function startVoiceMonitor(){
+    if(S.voiceMonitor||S.voiceMonitorStarting||!S.listening||document.hidden||!has('voice.agent')||!has('voice.self')
+       ||!navigator.mediaDevices?.getUserMedia)return false;
+    const Audio=window.AudioContext||window.webkitAudioContext;
+    if(!Audio)return false;
+    let stream=null,context=null;
+    S.voiceMonitorStarting=true;
+    try{
+      const profile=await req('api/voice-identity.php?action=profile');
+      if(profile.profile?.status!=='active'||!S.listening||document.hidden)return false;
+      stream=await navigator.mediaDevices.getUserMedia({
+        audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:false}
+      });
+      context=new Audio();
+      const source=context.createMediaStreamSource(stream);
+      const analyser=context.createAnalyser();analyser.fftSize=1024;
+      source.connect(analyser);
+      if(!S.listening||document.hidden){stream.getTracks().forEach(track=>track.stop());void context.close();return false;}
+      const monitor={stream,context,frames:[],timer:null};
+      S.voiceMonitor=monitor;
+      const bins=new Uint8Array(analyser.frequencyBinCount);
+      monitor.timer=setInterval(()=>{
+        if(S.voiceMonitor!==monitor)return;
+        analyser.getByteFrequencyData(bins);
+        const bands=[];
+        for(let i=0;i<24;i++){
+          const low=Math.floor(i*bins.length/24),high=Math.floor((i+1)*bins.length/24);
+          let sum=0;for(let j=low;j<high;j++)sum+=bins[j];
+          bands.push(sum/Math.max(1,high-low)/255);
+        }
+        const level=bands.reduce((total,value)=>total+value,0)/24;
+        monitor.frames.push({at:Date.now(),bands,level});
+        if(monitor.frames.length>60)monitor.frames.shift();
+      },80);
+      return true;
+    }catch(error){
+      if(stream)stream.getTracks().forEach(track=>track.stop());
+      if(context)void context.close();
+      diag('voice-identity-monitor-unavailable',{reason:String(error?.name||'unavailable')});
+      return false;
+    }finally{S.voiceMonitorStarting=false;}
+  }
+
   async function captureFeatures(milliseconds = 2800) {
     if (!navigator.mediaDevices?.getUserMedia) throw new Error('Microphone capture is not available.');
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -659,6 +740,7 @@
     field.value=value;field.dataset.voiceInterim=final?'false':'true';
     draft.owned=true;draft.previous=value;
     if(final)draft.committed=value;
+    if(final)voiceSampleFromMonitor(value);
     field.dispatchEvent(new Event('input',{bubbles:true}));
     if(S.listening&&!once){clearConversationTimer();if(final&&autoSend)scheduleSpokenTurn(value,true);}
     window.dispatchEvent(new CustomEvent('gelato-agent-dictation',{
@@ -810,8 +892,10 @@
         const started=S.rec?true:startContinuous();
         if(!started){S.listening=false;S.wakeStandby=false;stopPoll();renderListening();return false;}
         startPoll();
+        void startVoiceMonitor();
         status('Listening active · speech sends automatically after you pause. Say “Hey Gelato” for commands.',5500);
       }else{
+        stopVoiceMonitor();
         stopPoll();
         if(keepWake&&S.rec){
           status('Wake standby. Say “Hey Gelato, start listening”, or Microphone Off.',4500);
@@ -843,7 +927,7 @@
   function haltVoiceAfterFailure(){
     S.recoveryPendingTurn=null;clearConversationTimer();S.conversationDraft='';resetVoiceDraft();
     S.conversation=false;S.listening=false;S.wakeStandby=false;
-    stopPoll();stopContinuous();renderConversation();renderListening();
+    stopVoiceMonitor();stopPoll();stopContinuous();renderConversation();renderListening();
   }
   function startContinuous(){
     const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -934,6 +1018,7 @@
           if(evaluation?.interrupt)interruptSpeech('voice-barge-in');
           window.dispatchEvent(new CustomEvent('gelato-agent-voice-transcript',{detail:{text}}));
           if(isDuplicateWakeTurn(text)){diag('duplicate-final-suppressed');continue;}
+          voiceSampleFromMonitor(text);
           void send(text,true);
         }
       }
@@ -1075,10 +1160,10 @@
   }
 
   document.addEventListener('visibilitychange',()=>{
-    if(document.hidden){S.recoveryPendingTurn=null;clearConversationTimer();S.conversationDraft='';stopContinuous();diag('paused');if(S.listening||S.wakeStandby)status('Microphone paused · tab hidden.');}
-    else if(S.listening||S.wakeStandby)startContinuous();
+    if(document.hidden){S.recoveryPendingTurn=null;clearConversationTimer();S.conversationDraft='';stopVoiceMonitor();stopContinuous();diag('paused');if(S.listening||S.wakeStandby)status('Microphone paused · tab hidden.');}
+    else if(S.listening||S.wakeStandby){startContinuous();if(S.listening)void startVoiceMonitor();}
   });
-  window.addEventListener('beforeunload',()=>{stopContinuous();interruptSpeech('page-unload');});
+  window.addEventListener('beforeunload',()=>{stopVoiceMonitor();stopContinuous();interruptSpeech('page-unload');});
 
   function proactiveGreet(text){
     if(!S.proactiveVoiceEnabled||!has('agent.proactive')||document.hidden

@@ -50,9 +50,30 @@ $registry=fm8d3_catalogue($principal);
 b8d3_check(isset($registry['get_my_hours'])&&isset($registry['get_current_user']),'authorized model sees both skills');
 b8d3_check(!isset(fm8d3_catalogue(array_replace($principal,['permissions'=>[]]))['get_my_hours']),'unprivileged model cannot discover timecards');
 b8d3_check(!in_array('user_id',$registry['get_my_hours']['allowedArguments'],true),'no model-controlled employee selector');
-b8d3_check(count(fm8d3_provider_tools('openai',$registry))===2,'OpenAI receives registered schema');
-b8d3_check(count(fm8d3_provider_tools('anthropic',$registry))===2,'Claude receives registered schema');
+b8d3_check(count(fm8d3_provider_tools('openai',$registry))===3,'OpenAI receives registered schema');
+b8d3_check(count(fm8d3_provider_tools('anthropic',$registry))===3,'Claude receives registered schema');
 b8d3_check(fm8d3_provider_tools('anthropic',$registry)[1]['name']==='get_my_hours','Anthropic tool registered');
+$manager=['id'=>7,'organization_id'=>21,'display_name'=>'David Evans',
+    'role_slug'=>'manager',
+    'permissions'=>['schedule.view','schedule.manage','schedule.agent']];
+$managerTools=fm8d3_catalogue($manager);
+b8d3_check(isset($managerTools['get_my_schedule'])
+    &&isset($managerTools['get_employee_schedule'])
+    &&isset($managerTools['get_day_roster'])
+    &&isset($managerTools['check_staff_availability'])
+    &&isset($managerTools['propose_staff_shift']),
+    'manager model receives existing schedule, roster and confirmed shift tools');
+$unprivileged=fm8d3_catalogue(array_replace($manager,['permissions'=>[]]));
+b8d3_check(!isset($unprivileged['get_employee_schedule'])
+    &&!isset($unprivileged['get_day_roster'])
+    &&!isset($unprivileged['propose_staff_shift']),
+    'unprivileged voice or text must not discover protected roster and shift tools');
+b8d3_check(isset($managerTools['list_my_gelato_capabilities']),
+    'LLM receives runtime capability introspection tool');
+$capabilities=($managerTools['list_my_gelato_capabilities']['execute'])([],$manager);
+b8d3_check(str_contains($capabilities['data']['answer'],'get_day_roster')
+    &&str_contains($capabilities['data']['answer'],'Scheduling'),
+    'capability answer reflects permission-scoped executable tools and existing agents');
 $fakeDb=new PDO('sqlite::memory:');
 $executed=0;$audit=[];$payloads=[];
 $mockCatalogue=[
@@ -125,4 +146,7 @@ b8d3_check(str_contains($api,'fm8d3_turn('),'live model endpoint uses tool selec
 b8d3_check(str_contains($api,'avc_verified_speaker('),'voice cannot inherit owner tool grants');
 b8d3_check(str_contains($api,'$allowTools'),'voice tools require verified identity');
 b8d3_check(str_contains($api,'session_write_close()'),'long network call releases session lock');
+b8d3_check(str_contains($api,"'voiceIdentityRequired'")
+    &&str_contains($api,"'privateToolsAvailable'"),
+    'API reports the real voice identity gate instead of claiming scheduling tools are absent');
 echo "Food Monster B8D3: $n assertions passed.\n";

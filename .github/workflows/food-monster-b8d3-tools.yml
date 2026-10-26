@@ -8,6 +8,8 @@ on:
       - 'includes/food-monster-b8d3-tool-runtime.php'
       - 'tests/food-monster-b8d3-tool-selection.php'
       - 'tests/food-monster-b8d3-mariadb.php'
+      - 'tests/agent-voice-capability-continuity.test.cjs'
+      - 'js/global-agent.js'
       - 'config/food-monster-capability-map.json'
       - '.github/workflows/food-monster-b8d3-tools.yml'
   push:
@@ -34,6 +36,10 @@ jobs:
           php -l tests/food-monster-b8d3-mariadb.php
       - name: Model-selected tools, authorization, personal-hours calculations and provider isolation
         run: php tests/food-monster-b8d3-tool-selection.php
+      - name: Continuous voice identity and dynamic tool availability
+        run: |
+          node --check js/global-agent.js
+          node tests/agent-voice-capability-continuity.test.cjs
       - name: Existing conversational LLM isolation regression
         run: php tests/food-monster-g12e-llm-isolation.php
       - name: Existing B8D1 conversation regression
