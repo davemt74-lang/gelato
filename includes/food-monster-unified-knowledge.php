@@ -60,6 +60,29 @@ function fmuk_menu_overview_question(string $question): bool
     return preg_match('/\b(?:what(?:\x27s| is) on the menu|show (?:me )?(?:the |our )?menu|menu (?:overview|list|items|options|specials)|what (?:food|dishes|pizzas|pastas) (?:do|can) (?:you|we) (?:have|serve|offer))\b/iu',$question)===1;
 }
 
+/**
+ * A named menu fact requires Gelato's active item record even when the model
+ * would otherwise reply without selecting a tool. This never treats general
+ * cooking questions, write instructions, or allergy clearance as item reads.
+ */
+function fmuk_named_menu_item_question(string $question): bool
+{
+    if(fmuk_menu_overview_question($question)
+        ||!in_array('menu',fmuk_topics($question),true))return false;
+    if(preg_match('/\b(?:why|should|would|better|joke|story|poem|recipe|formula|allerg(?:y|ic|en|ens|ies)|nuts?|peanuts?|gluten|celiac|safe|cross.contact)\b/iu',$question))return false;
+    if(!preg_match('/\b(?:what|which|show|list|tell|describe|does|do|is|are|how much|prices?|costs?|toppings?|ingredients?|contains?)\b/iu',$question))return false;
+    $subject=fmuk_menu_subject($question);
+    $name=trim(preg_replace('/\b(?:pizza|pie|pasta|dish|item)\b/iu',' ',$subject)??$subject);
+    return mb_strlen($name,'UTF-8')>=3;
+}
+
+/** Remove question phrasing; keep the distinctive item name for SQL matching. */
+function fmuk_menu_subject(string $question): string
+{
+    $subject=fm13b_subject($question);
+    return trim(preg_replace('/\b(?:s|toppings?|listed|details?|about|serve|served|has|have)\b/iu',' ',$subject)??$subject);
+}
+
 function fmuk_roster_question(string $question): bool
 {
     return preg_match('/\b(?:who (?:are|is) (?:the |our )?(?:employees|staff|crew)|(?:show|list) (?:me )?(?:the |our )?(?:employees|staff|crew|team)|employee (?:directory|roster|list)|staff (?:directory|roster|list))\b/iu',$question)===1;
@@ -154,7 +177,7 @@ function fmuk_capabilities(array $user,bool $voice,bool $ownerVoiceVerified): ar
 
 function fmuk_menu_items(PDO $pdo,int $org,string $question): array
 {
-    $subject=fm13b_subject($question);
+    $subject=fmuk_menu_subject($question);
     // Menu-wide requests return an actual bounded menu slice. A specific
     // item request is searched against active menu evidence first.
     $overview=fmuk_menu_overview_question($question)||preg_match('/\b(?:menu|specials?|options?|what (?:do|can) (?:you|we) (?:have|serve|offer))\b/iu',$question)===1
@@ -167,6 +190,31 @@ function fmuk_menu_items(PDO $pdo,int $org,string $question): array
             $name=trim(preg_replace('/\b(?:pizza|pie|dish|item)\b/iu',' ',$subject)??$subject);
             if($name!==$subject&&mb_strlen($name,'UTF-8')>=3)
                 $matches=menu_training_search_items($pdo,$org,$name,12);
+        }
+        if(!$matches&&mb_strlen($name??$subject,'UTF-8')>=5){
+            // Narrowly tolerate an extra/missing letter in a distinctive name:
+            // "Testarossa" may be stored as "Testarosa". Never guess a record
+            // from a different organization or an inactive menu section.
+            $needle=mb_strtolower(trim($name??$subject),'UTF-8');
+            $needle=preg_replace('/[^\p{L}\p{N}]/u','',$needle)??$needle;
+            if(strlen($needle)>=5&&strlen($needle)<=80){
+                $q=$pdo->prepare("SELECT i.id,i.name FROM menu_items i
+                    JOIN menu_sections s ON s.id=i.section_id AND s.organization_id=i.organization_id
+                    WHERE i.organization_id=? AND i.is_active=1 AND s.status='active'
+                    ORDER BY i.id LIMIT 500");
+                $q->execute([$org]);
+                $best=[];$bestDistance=3;
+                foreach($q->fetchAll(PDO::FETCH_ASSOC) as $row){
+                    $candidate=mb_strtolower((string)$row['name'],'UTF-8');
+                    $candidate=trim(preg_replace('/\b(?:pizza|pie|pasta|dish|item)\b/iu',' ',$candidate)??$candidate);
+                    $candidate=preg_replace('/[^\p{L}\p{N}]/u','',$candidate)??$candidate;
+                    $distance=levenshtein($needle,$candidate);
+                    if($distance<$bestDistance){$bestDistance=$distance;$best=[(int)$row['id']];}
+                    elseif($distance===$bestDistance)$best[]=(int)$row['id'];
+                }
+                if($bestDistance<=2&&count($best)===1)
+                    $matches=menu_training_items_by_ids($pdo,$org,$best,1);
+            }
         }
         return $matches;
     }
