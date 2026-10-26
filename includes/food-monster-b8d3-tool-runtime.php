@@ -164,7 +164,7 @@ function fm8d3_turn(
             ($context['verifiedSameUser']??false)===true);
         $grounded['ok']=true;
         $grounded['data']=array_merge((array)($grounded['data']??[]),
-            ['toolCalls'=>0,'groundedMenuOverview'=>true]);
+            ['toolCalls'=>0,'groundedReadFallback'=>true,'groundedMenuOverview'=>true]);
         return $grounded;
     }
     $payload=fmllm_payload($provider,$history,$memory);
