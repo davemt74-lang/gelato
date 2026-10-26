@@ -202,7 +202,9 @@
   window.addEventListener('gelato-agent-ready',()=>{removeLegacyCanvasButton();ensureDrawerToggle();if(state.open)refresh().catch(()=>{});if(state.drawerOpen)refreshDrawer().catch(()=>{});});
   window.addEventListener('gelato-agent-response',(event)=>{state.activeThread=event.detail?.threadId||window.GelatoGlobalAgent?.threadId||state.activeThread;
     // Never open a response view automatically, including in workspace.
-    if(isWorkspacePage()&&state.open){setStatus('');refreshThreadsAndMessages().catch(error=>setStatus(error.message));}
+    if(isWorkspacePage()){
+      if(state.open){setStatus('');refreshThreadsAndMessages().catch(error=>setStatus(error.message));}
+    }
     state.drawerPending=false;
     if(state.drawerOpen)refreshDrawer().catch(error=>renderDrawerError(error));
   });
