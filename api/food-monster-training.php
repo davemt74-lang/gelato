@@ -3,6 +3,7 @@ declare(strict_types=1);
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/agent-workspace-core.php';
 require_once __DIR__.'/../includes/agent-voice-conversation.php';
+require_once __DIR__.'/../includes/agent-private-voice.php';
 require_once __DIR__.'/../includes/food-monster-g13c-training.php';
 
 $user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];$uid=(int)$user['id'];
@@ -28,10 +29,17 @@ try{
     $voice=($latest['channel']??'')==='voice';
     $personId=$uid;$ownerVoiceVerified=false;
     if($voice){
+        // Speaker matching is provisional; a training write or private
+        // recipe read requires explicit consent for this canonical turn.
+        $ownerVoiceVerified=gavp_was_approved($org,$uid,$room,$turnId);
+        if(!$ownerVoiceVerified)
+            throw new DomainException('Approve this spoken training request in Agent Chat before accessing private training or saving progress.');
         $voiceEvent=(string)($latest['voice_event_public_id']??'');
         $ownerSpeaker=$voiceEvent!==''?avc_verified_speaker($pdo,$org,$user,$voiceEvent):null;
-        if($ownerSpeaker&&(int)$ownerSpeaker['userId']===$uid){
-            $ownerVoiceVerified=true;
+        if(!$ownerSpeaker||(int)$ownerSpeaker['userId']===$uid){
+            // Explicit operator consent, not a biometric match, is the
+            // private-access boundary. Missing acoustics cannot impersonate
+            // an independently attributed participant.
         }else{
             // The owner is only a room operator: do not treat their login as
             // the participant's identity. A fresh server-mirrored voice event
@@ -72,6 +80,8 @@ try{
     // inherit the room operator's credentials for an employee voice.
     $isRecipe=$command['action']==='start'&&preg_match('/\brecipe\b/iu',$command['subject']??'')===1;
     $intent=$isRecipe?'recipe':'training';
+    if($personId!==$uid&&$isRecipe)
+        throw new DomainException('A participant cannot inherit the operator\'s private recipe access.');
     if(!fm13b_allowed($user,$intent,$ownerVoiceVerified,$voice))
         throw new DomainException('You do not have permission to access those training records.');
 
@@ -111,6 +121,8 @@ try{
             // Progress on private recipe content cannot be continued by another
             // employee in the Super Admin's shared room.
             $kind=(string)($prior['kind']??'');
+            if($kind==='recipe'&&$personId!==$uid)
+                throw new DomainException('Private recipe training cannot be continued for a room participant.');
             if(!fm13b_allowed($user,$kind==='recipe'?'recipe':'training',$ownerVoiceVerified,$voice))
                 throw new DomainException('You cannot access this training procedure.');
             $material=fm13c_fetch_material($pdo,$org,$prior);

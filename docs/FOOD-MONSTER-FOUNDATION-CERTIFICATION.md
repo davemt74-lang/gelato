@@ -12,6 +12,10 @@ has passed all required CI checks, been reviewed, merged, and verified.
 - Do not inherit a previously verified participant's rights on a new turn.
 - Deny and test expired, forged, repeated, wrong-user, wrong-thread and wrong-organization grants.
 - Preserve anonymous/public conversation and typed authenticated access.
+- Audit direct grounded/unified knowledge and legacy training endpoints: none may
+  unlock private records using an acoustic match, including delegated requests.
+- Clear approval when a new canonical user turn is appended, then verify expiry
+  and original thread/message scoping across asynchronous evidence endpoints.
 
 **Important:** The explicit UI confirmation is consent from an already authenticated
 browser session. It is not multi-factor authentication, and a physically unattended

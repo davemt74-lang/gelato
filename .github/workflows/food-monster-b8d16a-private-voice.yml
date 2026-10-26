@@ -5,6 +5,11 @@ on:
     paths:
       - 'api/agent-workspace.php'
       - 'api/food-monster-llm.php'
+      - 'api/food-monster-knowledge.php'
+      - 'api/food-monster-unified-knowledge.php'
+      - 'api/food-monster-training.php'
+      - 'includes/food-monster-b8d6-training.php'
+      - 'tests/food-monster-manual-chat-browser.test.cjs'
       - 'includes/agent-voice-conversation.php'
       - 'includes/agent-private-voice.php'
       - 'includes/food-monster-b8d3-tool-runtime.php'
@@ -19,6 +24,11 @@ on:
     paths:
       - 'api/agent-workspace.php'
       - 'api/food-monster-llm.php'
+      - 'api/food-monster-knowledge.php'
+      - 'api/food-monster-unified-knowledge.php'
+      - 'api/food-monster-training.php'
+      - 'includes/food-monster-b8d6-training.php'
+      - 'tests/food-monster-manual-chat-browser.test.cjs'
       - 'includes/agent-voice-conversation.php'
       - 'includes/agent-private-voice.php'
       - 'includes/food-monster-b8d3-tool-runtime.php'
@@ -40,6 +50,10 @@ jobs:
         run: |
           php -l api/agent-workspace.php
           php -l api/food-monster-llm.php
+          php -l api/food-monster-knowledge.php
+          php -l api/food-monster-unified-knowledge.php
+          php -l api/food-monster-training.php
+          php -l includes/food-monster-b8d6-training.php
           php -l includes/agent-voice-conversation.php
           php -l includes/agent-private-voice.php
           php -l includes/food-monster-b8d3-tool-runtime.php
@@ -57,3 +71,4 @@ jobs:
           npm install --no-save --no-package-lock playwright@1.56.0
           npx playwright install --with-deps chromium
           node tests/agent-private-voice-dialog-browser.test.cjs
+          node tests/food-monster-manual-chat-browser.test.cjs

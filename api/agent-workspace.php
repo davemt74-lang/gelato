@@ -3,6 +3,7 @@ declare(strict_types=1);
 require __DIR__.'/../includes/bootstrap.php';
 require __DIR__.'/../includes/agent-workspace-core.php';
 require_once __DIR__.'/../includes/agent-voice-conversation.php';
+require_once __DIR__.'/../includes/agent-private-voice.php';
 require_once __DIR__.'/../includes/agent-node-registry.php';
 require_once __DIR__.'/../includes/admin-control-core.php';
 require_once __DIR__.'/../includes/menu-training-knowledge.php';
@@ -146,6 +147,7 @@ try{
                 unset($_SESSION[$pendingKey]);
             }
             $pdo->commit();
+            if($role==='user')gavp_clear_approved();
         }catch(Throwable $error){
             if($pdo->inTransaction())$pdo->rollBack();
             unset($_SESSION[$pendingKey]);

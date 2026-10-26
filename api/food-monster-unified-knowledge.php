@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/agent-workspace-core.php';
-require_once __DIR__.'/../includes/agent-voice-conversation.php';
+require_once __DIR__.'/../includes/agent-private-voice.php';
 require_once __DIR__.'/../includes/food-monster-unified-knowledge.php';
 
 $user=app_require_auth();$pdo=app_pdo();
@@ -30,9 +30,7 @@ try{
         app_json_response(['ok'=>false,'message'=>'This must be the latest saved Agent Chat user turn.'],409);
     $voice=($last['channel']??'')==='voice';$ownerVoiceVerified=false;
     if($voice){
-        $event=(string)($last['voice_event_public_id']??'');
-        $matched=$event!==''?avc_verified_speaker($pdo,$org,$user,$event):null;
-        $ownerVoiceVerified=is_array($matched)&&(int)($matched['userId']??0)===$uid;
+        $ownerVoiceVerified=gavp_was_approved($org,$uid,$thread,(string)$last['public_id']);
     }
     $result=fmuk_answer($pdo,$user,$question,$voice,$ownerVoiceVerified);
     app_audit($pdo,$org,$uid,'food_monster.unified_knowledge_read','agent_conversation',$thread,null,

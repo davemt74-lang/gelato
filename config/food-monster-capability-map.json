@@ -183,7 +183,7 @@
     {
       "path": "api/agent-workspace.php",
       "feature": "agent_core",
-      "sourceBlob": "94afeb2f2d8ab540c5fc99d34b6d37a0a52dc951",
+      "sourceBlob": "9ab654ac3e4dd96b8cf50fc72dfa7c4e263b8c78",
       "discoveredActions": [
         "append",
         "archive",
@@ -673,7 +673,7 @@
     {
       "path": "api/food-monster-knowledge.php",
       "feature": "food_monster",
-      "sourceBlob": "6d2628b39cc01dc5cc2474ee1ec3768a7bcf69d1",
+      "sourceBlob": "fa074f8164c8627d68ff7c0bdada4c509db49203",
       "discoveredActions": [],
       "permissionTokensSeen": [],
       "directAppRequireAuthCall": true,
@@ -800,7 +800,7 @@
     {
       "path": "api/food-monster-training.php",
       "feature": "food_monster",
-      "sourceBlob": "0fea30d8dcd70bba3b64eb1311a89f49a4521e16",
+      "sourceBlob": "e764eca7404353715fc0ff6bc03109ad366a26d9",
       "discoveredActions": [],
       "permissionTokensSeen": [],
       "directAppRequireAuthCall": true,
@@ -811,7 +811,7 @@
     {
       "path": "api/food-monster-unified-knowledge.php",
       "feature": "food_monster",
-      "sourceBlob": "ceef68e16c2ce7a47eb77f9a24b6c1bcd45447cc",
+      "sourceBlob": "90904f87d6bbaed196fe11f1a4cb210353fc8089",
       "discoveredActions": [],
       "permissionTokensSeen": [],
       "directAppRequireAuthCall": true,

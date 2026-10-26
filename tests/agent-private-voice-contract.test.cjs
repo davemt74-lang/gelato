@@ -11,6 +11,10 @@ const llm=read('api/food-monster-llm.php');
 const voice=read('includes/agent-voice-conversation.php');
 const runtime=read('includes/food-monster-b8d3-tool-runtime.php');
 const helper=read('includes/agent-private-voice.php');
+const knowledge=read('api/food-monster-knowledge.php');
+const unified=read('api/food-monster-unified-knowledge.php');
+const training=read('api/food-monster-training.php');
+const trainingNative=read('includes/food-monster-b8d6-training.php');
 
 assert(agent.includes('approvedPrivateVoiceToken(text,submitted)'),'client must request approval for the exact committed message');
 assert(agent.includes('requestPrivateVoiceConfirmation(text)'),'operator must deliberately confirm the request');
@@ -30,6 +34,13 @@ assert(llm.includes('gavp_consume($org,$uid,$threadId'),'private tool authorizat
 assert(!llm.includes('avc_verified_speaker($pdo,$org,$user,$event)'),'provisional biometrics cannot authorize private tools');
 assert(runtime.includes("($context['privateVoiceApproved']??false)!==true"),'tool runtime fails closed when unapproved');
 assert(helper.includes("unset($_SESSION['gelato_private_voice_turn'])"),'grant one-use consumption on any attempt');
+assert(helper.includes('function gavp_was_approved('),'separate evidence routes check the exact approved turn');
+for(const [name,src] of [['knowledge',knowledge],['unified knowledge',unified],['guided training',training]]){
+ assert(src.includes('gavp_was_approved('),name+' uses explicit signed-in operator consent');
+}
+assert(!knowledge.includes('avc_verified_speaker(')&&!unified.includes('avc_verified_speaker('),'provisional voice biometrics cannot unlock direct private evidence');
+assert(trainingNative.includes("($context['privateVoiceApproved']??false)!==true"),'native training actions also require approved turn');
+assert(workspace.includes('gavp_clear_approved()'),'next user turn revokes previous approval');
 
 // This classification only decides when to ASK for approval. It never selects
 // a restaurant tool or bypasses server permission checks.
