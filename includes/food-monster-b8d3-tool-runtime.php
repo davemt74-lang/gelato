@@ -148,6 +148,25 @@ function fm8d3_turn(
         $confirmed=fm8d4_confirm_pending($pdo,$principal,$history);
         if($confirmed!==null)return $confirmed;
     }
+    // Explicit menu overview requests are answered from the current tenant's
+    // permission-scoped active menu, even when a model would choose a general
+    // conversation/delegation tool instead of the local menu lookup. No menu
+    // records are forwarded to the external model.
+    $latest=end($history);
+    $groundedQuestion=is_array($latest)&&($latest['role']??'')==='user'
+        ?trim((string)($latest['content']??'')):'';
+    $verifiedRead=($context['channel']??'text')!=='voice'
+        ||($context['verifiedSameUser']??false)===true;
+    if($verifiedRead&&$groundedQuestion!==''
+        &&fmuk_menu_overview_question($groundedQuestion)){
+        $grounded=fmuk_answer($pdo,$principal,$groundedQuestion,
+            ($context['channel']??'text')==='voice',
+            ($context['verifiedSameUser']??false)===true);
+        $grounded['ok']=true;
+        $grounded['data']=array_merge((array)($grounded['data']??[]),
+            ['toolCalls'=>0,'groundedReadFallback'=>true,'groundedMenuOverview'=>true]);
+        return $grounded;
+    }
     $payload=fmllm_payload($provider,$history,$memory);
     $payload['tools']=fm8d3_provider_tools($provider,$catalogue);
     $payload['tool_choice']=$provider==='openai'?'auto':['type'=>'auto'];
