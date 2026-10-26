@@ -14,8 +14,9 @@ const {chromium}=require('playwright');
     page.on('pageerror',error=>errors.push(error.message));
     await page.route('https://gelato.test/**',async route=>{
       const url=new URL(route.request().url());
-      if(url.pathname==='/')return route.fulfill({status:200,contentType:'text/html',
-        body:'<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body></body></html>'});
+      if(['/', '/vision-lab.php', '/workspace.php'].includes(url.pathname))
+        return route.fulfill({status:200,contentType:'text/html',
+          body:'<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body '+(url.pathname==='/workspace.php'?'data-agent-workspace="1"':'')+'></body></html>'});
       if(url.pathname==='/assets/food-monster/chef-mascot.svg')
         return route.fulfill({status:200,contentType:'image/svg+xml',body:source('assets/food-monster/chef-mascot.svg')});
       if(url.pathname.startsWith('/js/'))
@@ -40,11 +41,14 @@ const {chromium}=require('playwright');
           answer:'The current menu includes a margherita pizza.',sources:['Gelato active menu']};
       return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
     });
-    await page.goto('https://gelato.test/');
+    await page.goto('https://gelato.test/vision-lab.php');
     await page.addStyleTag({content:source('css/food-monster.css')});
     await page.addScriptTag({content:source('js/global-agent.js')});
     await page.addScriptTag({content:source('js/food-monster.js')});
-    await page.addScriptTag({content:source('js/dynamic-agent-canvas.js')});
+    // Page loads only the shared agent bar; CHAT popup must self-load.
+    await page.locator('#gaResponseToggle').waitFor();
+    ok(await page.locator('#gaResponseToggle').textContent()==='CHAT',
+      'Labeled CHAT appears even when a page omits the separate popup script');
     await page.waitForFunction(()=>window.GelatoGlobalAgent?.user?.id===7);
     await page.locator('#gaInput').fill('What is on our menu?');
     await page.locator('#gaSend').click();
@@ -91,6 +95,21 @@ const {chromium}=require('playwright');
     });
     ok(mobile.actorBottom<=mobile.drawerTop+2,
       'Mascot avoids the open mobile drawer: '+JSON.stringify(mobile));
+    // Workspace used to suppress the transcript button; verify its
+    // explicit, non-modal drawer even on this special route.
+    await page.goto('https://gelato.test/workspace.php');
+    await page.addScriptTag({content:source('js/global-agent.js')});
+    await page.locator('#gaResponseToggle').waitFor();
+    ok(await page.locator('#gaResponseToggle').textContent()==='CHAT',
+      'Workspace shows the same labeled CHAT action');
+    ok(await page.locator('#gelato-agent-response-drawer.open').count()===0,
+      'Workspace drawer stays closed until clicked');
+    await page.locator('#gaResponseToggle').click();
+    ok(await page.locator('#gelato-agent-response-drawer.open').count()===1,
+      'Workspace CHAT opens the same transcript popup');
+    await page.locator('#gaResponseToggle').click();
+    ok(await page.locator('#gelato-agent-response-drawer.open').count()===0,
+      'Workspace CHAT closes the transcript popup');
     ok(errors.length===0,'No browser exceptions: '+errors.join('; '));
     console.log('Food Monster manual chat UI PASS ('+checks+' assertions)');
   }finally{await browser.close();}
