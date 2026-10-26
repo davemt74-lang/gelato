@@ -35,6 +35,9 @@ $item=menu_manager_save_item($pdo,$org,null,[
     ],
 ],$uid);
 b8d5_assert((int)$item['id']>0,'Testarosa fixture saved to real menu database');
+menu_manager_set_status($pdo,$org,(int)$item['id'],'publish',$uid);
+b8d5_assert(menu_training_search_items($pdo,$org,'Testarosa Pizza')!==[],
+    'acceptance fixture is published and available to the active-menu broker');
 $ingredients=[
  ['quantity'=>'1000','unit'=>'g','ingredient'=>'pizza flour','notes'=>''],
  ['quantity'=>'600','unit'=>'g','ingredient'=>'water','notes'=>'cold'],
