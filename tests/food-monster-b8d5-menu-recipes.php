@@ -85,6 +85,13 @@ foreach([
         static fn():array=>$principal,static function(array $event):void{},$activeMenuContext);
     b8d5_assert(($grounded['data']['groundedNamedMenuItem']??false)===true,
         'named menu question uses mandatory local DB lookup: '.$question);
+    if(!str_contains($grounded['answer'],'Testarosa Pizza')){
+        fwrite(STDERR,'B8D5 named menu diagnosis: '.json_encode([
+            'question'=>$question,'subject'=>fmuk_menu_subject($question),
+            'answer'=>$grounded['answer'],'sources'=>$grounded['sources']??[],
+            'directMatches'=>array_column(fmuk_menu_items($pdo,$org,$question),'name'),
+        ],JSON_UNESCAPED_UNICODE)."\n");
+    }
     b8d5_assert(str_contains($grounded['answer'],'Testarosa Pizza'),
         'recorded name is returned even for a one-letter spelling difference');
     if(str_contains($question,'How much')){
