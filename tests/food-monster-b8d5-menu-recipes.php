@@ -63,6 +63,52 @@ b8d5_assert(str_contains($details['data']['answer'],'Roasted Garlic')&&
     str_contains($details['data']['answer'],'Fresh Mozzarella'),'real named item ingredient list');
 b8d5_assert(str_contains($details['data']['answer'],'supplier labels'),
     'allergen advisory included without invented clearance');
+
+$providerCalls=0;
+$providerRefusal=static function()use(&$providerCalls):array{
+    $providerCalls++;
+    return ['output'=>[['type'=>'message','content'=>[[
+        'type'=>'output_text','text'=>"I can't verify the Testarossa Pizza without the live menu."
+    ]]]]];
+};
+$activeMenuContext=['channel'=>'text','verifiedSameUser'=>false];
+foreach([
+    "What's on the Testarossa Pizza?",
+    'What toppings are on the Testarossa Pizza?',
+    'How much is the Testarossa Pizza?',
+] as $question){
+    $grounded=fm8d3_turn($pdo,$principal,'openai','fake',
+        [['role'=>'user','content'=>$question]],'',$providerRefusal,null,
+        static fn():array=>$principal,static function(array $event):void{},$activeMenuContext);
+    b8d5_assert(($grounded['data']['groundedNamedMenuItem']??false)===true,
+        'named menu question uses mandatory local DB lookup: '.$question);
+    b8d5_assert(str_contains($grounded['answer'],'Testarosa Pizza'),
+        'recorded name is returned even for a one-letter spelling difference');
+    if(str_contains($question,'How much')){
+        b8d5_assert(str_contains($grounded['answer'],'18.00'),
+            'recorded menu price replaces model refusal: '.$question);
+    }else{
+        b8d5_assert(str_contains($grounded['answer'],'Roasted Garlic')
+            &&str_contains($grounded['answer'],'Ricotta'),
+            'recorded toppings answer replaces model refusal: '.$question);
+    }
+    b8d5_assert(!empty($grounded['sources']),
+        'grounded menu item includes verifiable source: '.$question);
+}
+b8d5_assert($providerCalls===0,'named menu facts never depend on model tool selection');
+$verifiedMenuVoice=fm8d3_turn($pdo,$principal,'openai','fake',
+    [['role'=>'user','content'=>"What's on the Testarossa Pizza?"]],'',
+    $providerRefusal,null,static fn():array=>$principal,
+    static function(array $event):void{},['channel'=>'voice','verifiedSameUser'=>true]);
+b8d5_assert(str_contains($verifiedMenuVoice['answer'],'Roasted Garlic'),
+    'verified owner voice can read authorized menu item');
+$unverifiedMenuVoice=fm8d3_turn($pdo,$principal,'openai','fake',
+    [['role'=>'user','content'=>"What's on the Testarossa Pizza?"]],'',
+    $providerRefusal,null,static fn():array=>$principal,
+    static function(array $event):void{},['channel'=>'voice','verifiedSameUser'=>false]);
+b8d5_assert(!str_contains($unverifiedMenuVoice['answer'],'Roasted Garlic'),
+    'unverified participant speech cannot read owner menu data');
+
 $priced=$getMenu(['item_name'=>'Testarosa Pizza','include_prices'=>true],$principal);
 b8d5_assert(str_contains($priced['data']['answer'],'18.00'),'real menu price is returned');
 $absent=$getMenu(['item_name'=>'A made-up special'],$principal);
