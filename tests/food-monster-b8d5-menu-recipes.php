@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once dirname(__DIR__).'/includes/bootstrap.php';
 require_once dirname(__DIR__).'/includes/food-monster-llm.php';
 require_once dirname(__DIR__).'/includes/food-monster-b8d3-tool-runtime.php';
+require_once dirname(__DIR__).'/includes/food-monster-unified-knowledge.php';
 
 $checks=0;
 function b8d5_assert(bool $ok,string $msg):void{

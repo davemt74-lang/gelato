@@ -60,22 +60,6 @@ function fmuk_menu_overview_question(string $question): bool
     return preg_match('/\b(?:what(?:\x27s| is) on the menu|show (?:me )?(?:the |our )?menu|menu (?:overview|list|items|options|specials)|what (?:food|dishes|pizzas|pastas) (?:do|can) (?:you|we) (?:have|serve|offer))\b/iu',$question)===1;
 }
 
-/**
- * A named menu fact requires Gelato's active item record even when the model
- * would otherwise reply without selecting a tool. This never treats general
- * cooking questions, write instructions, or allergy clearance as item reads.
- */
-function fmuk_named_menu_item_question(string $question): bool
-{
-    if(fmuk_menu_overview_question($question)
-        ||!in_array('menu',fmuk_topics($question),true))return false;
-    if(preg_match('/\b(?:why|should|would|better|joke|story|poem|recipe|formula|allerg(?:y|ic|en|ens|ies)|nuts?|peanuts?|gluten|celiac|safe|cross.contact)\b/iu',$question))return false;
-    if(!preg_match('/\b(?:what|which|show|list|tell|describe|does|do|is|are|how much|prices?|costs?|toppings?|ingredients?|contains?)\b/iu',$question))return false;
-    $subject=fmuk_menu_subject($question);
-    $name=trim(preg_replace('/\b(?:pizza|pie|pasta|dish|item)\b/iu',' ',$subject)??$subject);
-    return mb_strlen($name,'UTF-8')>=3;
-}
-
 /** Preserve item names while removing menu-question wording and contractions. */
 function fmuk_menu_subject(string $question): string
 {
