@@ -1,0 +1,71 @@
+name: B8D17A Agent Capability Truth
+
+on:
+  pull_request:
+    paths:
+      - 'includes/food-monster-b8d17a-capability-truth.php'
+      - 'includes/food-monster-b8d3-tool-runtime.php'
+      - 'includes/food-monster-skill-registry.php'
+      - 'includes/food-monster-b8d11-domain-routing.php'
+      - 'api/agent-workspace.php'
+      - 'agent-canvas.php'
+      - 'js/agent-canvas.js'
+      - 'config/food-monster-capability-map.json'
+      - 'tests/food-monster-b8d17a-capability-truth.php'
+      - 'tests/food-monster-b8d17a-capability-truth-browser.test.cjs'
+      - 'tests/agent-voice-capability-continuity.test.cjs'
+      - '.github/workflows/food-monster-b8d17a-capability-truth.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'includes/food-monster-b8d17a-capability-truth.php'
+      - 'includes/food-monster-b8d3-tool-runtime.php'
+      - 'api/agent-workspace.php'
+      - 'agent-canvas.php'
+      - 'js/agent-canvas.js'
+      - 'config/food-monster-capability-map.json'
+      - 'tests/food-monster-b8d17a-capability-truth.php'
+      - 'tests/food-monster-b8d17a-capability-truth-browser.test.cjs'
+      - 'tests/agent-voice-capability-continuity.test.cjs'
+
+permissions:
+  contents: read
+
+jobs:
+  capabilities-and-permissions:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_sqlite
+      - name: Syntax and static JavaScript safety
+        run: |
+          php -l includes/food-monster-b8d17a-capability-truth.php
+          php -l includes/food-monster-b8d3-tool-runtime.php
+          php -l api/agent-workspace.php
+          php -l agent-canvas.php
+          php -l tests/food-monster-b8d17a-capability-truth.php
+          node --check js/agent-canvas.js
+      - name: Current-user scope, nonexecution, owner visibility and chat truth
+        run: php tests/food-monster-b8d17a-capability-truth.php
+      - name: Existing model-tool and discovery map regression
+        run: |
+          php tests/food-monster-b8d3-tool-selection.php
+          php tests/food-monster-b8c-capability-map.php
+          node tests/agent-voice-capability-continuity.test.cjs
+
+  capability-dialog-browser:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Chromium for responsive, read-only acceptance
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.0
+          npx playwright install --with-deps chromium
+      - name: Tools/status dialog remains permission-safe on desktop and mobile
+        run: node tests/food-monster-b8d17a-capability-truth-browser.test.cjs
