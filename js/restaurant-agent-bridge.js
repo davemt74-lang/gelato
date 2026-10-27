@@ -9,17 +9,38 @@
   const operationsIntent = /\b(inventory|stock|par|reorder|shortage|running out|task|tasks|prep|opening|closing|cleaning|assignment|assigned|overdue|task category|fulfillment|delivery)\b|\bwholesale\s+(?:order|orders|task|tasks|production|fulfillment)\b/i;
   const prepIntent = /\b(prep|preparation)\b/i;
   const confirmationIntent = /^(?:confirm|yes|yes please|do it|go ahead|execute|apply|cancel|cancel it|discard|never mind|nevermind|stop)(?:\s+(?:it|that|change|action))?[.!]?$/i;
+  const prepFollowupIntent = /^(?:(?:please\s+)?(?:mark|set)\s+.+\s+(?:complete|completed|done)|(?:please\s+)?(?:add|increase(?:\s+by)?)\s+(?:\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:more\s+)?(?:pans?|trays?|batches?|containers?|cases?|bags?|lbs?|pounds?)\b|(?:who(?:'s| is)|which (?:person|employee) is)\s+(?:doing|assigned to|working on)\s+.+)/i;
   const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
   const chatKey = 'restaurant-owner-agent-chat-v1';
+  const prepMemoryKey = 'gelato-owner-prep-context-v1';
   let busy = false;
   let pendingEndpoint = null;
+  let recentPrepUntil = 0;
+  const actorIdentity = () => String(Auth.current()?.id || Auth.current()?.userId || Auth.current()?.publicId || '');
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(prepMemoryKey) || 'null');
+    if (saved?.actor && saved.actor === actorIdentity() && saved.until > Date.now()) {
+      recentPrepUntil = saved.until;
+      if (saved.pendingUntil > Date.now()) pendingEndpoint = saved.pendingEndpoint || null;
+    }
+  } catch { /* Conversation state remains usable without sessionStorage. */ }
 
-  function shouldHandle(text) { return restaurantIntent.test(text) || (pendingEndpoint !== null && confirmationIntent.test(cleanWakePhrase(text))); }
+  function prepFollowup(text) { return Date.now() < recentPrepUntil && prepFollowupIntent.test(text) && Auth.has('prep.intelligence.agent') && Auth.has('prep.intelligence.view'); }
+  function shouldHandle(text) { const cleaned = cleanWakePhrase(text); return restaurantIntent.test(cleaned) || prepFollowup(cleaned) || (pendingEndpoint !== null && confirmationIntent.test(cleaned)); }
   function isTimeclock(text) { return timeclockIntent.test(text); }
   function isScheduling(text) { return scheduleIntent.test(text); }
   function isOperations(text) { return operationsIntent.test(text); }
   function isPrep(text) { return prepIntent.test(text) && Auth.has('prep.intelligence.agent') && Auth.has('prep.intelligence.view'); }
   function cleanWakePhrase(text) { return String(text || '').trim().replace(/^hey\s+gelato[,\s]*/i, ''); }
+  function rememberPrep(endpoint, requiresConfirmation) {
+    if (endpoint === 'api/prep-intelligence-agent.php') recentPrepUntil = Date.now() + 30 * 60 * 1000;
+    const actor = actorIdentity();
+    if (!actor || typeof sessionStorage === 'undefined') return;
+    try {
+      sessionStorage.setItem(prepMemoryKey, JSON.stringify({actor, until: recentPrepUntil,
+        pendingEndpoint, pendingUntil: requiresConfirmation ? Date.now() + 10 * 60 * 1000 : 0}));
+    } catch { /* Storage can be unavailable; server authorization still applies. */ }
+  }
   function now() { return new Date().toISOString(); }
   function readHistory() { try { return JSON.parse(localStorage.getItem(chatKey) || '[]'); } catch { return []; } }
   function saveMessage(role, text) {
@@ -39,17 +60,19 @@
     const input = document.getElementById('ownerAgentInput'); if (input) input.value = '';
     saveMessage('user', rawText); appendMessage('user', rawText);
     const pending = appendMessage('agent', 'Checking restaurant operations…', true); const guidance = document.getElementById('ownerComposerGuidance');
-    if (guidance) guidance.textContent = isPrep(text) ? 'Gelato is checking your dated prep plans and tasks.' : (isTimeclock(text) ? 'Gelato is checking time, attendance, shifts, and employee context.' : (isScheduling(text) ? 'Gelato is checking staff schedules, availability, coverage, and workload.' : (isOperations(text) ? 'Gelato is checking tasks, inventory, and fulfillment.' : 'Restaurant Agent is checking private business knowledge.')));
+    if (guidance) guidance.textContent = (isPrep(text) || prepFollowup(text)) ? 'Gelato is checking your dated prep plans and tasks.' : (isTimeclock(text) ? 'Gelato is checking time, attendance, shifts, and employee context.' : (isScheduling(text) ? 'Gelato is checking staff schedules, availability, coverage, and workload.' : (isOperations(text) ? 'Gelato is checking tasks, inventory, and fulfillment.' : 'Restaurant Agent is checking private business knowledge.')));
     try {
       // Keep Confirm/Cancel on the same specialist that produced the proposal.
-      const endpoint = (pendingEndpoint && confirmationIntent.test(text)) ? pendingEndpoint : (isPrep(text) ? 'api/prep-intelligence-agent.php' : (isTimeclock(text) ? 'api/timeclock-agent.php' : (isScheduling(text) ? 'api/scheduling-agent.php' : (isOperations(text) ? 'api/operations-agent.php' : 'api/agent-brain.php'))));
+      const endpoint = (pendingEndpoint && confirmationIntent.test(text)) ? pendingEndpoint : ((isPrep(text) || prepFollowup(text)) ? 'api/prep-intelligence-agent.php' : (isTimeclock(text) ? 'api/timeclock-agent.php' : (isScheduling(text) ? 'api/scheduling-agent.php' : (isOperations(text) ? 'api/operations-agent.php' : 'api/agent-brain.php'))));
       const response = await fetch(endpoint,{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-Token':window.RESTAURANT_CSRF_TOKEN || ''},body:JSON.stringify({action:'ask',message:text,voice:!!options.voice,voiceEventId:options.voiceEventId||'',csrf_token:window.RESTAURANT_CSRF_TOKEN || ''})});
       const data = await response.json(); if (!response.ok || !data.ok) throw new Error(data.message || 'The Restaurant Agent could not complete that request.');
       pendingEndpoint = data.data?.requiresConfirmation ? endpoint : null;
+      rememberPrep(endpoint, !!data.data?.requiresConfirmation);
       if (pending) pending.remove(); saveMessage('agent', data.answer || data.reply || 'Done.'); appendMessage('agent', data.answer || data.reply || 'Done.');
       if (guidance) guidance.textContent = `Restaurant Agent skill: ${data.skill || 'knowledge.search'}`;
       return data;
     } catch (error) {
+      if (confirmationIntent.test(text)) { pendingEndpoint = null; rememberPrep('', false); }
       if (pending) pending.remove(); const message = error.message || 'The Restaurant Agent is unavailable.'; saveMessage('agent', message); appendMessage('agent', message); if (guidance) guidance.textContent = 'Restaurant Agent request could not be completed.'; throw error;
     } finally { busy = false; }
   }
