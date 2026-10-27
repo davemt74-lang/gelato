@@ -19,6 +19,13 @@ pit_assert($withItems!==null&&count($withItems['items'])===2
     &&$withItems['items'][1]['quantity']===4.0,'conversational multiple-item prep creation');
 pit_assert($withItems['date']===prep_parse_date_phrase('tomorrow'),'spoken tomorrow follows restaurant local date');
 pit_assert(pac_create_request('add 20 pounds to inventory')===null,'inventory receipt is not a prep action');
+pit_assert(pac_quantity(0)==='0','zero prep quantities must be spoken accurately');
+pit_assert(pac_followup_intent('Mark the dough complete')['type']==='complete','spoken completion intent');
+pit_assert(pac_followup_intent("Who's doing sauce?")['type']==='assignees','spoken prep assignment intent');
+pit_assert(pac_followup_intent('add two more pans of dough')['quantity']===2.0,'spoken incremental prep quantity');
+try{pac_task_match([['public_id'=>'one','title'=>'Pizza dough'],['public_id'=>'two','title'=>'Bread dough']],'dough');
+    throw new RuntimeException('Ambiguous prep task must not be guessed');}
+catch(InvalidArgumentException $expected){}
 
 $orgId=(int)$pdo->query('SELECT id FROM organizations ORDER BY id LIMIT 1')->fetchColumn();
 if(!$orgId){
@@ -32,8 +39,9 @@ if(!$userId){
     $userId=(int)$pdo->lastInsertId();
     $pdo->prepare("INSERT INTO organization_memberships (organization_id,user_id,status) VALUES (?,?,'active')")->execute([$orgId,$userId]);
 }
+$actorName=(string)$pdo->query('SELECT display_name FROM users WHERE id='.(int)$userId)->fetchColumn();
 
-$prepActor=['id'=>$userId,'organization_id'=>$orgId,'permissions'=>['prep.intelligence.manage','prep.intelligence.agent','prep.intelligence.view']];
+$prepActor=['id'=>$userId,'organization_id'=>$orgId,'permissions'=>['prep.intelligence.manage','prep.intelligence.agent','prep.intelligence.view','tasks.manage']];
 $proposal=['organizationId'=>$orgId,'userId'=>$userId,'type'=>'create_plan',
     'payload'=>['date'=>'2026-11-05','service'=>'all','expected'=>pac_snapshot(null)]];
 $created=pac_execute($pdo,$orgId,$userId,$prepActor,$proposal,false);
@@ -68,6 +76,62 @@ pit_assert((int)$existingCount->fetchColumn()===1,'revision-gated replay does no
 try{pac_execute($pdo,$orgId,$userId,['id'=>$userId,'organization_id'=>$orgId,'permissions'=>[]],$proposal,false);
     throw new RuntimeException('Prep manager permission must be enforced');}
 catch(PrepAgentPermissionException $expected){}
+
+// B8D17G2B: create -> read -> incremental update -> read -> completion -> read.
+app_boot_session();
+$read=prep_agent_handle($pdo,$prepActor,['message'=>'Show the prep list on 2026-11-06']);
+pit_assert($read['skill']==='prep.list'&&count($read['data']['tasks'])===2,'dated prep list reads both persisted tasks');
+pit_assert(str_contains($read['answer'],'6 pan dough')&&str_contains($read['answer'],'4 container sauce'),
+    'spoken read-back includes item names and quantities');
+pit_assert((pac_context_get($orgId,$userId)['date']??'')==='2026-11-06','prep context is scoped to the current user and plan');
+pit_assert(pac_context_get($orgId+1000,$userId)===null,'prep context is not shared across organizations');
+
+$increase=prep_agent_handle($pdo,$prepActor,['message'=>'Add two more pans of dough']);
+pit_assert(($increase['data']['requiresConfirmation']??false)===true,'incremental prep write requires confirmation');
+$pendingIncrease=gac_pending_get('prep',$orgId,$userId);
+pit_assert(($pendingIncrease['type']??'')==='task_quantity','pending quantity action targets the canonical task');
+// Reloading the page does not consume or replay the one-use server-side proposal.
+unset($_SESSION['prep_agent_context'][pac_context_key($orgId,$userId)]);
+$confirmedIncrease=prep_agent_handle($pdo,$prepActor,['message'=>'Confirm']);
+pit_assert(($confirmedIncrease['data']['before']??null)===6.0
+    &&($confirmedIncrease['data']['after']??null)===8.0,'confirmed quantity update is additive and exact');
+pit_assert(($confirmedIncrease['data']['proof']['taskId']??'')!=='','quantity action includes a verifiable task receipt');
+try{pac_execute($pdo,$orgId,$userId,$prepActor,$pendingIncrease,false);
+    throw new RuntimeException('Replaying confirmed quantity proposal should fail');}
+catch(InvalidArgumentException $expected){}
+try{prep_agent_handle($pdo,$prepActor,['message'=>'Confirm']);
+    throw new RuntimeException('A second confirmation must not replay the completed write');}
+catch(InvalidArgumentException $expected){}
+$afterIncrease=prep_agent_handle($pdo,$prepActor,['message'=>'Show the prep list on 2026-11-06']);
+pit_assert(str_contains($afterIncrease['answer'],'8 pan dough'),'read-back reflects the new persisted quantity');
+
+$assignee=prep_agent_handle($pdo,$prepActor,['message'=>"Who's doing sauce?"]);
+pit_assert($assignee['skill']==='prep.task_assignees'&&str_contains($assignee['answer'],'unassigned'),
+    'conversational assignment query reads the current canonical task');
+$employeeActor=['id'=>$userId,'organization_id'=>$orgId,'permissions'=>['prep.intelligence.view','prep.intelligence.agent','tasks.self']];
+try{prep_agent_handle($pdo,$employeeActor,['message'=>'Mark the sauce complete']);
+    throw new RuntimeException('Unassigned employees may not complete arbitrary prep tasks');}
+catch(PrepAgentPermissionException $expected){}
+$sauce=operations_task_by_public_id($pdo,$orgId,(string)$added['data']['tasks'][1]['public_id']);
+$pdo->prepare("INSERT IGNORE INTO restaurant_task_assignments (organization_id,task_id,user_id,assignment_role,assigned_by) VALUES (?,?,?,'assignee',?)")
+    ->execute([$orgId,(int)$sauce['id'],$userId,$userId]);
+$assigned=prep_agent_handle($pdo,$employeeActor,['message'=>"Who's doing sauce?"]);
+pit_assert(str_contains($assigned['answer'],$actorName),'assignment read-back identifies the actual assigned employee');
+$statusProposal=prep_agent_handle($pdo,$employeeActor,['message'=>'Mark the sauce complete']);
+pit_assert(($statusProposal['data']['requiresConfirmation']??false)===true,'assigned employee completion still needs confirmation');
+$pdo->prepare('UPDATE restaurant_tasks SET requires_photo=1 WHERE id=?')->execute([(int)$sauce['id']]);
+try{prep_agent_handle($pdo,$employeeActor,['message'=>'Confirm']);
+    throw new RuntimeException('Photo-required prep task cannot complete without proof');}
+catch(InvalidArgumentException $expected){}
+pit_assert((string)operations_task_by_public_id($pdo,$orgId,(string)$sauce['public_id'])['status']==='queued',
+    'denied completion preserves task status');
+$pdo->prepare('UPDATE restaurant_tasks SET requires_photo=0 WHERE id=?')->execute([(int)$sauce['id']]);
+$statusProposal=prep_agent_handle($pdo,$employeeActor,['message'=>'Mark the sauce complete']);
+$statusDone=prep_agent_handle($pdo,$employeeActor,['message'=>'Confirm']);
+pit_assert(($statusDone['data']['after']??'')==='completed','assigned employee may complete their prep task');
+$afterStatus=prep_agent_handle($pdo,$prepActor,['message'=>'Show the prep list on 2026-11-06']);
+pit_assert(str_contains($afterStatus['answer'],'sauce (completed, assigned to '.$actorName.')'),
+    'post-write readback includes employee and completed status');
 
 operations_ensure_default_categories($pdo,$orgId,$userId);
 $prepCategory=operations_category_by_slug($pdo,$orgId,'prep');
