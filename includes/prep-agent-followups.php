@@ -55,6 +55,16 @@ function pac_followup_intent(string $text): ?array
     $clean=rtrim($clean," \t\r\n.!?");
     if(preg_match('/^(?:please\s+)?(?:mark|set)\s+(?:the\s+)?(.+?)\s+(?:as\s+)?(?:complete|completed|done)$/iu',$clean,$m))
         return ['type'=>'complete','target'=>trim($m[1])];
+    if(preg_match('/^(?:please\s+)?(?:assign|give)\s+(?:the\s+)?(.+?)\s+to\s+(.+)$/iu',$clean,$m))
+        return ['type'=>'assign','target'=>trim($m[1]),'assignee'=>trim($m[2])];
+    if(preg_match('/^(?:please\s+)?(?:mark|set)\s+(?:the\s+)?(.+?)\s+(?:as\s+)?(in\s+progress|started|blocked|accepted)$/iu',$clean,$m)){
+        $state=mb_strtolower(preg_replace('/\s+/u',' ',trim($m[2]))??trim($m[2]),'UTF-8');
+        return ['type'=>'progress','target'=>trim($m[1]),'status'=>$state==='started'?'in_progress':str_replace(' ','_',$state)];
+    }
+    if(preg_match('/^(?:please\s+)?(start|resume|block|accept)\s+(?:the\s+)?(.+)$/iu',$clean,$m)){
+        $verb=mb_strtolower($m[1],'UTF-8');
+        return ['type'=>'progress','target'=>trim($m[2]),'status'=>match($verb){'block'=>'blocked','accept'=>'accepted',default=>'in_progress'}];
+    }
     if(preg_match('/^(?:please\s+)?(?:who(?:\x27s| is)|which (?:person|employee) is)\s+(?:doing|assigned to|working on)\s+(?:the\s+)?(.+)$/iu',$clean,$m))
         return ['type'=>'assignees','target'=>trim($m[1])];
     $numbers='one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty';
@@ -107,6 +117,36 @@ function pac_task_description(array $task): string
     return $prefix.$task['title'].' ('.$status.($assignees!==''?', assigned to '.$assignees:', unassigned').')';
 }
 
+/** Resolve an active restaurant employee by exact display name or unambiguous first name. */
+function pac_staff_match(PDO $pdo,int $org,string $requested): array
+{
+    $needle=prep_normalized_key($requested);
+    if($needle==='')throw new InvalidArgumentException('Name the employee who should receive this prep task.');
+    $q=$pdo->prepare("SELECT DISTINCT u.id,u.display_name FROM users u
+        INNER JOIN organization_memberships om ON om.user_id=u.id AND om.organization_id=? AND om.status='active'
+        WHERE u.status='active' AND u.archived_at IS NULL
+          AND COALESCE(om.job_title,'')<>'Wholesale Customer'
+          AND NOT EXISTS (SELECT 1 FROM user_roles ur INNER JOIN roles r ON r.id=ur.role_id
+            WHERE ur.membership_id=om.id AND r.slug='wholesale_customer')");
+    $q->execute([$org]);$exact=[];$first=[];
+    foreach($q->fetchAll() as $row){
+        $name=prep_normalized_key((string)$row['display_name']);
+        if($name===$needle)$exact[]=$row;
+        if(explode(' ',$name,2)[0]===$needle)$first[]=$row;
+    }
+    $found=$exact?:$first;
+    if(count($found)===1)return $found[0];
+    if(!$found)throw new InvalidArgumentException('I could not find an active restaurant employee named “'.$requested.'”.');
+    throw new InvalidArgumentException('More than one employee matches “'.$requested.'”. Use the full display name.');
+}
+
+function pac_assignment_signature(PDO $pdo,int $org,int $taskId): string
+{
+    $q=$pdo->prepare("SELECT CONCAT(user_id,':',assignment_role) AS assignee_entry FROM restaurant_task_assignments WHERE organization_id=? AND task_id=? ORDER BY user_id,assignment_role");
+    $q->execute([$org,$taskId]);
+    return implode('|',$q->fetchAll(PDO::FETCH_COLUMN));
+}
+
 function pac_list_result(PDO $pdo,int $org,int $uid,array $plan,bool $canForecast): array
 {
     $detail=pac_visible(prep_plan_detail($pdo,$org,(string)$plan['public_id']),$canForecast);
@@ -123,9 +163,9 @@ function pac_list_result(PDO $pdo,int $org,int $uid,array $plan,bool $canForecas
 
 function pac_execute_followup(PDO $pdo,int $org,int $uid,array $user,array $payload,string $type): array
 {
-    if($type==='task_quantity'){
-        pac_require($user,'prep.intelligence.manage','Prep management permission is required to change prep quantities.');
-        pac_require($user,'tasks.manage','Task management permission is required to change prep quantities.');
+    if(in_array($type,['task_quantity','task_assign'],true)){
+        pac_require($user,'prep.intelligence.manage','Prep management permission is required to change prep tasks.');
+        pac_require($user,'tasks.manage','Task management permission is required to change prep tasks.');
     }else{
         pac_require($user,'prep.intelligence.view','Prep view permission is required.');
         pac_require($user,'prep.intelligence.agent','Prep Agent permission is required.');
@@ -147,11 +187,14 @@ function pac_execute_followup(PDO $pdo,int $org,int $uid,array $user,array $payl
             ||(string)($task['unit']??'')!==(string)($payload['taskUnit']??'')){
             throw new InvalidArgumentException('That prep task changed after the proposal. Review it and ask again.');
         }
+        if(array_key_exists('assignmentSignature',$payload)
+            &&pac_assignment_signature($pdo,$org,(int)$task['id'])!==(string)$payload['assignmentSignature'])
+            throw new InvalidArgumentException('The prep task assignment changed. Review it and ask again.');
         $advance=$pdo->prepare('UPDATE prep_plans SET revision=revision+1,updated_by=?,updated_at=NOW(6) WHERE id=? AND organization_id=? AND revision=?');
         $advance->execute([$uid,(int)$plan['id'],$org,(int)$plan['revision']]);
         if($advance->rowCount()!==1)
             throw new InvalidArgumentException('That prep plan changed. Review it and ask again.');
-        if($type==='task_status'){
+        if(in_array($type,['task_status','task_progress'],true)){
             $manager=app_has_permission('tasks.manage',$user)&&app_has_permission('prep.intelligence.manage',$user);
             if(!$manager){
                 pac_require($user,'tasks.self','Only an assigned employee or a manager may complete this prep task.');
@@ -159,7 +202,10 @@ function pac_execute_followup(PDO $pdo,int $org,int $uid,array $user,array $payl
                 $assigned->execute([$org,(int)$task['id'],$uid]);
                 if((int)$assigned->fetchColumn()===0)throw new PrepAgentPermissionException('You may only complete prep tasks assigned to you.');
             }
-            if((int)$task['requires_photo']===1){
+            $newStatus=$type==='task_status'?'completed':(string)($payload['status']??'');
+            if(!in_array($newStatus,['completed','accepted','in_progress','blocked'],true))
+                throw new InvalidArgumentException('That prep task status is not supported.');
+            if($newStatus==='completed'&&(int)$task['requires_photo']===1){
                 $proof=$pdo->prepare('SELECT COUNT(*) FROM restaurant_task_proofs WHERE organization_id=? AND task_id=?');
                 $proof->execute([$org,(int)$task['id']]);
                 if((int)$proof->fetchColumn()===0)
@@ -167,9 +213,27 @@ function pac_execute_followup(PDO $pdo,int $org,int $uid,array $user,array $payl
             }
             if(in_array((string)$task['status'],['completed','verified','cancelled'],true))
                 throw new InvalidArgumentException('That prep task is already finished or cancelled.');
-            $updated=operations_task_set_status($pdo,$org,$taskId,'completed',$uid);
-            $answer='Confirmed. Marked '.$task['title'].' complete.';
-            $after='completed';$before=$task['status'];
+            if((string)$task['status']===$newStatus)throw new InvalidArgumentException('That prep task is already in the requested status.');
+            $updated=operations_task_set_status($pdo,$org,$taskId,$newStatus,$uid);
+            $answer='Confirmed. Marked '.$task['title'].' '.str_replace('_',' ',$newStatus).'.';
+            $after=$newStatus;$before=$task['status'];
+        }elseif($type==='task_assign'){
+            if(in_array((string)$task['status'],['completed','verified','cancelled'],true))
+                throw new InvalidArgumentException('A finished prep task cannot be reassigned.');
+            $staff=pac_staff_match($pdo,$org,(string)($payload['assigneeName']??''));
+            if((int)$staff['id']!==(int)($payload['assigneeId']??0))
+                throw new InvalidArgumentException('That employee identity changed. Review the assignment and ask again.');
+            $before=pac_assignment_signature($pdo,$org,(int)$task['id']);
+            $pdo->prepare('DELETE FROM restaurant_task_assignments WHERE organization_id=? AND task_id=?')
+                ->execute([$org,(int)$task['id']]);
+            $pdo->prepare("INSERT INTO restaurant_task_assignments (organization_id,task_id,user_id,assignment_role,assigned_by) VALUES (?,?,?,'assignee',?)")
+                ->execute([$org,(int)$task['id'],(int)$staff['id'],$uid]);
+            $pdo->prepare("UPDATE restaurant_tasks SET status=IF(status='queued','assigned',status),updated_by=?,updated_at=NOW(6) WHERE organization_id=? AND id=?")
+                ->execute([$uid,$org,(int)$task['id']]);
+            $after=(int)$staff['id'];
+            operations_task_event($pdo,$org,(int)$task['id'],'assignment_changed','Prep task assigned to '.$staff['display_name'],$uid,['prior'=>$before,'assigneeId'=>$after,'planId'=>$plan['public_id']]);
+            $updated=operations_task_by_public_id($pdo,$org,$taskId);
+            $answer='Confirmed. Assigned '.$task['title'].' to '.$staff['display_name'].'.';
         }elseif($type==='task_quantity'){
             if(!empty($task['source_type']))
                 throw new InvalidArgumentException('This task is generated from another source. Change its source recommendation in Prep Intelligence.');

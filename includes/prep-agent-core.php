@@ -143,7 +143,7 @@ function pac_execute(PDO $pdo,int $org,int $uid,array $user,array $proposal,bool
     if((int)($proposal['organizationId']??0)!==$org||(int)($proposal['userId']??0)!==$uid)throw new PrepAgentPermissionException('This Prep Agent proposal does not belong to your session.');
     $payload=(array)$proposal['payload'];
     $type=(string)$proposal['type'];
-    if(in_array($type,['task_status','task_quantity'],true))
+    if(in_array($type,['task_status','task_quantity','task_assign','task_progress'],true))
         return pac_execute_followup($pdo,$org,$uid,$user,$payload,$type);
     pac_require($user,'prep.intelligence.manage','Prep Intelligence management permission is required for this action.');
 
@@ -251,7 +251,7 @@ function prep_agent_handle(PDO $pdo,array $user,array $input): array
                 'data'=>['plan'=>$detail['plan'],'task'=>$task,'proof'=>['url'=>'prep-intelligence.php','planId'=>$plan['public_id'],'taskId'=>$task['public_id']]],
                 'sources'=>[(string)$task['public_id']]];
         }
-        if($followup['type']==='complete'){
+        if(in_array($followup['type'],['complete','progress'],true)){
             $manager=app_has_permission('prep.intelligence.manage',$user)&&app_has_permission('tasks.manage',$user);
             if(!$manager){
                 pac_require($user,'tasks.self','Only managers or assigned employees may complete prep tasks.');
@@ -261,8 +261,19 @@ function prep_agent_handle(PDO $pdo,array $user,array $input): array
             }
             if(in_array((string)$full['status'],['completed','verified','cancelled'],true))
                 return ['ok'=>true,'skill'=>'prep.task_already_done','answer'=>$full['title'].' is already '.str_replace('_',' ',$full['status']).'.','data'=>['task'=>$task],'sources'=>[(string)$task['public_id']]];
-            $action='task_status';
-            $summary='Proposed action: mark '.$full['title'].' complete on the '.$plan['plan_date'].' prep plan. No change has been made.';
+            $status=$followup['type']==='complete'?'completed':(string)$followup['status'];
+            if((string)$full['status']===$status)
+                return ['ok'=>true,'skill'=>'prep.task_already_done','answer'=>$full['title'].' is already '.str_replace('_',' ',$status).'.','data'=>['task'=>$task],'sources'=>[(string)$task['public_id']]];
+            $action=$status==='completed'?'task_status':'task_progress';
+            $summary='Proposed action: mark '.$full['title'].' '.str_replace('_',' ',$status).' on the '.$plan['plan_date'].' prep plan. No change has been made.';
+        }elseif($followup['type']==='assign'){
+            pac_require($user,'prep.intelligence.manage','Prep management permission is required to assign prep tasks.');
+            pac_require($user,'tasks.manage','Task management permission is required to assign prep tasks.');
+            if(in_array((string)$full['status'],['completed','verified','cancelled'],true))
+                throw new InvalidArgumentException('Finished prep tasks cannot be reassigned.');
+            $staff=pac_staff_match($pdo,$org,(string)$followup['assignee']);
+            $action='task_assign';
+            $summary='Proposed action: assign '.$full['title'].' to '.$staff['display_name'].'. This replaces any current assignees after confirmation. No change has been made.';
         }else{
             pac_require($user,'prep.intelligence.manage','Prep management permission is required to change quantities.');
             pac_require($user,'tasks.manage','Task management permission is required to change quantities.');
@@ -272,8 +283,11 @@ function prep_agent_handle(PDO $pdo,array $user,array $input): array
         $payload=['date'=>(string)$plan['plan_date'],'service'=>(string)$plan['service_period'],
             'expected'=>pac_snapshot($plan),'taskId'=>(string)$full['public_id'],
             'taskUpdatedAt'=>(string)$full['updated_at'],'taskStatus'=>(string)$full['status'],
-            'taskQuantity'=>(string)($full['quantity']??''),'taskUnit'=>(string)($full['unit']??'')];
+            'taskQuantity'=>(string)($full['quantity']??''),'taskUnit'=>(string)($full['unit']??''),
+            'assignmentSignature'=>pac_assignment_signature($pdo,$org,(int)$full['id'])];
         if($action==='task_quantity'){$payload['delta']=$followup['quantity'];$payload['unit']=$followup['unit'];}
+        if($action==='task_progress')$payload['status']=$status;
+        if($action==='task_assign'){$payload['assigneeId']=(int)$staff['id'];$payload['assigneeName']=(string)$staff['display_name'];}
         $proposal=gac_pending_store('prep',$org,$uid,$action,$payload,$summary);
         app_audit($pdo,$org,$uid,'prep.agent_action_proposed','prep_agent_proposal',(string)$proposal['id'],null,['type'=>$action,'taskId'=>$full['public_id']]);
         return gac_proposal_result($proposal,'prep.action_proposal',['Prep Plan','Restaurant Tasks']);
