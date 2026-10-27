@@ -20,3 +20,4 @@ if(!app_has_permission('kds.view',$user)){http_response_code(403);exit('Kitchen 
 <script src="js/kds-spoken-orders.js?v=20261013-natural1"></script>
 <script src="js/kds-agent-sidebar.js?v=20261013-natural1"></script>
 <script src="js/kds.js?v=20261013-natural1"></script>
+<script src="js/kds-voice-listener.js?v=20261018-fmg14b"></script></body></html>

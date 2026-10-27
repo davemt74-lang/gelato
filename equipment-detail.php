@@ -30,3 +30,4 @@ function render(){if(!asset){$('content').className='empty';$('content').textCon
 async function load(){if(!ASSET_ID){$('content').textContent='No equipment asset id was provided.';return}try{const d=await api('api/equipment.php?asset='+encodeURIComponent(ASSET_ID),{method:'GET'});asset=(d.assets||[]).find(a=>a.id===ASSET_ID)||null;events=(d.events||[]).filter(e=>e.assetId===ASSET_ID);render()}catch(e){$('content').textContent=e.message}}
 $('back').onclick=()=>location.href=RETURN;load();
 })();
+</script></body></html>

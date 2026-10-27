@@ -70,3 +70,4 @@ $('addServiceEvent')?.addEventListener('click',()=>{if(!state.selected)return al
 document.querySelectorAll('[data-agent-prompt]').forEach(button=>button.addEventListener('click',()=>window.GelatoGlobalAgent?.send?.(button.dataset.agentPrompt||'')));
 load();})();
 </script>
+</body></html>
