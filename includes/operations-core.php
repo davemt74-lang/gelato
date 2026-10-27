@@ -116,16 +116,19 @@ function operations_inventory_list(PDO $pdo,int $organizationId,string $query=''
     $stmt=$pdo->prepare("SELECT * FROM inventory_items WHERE {$where} ORDER BY (reorder_point IS NOT NULL AND on_hand_quantity<=reorder_point) DESC,name LIMIT {$limit}");$stmt->execute($params);return $stmt->fetchAll();
 }
 
-function operations_inventory_adjust(PDO $pdo,int $organizationId,string $publicId,float $delta,string $type,?int $userId,string $note=''): array
+function operations_inventory_adjust(PDO $pdo,int $organizationId,string $publicId,float $delta,string $type,?int $userId,string $note='',?float $expectedOnHand=null): array
 {
     $allowed=['count','receive','use','waste','adjust','transfer'];if(!in_array($type,$allowed,true))throw new InvalidArgumentException('Invalid inventory transaction type.');
     $pdo->beginTransaction();
     try{
         $stmt=$pdo->prepare('SELECT * FROM inventory_items WHERE organization_id=? AND public_id=? AND archived_at IS NULL FOR UPDATE');$stmt->execute([$organizationId,$publicId]);$item=$stmt->fetch();if(!$item)throw new RuntimeException('Inventory item not found.');
-        $old=(float)$item['on_hand_quantity'];$new=$type==='count'?$delta:$old+$delta;if($new<0)$new=0;
+        $old=(float)$item['on_hand_quantity'];
+        if($expectedOnHand!==null&&abs($old-$expectedOnHand)>0.00001)throw new RuntimeException('Stock changed since the proposal. Ask for a fresh inventory adjustment.');
+        if($expectedOnHand!==null&&$type!=='count'&&$old+$delta<0)throw new RuntimeException('Stock is insufficient. Ask for a fresh physical count.');
+        $new=$type==='count'?$delta:$old+$delta;if($new<0)$new=0;
         $pdo->prepare('UPDATE inventory_items SET on_hand_quantity=?,last_counted_at=IF(?="count",NOW(6),last_counted_at),updated_by=?,updated_at=NOW(6) WHERE id=?')->execute([$new,$type,$userId,(int)$item['id']]);
         $pdo->prepare('INSERT INTO inventory_transactions (organization_id,inventory_item_id,transaction_type,quantity_delta,resulting_quantity,unit,note,created_by) VALUES (?,?,?,?,?,?,?,?)')->execute([$organizationId,(int)$item['id'],$type,$type==='count'?$new-$old:$delta,$new,$item['base_unit'],$note?:null,$userId]);
-        $pdo->commit();$item['on_hand_quantity']=$new;return $item;
+        $transactionId=(int)$pdo->lastInsertId();$pdo->commit();$item['on_hand_quantity']=$new;$item['last_transaction_id']=$transactionId;return $item;
     }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
 }
 
