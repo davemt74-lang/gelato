@@ -104,6 +104,21 @@ function ops_agent_execute_pending(PDO $pdo,int $organizationId,int $userId,arra
                 'proof'=>['url'=>'operations.php','section'=>'Inventory','inventoryItemId'=>$itemId,'transactionId'=>$item['last_transaction_id']]],
             'sources'=>['Restaurant Operations → Inventory']];
     }
+    if($type==='inventory_create'){
+        if(!app_has_permission('inventory.manage',$user)||!app_has_permission('inventory.agent',$user)||!app_has_permission('inventory.view',$user))
+            throw new RuntimeException('Inventory Agent and management permissions are required to create inventory items.');
+        $item=ops_agent_inventory_new_execute($pdo,$organizationId,$userId,$payload);
+        app_audit($pdo,$organizationId,$userId,'inventory.item_created','inventory_item',$item['publicId'],null,
+            ['name'=>$item['name'],'unit'=>$item['unit'],'onHand'=>$item['onHand'],
+             'transactionId'=>$item['transactionId'],'source'=>'operations_agent']);
+        return ['ok'=>true,'skill'=>'operations.action_confirmed',
+            'answer'=>'Confirmed. Created “'.$item['name'].'” with '.number_format((float)$item['onHand'],4).' '.$item['unit'].' on hand. Review it in Restaurant Operations → Inventory.',
+            'data'=>['action'=>'inventory_create','itemId'=>$item['publicId'],
+                'transactionId'=>$item['transactionId'],'resultOnHand'=>$item['onHand'],
+                'proof'=>['url'=>'operations.php','section'=>'Inventory',
+                    'inventoryItemId'=>$item['publicId'],'transactionId'=>$item['transactionId']]],
+            'sources'=>['Restaurant Operations → Inventory']];
+    }
     if($type==='wholesale_task_sync'){
         if(!app_has_permission('tasks.manage',$user))throw new RuntimeException('Task management permission is required to synchronize wholesale fulfillment tasks.');
         $result=operations_sync_wholesale_tasks($pdo,$organizationId,$userId);
@@ -122,7 +137,7 @@ try{
     $pending=gac_pending_get('operations',$organizationId,$userId);
     if(gac_is_confirm($message)){
         if(!$pending)throw new InvalidArgumentException('There is no pending Operations Agent action to confirm.');
-        if(in_array(($pending['type']??''),['inventory_adjust','task_status_change'],true)){
+        if(in_array(($pending['type']??''),['inventory_adjust','inventory_create','task_status_change'],true)){
             // Consume this one-use stock approval before its side effect, even if the
             // response is lost. The session lock also serializes concurrent confirms.
             gac_pending_clear('operations',$organizationId,$userId);
@@ -160,6 +175,18 @@ try{
         app_audit($pdo,$organizationId,$userId,'operations.agent_action_proposed','operations_agent_proposal',(string)$proposal['id'],null,
             ['type'=>'task_status_change','taskId'=>$payload['publicId']]);
         app_json_response(gac_proposal_result($proposal,'operations.action_proposal',['Restaurant Tasks']));
+    }
+    if($canInventory&&($newInventoryIntent=ops_agent_inventory_new_intent($message))!==null){
+        if(!app_has_permission('inventory.manage',$user))
+            app_json_response(['ok'=>false,'message'=>'Inventory management permission is required to create inventory records.'],403);
+        $payload=ops_agent_inventory_new_prepare($pdo,$organizationId,$newInventoryIntent);
+        $proposal=gac_pending_store('operations',$organizationId,$userId,'inventory_create',$payload,
+            'Proposed NEW inventory record “'.$payload['name'].'”, base unit '.$payload['unit'].
+            ', starting stock '.number_format($payload['quantity'],4).
+            ($payload['category']!==''?', category '.$payload['category']:'').'. No item has been created.');
+        app_audit($pdo,$organizationId,$userId,'operations.agent_action_proposed','operations_agent_proposal',(string)$proposal['id'],null,
+            ['type'=>'inventory_create','name'=>$payload['name']]);
+        app_json_response(gac_proposal_result($proposal,'operations.action_proposal',['Restaurant Operations → Inventory']));
     }
     if($canInventory&&($inventoryIntent=ops_agent_inventory_intent($message))!==null){
         if(!app_has_permission('inventory.manage',$user))app_json_response(['ok'=>false,'message'=>'Inventory management permission is required to change stock.'],403);
