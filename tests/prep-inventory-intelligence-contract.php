@@ -81,7 +81,7 @@ catch(PrepAgentPermissionException $expected){}
 app_boot_session();
 $read=prep_agent_handle($pdo,$prepActor,['message'=>'Show the prep list on 2026-11-06']);
 pit_assert($read['skill']==='prep.list'&&count($read['data']['tasks'])===2,'dated prep list reads both persisted tasks');
-pit_assert(str_contains($read['answer'],'6 pan dough')&&str_contains($read['answer'],'4 container sauce'),
+pit_assert(str_contains($read['answer'],'6 pans of dough')&&str_contains($read['answer'],'4 containers of sauce'),
     'spoken read-back includes item names and quantities; actual: '.$read['answer']);
 pit_assert((pac_context_get($orgId,$userId)['date']??'')==='2026-11-06','prep context is scoped to the current user and plan');
 pit_assert(pac_context_get($orgId+1000,$userId)===null,'prep context is not shared across organizations');
@@ -103,7 +103,7 @@ try{prep_agent_handle($pdo,$prepActor,['message'=>'Confirm']);
     throw new RuntimeException('A second confirmation must not replay the completed write');}
 catch(InvalidArgumentException $expected){}
 $afterIncrease=prep_agent_handle($pdo,$prepActor,['message'=>'Show the prep list on 2026-11-06']);
-pit_assert(str_contains($afterIncrease['answer'],'8 pan dough'),'read-back reflects the new persisted quantity');
+pit_assert(str_contains($afterIncrease['answer'],'8 pans of dough'),'read-back reflects the new persisted quantity');
 
 $assignee=prep_agent_handle($pdo,$prepActor,['message'=>"Who's doing sauce?"]);
 pit_assert($assignee['skill']==='prep.task_assignees'&&str_contains($assignee['answer'],'unassigned'),
