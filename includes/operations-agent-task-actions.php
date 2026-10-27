@@ -8,7 +8,7 @@ declare(strict_types=1);
 function ops_agent_task_status_intent(string $message): ?array
 {
     $command=trim((string)(preg_replace('/^\\s*(?:hey\\s+gelato[,\\s]*)?(?:please\\s+)?/iu','',$message)??$message));
-    $command=rtrim($command," \\t\\r\\n.");
+    $command=rtrim($command," \t\r\n.");
     $status=null;$name='';
     if(preg_match('/^(?:mark|set)\\s+(?:the\\s+)?(?:task\\s+)?(.+?)\\s+(?:as|to)\\s+(done|completed|in progress|blocked|accepted)$/iu',$command,$m)){
         $name=$m[1];$status=strtolower($m[2]);
@@ -19,7 +19,7 @@ function ops_agent_task_status_intent(string $message): ?array
             :(preg_match('/^block\\b/',$verb)?'blocked':'accepted'));
     }else{return null;}
     $status=['done'=>'completed','in progress'=>'in_progress'][$status]??$status;
-    $name=trim($name," \\t\\r\\n.");
+    $name=trim($name," \t\r\n.");
     if($name===''||strlen($name)>240||preg_match('/[;\\n]|\\band\\s+(?:complete|finish|start|block|accept|mark|set)\\b/iu',$name)){
         throw new InvalidArgumentException('Name exactly one restaurant task for a status change.');
     }
