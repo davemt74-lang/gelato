@@ -10,6 +10,7 @@ require_once __DIR__.'/food-monster-b8d8-vision-actions.php';
 require_once __DIR__.'/food-monster-b8d9-review-governance.php';
 require_once __DIR__.'/food-monster-b8d10-approvals.php';
 require_once __DIR__.'/food-monster-b8d11-domain-routing.php';
+require_once __DIR__.'/food-monster-b8d17a-capability-truth.php';
 require_once __DIR__.'/food-monster-b8d12-pending-actions.php';
 require_once __DIR__.'/food-monster-b8d13-preflight.php';
 require_once __DIR__.'/food-monster-b8d13b-task-journal.php';
@@ -65,22 +66,20 @@ function fm8d3_catalogue(array $principal,array $context=[]):array
         ];
     }
     $base['list_my_gelato_capabilities']=[
-        'description'=>'Enumerate the currently authorized executable Gelato Agent Chat tools and existing specialist agent domains for this authenticated user. Use when asked what restaurant systems, skills or tools the assistant can actually access. This reads the runtime registry; the inventory JSON alone does not confer execution grants.',
+        'description'=>'Show what this authenticated user can actually request through registered Agent Chat tools, specialist agent handoffs and prompt-only suggestions. Clearly distinguish registered access from successful execution, proposed skill contracts and private voice approval. Use when asked what tools, skills or Gelato sections the agent can access. No action is performed.',
         'parameters'=>['type'=>'object','properties'=>new stdClass(),'additionalProperties'=>false],
         'allowedArguments'=>[],'impact'=>'read',
         'authorize'=>static fn(array $actor,array $args):bool=>
             (int)($actor['id']??0)>0&&(int)($actor['organization_id']??0)>0,
         'validate'=>static fn(array $args,array $actor):array=>[],
         'execute'=>static function(array $args,array $actor)use($context):array{
-            $tools=fm8d3_catalogue($actor,$context);
-            $domains=fm8d11_available_domains($actor);
-            $names=array_keys($tools);
-            $routes=array_map(static fn(array $item):string=>(string)$item['label'],$domains);
+            $report=fm8d17a_snapshot($actor,$context);
             return ['ok'=>true,'data'=>[
-                'answer'=>'Your authorized Gelato Agent Chat tools: '.implode(', ',$names).
-                    '. Existing connected restaurant agents: '.($routes?implode(', ',$routes):'none for this account').'.',
-                'source'=>'Gelato executable tool and agent-node registries',
-                'nativeTools'=>$names,'agentDomains'=>array_keys($domains),
+                'answer'=>fm8d17a_summary($report),
+                'source'=>'Gelato permission-scoped registered tools and agent handoffs',
+                'nativeTools'=>array_column($report['nativeTools'],'id'),
+                'agentDomains'=>array_column($report['delegatedAgents'],'id'),
+                'capabilityTruth'=>$report,
             ]];
         },
     ];
