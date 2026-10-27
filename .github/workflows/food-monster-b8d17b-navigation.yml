@@ -1,0 +1,63 @@
+name: B8D17B Universal Agent Navigation
+
+on:
+  pull_request:
+    paths:
+      - 'includes/food-monster-b8d17b-navigation.php'
+      - 'includes/food-monster-b8d3-tool-runtime.php'
+      - 'js/global-agent.js'
+      - 'js/agent-canvas.js'
+      - 'js/dynamic-agent-canvas.js'
+      - 'tests/food-monster-b8d17b-navigation.php'
+      - 'tests/food-monster-b8d17b-navigation-browser.test.cjs'
+      - '.github/workflows/food-monster-b8d17b-navigation.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'includes/food-monster-b8d17b-navigation.php'
+      - 'includes/food-monster-b8d3-tool-runtime.php'
+      - 'js/global-agent.js'
+      - 'js/agent-canvas.js'
+      - 'js/dynamic-agent-canvas.js'
+      - 'tests/food-monster-b8d17b-navigation.php'
+      - 'tests/food-monster-b8d17b-navigation-browser.test.cjs'
+
+permissions:
+  contents: read
+
+jobs:
+  navigation-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_sqlite
+      - name: Parse PHP and client modules
+        run: |
+          php -l includes/food-monster-b8d17b-navigation.php
+          php -l includes/food-monster-b8d3-tool-runtime.php
+          php -l tests/food-monster-b8d17b-navigation.php
+          node --check js/global-agent.js
+          node --check js/agent-canvas.js
+          node --check js/dynamic-agent-canvas.js
+      - name: Authorization, navigation receipt and existing model regression
+        run: |
+          php tests/food-monster-b8d17b-navigation.php
+          php tests/food-monster-b8d3-tool-selection.php
+          php tests/food-monster-b8c-capability-map.php
+
+  navigation-browser:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.0
+          npx playwright install --with-deps chromium
+      - name: Verify actual rendered navigation cards
+        run: node tests/food-monster-b8d17b-navigation-browser.test.cjs
