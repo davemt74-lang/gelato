@@ -43,8 +43,8 @@ $csrf = app_csrf_token();
 <div class="modal" id="modal"><div class="modal-box"><div class="modal-head"><h3 id="modalTitle">Modal</h3><button id="modalClose">×</button></div><div id="modalBody"></div></div></div>
 <script src="js/agent-page-context.js?v=20260916-1"></script>
 <script src="js/equipment-agent-context.js?v=20260916-2"></script>
-<script src="js/global-agent.js?v=20261026-b8d16a-voice1"></script>
-<script src="js/dynamic-agent-canvas.js?v=20261023-manual-chat1"></script>
+<script src="js/global-agent.js?v=20261027-b8d17b-navigation1"></script>
+<script src="js/dynamic-agent-canvas.js?v=20261027-b8d17b-navigation1"></script>
 <script src="js/universal-admin-page-shell.js?v=20260915-3"></script>
 <script>
 (()=>{'use strict';const CSRF=<?=json_encode($csrf,JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT|JSON_THROW_ON_ERROR)?>,CAN_EDIT=<?=$canEdit?'true':'false'?>,CAN_SERVICE=<?=$canService?'true':'false'?>,CAN_CONTACTS=<?=$canContacts?'true':'false'?>,$=id=>document.getElementById(id);let state={assets:[],contacts:[],events:[],summary:{},selected:null};
@@ -70,4 +70,3 @@ $('addServiceEvent')?.addEventListener('click',()=>{if(!state.selected)return al
 document.querySelectorAll('[data-agent-prompt]').forEach(button=>button.addEventListener('click',()=>window.GelatoGlobalAgent?.send?.(button.dataset.agentPrompt||'')));
 load();})();
 </script>
-</body></html>
