@@ -10,6 +10,7 @@ on:
       - 'includes/prep-intelligence-core.php'
       - 'includes/prep-agent-core.php'
       - 'includes/prep-agent-followups.php'
+      - 'includes/prep-agent-proactive.php'
       - 'js/restaurant-agent-bridge.js'
       - 'includes/agent-workspace-core.php'
       - 'js/prep-intelligence.js'
@@ -27,6 +28,7 @@ on:
       - 'includes/prep-intelligence-core.php'
       - 'includes/prep-agent-core.php'
       - 'includes/prep-agent-followups.php'
+      - 'includes/prep-agent-proactive.php'
       - 'js/restaurant-agent-bridge.js'
       - 'includes/agent-workspace-core.php'
       - 'js/prep-intelligence.js'
@@ -63,6 +65,7 @@ jobs:
           php -l includes/prep-intelligence-core.php
           php -l includes/prep-agent-core.php
           php -l includes/prep-agent-followups.php
+          php -l includes/prep-agent-proactive.php
           php -l includes/agent-workspace-core.php
           php -l tests/prep-inventory-intelligence-contract.php
           node --check js/prep-intelligence.js
