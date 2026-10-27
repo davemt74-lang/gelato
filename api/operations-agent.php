@@ -6,6 +6,7 @@ require_once __DIR__ . '/../includes/operations-wholesale.php';
 require_once __DIR__ . '/../includes/operations-wholesale-agent.php';
 require_once __DIR__ . '/../includes/agent-confirmation-core.php';
 require_once __DIR__ . '/../includes/operations-agent-inventory-actions.php';
+require_once __DIR__ . '/../includes/operations-agent-task-actions.php';
 // Compatibility capability markers: tasks.prep_add and tasks.category_create are now proposal-confirmed Operations actions.
 $user=app_require_auth();$pdo=app_pdo();$organizationId=(int)$user['organization_id'];$userId=(int)$user['id'];
 $canTasks=app_has_permission('tasks.agent',$user)&&app_has_permission('tasks.view',$user);$canInventory=app_has_permission('inventory.agent',$user)&&app_has_permission('inventory.view',$user);if(!$canTasks&&!$canInventory)app_json_response(['ok'=>false,'message'=>'Operations Agent permission required.'],403);if(!operations_core_ready($pdo))app_json_response(['ok'=>false,'message'=>'Operations Core migration is not installed. Run upgrade.php.'],503);
@@ -77,6 +78,19 @@ function ops_agent_execute_pending(PDO $pdo,int $organizationId,int $userId,arra
         $result=operations_sync_inventory_sources($pdo,$organizationId,$userId);
         return ['ok'=>true,'skill'=>'operations.action_confirmed','answer'=>'Confirmed. Inventory synchronized from the menu ingredient catalog and active recipes. '.$result['items'].' ingredient records were touched, covering '.$result['menuReferences'].' menu references and '.$result['recipeReferences'].' recipe references.','data'=>['action'=>'inventory_sync','result'=>$result],'sources'=>[]];
     }
+    if($type==='task_status_change'){
+        if(!app_has_permission('tasks.manage',$user)||!app_has_permission('tasks.agent',$user)||!app_has_permission('tasks.view',$user))
+            throw new RuntimeException('Task management and Agent permissions are required.');
+        $task=ops_agent_task_status_confirm($pdo,$organizationId,$payload,$userId);
+        $taskId=(string)$task['public_id'];
+        app_audit($pdo,$organizationId,$userId,'tasks.agent_status_changed','restaurant_task',$taskId,null,
+            ['oldStatus'=>$payload['expectedStatus'],'newStatus'=>$task['status'],'source'=>'operations_agent']);
+        return ['ok'=>true,'skill'=>'operations.action_confirmed',
+            'answer'=>'Confirmed. “'.$payload['title'].'” changed from '.str_replace('_',' ',$payload['expectedStatus']).' to '.str_replace('_',' ',$task['status']).'.',
+            'data'=>['action'=>'task_status_change','taskId'=>$taskId,'oldStatus'=>$payload['expectedStatus'],
+                'status'=>$task['status'],'proof'=>['url'=>'operations.php','section'=>'Tasks','taskId'=>$taskId]],
+            'sources'=>['Restaurant Tasks']];
+    }
     if($type==='inventory_adjust'){
         if(!app_has_permission('inventory.manage',$user)||!app_has_permission('inventory.agent',$user)||!app_has_permission('inventory.view',$user))throw new RuntimeException('Inventory Agent and management permissions are required to adjust stock.');
         $item=operations_inventory_adjust($pdo,$organizationId,(string)$payload['publicId'],(float)$payload['delta'],(string)$payload['type'],$userId,
@@ -108,13 +122,13 @@ try{
     $pending=gac_pending_get('operations',$organizationId,$userId);
     if(gac_is_confirm($message)){
         if(!$pending)throw new InvalidArgumentException('There is no pending Operations Agent action to confirm.');
-        if(($pending['type']??'')==='inventory_adjust'){
+        if(in_array(($pending['type']??''),['inventory_adjust','task_status_change'],true)){
             // Consume this one-use stock approval before its side effect, even if the
             // response is lost. The session lock also serializes concurrent confirms.
             gac_pending_clear('operations',$organizationId,$userId);
             if(session_status()===PHP_SESSION_ACTIVE)session_write_close();
             $result=ops_agent_execute_pending($pdo,$organizationId,$userId,$user,$pending);
-            app_audit($pdo,$organizationId,$userId,'operations.agent_action_confirmed','operations_agent_proposal',(string)$pending['id'],null,['type'=>'inventory_adjust']);
+            app_audit($pdo,$organizationId,$userId,'operations.agent_action_confirmed','operations_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);
             app_json_response($result);
         }
         try{$result=ops_agent_execute_pending($pdo,$organizationId,$userId,$user,$pending);}catch(Throwable $e){gac_pending_clear('operations',$organizationId,$userId);throw $e;}
@@ -136,6 +150,16 @@ try{
     if($canTasks&&preg_match('/\badd\s+(?:a\s+)?task\s*[:,-]?\s*(.+)$/iu',$normalized,$m)){
         if(!app_has_permission('tasks.manage',$user))app_json_response(['ok'=>false,'message'=>'Task management permission is required to add tasks.'],403);$taskText=trim($m[1]);$assignmentRequested=false;$assigneeIds=ops_agent_extract_assignees($pdo,$organizationId,$taskText,$assignmentRequested);if($assignmentRequested&&!$assigneeIds)app_json_response(['ok'=>false,'message'=>'I could not match that employee name to an active restaurant staff account. Say the employee name as it appears in the staff account.'],422);
         $proposal=gac_pending_store('operations',$organizationId,$userId,'task_create',['items'=>[$taskText],'assigneeIds'=>$assigneeIds,'transcript'=>$message],'Proposed action: create the restaurant task “'.$taskText.'”'.($assigneeIds?' and tag the requested employee(s)':'').'.');app_audit($pdo,$organizationId,$userId,'operations.agent_action_proposed','operations_agent_proposal',(string)$proposal['id'],null,['type'=>'task_create']);app_json_response(gac_proposal_result($proposal,'operations.action_proposal',['Restaurant Tasks']));
+    }
+    if($canTasks&&($taskStatusIntent=ops_agent_task_status_intent($message))!==null){
+        if(!app_has_permission('tasks.manage',$user))
+            app_json_response(['ok'=>false,'message'=>'Task management permission is required to change task status.'],403);
+        $payload=ops_agent_task_status_prepare($pdo,$organizationId,$taskStatusIntent);
+        $proposal=gac_pending_store('operations',$organizationId,$userId,'task_status_change',$payload,
+            'Proposed task status change for “'.$payload['title'].'”: '.str_replace('_',' ',$payload['expectedStatus']).' → '.str_replace('_',' ',$payload['status']).'. Confirm to apply.');
+        app_audit($pdo,$organizationId,$userId,'operations.agent_action_proposed','operations_agent_proposal',(string)$proposal['id'],null,
+            ['type'=>'task_status_change','taskId'=>$payload['publicId']]);
+        app_json_response(gac_proposal_result($proposal,'operations.action_proposal',['Restaurant Tasks']));
     }
     if($canInventory&&($inventoryIntent=ops_agent_inventory_intent($message))!==null){
         if(!app_has_permission('inventory.manage',$user))app_json_response(['ok'=>false,'message'=>'Inventory management permission is required to change stock.'],403);

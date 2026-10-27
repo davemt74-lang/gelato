@@ -5,9 +5,11 @@ on:
     paths:
       - 'api/operations-agent.php'
       - 'includes/operations-agent-inventory-actions.php'
+      - 'includes/operations-agent-task-actions.php'
       - 'includes/operations-core.php'
       - 'config/food-monster-capability-map.json'
       - 'tests/food-monster-b8d17d-inventory-actions.php'
+      - 'tests/food-monster-b8d17f-task-status.php'
       - '.github/workflows/food-monster-b8d17d-inventory-actions.yml'
   push:
     branches: [main]
@@ -48,8 +50,10 @@ jobs:
           php -l api/operations-agent.php
           php -l api/operations.php
           php -l includes/operations-agent-inventory-actions.php
+          php -l includes/operations-agent-task-actions.php
           php -l includes/operations-core.php
           php -l tests/food-monster-b8d17d-inventory-actions.php
+          php -l tests/food-monster-b8d17f-task-status.php
       - name: Parser, authorization, transactional replay and source registry
         env:
           B8D17D_DSN: mysql:host=127.0.0.1;port=3306;dbname=gelato_b8d17d_ci
@@ -57,4 +61,5 @@ jobs:
           B8D17D_PASS: root
         run: |
           php tests/food-monster-b8d17d-inventory-actions.php
+          php tests/food-monster-b8d17f-task-status.php
           php tests/food-monster-b8c-capability-map.php
