@@ -145,7 +145,7 @@ function gaw_route(array $user,string $message): array
     $prepKey=(int)($user['organization_id']??0).':'.(int)($user['id']??0);
     $recentPrep=$_SESSION['prep_agent_context'][$prepKey]??null;
     $prepFollowup=is_array($recentPrep)&&(int)($recentPrep['expires']??0)>=time()
-        &&preg_match('/^(?:(?:please\s+)?(?:mark|set)\s+.+\s+(?:complete|completed|done)|(?:please\s+)?(?:add|increase(?:\s+by)?)\s+(?:\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:more\s+)?(?:pans?|trays?|batches?|containers?|cases?|bags?|lbs?|pounds?)\b|(?:who(?:\x27s| is)|which (?:person|employee) is)\s+(?:doing|assigned to|working on)\s+.+)$/u',$text);
+        &&preg_match('/^(?:(?:please\s+)?(?:mark|set)\s+.+\s+(?:complete|completed|done|in progress|started|blocked|accepted)|(?:please\s+)?(?:assign|give)\s+.+\s+to\s+.+|(?:please\s+)?(?:start|resume|block|accept)\s+(?:the\s+)?prep\s+.+|(?:please\s+)?(?:add|increase(?:\s+by)?)\s+(?:\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:more\s+)?(?:pans?|trays?|batches?|containers?|cases?|bags?|lbs?|pounds?)\b|(?:who(?:\x27s| is)|which (?:person|employee) is)\s+(?:doing|assigned to|working on)\s+.+)$/u',$text);
     if($prepFollowup&&app_has_permission('prep.intelligence.agent',$user)&&app_has_permission('prep.intelligence.view',$user))
         return ['route'=>'api/prep-intelligence-agent.php','domain'=>'prep_intelligence_followup'];
 
