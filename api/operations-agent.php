@@ -13,6 +13,7 @@ $canTasks=app_has_permission('tasks.agent',$user)&&app_has_permission('tasks.vie
 function ops_agent_split_items(string $text):array
 {
     $text=preg_replace('/\b(?:and then|then)\b/i',';',$text)??$text;
+    $text=preg_replace('/\s+and\s+(?=(?:\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\s+(?:lb|lbs|pound|pounds|oz|g|kg|pan|pans|tray|trays|case|cases|bag|bags|box|boxes|each|ea)\b)/iu',';',$text)??$text;
     $parts=preg_split('/[;\n,]+/',$text)?:[];
     return array_values(array_filter(array_map(static fn(string $v):string=>trim($v," \t\n\r\0\x0B.-"),$parts),static fn(string $v):bool=>$v!==''));
 }
@@ -69,7 +70,7 @@ function ops_agent_execute_pending(PDO $pdo,int $organizationId,int $userId,arra
         foreach((array)($payload['items']??[]) as $item)$created[]=ops_agent_task_create($pdo,$organizationId,$userId,(string)$item,$category,(string)($payload['transcript']??''),(array)($payload['assigneeIds']??[]));
         if(!$created)throw new InvalidArgumentException('The pending task proposal no longer contains valid items.');
         $names=array_column($created,'title');
-        return ['ok'=>true,'skill'=>'operations.action_confirmed','answer'=>'Confirmed. Added '.count($created).' '.($type==='prep_tasks'?'prep item(s)':'task(s)').': '.implode(', ',$names).'.','data'=>['action'=>$type,'tasks'=>$created],'sources'=>array_column($created,'public_id')];
+        return ['ok'=>true,'skill'=>'operations.action_confirmed','answer'=>'Confirmed. Added '.count($created).' '.($type==='prep_tasks'?'prep item(s)':'task(s)').': '.implode(', ',$names).'.','data'=>['action'=>$type,'tasks'=>$created,'proof'=>['url'=>'operations.php','section'=>'Tasks','taskIds'=>array_column($created,'public_id')]],'sources'=>array_column($created,'public_id')];
     }
     if($type==='inventory_sync'){
         if(!app_has_permission('inventory.manage',$user))throw new RuntimeException('Inventory management permission is required to synchronize inventory sources.');
@@ -127,9 +128,9 @@ try{
         if(!app_has_permission('tasks.manage',$user))app_json_response(['ok'=>false,'message'=>'Task management permission is required to add a category.'],403);$name=trim($m[1]," .\t\n\r");
         $proposal=gac_pending_store('operations',$organizationId,$userId,'category_create',['name'=>ucwords($name)],'Proposed action: create the restaurant task category “'.ucwords($name).'”.');app_audit($pdo,$organizationId,$userId,'operations.agent_action_proposed','operations_agent_proposal',(string)$proposal['id'],null,['type'=>'category_create']);app_json_response(gac_proposal_result($proposal,'operations.action_proposal',['Restaurant Tasks → Categories']));
     }
-    if($canTasks&&(preg_match('/\badd(?:\s+these|\s+the following)?(?:\s+items?)?\s+to\s+(?:the\s+)?prep\s+list\s*[:,-]?\s*(.+)$/iu',$normalized,$m)||preg_match('/\b(?:add|put)\s+(.+?)\s+(?:to|on)\s+(?:the\s+)?prep\s+list\b(.*)$/iu',$normalized,$m))){
+    if($canTasks&&(preg_match('/\b(?:make|create|build|start)\s+(?:a\s+|the\s+)?prep\s+list\s+(?:with|for|containing)\s+(.+)$/iu',$normalized,$m)||preg_match('/\badd(?:\s+these|\s+the following)?(?:\s+items?)?\s+to\s+(?:the\s+)?prep\s+list\s*[:,-]?\s*(.+)$/iu',$normalized,$m)||preg_match('/\b(?:add|put)\s+(.+?)\s+(?:to|on)\s+(?:the\s+)?prep\s+list\b(.*)$/iu',$normalized,$m))){
         if(!app_has_permission('tasks.manage',$user))app_json_response(['ok'=>false,'message'=>'Task management permission is required to add prep tasks.'],403);
-        $taskText=trim(($m[1]??'').' '.($m[2]??''));$assignmentRequested=false;$assigneeIds=ops_agent_extract_assignees($pdo,$organizationId,$taskText,$assignmentRequested);if($assignmentRequested&&!$assigneeIds)app_json_response(['ok'=>false,'message'=>'I could not match that employee name to an active restaurant staff account. Say the employee name as it appears in the staff account.'],422);$items=ops_agent_split_items($taskText);if(!$items)app_json_response(['ok'=>false,'message'=>'Tell me which prep items to add.'],422);
+        $taskText=trim(($m[1]??'').' '.($m[2]??''));$assignmentRequested=false;$assigneeIds=ops_agent_extract_assignees($pdo,$organizationId,$taskText,$assignmentRequested);if($assignmentRequested&&!$assigneeIds)app_json_response(['ok'=>false,'message'=>'I could not match that employee name to an active restaurant staff account. Say the employee name as it appears in the staff account.'],422);$items=ops_agent_split_items($taskText);if(count($items)>30)app_json_response(['ok'=>false,'message'=>'A prep-list proposal can contain at most 30 items. Please split this into two requests.'],422);if(!$items)app_json_response(['ok'=>false,'message'=>'Tell me which prep items to add.'],422);
         $proposal=gac_pending_store('operations',$organizationId,$userId,'prep_tasks',['items'=>array_slice($items,0,30),'assigneeIds'=>$assigneeIds,'transcript'=>$message],'Proposed action: add '.count(array_slice($items,0,30)).' item(s) to the restaurant prep task list'.($assigneeIds?' and tag '.count($assigneeIds).' employee(s)':'').': '.implode(', ',array_slice($items,0,8)).(count($items)>8?'…':'').'.');app_audit($pdo,$organizationId,$userId,'operations.agent_action_proposed','operations_agent_proposal',(string)$proposal['id'],null,['type'=>'prep_tasks','count'=>count($items)]);app_json_response(gac_proposal_result($proposal,'operations.action_proposal',['Restaurant Tasks → Prep']));
     }
     if($canTasks&&preg_match('/\badd\s+(?:a\s+)?task\s*[:,-]?\s*(.+)$/iu',$normalized,$m)){

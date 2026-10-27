@@ -22,6 +22,10 @@ function d17d_error(callable $callback,string $needle):void
 $receive=ops_agent_inventory_intent('Hey Gelato, receive 5 lbs of Fresh Mozzarella.');
 d17d_assert($receive!==null&&$receive['type']==='receive'&&$receive['quantity']===5.0&&$receive['name']==='Fresh Mozzarella','receive parsing');
 d17d_assert(ops_agent_inventory_intent('use 2.25 lb of Fresh Mozzarella')['type']==='use','use parsing');
+d17d_assert(ops_agent_inventory_intent('please add five pounds of Fresh Mozzarella to inventory')['type']==='receive','spoken add inventory');
+d17d_assert(ops_agent_inventory_intent('put 3 lbs of Fresh Mozzarella into stock')['quantity']===3.0,'spoken put inventory');
+d17d_assert(ops_agent_inventory_intent('remove two lbs of Fresh Mozzarella from inventory')['type']==='use','spoken remove inventory');
+d17d_assert(ops_agent_inventory_intent('receive seven lbs of Fresh Mozzarella')['quantity']===7.0,'spoken number normalization');
 d17d_assert(ops_agent_inventory_intent('waste 1 lb of Fresh Mozzarella')['type']==='waste','waste parsing');
 d17d_assert(ops_agent_inventory_intent('count 0 lb of Fresh Mozzarella')['quantity']===0.0,'zero count allowed');
 d17d_assert(ops_agent_inventory_intent('set inventory count for Fresh Mozzarella to 12.5 lbs')['quantity']===12.5,'set count parsing');
@@ -50,6 +54,9 @@ $insert->execute(['inv-4',7,'fresh mozzarella','lb',1]);
 d17d_error(static fn()=>ops_agent_inventory_prepare($sqlite,7,$receive),'Multiple inventory items');
 
 $api=(string)file_get_contents(dirname(__DIR__).'/api/operations-agent.php');
+d17d_assert(str_contains($api,'(?:make|create|build|start)')&&str_contains($api,'prep\\s+list'),'natural spoken prep creation');
+d17d_assert(str_contains($api,'A prep-list proposal can contain at most 30 items'),'oversized prep request is rejected');
+d17d_assert(str_contains($api,"'taskIds'")&&str_contains($api,"'url'=>'operations.php'"),'created prep tasks return record receipts');
 $core=(string)file_get_contents(dirname(__DIR__).'/includes/operations-core.php');
 d17d_assert(str_contains($api,"'inventory_adjust'")&&str_contains($api,"'inventory.manage'")
     &&str_contains($api,'session_write_close()'),'manager-only confirm and consume before write');
