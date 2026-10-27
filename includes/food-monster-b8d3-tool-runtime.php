@@ -11,6 +11,7 @@ require_once __DIR__.'/food-monster-b8d9-review-governance.php';
 require_once __DIR__.'/food-monster-b8d10-approvals.php';
 require_once __DIR__.'/food-monster-b8d11-domain-routing.php';
 require_once __DIR__.'/food-monster-b8d17a-capability-truth.php';
+require_once __DIR__.'/food-monster-b8d17b-navigation.php';
 require_once __DIR__.'/food-monster-b8d12-pending-actions.php';
 require_once __DIR__.'/food-monster-b8d13-preflight.php';
 require_once __DIR__.'/food-monster-b8d13b-task-journal.php';
@@ -83,7 +84,7 @@ function fm8d3_catalogue(array $principal,array $context=[]):array
             ]];
         },
     ];
-    return array_merge($base,fm8d4_schedule_catalogue($principal),fm8d5_catalogue($principal),fm8d6_training_catalogue($principal,$context),fm8d7_vision_catalogue($principal),fm8d8_vision_catalogue($principal,$context),fm8d9_catalogue($principal),fm8d10_catalogue($principal,$context),fm8d11_catalogue($principal,$context),fm8d12_pending_catalogue($principal,$context));
+    return array_merge($base,fm8d17b_catalogue($principal),fm8d4_schedule_catalogue($principal),fm8d5_catalogue($principal),fm8d6_training_catalogue($principal,$context),fm8d7_vision_catalogue($principal),fm8d8_vision_catalogue($principal,$context),fm8d9_catalogue($principal),fm8d10_catalogue($principal,$context),fm8d11_catalogue($principal,$context),fm8d12_pending_catalogue($principal,$context));
 }
 function fm8d3_provider_tools(string $provider,array $catalogue):array
 {
@@ -172,6 +173,7 @@ function fm8d3_turn(
     $payload['tool_choice']=$provider==='openai'?'auto':['type'=>'auto'];
     $today=(new DateTimeImmutable('now',new DateTimeZone('America/Phoenix')))->format('Y-m-d l');
     $instruction=" Today at the restaurant in America/Phoenix is ".$today.". Interpret relative dates such as Friday against that date; when time is missing, ask rather than inventing it. Select an appropriate available Gelato skill for a user’s account, hours, staff schedule, roster, availability, shift creation, menu item ingredient, price, or in-house recipe request. For a named menu item first consult get_menu_item rather than claiming menu data is missing. For generic cooking science questions such as why honey helps pizza dough, answer conversationally without requiring private recipe access. Shift creation selects propose_staff_shift and requires a separate explicit human Confirm before any database change. Do not say live data is unavailable without attempting the authorized tool. Use model-selected get_my_training_progress or run_training_step for the employee's saved training and training dialogue; do not require exact command phrases. Never invent training steps; use recorded procedures only. For multi-part questions, select up to four independent authorized read skills in one tool-selection response; their verified results are combined locally in Agent Chat, never transmitted back to the AI provider. Never batch routine changes with reads or with other writes, never depend on an unread result to choose a write, and use the existing pending proposal confirmation for changes. For questions on Vision Lab, its camera device health, recorded observations, models, mission statuses, and datasets, select the authorized Vision Lab read skill and cite recorded history, never assume live perception. For explicit authorized requests to create a Vision Lab collection mission or an empty DRAFT dataset version, select the corresponding routine creation tool with a clear name/title; do not infer creation from a question. For Vision Lab training-sample review queues, annotation-quality reports and model release candidates, select the authorized read-only review/governance skill. Samples may be pending, disputed, approved or rejected; never claim a review decision was executed. Approval, dataset freeze, model release and device changes require the dedicated Gelato governance workflow. When a manager explicitly requests a Vision Lab training-sample review decision, use request_vision_sample_review to prepare a durable proposal; do not claim a sample was changed until the signed-in user clicks Approve in Agent Chat and the server verifies the original sample is unchanged. The proposal never executes a review. Never activate vision models, modify device configuration, approve samples, or freeze datasets through routine model-selected tools. For requests not covered by a native tool, call delegate_restaurant_domain to choose the best accessible existing Gelato operations agent. Select the domain by intent, not fixed words, and let the destination enforce its permission and confirmation contract. When an existing Gelato Agent has a server-recorded pending proposal, use continue_pending_restaurant_action ONLY for the user's explicit, unambiguous confirmation or cancellation; do not infer consent from a vague acknowledgement. This tool sends a canonical single-use decision to that specific pending Agent and never bypasses its separate approval gate. Do not use generic delegation for confirmation if this native pending tool is available. Follow-ups that ask questions (without approval) should use the same domain. Do not delegate general chat or generic cooking science; answer it directly. Do not invent records.";
+    $instruction.=' When the user explicitly asks to open or switch to a Gelato screen, select navigate_to_gelato_page with an authorized page_id. This prepares a verified internal navigation and does not retrieve business records. Do not invent URLs, claim access to unlisted pages, or confuse navigation with permission to perform actions on that page.';
     if(($context['channel']??'')==='voice'&&($context['privateVoiceApproved']??false)!==true)
         $instruction.=' This is an unverified room-voice turn. Only the published menu read tool is offered intentionally to protect private employee, schedule and restaurant records. The other Gelato tools do exist; they are not missing. If the question needs private data, explain that the logged-in operator must explicitly approve this spoken request in Agent Chat or type the request. Acoustic speaker recognition alone never unlocks private tools. Do not imply private tools are absent, and never guess private facts.';
     if($provider==='openai')$payload['instructions'].=$instruction;
@@ -286,7 +288,7 @@ function fm8d3_turn(
             'sources'=>[],'data'=>['status'=>$result['status'],'steps'=>$result['completed']]],
             (int)$result['completed']);
     }
-    $answers=[];$sources=[];$pendingApproval=null;$delegation=null;
+    $answers=[];$sources=[];$pendingApproval=null;$delegation=null;$navigation=null;
     foreach($result['steps'] as $step){
         $obs=$step['observation']??[];
         if(($obs['approval']['type']??'')==='vision_sample_review'
@@ -294,6 +296,8 @@ function fm8d3_turn(
             $pendingApproval=$obs['approval'];
         if(isset($obs['delegation'])&&is_array($obs['delegation']))
             $delegation=$obs['delegation'];
+        if(($obs['navigation']['kind']??'')==='verified_internal_page'
+           &&is_array($obs['navigation']))$navigation=$obs['navigation'];
         $answer=trim((string)($obs['answer']??''));
         if($answer!=='')$answers[]=$answer;
         $source=trim((string)($obs['source']??''));
@@ -308,6 +312,7 @@ function fm8d3_turn(
         'cognitiveRetrySelectedRead'=>$cognitiveRetry];
     if($pendingApproval!==null)$data['approval']=$pendingApproval;
     if($delegation!==null)$data['delegation']=$delegation;
+    if($navigation!==null)$data['navigation']=$navigation;
     return $save(['ok'=>true,'skill'=>'agent.model_selected_tools',
         'answer'=>implode("\n\n",$answers),
         'sources'=>array_values(array_unique($sources)),

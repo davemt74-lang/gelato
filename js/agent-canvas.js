@@ -321,6 +321,14 @@
 
   function structuredCard(data, skill, sources = []) {
     if (data == null) return '<div class="empty">No structured result for this response.</div>';
+    const nav = data.navigation || data.responseData?.navigation;
+    if (nav?.kind === 'verified_internal_page'
+        && /^[a-z][a-z0-9-]*\.php(?:#[a-z][a-z0-9-]*)?$/.test(String(nav.href || ''))) {
+      return '<div class="result-card"><h3>Verified Gelato page</h3>'+
+        '<p>'+esc(nav.label || 'Gelato workspace')+' · '+esc(nav.section || 'Staff navigation')+'</p>'+
+        '<p>Current account access was checked by the server. This navigates only; it does not change restaurant data.</p>'+
+        '<a class="pill" href="'+esc(nav.href)+'">Open page ↗</a></div>';
+    }
     if (skill === 'food_monster.kitchen_pilot' && Array.isArray(data.items)) {
       const ready=data.readiness||{};
       const count=ready.statusCounts||{};
@@ -548,7 +556,12 @@
     root.innerHTML = messages.map((message) => `
       <article class="msg ${message.role === 'user' ? 'user' : 'agent'}">
         <div>
-          <div class="bubble">${esc(message.content)}</div>
+          <div class="bubble">${esc(message.content)}${(() => {
+            const nav=message.structured?.navigation || message.structured?.responseData?.navigation;
+            return nav?.kind==='verified_internal_page'
+              && /^[a-z][a-z0-9-]*\.php(?:#[a-z][a-z0-9-]*)?$/.test(String(nav.href||''))
+              ? '<div class="result-card"><a href="'+esc(nav.href)+'">Open '+esc(nav.label||'Gelato page')+' ↗</a></div>' : '';
+          })()}</div>
           <div class="meta">${message.role === 'user' ? 'You' : 'Gelato'} · ${esc(message.channel || 'text')}${message.skill ? ' · ' + esc(message.skill) : ''} · ${esc(fmt(message.created_at))}</div>
         </div>
       </article>

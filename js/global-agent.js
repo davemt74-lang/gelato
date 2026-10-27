@@ -83,7 +83,7 @@
     if (!document.getElementById('gelato-agent-bar') || window.GelatoDynamicAgentCanvas
         || document.querySelector('script[src*="dynamic-agent-canvas.js"]')) return;
     const script = document.createElement('script');
-    script.src = 'js/dynamic-agent-canvas.js?v=20261026-chat-universal1';
+    script.src = 'js/dynamic-agent-canvas.js?v=20261027-b8d17b-navigation1';
     script.dataset.gelatoChatPopup = '1';
     document.head.appendChild(script);
   }
@@ -508,6 +508,13 @@
       window.dispatchEvent(new CustomEvent('gelato-agent-response', {
         detail: {answer, result, threadId: S.thread},
       }));
+      const navigation=result?.data?.navigation;
+      if(!voice && navigation?.kind==='verified_internal_page'
+         && /^[a-z][a-z0-9-]*\.php(?:#[a-z][a-z0-9-]*)?$/.test(String(navigation.href||''))){
+        // Never navigate before canonical chat history and the action receipt
+        // have been recorded. Only a server-selected, local page can redirect.
+        window.setTimeout(()=>window.location.assign(navigation.href),900);
+      }
       if (voice && window.speechSynthesis && has('voice.agent')) speak(answer);
       else if(S.conversation&&voice) status('Reply ready. Browser voice output is unavailable; read the response above.',7000);
       return result;
