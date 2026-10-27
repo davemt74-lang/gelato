@@ -1583,7 +1583,7 @@
     {
       "path": "api/operations-agent.php",
       "feature": "operations",
-      "sourceBlob": "e3ba144892717c071e0e5fca70b80d75d139444f",
+      "sourceBlob": "5b137e2999dad01bb57cc1da38ba533686b9b6a0",
       "discoveredActions": [],
       "permissionTokensSeen": [
         "inventory.agent",
