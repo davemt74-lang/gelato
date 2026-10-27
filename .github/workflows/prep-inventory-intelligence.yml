@@ -14,6 +14,7 @@ on:
       - 'js/prep-intelligence.js'
       - 'database/20260913_zzzzzzzz_prep_inventory_intelligence.sql'
       - 'tests/prep-inventory-intelligence-contract.php'
+      - 'tests/prep-agent-bridge-routing.cjs'
       - '.github/workflows/prep-inventory-intelligence.yml'
   push:
     branches: [main]
@@ -29,6 +30,7 @@ on:
       - 'js/prep-intelligence.js'
       - 'database/20260913_zzzzzzzz_prep_inventory_intelligence.sql'
       - 'tests/prep-inventory-intelligence-contract.php'
+      - 'tests/prep-agent-bridge-routing.cjs'
       - '.github/workflows/prep-inventory-intelligence.yml'
 
 jobs:
@@ -62,6 +64,7 @@ jobs:
           php -l tests/prep-inventory-intelligence-contract.php
           node --check js/prep-intelligence.js
           node --check js/restaurant-agent-bridge.js
+          node tests/prep-agent-bridge-routing.cjs
       - name: Architecture and safety contract
         run: |
           grep -q "CREATE TABLE IF NOT EXISTS prep_plans" database/20260913_zzzzzzzz_prep_inventory_intelligence.sql
