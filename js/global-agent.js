@@ -508,6 +508,13 @@
       window.dispatchEvent(new CustomEvent('gelato-agent-response', {
         detail: {answer, result, threadId: S.thread},
       }));
+      const navigation=result?.data?.navigation;
+      if(!voice && navigation?.kind==='verified_internal_page'
+         && /^[a-z][a-z0-9-]*\.php(?:#[a-z][a-z0-9-]*)?$/.test(String(navigation.href||''))){
+        // Never navigate before canonical chat history and the action receipt
+        // have been recorded. Only a server-selected, local page can redirect.
+        window.setTimeout(()=>window.location.assign(navigation.href),900);
+      }
       if (voice && window.speechSynthesis && has('voice.agent')) speak(answer);
       else if(S.conversation&&voice) status('Reply ready. Browser voice output is unavailable; read the response above.',7000);
       return result;
