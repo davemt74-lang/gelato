@@ -24,6 +24,9 @@ d17d_assert($receive!==null&&$receive['type']==='receive'&&$receive['quantity']=
 d17d_assert(ops_agent_inventory_intent('use 2.25 lb of Fresh Mozzarella')['type']==='use','use parsing');
 d17d_assert(ops_agent_inventory_intent('please add five pounds of Fresh Mozzarella to inventory')['type']==='receive','spoken add inventory');
 d17d_assert(ops_agent_inventory_intent('put 3 lbs of Fresh Mozzarella into stock')['quantity']===3.0,'spoken put inventory');
+d17d_assert(ops_agent_inventory_intent('add to inventory 20 pounds of Fresh Mozzarella')['quantity']===20.0,'natural inventory-first speech');
+d17d_assert(ops_agent_inventory_intent('put into stock: 3 lbs of Fresh Mozzarella')['type']==='receive','natural stock-first speech');
+d17d_assert(ops_agent_inventory_intent('add 2 pans of dough to prep list')===null,'prep requests must not become inventory writes');
 d17d_assert(ops_agent_inventory_intent('remove two lbs of Fresh Mozzarella from inventory')['type']==='use','spoken remove inventory');
 d17d_assert(ops_agent_inventory_intent('receive seven lbs of Fresh Mozzarella')['quantity']===7.0,'spoken number normalization');
 d17d_assert(ops_agent_inventory_intent('waste 1 lb of Fresh Mozzarella')['type']==='waste','waste parsing');
