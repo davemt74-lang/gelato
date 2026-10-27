@@ -82,7 +82,7 @@ app_boot_session();
 $read=prep_agent_handle($pdo,$prepActor,['message'=>'Show the prep list on 2026-11-06']);
 pit_assert($read['skill']==='prep.list'&&count($read['data']['tasks'])===2,'dated prep list reads both persisted tasks');
 pit_assert(str_contains($read['answer'],'6 pan dough')&&str_contains($read['answer'],'4 container sauce'),
-    'spoken read-back includes item names and quantities');
+    'spoken read-back includes item names and quantities; actual: '.$read['answer']);
 pit_assert((pac_context_get($orgId,$userId)['date']??'')==='2026-11-06','prep context is scoped to the current user and plan');
 pit_assert(pac_context_get($orgId+1000,$userId)===null,'prep context is not shared across organizations');
 
