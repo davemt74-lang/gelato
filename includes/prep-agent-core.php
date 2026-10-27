@@ -206,6 +206,60 @@ function pac_execute(PDO $pdo,int $org,int $uid,array $user,array $proposal,bool
     throw new InvalidArgumentException('That pending Prep Agent action is no longer supported.');
 }
 
+
+/**
+ * Employee-facing, read-only prep inbox. Assignment membership is evaluated
+ * in SQL, not inferred from the current chat context or name matching.
+ */
+function pac_my_prep(PDO $pdo,int $org,int $uid,string $text): array
+{
+    $date=prep_parse_date_phrase($text);
+    $service=pac_service($text);
+    $filter=$service==='all'?'':' AND p.service_period IN (?,\'all\')';
+    $sql="SELECT p.public_id plan_public_id,p.plan_date,p.service_period,
+                 t.public_id,t.title,t.quantity,t.unit,t.status,t.due_at,t.priority
+          FROM prep_plan_tasks pt
+          JOIN prep_plans p ON p.id=pt.plan_id AND p.organization_id=pt.organization_id
+          JOIN restaurant_tasks t ON t.id=pt.task_id AND t.organization_id=pt.organization_id
+          WHERE pt.organization_id=? AND p.plan_date=? AND t.archived_at IS NULL
+            AND EXISTS (SELECT 1 FROM restaurant_task_assignments a
+                        WHERE a.organization_id=t.organization_id
+                          AND a.task_id=t.id AND a.user_id=?)".$filter."
+          ORDER BY FIELD(t.status,'blocked','in_progress','accepted','assigned','queued','completed','verified','cancelled'),
+                   t.due_at IS NULL,t.due_at,t.title LIMIT 61";
+    $params=[$org,$date,$uid];
+    if($service!=='all')$params[]=$service;
+    $q=$pdo->prepare($sql);$q->execute($params);
+    $all=$q->fetchAll(PDO::FETCH_ASSOC);
+    $more=count($all)>60;
+    $tasks=array_slice($all,0,60);
+    $plans=array_unique(array_column($tasks,'plan_public_id'));
+    if(count($plans)===1){
+        $first=$tasks[0];
+        pac_context_store($org,$uid,[
+            'public_id'=>$first['plan_public_id'],
+            'plan_date'=>$first['plan_date'],
+            'service_period'=>$first['service_period'],
+        ],count($tasks)===1?(string)$first['public_id']:null);
+    }else{
+        unset($_SESSION['prep_agent_context'][pac_context_key($org,$uid)]);
+    }
+    if(!$tasks)$answer='You have no assigned prep plan tasks for '.$date.($service==='all'?'':' '.$service).' prep.';
+    else{
+        $lines=[];
+        foreach(array_slice($tasks,0,12) as $task){
+            $amount=$task['quantity']===null?'':pac_quantity($task['quantity']).' '.trim((string)$task['unit']).' ';
+            $lines[]=$amount.$task['title'].' ('.str_replace('_',' ',(string)$task['status']).', '.$task['service_period'].' prep)';
+        }
+        $answer='Your assigned prep for '.$date.': '.count($tasks).($more?'+':'').' task(s). '.implode('; ',$lines).'.';
+        if(count($tasks)>12)$answer.=' Plus '.(count($tasks)-12).($more?'+':'').' more in your prep task list.';
+    }
+    return ['ok'=>true,'skill'=>'prep.my_tasks','answer'=>$answer,
+        'data'=>['date'=>$date,'service'=>$service,'tasks'=>$tasks,
+            'proof'=>['url'=>'prep-intelligence.php']],
+        'sources'=>array_column($tasks,'public_id')];
+}
+
 function prep_agent_handle(PDO $pdo,array $user,array $input): array
 {
     $org=(int)$user['organization_id'];
@@ -292,6 +346,13 @@ function prep_agent_handle(PDO $pdo,array $user,array $input): array
         app_audit($pdo,$org,$uid,'prep.agent_action_proposed','prep_agent_proposal',(string)$proposal['id'],null,['type'=>$action,'taskId'=>$full['public_id']]);
         return gac_proposal_result($proposal,'prep.action_proposal',['Prep Plan','Restaurant Tasks']);
     }
+
+
+    // Give employees a scoped inbox even when other people's prep plans exist.
+    if(preg_match('/\\bmy\\s+prep\\b/u',$lower)
+        ||preg_match('/\\bwhat\\s+(?:do|should)\\s+i\\s+(?:need\\s+to\\s+)?prep\\b/u',$lower)
+        ||preg_match('/\\bwhat\\s+am\\s+i\\s+assigned\\s+to\\s+prep\\b/u',$lower))
+        return pac_my_prep($pdo,$org,$uid,$text);
 
     if(preg_match('/\bprep\s+(?:list|tasks?|items?)\b/iu',$lower)
        &&preg_match('/\b(?:show|read|list|display|what(?:\x27s| is)?\s+on|tell me|give me)\b/iu',$lower)){
