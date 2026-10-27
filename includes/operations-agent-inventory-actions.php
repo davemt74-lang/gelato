@@ -16,7 +16,9 @@ function ops_agent_inventory_intent(string $message): ?array
         'seventeen'=>17,'eighteen'=>18,'nineteen'=>19,'twenty'=>20];
     $command=preg_replace_callback('/\\b('.implode('|',array_keys($spoken)).')\\b/iu',
         static fn(array $m):string=>(string)$spoken[strtolower($m[1])],$command)??$command;
-    if(preg_match('/^(?:add|put)\\s+(\\d+(?:\\.\\d{1,4})?)\\s+([a-z][a-z0-9-]{0,19})\\s+(?:of\\s+)?(.+?)\\s+(?:to|into)\\s+(?:the\\s+)?(?:inventory|stock)$/iu',$command,$m)){
+    if(preg_match('/^(?:add|put)\\s+(?:to|into)\\s+(?:the\\s+)?(?:inventory|stock)\\s*[:,-]?\\s*(\\d+(?:\\.\\d{1,4})?)\\s+([a-z][a-z0-9-]{0,19})\\s+(?:of\\s+)?(.+)$/iu',$command,$m)){
+        $command='receive '.$m[1].' '.$m[2].' of '.$m[3];
+    }elseif(preg_match('/^(?:add|put)\\s+(\\d+(?:\\.\\d{1,4})?)\\s+([a-z][a-z0-9-]{0,19})\\s+(?:of\\s+)?(.+?)\\s+(?:to|into)\\s+(?:the\\s+)?(?:inventory|stock)$/iu',$command,$m)){
         $command='receive '.$m[1].' '.$m[2].' of '.$m[3];
     }elseif(preg_match('/^(?:take|remove|deduct)\\s+(\\d+(?:\\.\\d{1,4})?)\\s+([a-z][a-z0-9-]{0,19})\\s+(?:of\\s+)?(.+?)\\s+from\\s+(?:the\\s+)?(?:inventory|stock)$/iu',$command,$m)){
         $command='use '.$m[1].' '.$m[2].' of '.$m[3];
