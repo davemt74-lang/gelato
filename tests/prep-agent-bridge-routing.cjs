@@ -6,7 +6,7 @@ const path = require('node:path');
 
 const script = fs.readFileSync(path.join(__dirname, '../js/restaurant-agent-bridge.js'), 'utf8');
 
-function makeAgent(permissions) {
+function makeAgent(permissions, persistedSession = new Map(), actorId = 'ci-manager-1') {
   const storage = new Map();
   const sent = [];
   const window = {
@@ -14,7 +14,7 @@ function makeAgent(permissions) {
     RESTAURANT_CSRF_TOKEN: 'contract-test',
     RestaurantAuth: {
       has: key => permissions.includes(key),
-      current: () => ({ displayName: 'CI Manager' }),
+      current: () => ({ id: actorId, displayName: 'CI Manager' }),
     },
   };
   const document = {
@@ -25,10 +25,14 @@ function makeAgent(permissions) {
     getItem: key => storage.get(key) ?? null,
     setItem: (key, value) => storage.set(key, value),
   };
+  const sessionStorage = {
+    getItem: key => persistedSession.get(key) ?? null,
+    setItem: (key, value) => persistedSession.set(key, value),
+  };
   const fetch = async (endpoint, options) => {
     const body = JSON.parse(options.body);
     sent.push({ endpoint, body });
-    const proposal = body.message.startsWith('create ') || body.message.startsWith('add ');
+    const proposal = /^(create |add |mark )/i.test(body.message);
     return { ok: true, json: async () => ({
       ok: true,
       skill: proposal ? 'prep.action_proposal' : 'prep.action_confirmed',
@@ -36,13 +40,14 @@ function makeAgent(permissions) {
       data: proposal ? { requiresConfirmation: true } : {},
     }) };
   };
-  vm.runInNewContext(script, { window, document, localStorage, fetch, Intl, Date, Math, console });
+  vm.runInNewContext(script, { window, document, localStorage, sessionStorage, fetch, Intl, Date, Math, console });
   return { submit: window.GelatoRestaurantAgent.submit, sent };
 }
 
 (async () => {
   const permissions = ['prep.intelligence.agent', 'prep.intelligence.view'];
-  const agent = makeAgent(permissions);
+  const persistedSession = new Map();
+  const agent = makeAgent(permissions, persistedSession);
   await agent.submit("create tomorrow's prep list with six pans of dough");
   assert.equal(agent.sent[0].endpoint, 'api/prep-intelligence-agent.php', 'dated creation should go to Prep Intelligence');
   await agent.submit('Confirm');
@@ -51,6 +56,20 @@ function makeAgent(permissions) {
   assert.equal(agent.sent[2].endpoint, 'api/prep-intelligence-agent.php', 'prep request takes precedence over timeclock route');
   await agent.submit('check inventory');
   assert.equal(agent.sent[3].endpoint, 'api/operations-agent.php', 'inventory remains with Operations');
+  await agent.submit('show prep list');
+  await agent.submit("Who's doing sauce?");
+  assert.equal(agent.sent[5].endpoint, 'api/prep-intelligence-agent.php', 'short assignee query returns to active prep plan');
+  await agent.submit('Add two more pans of dough');
+  assert.equal(agent.sent[6].endpoint, 'api/prep-intelligence-agent.php', 'quantity followup routes to dated prep plan');
+  const reloaded = makeAgent(permissions, persistedSession);
+  await reloaded.submit('Confirm');
+  assert.equal(reloaded.sent[0].endpoint, 'api/prep-intelligence-agent.php', 'pending confirmation survives browser reload');
+  await reloaded.submit('Mark dough complete');
+  assert.equal(reloaded.sent[1].endpoint, 'api/prep-intelligence-agent.php', 'task completion followup survives browser reload');
+  const differentUser = makeAgent(permissions, persistedSession, 'ci-manager-2');
+  await differentUser.submit('Confirm');
+  assert.notEqual(differentUser.sent[0].endpoint, 'api/prep-intelligence-agent.php',
+    'browser-side prep confirmation context does not cross user identities');
   const noAccess = makeAgent([]);
   await noAccess.submit('show prep list');
   assert.equal(noAccess.sent[0].endpoint, 'api/operations-agent.php', 'prep specialist requires agent and view permissions');

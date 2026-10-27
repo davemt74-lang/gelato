@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__.'/prep-intelligence-core.php';
 require_once __DIR__.'/agent-confirmation-core.php';
+require_once __DIR__.'/prep-agent-followups.php';
 
 final class PrepAgentPermissionException extends RuntimeException {}
 
@@ -71,7 +72,8 @@ function pac_resolve_plan(PDO $pdo,int $org,array $payload,bool $create,int $use
 
 function pac_quantity(mixed $value): string
 {
-    return rtrim(rtrim(number_format((float)$value,3,'.',''),'0'),'.');
+    $formatted=rtrim(rtrim(number_format((float)$value,3,'.',''),'0'),'.');
+    return $formatted===''?'0':$formatted;
 }
 
 function pac_word_number(string $word): ?float
@@ -139,15 +141,18 @@ function pac_visible(array $detail,bool $canForecast): array
 function pac_execute(PDO $pdo,int $org,int $uid,array $user,array $proposal,bool $canForecast): array
 {
     if((int)($proposal['organizationId']??0)!==$org||(int)($proposal['userId']??0)!==$uid)throw new PrepAgentPermissionException('This Prep Agent proposal does not belong to your session.');
-    pac_require($user,'prep.intelligence.manage','Prep Intelligence management permission is required for this action.');
     $payload=(array)$proposal['payload'];
     $type=(string)$proposal['type'];
+    if(in_array($type,['task_status','task_quantity'],true))
+        return pac_execute_followup($pdo,$org,$uid,$user,$payload,$type);
+    pac_require($user,'prep.intelligence.manage','Prep Intelligence management permission is required for this action.');
 
     if($type==='create_plan'){
         $date=(string)$payload['date'];$service=prep_service_period((string)$payload['service']);
         if(!empty($payload['expected']['exists'])||prep_plan_for_period($pdo,$org,$date,$service))
             throw new InvalidArgumentException('A prep plan already exists for that date and service. Review it instead of creating another.');
         $plan=prep_get_or_create_plan($pdo,$org,$date,$service,$uid);
+        pac_context_store($org,$uid,$plan);
         return ['ok'=>true,'skill'=>'prep.action_confirmed',
             'answer'=>'Confirmed. Created your '.$date.' '.ucfirst($service).' prep list. Open Prep Intelligence to add items or generate recommendations.',
             'data'=>['action'=>'create_plan','plan'=>$plan,
@@ -180,6 +185,7 @@ function pac_execute(PDO $pdo,int $org,int $uid,array $user,array $proposal,bool
         if(!$created)throw new InvalidArgumentException('The pending prep action no longer contains valid items.');
         $pdo->commit();
         }catch(Throwable $error){if($pdo->inTransaction())$pdo->rollBack();throw $error;}
+        pac_context_store($org,$uid,$plan,count($created)===1?(string)$created[0]['public_id']:null);
         return ['ok'=>true,'skill'=>'prep.action_confirmed','answer'=>'Confirmed. Added '.count($created).' item(s) to '.ucfirst((string)$plan['service_period']).' prep: '.implode(', ',array_column($created,'title')).'.','data'=>['action'=>'add_items','plan'=>$plan,'tasks'=>$created,
             'proof'=>['url'=>'prep-intelligence.php','planId'=>$plan['public_id'],'taskIds'=>array_column($created,'public_id')]],'sources'=>array_column($created,'public_id')];
     }
@@ -224,6 +230,62 @@ function prep_agent_handle(PDO $pdo,array $user,array $input): array
         gac_pending_clear('prep',$org,$uid);
         app_audit($pdo,$org,$uid,'prep.agent_action_discarded','prep_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);
         return ['ok'=>true,'skill'=>'prep.action_cancelled','answer'=>'Cancelled. I did not change the prep plan.','data'=>['cancelledProposal'=>$pending['id']],'sources'=>['Prep + Inventory Intelligence']];
+    }
+
+    if(($followup=pac_followup_intent($text))!==null){
+        $plan=pac_context_plan($pdo,$org,$uid,$text);
+        if(!$plan)return ['ok'=>true,'skill'=>'prep.plan_missing',
+            'answer'=>'Which dated prep list should I use? Open or create the plan and ask again.',
+            'data'=>null,'sources'=>[]];
+        $detail=prep_plan_detail($pdo,$org,(string)$plan['public_id']);
+        $context=pac_context_get($org,$uid);
+        $focus=$context&&$context['planId']===$plan['public_id']?(string)($context['taskId']??''):null;
+        $task=pac_task_match($detail['tasks'],(string)$followup['target'],$focus?:null);
+        $full=operations_task_by_public_id($pdo,$org,(string)$task['public_id']);
+        if(!$full)throw new InvalidArgumentException('That prep task is no longer available.');
+        if($followup['type']==='assignees'){
+            pac_context_store($org,$uid,$plan,(string)$task['public_id']);
+            $names=trim((string)($task['assigned_names']??''));
+            return ['ok'=>true,'skill'=>'prep.task_assignees',
+                'answer'=>$names!==''?$task['title'].' is assigned to '.$names.'.':$task['title'].' is currently unassigned.',
+                'data'=>['plan'=>$detail['plan'],'task'=>$task,'proof'=>['url'=>'prep-intelligence.php','planId'=>$plan['public_id'],'taskId'=>$task['public_id']]],
+                'sources'=>[(string)$task['public_id']]];
+        }
+        if($followup['type']==='complete'){
+            $manager=app_has_permission('prep.intelligence.manage',$user)&&app_has_permission('tasks.manage',$user);
+            if(!$manager){
+                pac_require($user,'tasks.self','Only managers or assigned employees may complete prep tasks.');
+                $check=$pdo->prepare('SELECT COUNT(*) FROM restaurant_task_assignments WHERE organization_id=? AND task_id=? AND user_id=?');
+                $check->execute([$org,(int)$full['id'],$uid]);
+                if(!(int)$check->fetchColumn())throw new PrepAgentPermissionException('You may only complete prep tasks assigned to you.');
+            }
+            if(in_array((string)$full['status'],['completed','verified','cancelled'],true))
+                return ['ok'=>true,'skill'=>'prep.task_already_done','answer'=>$full['title'].' is already '.str_replace('_',' ',$full['status']).'.','data'=>['task'=>$task],'sources'=>[(string)$task['public_id']]];
+            $action='task_status';
+            $summary='Proposed action: mark '.$full['title'].' complete on the '.$plan['plan_date'].' prep plan. No change has been made.';
+        }else{
+            pac_require($user,'prep.intelligence.manage','Prep management permission is required to change quantities.');
+            pac_require($user,'tasks.manage','Task management permission is required to change quantities.');
+            $action='task_quantity';
+            $summary='Proposed action: add '.pac_quantity($followup['quantity']).' '.$followup['unit'].' to '.$full['title'].' on the '.$plan['plan_date'].' prep plan. No change has been made.';
+        }
+        $payload=['date'=>(string)$plan['plan_date'],'service'=>(string)$plan['service_period'],
+            'expected'=>pac_snapshot($plan),'taskId'=>(string)$full['public_id'],
+            'taskUpdatedAt'=>(string)$full['updated_at'],'taskStatus'=>(string)$full['status'],
+            'taskQuantity'=>(string)($full['quantity']??''),'taskUnit'=>(string)($full['unit']??'')];
+        if($action==='task_quantity'){$payload['delta']=$followup['quantity'];$payload['unit']=$followup['unit'];}
+        $proposal=gac_pending_store('prep',$org,$uid,$action,$payload,$summary);
+        app_audit($pdo,$org,$uid,'prep.agent_action_proposed','prep_agent_proposal',(string)$proposal['id'],null,['type'=>$action,'taskId'=>$full['public_id']]);
+        return gac_proposal_result($proposal,'prep.action_proposal',['Prep Plan','Restaurant Tasks']);
+    }
+
+    if(preg_match('/\bprep\s+(?:list|tasks?|items?)\b/iu',$lower)
+       &&preg_match('/\b(?:show|read|list|display|what(?:\x27s| is)?\s+on|tell me|give me)\b/iu',$lower)){
+        $plan=pac_context_plan($pdo,$org,$uid,$text);
+        if(!$plan)return ['ok'=>true,'skill'=>'prep.plan_missing',
+            'answer'=>'No prep list exists for that date and service. Ask me to create one if needed.',
+            'data'=>null,'sources'=>[]];
+        return pac_list_result($pdo,$org,$uid,$plan,$canForecast);
     }
 
     if(($requested=pac_create_request($text))!==null){
