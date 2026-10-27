@@ -7,14 +7,18 @@
   const timeclockIntent = /\b(clock(?:ed)?\s+(?:me\s+)?(?:in|out)|time\s*clock|start\s+(?:my\s+)?break|end\s+(?:my\s+)?break|who.*clocked in|on the clock|late|no.?show|attendance|actual labor|scheduled.*actual|when do i work|next shift|my tasks|what.*prep)\b/i;
   const scheduleIntent = /\b(schedule|scheduled|shift|shifts|availability|available|time off|swap|coverage|labor hours|staffing|short staffed|short-staffed|who works|who is working|working\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))\b/i;
   const operationsIntent = /\b(inventory|stock|par|reorder|shortage|running out|task|tasks|prep|opening|closing|cleaning|assignment|assigned|overdue|task category|fulfillment|delivery)\b|\bwholesale\s+(?:order|orders|task|tasks|production|fulfillment)\b/i;
+  const prepIntent = /\b(prep|preparation)\b/i;
+  const confirmationIntent = /^(?:confirm|yes|yes please|do it|go ahead|execute|apply|cancel|cancel it|discard|never mind|nevermind|stop)(?:\s+(?:it|that|change|action))?[.!]?$/i;
   const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
   const chatKey = 'restaurant-owner-agent-chat-v1';
   let busy = false;
+  let pendingEndpoint = null;
 
-  function shouldHandle(text) { return restaurantIntent.test(text); }
+  function shouldHandle(text) { return restaurantIntent.test(text) || (pendingEndpoint !== null && confirmationIntent.test(cleanWakePhrase(text))); }
   function isTimeclock(text) { return timeclockIntent.test(text); }
   function isScheduling(text) { return scheduleIntent.test(text); }
   function isOperations(text) { return operationsIntent.test(text); }
+  function isPrep(text) { return prepIntent.test(text) && Auth.has('prep.intelligence.agent') && Auth.has('prep.intelligence.view'); }
   function cleanWakePhrase(text) { return String(text || '').trim().replace(/^hey\s+gelato[,\s]*/i, ''); }
   function now() { return new Date().toISOString(); }
   function readHistory() { try { return JSON.parse(localStorage.getItem(chatKey) || '[]'); } catch { return []; } }
@@ -35,11 +39,13 @@
     const input = document.getElementById('ownerAgentInput'); if (input) input.value = '';
     saveMessage('user', rawText); appendMessage('user', rawText);
     const pending = appendMessage('agent', 'Checking restaurant operations…', true); const guidance = document.getElementById('ownerComposerGuidance');
-    if (guidance) guidance.textContent = isTimeclock(text) ? 'Gelato is checking time, attendance, shifts, and employee context.' : (isScheduling(text) ? 'Gelato is checking staff schedules, availability, coverage, and workload.' : (isOperations(text) ? 'Gelato is checking tasks, prep, inventory, and fulfillment.' : 'Restaurant Agent is checking private business knowledge.'));
+    if (guidance) guidance.textContent = isPrep(text) ? 'Gelato is checking your dated prep plans and tasks.' : (isTimeclock(text) ? 'Gelato is checking time, attendance, shifts, and employee context.' : (isScheduling(text) ? 'Gelato is checking staff schedules, availability, coverage, and workload.' : (isOperations(text) ? 'Gelato is checking tasks, inventory, and fulfillment.' : 'Restaurant Agent is checking private business knowledge.')));
     try {
-      const endpoint = isTimeclock(text) ? 'api/timeclock-agent.php' : (isScheduling(text) ? 'api/scheduling-agent.php' : (isOperations(text) ? 'api/operations-agent.php' : 'api/agent-brain.php'));
+      // Keep Confirm/Cancel on the same specialist that produced the proposal.
+      const endpoint = (pendingEndpoint && confirmationIntent.test(text)) ? pendingEndpoint : (isPrep(text) ? 'api/prep-intelligence-agent.php' : (isTimeclock(text) ? 'api/timeclock-agent.php' : (isScheduling(text) ? 'api/scheduling-agent.php' : (isOperations(text) ? 'api/operations-agent.php' : 'api/agent-brain.php'))));
       const response = await fetch(endpoint,{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-Token':window.RESTAURANT_CSRF_TOKEN || ''},body:JSON.stringify({action:'ask',message:text,voice:!!options.voice,voiceEventId:options.voiceEventId||'',csrf_token:window.RESTAURANT_CSRF_TOKEN || ''})});
       const data = await response.json(); if (!response.ok || !data.ok) throw new Error(data.message || 'The Restaurant Agent could not complete that request.');
+      pendingEndpoint = data.data?.requiresConfirmation ? endpoint : null;
       if (pending) pending.remove(); saveMessage('agent', data.answer || data.reply || 'Done.'); appendMessage('agent', data.answer || data.reply || 'Done.');
       if (guidance) guidance.textContent = `Restaurant Agent skill: ${data.skill || 'knowledge.search'}`;
       return data;

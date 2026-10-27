@@ -4,12 +4,21 @@ declare(strict_types=1);
 require __DIR__ . '/../includes/bootstrap.php';
 require __DIR__ . '/../includes/prep-intelligence-core.php';
 require __DIR__ . '/../includes/agent-workspace-core.php';
+require __DIR__ . '/../includes/prep-agent-core.php';
 
 $pdo=app_pdo();
 function pit_assert(bool $condition,string $message): void { if(!$condition) throw new RuntimeException($message); }
 
 pit_assert(operations_core_ready($pdo),'Operations Core must be installed.');
 pit_assert(prep_intelligence_ready($pdo),'Prep Intelligence must be installed.');
+$emptyRequest=pac_create_request('create a prep list for 2026-11-05');
+pit_assert($emptyRequest!==null&&$emptyRequest['date']==='2026-11-05'&&$emptyRequest['items']===[],'explicit dated empty prep-list intent');
+$withItems=pac_create_request("create tomorrow's prep list with six pans of dough and four containers of sauce");
+pit_assert($withItems!==null&&count($withItems['items'])===2
+    &&$withItems['items'][0]['quantity']===6.0
+    &&$withItems['items'][1]['quantity']===4.0,'conversational multiple-item prep creation');
+pit_assert($withItems['date']===prep_parse_date_phrase('tomorrow'),'spoken tomorrow follows restaurant local date');
+pit_assert(pac_create_request('add 20 pounds to inventory')===null,'inventory receipt is not a prep action');
 
 $orgId=(int)$pdo->query('SELECT id FROM organizations ORDER BY id LIMIT 1')->fetchColumn();
 if(!$orgId){
@@ -23,6 +32,42 @@ if(!$userId){
     $userId=(int)$pdo->lastInsertId();
     $pdo->prepare("INSERT INTO organization_memberships (organization_id,user_id,status) VALUES (?,?,'active')")->execute([$orgId,$userId]);
 }
+
+$prepActor=['id'=>$userId,'organization_id'=>$orgId,'permissions'=>['prep.intelligence.manage','prep.intelligence.agent','prep.intelligence.view']];
+$proposal=['organizationId'=>$orgId,'userId'=>$userId,'type'=>'create_plan',
+    'payload'=>['date'=>'2026-11-05','service'=>'all','expected'=>pac_snapshot(null)]];
+$created=pac_execute($pdo,$orgId,$userId,$prepActor,$proposal,false);
+pit_assert(($created['data']['proof']['url']??'')==='prep-intelligence.php','new prep list produces a verifiable record location');
+pit_assert((bool)prep_plan_for_period($pdo,$orgId,'2026-11-05','all'),'new prep list is dated and persisted');
+try{pac_execute($pdo,$orgId,$userId,$prepActor,$proposal,false);throw new RuntimeException('Repeated plan creation should fail');}
+catch(InvalidArgumentException $expected){}
+$itemProposal=['organizationId'=>$orgId,'userId'=>$userId,'type'=>'add_items',
+    'payload'=>['date'=>'2026-11-06','service'=>'all','expected'=>pac_snapshot(null),
+        'items'=>$withItems['items'],'transcript'=>'Create prep list with dough and sauce','source'=>'agent']];
+$added=pac_execute($pdo,$orgId,$userId,$prepActor,$itemProposal,false);
+pit_assert(count($added['data']['tasks'])===2,'two prep tasks were created atomically');
+pit_assert(($added['data']['proof']['planId']??'')!=='','prep task receipt links to dated canonical plan');
+$linked=$pdo->prepare('SELECT COUNT(*) FROM prep_plan_tasks WHERE organization_id=? AND plan_id=?');
+$linked->execute([$orgId,(int)$added['data']['plan']['id']]);
+pit_assert((int)$linked->fetchColumn()===2,'canonical prep plan links both tasks');
+try{pac_execute($pdo,$orgId,$userId,$prepActor,$itemProposal,false);throw new RuntimeException('Repeated prep task proposal should fail');}
+catch(InvalidArgumentException $expected){}
+$linked->execute([$orgId,(int)$added['data']['plan']['id']]);
+pit_assert((int)$linked->fetchColumn()===2,'replayed prep proposal does not duplicate tasks');
+$existingPlan=prep_plan_for_period($pdo,$orgId,'2026-11-05','all');
+$existingProposal=['organizationId'=>$orgId,'userId'=>$userId,'type'=>'add_items',
+    'payload'=>['date'=>'2026-11-05','service'=>'all','expected'=>pac_snapshot($existingPlan),
+        'items'=>[['title'=>'Dough for Friday','quantity'=>2,'unit'=>'pan']]]];
+pac_execute($pdo,$orgId,$userId,$prepActor,$existingProposal,false);
+try{pac_execute($pdo,$orgId,$userId,$prepActor,$existingProposal,false);
+    throw new RuntimeException('An existing-plan proposal should reject replay');}
+catch(InvalidArgumentException $expected){}
+$existingCount=$pdo->prepare("SELECT COUNT(*) FROM prep_plan_tasks WHERE organization_id=? AND plan_id=?");
+$existingCount->execute([$orgId,(int)$existingPlan['id']]);
+pit_assert((int)$existingCount->fetchColumn()===1,'revision-gated replay does not duplicate existing-plan tasks');
+try{pac_execute($pdo,$orgId,$userId,['id'=>$userId,'organization_id'=>$orgId,'permissions'=>[]],$proposal,false);
+    throw new RuntimeException('Prep manager permission must be enforced');}
+catch(PrepAgentPermissionException $expected){}
 
 operations_ensure_default_categories($pdo,$orgId,$userId);
 $prepCategory=operations_category_by_slug($pdo,$orgId,'prep');

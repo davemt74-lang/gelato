@@ -38,11 +38,13 @@ function pac_snapshot(?array $plan): array
         'publicId'=>(string)$plan['public_id'],
         'updatedAt'=>(string)$plan['updated_at'],
         'status'=>(string)$plan['status'],
+        'revision'=>(int)$plan['revision'],
     ]:[
         'exists'=>false,
         'publicId'=>'',
         'updatedAt'=>'',
         'status'=>'',
+        'revision'=>0,
     ];
 }
 
@@ -56,7 +58,8 @@ function pac_resolve_plan(PDO $pdo,int $org,array $payload,bool $create,int $use
         if(!$current
             ||(string)$current['public_id']!==(string)($expected['publicId']??'')
             ||(string)$current['updated_at']!==(string)($expected['updatedAt']??'')
-            ||(string)$current['status']!==(string)($expected['status']??'')){
+            ||(string)$current['status']!==(string)($expected['status']??'')
+            ||(int)$current['revision']!==(int)($expected['revision']??-1)){
             throw new InvalidArgumentException('That prep plan changed after I proposed the action. Review it and ask again.');
         }
         return $current;
@@ -100,6 +103,7 @@ function pac_parse_item(string $item): array
 function pac_items(string $text): array
 {
     $text=preg_replace('/\b(?:and then|then)\b/iu',';',$text)??$text;
+    $text=preg_replace('/\s+and\s+(?=(?:\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\s+(?:lb|lbs|pounds?|grams?|kg|pans?|trays?|batches?|containers?|cases?|bags?|boxes?|each|ea)\b)/iu',';',$text)??$text;
     $parts=preg_split('/[;\n,]+/u',$text)?:[];
     $items=[];
     foreach(array_slice($parts,0,30) as $part){
@@ -109,6 +113,21 @@ function pac_items(string $text): array
         if($parsed['title']!=='')$items[]=$parsed;
     }
     return $items;
+}
+
+function pac_create_request(string $text): ?array
+{
+    $clean=trim((string)(preg_replace('/^(?:hey\s+gelato|food\s+monster)[,\s]*/iu','',$text)??$text));
+    $pattern="/^(?:please\\s+)?(?:create|make|start|open|build)\\s+(?:(?:a|the)\\s+)?(?:(?:today|tomorrow)(?:'s)?\\s+)?prep\\s+(?:list|plan)\\b(.*)$/iu";
+    if(!preg_match($pattern,$clean,$match))return null;
+    $tail=trim((string)$match[1]," \t\r\n.");
+    $items=[];
+    if(preg_match('/\b(?:with|containing)\s+(.+)$/iu',$tail,$itemsMatch))
+        $items=pac_items($itemsMatch[1]);
+    elseif($tail!==''&&!preg_match('/^(?:(?:for|on)\s+)?(?:today|tomorrow|20\d{2}-\d{2}-\d{2})(?:\s+(?:morning|lunch|dinner|closing))?$/iu',$tail))
+        throw new InvalidArgumentException('Specify a prep date and optional items using “with”, such as “create tomorrow’s prep list with 6 pans of dough”.');
+    if(count($items)>30)throw new InvalidArgumentException('A prep plan can include at most 30 new items per request.');
+    return ['date'=>prep_parse_date_phrase($clean),'service'=>pac_service($clean),'items'=>$items];
 }
 
 function pac_visible(array $detail,bool $canForecast): array
@@ -124,8 +143,29 @@ function pac_execute(PDO $pdo,int $org,int $uid,array $user,array $proposal,bool
     $payload=(array)$proposal['payload'];
     $type=(string)$proposal['type'];
 
+    if($type==='create_plan'){
+        $date=(string)$payload['date'];$service=prep_service_period((string)$payload['service']);
+        if(!empty($payload['expected']['exists'])||prep_plan_for_period($pdo,$org,$date,$service))
+            throw new InvalidArgumentException('A prep plan already exists for that date and service. Review it instead of creating another.');
+        $plan=prep_get_or_create_plan($pdo,$org,$date,$service,$uid);
+        return ['ok'=>true,'skill'=>'prep.action_confirmed',
+            'answer'=>'Confirmed. Created your '.$date.' '.ucfirst($service).' prep list. Open Prep Intelligence to add items or generate recommendations.',
+            'data'=>['action'=>'create_plan','plan'=>$plan,
+                'proof'=>['url'=>'prep-intelligence.php','planId'=>$plan['public_id']]],
+            'sources'=>[$plan['public_id']]];
+    }
+
     if($type==='add_items'){
+        $pdo->beginTransaction();
+        try{
         $plan=pac_resolve_plan($pdo,$org,$payload,true,$uid);
+        if((string)$plan['status']==='closed')
+            throw new InvalidArgumentException('A closed prep plan cannot accept new items.');
+        // Lock and advance the plan revision within the task transaction so a
+        // previously approved proposal cannot be replayed against that plan.
+        $advance=$pdo->prepare('UPDATE prep_plans SET revision=revision+1,updated_at=NOW(6),updated_by=? WHERE id=? AND organization_id=? AND revision=?');
+        $advance->execute([$uid,(int)$plan['id'],$org,(int)$plan['revision']]);
+        if($advance->rowCount()!==1)throw new InvalidArgumentException('The prep plan changed. Review the current plan and ask again.');
         $created=[];
         foreach((array)($payload['items']??[]) as $item){
             if(trim((string)($item['title']??''))==='')continue;
@@ -138,7 +178,10 @@ function pac_execute(PDO $pdo,int $org,int $uid,array $user,array $proposal,bool
             ],$uid,(string)($payload['source']??'agent'));
         }
         if(!$created)throw new InvalidArgumentException('The pending prep action no longer contains valid items.');
-        return ['ok'=>true,'skill'=>'prep.action_confirmed','answer'=>'Confirmed. Added '.count($created).' item(s) to '.ucfirst((string)$plan['service_period']).' prep: '.implode(', ',array_column($created,'title')).'.','data'=>['action'=>'add_items','plan'=>$plan,'tasks'=>$created],'sources'=>array_column($created,'public_id')];
+        $pdo->commit();
+        }catch(Throwable $error){if($pdo->inTransaction())$pdo->rollBack();throw $error;}
+        return ['ok'=>true,'skill'=>'prep.action_confirmed','answer'=>'Confirmed. Added '.count($created).' item(s) to '.ucfirst((string)$plan['service_period']).' prep: '.implode(', ',array_column($created,'title')).'.','data'=>['action'=>'add_items','plan'=>$plan,'tasks'=>$created,
+            'proof'=>['url'=>'prep-intelligence.php','planId'=>$plan['public_id'],'taskIds'=>array_column($created,'public_id')]],'sources'=>array_column($created,'public_id')];
     }
 
     if($type==='publish_plan'){
@@ -181,6 +224,29 @@ function prep_agent_handle(PDO $pdo,array $user,array $input): array
         gac_pending_clear('prep',$org,$uid);
         app_audit($pdo,$org,$uid,'prep.agent_action_discarded','prep_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);
         return ['ok'=>true,'skill'=>'prep.action_cancelled','answer'=>'Cancelled. I did not change the prep plan.','data'=>['cancelledProposal'=>$pending['id']],'sources'=>['Prep + Inventory Intelligence']];
+    }
+
+    if(($requested=pac_create_request($text))!==null){
+        pac_require($user,'prep.intelligence.manage','Prep Intelligence management permission is required to create prep lists.');
+        $date=$requested['date'];$service=$requested['service'];
+        $existing=prep_plan_for_period($pdo,$org,$date,$service);
+        if($existing&&$requested['items']===[])
+            return ['ok'=>true,'skill'=>'prep.plan_exists',
+                'answer'=>'A '.$date.' '.ucfirst($service).' prep plan already exists. No duplicate was created.',
+                'data'=>['plan'=>$existing,'proof'=>['url'=>'prep-intelligence.php','planId'=>$existing['public_id']]],
+                'sources'=>[$existing['public_id']]];
+        $type=$requested['items']===[]?'create_plan':'add_items';
+        $payload=['date'=>$date,'service'=>$service,'expected'=>pac_snapshot($existing)];
+        if($type==='add_items'){
+            $payload['items']=$requested['items'];$payload['transcript']=$message;
+            $payload['source']=!empty($input['voice'])?'voice':'agent';
+        }
+        $summary='Proposed '.$date.' '.ucfirst($service).' prep list'.
+            ($type==='add_items'?' with '.count($requested['items']).' item(s)':' as an empty dated plan').
+            '. No changes have been made.';
+        $proposal=gac_pending_store('prep',$org,$uid,$type,$payload,$summary);
+        app_audit($pdo,$org,$uid,'prep.agent_action_proposed','prep_agent_proposal',(string)$proposal['id'],null,['type'=>$type,'date'=>$date,'service'=>$service]);
+        return gac_proposal_result($proposal,'prep.action_proposal',['Prep Plan','Restaurant Tasks']);
     }
 
     if(preg_match('/\b(?:add|put)\b.*\bprep\s+list\b/iu',$lower)||preg_match('/\badd(?:\s+these|\s+the following)?(?:\s+items?)?\s+to\s+(?:the\s+)?prep\s+list\b/iu',$lower)){

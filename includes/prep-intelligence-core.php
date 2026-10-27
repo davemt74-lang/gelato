@@ -236,7 +236,15 @@ function prep_attach_manual_task(PDO $pdo,int $organizationId,array $plan,array 
 
 function prep_parse_date_phrase(string $phrase,?DateTimeImmutable $now=null): string
 {
-    $now=$now??new DateTimeImmutable('now');$text=mb_strtolower(trim($phrase),'UTF-8');if(preg_match('/\b(20\d{2}-\d{2}-\d{2})\b/',$text,$m))return $m[1];if(preg_match('/\b(today|tomorrow|yesterday|last\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))\b/',$text,$m)){try{return $now->modify($m[1])->format('Y-m-d');}catch(Throwable){}}
+    if($now===null){
+        $timezone=(string)(app_config()['app']['timezone']??'America/Phoenix');
+        $now=new DateTimeImmutable('now',new DateTimeZone($timezone));
+    }
+    $text=mb_strtolower(trim($phrase),'UTF-8');
+    if(preg_match('/\b(20\d{2}-\d{2}-\d{2})\b/',$text,$m))return $m[1];
+    if(preg_match('/\b(today|tomorrow|yesterday|last\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))\b/',$text,$m)){
+        try{return $now->modify($m[1])->format('Y-m-d');}catch(Throwable){}
+    }
     return $now->format('Y-m-d');
 }
 
