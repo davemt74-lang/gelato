@@ -183,12 +183,13 @@
     {
       "path": "api/agent-workspace.php",
       "feature": "agent_core",
-      "sourceBlob": "7e77774dc133e7ca736b70a39189053bb9579da8",
+      "sourceBlob": "1eea25be7e1662aa9f721ba2591b6001952e7d14",
       "discoveredActions": [
         "append",
         "archive",
         "authorize_private_voice",
         "bootstrap",
+        "food_monster_capability_truth",
         "food_monster_context",
         "food_monster_skills",
         "history_page",
