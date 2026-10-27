@@ -49,6 +49,7 @@ const staff = {...owner, planned:[], inventoryVisibility:'withheld_for_this_acco
     await page.getByRole('button',{name:'Tools & status'}).click();
     await page.getByText('Native registered tools',{exact:false}).waitFor();
     assert.match(await page.locator('#capabilityTruthContent').innerText(),/Proposed contracts — NOT executable/);
+    await page.getByText('Diagnostics and acceptance still needed').click();
     assert.match(await page.locator('#capabilityTruthContent').innerText(),/not_tested_by_capability_snapshot/);
     assert.equal(await page.locator('#capabilityTruthContent img').count(),0,'server labels must be escaped');
     assert.equal(await page.evaluate(()=>window.capabilityXss===1),false,'malicious label never executes');
