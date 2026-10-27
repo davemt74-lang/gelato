@@ -7,6 +7,7 @@ require_once __DIR__.'/../includes/food-monster-person-conversations.php';
 require_once __DIR__.'/../includes/food-monster-conversation-memory.php';
 require_once __DIR__.'/../includes/food-monster-g13a-engagement.php';
 require_once __DIR__.'/../includes/agent-voice-conversation.php';
+require_once __DIR__.'/../includes/agent-private-voice.php';
 require_once __DIR__.'/../includes/food-monster-b8d3-tool-runtime.php';
 
 $user=app_require_auth();
@@ -128,17 +129,16 @@ try{
         error_log('Food Monster credential decrypt failure: '.get_class($error));
         app_json_response(['ok'=>false,'code'=>'credential_decryption','message'=>'Gelato cannot decrypt the saved API key. Re-save it in Gelato LLM Settings and preserve storage/keys during deployment.'],503);
     }
-    // Website authentication authorizes typed tools. A room voice may use
-    // private tools only if its canonical voice event verifies this SAME
-    // logged-in account. Other/unknown voices can still ask about the
-    // published menu through the existing read-only tool runtime.
-    $allowTools=($last['channel']??'text')!=='voice';
-    if(!$allowTools){
-        $event=(string)($last['voice_event_public_id']??'');
-        try{
-            $speaker=avc_verified_speaker($pdo,$org,$user,$event);
-            $allowTools=is_array($speaker)&&(int)($speaker['userId']??0)===$uid;
-        }catch(Throwable){$allowTools=false;}
+    // Authentication plus a deliberate, single-turn UI approval is needed
+    // for private room-voice tools. Acoustic identity is provisional and can
+    // NEVER authorize payroll, scheduling, recipes or employee data.
+    $isVoice=($last['channel']??'text')==='voice';
+    $allowTools=!$isVoice;
+    if($isVoice){
+        $privateToken=is_string($in['privateTurnToken']??null)
+            ?(string)$in['privateTurnToken']:'';
+        $allowTools=gavp_consume($org,$uid,$threadId,
+            (string)$last['public_id'],$privateToken);
     }
     $publicVoiceCatalogue=[];
     if(!$allowTools){
@@ -155,7 +155,7 @@ try{
         $context=['threadId'=>$threadId,'messageId'=>(string)$last['public_id'],
             'channel'=>(string)($last['channel']??'text'),
             'voiceEventId'=>(string)($last['voice_event_public_id']??''),
-            'verifiedSameUser'=>$allowTools];
+            'privateVoiceApproved'=>$allowTools];
         if($allowTools){
             $result=fm8d3_turn($pdo,$user,$selected['provider'],$key,$history,$personMemory,
                 context:$context);

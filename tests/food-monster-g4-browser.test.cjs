@@ -56,9 +56,12 @@ const source=fs.readFileSync(path.resolve(__dirname,'../js/food-monster-llm.js')
   });
   await noProvider.addScriptTag({content:source});
   await noProvider.waitForFunction(()=>window.GelatoFoodMonsterLLM?.configured!==null);
-  const fallback=await noProvider.evaluate(()=>window.GelatoFoodMonsterLLM.ask({text:'Hi',threadId:'one',csrf:'x'}));
-  ok(fallback.skill==='agent.capabilities','clear no-key fallback preserves tools');
-  ok(fallback.answer.includes('administrator'),'no fake model when provider is unconfigured');
+  const noKey=await noProvider.evaluate(async()=>{
+    try{await window.GelatoFoodMonsterLLM.ask({text:'Hi',threadId:'one',csrf:'x'});return '';}
+    catch(error){return String(error.message||error);}
+  });
+  ok(noKey.includes('No AI provider is configured'),'missing model fails closed without keyword-based private routing');
+  ok(noKey.includes('offline keyword fallback'),'clear administrator guidance on missing credentials');
   await noProvider.close();
   console.log('FM-G4 browser provider selection and chat adapter PASS ('+checks+' checks)');
  }finally{await browser.close();}

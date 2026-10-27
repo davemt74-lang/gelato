@@ -111,6 +111,6 @@ b8d1_assert(!str_contains($browser,'answer: capabilityMessage(),'),
 $api=(string)file_get_contents($root.'/api/food-monster-unified-knowledge.php');
 b8d1_assert(str_contains($api,'app_require_auth()')&&str_contains($api,'app_verify_request_csrf'),
     'Authenticated read remains protected');
-b8d1_assert(str_contains($api,'avc_verified_speaker'),
-    'Voice identity is server verified');
+b8d1_assert(str_contains($api,'gavp_was_approved')&&!str_contains($api,'avc_verified_speaker'),
+    'Private voice evidence requires the operator\'s approved canonical turn');
 echo 'Food Monster B8D1 Conversation Foundation PASS ('.$count." assertions)\n";

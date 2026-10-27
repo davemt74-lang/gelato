@@ -143,8 +143,8 @@ $r=fm8d3_turn($fakeDb,$principal,'openai','dummy',$history,'',$limit,$mockCatalo
 b8d3_check($r['data']['status']==='budget_exhausted','excess model-selected actions stopped');
 $api=(string)file_get_contents(dirname(__DIR__).'/api/food-monster-llm.php');
 b8d3_check(str_contains($api,'fm8d3_turn('),'live model endpoint uses tool selection');
-b8d3_check(str_contains($api,'avc_verified_speaker('),'voice cannot inherit owner tool grants');
-b8d3_check(str_contains($api,'$allowTools'),'voice tools require verified identity');
+b8d3_check(str_contains($api,'gavp_consume('),'voice cannot inherit owner tool grants without one-use operator approval');
+b8d3_check(str_contains($api,'$allowTools'),'voice tools require explicit private turn approval');
 b8d3_check(str_contains($api,'session_write_close()'),'long network call releases session lock');
 b8d3_check(str_contains($api,"'voiceIdentityRequired'")
     &&str_contains($api,"'privateToolsAvailable'"),

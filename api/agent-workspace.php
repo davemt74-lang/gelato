@@ -3,6 +3,7 @@ declare(strict_types=1);
 require __DIR__.'/../includes/bootstrap.php';
 require __DIR__.'/../includes/agent-workspace-core.php';
 require_once __DIR__.'/../includes/agent-voice-conversation.php';
+require_once __DIR__.'/../includes/agent-private-voice.php';
 require_once __DIR__.'/../includes/agent-node-registry.php';
 require_once __DIR__.'/../includes/admin-control-core.php';
 require_once __DIR__.'/../includes/menu-training-knowledge.php';
@@ -76,6 +77,25 @@ if($_SERVER['REQUEST_METHOD']==='GET'){
 if($_SERVER['REQUEST_METHOD']!=='POST'){header('Allow: GET, POST');app_json_response(['ok'=>false,'message'=>'Method not allowed.'],405);}
 $in=app_json_input();app_verify_request_csrf($in);$action=(string)($in['action']??'');
 try{
+    if($action==='authorize_private_voice'){
+        // Only a deliberate click in the authenticated user's UI may request
+        // private tool access for this exact committed voice turn. Acoustic
+        // matching cannot mint a private-tool grant.
+        if(!app_has_permission('voice.agent',$user))
+            throw new DomainException('Voice Agent permission is required.');
+        $thread=trim((string)($in['threadId']??''));
+        $messageId=trim((string)($in['messageId']??''));
+        if(!gaw_thread($pdo,$org,$uid,$thread))
+            throw new InvalidArgumentException('Agent conversation not found.');
+        $last=gaw_messages($pdo,$org,$uid,$thread,1)[0]??[];
+        if(($last['role']??'')!=='user'||($last['channel']??'')!=='voice'
+            ||(string)($last['public_id']??'')!==$messageId)
+            throw new InvalidArgumentException('The approval must refer to the latest spoken request.');
+        require_once __DIR__.'/../includes/agent-private-voice.php';
+        $token=gavp_issue($org,$uid,$thread,$messageId);
+        app_audit($pdo,$org,$uid,'agent.private_voice_turn_approved','agent_message',$messageId);
+        app_json_response(['ok'=>true,'privateTurnToken'=>$token,'expiresInSeconds'=>45]);
+    }
     if($action==='resolve_person_report'){
         $personId=(int)($in['personId']??0);
         $messageId=trim((string)($in['reportMessageId']??''));
@@ -93,17 +113,23 @@ try{
         $voiceEvent=(string)($in['voiceEventId']??'');
         $greeting=null;
         $speaker=null;
-        // Speaker event is server evidence, not an employee login or role grant.
-        if($role==='user'&&$channel==='voice'){
-            $speaker=avc_verified_speaker($pdo,$org,$user,$voiceEvent);
-            if($speaker&&(int)$speaker['userId']===$uid)
-                $greeting=avc_greeting($pdo,$org,$uid,(string)$speaker['firstName']);
-        }
-        $personSpeaker=$role==='user'&&$channel==='voice'
-            ?fm9d_resolve_speaker($pdo,$user,$voiceEvent):null;
+        $personSpeaker=null;
+        // Voiceprints are provisional attribution only. Claim an event inside
+        // the same transaction as the canonical message: concurrent/replayed
+        // acoustic IDs must never label a different spoken turn.
+        if($role!=='user'||$channel!=='voice')$voiceEvent='';
         $pendingKey='fm9d_pending_'.hash('sha256',$org.'|'.$uid.'|'.$thread);
         $pdo->beginTransaction();
         try{
+            if($role==='user'&&$channel==='voice'){
+                if(!avc_claim_unused_event($pdo,$org,$user,$voiceEvent))$voiceEvent='';
+                if($voiceEvent!==''){
+                    $speaker=avc_verified_speaker($pdo,$org,$user,$voiceEvent);
+                    if($speaker&&(int)$speaker['userId']===$uid)
+                        $greeting=avc_greeting($pdo,$org,$uid,(string)$speaker['firstName']);
+                    $personSpeaker=fm9d_resolve_speaker($pdo,$user,$voiceEvent);
+                }
+            }
             $message=gaw_append($pdo,$org,$uid,$thread,$role,(string)($in['content']??''),[
                 'channel'=>$channel,'skill'=>$in['skill']??null,'tool'=>$in['tool']??null,
                 'voiceEventId'=>$voiceEvent,'structured'=>$in['structured']??null,
@@ -121,6 +147,7 @@ try{
                 unset($_SESSION[$pendingKey]);
             }
             $pdo->commit();
+            if($role==='user')gavp_clear_approved();
         }catch(Throwable $error){
             if($pdo->inTransaction())$pdo->rollBack();
             unset($_SESSION[$pendingKey]);
@@ -185,6 +212,33 @@ try{
         // recent canonical turn and a server-resolved owner voice event only.
         // Do not trust a client-supplied participant, role, or channel flag.
         $roomThread=trim((string)($in['threadId']??''));
+        $routeLast=[];
+        if(preg_match('/^agent-[a-f0-9]{20}$/D',$roomThread)
+            &&gaw_thread($pdo,$org,$uid,$roomThread))
+            $routeLast=gaw_messages($pdo,$org,$uid,$roomThread,1)[0]??[];
+        $voiceRoute=($routeLast['channel']??'')==='voice'||($in['channel']??'')==='voice';
+        if($voiceRoute){
+            // Legacy/cached clients can still call the route endpoint directly.
+            // Do not let them bypass the model's private-turn consent check.
+            $canonical=($routeLast['role']??'')==='user'
+                &&($routeLast['channel']??'')==='voice'
+                &&trim((string)($routeLast['content']??''))===$message;
+            $approved=$canonical&&gavp_was_approved($org,$uid,$roomThread,
+                (string)($routeLast['public_id']??''));
+            if(!$approved){
+                $publicIntent=fm13b_intent($message);
+                if($canonical&&fmuk_menu_overview_question($message))
+                    app_json_response(['ok'=>true,
+                        'route'=>'api/food-monster-unified-knowledge.php?threadId='.rawurlencode($roomThread),
+                        'domain'=>'food_monster_unified_knowledge','nodeMode'=>'read_only']);
+                if($canonical&&in_array($publicIntent,['menu','allergen','training'],true))
+                    app_json_response(['ok'=>true,
+                        'route'=>'api/food-monster-knowledge.php?threadId='.rawurlencode($roomThread),
+                        'domain'=>'food_monster_grounded_knowledge','nodeMode'=>'read_only']);
+                app_json_response(['ok'=>true,'route'=>null,
+                    'domain'=>'participant_conversation','nodeMode'=>'conversation_only']);
+            }
+        }
 
         // B8D1: general explanations must reach the conversational model,
         // never a static keyword-based restaurant report. Governed actions
@@ -288,9 +342,7 @@ try{
             $ownerMatch=false;
             if(($latest['role']??'')==='user'&&($latest['channel']??'')==='voice'
                 &&trim((string)($latest['content']??''))===$message){
-                $voiceId=(string)($latest['voice_event_public_id']??'');
-                $speaker=$voiceId!==''?avc_verified_speaker($pdo,$org,$user,$voiceId):null;
-                $ownerMatch=is_array($speaker)&&(int)($speaker['userId']??0)===$uid;
+                $ownerMatch=gavp_was_approved($org,$uid,$roomThread,(string)$latest['public_id']);
             }
             if(fm13a_voice_route_mode($latest,$message,$ownerMatch)==='conversation_only'){
                 // Food and allergen questions are safe read-only skills only.

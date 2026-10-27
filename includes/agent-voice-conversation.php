@@ -11,7 +11,7 @@ require_once __DIR__.'/agent-workspace-core.php';
 function avc_verified_speaker(PDO $pdo,int $org,array $actor,string $eventId): ?array
 {
     if($eventId===''||strlen($eventId)>100||!app_has_permission('voice.agent',$actor))return null;
-    $q=$pdo->prepare("SELECT e.matched_user_id,u.display_name,u.first_name FROM voice_identity_events e INNER JOIN users u ON u.id=e.matched_user_id INNER JOIN organization_memberships om ON om.user_id=u.id AND om.organization_id=e.organization_id AND om.status='active' INNER JOIN voice_identity_profiles p ON p.organization_id=e.organization_id AND p.user_id=u.id AND p.status='active' WHERE e.organization_id=? AND e.public_id=? AND e.session_user_id=? AND e.event_type='match' AND e.created_at>=DATE_SUB(NOW(6),INTERVAL 15 MINUTE) AND u.status='active' AND u.archived_at IS NULL LIMIT 1");
+    $q=$pdo->prepare("SELECT e.matched_user_id,u.display_name,u.first_name FROM voice_identity_events e INNER JOIN users u ON u.id=e.matched_user_id INNER JOIN organization_memberships om ON om.user_id=u.id AND om.organization_id=e.organization_id AND om.status='active' INNER JOIN voice_identity_profiles p ON p.organization_id=e.organization_id AND p.user_id=u.id AND p.status='active' WHERE e.organization_id=? AND e.public_id=? AND e.session_user_id=? AND e.event_type='match' AND e.created_at>=DATE_SUB(NOW(6),INTERVAL 30 SECOND) AND u.status='active' AND u.archived_at IS NULL LIMIT 1");
     $q->execute([$org,$eventId,(int)$actor['id']]);
     $r=$q->fetch(PDO::FETCH_ASSOC);
     if(!$r)return null;
@@ -21,6 +21,26 @@ function avc_verified_speaker(PDO $pdo,int $org,array $actor,string $eventId): ?
     if($first==='')$first=explode(' ',trim((string)$r['display_name']))[0]??'';
     // Never accept a name supplied by the browser or from a transcript.
     return ['userId'=>$speaker,'firstName'=>mb_substr($first,0,50,'UTF-8'),'displayName'=>(string)$r['display_name']];
+}
+
+/**
+ * Atomically claim one provisional acoustic event for exactly one canonical
+ * spoken turn. A browser-supplied event ID is not proof of authentication.
+ * JSON metadata avoids schema changes and the UPDATE prevents concurrent
+ * sessions from claiming the same event twice.
+ */
+function avc_claim_unused_event(PDO $pdo,int $org,array $actor,string $eventId): bool
+{
+    if(!app_has_permission('voice.agent',$actor)
+       ||preg_match('/^voice-[a-f0-9]{16}$/D',$eventId)!==1)return false;
+    $q=$pdo->prepare("UPDATE voice_identity_events
+        SET metadata_json=JSON_SET(COALESCE(metadata_json,'{}'),'$.agentTurnConsumedAt',NOW(6))
+        WHERE organization_id=? AND session_user_id=? AND public_id=?
+          AND event_type='match'
+          AND created_at>=DATE_SUB(NOW(6),INTERVAL 30 SECOND)
+          AND JSON_EXTRACT(COALESCE(metadata_json,'{}'),'$.agentTurnConsumedAt') IS NULL");
+    $q->execute([$org,(int)$actor['id'],$eventId]);
+    return $q->rowCount()===1;
 }
 
 /**

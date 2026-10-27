@@ -112,15 +112,15 @@ b8d11_check(($r['data']['delegation']['node']??'')==='scheduling',
 $client=file_get_contents(dirname(__DIR__).'/js/global-agent.js');
 b8d11_check(is_string($client)
     &&!str_contains($client,"const route = await post('api/agent-workspace.php'")
-    &&str_contains($client,"result?.data?.offlineFallback===true"),
-    'main Agent Chat is model-first; phrase route only in explicit no-provider fallback');
+    &&!str_contains($client,"result?.data?.offlineFallback===true"),
+    'main Agent Chat does not route private tools in an offline phrase fallback');
 b8d11_check(str_contains($client,"const delegation=result?.data?.delegation;")
     &&str_contains($client,"serverMessage!==String(submitted?.message?.id||'')"),
     'client verifies delegation tied to exact turn');
 $providerApi=file_get_contents(dirname(__DIR__).'/api/food-monster-llm.php');
 b8d11_check(str_contains((string)$providerApi,"'code'=>'provider_not_configured'")
-    &&str_contains($client,"result?.code==='provider_not_configured'"),
-    'no-provider fallback is explicit and never masks ordinary provider failures');
+    &&!str_contains($client,"result?.code==='provider_not_configured'"),
+    'no-provider failures remain explicit and do not enable private routing');
 b8d11_check(str_contains($client,"!/^api\\/"),
     'client rejects external or arbitrary handoff destinations');
 echo "FM-B8D11 model-first domain routing: PASS ($n assertions)\n";

@@ -2,7 +2,7 @@
 declare(strict_types=1);
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/agent-workspace-core.php';
-require_once __DIR__.'/../includes/agent-voice-conversation.php';
+require_once __DIR__.'/../includes/agent-private-voice.php';
 require_once __DIR__.'/../includes/food-monster-person-conversations.php';
 require_once __DIR__.'/../includes/food-monster-g13b-knowledge.php';
 
@@ -31,14 +31,12 @@ try{
     $voice=($last['channel']??'')==='voice';
     $ownerVoiceVerified=false;
     if($voice){
-        $voiceId=(string)($last['voice_event_public_id']??'');
-        $matched=$voiceId!==''?avc_verified_speaker($pdo,$org,$user,$voiceId):null;
-        $ownerVoiceVerified=is_array($matched)&&(int)($matched['userId']??0)===$uid;
+        $ownerVoiceVerified=gavp_was_approved($org,$uid,$thread,(string)$last['public_id']);
     }
     // A recognized employee is allowed only the same staff-facing menu
     // evidence the operator's configured menu-view permission allows.
-    // Owner-private recipe records require the operator's own verified
-    // voice, or their explicitly typed authorized request.
+    // Owner-private recipe records require explicitly approved canonical
+    // voice turns, or explicitly typed authenticated requests.
     if(!fm13b_allowed($user,$intent,$ownerVoiceVerified,$voice))
         throw new DomainException('You do not have permission to read that information.');
     $authorizedForFallback=true;

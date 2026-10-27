@@ -15,7 +15,7 @@ voiceBrainCheck(str_contains($brain,"voice_identity_events"),'must reuse enrolle
 voiceBrainCheck(str_contains($brain,"voice_identity_profiles")&&str_contains($brain,"p.status='active'"),'disabled voice profiles cannot personalize');
 voiceBrainCheck(str_contains($brain,"e.session_user_id=?"),'verification belongs to current signed-in actor');
 voiceBrainCheck(str_contains($brain,"voice.manage"),'cross-user greeting requires manage permission');
-voiceBrainCheck(str_contains($brain,'DATE_SUB(NOW(6),INTERVAL 15 MINUTE)'),'expired matches never greet by name');
+voiceBrainCheck(str_contains($brain,'DATE_SUB(NOW(6),INTERVAL 30 SECOND)'),'expired matches never greet by name');
 voiceBrainCheck(str_contains($brain,"role='user'")&&str_contains($brain,'TIMESTAMPDIFF'),'greeting based on user message history not client clock');
 voiceBrainCheck(str_contains($brain,"idle_min")&&str_contains($brain,"CURRENT_DATE()"),'first conversation per day and idle period');
 voiceBrainCheck(str_contains($brain,'gaw_append($pdo,$org,$uid,$thread,\'user\'')&&str_contains($brain,'gaw_append($pdo,$org,$uid,$thread,\'agent\''),'KDS user and agent replies saved to existing Agent Brain');

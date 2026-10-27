@@ -253,7 +253,7 @@ function greet(message){
 window.GelatoFoodMonster={root,blink,greet,setFaceTarget,get isStage(){return stage;},get mood(){return performanceState.mood;},get motion(){return {enabled:state.roamEnabled,baseSize:state.baseSize,size:state.size,x:state.x,y:state.y};}};
 if(!document.querySelector('script[data-fm-llm-loader]')){
  const script=document.createElement('script');
- script.src='js/food-monster-llm.js?v=20261015-fmg7d';script.async=true;
+ script.src='js/food-monster-llm.js?v=20261026-b8d16a-llm1';script.async=true;
  script.dataset.fmLlmLoader='1';document.head.append(script);
 }
 if(!document.querySelector('script[data-fm-skills-loader]')){

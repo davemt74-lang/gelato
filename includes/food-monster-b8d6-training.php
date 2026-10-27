@@ -7,7 +7,7 @@ declare(strict_types=1);
  */
 require_once __DIR__.'/food-monster-g13c-training.php';
 require_once __DIR__.'/food-monster-g13e-intelligence.php';
-require_once __DIR__.'/agent-voice-conversation.php';
+require_once __DIR__.'/agent-private-voice.php';
 
 function fm8d6_observe(string $answer,string $source='Gelato Guided Training'):array
 {
@@ -69,8 +69,7 @@ function fm8d6_canonical_turn(PDO $pdo,array $actor,array $context):?string
     if(($latest['channel']??'')==='voice'){
         $event=(string)($latest['voice_event_public_id']??'');
         if($event===''||$event!==(string)($context['voiceEventId']??''))return null;
-        $verified=avc_verified_speaker($pdo,$org,$actor,$event);
-        if(!is_array($verified)||(int)($verified['userId']??0)!==$uid)return null;
+        if(($context['privateVoiceApproved']??false)!==true)return null;
     }elseif(($latest['channel']??'text')!=='text')return null;
     return $turn;
 }
@@ -100,7 +99,7 @@ function fm8d6_step(PDO $pdo,array $actor,array $context,array $args):array
     $kind=(string)($args['kind']??'menu');
     $intent=$action==='start'&&$kind==='recipe'?'recipe':'training';
     $voice=($context['channel']??'')==='voice';
-    if(!fm13b_allowed($actor,$intent,!$voice||($context['verifiedSameUser']??false)===true,$voice))
+    if(!fm13b_allowed($actor,$intent,!$voice||($context['privateVoiceApproved']??false)===true,$voice))
         return fm8d6_observe('Your account is not authorized for this training procedure.');
     $pdo->beginTransaction();
     try{
@@ -116,11 +115,11 @@ function fm8d6_step(PDO $pdo,array $actor,array $context,array $args):array
         $prior=$thread?fm13c_read_state($pdo,$org,$uid,$thread):null;
         $material=null;
         if($action==='start'){
-            if($kind==='recipe'&&!fm13b_allowed($actor,'recipe',!$voice||($context['verifiedSameUser']??false)===true,$voice))
+            if($kind==='recipe'&&!fm13b_allowed($actor,'recipe',!$voice||($context['privateVoiceApproved']??false)===true,$voice))
                 throw new DomainException('Recipe training access is not authorized.');
             $material=fm8d6_selected_material($pdo,$org,$args);
         }elseif($prior){
-            if(($prior['kind']??'')==='recipe'&&!fm13b_allowed($actor,'recipe',!$voice||($context['verifiedSameUser']??false)===true,$voice))
+            if(($prior['kind']??'')==='recipe'&&!fm13b_allowed($actor,'recipe',!$voice||($context['privateVoiceApproved']??false)===true,$voice))
                 throw new DomainException('Your current training procedure is restricted.');
             $material=fm13c_fetch_material($pdo,$org,$prior);
         }
