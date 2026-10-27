@@ -32,7 +32,7 @@ function makeAgent(permissions, persistedSession = new Map(), actorId = 'ci-mana
   const fetch = async (endpoint, options) => {
     const body = JSON.parse(options.body);
     sent.push({ endpoint, body });
-    const proposal = /^(create |add |mark )/i.test(body.message);
+    const proposal = /^(create |add |mark |assign |block prep )/i.test(body.message);
     return { ok: true, json: async () => ({
       ok: true,
       skill: proposal ? 'prep.action_proposal' : 'prep.action_confirmed',
@@ -66,6 +66,10 @@ function makeAgent(permissions, persistedSession = new Map(), actorId = 'ci-mana
   assert.equal(reloaded.sent[0].endpoint, 'api/prep-intelligence-agent.php', 'pending confirmation survives browser reload');
   await reloaded.submit('Mark dough complete');
   assert.equal(reloaded.sent[1].endpoint, 'api/prep-intelligence-agent.php', 'task completion followup survives browser reload');
+  await reloaded.submit('Assign dough to Prep CI Staff');
+  assert.equal(reloaded.sent[2].endpoint, 'api/prep-intelligence-agent.php', 'name-based assignment followup stays on Prep Intelligence');
+  await reloaded.submit('Mark dough in progress');
+  assert.equal(reloaded.sent[3].endpoint, 'api/prep-intelligence-agent.php', 'employee progress followup stays on Prep Intelligence');
   const differentUser = makeAgent(permissions, persistedSession, 'ci-manager-2');
   await differentUser.submit('Confirm');
   assert.notEqual(differentUser.sent[0].endpoint, 'api/prep-intelligence-agent.php',
