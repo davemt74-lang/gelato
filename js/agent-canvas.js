@@ -59,6 +59,68 @@
     });
   }
 
+  // B8D17A: one deliberate, authenticated snapshot. Opening this panel never
+  // runs a restaurant skill, calls a provider, or grants room-voice access.
+  function capabilityTruthHtml(report) {
+    const count = report?.counts || {};
+    const row = (label, value, extra = '') => '<li><strong>' + esc(label) +
+      '</strong>' + (value ? ' <small>· ' + esc(value) + '</small>' : '') +
+      (extra ? '<small> · ' + esc(extra) + '</small>' : '') + '</li>';
+    const detail = (title, entries, mapper) => '<details><summary>' + esc(title) +
+      ' (' + entries.length + ')</summary><ul>' +
+      (entries.length ? entries.map(mapper).join('') : '<li>None registered for this account.</li>') +
+      '</ul></details>';
+    const native = Array.isArray(report?.nativeTools) ? report.nativeTools : [];
+    const agents = Array.isArray(report?.delegatedAgents) ? report.delegatedAgents : [];
+    const prompts = Array.isArray(report?.chatPrompts) ? report.chatPrompts : [];
+    const planned = Array.isArray(report?.planned) ? report.planned : [];
+    const readiness = Object.entries(report?.readiness || {}).map(([key, value]) =>
+      row(key.replace(/([A-Z])/g, ' $1'), value)).join('');
+    const inventoryWarning = report?.inventoryVisibility === 'owner_only'
+      && report?.inventoryStatus !== 'source_inventory_only'
+      ? '<p><strong>Source-only inventory unavailable.</strong> Proposed contract counts may be incomplete.</p>'
+      : '';
+    return '<p><strong>What Gelato is actually wired to offer your current account.</strong> ' +
+      'Registry availability is not a passed execution test; every action is ' +
+      'rechecked at the destination.</p><p>' +
+      esc(count.nativeRegistered ?? native.length) + ' native tools · ' +
+      esc(count.delegationRegistered ?? agents.length) + ' specialist handoffs · ' +
+      esc(count.promptTemplates ?? prompts.length) + ' prompt templates</p>' +
+      detail('Native registered tools', native, item => row(item.id, item.impact,
+        'registered, not execution-tested')) +
+      detail('Specialist agent handoffs', agents, item => row(item.label, item.mode,
+        'destination approval/permissions apply')) +
+      detail('Chat prompt templates', prompts, item => row(item.label, 'fills draft only')) +
+      (report?.inventoryVisibility === 'owner_only' ?
+        detail('Proposed contracts — NOT executable', planned,
+          item => row(item.label || item.id, item.feature, 'not granted')) : '') +
+      inventoryWarning +
+      '<details><summary>Diagnostics and acceptance still needed</summary><ul>' +
+      readiness + '</ul></details>' +
+      '<p><small>Private spoken requests still require the operator’s one-use approval. ' +
+      'Provider connectivity, live record reads, writes and microphone interruption ' +
+      'must be confirmed on the deployed site.</small></p>';
+  }
+
+  function closeCapabilityTruth() {
+    $('#capabilityTruthOverlay').hidden = true;
+    $('#capabilityTruthButton').focus();
+  }
+
+  async function openCapabilityTruth() {
+    const overlay = $('#capabilityTruthOverlay');
+    overlay.hidden = false;
+    $('#capabilityTruthContent').textContent = 'Checking registered capabilities…';
+    $('#capabilityTruthClose').focus();
+    try {
+      const data = await req('api/agent-workspace.php?action=food_monster_capability_truth');
+      if (!overlay.hidden) $('#capabilityTruthContent').innerHTML = capabilityTruthHtml(data.capabilities);
+    } catch (error) {
+      if (!overlay.hidden) $('#capabilityTruthContent').textContent =
+        'Capability diagnostics unavailable: ' + error.message;
+    }
+  }
+
   function status(text, milliseconds = 0) {
     const element = $('#canvasStatus');
     if (!element) return;
@@ -560,6 +622,14 @@
   });
   $('#canvasMic').onclick = () => window.GelatoGlobalAgent?.talkOnce();
   $('#mobileThreads').onclick = () => $('#canvasSide').classList.toggle('open');
+  $('#capabilityTruthButton').onclick = () => openCapabilityTruth();
+  $('#capabilityTruthClose').onclick = closeCapabilityTruth;
+  $('#capabilityTruthOverlay').addEventListener('click', (event) => {
+    if (event.target === $('#capabilityTruthOverlay')) closeCapabilityTruth();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !$('#capabilityTruthOverlay').hidden) closeCapabilityTruth();
+  });
 
   window.addEventListener('gelato-agent-ready', () => {
     load().catch((error) => status(error.message, 5000));

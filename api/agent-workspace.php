@@ -68,6 +68,14 @@ if($_SERVER['REQUEST_METHOD']==='GET'){
         app_json_response(['ok'=>true,'skills'=>fm_skill_registry_for_user($user),
             'mode'=>'chat_review','writes'=>'existing_approvals_only']);
     }
+    if($action==='food_monster_capability_truth'){
+        // A deliberate signed-in browser read, not an acoustic voice grant.
+        // Read from current server registries; do not call provider tools or
+        // execute business operations just to draw a diagnostics panel.
+        require_once __DIR__.'/../includes/food-monster-b8d3-tool-runtime.php';
+        $report=fm8d17a_snapshot($user);
+        app_json_response(['ok'=>true,'capabilities'=>$report]);
+    }
     if($action==='thread'){$id=trim((string)($_GET['id']??''));app_json_response(['ok'=>true,'thread'=>gaw_thread($pdo,$org,$uid,$id),'messages'=>gaw_messages($pdo,$org,$uid,$id,220)]);}
     if($action==='threads')app_json_response(['ok'=>true,'threads'=>gaw_threads($pdo,$org,$uid,80)]);
     if($action==='history_threads'){$offset=max(0,(int)($_GET['offset']??0));app_json_response(['ok'=>true]+gaw_history_threads($pdo,$org,$uid,$offset,80));}
