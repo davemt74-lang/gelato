@@ -8,6 +8,8 @@ on:
       - 'api/prep-intelligence-agent.php'
       - 'api/proactive-agent.php'
       - 'includes/prep-intelligence-core.php'
+      - 'includes/prep-agent-core.php'
+      - 'js/restaurant-agent-bridge.js'
       - 'includes/agent-workspace-core.php'
       - 'js/prep-intelligence.js'
       - 'database/20260913_zzzzzzzz_prep_inventory_intelligence.sql'
@@ -21,6 +23,8 @@ on:
       - 'api/prep-intelligence-agent.php'
       - 'api/proactive-agent.php'
       - 'includes/prep-intelligence-core.php'
+      - 'includes/prep-agent-core.php'
+      - 'js/restaurant-agent-bridge.js'
       - 'includes/agent-workspace-core.php'
       - 'js/prep-intelligence.js'
       - 'database/20260913_zzzzzzzz_prep_inventory_intelligence.sql'
@@ -53,9 +57,11 @@ jobs:
           php -l api/prep-intelligence-agent.php
           php -l api/proactive-agent.php
           php -l includes/prep-intelligence-core.php
+          php -l includes/prep-agent-core.php
           php -l includes/agent-workspace-core.php
           php -l tests/prep-inventory-intelligence-contract.php
           node --check js/prep-intelligence.js
+          node --check js/restaurant-agent-bridge.js
       - name: Architecture and safety contract
         run: |
           grep -q "CREATE TABLE IF NOT EXISTS prep_plans" database/20260913_zzzzzzzz_prep_inventory_intelligence.sql
