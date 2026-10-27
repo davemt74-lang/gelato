@@ -161,6 +161,14 @@ function fmuk_capabilities(array $user,bool $voice,bool $ownerVoiceVerified): ar
     return $result;
 }
 
+/** Stable server-side topic IDs for a model-selected read, never SQL names. */
+function fmuk_read_topics(): array
+{
+    return ['menu','recipes','vision_lab','schedule','employees','inventory',
+        'tasks','sales','crm','equipment','purchasing','catering','wholesale',
+        'knowledge','kds','online_orders','attendance','pos','reservations','training'];
+}
+
 function fmuk_menu_items(PDO $pdo,int $org,string $question): array
 {
     $subject=fmuk_menu_subject($question);
@@ -509,11 +517,14 @@ function fmuk_render_vision_lab(array $catalog): array
 }
 
 /** @return array{context:string,sources:array,topics:array} */
-function fmuk_evidence(PDO $pdo,array $user,string $question,bool $voice=false,bool $ownerVoiceVerified=false): array
+function fmuk_evidence(PDO $pdo,array $user,string $question,bool $voice=false,bool $ownerVoiceVerified=false,?array $selectedTopics=null): array
 {
     $org=(int)($user['organization_id']??0);$uid=(int)($user['id']??0);
     if($org<1||$uid<1)throw new DomainException('Authenticated restaurant context is required.');
-    $topics=fmuk_topics($question);$sources=[];$sections=[];$served=[];
+    $topics=$selectedTopics===null?fmuk_topics($question):array_values(array_unique(array_filter(
+        $selectedTopics,static fn($topic):bool=>is_string($topic)&&in_array($topic,fmuk_read_topics(),true)
+    )));
+    $topics=array_slice($topics,0,3);$sources=[];$sections=[];$served=[];
     foreach($topics as $topic){
         if(!fmuk_allowed($user,$topic,$voice,$ownerVoiceVerified)){
             $sections[]=$topic.': NOT AUTHORIZED for this speaker/account; do not disclose records.';

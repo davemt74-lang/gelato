@@ -50,8 +50,8 @@ $registry=fm8d3_catalogue($principal);
 b8d3_check(isset($registry['get_my_hours'])&&isset($registry['get_current_user']),'authorized model sees both skills');
 b8d3_check(!isset(fm8d3_catalogue(array_replace($principal,['permissions'=>[]]))['get_my_hours']),'unprivileged model cannot discover timecards');
 b8d3_check(!in_array('user_id',$registry['get_my_hours']['allowedArguments'],true),'no model-controlled employee selector');
-b8d3_check(count(fm8d3_provider_tools('openai',$registry))===3,'OpenAI receives registered schema');
-b8d3_check(count(fm8d3_provider_tools('anthropic',$registry))===3,'Claude receives registered schema');
+b8d3_check(count(fm8d3_provider_tools('openai',$registry))===4,'OpenAI receives registered schema including scoped record reads');
+b8d3_check(count(fm8d3_provider_tools('anthropic',$registry))===4,'Claude receives registered schema including scoped record reads');
 b8d3_check(fm8d3_provider_tools('anthropic',$registry)[1]['name']==='get_my_hours','Anthropic tool registered');
 $manager=['id'=>7,'organization_id'=>21,'display_name'=>'David Evans',
     'role_slug'=>'manager',
