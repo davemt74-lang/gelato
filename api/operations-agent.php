@@ -13,7 +13,7 @@ $canTasks=app_has_permission('tasks.agent',$user)&&app_has_permission('tasks.vie
 function ops_agent_split_items(string $text):array
 {
     $text=preg_replace('/\b(?:and then|then)\b/i',';',$text)??$text;
-    $text=preg_replace('/\s+and\s+(?=\d+(?:\.\d+)?\s+(?:lb|lbs|pound|pounds|oz|g|kg|pan|pans|tray|trays|case|cases|bag|bags|box|boxes|each|ea)\b)/iu',';',$text)??$text;
+    $text=preg_replace('/\s+and\s+(?=(?:\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\s+(?:lb|lbs|pound|pounds|oz|g|kg|pan|pans|tray|trays|case|cases|bag|bags|box|boxes|each|ea)\b)/iu',';',$text)??$text;
     $parts=preg_split('/[;\n,]+/',$text)?:[];
     return array_values(array_filter(array_map(static fn(string $v):string=>trim($v," \t\n\r\0\x0B.-"),$parts),static fn(string $v):bool=>$v!==''));
 }
