@@ -1,0 +1,51 @@
+name: B8D17C Authenticated Agent Record Reads
+
+on:
+  pull_request:
+    paths:
+      - 'includes/food-monster-unified-knowledge.php'
+      - 'includes/food-monster-b8d17c-record-reads.php'
+      - 'includes/food-monster-b8d3-tool-runtime.php'
+      - 'api/food-monster-llm.php'
+      - 'config/food-monster-capability-map.json'
+      - 'tests/food-monster-b8d17c-record-reads.php'
+      - 'tests/food-monster-b8d3-tool-selection.php'
+      - '.github/workflows/food-monster-b8d17c-record-reads.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'includes/food-monster-unified-knowledge.php'
+      - 'includes/food-monster-b8d17c-record-reads.php'
+      - 'includes/food-monster-b8d3-tool-runtime.php'
+      - 'api/food-monster-llm.php'
+      - 'config/food-monster-capability-map.json'
+      - 'tests/food-monster-b8d17c-record-reads.php'
+      - 'tests/food-monster-b8d3-tool-selection.php'
+
+permissions:
+  contents: read
+
+jobs:
+  authenticated-record-read-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_sqlite
+      - name: PHP syntax
+        run: |
+          php -l includes/food-monster-unified-knowledge.php
+          php -l includes/food-monster-b8d17c-record-reads.php
+          php -l includes/food-monster-b8d3-tool-runtime.php
+          php -l api/food-monster-llm.php
+          php -l tests/food-monster-b8d17c-record-reads.php
+          php -l tests/food-monster-b8d3-tool-selection.php
+      - name: Permission and regression contracts
+        run: |
+          php tests/food-monster-b8d17c-record-reads.php
+          php tests/food-monster-b8d3-tool-selection.php
+          php tests/food-monster-b8d17b-navigation.php
+          php tests/food-monster-b8d17a-capability-truth.php
+          php tests/food-monster-b8c-capability-map.php

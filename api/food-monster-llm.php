@@ -153,6 +153,7 @@ try{
     if(session_status()===PHP_SESSION_ACTIVE)session_write_close();
     try{
         $context=['threadId'=>$threadId,'messageId'=>(string)$last['public_id'],
+            'userQuestion'=>(string)$last['content'],
             'channel'=>(string)($last['channel']??'text'),
             'voiceEventId'=>(string)($last['voice_event_public_id']??''),
             'privateVoiceApproved'=>$allowTools];
