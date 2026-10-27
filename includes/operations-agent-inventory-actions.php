@@ -8,7 +8,7 @@ declare(strict_types=1);
 function ops_agent_inventory_intent(string $message): ?array
 {
     $command=trim((string)(preg_replace('/^\s*(?:hey\s+gelato[,\s]*)?(?:please\s+)?/iu','',$message)??$message));
-    $command=rtrim($command," \\t\\r\\n.");
+    $command=rtrim($command," \t\r\n.");
     // Common speech-to-text phrasings; keep quantities and item names explicit.
     $spoken=['one'=>1,'two'=>2,'three'=>3,'four'=>4,'five'=>5,'six'=>6,
         'seven'=>7,'eight'=>8,'nine'=>9,'ten'=>10,'eleven'=>11,'twelve'=>12,
