@@ -170,6 +170,27 @@ $blockedProposal=prep_agent_handle($pdo,$staffActor,['message'=>'Block prep doug
 pit_assert(($blockedProposal['data']['requiresConfirmation']??false)===true,'blocking a task needs confirmation');
 $blocked=prep_agent_handle($pdo,$staffActor,['message'=>'Confirm']);
 pit_assert(($blocked['data']['after']??'')==='blocked','assigned employee can report a blocker');
+ 
+// B8D17G2D: actor-scoped prep inbox, tenant isolation and restart-safe readbacks.
+$mine=prep_agent_handle($pdo,$staffActor,['message'=>'What is my prep on 2026-11-06?']);
+pit_assert(($mine['skill']??'')==='prep.my_tasks','spoken my-prep intent reaches dedicated inbox');
+pit_assert(count($mine['data']['tasks']??[])===1
+    &&(string)$mine['data']['tasks'][0]['public_id']===$doughId,
+    'employee inbox contains only their actual dated task assignment');
+pit_assert(str_contains($mine['answer'],'blocked')&&!str_contains($mine['answer'],'sauce'),
+    'inbox speaks live progress without disclosing another employee\'s prep');
+$managerMine=prep_agent_handle($pdo,$prepActor,['message'=>'Show my prep tasks on 2026-11-06']);
+pit_assert(count($managerMine['data']['tasks']??[])===1
+    &&(string)$managerMine['data']['tasks'][0]['public_id']===(string)$sauce['public_id'],
+    'manager\'s personal prep inbox does not turn into an unrestricted task list');
+$tenantMine=pac_my_prep($pdo,$orgId+100000,$staffId,'My prep on 2026-11-06');
+pit_assert(($tenantMine['data']['tasks']??[])===[],
+    'prep inbox does not read another organization\'s task assignments');
+unset($_SESSION['prep_agent_context']);
+$reloadMine=prep_agent_handle($pdo,$staffActor,['message'=>'My prep on 2026-11-06']);
+pit_assert(($reloadMine['sources']??[])===[$doughId],
+    'prep inbox reconstructs the same canonical assignment after session reload');
+
 $unassignedTask=prep_attach_manual_task($pdo,$orgId,prep_plan($pdo,$orgId,(string)$added['data']['plan']['public_id']),
     ['title'=>'Garlic knots','quantity'=>2,'unit'=>'tray'],$userId,'contract');
 $managerSignals=pac_proactive_signals($pdo,$orgId,$userId,$prepActor,'2026-11-06');
@@ -248,6 +269,9 @@ $route=gaw_route($routeUser,'Hey Gelato, what should we prep today?');
 pit_assert(($route['route']??null)==='api/prep-intelligence-agent.php','Prep planning should route to the dedicated Prep Intelligence Agent.');
 $route=gaw_route($routeUser,'Hey Gelato, show prep history from last Saturday');
 pit_assert(($route['route']??null)==='api/prep-intelligence-agent.php','Prep history should route to the dedicated Prep Intelligence Agent.');
+$route=gaw_route($routeUser,'What is my prep today?');
+pit_assert(($route['route']??null)==='api/prep-intelligence-agent.php',
+    'my-prep inbox routes to the scoped Prep Agent instead of generic tasks');
 $route=gaw_route($routeUser,'Hey Gelato, count inventory');
 pit_assert(($route['route']??null)==='api/operations-agent.php','Generic inventory should remain on the Operations Agent.');
 
