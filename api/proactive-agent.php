@@ -3,6 +3,7 @@ declare(strict_types=1);
 require __DIR__.'/../includes/bootstrap.php';
 require __DIR__.'/../includes/timeclock-voice-core.php';
 require_once __DIR__.'/../includes/prep-intelligence-core.php';
+require_once __DIR__.'/../includes/prep-agent-proactive.php';
 require_once __DIR__.'/../includes/purchasing-proactive.php';
 require_once __DIR__.'/../includes/employee-home-core.php';
 require_once __DIR__.'/../includes/employee-shift-communications.php';
@@ -33,6 +34,10 @@ function pa_generate(PDO $pdo,int $org,int $uid,array $prefs,array $user):void{
      $q=$pdo->prepare("SELECT * FROM prep_plans WHERE organization_id=? AND plan_date=? ORDER BY FIELD(service_period,'all','lunch','dinner','morning','closing') LIMIT 1");$q->execute([$org,$today]);$plan=$q->fetch();
      if($plan){$detail=prep_plan_detail($pdo,$org,(string)$plan['public_id']);if($canPrepForecast){$flagged=array_values(array_filter($detail['forecasts'],static fn(array $f):bool=>(float)$f['shortage_quantity']>0||(float)$f['restock_quantity']>0));if($flagged){$names=array_slice(array_column($flagged,'inventory_name'),0,4);pa_put($pdo,$org,$uid,'inventory.shortage_forecast','high','Prep forecast flags '.count($flagged).' inventory item(s) for shortage or restock: '.implode(', ',$names).'.','prep-shortage:'.$plan['public_id'].':'.$plan['revision'],'prep-intelligence.php',['planId'=>$plan['public_id'],'count'=>count($flagged)]);}}$pending=count(array_filter($detail['recommendations'],static fn(array $r):bool=>in_array($r['status'],['proposed','accepted'],true)));if((string)$plan['status']==='draft'&&$pending>0)pa_put($pdo,$org,$uid,'prep.plan_ready','normal',$pending.' prep recommendation(s) are ready for review before publishing.','prep-ready:'.$plan['public_id'].':'.$plan['revision'],'prep-intelligence.php',['planId'=>$plan['public_id'],'recommendations'=>$pending]);}
      elseif(app_has_permission('prep.intelligence.manage',$user)&&(int)$now->format('G')>=7)pa_put($pdo,$org,$uid,'prep.plan_missing','normal','Today does not have a Prep Intelligence plan yet. Ask “Hey Gelato, what should we prep today?” to build one from history.','prep-missing:'.$today,'prep-intelligence.php',['date'=>$today]);
+     if(!empty($prefs['task_reminders'])){
+       foreach(pac_proactive_signals($pdo,$org,$uid,$user,$today) as $signal)
+         pa_put($pdo,$org,$uid,$signal['type'],$signal['priority'],$signal['message'],$signal['key'],$signal['url'],$signal['meta']);
+     }
    }catch(Throwable){}
  }
  if(app_has_permission('purchasing.view',$user)&&purchasing_ready($pdo)){try{foreach(purchasing_proactive_signals($pdo,$org) as $signal)pa_put($pdo,$org,$uid,$signal['type'],$signal['priority'],$signal['message'],$signal['key'],$signal['url'],$signal['meta']);}catch(Throwable){}}
