@@ -29,7 +29,7 @@ $insert->execute(['task-4',7,'prep dough','queued',0,0]);
 f_error(static fn()=>ops_agent_task_status_prepare($sqlite,7,['name'=>'Prep Dough','status'=>'completed']),'Several tasks');
 $api=file_get_contents(dirname(__DIR__).'/api/operations-agent.php');
 f_assert(str_contains($api,"'task_status_change'")&&str_contains($api,"'tasks.manage'")&&str_contains($api,"'taskId'"),'approval and receipt');
-f_assert(str_contains($api,"['inventory_adjust','task_status_change']"),'one-use approval consumed');
+f_assert(str_contains($api,"['inventory_adjust','inventory_create','task_status_change']"),'one-use approval consumed');
 if(getenv('B8D17D_DSN')){
     $db=new PDO((string)getenv('B8D17D_DSN'),(string)getenv('B8D17D_USER'),(string)getenv('B8D17D_PASS'));
     $db->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);
