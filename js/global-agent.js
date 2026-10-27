@@ -83,7 +83,7 @@
     if (!document.getElementById('gelato-agent-bar') || window.GelatoDynamicAgentCanvas
         || document.querySelector('script[src*="dynamic-agent-canvas.js"]')) return;
     const script = document.createElement('script');
-    script.src = 'js/dynamic-agent-canvas.js?v=20261026-chat-universal1';
+    script.src = 'js/dynamic-agent-canvas.js?v=20261027-b8d17b-navigation1';
     script.dataset.gelatoChatPopup = '1';
     document.head.appendChild(script);
   }
