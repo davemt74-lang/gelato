@@ -5,6 +5,7 @@ require __DIR__ . '/../includes/bootstrap.php';
 require __DIR__ . '/../includes/prep-intelligence-core.php';
 require __DIR__ . '/../includes/agent-workspace-core.php';
 require __DIR__ . '/../includes/prep-agent-core.php';
+require __DIR__ . '/../includes/prep-agent-proactive.php';
 
 $pdo=app_pdo();
 function pit_assert(bool $condition,string $message): void { if(!$condition) throw new RuntimeException($message); }
@@ -23,6 +24,9 @@ pit_assert(pac_quantity(0)==='0','zero prep quantities must be spoken accurately
 pit_assert(pac_followup_intent('Mark the dough complete')['type']==='complete','spoken completion intent');
 pit_assert(pac_followup_intent("Who's doing sauce?")['type']==='assignees','spoken prep assignment intent');
 pit_assert(pac_followup_intent('add two more pans of dough')['quantity']===2.0,'spoken incremental prep quantity');
+pit_assert(pac_followup_intent('Assign dough to Prep CI Staff')['type']==='assign','spoken task assignment intent');
+pit_assert(pac_followup_intent('Mark dough in progress')['status']==='in_progress','spoken task progress intent');
+pit_assert(pac_followup_intent('Block prep dough')['status']==='blocked','spoken blocked-task intent');
 try{pac_task_match([['public_id'=>'one','title'=>'Pizza dough'],['public_id'=>'two','title'=>'Bread dough']],'dough');
     throw new RuntimeException('Ambiguous prep task must not be guessed');}
 catch(InvalidArgumentException $expected){}
@@ -132,6 +136,54 @@ pit_assert(($statusDone['data']['after']??'')==='completed','assigned employee m
 $afterStatus=prep_agent_handle($pdo,$prepActor,['message'=>'Show the prep list on 2026-11-06']);
 pit_assert(str_contains($afterStatus['answer'],'sauce (completed, assigned to '.$actorName.')'),
     'post-write readback includes employee and completed status');
+
+// B8D17G2C: manager-only assignment, assigned-employee progress, and proactive signals.
+$pdo->prepare("INSERT INTO users (email,password_hash,first_name,last_name,display_name,status) VALUES (?,?,?,?,?,'active')")
+    ->execute(['prep-ci-staff@example.test',password_hash('CI-only-password',PASSWORD_DEFAULT),'Prep','Staff','Prep CI Staff']);
+$staffId=(int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO organization_memberships (organization_id,user_id,status) VALUES (?,?,'active')")
+    ->execute([$orgId,$staffId]);
+try{pac_staff_match($pdo,$orgId,'Prep');throw new RuntimeException('Ambiguous first names must not be guessed');}
+catch(InvalidArgumentException $expected){}
+try{pac_staff_match($pdo,$orgId,'Someone Outside');throw new RuntimeException('Unknown staff identity must be rejected');}
+catch(InvalidArgumentException $expected){}
+$doughId=(string)$added['data']['tasks'][0]['public_id'];
+$assignProposal=prep_agent_handle($pdo,$prepActor,['message'=>'Assign dough to Prep CI Staff']);
+pit_assert(($assignProposal['data']['requiresConfirmation']??false)===true,'assignment requires confirmation');
+$staffActor=['id'=>$staffId,'organization_id'=>$orgId,'permissions'=>['prep.intelligence.view','prep.intelligence.agent','tasks.self']];
+prep_agent_handle($pdo,$staffActor,['message'=>'Show the prep list on 2026-11-06']);
+try{prep_agent_handle($pdo,$staffActor,['message'=>'Assign dough to Prep CI Staff']);
+    throw new RuntimeException('Employee may not reassign prep tasks');}
+catch(PrepAgentPermissionException $expected){}
+$assignedDough=prep_agent_handle($pdo,$prepActor,['message'=>'Confirm']);
+pit_assert(($assignedDough['data']['action']??'')==='task_assign','manager confirmation records assignment action');
+$doughDetail=operations_task_detail($pdo,$orgId,$doughId);
+pit_assert(count($doughDetail['assignments'])===1&&(int)$doughDetail['assignments'][0]['user_id']===$staffId,
+    'canonical task assignment targets the named employee exactly');
+try{prep_agent_handle($pdo,$prepActor,['message'=>'Confirm']);throw new RuntimeException('Replayed assignment must fail');}
+catch(InvalidArgumentException $expected){}
+$progressProposal=prep_agent_handle($pdo,$staffActor,['message'=>'Mark dough in progress']);
+pit_assert(($progressProposal['data']['requiresConfirmation']??false)===true,'assigned employee progress needs confirmation');
+$progress=prep_agent_handle($pdo,$staffActor,['message'=>'Confirm']);
+pit_assert(($progress['data']['after']??'')==='in_progress','assigned employee can start prep progress');
+$blockedProposal=prep_agent_handle($pdo,$staffActor,['message'=>'Block prep dough']);
+pit_assert(($blockedProposal['data']['requiresConfirmation']??false)===true,'blocking a task needs confirmation');
+$blocked=prep_agent_handle($pdo,$staffActor,['message'=>'Confirm']);
+pit_assert(($blocked['data']['after']??'')==='blocked','assigned employee can report a blocker');
+$unassignedTask=prep_attach_manual_task($pdo,$orgId,prep_plan($pdo,$orgId,(string)$added['data']['plan']['public_id']),
+    ['title'=>'Garlic knots','quantity'=>2,'unit'=>'tray'],$userId,'contract');
+$managerSignals=pac_proactive_signals($pdo,$orgId,$userId,$prepActor,'2026-11-06');
+$managerKinds=array_column($managerSignals,'type');
+pit_assert(in_array('prep.task_blocked',$managerKinds,true)&&in_array('prep.task_unassigned',$managerKinds,true),
+    'manager proactively sees blocked and unassigned prep tasks');
+$staffSignals=pac_proactive_signals($pdo,$orgId,$staffId,$staffActor,'2026-11-06');
+pit_assert(count($staffSignals)===1&&$staffSignals[0]['type']==='prep.task_blocked',
+    'employee sees their own blocked prep task without managerial unassigned alerts');
+pit_assert(pac_proactive_signals($pdo,$orgId,$userId,
+    ['id'=>$userId,'permissions'=>['prep.intelligence.view','tasks.self']],'2026-11-06')===[],
+    'other employees do not receive somebody else’s blocked task');
+pit_assert(array_column(pac_proactive_signals($pdo,$orgId,$staffId,$staffActor,'2026-11-06'),'key')
+    ===array_column($staffSignals,'key'),'proactive dedupe keys stay stable across polling');
 
 operations_ensure_default_categories($pdo,$orgId,$userId);
 $prepCategory=operations_category_by_slug($pdo,$orgId,'prep');
