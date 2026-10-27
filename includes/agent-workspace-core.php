@@ -135,9 +135,19 @@ function gaw_route(array $user,string $message): array
         if($pendingNode==='marketing'&&(app_has_permission('packages.view',$user)||app_has_permission('public_pages.edit',$user)||app_has_permission('settings.organization_edit',$user)))return gaw_node_route('marketing','marketing_confirmation');
         if($pendingNode==='equipment'&&app_has_permission('equipment.view',$user)&&app_has_permission('agent.equipment_skills',$user))return gaw_node_route('equipment','equipment_confirmation');
         if($pendingNode==='recipes'&&app_has_permission('recipes.view',$user)&&app_has_permission('recipes.agent',$user))return gaw_node_route('recipes','recipe_confirmation');
+        if($pendingNode==='prep'&&app_has_permission('prep.intelligence.view',$user)&&app_has_permission('prep.intelligence.agent',$user))return gaw_node_route('prep','prep_confirmation');
         if($pendingNode==='online_orders'&&(app_has_permission('online_orders.fulfill',$user)||app_has_permission('order_recovery.view',$user)||app_has_permission('order_recovery.manage',$user)||app_has_permission('order_recovery.refund',$user)||app_has_permission('pos.use',$user)||app_has_permission('kds.view',$user)||app_has_permission('crm.view',$user)))return gaw_node_route('online_orders','online_order_confirmation');
         if($pendingNode==='timeclock'&&app_has_permission('timeclock.agent',$user))return gaw_node_route('timeclock','timeclock_confirmation');
     }
+
+    // A previously read prep list provides scoped context for short follow-ups.
+    // Keep this restricted to explicit task verbs, never arbitrary chat.
+    $prepKey=(int)($user['organization_id']??0).':'.(int)($user['id']??0);
+    $recentPrep=$_SESSION['prep_agent_context'][$prepKey]??null;
+    $prepFollowup=is_array($recentPrep)&&(int)($recentPrep['expires']??0)>=time()
+        &&preg_match('/^(?:(?:please\s+)?(?:mark|set)\s+.+\s+(?:complete|completed|done)|(?:please\s+)?(?:add|increase(?:\s+by)?)\s+(?:\d+(?:\.\d+)?|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:more\s+)?(?:pans?|trays?|batches?|containers?|cases?|bags?|lbs?|pounds?)\b|(?:who(?:\x27s| is)|which (?:person|employee) is)\s+(?:doing|assigned to|working on)\s+.+)$/u',$text);
+    if($prepFollowup&&app_has_permission('prep.intelligence.agent',$user)&&app_has_permission('prep.intelligence.view',$user))
+        return ['route'=>'api/prep-intelligence-agent.php','domain'=>'prep_intelligence_followup'];
 
     if(preg_match($workforce,$text)&&(app_has_permission('resumes.view',$user)||app_has_permission('audit.view',$user)||app_has_permission('schedule.view',$user)))return ['route'=>'api/workspace-workforce-agent.php','domain'=>'workspace_workforce'];
     if(preg_match($menu,$text)&&app_has_permission('menu.view',$user))return ['route'=>'api/agent-brain.php','domain'=>'restaurant_brain'];
