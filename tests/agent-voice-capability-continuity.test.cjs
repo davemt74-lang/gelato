@@ -6,6 +6,7 @@ const base=path.resolve(__dirname,'..');
 const client=fs.readFileSync(path.join(base,'js/global-agent.js'),'utf8');
 const api=fs.readFileSync(path.join(base,'api/food-monster-llm.php'),'utf8');
 const runtime=fs.readFileSync(path.join(base,'includes/food-monster-b8d3-tool-runtime.php'),'utf8');
+const truth=fs.readFileSync(path.join(base,'includes/food-monster-b8d17a-capability-truth.php'),'utf8');
 const start=client.indexOf('  function voiceSampleFromMonitor(text){');
 const end=client.indexOf('  function stopVoiceMonitor(){',start);
 assert(start>=0&&end>start,'live client should contain fresh per-utterance feature sampling');
@@ -39,5 +40,7 @@ assert(client.includes("profile.profile?.status!=='active'"),'only explicitly en
 assert(api.includes("if(!$allowTools)")&&api.includes("$publicVoiceCatalogue['list_available_menu_items']"),'unknown speakers remain public-menu scoped');
 assert(api.includes("'voiceIdentityRequired'"),'API exposes the true private-tool access reason');
 assert(runtime.includes('list_my_gelato_capabilities'),'runtime discovery tool is advertised to LLM');
-assert(runtime.includes('fm8d11_available_domains($actor)'),'capabilities based on existing permission-scoped Agent nodes');
+assert(runtime.includes('fm8d17a_snapshot($actor,$context)')
+  &&truth.includes('fm8d11_available_domains($actor)'),
+  'capabilities are still based on actual permission-scoped Agent nodes');
 process.stdout.write('Gelato voice tool continuity: behavioral and boundary checks passed.\n');
