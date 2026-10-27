@@ -91,7 +91,17 @@ function pac_task_match(array $tasks,string $target,?string $focusedId=null): ar
 
 function pac_task_description(array $task): string
 {
-    $prefix=($task['quantity']??null)!==null?pac_quantity($task['quantity']).' '.((string)($task['unit']??'')?:'ea').' ':'';
+    $prefix='';
+    if(($task['quantity']??null)!==null){
+        $quantity=(float)$task['quantity'];
+        $unit=mb_strtolower(trim((string)($task['unit']??'')),'UTF-8');
+        $singular=['pans'=>'pan','trays'=>'tray','batches'=>'batch','containers'=>'container','bags'=>'bag',
+            'cases'=>'case','boxes'=>'box','bottles'=>'bottle','pounds'=>'lb','lbs'=>'lb'][$unit]??$unit;
+        $plurals=['pan'=>'pans','tray'=>'trays','batch'=>'batches','container'=>'containers',
+            'bag'=>'bags','case'=>'cases','box'=>'boxes','bottle'=>'bottles'];
+        $spokenUnit=abs($quantity-1.0)<0.00001?$singular:($plurals[$singular]??$singular);
+        $prefix=pac_quantity($quantity).' '.($spokenUnit==='ea'?'each ':($spokenUnit!==''?$spokenUnit.' of ':' '));
+    }
     $status=str_replace('_',' ',(string)$task['status']);
     $assignees=trim((string)($task['assigned_names']??''));
     return $prefix.$task['title'].' ('.$status.($assignees!==''?', assigned to '.$assignees:', unassigned').')';
