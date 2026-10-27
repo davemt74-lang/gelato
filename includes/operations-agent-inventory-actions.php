@@ -49,9 +49,83 @@ function ops_agent_inventory_unit(string $value): string
         'l'=>['liter','liters','litre','litres'], 'ml'=>['milliliter','milliliters'],
         'ea'=>['each','unit','units'], 'case'=>['cases'], 'bag'=>['bags'],
         'box'=>['boxes'], 'bottle'=>['bottles'], 'gal'=>['gallon','gallons'],
-        'qt'=>['quart','quarts'],
+        'qt'=>['quart','quarts'], 'pan'=>['pans'], 'tray'=>['trays'],
+        'batch'=>['batches'], 'container'=>['containers'], 'dozen'=>[],
+        'cup'=>['cups'],
     ] as $canonical=>$aliases){if($unit===$canonical||in_array($unit,$aliases,true))return $canonical;}
     return $unit;
+}
+
+/**
+ * G1A: Creating an inventory *record* is distinct from receiving stock into
+ * an existing record. Require an explicit "new item" phrase and all important
+ * fields; never turn an ambiguous receiving request into catalog creation.
+ */
+function ops_agent_inventory_new_intent(string $message): ?array
+{
+    $text=trim((string)(preg_replace('/^\s*(?:hey\s+gelato[,\s]*)?(?:please\s+)?/iu','',$message)??$message));
+    $text=rtrim($text," \t\r\n.");
+    $quantity='(\d+(?:\.\d{1,4})?)';
+    $pattern='/^(?:create|add|register)\s+(?:a\s+)?new\s+(?:inventory|stock)\s+item\s+(?:(?:called|named)\s+)?(.+?)\s*(?:,|\s+with)\s+(?:base\s+)?unit\s+([a-z][a-z0-9-]{0,19})\s*(?:,|and)\s*(?:starting\s+)?(?:quantity|stock|on\s+hand)\s+'.$quantity.'(?:\s*,?\s*category\s+(.+))?$/iu';
+    if(!preg_match($pattern,$text,$m))return null;
+    $name=trim($m[1]," \t,");
+    $unit=ops_agent_inventory_unit($m[2]);
+    $amount=(float)$m[3];
+    $category=trim((string)($m[4]??'')," \t,");
+    if($name===''||mb_strlen($name,'UTF-8')>220
+       ||preg_match('/[;\r\n]/u',$name)
+       ||$category!==''&&(mb_strlen($category,'UTF-8')>100||preg_match('/[;\r\n]/u',$category))
+       ||!is_finite($amount)||$amount<0||$amount>10000000)
+        throw new InvalidArgumentException('Specify one new item with a valid name, base unit, and starting quantity.');
+    if(!in_array($unit,['lb','oz','g','kg','l','ml','ea','case','bag','box',
+        'bottle','gal','qt','pan','tray','batch','container','dozen','cup'],true))
+        throw new InvalidArgumentException('Unknown inventory base unit. Say a saved standard unit such as lb, kg, case, pan, or each.');
+    return ['name'=>$name,'unit'=>$unit,'quantity'=>$amount,'category'=>$category];
+}
+
+function ops_agent_inventory_new_prepare(PDO $pdo,int $organizationId,array $intent): array
+{
+    $key=operations_slug(operations_normalized_ingredient((string)$intent['name']));
+    $query=$pdo->prepare('SELECT public_id FROM inventory_items WHERE organization_id=? AND normalized_key=? LIMIT 1');
+    $query->execute([$organizationId,$key]);
+    if($query->fetchColumn()!==false)
+        throw new InvalidArgumentException('This inventory item already exists (including archived records). Use a stock adjustment or review the saved record.');
+    return [
+        'name'=>(string)$intent['name'],'normalizedKey'=>$key,
+        'unit'=>(string)$intent['unit'],'quantity'=>(float)$intent['quantity'],
+        'category'=>(string)$intent['category'],
+    ];
+}
+
+function ops_agent_inventory_new_execute(PDO $pdo,int $organizationId,int $userId,array $payload): array
+{
+    $key=operations_slug(operations_normalized_ingredient((string)$payload['name']));
+    if($key!==(string)$payload['normalizedKey'])
+        throw new InvalidArgumentException('New inventory item name changed after confirmation.');
+    $publicId='inv-'.substr(hash('sha256',$organizationId.'|'.$key),0,20);
+    $pdo->beginTransaction();
+    try{
+        // A second creation, whether concurrent or retried, must fail without
+        // reactivating archived items or changing an existing quantity.
+        $check=$pdo->prepare('SELECT id FROM inventory_items WHERE organization_id=? AND normalized_key=? LIMIT 1 FOR UPDATE');
+        $check->execute([$organizationId,$key]);
+        if($check->fetchColumn()!==false)
+            throw new InvalidArgumentException('This inventory item was created after the proposal. Review its current stock instead.');
+        $insert=$pdo->prepare('INSERT INTO inventory_items (organization_id,public_id,normalized_key,name,category,base_unit,on_hand_quantity,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?)');
+        $insert->execute([$organizationId,$publicId,$key,$payload['name'],$payload['category']?:null,$payload['unit'],$payload['quantity'],$userId,$userId]);
+        $itemId=(int)$pdo->lastInsertId();
+        $ledger=$pdo->prepare("INSERT INTO inventory_transactions (organization_id,inventory_item_id,transaction_type,quantity_delta,resulting_quantity,unit,note,source_type,created_by) VALUES (?,?,'count',?,?,?,'Agent-confirmed initial inventory count','agent_initial',?)");
+        $ledger->execute([$organizationId,$itemId,$payload['quantity'],$payload['quantity'],$payload['unit'],$userId]);
+        $transactionId=(int)$pdo->lastInsertId();
+        $pdo->commit();
+        return ['publicId'=>$publicId,'name'=>$payload['name'],'unit'=>$payload['unit'],
+            'onHand'=>$payload['quantity'],'transactionId'=>$transactionId];
+    }catch(Throwable $e){
+        if($pdo->inTransaction())$pdo->rollBack();
+        if($e instanceof PDOException&&$e->getCode()==='23000')
+            throw new InvalidArgumentException('That inventory item already exists. No duplicate was created.',0,$e);
+        throw $e;
+    }
 }
 
 function ops_agent_inventory_prepare(PDO $pdo,int $organizationId,array $intent): array
