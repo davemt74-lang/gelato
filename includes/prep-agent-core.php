@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__.'/prep-intelligence-core.php';
 require_once __DIR__.'/agent-confirmation-core.php';
 require_once __DIR__.'/prep-agent-followups.php';
+require_once __DIR__.'/prep-agent-readiness.php';
 
 final class PrepAgentPermissionException extends RuntimeException {}
 
@@ -427,6 +428,9 @@ function prep_agent_handle(PDO $pdo,array $user,array $input): array
         return gac_proposal_result($proposal,'prep.action_proposal',['Prep Plan','Restaurant Tasks']);
     }
 
+
+    if(preg_match('/\b(?:prep\s+(?:readiness|progress|status|overview)|(?:ready|readiness|progress|on\s+track|behind)\b.{0,40}\bprep|prep\b.{0,40}\b(?:ready|readiness|progress|on\s+track|behind)|how(?:\x27s| is)\s+(?:the\s+)?prep\s+(?:going|looking)|what(?:\x27s| is)\s+left\b.{0,30}\bprep|how\s+much\s+prep\s+is\s+(?:left|done))\b/iu',$lower))
+        return pac_readiness($pdo,$org,$uid,$user,$text);
 
     if(preg_match('/\b(?:what(?:\x27s| is)\s+(?:blocked|blocking|holding\s+up).*prep|(?:blocked|blocking)\s+prep|prep\s+(?:blockers?|blocked\s+tasks?)|who(?:\x27s| is)\s+blocked\s+on\s+prep)\b/iu',$lower))
         return pac_blockers($pdo,$org,$uid,$user,$text);
