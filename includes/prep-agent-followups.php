@@ -234,6 +234,19 @@ function pac_execute_followup(PDO $pdo,int $org,int $uid,array $user,array $payl
                 $reason=trim((string)($payload['reason']??''));
                 if(mb_strlen($reason,'UTF-8')<3||mb_strlen($reason,'UTF-8')>240)
                     throw new InvalidArgumentException('The blocker reason is missing or too long. Ask again.');
+                $prior=$pdo->prepare("SELECT e.metadata_json FROM restaurant_task_events e
+                    WHERE e.organization_id=? AND e.task_id=? AND e.event_type='prep_blocker_reported'
+                      AND e.id>COALESCE((SELECT MAX(e2.id) FROM restaurant_task_events e2
+                          WHERE e2.organization_id=e.organization_id AND e2.task_id=e.task_id
+                            AND e2.event_type='status_changed'),0)
+                    ORDER BY e.id DESC LIMIT 1");
+                $prior->execute([$org,(int)$task['id']]);
+                $priorJson=$prior->fetchColumn();
+                $priorMeta=$priorJson?json_decode((string)$priorJson,true):null;
+                $priorReason=trim((string)($priorMeta['reason']??''));
+                $normalize=static fn(string $v):string=>mb_strtolower(preg_replace('/\s+/u',' ',$v)??$v,'UTF-8');
+                if($priorReason!==''&&$normalize($priorReason)===$normalize($reason))
+                    throw new InvalidArgumentException('That exact blocker reason is already recorded. No duplicate alert was created.');
                 operations_task_event($pdo,$org,(int)$task['id'],'prep_blocker_reported','Prep blocker reported: '.$reason,$uid,
                     ['reason'=>$reason,'planId'=>$plan['public_id'],'taskId'=>$taskId]);
                 $answer='Confirmed. Recorded a blocker for '.$task['title'].': '.$reason.'. Management will see it in prep alerts.';
