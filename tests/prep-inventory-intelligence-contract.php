@@ -27,6 +27,12 @@ pit_assert(pac_followup_intent('add two more pans of dough')['quantity']===2.0,'
 pit_assert(pac_followup_intent('Assign dough to Prep CI Staff')['type']==='assign','spoken task assignment intent');
 pit_assert(pac_followup_intent('Mark dough in progress')['status']==='in_progress','spoken task progress intent');
 pit_assert(pac_followup_intent('Block prep dough')['status']==='blocked','spoken blocked-task intent');
+pit_assert(pac_followup_intent("I'm blocked on dough because mixer is overheating")['reason']==='mixer is overheating',
+    'spoken blocker explanation captures reason separately from task identity');
+pit_assert(pac_followup_intent('Resolve blocker on dough')['type']==='resolve',
+    'spoken manager blocker resolution intent');
+pit_assert(pac_followup_intent('Reassign dough to Prep CI Staff')['type']==='assign',
+    'spoken reassignment reuses canonical employee matching');
 try{pac_task_match([['public_id'=>'one','title'=>'Pizza dough'],['public_id'=>'two','title'=>'Bread dough']],'dough');
     throw new RuntimeException('Ambiguous prep task must not be guessed');}
 catch(InvalidArgumentException $expected){}
@@ -206,6 +212,69 @@ pit_assert(pac_proactive_signals($pdo,$orgId,$userId,
 pit_assert(array_column(pac_proactive_signals($pdo,$orgId,$staffId,$staffActor,'2026-11-06'),'key')
     ===array_column($staffSignals,'key'),'proactive dedupe keys stay stable across polling');
 
+// B8D17G2E: employee blocker reason, manager visibility, deduped escalation, resolution and handoff.
+$reasonProposal=prep_agent_handle($pdo,$staffActor,
+    ['message'=>"I'm blocked on dough because the mixer is overheating"]);
+pit_assert(($reasonProposal['data']['requiresConfirmation']??false)===true,
+    'reporting a new reason for an already blocked task requires confirmation');
+$reasonRecorded=prep_agent_handle($pdo,$staffActor,['message'=>'Confirm']);
+pit_assert(($reasonRecorded['data']['action']??'')==='task_blocker',
+    'confirmed blocker reason is a distinct canonical task action');
+$eventQuery=$pdo->prepare("SELECT metadata_json FROM restaurant_task_events
+    WHERE organization_id=? AND task_id=? AND event_type='prep_blocker_reported' ORDER BY id DESC LIMIT 1");
+$eventQuery->execute([$orgId,(int)operations_task_by_public_id($pdo,$orgId,$doughId)['id']]);
+$reasonEvent=json_decode((string)$eventQuery->fetchColumn(),true);
+pit_assert(($reasonEvent['reason']??'')==='the mixer is overheating',
+    'append-only task event retains the employee reported blocker reason');
+$managerBlockers=prep_agent_handle($pdo,$prepActor,['message'=>"What's blocked on prep on 2026-11-06?"]);
+pit_assert(($managerBlockers['skill']??'')==='prep.blockers'
+    &&count($managerBlockers['data']['tasks']??[])===1
+    &&str_contains($managerBlockers['answer'],'the mixer is overheating')
+    &&str_contains($managerBlockers['answer'],'Prep CI Staff'),
+    'manager sees the live blocker reason and assigned employee');
+$myBlockers=prep_agent_handle($pdo,$staffActor,['message'=>'Blocked prep on 2026-11-06']);
+pit_assert(count($myBlockers['data']['tasks']??[])===1,
+    'assigned employee sees their own blocked task');
+$otherBlockers=prep_agent_handle($pdo,$employeeActor,['message'=>'Blocked prep on 2026-11-06']);
+pit_assert(($otherBlockers['data']['tasks']??[])===[],
+    'employee cannot read another employee’s blocker reason');
+try{prep_agent_handle($pdo,$staffActor,['message'=>'Resolve blocker on dough']);
+    throw new RuntimeException('Employee cannot authorize manager-only blocker resolution');}
+catch(PrepAgentPermissionException $expected){}
+$refreshedSignals=pac_proactive_signals($pdo,$orgId,$userId,$prepActor,'2026-11-06');
+$refreshedBlocked=array_values(array_filter($refreshedSignals,
+    static fn(array $signal):bool=>$signal['type']==='prep.task_blocked'));
+pit_assert(count($refreshedBlocked)===1
+    &&str_contains($refreshedBlocked[0]['message'],'the mixer is overheating')
+    &&$refreshedBlocked[0]['key']!==$managerSignals[0]['key'],
+    'new blocker reason creates a fresh actionable manager alert');
+pit_assert(array_column(pac_proactive_signals($pdo,$orgId,$userId,$prepActor,'2026-11-06'),'key')
+    ===array_column($refreshedSignals,'key'),'same blocker reason never creates duplicate alert keys');
+$resolveProposal=prep_agent_handle($pdo,$prepActor,['message'=>'Resolve blocker on dough']);
+pit_assert(($resolveProposal['data']['requiresConfirmation']??false)===true,
+    'manager resolution requests explicit confirmation');
+$resolved=prep_agent_handle($pdo,$prepActor,['message'=>'Confirm']);
+pit_assert(($resolved['data']['after']??'')==='in_progress',
+    'manager-confirmed blocker resolution returns task to in progress');
+pit_assert(!in_array('prep.task_blocked',
+    array_column(pac_proactive_signals($pdo,$orgId,$userId,$prepActor,'2026-11-06'),'type'),true),
+    'resolved blocker disappears from proactive exception feed');
+$reassignProposal=prep_agent_handle($pdo,$prepActor,
+    ['message'=>'Reassign dough to '.$actorName]);
+pit_assert(($reassignProposal['data']['requiresConfirmation']??false)===true,
+    'manager handoff to a named employee requires confirmation');
+$reassigned=prep_agent_handle($pdo,$prepActor,['message'=>'Confirm']);
+pit_assert(($reassigned['data']['action']??'')==='task_assign',
+    'confirmed blocker handoff changes the canonical task assignment');
+$handoff=operations_task_detail($pdo,$orgId,$doughId);
+pit_assert(count($handoff['assignments'])===1
+    &&(int)$handoff['assignments'][0]['user_id']===$userId,
+    'old assignee is replaced by new handoff owner, not duplicated');
+try{prep_agent_handle($pdo,$staffActor,['message'=>'Mark dough in progress']);
+    throw new RuntimeException('Former assignee must lose task progress authority after handoff');}
+catch(PrepAgentPermissionException $expected){}
+
+
 operations_ensure_default_categories($pdo,$orgId,$userId);
 $prepCategory=operations_category_by_slug($pdo,$orgId,'prep');
 pit_assert((bool)$prepCategory,'Prep category is required.');
@@ -272,6 +341,9 @@ pit_assert(($route['route']??null)==='api/prep-intelligence-agent.php','Prep his
 $route=gaw_route($routeUser,'What is my prep today?');
 pit_assert(($route['route']??null)==='api/prep-intelligence-agent.php',
     'my-prep inbox routes to the scoped Prep Agent instead of generic tasks');
+$route=gaw_route($routeUser,"What's blocked on prep today?");
+pit_assert(($route['route']??null)==='api/prep-intelligence-agent.php',
+    'blocked prep inquiry routes to scoped Prep Intelligence');
 $route=gaw_route($routeUser,'Hey Gelato, count inventory');
 pit_assert(($route['route']??null)==='api/operations-agent.php','Generic inventory should remain on the Operations Agent.');
 
