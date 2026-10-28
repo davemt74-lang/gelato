@@ -299,6 +299,72 @@ try{prep_agent_handle($pdo,$staffActor,['message'=>'Mark dough in progress']);
 catch(PrepAgentPermissionException $expected){}
 
 
+
+// B8D17G2F: read-only service readiness plus stable due-soon/overdue reminders.
+$readiness=prep_agent_handle($pdo,$prepActor,
+    ['message'=>'Are we ready for prep on 2026-11-06?']);
+pit_assert(($readiness['skill']??'')==='prep.readiness'
+    &&($readiness['data']['scope']??'')==='manager'
+    &&($readiness['data']['counts']['total']??0)===3
+    &&($readiness['data']['counts']['completed']??0)===1
+    &&($readiness['data']['counts']['unassigned']??0)===1
+    &&($readiness['data']['state']??'')==='at_risk',
+    'manager gets truthful readiness from all canonical tasks, including unassigned work');
+pit_assert(str_contains($readiness['answer'],'Garlic knots')
+    &&!str_contains($readiness['answer'],'ready for service'),
+    'at-risk prep summary names the outstanding blocker without falsely declaring readiness');
+$employeeReadiness=prep_agent_handle($pdo,$employeeActor,
+    ['message'=>'How much prep is done on 2026-11-06?']);
+pit_assert(($employeeReadiness['skill']??'')==='prep.readiness'
+    &&($employeeReadiness['data']['scope']??'')==='assigned_employee'
+    &&($employeeReadiness['data']['counts']['total']??0)===2
+    &&($employeeReadiness['data']['counts']['unassigned']??-1)===0
+    &&($employeeReadiness['data']['plans']??null)===[]
+    &&!str_contains($employeeReadiness['answer'],'Garlic knots'),
+    'employee readiness is their assignment-only progress without managerial plan exposure');
+$formerReadiness=prep_agent_handle($pdo,$staffActor,
+    ['message'=>'Prep status on 2026-11-06']);
+pit_assert(($formerReadiness['data']['counts']['total']??-1)===0
+    &&($formerReadiness['data']['state']??'')==='no_tasks',
+    'employee removed by handoff does not retain readiness visibility');
+$missingReadiness=prep_agent_handle($pdo,$prepActor,
+    ['message'=>'Prep readiness on 2026-12-31']);
+pit_assert(($missingReadiness['data']['state']??'')==='no_plan',
+    'missing dated plan is never falsely declared ready');
+$foreignReadiness=pac_readiness($pdo,$orgId+100000,$userId,$prepActor,
+    'Prep readiness on 2026-11-06');
+pit_assert(($foreignReadiness['data']['counts']['total']??-1)===0
+    &&($foreignReadiness['data']['state']??'')==='no_plan',
+    'readiness cannot expose another organization\'s tasks');
+$zone=new DateTimeZone((string)(app_config()['app']['timezone']??'America/Phoenix'));
+$nearTime=new DateTimeImmutable('2026-11-06 14:20:00',$zone);
+$nearSignals=pac_proactive_signals($pdo,$orgId,$userId,$prepActor,'2026-11-06',$nearTime);
+$nearDue=array_values(array_filter($nearSignals,
+    static fn(array $signal):bool=>$signal['type']==='prep.task_due_soon'));
+pit_assert(count($nearDue)===1&&str_contains($nearDue[0]['message'],'dough'),
+    'manager receives approaching due-time progress reminder for assigned open prep');
+pit_assert(array_column(pac_proactive_signals($pdo,$orgId,$userId,$prepActor,'2026-11-06',$nearTime),'key')
+    ===array_column($nearSignals,'key'),'due-soon reminder dedupe key remains stable across polling');
+$employeeNear=pac_proactive_signals($pdo,$orgId,$userId,$employeeActor,'2026-11-06',$nearTime);
+pit_assert(count($employeeNear)===1&&$employeeNear[0]['type']==='prep.task_due_soon'
+    &&!str_contains($employeeNear[0]['message'],'Garlic knots'),
+    'nonmanager gets only their own approaching deadline without other staff details');
+pit_assert(pac_proactive_signals($pdo,$orgId,$staffId,$staffActor,'2026-11-06',$nearTime)===[],
+    'former assignee receives no due-time alerts after handoff');
+$lateTime=new DateTimeImmutable('2026-11-06 16:20:00',$zone);
+$lateSignals=pac_proactive_signals($pdo,$orgId,$userId,$prepActor,'2026-11-06',$lateTime);
+$overdue=array_values(array_filter($lateSignals,
+    static fn(array $signal):bool=>$signal['type']==='prep.task_overdue'));
+pit_assert(count($overdue)===1
+    &&$overdue[0]['priority']==='high'
+    &&$overdue[0]['key']!==$nearDue[0]['key'],
+    'missed deadline raises distinct high-priority reminder instead of repeating due-soon key');
+$lateReadiness=pac_readiness($pdo,$orgId,$userId,$prepActor,
+    'How is prep looking on 2026-11-06?',$lateTime);
+pit_assert(($lateReadiness['data']['counts']['overdue']??0)===2
+    &&($lateReadiness['data']['state']??'')==='at_risk',
+    'as-of readiness identifies both open overdue tasks at their due time');
+
 operations_ensure_default_categories($pdo,$orgId,$userId);
 $prepCategory=operations_category_by_slug($pdo,$orgId,'prep');
 pit_assert((bool)$prepCategory,'Prep category is required.');
@@ -368,6 +434,15 @@ pit_assert(($route['route']??null)==='api/prep-intelligence-agent.php',
 $route=gaw_route($routeUser,"What's blocked on prep today?");
 pit_assert(($route['route']??null)==='api/prep-intelligence-agent.php',
     'blocked prep inquiry routes to scoped Prep Intelligence');
+$route=gaw_route($routeUser,'Prep readiness for dinner service');
+pit_assert(($route['route']??null)==='api/prep-intelligence-agent.php',
+    'readiness query routes to Prep Intelligence instead of generic Operations');
+$hostRouteUser=$routeUser;
+$hostRouteUser['permissions'][]='host.view';
+$hostRouteUser['permissions'][]='table_service.view';
+$route=gaw_route($hostRouteUser,'Are we ready for lunch prep?');
+pit_assert(($route['route']??null)==='api/prep-intelligence-agent.php',
+    'explicit prep readiness beats competing front-of-house ready-for-service routing');
 $route=gaw_route($routeUser,'Hey Gelato, count inventory');
 pit_assert(($route['route']??null)==='api/operations-agent.php','Generic inventory should remain on the Operations Agent.');
 

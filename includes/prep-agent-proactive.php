@@ -3,12 +3,15 @@ declare(strict_types=1);
 
 /**
  * Read-only, actor-scoped prep alerts for the existing Proactive Agent pipeline.
- * The delivery layer handles one-use dedupe and per-user listening preferences.
+ * Notify on blocker changes, unassigned work and approaching/missed deadlines.
+ * Each threshold uses a stable dedupe key; completing the task removes the alert.
  */
-function pac_proactive_signals(PDO $pdo,int $org,int $uid,array $user,string $day): array
+function pac_proactive_signals(PDO $pdo,int $org,int $uid,array $user,string $day,?DateTimeImmutable $now=null): array
 {
     if(!app_has_permission('prep.intelligence.view',$user))return [];
     $manager=app_has_permission('prep.intelligence.manage',$user)&&app_has_permission('tasks.manage',$user);
+    $timezone=new DateTimeZone((string)(app_config()['app']['timezone']??'America/Phoenix'));
+    $now=$now?->setTimezone($timezone)??new DateTimeImmutable('now',$timezone);
     $q=$pdo->prepare("SELECT p.public_id plan_public_id,p.plan_date,t.public_id task_public_id,
         t.title,t.status,t.due_at,
         (SELECT GROUP_CONCAT(u.display_name ORDER BY u.display_name SEPARATOR ', ')
@@ -37,29 +40,50 @@ function pac_proactive_signals(PDO $pdo,int $org,int $uid,array $user,string $da
         JOIN restaurant_tasks t ON t.id=pt.task_id AND t.organization_id=pt.organization_id
         WHERE pt.organization_id=? AND p.plan_date=? AND p.status<>'closed'
           AND t.archived_at IS NULL AND t.status NOT IN ('completed','verified','cancelled')
-        ORDER BY FIELD(t.status,'blocked','in_progress','assigned','queued','accepted'),t.due_at,t.title LIMIT 60");
-    $q->execute([$uid,$org,$day]);$signals=[];
-    foreach($q->fetchAll() as $row){
+        ORDER BY FIELD(t.status,'blocked','in_progress','assigned','queued','accepted'),t.due_at,t.title LIMIT 100");
+    $q->execute([$uid,$org,$day]);$groups=[[],[],[],[]];
+    foreach($q->fetchAll(PDO::FETCH_ASSOC) as $row){
         $blocked=$row['status']==='blocked';
         $mine=(int)$row['assigned_to_me']>0;
         $unassigned=(int)$row['assignee_count']===0;
         if(!$manager&&!$mine)continue;
-        if(!$blocked&&!($manager&&$unassigned))continue;
-        $kind=$blocked?'prep.task_blocked':'prep.task_unassigned';
-        $priority=$blocked?'high':'normal';
+        $due=trim((string)($row['due_at']??''));
+        $seconds=$due===''?null:(new DateTimeImmutable($due,$timezone))->getTimestamp()-$now->getTimestamp();
+        $kind='';
+        if($blocked)$kind='prep.task_blocked';
+        elseif($manager&&$unassigned)$kind='prep.task_unassigned';
+        elseif($seconds!==null&&$seconds<0)$kind='prep.task_overdue';
+        elseif($seconds!==null&&$seconds<=3600)$kind='prep.task_due_soon';
+        else continue;
+        $priority=in_array($kind,['prep.task_blocked','prep.task_overdue'],true)?'high':'normal';
         $blocker=$row['blocker_json']?json_decode((string)$row['blocker_json'],true):null;
         $reason=trim((string)($blocker['reason']??''));
         $assignees=trim((string)($row['assigned_names']??''));
-        $message=$blocked?('Prep task blocked: '.$row['title'].($assignees!==''?' ('.$assignees.')':'').'. '.
-            ($reason!==''?'Reason: '.$reason.'.':'Ask the assignee for the blocker reason.'))
-            :('Unassigned prep task: '.$row['title'].'. Assign an employee before service.');
-        $signals[]=[
-            'type'=>$kind,'priority'=>$priority,'message'=>$message,
-            'key'=>'prep-task:'.$row['plan_public_id'].':'.$row['task_public_id'].':'.$kind.':'.$day.
-                ($blocked?':'.(int)($row['blocker_event_id']??0):''),
+        $taskName=(string)$row['title'];
+        if($kind==='prep.task_blocked'){
+            $message='Prep task blocked: '.$taskName.($assignees!==''?' ('.$assignees.')':'').'. '.
+                ($reason!==''?'Reason: '.$reason.'.':'Ask the assignee for the blocker reason.');
+            $group=0;
+        }elseif($kind==='prep.task_overdue'){
+            $message='Overdue prep task: '.$taskName.($manager&&$assignees!==''?' ('.$assignees.')':'').
+                '. Due '.$due.'. Check progress before service.';
+            $group=1;
+        }elseif($kind==='prep.task_unassigned'){
+            $message='Unassigned prep task: '.$taskName.'. Assign an employee before service.';
+            $group=2;
+        }else{
+            $message='Prep task due within one hour: '.$taskName.($manager&&$assignees!==''?' ('.$assignees.')':'').
+                '. Due '.$due.'.';
+            $group=3;
+        }
+        $key='prep-task:'.$row['plan_public_id'].':'.$row['task_public_id'].':'.$kind.':'.$day;
+        if($blocked)$key.=':'.(int)($row['blocker_event_id']??0);
+        if($kind==='prep.task_overdue'||$kind==='prep.task_due_soon')$key.=':'.$due;
+        $groups[$group][]=[
+            'type'=>$kind,'priority'=>$priority,'message'=>$message,'key'=>$key,
             'url'=>'prep-intelligence.php',
             'meta'=>['planId'=>$row['plan_public_id'],'taskId'=>$row['task_public_id'],'date'=>$day],
         ];
     }
-    return array_slice($signals,0,10);
+    return array_slice(array_merge(...$groups),0,10);
 }
