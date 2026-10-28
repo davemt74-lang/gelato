@@ -143,7 +143,7 @@ function pac_execute(PDO $pdo,int $org,int $uid,array $user,array $proposal,bool
     if((int)($proposal['organizationId']??0)!==$org||(int)($proposal['userId']??0)!==$uid)throw new PrepAgentPermissionException('This Prep Agent proposal does not belong to your session.');
     $payload=(array)$proposal['payload'];
     $type=(string)$proposal['type'];
-    if(in_array($type,['task_status','task_quantity','task_assign','task_progress'],true))
+    if(in_array($type,['task_status','task_quantity','task_assign','task_progress','task_blocker','task_resolve'],true))
         return pac_execute_followup($pdo,$org,$uid,$user,$payload,$type);
     pac_require($user,'prep.intelligence.manage','Prep Intelligence management permission is required for this action.');
 
@@ -211,6 +211,72 @@ function pac_execute(PDO $pdo,int $org,int $uid,array $user,array $proposal,bool
  * Employee-facing, read-only prep inbox. Assignment membership is evaluated
  * in SQL, not inferred from the current chat context or name matching.
  */
+/**
+ * Answer who is blocked using current canonical prep task status. Managers see
+ * all blocked tasks for the day; employees only see their own assignments.
+ */
+function pac_blockers(PDO $pdo,int $org,int $uid,array $user,string $text): array
+{
+    $date=prep_parse_date_phrase($text);
+    $service=pac_service($text);
+    $manager=app_has_permission('prep.intelligence.manage',$user)&&app_has_permission('tasks.manage',$user);
+    $serviceClause=$service==='all'?'':' AND p.service_period IN (?,\'all\')';
+    $actorClause=$manager?'':' AND EXISTS (SELECT 1 FROM restaurant_task_assignments mine
+            WHERE mine.organization_id=t.organization_id AND mine.task_id=t.id AND mine.user_id=?)';
+    $sql="SELECT p.public_id plan_public_id,p.plan_date,p.service_period,
+             t.public_id,t.title,t.status,t.due_at,
+             (SELECT GROUP_CONCAT(u.display_name ORDER BY u.display_name SEPARATOR ', ')
+              FROM restaurant_task_assignments a JOIN users u ON u.id=a.user_id
+              WHERE a.organization_id=t.organization_id AND a.task_id=t.id) assigned_names,
+             (SELECT e.metadata_json FROM restaurant_task_events e
+              WHERE e.organization_id=t.organization_id AND e.task_id=t.id
+                AND e.event_type='prep_blocker_reported'
+                AND e.id>COALESCE((SELECT MAX(e2.id) FROM restaurant_task_events e2
+                  WHERE e2.organization_id=e.organization_id AND e2.task_id=e.task_id
+                    AND e2.event_type='status_changed'),0)
+              ORDER BY e.id DESC LIMIT 1) reason_json
+          FROM prep_plan_tasks pt
+          JOIN prep_plans p ON p.id=pt.plan_id AND p.organization_id=pt.organization_id
+          JOIN restaurant_tasks t ON t.id=pt.task_id AND t.organization_id=pt.organization_id
+          WHERE pt.organization_id=? AND p.plan_date=? AND p.status<>'closed'
+            AND t.status='blocked' AND t.archived_at IS NULL".$serviceClause.$actorClause."
+          ORDER BY t.due_at IS NULL,t.due_at,t.title LIMIT 51";
+    $params=[$org,$date];
+    if($service!=='all')$params[]=$service;
+    if(!$manager)$params[]=$uid;
+    $q=$pdo->prepare($sql);$q->execute($params);
+    $raw=$q->fetchAll(PDO::FETCH_ASSOC);
+    $more=count($raw)>50;$tasks=array_slice($raw,0,50);
+    foreach($tasks as &$task){
+        $metadata=$task['reason_json']?json_decode((string)$task['reason_json'],true):null;
+        $task['reason']=trim((string)($metadata['reason']??''))?:'Reason not provided';
+        unset($task['reason_json']);
+    }unset($task);
+    // Bind a single dated plan to the conversation so "resolve blocker on
+    // dough" can follow a read-back without repeating the date or service.
+    $plans=array_unique(array_column($tasks,'plan_public_id'));
+    if(count($plans)===1){
+        $first=$tasks[0];
+        pac_context_store($org,$uid,[
+            'public_id'=>$first['plan_public_id'],
+            'plan_date'=>$first['plan_date'],
+            'service_period'=>$first['service_period'],
+        ],count($tasks)===1?(string)$first['public_id']:null);
+    }else{
+        unset($_SESSION['prep_agent_context'][pac_context_key($org,$uid)]);
+    }
+    $lines=[];
+    foreach(array_slice($tasks,0,8) as $task)
+        $lines[]=$task['title'].' ('.($task['assigned_names']?:'unassigned').'): '.$task['reason'];
+    $answer=$tasks?($manager?'Blocked prep for ':'Your blocked prep for ').$date.': '.implode('; ',$lines).'.'
+        :($manager?'There are no blocked prep tasks for ':'You have no blocked assigned prep tasks for ').$date.'.';
+    if(count($tasks)>8)$answer.=' Plus '.(count($tasks)-8).($more?'+':'').' more blocked task(s).';
+    return ['ok'=>true,'skill'=>'prep.blockers','answer'=>$answer,
+        'data'=>['date'=>$date,'service'=>$service,'tasks'=>$tasks,
+            'proof'=>['url'=>'prep-intelligence.php']],
+        'sources'=>array_column($tasks,'public_id')];
+}
+
 function pac_my_prep(PDO $pdo,int $org,int $uid,string $text): array
 {
     $date=prep_parse_date_phrase($text);
@@ -305,7 +371,7 @@ function prep_agent_handle(PDO $pdo,array $user,array $input): array
                 'data'=>['plan'=>$detail['plan'],'task'=>$task,'proof'=>['url'=>'prep-intelligence.php','planId'=>$plan['public_id'],'taskId'=>$task['public_id']]],
                 'sources'=>[(string)$task['public_id']]];
         }
-        if(in_array($followup['type'],['complete','progress'],true)){
+        if(in_array($followup['type'],['complete','progress','blocker','resolve'],true)){
             $manager=app_has_permission('prep.intelligence.manage',$user)&&app_has_permission('tasks.manage',$user);
             if(!$manager){
                 pac_require($user,'tasks.self','Only managers or assigned employees may complete prep tasks.');
@@ -315,11 +381,24 @@ function prep_agent_handle(PDO $pdo,array $user,array $input): array
             }
             if(in_array((string)$full['status'],['completed','verified','cancelled'],true))
                 return ['ok'=>true,'skill'=>'prep.task_already_done','answer'=>$full['title'].' is already '.str_replace('_',' ',$full['status']).'.','data'=>['task'=>$task],'sources'=>[(string)$task['public_id']]];
-            $status=$followup['type']==='complete'?'completed':(string)$followup['status'];
-            if((string)$full['status']===$status)
-                return ['ok'=>true,'skill'=>'prep.task_already_done','answer'=>$full['title'].' is already '.str_replace('_',' ',$status).'.','data'=>['task'=>$task],'sources'=>[(string)$task['public_id']]];
-            $action=$status==='completed'?'task_status':'task_progress';
-            $summary='Proposed action: mark '.$full['title'].' '.str_replace('_',' ',$status).' on the '.$plan['plan_date'].' prep plan. No change has been made.';
+            if($followup['type']==='resolve'){
+                pac_require($user,'prep.intelligence.manage','Only managers may resolve prep blockers.');
+                pac_require($user,'tasks.manage','Task management permission is required to resolve prep blockers.');
+                if((string)$full['status']!=='blocked')
+                    throw new InvalidArgumentException('Only a currently blocked prep task can have its blocker resolved.');
+                $status='in_progress';
+                $action='task_resolve';
+                $summary='Proposed action: resolve the blocker on '.$full['title'].' and return the task to in progress. No change has been made.';
+            }elseif($followup['type']==='blocker'){
+                $status='blocked';$action='task_blocker';
+                $summary='Proposed blocker on '.$full['title'].': '.$followup['reason'].'. No change has been made.';
+            }else{
+                $status=$followup['type']==='complete'?'completed':(string)$followup['status'];
+                if((string)$full['status']===$status)
+                    return ['ok'=>true,'skill'=>'prep.task_already_done','answer'=>$full['title'].' is already '.str_replace('_',' ',$status).'.','data'=>['task'=>$task],'sources'=>[(string)$task['public_id']]];
+                $action=$status==='completed'?'task_status':'task_progress';
+                $summary='Proposed action: mark '.$full['title'].' '.str_replace('_',' ',$status).' on the '.$plan['plan_date'].' prep plan. No change has been made.';
+            }
         }elseif($followup['type']==='assign'){
             pac_require($user,'prep.intelligence.manage','Prep management permission is required to assign prep tasks.');
             pac_require($user,'tasks.manage','Task management permission is required to assign prep tasks.');
@@ -341,12 +420,16 @@ function prep_agent_handle(PDO $pdo,array $user,array $input): array
             'assignmentSignature'=>pac_assignment_signature($pdo,$org,(int)$full['id'])];
         if($action==='task_quantity'){$payload['delta']=$followup['quantity'];$payload['unit']=$followup['unit'];}
         if($action==='task_progress')$payload['status']=$status;
+        if($action==='task_blocker')$payload['reason']=$followup['reason'];
         if($action==='task_assign'){$payload['assigneeId']=(int)$staff['id'];$payload['assigneeName']=(string)$staff['display_name'];}
         $proposal=gac_pending_store('prep',$org,$uid,$action,$payload,$summary);
         app_audit($pdo,$org,$uid,'prep.agent_action_proposed','prep_agent_proposal',(string)$proposal['id'],null,['type'=>$action,'taskId'=>$full['public_id']]);
         return gac_proposal_result($proposal,'prep.action_proposal',['Prep Plan','Restaurant Tasks']);
     }
 
+
+    if(preg_match('/\b(?:what(?:\x27s| is)\s+(?:blocked|blocking|holding\s+up).*prep|(?:blocked|blocking)\s+prep|prep\s+(?:blockers?|blocked\s+tasks?)|who(?:\x27s| is)\s+blocked\s+on\s+prep)\b/iu',$lower))
+        return pac_blockers($pdo,$org,$uid,$user,$text);
 
     // Give employees a scoped inbox even when other people's prep plans exist.
     if(preg_match('/\\bmy\\s+prep\\b/u',$lower)
