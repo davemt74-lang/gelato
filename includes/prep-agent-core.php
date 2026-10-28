@@ -249,6 +249,19 @@ function pac_blockers(PDO $pdo,int $org,int $uid,array $user,string $text): arra
         $task['reason']=trim((string)($metadata['reason']??''))?:'Reason not provided';
         unset($task['reason_json']);
     }unset($task);
+    // Bind a single dated plan to the conversation so "resolve blocker on
+    // dough" can follow a read-back without repeating the date or service.
+    $plans=array_unique(array_column($tasks,'plan_public_id'));
+    if(count($plans)===1){
+        $first=$tasks[0];
+        pac_context_store($org,$uid,[
+            'public_id'=>$first['plan_public_id'],
+            'plan_date'=>$first['plan_date'],
+            'service_period'=>$first['service_period'],
+        ],count($tasks)===1?(string)$first['public_id']:null);
+    }else{
+        unset($_SESSION['prep_agent_context'][pac_context_key($org,$uid)]);
+    }
     $lines=[];
     foreach(array_slice($tasks,0,8) as $task)
         $lines[]=$task['title'].' ('.($task['assigned_names']?:'unassigned').'): '.$task['reason'];
