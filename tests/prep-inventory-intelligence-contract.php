@@ -229,6 +229,16 @@ pit_assert(($reasonEvent['reason']??'')==='the mixer is overheating',
 $otherBlockers=prep_agent_handle($pdo,$employeeActor,['message'=>'Blocked prep on 2026-11-06']);
 pit_assert(($otherBlockers['data']['tasks']??[])===[],
     'employee cannot read another employee’s blocker reason');
+$duplicateProposal=prep_agent_handle($pdo,$staffActor,
+    ['message'=>"I'm blocked on dough because the mixer is overheating"]);
+pit_assert(($duplicateProposal['data']['requiresConfirmation']??false)===true,
+    'repeated blocker report is still presented for confirmation');
+try{prep_agent_handle($pdo,$staffActor,['message'=>'Confirm']);
+    throw new RuntimeException('Identical blocker reason must not create duplicate events');}
+catch(InvalidArgumentException $expected){}
+$eventQuery->execute([$orgId,(int)operations_task_by_public_id($pdo,$orgId,$doughId)['id']]);
+pit_assert(json_decode((string)$eventQuery->fetchColumn(),true)['reason']==='the mixer is overheating',
+    'duplicate confirmation preserves the original reason and audit lineage');
 $managerBlockers=prep_agent_handle($pdo,$prepActor,['message'=>"What's blocked on prep on 2026-11-06?"]);
 pit_assert(($managerBlockers['skill']??'')==='prep.blockers'
     &&count($managerBlockers['data']['tasks']??[])===1
@@ -259,6 +269,20 @@ pit_assert(($resolved['data']['after']??'')==='in_progress',
 pit_assert(!in_array('prep.task_blocked',
     array_column(pac_proactive_signals($pdo,$orgId,$userId,$prepActor,'2026-11-06'),'type'),true),
     'resolved blocker disappears from proactive exception feed');
+$reblockProposal=prep_agent_handle($pdo,$prepActor,['message'=>'Block prep dough']);
+pit_assert(($reblockProposal['data']['requiresConfirmation']??false)===true,
+    'new status epoch still permits a bare block without inventing a reason');
+$reblocked=prep_agent_handle($pdo,$prepActor,['message'=>'Confirm']);
+pit_assert(($reblocked['data']['after']??'')==='blocked','reblock changes task status');
+$reblockSignals=pac_proactive_signals($pdo,$orgId,$userId,$prepActor,'2026-11-06');
+$bareBlock=array_values(array_filter($reblockSignals,
+    static fn(array $signal):bool=>$signal['type']==='prep.task_blocked'));
+pit_assert(count($bareBlock)===1
+    &&!str_contains($bareBlock[0]['message'],'the mixer is overheating'),
+    'new status epoch never reuses a stale blocker reason');
+$reResolve=prep_agent_handle($pdo,$prepActor,['message'=>'Resolve blocker on dough']);
+pit_assert(($reResolve['data']['requiresConfirmation']??false)===true,'manager can resolve a later blocker');
+prep_agent_handle($pdo,$prepActor,['message'=>'Confirm']);
 $reassignProposal=prep_agent_handle($pdo,$prepActor,
     ['message'=>'Reassign dough to '.$actorName]);
 pit_assert(($reassignProposal['data']['requiresConfirmation']??false)===true,
