@@ -16,10 +16,18 @@ function pac_proactive_signals(PDO $pdo,int $org,int $uid,array $user,string $da
           WHERE a.organization_id=t.organization_id AND a.task_id=t.id) assigned_names,
         (SELECT e.id FROM restaurant_task_events e
           WHERE e.organization_id=t.organization_id AND e.task_id=t.id
-            AND e.event_type='prep_blocker_reported' ORDER BY e.id DESC LIMIT 1) blocker_event_id,
+            AND e.event_type='prep_blocker_reported'
+            AND e.id>COALESCE((SELECT MAX(e2.id) FROM restaurant_task_events e2
+              WHERE e2.organization_id=e.organization_id AND e2.task_id=e.task_id
+                AND e2.event_type='status_changed'),0)
+          ORDER BY e.id DESC LIMIT 1) blocker_event_id,
         (SELECT e.metadata_json FROM restaurant_task_events e
           WHERE e.organization_id=t.organization_id AND e.task_id=t.id
-            AND e.event_type='prep_blocker_reported' ORDER BY e.id DESC LIMIT 1) blocker_json,
+            AND e.event_type='prep_blocker_reported'
+            AND e.id>COALESCE((SELECT MAX(e2.id) FROM restaurant_task_events e2
+              WHERE e2.organization_id=e.organization_id AND e2.task_id=e.task_id
+                AND e2.event_type='status_changed'),0)
+          ORDER BY e.id DESC LIMIT 1) blocker_json,
         (SELECT COUNT(*) FROM restaurant_task_assignments a
           WHERE a.organization_id=t.organization_id AND a.task_id=t.id) assignee_count,
         (SELECT COUNT(*) FROM restaurant_task_assignments a
