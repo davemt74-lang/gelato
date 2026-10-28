@@ -55,7 +55,15 @@ function pac_followup_intent(string $text): ?array
     $clean=rtrim($clean," \t\r\n.!?");
     if(preg_match('/^(?:please\s+)?(?:mark|set)\s+(?:the\s+)?(.+?)\s+(?:as\s+)?(?:complete|completed|done)$/iu',$clean,$m))
         return ['type'=>'complete','target'=>trim($m[1])];
-    if(preg_match('/^(?:please\s+)?(?:assign|give)\s+(?:the\s+)?(.+?)\s+to\s+(.+)$/iu',$clean,$m))
+    if(preg_match('/^(?:please\s+)?(?:i(?:\x27m| am)\s+blocked\s+on|block(?:ed)?|report\s+(?:a\s+)?blocker\s+on)\s+(?:the\s+)?(.+?)\s+because\s+(.+)$/iu',$clean,$m)){
+        $reason=trim($m[2]);
+        if(mb_strlen($reason,'UTF-8')<3||mb_strlen($reason,'UTF-8')>240)
+            throw new InvalidArgumentException('Give a blocker reason between 3 and 240 characters.');
+        return ['type'=>'blocker','target'=>trim($m[1]),'reason'=>$reason];
+    }
+    if(preg_match('/^(?:please\s+)?(?:resolve|clear|unblock)\s+(?:the\s+)?(?:blocker\s+(?:on|for)\s+)?(.+)$/iu',$clean,$m))
+        return ['type'=>'resolve','target'=>trim($m[1])];
+    if(preg_match('/^(?:please\s+)?(?:reassign|assign|give)\s+(?:the\s+)?(.+?)\s+to\s+(.+)$/iu',$clean,$m))
         return ['type'=>'assign','target'=>trim($m[1]),'assignee'=>trim($m[2])];
     if(preg_match('/^(?:please\s+)?(?:mark|set)\s+(?:the\s+)?(.+?)\s+(?:as\s+)?(in\s+progress|started|blocked|accepted)$/iu',$clean,$m)){
         $state=mb_strtolower(preg_replace('/\s+/u',' ',trim($m[2]))??trim($m[2]),'UTF-8');
@@ -163,7 +171,7 @@ function pac_list_result(PDO $pdo,int $org,int $uid,array $plan,bool $canForecas
 
 function pac_execute_followup(PDO $pdo,int $org,int $uid,array $user,array $payload,string $type): array
 {
-    if(in_array($type,['task_quantity','task_assign'],true)){
+    if(in_array($type,['task_quantity','task_assign','task_resolve'],true)){
         pac_require($user,'prep.intelligence.manage','Prep management permission is required to change prep tasks.');
         pac_require($user,'tasks.manage','Task management permission is required to change prep tasks.');
     }else{
@@ -194,29 +202,48 @@ function pac_execute_followup(PDO $pdo,int $org,int $uid,array $user,array $payl
         $advance->execute([$uid,(int)$plan['id'],$org,(int)$plan['revision']]);
         if($advance->rowCount()!==1)
             throw new InvalidArgumentException('That prep plan changed. Review it and ask again.');
-        if(in_array($type,['task_status','task_progress'],true)){
+        if(in_array($type,['task_status','task_progress','task_blocker','task_resolve'],true)){
             $manager=app_has_permission('tasks.manage',$user)&&app_has_permission('prep.intelligence.manage',$user);
             if(!$manager){
-                pac_require($user,'tasks.self','Only an assigned employee or a manager may complete this prep task.');
+                pac_require($user,'tasks.self','Only an assigned employee or a manager may update this prep task.');
                 $assigned=$pdo->prepare('SELECT COUNT(*) FROM restaurant_task_assignments WHERE organization_id=? AND task_id=? AND user_id=?');
                 $assigned->execute([$org,(int)$task['id'],$uid]);
-                if((int)$assigned->fetchColumn()===0)throw new PrepAgentPermissionException('You may only complete prep tasks assigned to you.');
+                if((int)$assigned->fetchColumn()===0)throw new PrepAgentPermissionException('You may only update prep tasks assigned to you.');
             }
-            $newStatus=$type==='task_status'?'completed':(string)($payload['status']??'');
+            $newStatus=match($type){
+                'task_status'=>'completed','task_blocker'=>'blocked','task_resolve'=>'in_progress',
+                default=>(string)($payload['status']??''),
+            };
             if(!in_array($newStatus,['completed','accepted','in_progress','blocked'],true))
                 throw new InvalidArgumentException('That prep task status is not supported.');
+            if(in_array((string)$task['status'],['completed','verified','cancelled'],true))
+                throw new InvalidArgumentException('That prep task is already finished or cancelled.');
+            if($type==='task_resolve'&&(string)$task['status']!=='blocked')
+                throw new InvalidArgumentException('Only a currently blocked prep task can have its blocker resolved.');
             if($newStatus==='completed'&&(int)$task['requires_photo']===1){
                 $proof=$pdo->prepare('SELECT COUNT(*) FROM restaurant_task_proofs WHERE organization_id=? AND task_id=?');
                 $proof->execute([$org,(int)$task['id']]);
                 if((int)$proof->fetchColumn()===0)
                     throw new InvalidArgumentException('Photo proof is required before this prep task can be completed.');
             }
-            if(in_array((string)$task['status'],['completed','verified','cancelled'],true))
-                throw new InvalidArgumentException('That prep task is already finished or cancelled.');
-            if((string)$task['status']===$newStatus)throw new InvalidArgumentException('That prep task is already in the requested status.');
-            $updated=operations_task_set_status($pdo,$org,$taskId,$newStatus,$uid);
-            $answer='Confirmed. Marked '.$task['title'].' '.str_replace('_',' ',$newStatus).'.';
-            $after=$newStatus;$before=$task['status'];
+            if($type!=='task_blocker'&&(string)$task['status']===$newStatus)
+                throw new InvalidArgumentException('That prep task is already in the requested status.');
+            $before=(string)$task['status'];$after=$newStatus;
+            $updated=(string)$task['status']===$newStatus?$task:operations_task_set_status($pdo,$org,$taskId,$newStatus,$uid);
+            if($type==='task_blocker'){
+                $reason=trim((string)($payload['reason']??''));
+                if(mb_strlen($reason,'UTF-8')<3||mb_strlen($reason,'UTF-8')>240)
+                    throw new InvalidArgumentException('The blocker reason is missing or too long. Ask again.');
+                operations_task_event($pdo,$org,(int)$task['id'],'prep_blocker_reported','Prep blocker reported: '.$reason,$uid,
+                    ['reason'=>$reason,'planId'=>$plan['public_id'],'taskId'=>$taskId]);
+                $answer='Confirmed. Recorded a blocker for '.$task['title'].': '.$reason.'. Management will see it in prep alerts.';
+            }elseif($type==='task_resolve'){
+                operations_task_event($pdo,$org,(int)$task['id'],'prep_blocker_resolved','Prep blocker resolved by manager.',$uid,
+                    ['planId'=>$plan['public_id'],'taskId'=>$taskId]);
+                $answer='Confirmed. Resolved the blocker on '.$task['title'].' and returned it to in progress.';
+            }else{
+                $answer='Confirmed. Marked '.$task['title'].' '.str_replace('_',' ',$newStatus).'.';
+            }
         }elseif($type==='task_assign'){
             if(in_array((string)$task['status'],['completed','verified','cancelled'],true))
                 throw new InvalidArgumentException('A finished prep task cannot be reassigned.');
