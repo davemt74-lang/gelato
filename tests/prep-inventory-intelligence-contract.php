@@ -252,7 +252,7 @@ pit_assert(array_column(pac_proactive_signals($pdo,$orgId,$userId,$prepActor,'20
     ===array_column($refreshedSignals,'key'),'same blocker reason never creates duplicate alert keys');
 $resolveProposal=prep_agent_handle($pdo,$prepActor,['message'=>'Resolve blocker on dough']);
 pit_assert(($resolveProposal['data']['requiresConfirmation']??false)===true,
-    'manager resolution requests explicit confirmation');
+    'manager resolution requests explicit confirmation; got '.json_encode($resolveProposal,JSON_UNESCAPED_SLASHES));
 $resolved=prep_agent_handle($pdo,$prepActor,['message'=>'Confirm']);
 pit_assert(($resolved['data']['after']??'')==='in_progress',
     'manager-confirmed blocker resolution returns task to in progress');
