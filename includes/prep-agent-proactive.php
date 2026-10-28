@@ -11,6 +11,15 @@ function pac_proactive_signals(PDO $pdo,int $org,int $uid,array $user,string $da
     $manager=app_has_permission('prep.intelligence.manage',$user)&&app_has_permission('tasks.manage',$user);
     $q=$pdo->prepare("SELECT p.public_id plan_public_id,p.plan_date,t.public_id task_public_id,
         t.title,t.status,t.due_at,
+        (SELECT GROUP_CONCAT(u.display_name ORDER BY u.display_name SEPARATOR ', ')
+          FROM restaurant_task_assignments a JOIN users u ON u.id=a.user_id
+          WHERE a.organization_id=t.organization_id AND a.task_id=t.id) assigned_names,
+        (SELECT e.id FROM restaurant_task_events e
+          WHERE e.organization_id=t.organization_id AND e.task_id=t.id
+            AND e.event_type='prep_blocker_reported' ORDER BY e.id DESC LIMIT 1) blocker_event_id,
+        (SELECT e.metadata_json FROM restaurant_task_events e
+          WHERE e.organization_id=t.organization_id AND e.task_id=t.id
+            AND e.event_type='prep_blocker_reported' ORDER BY e.id DESC LIMIT 1) blocker_json,
         (SELECT COUNT(*) FROM restaurant_task_assignments a
           WHERE a.organization_id=t.organization_id AND a.task_id=t.id) assignee_count,
         (SELECT COUNT(*) FROM restaurant_task_assignments a
@@ -30,11 +39,16 @@ function pac_proactive_signals(PDO $pdo,int $org,int $uid,array $user,string $da
         if(!$blocked&&!($manager&&$unassigned))continue;
         $kind=$blocked?'prep.task_blocked':'prep.task_unassigned';
         $priority=$blocked?'high':'normal';
-        $message=$blocked?('Prep task blocked: '.$row['title'].'. Review the blocker before service.')
+        $blocker=$row['blocker_json']?json_decode((string)$row['blocker_json'],true):null;
+        $reason=trim((string)($blocker['reason']??''));
+        $assignees=trim((string)($row['assigned_names']??''));
+        $message=$blocked?('Prep task blocked: '.$row['title'].($assignees!==''?' ('.$assignees.')':'').'. '.
+            ($reason!==''?'Reason: '.$reason.'.':'Ask the assignee for the blocker reason.'))
             :('Unassigned prep task: '.$row['title'].'. Assign an employee before service.');
         $signals[]=[
             'type'=>$kind,'priority'=>$priority,'message'=>$message,
-            'key'=>'prep-task:'.$row['plan_public_id'].':'.$row['task_public_id'].':'.$kind.':'.$day,
+            'key'=>'prep-task:'.$row['plan_public_id'].':'.$row['task_public_id'].':'.$kind.':'.$day.
+                ($blocked?':'.(int)($row['blocker_event_id']??0):''),
             'url'=>'prep-intelligence.php',
             'meta'=>['planId'=>$row['plan_public_id'],'taskId'=>$row['task_public_id'],'date'=>$day],
         ];
