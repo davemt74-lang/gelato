@@ -70,6 +70,18 @@ function makeAgent(permissions, persistedSession = new Map(), actorId = 'ci-mana
   assert.equal(reloaded.sent[2].endpoint, 'api/prep-intelligence-agent.php', 'name-based assignment followup stays on Prep Intelligence');
   await reloaded.submit('Mark dough in progress');
   assert.equal(reloaded.sent[3].endpoint, 'api/prep-intelligence-agent.php', 'employee progress followup stays on Prep Intelligence');
+  await reloaded.submit("I'm blocked on dough because the mixer overheated");
+  assert.equal(reloaded.sent[4].endpoint, 'api/prep-intelligence-agent.php',
+    'spoken blocker reason stays with dated prep specialist after reload');
+  await reloaded.submit('Resolve blocker on dough');
+  assert.equal(reloaded.sent[5].endpoint, 'api/prep-intelligence-agent.php',
+    'manager resolution followup stays with dated prep specialist');
+  await reloaded.submit('Reassign dough to Prep CI Staff');
+  assert.equal(reloaded.sent[6].endpoint, 'api/prep-intelligence-agent.php',
+    'reassignment followup stays with dated prep specialist');
+  await reloaded.submit("What's blocked on prep today?");
+  assert.equal(reloaded.sent[7].endpoint, 'api/prep-intelligence-agent.php',
+    'blocker summaries use the prep specialist instead of generic Operations');
   const differentUser = makeAgent(permissions, persistedSession, 'ci-manager-2');
   await differentUser.submit('Confirm');
   assert.notEqual(differentUser.sent[0].endpoint, 'api/prep-intelligence-agent.php',
