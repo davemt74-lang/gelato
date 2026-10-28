@@ -226,6 +226,9 @@ $eventQuery->execute([$orgId,(int)operations_task_by_public_id($pdo,$orgId,$doug
 $reasonEvent=json_decode((string)$eventQuery->fetchColumn(),true);
 pit_assert(($reasonEvent['reason']??'')==='the mixer is overheating',
     'append-only task event retains the employee reported blocker reason');
+$otherBlockers=prep_agent_handle($pdo,$employeeActor,['message'=>'Blocked prep on 2026-11-06']);
+pit_assert(($otherBlockers['data']['tasks']??[])===[],
+    'employee cannot read another employee’s blocker reason');
 $managerBlockers=prep_agent_handle($pdo,$prepActor,['message'=>"What's blocked on prep on 2026-11-06?"]);
 pit_assert(($managerBlockers['skill']??'')==='prep.blockers'
     &&count($managerBlockers['data']['tasks']??[])===1
@@ -235,9 +238,6 @@ pit_assert(($managerBlockers['skill']??'')==='prep.blockers'
 $myBlockers=prep_agent_handle($pdo,$staffActor,['message'=>'Blocked prep on 2026-11-06']);
 pit_assert(count($myBlockers['data']['tasks']??[])===1,
     'assigned employee sees their own blocked task');
-$otherBlockers=prep_agent_handle($pdo,$employeeActor,['message'=>'Blocked prep on 2026-11-06']);
-pit_assert(($otherBlockers['data']['tasks']??[])===[],
-    'employee cannot read another employee’s blocker reason');
 try{prep_agent_handle($pdo,$staffActor,['message'=>'Resolve blocker on dough']);
     throw new RuntimeException('Employee cannot authorize manager-only blocker resolution');}
 catch(PrepAgentPermissionException $expected){}
