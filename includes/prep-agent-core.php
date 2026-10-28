@@ -231,6 +231,9 @@ function pac_blockers(PDO $pdo,int $org,int $uid,array $user,string $text): arra
              (SELECT e.metadata_json FROM restaurant_task_events e
               WHERE e.organization_id=t.organization_id AND e.task_id=t.id
                 AND e.event_type='prep_blocker_reported'
+                AND e.id>COALESCE((SELECT MAX(e2.id) FROM restaurant_task_events e2
+                  WHERE e2.organization_id=e.organization_id AND e2.task_id=e.task_id
+                    AND e2.event_type='status_changed'),0)
               ORDER BY e.id DESC LIMIT 1) reason_json
           FROM prep_plan_tasks pt
           JOIN prep_plans p ON p.id=pt.plan_id AND p.organization_id=pt.organization_id
