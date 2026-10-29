@@ -365,6 +365,18 @@ pit_assert(($lateReadiness['data']['counts']['overdue']??0)===2
     &&($lateReadiness['data']['state']??'')==='at_risk',
     'as-of readiness identifies both open overdue tasks at their due time');
 
+// B8D17G2G: direct voice handoff uses current manager/employee readiness.
+$managerHandoff=prep_agent_handle($pdo,$prepActor,
+    ['message'=>'Prep handoff for lunch on 2026-11-06']);
+pit_assert(($managerHandoff['skill']??'')==='prep.shift_handoff'
+    &&($managerHandoff['data']['counts']['total']??-1)===3,
+    'Prep Agent voice handoff finds canonical plan without an assigned manager shift.');
+$employeeHandoff=prep_agent_handle($pdo,$employeeActor,
+    ['message'=>'Prep handoff for lunch on 2026-11-06']);
+pit_assert(($employeeHandoff['skill']??'')==='prep.shift_handoff'
+    &&($employeeHandoff['data']['counts']['total']??-1)===2
+    &&!str_contains($employeeHandoff['answer'],'Garlic knots'),
+    'Employee conversational handoff is assignment-scoped.');
 operations_ensure_default_categories($pdo,$orgId,$userId);
 $prepCategory=operations_category_by_slug($pdo,$orgId,'prep');
 pit_assert((bool)$prepCategory,'Prep category is required.');
@@ -443,6 +455,13 @@ $hostRouteUser['permissions'][]='table_service.view';
 $route=gaw_route($hostRouteUser,'Are we ready for lunch prep?');
 pit_assert(($route['route']??null)==='api/prep-intelligence-agent.php',
     'explicit prep readiness beats competing front-of-house ready-for-service routing');
+$route=gaw_route($routeUser,'Prep handoff for next shift');
+pit_assert(($route['route']??null)==='api/prep-intelligence-agent.php',
+    'prep handoff must route to the canonical Prep Agent before Scheduling.');
+$handoffRouteUser=['role_slug'=>'employee','permissions'=>['employee.self','employee.handoffs.view','schedule.self']];
+$route=gaw_route($handoffRouteUser,'What changed before my shift?');
+pit_assert(($route['route']??null)==='api/employee-agent.php',
+    'incoming employee shift handoff must beat generic schedule routing.');
 $route=gaw_route($routeUser,'Hey Gelato, count inventory');
 pit_assert(($route['route']??null)==='api/operations-agent.php','Generic inventory should remain on the Operations Agent.');
 

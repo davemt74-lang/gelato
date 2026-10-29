@@ -24,9 +24,27 @@ if($handoffWrite){
 }
 
 if($handoffReady&&preg_match('/\b(what happened before i got here|what happened before my shift|what changed|handoff|handoffs|shift notes?|station notes?|anything i should know|before i got here|before my shift)\b/u',$normalized)){
-    $rows=employee_shift_messages_for_user($pdo,$org,$uid);$unread=array_values(array_filter($rows,static fn(array $r):bool=>empty($r['read_at'])));if(!$rows)app_json_response(['ok'=>true,'skill'=>'employee.handoff','answer'=>'There are no active shift handoffs or targeted updates for your current restaurant scope.','data'=>[],'sources'=>['employee-home.php']]);
-    $lines=[];foreach(array_slice($rows,0,16) as $r){$scope=array_filter([$r['station']?('station '.$r['station']):null,$r['location_name']??null,$r['position_name']??null]);$lines[]=$r['title'].($r['priority']&&$r['priority']!=='normal'?' — '.$r['priority']:'').($scope?' — '.implode(' / ',$scope):'').': '.mb_substr((string)$r['body'],0,420,'UTF-8').($r['read_at']?'':' — unread');}
-    app_audit($pdo,$org,$uid,'agent.employee_handoff_used','user',(string)$uid,null,['count'=>count($rows),'unread'=>count($unread)]);app_json_response(['ok'=>true,'skill'=>'employee.handoff','answer'=>"Here is the current shift handoff:\n- ".implode("\n- ",$lines),'data'=>$rows,'sources'=>array_column($rows,'public_id')]);
+    $rows=employee_shift_messages_for_user($pdo,$org,$uid);
+    $unread=array_values(array_filter($rows,static fn(array $r):bool=>empty($r['read_at'])));
+    $brief=employee_shift_arrival_brief($pdo,$org,$uid,$user);
+    $prep=$brief['prep']??null;
+    if(!$rows&&!$prep)app_json_response(['ok'=>true,'skill'=>'employee.handoff',
+        'answer'=>'There are no active shift handoffs or assigned prep issues for your current restaurant scope.',
+        'data'=>['handoffs'=>[],'prep'=>null],'sources'=>['employee-home.php']]);
+    $lines=[];
+    foreach(array_slice($rows,0,16) as $r){
+        $scope=array_filter([$r['station']?('station '.$r['station']):null,$r['location_name']??null,$r['position_name']??null]);
+        $lines[]=$r['title'].($r['priority']&&$r['priority']!=='normal'?' — '.$r['priority']:'').
+            ($scope?' — '.implode(' / ',$scope):'').': '.mb_substr((string)$r['body'],0,420,'UTF-8').
+            ($r['read_at']?'':' — unread');
+    }
+    $answer=$rows?"Here is the current shift handoff:\n- ".implode("\n- ",$lines):'No manually posted shift handoffs are active.';
+    if($prep)$answer.="\n".$prep['summary'];
+    app_audit($pdo,$org,$uid,'agent.employee_handoff_used','user',(string)$uid,null,
+        ['count'=>count($rows),'unread'=>count($unread),'prepIncluded'=>$prep!==null]);
+    app_json_response(['ok'=>true,'skill'=>'employee.handoff','answer'=>$answer,
+        'data'=>['handoffs'=>$rows,'prep'=>$prep],
+        'sources'=>array_merge(array_column($rows,'public_id'),array_column((array)($prep['tasks']??[]),'public_id'))]);
 }
 
 if($homeReady&&preg_match('/\b(my day|today|employee home|what.*need.*do|what.*doing|overview|brief me)\b/u',$normalized)){

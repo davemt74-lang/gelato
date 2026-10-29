@@ -429,6 +429,16 @@ function prep_agent_handle(PDO $pdo,array $user,array $input): array
     }
 
 
+    if(preg_match('/\b(?:prep\b.{0,50}\b(?:handoff|hand over|next shift|shift brief)|(?:handoff|next shift|incoming shift|shift brief)\b.{0,50}\bprep)\b/iu',$lower)){
+        require_once __DIR__.'/employee-shift-communications.php';
+        $scope=employee_shift_scope($pdo,$org,$uid);
+        $result=pac_shift_handoff($pdo,$org,$uid,$user,$scope['currentShift']??null,$text);
+        if($result)return $result;
+        return ['ok'=>true,'skill'=>'prep.shift_handoff_unavailable',
+            'answer'=>'Prep readiness is not installed for the restaurant. Run upgrade.php before using prep handoffs.',
+            'data'=>null,'sources'=>[]];
+    }
+
     if(preg_match('/\b(?:prep\s+(?:readiness|progress|status|overview)|(?:ready|readiness|progress|on\s+track|behind)\b.{0,40}\bprep|prep\b.{0,40}\b(?:ready|readiness|progress|on\s+track|behind)|how(?:\x27s| is)\s+(?:the\s+)?prep\s+(?:going|looking)|what(?:\x27s| is)\s+left\b.{0,30}\bprep|how\s+much\s+prep\s+is\s+(?:left|done))\b/iu',$lower))
         return pac_readiness($pdo,$org,$uid,$user,$text);
 

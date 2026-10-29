@@ -88,6 +88,16 @@ function makeAgent(permissions, persistedSession = new Map(), actorId = 'ci-mana
   await reloaded.submit('How is prep looking today?');
   assert.equal(reloaded.sent[9].endpoint, 'api/prep-intelligence-agent.php',
     'progress review stays in the prep specialist');
+  await reloaded.submit('Prep handoff for lunch today');
+  assert.equal(reloaded.sent[10].endpoint, 'api/prep-intelligence-agent.php',
+    'prep shift handoff keeps the canonical prep permission gate');
+  const employeeHandoff = makeAgent(['employee.handoffs.view']);
+  await employeeHandoff.submit('What changed before my shift?');
+  assert.equal(employeeHandoff.sent[0].endpoint, 'api/employee-agent.php',
+    'employee handoff inquiry routes before scheduling');
+  await employeeHandoff.submit('Shift handoff notes?');
+  assert.equal(employeeHandoff.sent[1].endpoint, 'api/employee-agent.php',
+    'shift handoff readback stays with employee communications');
   const differentUser = makeAgent(permissions, persistedSession, 'ci-manager-2');
   await differentUser.submit('Confirm');
   assert.notEqual(differentUser.sent[0].endpoint, 'api/prep-intelligence-agent.php',

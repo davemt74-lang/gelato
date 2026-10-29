@@ -9,6 +9,8 @@ on:
       - 'api/proactive-agent.php'
       - 'includes/prep-intelligence-core.php'
       - 'includes/prep-agent-core.php'
+      - 'includes/prep-agent-handoffs.php'
+      - 'includes/prep-agent-readiness.php'
       - 'includes/prep-agent-followups.php'
       - 'includes/prep-agent-proactive.php'
       - 'js/restaurant-agent-bridge.js'
@@ -27,6 +29,8 @@ on:
       - 'api/proactive-agent.php'
       - 'includes/prep-intelligence-core.php'
       - 'includes/prep-agent-core.php'
+      - 'includes/prep-agent-handoffs.php'
+      - 'includes/prep-agent-readiness.php'
       - 'includes/prep-agent-followups.php'
       - 'includes/prep-agent-proactive.php'
       - 'js/restaurant-agent-bridge.js'
@@ -64,6 +68,8 @@ jobs:
           php -l api/proactive-agent.php
           php -l includes/prep-intelligence-core.php
           php -l includes/prep-agent-core.php
+          php -l includes/prep-agent-handoffs.php
+          php -l includes/prep-agent-readiness.php
           php -l includes/prep-agent-followups.php
           php -l includes/prep-agent-proactive.php
           php -l includes/agent-workspace-core.php
