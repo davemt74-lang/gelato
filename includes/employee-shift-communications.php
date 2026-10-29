@@ -86,12 +86,6 @@ function employee_shift_handoff_resolve(PDO $pdo,int $org,string $publicId,int $
         $q->execute([$org,$publicId]);$row=$q->fetch();
         if(!$row||(string)$row['message_type']!=='handoff')
             throw new InvalidArgumentException('Handoff not found in this restaurant.');
-        if($taskPublicId!==''){
-            $t=$pdo->prepare("SELECT status FROM restaurant_tasks WHERE organization_id=? AND public_id=? AND archived_at IS NULL LIMIT 1");
-            $t->execute([$org,$taskPublicId]);$taskStatus=$t->fetchColumn();
-            if(!in_array($taskStatus,['completed','verified'],true))
-                throw new InvalidArgumentException('The linked task must already be completed or verified in this restaurant.');
-        }
         $pdo->prepare('INSERT INTO employee_shift_handoff_followups (organization_id,message_id) VALUES (?,?) ON DUPLICATE KEY UPDATE id=id')
             ->execute([$org,(int)$row['id']]);
         $f=$pdo->prepare('SELECT resolution_outcome,resolution_note,linked_task_public_id,resolved_at FROM employee_shift_handoff_followups WHERE organization_id=? AND message_id=? FOR UPDATE');
@@ -104,6 +98,12 @@ function employee_shift_handoff_resolve(PDO $pdo,int $org,string $publicId,int $
             $pdo->commit();return ['publicId'=>$publicId,'outcome'=>$outcome,'note'=>$note,'taskPublicId'=>$taskPublicId,'resolvedAt'=>(string)($existing['resolved_at']??'')];
         }
         if((string)$row['status']!=='open')throw new InvalidArgumentException('Only open handoffs can be resolved.');
+        if($taskPublicId!==''){
+            $t=$pdo->prepare("SELECT status FROM restaurant_tasks WHERE organization_id=? AND public_id=? AND archived_at IS NULL LIMIT 1");
+            $t->execute([$org,$taskPublicId]);$taskStatus=$t->fetchColumn();
+            if(!in_array($taskStatus,['completed','verified'],true))
+                throw new InvalidArgumentException('The linked task must already be completed or verified in this restaurant.');
+        }
         $pdo->prepare('UPDATE employee_shift_handoff_followups SET resolution_outcome=?,resolution_note=?,linked_task_public_id=?,resolved_at=NOW(6),resolved_by=? WHERE organization_id=? AND message_id=?')
             ->execute([$outcome,$note,$taskPublicId?:null,$actor,$org,(int)$row['id']]);
         $pdo->prepare("UPDATE employee_shift_messages SET status='resolved',resolved_by=?,resolved_at=NOW(6),updated_by=?,updated_at=NOW(6) WHERE organization_id=? AND id=? AND status='open'")
