@@ -27,6 +27,8 @@ jobs:
           extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
       - name: Syntax checks
         run: |
+          php -l includes/prep-agent-handoffs.php
+          php -l includes/prep-agent-readiness.php
           php -l includes/employee-shift-communications.php
           php -l api/employee-home.php
           php -l api/employee-agent.php
