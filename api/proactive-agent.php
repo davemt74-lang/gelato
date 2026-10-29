@@ -28,6 +28,22 @@ function pa_generate(PDO $pdo,int $org,int $uid,array $prefs,array $user):void{
      }
    }catch(Throwable){}
  }
+ if(employee_shift_followups_ready($pdo)&&employee_shift_comms_ready($pdo)
+    &&(app_has_permission('employee.handoffs.manage',$user)||app_has_permission('employee.manage',$user)||app_has_permission('staff.manage',$user))){
+   try{
+     $team=employee_shift_messages_for_user($pdo,$org,$uid,false,true);$sent=0;
+     foreach($team as $handoff){
+       if((string)$handoff['message_type']!=='handoff')continue;
+       $attention=(string)($handoff['attention_status']??'normal');
+       if(!in_array($attention,['escalated','urgent','overdue','awaiting_acknowledgment'],true))continue;
+       pa_put($pdo,$org,$uid,'employee.handoff.manager_attention','high',
+         'Manager follow-through needed: '.$handoff['title'].' ('.str_replace('_',' ',$attention).').',
+         'employee-handoff-manager:'.$handoff['public_id'].':'.$today,'employee-home.php',
+         ['handoffId'=>$handoff['public_id'],'attention'=>$attention,'firstAcknowledgmentCount'=>(int)($handoff['ack_count']??0)]);
+       if(++$sent>=5)break;
+     }
+   }catch(Throwable){}
+ }
  if(prep_intelligence_ready($pdo)&&app_has_permission('prep.intelligence.view',$user)){
    try{
      $canPrepForecast=app_has_permission('inventory.forecast.view',$user)||app_has_permission('inventory.view',$user);
