@@ -22,6 +22,97 @@ function employee_shift_acks_ready(PDO $pdo): bool
     }catch(Throwable){return false;}
 }
 
+function employee_shift_followups_ready(PDO $pdo): bool
+{
+    try{
+        $q=$pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='employee_shift_handoff_followups'");
+        return (int)$q->fetchColumn()===1;
+    }catch(Throwable){return false;}
+}
+
+/**
+ * Human handoff follow-through is independent of the restaurant task state.
+ * It never writes to restaurant_tasks or restaurant_task_events.
+ */
+function employee_shift_handoff_attention(array $row): string
+{
+    if((string)($row['message_type']??'')!=='handoff'||(string)($row['status']??'')!=='open')return 'none';
+    if(!empty($row['escalated_at']))return 'escalated';
+    $hours=(time()-strtotime((string)($row['created_at']??'now')))/3600;
+    if((string)($row['priority']??'')==='urgent')return 'urgent';
+    if((string)($row['priority']??'')==='high'&&$hours>=2)return 'overdue';
+    if($hours>=12&&(int)($row['ack_count']??0)===0)return 'awaiting_acknowledgment';
+    return 'normal';
+}
+
+function employee_shift_handoff_escalate(PDO $pdo,int $org,string $publicId,int $actor,string $reason): array
+{
+    if(!employee_shift_followups_ready($pdo))throw new RuntimeException('Handoff follow-up upgrade is required. Run upgrade.php.');
+    $reason=mb_substr(trim($reason),0,1000,'UTF-8');
+    if($reason==='')throw new InvalidArgumentException('Explain why this handoff needs escalation.');
+    $pdo->beginTransaction();
+    try{
+        $q=$pdo->prepare('SELECT id,message_type,status FROM employee_shift_messages WHERE organization_id=? AND public_id=? AND archived_at IS NULL FOR UPDATE');
+        $q->execute([$org,$publicId]);$row=$q->fetch();
+        if(!$row||(string)$row['message_type']!=='handoff'||(string)$row['status']!=='open')
+            throw new InvalidArgumentException('Open handoff not found in this restaurant.');
+        $pdo->prepare('INSERT INTO employee_shift_handoff_followups (organization_id,message_id) VALUES (?,?) ON DUPLICATE KEY UPDATE id=id')
+            ->execute([$org,(int)$row['id']]);
+        $q=$pdo->prepare('SELECT escalated_at,escalation_reason FROM employee_shift_handoff_followups WHERE organization_id=? AND message_id=? FOR UPDATE');
+        $q->execute([$org,(int)$row['id']]);$followup=$q->fetch()?:[];
+        if(empty($followup['escalated_at'])){
+            $pdo->prepare('UPDATE employee_shift_handoff_followups SET escalated_at=NOW(6),escalated_by=?,escalation_reason=? WHERE organization_id=? AND message_id=?')
+                ->execute([$actor,$reason,$org,(int)$row['id']]);
+            $q->execute([$org,(int)$row['id']]);$followup=$q->fetch()?:[];
+        }
+        $pdo->commit();
+        return ['publicId'=>$publicId,'escalatedAt'=>(string)($followup['escalated_at']??''),'reason'=>(string)($followup['escalation_reason']??'')];
+    }catch(Throwable $e){$pdo->rollBack();throw $e;}
+}
+
+function employee_shift_handoff_resolve(PDO $pdo,int $org,string $publicId,int $actor,string $note,string $outcome,string $taskPublicId=''): array
+{
+    if(!employee_shift_followups_ready($pdo))throw new RuntimeException('Handoff follow-up upgrade is required. Run upgrade.php.');
+    $note=trim($note);$taskPublicId=trim($taskPublicId);
+    if($note==='')throw new InvalidArgumentException('Record what happened before resolving this handoff.');
+    if(mb_strlen($note,'UTF-8')>4000)throw new InvalidArgumentException('Resolution note is too long.');
+    if(!in_array($outcome,['addressed','no_action_required','linked_task_completed'],true))
+        throw new InvalidArgumentException('Choose a supported resolution outcome.');
+    if(($outcome==='linked_task_completed')!==($taskPublicId!==''))
+        throw new InvalidArgumentException('A completed task ID is required only for the completed task outcome.');
+    $pdo->beginTransaction();
+    try{
+        $q=$pdo->prepare('SELECT id,message_type,status FROM employee_shift_messages WHERE organization_id=? AND public_id=? AND archived_at IS NULL FOR UPDATE');
+        $q->execute([$org,$publicId]);$row=$q->fetch();
+        if(!$row||(string)$row['message_type']!=='handoff')
+            throw new InvalidArgumentException('Handoff not found in this restaurant.');
+        if($taskPublicId!==''){
+            $t=$pdo->prepare("SELECT status FROM restaurant_tasks WHERE organization_id=? AND public_id=? AND archived_at IS NULL LIMIT 1");
+            $t->execute([$org,$taskPublicId]);$taskStatus=$t->fetchColumn();
+            if(!in_array($taskStatus,['completed','verified'],true))
+                throw new InvalidArgumentException('The linked task must already be completed or verified in this restaurant.');
+        }
+        $pdo->prepare('INSERT INTO employee_shift_handoff_followups (organization_id,message_id) VALUES (?,?) ON DUPLICATE KEY UPDATE id=id')
+            ->execute([$org,(int)$row['id']]);
+        $f=$pdo->prepare('SELECT resolution_outcome,resolution_note,linked_task_public_id,resolved_at FROM employee_shift_handoff_followups WHERE organization_id=? AND message_id=? FOR UPDATE');
+        $f->execute([$org,(int)$row['id']]);$existing=$f->fetch()?:[];
+        if((string)$row['status']==='resolved'){
+            if((string)($existing['resolution_outcome']??'')!==$outcome
+              ||(string)($existing['resolution_note']??'')!==$note
+              ||(string)($existing['linked_task_public_id']??'')!==$taskPublicId)
+                throw new InvalidArgumentException('This handoff was already resolved with a different outcome.');
+            $pdo->commit();return ['publicId'=>$publicId,'outcome'=>$outcome,'note'=>$note,'taskPublicId'=>$taskPublicId,'resolvedAt'=>(string)($existing['resolved_at']??'')];
+        }
+        if((string)$row['status']!=='open')throw new InvalidArgumentException('Only open handoffs can be resolved.');
+        $pdo->prepare('UPDATE employee_shift_handoff_followups SET resolution_outcome=?,resolution_note=?,linked_task_public_id=?,resolved_at=NOW(6),resolved_by=? WHERE organization_id=? AND message_id=?')
+            ->execute([$outcome,$note,$taskPublicId?:null,$actor,$org,(int)$row['id']]);
+        $pdo->prepare("UPDATE employee_shift_messages SET status='resolved',resolved_by=?,resolved_at=NOW(6),updated_by=?,updated_at=NOW(6) WHERE organization_id=? AND id=? AND status='open'")
+            ->execute([$actor,$actor,$org,(int)$row['id']]);
+        $f->execute([$org,(int)$row['id']]);$saved=$f->fetch()?:[];
+        $pdo->commit();return ['publicId'=>$publicId,'outcome'=>$outcome,'note'=>$note,'taskPublicId'=>$taskPublicId,'resolvedAt'=>(string)($saved['resolved_at']??'')];
+    }catch(Throwable $e){$pdo->rollBack();throw $e;}
+}
+
 function employee_shift_public_id(string $prefix='handoff'): string
 {
     return $prefix.'-'.bin2hex(random_bytes(10));
@@ -75,14 +166,19 @@ function employee_shift_messages_for_user(PDO $pdo,int $org,int $userId,bool $in
     $ackReady=employee_shift_acks_ready($pdo);
     $ackSelect=$ackReady?",a.acknowledged_at,(SELECT COUNT(*) FROM employee_shift_handoff_acknowledgements ac WHERE ac.organization_id=m.organization_id AND ac.message_id=m.id) ack_count":",NULL acknowledged_at,0 ack_count";
     $ackJoin=$ackReady?" LEFT JOIN employee_shift_handoff_acknowledgements a ON a.message_id=m.id AND a.organization_id=m.organization_id AND a.user_id=?":"";
+    $followupReady=employee_shift_followups_ready($pdo);
+    $followupSelect=$followupReady?",f.escalated_at,f.escalation_reason,f.resolution_outcome,f.resolution_note,f.linked_task_public_id,f.resolved_at followup_resolved_at":",NULL escalated_at,NULL escalation_reason,NULL resolution_outcome,NULL resolution_note,NULL linked_task_public_id,NULL followup_resolved_at";
+    $followupJoin=$followupReady?" LEFT JOIN employee_shift_handoff_followups f ON f.message_id=m.id AND f.organization_id=m.organization_id":"";
     $q=$pdo->prepare("SELECT m.public_id,m.message_type,m.location_id,m.position_id,m.schedule_shift_id,m.target_user_id,m.station,m.title,m.body,m.priority,m.status,m.effective_from,m.effective_until,m.resolved_at,m.created_at,
-      r.read_at,u.display_name created_by_name,l.name location_name,p.name position_name,s.public_id shift_public_id,s.title shift_title,s.starts_at shift_starts_at".$ackSelect."
+      r.read_at,u.display_name created_by_name,l.name location_name,p.name position_name,s.public_id shift_public_id,s.title shift_title,s.starts_at shift_starts_at".$ackSelect.$followupSelect."
       FROM employee_shift_messages m
-      LEFT JOIN employee_shift_message_reads r ON r.message_id=m.id AND r.organization_id=m.organization_id AND r.user_id=?".$ackJoin."
+      LEFT JOIN employee_shift_message_reads r ON r.message_id=m.id AND r.organization_id=m.organization_id AND r.user_id=?".$ackJoin.$followupJoin."
       LEFT JOIN users u ON u.id=m.created_by LEFT JOIN locations l ON l.id=m.location_id LEFT JOIN positions p ON p.id=m.position_id LEFT JOIN schedule_shifts s ON s.id=m.schedule_shift_id
       WHERE {$where}
       ORDER BY FIELD(m.priority,'urgent','high','normal','low'),m.created_at DESC LIMIT 160");
     $q->execute($ackReady?[$userId,$userId,$org]:[$userId,$org]);$rows=$q->fetchAll();
+    foreach($rows as &$row)$row['attention_status']=employee_shift_handoff_attention($row);
+    unset($row);
     if($includeAll)return $rows;
     return array_values(array_filter($rows,static fn(array $row):bool=>employee_shift_message_matches($row,$userId,$scope)));
 }
@@ -93,7 +189,10 @@ function employee_shift_message_for_user(PDO $pdo,int $org,int $userId,string $p
     $ackReady=employee_shift_acks_ready($pdo);
     $ackSelect=$ackReady?",a.acknowledged_at":",NULL acknowledged_at";
     $ackJoin=$ackReady?" LEFT JOIN employee_shift_handoff_acknowledgements a ON a.message_id=m.id AND a.organization_id=m.organization_id AND a.user_id=?":"";
-    $q=$pdo->prepare("SELECT m.*,r.read_at".$ackSelect." FROM employee_shift_messages m LEFT JOIN employee_shift_message_reads r ON r.message_id=m.id AND r.organization_id=m.organization_id AND r.user_id=?".$ackJoin." WHERE m.organization_id=? AND m.public_id=? AND m.archived_at IS NULL LIMIT 1");
+    $followupReady=employee_shift_followups_ready($pdo);
+    $followupSelect=$followupReady?",f.escalated_at,f.escalation_reason,f.resolution_outcome,f.resolution_note,f.linked_task_public_id":",NULL escalated_at,NULL escalation_reason,NULL resolution_outcome,NULL resolution_note,NULL linked_task_public_id";
+    $followupJoin=$followupReady?" LEFT JOIN employee_shift_handoff_followups f ON f.message_id=m.id AND f.organization_id=m.organization_id":"";
+    $q=$pdo->prepare("SELECT m.*,r.read_at".$ackSelect.$followupSelect." FROM employee_shift_messages m LEFT JOIN employee_shift_message_reads r ON r.message_id=m.id AND r.organization_id=m.organization_id AND r.user_id=?".$ackJoin.$followupJoin." WHERE m.organization_id=? AND m.public_id=? AND m.archived_at IS NULL LIMIT 1");
     $q->execute($ackReady?[$userId,$userId,$org,$publicId]:[$userId,$org,$publicId]);$row=$q->fetch();if(!$row||!employee_shift_message_matches($row,$userId,$scope))return null;return $row;
 }
 
