@@ -40,6 +40,71 @@ $blocked=false;try{employee_shift_validate_target($pdo,$org,'location',$otherLoc
 $brief=employee_shift_arrival_brief($pdo,$org,$next);sh_must(!empty($brief['active']),'Upcoming employee shift did not activate arrival brief.');sh_must((int)$brief['summary']['unreadHandoffs']>=1,'Arrival brief did not include unread handoff communications.');
 $aud=employee_shift_audiences($pdo,$org);sh_must(count($aud['locations'])===2&&count($aud['positions'])===2,'Manager audience catalog is incomplete.');sh_must(count($aud['shifts'])>=3&&count($aud['users'])===4,'Manager shift/user audience catalog is incomplete.');
 
+// B8D17G2G: live prep readiness follows the next published shift and
+// never reveals another employee's assigned tasks or old blocker reasons.
+sh_must(prep_intelligence_ready($pdo),'Prep Intelligence tables are required for live prep handoff.');
+$prepDate=(new DateTimeImmutable((string)$brief['shift']['starts_at']))->format('Y-m-d');
+$prepPlan=prep_get_or_create_plan($pdo,$org,$prepDate,'all',$manager);
+$nextPrep=prep_attach_manual_task($pdo,$org,$prepPlan,
+    ['title'=>'Pizza dough','quantity'=>2,'unit'=>'tray','assigneeIds'=>[$next]],$manager,'contract');
+$northPrep=prep_attach_manual_task($pdo,$org,$prepPlan,
+    ['title'=>'North-only sauce','quantity'=>1,'unit'=>'pan','assigneeIds'=>[$north]],$manager,'contract');
+$unassignedPrep=prep_attach_manual_task($pdo,$org,$prepPlan,
+    ['title'=>'Manager-only garlic knots','quantity'=>3,'unit'=>'tray'],$manager,'contract');
+$pdo->prepare("UPDATE restaurant_tasks SET status='blocked' WHERE organization_id=? AND public_id=?")
+    ->execute([$org,$nextPrep['public_id']]);
+$blockedId=(int)operations_task_by_public_id($pdo,$org,(string)$nextPrep['public_id'])['id'];
+operations_task_event($pdo,$org,$blockedId,'prep_blocker_reported','Mixer needs service.',$next,
+    ['reason'=>'mixer overheated']);
+$staffViewer=['id'=>$next,'organization_id'=>$org,
+    'permissions'=>['prep.intelligence.view','prep.intelligence.agent','tasks.self','employee.self']];
+$northViewer=['id'=>$north,'organization_id'=>$org,
+    'permissions'=>['prep.intelligence.view','prep.intelligence.agent','tasks.self','employee.self']];
+$managerViewer=['id'=>$manager,'organization_id'=>$org,
+    'permissions'=>['prep.intelligence.view','prep.intelligence.agent','prep.intelligence.manage','tasks.manage','employee.self']];
+$nextBrief=employee_shift_arrival_brief($pdo,$org,$next,$staffViewer);
+$prep=$nextBrief['prep']??null;
+sh_must(is_array($prep)&&($prep['counts']['total']??-1)===1&&($prep['counts']['blocked']??-1)===1,
+    'Incoming employee receives only their blocked assigned prep task.');
+sh_must(($nextBrief['summary']['prepBlocked']??-1)===1
+    &&str_contains((string)$prep['summary'],'mixer overheated')
+    &&!str_contains((string)$prep['summary'],'North-only sauce')
+    &&!str_contains((string)$prep['summary'],'Manager-only garlic knots'),
+    'Live arrival briefing contains current blocker reason without exposing other employees or unassigned work.');
+$northBrief=employee_shift_arrival_brief($pdo,$org,$north,$northViewer);
+sh_must(($northBrief['prep']['counts']['total']??-1)===1
+    &&!str_contains((string)($northBrief['prep']['summary']??''),'Pizza dough'),
+    'Second location cannot read another employee\'s prep blocker.');
+$noPrepViewer=['id'=>$next,'organization_id'=>$org,'permissions'=>['employee.self']];
+$hidden=employee_shift_arrival_brief($pdo,$org,$next,$noPrepViewer);
+sh_must(($hidden['prep']??null)===null&&($hidden['summary']['prepBlocked']??-1)===0,
+    'Employees without Prep Intelligence permission receive no prep detail in arrival briefs.');
+$managerPrep=pac_shift_handoff($pdo,$org,$manager,$managerViewer,null,
+    'Prep handoff for dinner on '.$prepDate);
+sh_must(($managerPrep['data']['counts']['total']??-1)===3
+    &&($managerPrep['data']['counts']['unassigned']??-1)===1
+    &&str_contains($managerPrep['answer'],'Manager-only garlic knots'),
+    'Manager receives complete organization-scoped service handoff with unassigned tasks.');
+$foreignPrep=pac_shift_handoff($pdo,$otherOrg,$manager,$managerViewer,null,
+    'Prep handoff for dinner on '.$prepDate);
+sh_must(($foreignPrep['data']['counts']['total']??-1)===0
+    &&!str_contains($foreignPrep['answer'],'Pizza dough'),
+    'Cross-organization prep handoff cannot read original restaurant tasks.');
+$pdo->prepare("UPDATE restaurant_tasks SET status='completed' WHERE organization_id=? AND public_id=?")
+    ->execute([$org,$nextPrep['public_id']]);
+$updatedBrief=employee_shift_arrival_brief($pdo,$org,$next,$staffViewer);
+sh_must(($updatedBrief['prep']['counts']['blocked']??-1)===0
+    &&($updatedBrief['prep']['counts']['completed']??-1)===1
+    &&!str_contains((string)$updatedBrief['prep']['summary'],'mixer overheated'),
+    'Resolved/completed prep immediately updates the handoff without stale blocker history.');
+$handoffSource=(string)file_get_contents(__DIR__.'/../api/proactive-agent.php');
+sh_must(str_contains($handoffSource,'prepBlocked')
+    &&str_contains($handoffSource,'employee_shift_arrival_brief($pdo,$org,$uid,$user)'),
+    'Proactive arrival events include live scoped prep risk.');
+$voiceSource=(string)file_get_contents(__DIR__.'/../includes/prep-agent-core.php');
+sh_must(str_contains($voiceSource,"'prep.shift_handoff_unavailable'"),
+    'Conversational prep handoff is routed through the canonical Prep Agent.');
+
 employee_shift_message_resolve($pdo,$org,(string)$handoff['public_id'],$manager);$nextRows=employee_shift_messages_for_user($pdo,$org,$next);sh_must(count(array_filter($nextRows,static fn(array $r):bool=>$r['public_id']===$handoff['public_id']))===0,'Resolved handoff remained active.');$history=employee_shift_messages_for_user($pdo,$org,$manager,true,true);sh_must(count(array_filter($history,static fn(array $r):bool=>$r['public_id']===$handoff['public_id']&&$r['status']==='resolved'))===1,'Resolved handoff missing from manager history.');
 
 echo "shift-handoff-ok\n";
