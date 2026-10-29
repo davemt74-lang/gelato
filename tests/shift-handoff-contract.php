@@ -29,6 +29,17 @@ $handoff=employee_shift_message_save($pdo,$org,['title'=>'Server handoff','body'
 sh_must((int)$handoff['location_id']===$loc1,'Employee handoff did not inherit shift location.');sh_must((int)$handoff['position_id']===$server,'Employee handoff did not inherit shift position.');
 $nextRows=employee_shift_messages_for_user($pdo,$org,$next);sh_must(count($nextRows)===1&&$nextRows[0]['public_id']===$handoff['public_id'],'Next matching shift did not receive handoff.');sh_must(employee_shift_messages_for_user($pdo,$org,$north)===[],'Location isolation failed for employee handoff.');
 sh_must(employee_shift_acks_ready($pdo),'G2H acknowledgement schema missing.');
+sh_must(employee_shift_followups_ready($pdo),'G2I follow-through schema missing.');
+$escalated=employee_shift_handoff_escalate($pdo,$org,(string)$handoff['public_id'],$manager,'Guest needs a manager to confirm the comp.');
+$again=employee_shift_handoff_escalate($pdo,$org,(string)$handoff['public_id'],$manager,'Another manager clicked again.');
+sh_must($escalated===$again&&str_contains($escalated['reason'],'confirm the comp'),'Repeated escalations must retain the original reason and timestamp.');
+$crossTenant=false;try{employee_shift_handoff_escalate($pdo,$otherOrg,(string)$handoff['public_id'],$manager,'Wrong restaurant');}catch(InvalidArgumentException){$crossTenant=true;}
+sh_must($crossTenant,'An external organization cannot escalate a handoff.');
+$followupRows=employee_shift_messages_for_user($pdo,$org,$next);
+sh_must(($followupRows[0]['attention_status']??'')==='escalated'
+    &&str_contains((string)$followupRows[0]['escalation_reason'],'confirm the comp'),
+    'Recipient handoff timeline must include manager escalation.');
+
 $beforeAck=employee_shift_messages_for_user($pdo,$org,$next);
 sh_must(empty($beforeAck[0]['acknowledged_at']),'Unread handoff should not be implicitly acknowledged.');
 $receipt=employee_shift_message_acknowledge($pdo,$org,$next,(string)$handoff['public_id']);
@@ -120,8 +131,38 @@ $voiceSource=(string)file_get_contents(__DIR__.'/../includes/prep-agent-core.php
 sh_must(str_contains($voiceSource,"'prep.shift_handoff_unavailable'"),
     'Conversational prep handoff is routed through the canonical Prep Agent.');
 
-employee_shift_message_resolve($pdo,$org,(string)$handoff['public_id'],$manager);$nextRows=employee_shift_messages_for_user($pdo,$org,$next);sh_must(count(array_filter($nextRows,static fn(array $r):bool=>$r['public_id']===$handoff['public_id']))===0,'Resolved handoff remained active.');$history=employee_shift_messages_for_user($pdo,$org,$manager,true,true);sh_must(count(array_filter($history,static fn(array $r):bool=>$r['public_id']===$handoff['public_id']&&$r['status']==='resolved'))===1,'Resolved handoff missing from manager history.');
+$incompleteTaskRejected=false;
+try{employee_shift_handoff_resolve($pdo,$org,(string)$handoff['public_id'],$manager,'Task still in progress.','linked_task_completed',(string)$northPrep['public_id']);}
+catch(InvalidArgumentException){$incompleteTaskRejected=true;}
+sh_must($incompleteTaskRejected,'A pending task must not be reported as completed in a handoff resolution.');
+$missingTaskRejected=false;
+try{employee_shift_handoff_resolve($pdo,$org,(string)$handoff['public_id'],$manager,'Unknown task.','linked_task_completed','task-not-found');}
+catch(InvalidArgumentException){$missingTaskRejected=true;}
+sh_must($missingTaskRejected,'A nonexistent or foreign task must not be used as resolution evidence.');
+$resolved=employee_shift_handoff_resolve($pdo,$org,(string)$handoff['public_id'],$manager,
+    'Dining room comp was confirmed; the incoming prep task is finished.','linked_task_completed',(string)$nextPrep['public_id']);
+$repeat=employee_shift_handoff_resolve($pdo,$org,(string)$handoff['public_id'],$manager,
+    'Dining room comp was confirmed; the incoming prep task is finished.','linked_task_completed',(string)$nextPrep['public_id']);
+sh_must($resolved===$repeat,'Repeating the same handoff resolution must be idempotent.');
+$changedResolutionRejected=false;
+try{employee_shift_handoff_resolve($pdo,$org,(string)$handoff['public_id'],$manager,'Different closure','addressed');}
+catch(InvalidArgumentException){$changedResolutionRejected=true;}
+sh_must($changedResolutionRejected,'A resolved handoff must not silently rewrite its outcome.');
+$taskQuery=$pdo->prepare('SELECT status FROM restaurant_tasks WHERE organization_id=? AND public_id=?');
+$taskQuery->execute([$org,$nextPrep['public_id']]);
+sh_must($taskQuery->fetchColumn()==='completed','Resolving a handoff must not mutate the canonical task state.');
+$nextRows=employee_shift_messages_for_user($pdo,$org,$next);sh_must(count(array_filter($nextRows,static fn(array $r):bool=>$r['public_id']===$handoff['public_id']))===0,'Resolved handoff remained active.');$history=employee_shift_messages_for_user($pdo,$org,$manager,true,true);sh_must(count(array_filter($history,static fn(array $r):bool=>$r['public_id']===$handoff['public_id']&&$r['status']==='resolved'))===1,'Resolved handoff missing from manager history.');
 sh_must((bool)array_filter($history,static fn(array $r):bool=>$r['public_id']===$handoff['public_id']&&!empty($r['ack_count'])),'Acknowledgment must remain in resolved history.');
+sh_must((bool)array_filter($history,static fn(array $r):bool=>$r['public_id']===$handoff['public_id']
+    &&$r['resolution_outcome']==='linked_task_completed'&&$r['linked_task_public_id']===$nextPrep['public_id']
+    &&str_contains((string)$r['resolution_note'],'comp was confirmed')&&!empty($r['escalated_at'])),
+    'Manager history must preserve escalation, acknowledgment and task-backed resolution.');
+$employeeHistory=employee_shift_messages_for_user($pdo,$org,$next,true);
+sh_must((bool)array_filter($employeeHistory,static fn(array $r):bool=>$r['public_id']===$handoff['public_id']&&!empty($r['resolution_note'])),
+    'Addressed employee must be able to review the resolution outcome.');
+sh_must(employee_shift_messages_for_user($pdo,$org,$north,true)===[],
+    'Escalation and resolution notes must not leak to a different location.');
+
 
 
 echo "shift-handoff-ok\n";
