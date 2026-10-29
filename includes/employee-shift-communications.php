@@ -14,6 +14,14 @@ function employee_shift_comms_ready(PDO $pdo): bool
     }
 }
 
+function employee_shift_acks_ready(PDO $pdo): bool
+{
+    try{
+        $q=$pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='employee_shift_handoff_acknowledgements'");
+        return (int)$q->fetchColumn()===1;
+    }catch(Throwable){return false;}
+}
+
 function employee_shift_public_id(string $prefix='handoff'): string
 {
     return $prefix.'-'.bin2hex(random_bytes(10));
@@ -64,14 +72,17 @@ function employee_shift_messages_for_user(PDO $pdo,int $org,int $userId,bool $in
     $where=$includeResolved
       ? "m.organization_id=? AND m.archived_at IS NULL"
       : "m.organization_id=? AND m.archived_at IS NULL AND m.status='open' AND m.effective_from<=NOW(6) AND (m.effective_until IS NULL OR m.effective_until>=NOW(6))";
+    $ackReady=employee_shift_acks_ready($pdo);
+    $ackSelect=$ackReady?",a.acknowledged_at,(SELECT COUNT(*) FROM employee_shift_handoff_acknowledgements ac WHERE ac.organization_id=m.organization_id AND ac.message_id=m.id) ack_count":",NULL acknowledged_at,0 ack_count";
+    $ackJoin=$ackReady?" LEFT JOIN employee_shift_handoff_acknowledgements a ON a.message_id=m.id AND a.organization_id=m.organization_id AND a.user_id=?":"";
     $q=$pdo->prepare("SELECT m.public_id,m.message_type,m.location_id,m.position_id,m.schedule_shift_id,m.target_user_id,m.station,m.title,m.body,m.priority,m.status,m.effective_from,m.effective_until,m.resolved_at,m.created_at,
-      r.read_at,u.display_name created_by_name,l.name location_name,p.name position_name,s.public_id shift_public_id,s.title shift_title,s.starts_at shift_starts_at
+      r.read_at,u.display_name created_by_name,l.name location_name,p.name position_name,s.public_id shift_public_id,s.title shift_title,s.starts_at shift_starts_at".$ackSelect."
       FROM employee_shift_messages m
-      LEFT JOIN employee_shift_message_reads r ON r.message_id=m.id AND r.organization_id=m.organization_id AND r.user_id=?
+      LEFT JOIN employee_shift_message_reads r ON r.message_id=m.id AND r.organization_id=m.organization_id AND r.user_id=?".$ackJoin."
       LEFT JOIN users u ON u.id=m.created_by LEFT JOIN locations l ON l.id=m.location_id LEFT JOIN positions p ON p.id=m.position_id LEFT JOIN schedule_shifts s ON s.id=m.schedule_shift_id
       WHERE {$where}
       ORDER BY FIELD(m.priority,'urgent','high','normal','low'),m.created_at DESC LIMIT 160");
-    $q->execute([$userId,$org]);$rows=$q->fetchAll();
+    $q->execute($ackReady?[$userId,$userId,$org]:[$userId,$org]);$rows=$q->fetchAll();
     if($includeAll)return $rows;
     return array_values(array_filter($rows,static fn(array $row):bool=>employee_shift_message_matches($row,$userId,$scope)));
 }
@@ -79,8 +90,11 @@ function employee_shift_messages_for_user(PDO $pdo,int $org,int $userId,bool $in
 function employee_shift_message_for_user(PDO $pdo,int $org,int $userId,string $publicId): ?array
 {
     if(!employee_shift_comms_ready($pdo))return null;$scope=employee_shift_scope($pdo,$org,$userId);
-    $q=$pdo->prepare("SELECT m.*,r.read_at FROM employee_shift_messages m LEFT JOIN employee_shift_message_reads r ON r.message_id=m.id AND r.organization_id=m.organization_id AND r.user_id=? WHERE m.organization_id=? AND m.public_id=? AND m.archived_at IS NULL LIMIT 1");
-    $q->execute([$userId,$org,$publicId]);$row=$q->fetch();if(!$row||!employee_shift_message_matches($row,$userId,$scope))return null;return $row;
+    $ackReady=employee_shift_acks_ready($pdo);
+    $ackSelect=$ackReady?",a.acknowledged_at":",NULL acknowledged_at";
+    $ackJoin=$ackReady?" LEFT JOIN employee_shift_handoff_acknowledgements a ON a.message_id=m.id AND a.organization_id=m.organization_id AND a.user_id=?":"";
+    $q=$pdo->prepare("SELECT m.*,r.read_at".$ackSelect." FROM employee_shift_messages m LEFT JOIN employee_shift_message_reads r ON r.message_id=m.id AND r.organization_id=m.organization_id AND r.user_id=?".$ackJoin." WHERE m.organization_id=? AND m.public_id=? AND m.archived_at IS NULL LIMIT 1");
+    $q->execute($ackReady?[$userId,$userId,$org,$publicId]:[$userId,$org,$publicId]);$row=$q->fetch();if(!$row||!employee_shift_message_matches($row,$userId,$scope))return null;return $row;
 }
 
 function employee_shift_validate_target(PDO $pdo,int $org,string $type,int $id): array
@@ -122,6 +136,25 @@ function employee_shift_message_read(PDO $pdo,int $org,int $userId,string $publi
     $pdo->prepare('INSERT INTO employee_shift_message_reads (organization_id,message_id,user_id) VALUES (?,?,?) ON DUPLICATE KEY UPDATE read_at=NOW(6)')->execute([$org,(int)$row['id'],$userId]);
 }
 
+/**
+ * An acknowledgement is explicit, idempotent and scoped to its recipient.
+ * It does not resolve or mutate any canonical restaurant task.
+ */
+function employee_shift_message_acknowledge(PDO $pdo,int $org,int $userId,string $publicId): array
+{
+    if(!employee_shift_acks_ready($pdo))throw new RuntimeException('Handoff acknowledgement upgrade is required. Run upgrade.php.');
+    $row=employee_shift_message_for_user($pdo,$org,$userId,$publicId);
+    if(!$row||(string)$row['message_type']!=='handoff'||(string)$row['status']!=='open'
+        ||strtotime((string)$row['effective_from'])>time()
+        ||(!empty($row['effective_until'])&&strtotime((string)$row['effective_until'])<time()))
+        throw new InvalidArgumentException('No active handoff addressed to you matches that ID.');
+    $pdo->prepare("INSERT IGNORE INTO employee_shift_handoff_acknowledgements (organization_id,message_id,user_id) VALUES (?,?,?)")
+        ->execute([$org,(int)$row['id'],$userId]);
+    $q=$pdo->prepare('SELECT acknowledged_at FROM employee_shift_handoff_acknowledgements WHERE organization_id=? AND message_id=? AND user_id=?');
+    $q->execute([$org,(int)$row['id'],$userId]);
+    return ['publicId'=>$publicId,'acknowledgedAt'=>(string)$q->fetchColumn()];
+}
+
 function employee_shift_message_resolve(PDO $pdo,int $org,string $publicId,int $actor): void
 {
     $q=$pdo->prepare("UPDATE employee_shift_messages SET status='resolved',resolved_by=?,resolved_at=NOW(6),updated_by=?,updated_at=NOW(6) WHERE organization_id=? AND public_id=? AND status='open' AND archived_at IS NULL");$q->execute([$actor,$actor,$org,$publicId]);if($q->rowCount()!==1)throw new InvalidArgumentException('Open shift communication not found.');
@@ -143,6 +176,7 @@ function employee_shift_arrival_brief(PDO $pdo,int $org,int $userId,?array $view
     if($clock&&!empty($clock['clocked_in_at']))$active=strtotime((string)$clock['clocked_in_at'])>=$now-5400;
     if(!$active&&$shift&&!empty($shift['starts_at'])){$delta=strtotime((string)$shift['starts_at'])-$now;$active=$delta>=0&&$delta<=7200;}
     $messages=employee_shift_messages_for_user($pdo,$org,$userId);$unreadMessages=array_values(array_filter($messages,static fn(array $r):bool=>empty($r['read_at'])));
+    $unacknowledged=array_values(array_filter($messages,static fn(array $r):bool=>(string)$r['message_type']==='handoff'&&empty($r['acknowledged_at'])));
     $announcements=function_exists('employee_home_announcements')?employee_home_announcements($pdo,$org,$userId):[];$unreadAnnouncements=array_values(array_filter($announcements,static fn(array $r):bool=>empty($r['read_at'])));
     $tasks=(function_exists('operations_core_ready')&&operations_core_ready($pdo)&&function_exists('employee_home_tasks'))?employee_home_tasks($pdo,$org,$userId):[];
     $headline=$clock?'Welcome in — here is what changed before your shift.':($active?'Your next-shift brief is ready.':'Your restaurant handoff brief.');
@@ -164,7 +198,7 @@ function employee_shift_arrival_brief(PDO $pdo,int $org,int $userId,?array $view
         'messages'=>array_slice($unreadMessages,0,8),'announcements'=>array_slice($unreadAnnouncements,0,5),
         'tasks'=>array_slice($tasks,0,8),'prep'=>$prep,
         'summary'=>['unreadHandoffs'=>count($unreadMessages),'unreadAnnouncements'=>count($unreadAnnouncements),
-            'openTasks'=>count($tasks),'highPriority'=>$high,
+            'openTasks'=>count($tasks),'highPriority'=>$high,'unacknowledgedHandoffs'=>count($unacknowledged),
             'prepOpen'=>(int)($prepCounts['open']??0),'prepBlocked'=>(int)($prepCounts['blocked']??0),
             'prepOverdue'=>(int)($prepCounts['overdue']??0),'prepUnassigned'=>(int)($prepCounts['unassigned']??0)]];
 }
