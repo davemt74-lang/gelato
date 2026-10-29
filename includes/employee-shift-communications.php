@@ -1,6 +1,9 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__.'/prep-agent-core.php';
+require_once __DIR__.'/prep-agent-handoffs.php';
+
 function employee_shift_comms_ready(PDO $pdo): bool
 {
     try {
@@ -133,7 +136,7 @@ function employee_shift_audiences(PDO $pdo,int $org): array
     return ['locations'=>$locations->fetchAll(),'positions'=>$positions->fetchAll(),'shifts'=>$shifts->fetchAll(),'users'=>$users->fetchAll()];
 }
 
-function employee_shift_arrival_brief(PDO $pdo,int $org,int $userId): array
+function employee_shift_arrival_brief(PDO $pdo,int $org,int $userId,?array $viewer=null): array
 {
     if(!employee_shift_comms_ready($pdo))return ['active'=>false,'headline'=>'Shift briefing is not installed.','messages'=>[],'announcements'=>[],'tasks'=>[],'summary'=>['unreadHandoffs'=>0,'unreadAnnouncements'=>0,'openTasks'=>0]];
     $scope=employee_shift_scope($pdo,$org,$userId);$clock=$scope['clock'];$shift=$scope['currentShift'];$now=time();$active=false;
@@ -144,5 +147,24 @@ function employee_shift_arrival_brief(PDO $pdo,int $org,int $userId): array
     $tasks=(function_exists('operations_core_ready')&&operations_core_ready($pdo)&&function_exists('employee_home_tasks'))?employee_home_tasks($pdo,$org,$userId):[];
     $headline=$clock?'Welcome in — here is what changed before your shift.':($active?'Your next-shift brief is ready.':'Your restaurant handoff brief.');
     $high=count(array_filter($unreadMessages,static fn(array $r):bool=>in_array((string)$r['priority'],['urgent','high'],true)));
-    return ['active'=>$active,'headline'=>$headline,'shift'=>$shift,'messages'=>array_slice($unreadMessages,0,8),'announcements'=>array_slice($unreadAnnouncements,0,5),'tasks'=>array_slice($tasks,0,8),'summary'=>['unreadHandoffs'=>count($unreadMessages),'unreadAnnouncements'=>count($unreadAnnouncements),'openTasks'=>count($tasks),'highPriority'=>$high]];
+    $prep=null;
+    // Recalculate at read time: a resolved blocker must disappear from the
+    // next employee's brief immediately, without stale copied handoff text.
+    if($viewer!==null&&$shift){
+        try{
+            $result=pac_shift_handoff($pdo,$org,$userId,$viewer,$shift);
+            if($result&&in_array((string)($result['data']['state']??''),['at_risk','in_progress','ready','unpublished','incomplete','no_plan'],true)){
+                $prep=$result['data'];
+                $prep['summary']=$result['answer'];
+            }
+        }catch(Throwable){$prep=null;}
+    }
+    $prepCounts=(array)($prep['counts']??[]);
+    return ['active'=>$active,'headline'=>$headline,'shift'=>$shift,
+        'messages'=>array_slice($unreadMessages,0,8),'announcements'=>array_slice($unreadAnnouncements,0,5),
+        'tasks'=>array_slice($tasks,0,8),'prep'=>$prep,
+        'summary'=>['unreadHandoffs'=>count($unreadMessages),'unreadAnnouncements'=>count($unreadAnnouncements),
+            'openTasks'=>count($tasks),'highPriority'=>$high,
+            'prepOpen'=>(int)($prepCounts['open']??0),'prepBlocked'=>(int)($prepCounts['blocked']??0),
+            'prepOverdue'=>(int)($prepCounts['overdue']??0),'prepUnassigned'=>(int)($prepCounts['unassigned']??0)]];
 }
