@@ -28,6 +28,21 @@ sh_must(employee_shift_comms_ready($pdo),'Shift communication schema is not read
 $handoff=employee_shift_message_save($pdo,$org,['title'=>'Server handoff','body'=>'Table 12 is celebrating a birthday and dessert is already comped.','station'=>'Dining room','priority'=>'high'],$first,false);
 sh_must((int)$handoff['location_id']===$loc1,'Employee handoff did not inherit shift location.');sh_must((int)$handoff['position_id']===$server,'Employee handoff did not inherit shift position.');
 $nextRows=employee_shift_messages_for_user($pdo,$org,$next);sh_must(count($nextRows)===1&&$nextRows[0]['public_id']===$handoff['public_id'],'Next matching shift did not receive handoff.');sh_must(employee_shift_messages_for_user($pdo,$org,$north)===[],'Location isolation failed for employee handoff.');
+sh_must(employee_shift_acks_ready($pdo),'G2H acknowledgement schema missing.');
+$beforeAck=employee_shift_messages_for_user($pdo,$org,$next);
+sh_must(empty($beforeAck[0]['acknowledged_at']),'Unread handoff should not be implicitly acknowledged.');
+$receipt=employee_shift_message_acknowledge($pdo,$org,$next,(string)$handoff['public_id']);
+$secondReceipt=employee_shift_message_acknowledge($pdo,$org,$next,(string)$handoff['public_id']);
+sh_must($receipt['acknowledgedAt']!==''&&$receipt===$secondReceipt,'Duplicate acknowledgements must be idempotent.');
+$ackRows=employee_shift_messages_for_user($pdo,$org,$next);
+sh_must(!empty($ackRows[0]['acknowledged_at']),'Recipient acknowledgment timestamp was not projected.');
+$allForManager=employee_shift_messages_for_user($pdo,$org,$manager,true,true);
+sh_must((int)($allForManager[0]['ack_count']??-1)===1,'Manager view cannot inspect first handoff acknowledgment.');
+$ackBlocked=false;try{employee_shift_message_acknowledge($pdo,$org,$north,(string)$handoff['public_id']);}catch(InvalidArgumentException){$ackBlocked=true;}
+sh_must($ackBlocked,'A different location must not acknowledge another employee handoff.');
+$ackOtherOrg=false;try{employee_shift_message_acknowledge($pdo,$otherOrg,$next,(string)$handoff['public_id']);}catch(InvalidArgumentException){$ackOtherOrg=true;}
+sh_must($ackOtherOrg,'Cross-organization handoff acknowledgment must fail.');
+
 employee_shift_message_read($pdo,$org,$next,(string)$handoff['public_id']);$nextRows=employee_shift_messages_for_user($pdo,$org,$next);sh_must(!empty($nextRows[0]['read_at']),'Handoff read tracking failed.');
 
 $targeted=employee_shift_message_save($pdo,$org,['messageType'=>'announcement','title'=>'Downtown update','body'=>'Side entrance is closed tonight.','priority'=>'urgent','targetType'=>'location','targetId'=>$loc1],$manager,true);
@@ -106,5 +121,7 @@ sh_must(str_contains($voiceSource,"'prep.shift_handoff_unavailable'"),
     'Conversational prep handoff is routed through the canonical Prep Agent.');
 
 employee_shift_message_resolve($pdo,$org,(string)$handoff['public_id'],$manager);$nextRows=employee_shift_messages_for_user($pdo,$org,$next);sh_must(count(array_filter($nextRows,static fn(array $r):bool=>$r['public_id']===$handoff['public_id']))===0,'Resolved handoff remained active.');$history=employee_shift_messages_for_user($pdo,$org,$manager,true,true);sh_must(count(array_filter($history,static fn(array $r):bool=>$r['public_id']===$handoff['public_id']&&$r['status']==='resolved'))===1,'Resolved handoff missing from manager history.');
+sh_must((bool)array_filter($history,static fn(array $r):bool=>$r['public_id']===$handoff['public_id']&&!empty($r['ack_count'])),'Acknowledgment must remain in resolved history.');
+
 
 echo "shift-handoff-ok\n";
