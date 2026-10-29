@@ -42,6 +42,9 @@ jobs:
           grep -q "CREATE TABLE IF NOT EXISTS employee_shift_messages" database/20260914_zzzzz_shift_handoff_communications.sql
           grep -q "CREATE TABLE IF NOT EXISTS employee_shift_message_reads" database/20260914_zzzzz_shift_handoff_communications.sql
           grep -q "CREATE TABLE IF NOT EXISTS employee_shift_handoff_acknowledgements" database/20261029_shift_handoff_acknowledgements.sql
+          grep -q "CREATE TABLE IF NOT EXISTS employee_shift_handoff_followups" database/20261029_zz_shift_handoff_followups.sql
+          grep -q "employee_shift_handoff_escalate" includes/employee-shift-communications.php
+          grep -q "employee_shift_handoff_resolve" includes/employee-shift-communications.php
           grep -q "employee_shift_message_acknowledge" includes/employee-shift-communications.php
           grep -q "employee.handoffs.manage" database/20260914_zzzzz_shift_handoff_communications.sql
           grep -q "employee_shift_arrival_brief" includes/employee-shift-communications.php
@@ -69,9 +72,10 @@ jobs:
           PHP
       - name: Verify schema and permissions
         run: |
-          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('employee_shift_messages','employee_shift_message_reads','employee_shift_handoff_acknowledgements')" | grep -qx '3'
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -N -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('employee_shift_messages','employee_shift_message_reads','employee_shift_handoff_acknowledgements','employee_shift_handoff_followups')" | grep -qx '4'
           mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -N -e "SELECT COUNT(*) FROM permissions WHERE permission_key IN ('employee.handoffs.view','employee.handoffs.create','employee.handoffs.manage')" | grep -qx '3'
           mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -N -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260914_zzzzz_shift_handoff_communications'" | grep -qx '1'
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -N -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20261029_zz_shift_handoff_followups'" | grep -qx '1'
       - name: Employee Home regression
         run: php tests/employee-home-contract.php
       - name: Shift handoff behavior
