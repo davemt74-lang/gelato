@@ -156,6 +156,15 @@ function gaw_route(array $user,string $message): array
     if(preg_match('/\bprep\b/u',$text)&&preg_match('/\b(?:ready|readiness|progress|status|on track|behind|remaining|left|going|looking|done)\b/u',$text)
         &&app_has_permission('prep.intelligence.agent',$user)&&app_has_permission('prep.intelligence.view',$user))
         return ['route'=>'api/prep-intelligence-agent.php','domain'=>'prep_intelligence'];
+    // Prep handoffs must use the canonical prep task engine, even when
+    // the request also mentions a shift (which normally routes to Scheduling).
+    if(preg_match('/\b(?:prep\b.{0,50}\b(?:handoff|hand over|next shift|shift brief)|(?:handoff|next shift|incoming shift|shift brief)\b.{0,50}\bprep)\b/u',$text)
+        &&app_has_permission('prep.intelligence.view',$user)&&app_has_permission('prep.intelligence.agent',$user))
+        return ['route'=>'api/prep-intelligence-agent.php','domain'=>'prep_shift_handoff'];
+    if(preg_match('/\b(?:handoffs?|shift notes?|shift briefing|before my shift|anything i should know|what changed before)\b/u',$text)
+        &&(app_has_permission('employee.self',$user)||app_has_permission('employee.handoffs.view',$user)
+            ||app_has_permission('agent.employee_view',$user)))
+        return ['route'=>'api/employee-agent.php','domain'=>'employee_shift_handoff'];
     if(preg_match($frontOfHouse,$text)&&app_has_permission('host.view',$user)&&(app_has_permission('table_service.view',$user)||app_has_permission('host.use',$user)||app_has_permission('host.manage',$user)))return ['route'=>'api/front-of-house-agent.php','domain'=>'front_of_house'];
     if(preg_match($equipment,$text)&&app_has_permission('equipment.view',$user)&&app_has_permission('agent.equipment_skills',$user))return function_exists('gaw_node_route')?gaw_node_route('equipment'):['route'=>'api/equipment-agent.php','domain'=>'equipment_maintenance'];
     if(preg_match($recipes,$text)&&app_has_permission('recipes.view',$user)&&app_has_permission('recipes.agent',$user))return function_exists('gaw_node_route')?gaw_node_route('recipes'):['route'=>'api/recipe-agent.php','domain'=>'recipe_production_standards'];
