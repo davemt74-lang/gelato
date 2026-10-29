@@ -28,42 +28,97 @@ function fm8d5_named_match(array $rows,string $raw):array
     $names=array_slice(array_unique(array_map(static fn(array $r):string=>(string)$r['name'],$matches)),0,8);
     return ['error'=>'Several records match that name: '.implode(', ',$names).'. Which one did you mean?'];
 }
+/**
+ * Match against one authoritative snapshot of the published menu. A category
+ * word in an utterance ("Testarosa Pizza") is not necessarily part of the
+ * stored product name ("Testarossa"). Never fuzzy-match unpublished records.
+ */
+function fm8d5_menu_name_key(string $raw):string
+{
+    $raw=mb_strtolower(trim($raw),'UTF-8');
+    $raw=preg_replace('/[^\p{L}\p{N}]+/u',' ',$raw)??$raw;
+    $raw=preg_replace('/\b(?:what|which|where|whats|s|is|are|does|do|the|this|that|on|in|of|for|to|a|an|me|you|please|tell|about|how|much|price|prices|cost|ingredients?|toppings?|contains?|have|has|menu|item|items|pizza|pizzas|pie|pies|dish|dishes)\b/u',' ',$raw)??$raw;
+    return trim(preg_replace('/\s+/u',' ',$raw)??$raw);
+}
+/** Exact > partial > unique short-typo match; return ambiguity, not a guess. */
+function fm8d5_menu_match_rows(array $rows,string $raw):array
+{
+    $query=fm8d5_menu_name_key($raw);
+    if(mb_strlen($query,'UTF-8')<2||mb_strlen($query,'UTF-8')>140)return [];
+    $exact=[];$partial=[];$nearest=[];$best=3;
+    foreach($rows as $row){
+        $name=fm8d5_menu_name_key((string)($row['name']??''));
+        if($name==='')continue;
+        if($name===$query)$exact[]=$row;
+        elseif(str_contains($name,$query))$partial[]=$row;
+        elseif(strlen($query)>=5&&strlen($query)<=80&&strlen($name)<=80){
+            // A single-character transcription/typing error is common, but
+            // two edits are allowed only for longer distinctive names.
+            $distance=levenshtein($query,$name);
+            $allowed=mb_strlen($query,'UTF-8')>=9?2:1;
+            if($distance>$allowed)continue;
+            if($distance<$best){$best=$distance;$nearest=[$row];}
+            elseif($distance===$best)$nearest[]=$row;
+        }
+    }
+    if($exact)return $exact;
+    if($partial)return $partial;
+    return count($nearest)===1?$nearest:[];
+}
+
 function fm8d5_menu_find(PDO $pdo,int $org,string $name):array
 {
     if(!menu_manager_ready($pdo))return ['error'=>'The Menu Manager database is not installed or upgraded.'];
     $name=trim($name);
     if(mb_strlen($name,'UTF-8')<2||mb_strlen($name,'UTF-8')>140)
         return ['error'=>'Tell me the menu item name, please.'];
-    // The conversational menu is the same published, channel-enabled menu
-    // customers see. Draft, paused and archived items are not live offers.
+    // Resolve against the SAME public-menu snapshot that produces listings.
     $rows=[];$publicItems=[];
     foreach(menu_manager_channel_menu($pdo,$org,'public_menu') as $section)
         foreach($section['items'] as $item){
-            $rows[]=['id'=>(int)$item['id'],'name'=>(string)$item['name']];
+            $rows[]=['id'=>(int)$item['id'],'name'=>(string)$item['name'],
+                'section'=>(string)$section['name']];
             $publicItems[(int)$item['id']]=$item;
         }
-    $picked=fm8d5_named_match($rows,$name);
-    if(!isset($picked['item']))return $picked;
-    $id=(int)$picked['item']['id'];
+    $matches=fm8d5_menu_match_rows($rows,$name);
+    if(!$matches)return ['error'=>'No matching published menu item was found. Check the name or ask me to show the menu.'];
+    if(count($matches)>1)
+        return ['error'=>'Several published items match: '.implode(', ',array_slice(
+            array_unique(array_map(static fn(array $row):string=>(string)$row['name'],$matches)),0,8))
+            .'. Which one did you mean?'];
+    $id=(int)$matches[0]['id'];
     $details=menu_manager_item_payload($pdo,$org,$id);
-    // The detail payload is an editor view. Prices in conversation must
-    // instead match the currently published price options and effective dates.
+    // Editor detail never controls the published prices returned in chat.
     $details['sizes']=array_map(static fn(array $price):array=>[
         'label'=>(string)$price['optionName'],'amount'=>(float)$price['amount'],
     ],$publicItems[$id]['prices']);
     return ['item'=>$details];
 }
+
 function fm8d5_normalize_menu_filter(string $value):string
 {
     $value=mb_strtolower(trim(preg_replace('/\s+/u',' ',$value)??$value),'UTF-8');
     return preg_replace('/(?:es|s)$/u','',$value)??$value;
 }
-/** Format the existing published channel menu, never editor/draft records. */
-function fm8d5_available_menu_summary(array $sections,string $category='',string $itemName='',int $limit=40):string
-{
+/** Format the published channel menu; named reads also include public facts. */
+function fm8d5_available_menu_summary(
+    array $sections,string $category='',string $itemName='',int $limit=40,array $publicFacts=[]
+):string{
     $limit=max(1,min(75,$limit));
     $category=fm8d5_normalize_menu_filter($category);
-    $itemName=fm8d5_normalize_menu_filter($itemName);
+    $itemName=trim($itemName);
+    // Selecting a named product is resolved once across all sections; a
+    // model-invented category must not suppress a valid product name.
+    $all=[];
+    foreach($sections as $section)foreach((array)($section['items']??[]) as $item)
+        if(trim((string)($item['name']??''))!==''&&isset($item['id']))
+            $all[]=['id'=>(int)$item['id'],'name'=>(string)$item['name'],
+                'section'=>(string)($section['name']??'Menu')];
+    $matchedIds=null;
+    if($itemName!==''){
+        $matchedIds=array_fill_keys(array_map(static fn(array $row):int=>$row['id'],
+            fm8d5_menu_match_rows($all,$itemName)),true);
+    }
     $rows=[];
     foreach($sections as $section){
         $sectionName=(string)($section['name']??'Menu');
@@ -72,9 +127,10 @@ function fm8d5_available_menu_summary(array $sections,string $category='',string
             $name=trim((string)($item['name']??''));
             if($name==='')continue;
             $search=fm8d5_normalize_menu_filter($name);
-            if($category!==''&&!str_contains($sectionSearch,$category)
+            if($matchedIds!==null){
+                if(!isset($matchedIds[(int)($item['id']??0)]))continue;
+            }elseif($category!==''&&!str_contains($sectionSearch,$category)
                 &&!str_contains($search,$category))continue;
-            if($itemName!==''&&!str_contains($search,$itemName))continue;
             $prices=[];
             foreach(array_slice((array)($item['prices']??[]),0,5) as $price){
                 if(!is_numeric($price['amount']??null))continue;
@@ -83,8 +139,18 @@ function fm8d5_available_menu_summary(array $sections,string $category='',string
                 $prices[]=($label!==''?$label.' ':'').($currency==='USD'?'$':$currency.' ')
                     .number_format((float)$price['amount'],2);
             }
-            $rows[]=mb_substr($sectionName.' — '.$name
-                .($prices?' | '.implode('; ',$prices):' | price not recorded'),0,240,'UTF-8');
+            $row=$sectionName.' — '.$name
+                .($prices?' | '.implode('; ',$prices):' | price not recorded');
+            if($matchedIds!==null){
+                $description=trim((string)($item['description']??''));
+                if($description!=='')$row.="\nDescription: ".mb_substr($description,0,280,'UTF-8');
+                $factKey=mb_strtolower($sectionName."\0".$name,'UTF-8');
+                $ingredients=(array)($publicFacts[$factKey]['ingredients']??[]);
+                $row.="\n".($ingredients?'Recorded public ingredients: '.implode(', ',
+                    array_slice(array_map('strval',$ingredients),0,20)).'.':
+                    'No public ingredient list is recorded; do not guess the toppings.');
+            }
+            $rows[]=mb_substr($row,0,850,'UTF-8');
         }
     }
     if(!$rows)return 'No matching published items are currently recorded in Gelato’s menu.';
@@ -98,6 +164,7 @@ function fm8d5_available_menu_summary(array $sections,string $category='',string
         ."\n".implode("\n",$shown)
         .(count($shown)<count($rows)?"\nAsk for a category to see more items.":'');
 }
+
 function fm8d5_recipe_find(PDO $pdo,int $org,string $name):array
 {
     if(!restaurant_brain_table_ready($pdo,'recipes'))return ['error'=>'The Recipe Library database is not installed or upgraded.'];
@@ -162,7 +229,7 @@ function fm8d5_catalogue(array $principal):array
             &&app_has_permission('training.self_view',$principal));
     if($canReadMenu){
         $tools['list_available_menu_items']=[
-            'description'=>'Read the ACTUAL currently published Gelato menu. Use when the user asks which pizzas, appetizers, drinks, specials or other dishes are available, wants a menu category, asks to see all items, or asks about an item by name. Optional category can be pizza, appetizers, dinner or another category; optional item_name narrows to a menu item. Unlike the editor, this never lists draft or inactive products.',
+            'description'=>'Read the ACTUAL currently published Gelato menu. Use for listing menu categories, availability and prices. For a named product this also supplies the published description and public ingredients. For private owner-only recipe or detailed menu questions prefer get_menu_item when authorized. Optional category can be pizza, appetizers, dinner or another category; optional item_name narrows to a menu item. Unlike the editor, this never lists draft or inactive products.',
             'parameters'=>['type'=>'object','properties'=>[
                 'category'=>['type'=>'string','description'=>'Optional menu category, e.g. pizza or appetizers'],
                 'item_name'=>['type'=>'string','description'=>'Optional menu item name or distinctive part'],
@@ -178,16 +245,29 @@ function fm8d5_catalogue(array $principal):array
                 $pdo=app_pdo();
                 if(!menu_manager_ready($pdo))return fm8d5_observation(
                     'The Menu Manager database is not installed or upgraded.','Gelato published menu');
+                $org=(int)$actor['organization_id'];
+                $itemName=(string)($args['item_name']??'');
+                $facts=[];
+                if(trim($itemName)!==''){
+                    // The public website exposes these exact ingredients;
+                    // no internal recipes, methods or editor-only notes.
+                    foreach(menu_manager_public_sections($pdo,$org) as $section)
+                        foreach((array)($section['items']??[]) as $item){
+                            $key=mb_strtolower((string)$section['name']."\0".
+                                (string)$item['name'],'UTF-8');
+                            $facts[$key]=['ingredients'=>(array)($item['ingredients']??[])];
+                        }
+                }
                 return fm8d5_observation(fm8d5_available_menu_summary(
-                    menu_manager_channel_menu($pdo,(int)$actor['organization_id'],'public_menu'),
-                    (string)($args['category']??''),(string)($args['item_name']??''),
-                    (int)($args['limit']??40)),'Gelato published menu');
+                    menu_manager_channel_menu($pdo,$org,'public_menu'),
+                    (string)($args['category']??''),$itemName,
+                    (int)($args['limit']??40),$facts),'Gelato published menu');
             },
         ];
     }
     if(app_has_permission('menu.view',$principal)){
         $tools['get_menu_item']=[
-            'description'=>'Look up a live Gelato menu item by name and return its recorded ingredients, description, optionally price and sizes. Use for questions like "what ingredients are on Testarosa Pizza?", "what is on this pizza?", "does a menu item contain cheese?", or "what does this cost?" Never infer missing ingredients from the description; a specific menu item name is required.',
+            'description'=>'Look up a live Gelato menu item by name and return its recorded ingredients, description, optionally price and sizes. Use for questions like "what ingredients are on a Testarossa Pizza?", "what is on this pizza?", "does a menu item contain cheese?", or "what does this cost?" Never infer missing ingredients from the description; a specific menu item name is required.',
             'parameters'=>['type'=>'object','properties'=>[
                 'item_name'=>['type'=>'string','description'=>'Menu item name'],
                 'include_prices'=>['type'=>'boolean','description'=>'Include current recorded sizes and prices'],
