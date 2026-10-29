@@ -42,6 +42,19 @@ if($handoffReady&&preg_match('/\b(?:acknowledge|confirm receipt of)\b.*\bhandoff
         'answer'=>'I recorded your acknowledgment. This does not mark any unfinished prep task complete.',
         'data'=>$receipt,'sources'=>[$id]]);
 }
+if($handoffReady&&preg_match('/\b(?:handoffs? (?:that )?(?:need|requiring) (?:manager )?(?:follow.?up|attention)|escalated handoffs?|handoff escalation status|manager handoff queue)\b/u',$normalized)){
+    if(!app_has_permission('employee.handoffs.manage',$user)&&!app_has_permission('employee.manage',$user)&&!app_has_permission('staff.manage',$user))
+        app_json_response(['ok'=>false,'message'=>'Shift handoff management permission required.'],403);
+    $rows=array_values(array_filter(employee_shift_messages_for_user($pdo,$org,$uid,false,true),
+        static fn(array $r):bool=>(string)$r['message_type']==='handoff'
+            &&in_array((string)($r['attention_status']??''),['escalated','urgent','overdue','awaiting_acknowledgment'],true)));
+    $lines=array_map(static fn(array $r):string=>$r['title'].' ['.$r['public_id'].'] — '
+        .str_replace('_',' ',(string)$r['attention_status']).', '.(int)($r['ack_count']??0).' acknowledgment(s)'
+        .($r['escalation_reason']?' — '.$r['escalation_reason']:''),array_slice($rows,0,8));
+    app_json_response(['ok'=>true,'skill'=>'employee.handoff.manager_followup',
+        'answer'=>$lines?"Handoffs needing manager follow-through:\n- ".implode("\n- ",$lines):'There are no outstanding high-risk handoffs for this restaurant.',
+        'data'=>['handoffs'=>$rows],'sources'=>array_column($rows,'public_id')]);
+}
 if($handoffReady&&preg_match('/\b(?:handoff history|past handoffs|previous handoffs|resolved handoffs)\b/u',$normalized)){
     if(!app_has_permission('employee.handoffs.view',$user)&&!app_has_permission('employee.self',$user))
         app_json_response(['ok'=>false,'message'=>'Handoff view permission required.'],403);
@@ -66,7 +79,7 @@ if($handoffReady&&preg_match('/\b(what happened before i got here|what happened 
         $scope=array_filter([$r['station']?('station '.$r['station']):null,$r['location_name']??null,$r['position_name']??null]);
         $lines[]=$r['title'].($r['priority']&&$r['priority']!=='normal'?' — '.$r['priority']:'').
             ($scope?' — '.implode(' / ',$scope):'').': '.mb_substr((string)$r['body'],0,420,'UTF-8').
-            ($r['read_at']?'':' — unread').((string)$r['message_type']==='handoff'?($r['acknowledged_at']?' — acknowledged':' — needs acknowledgment'):'');
+            ($r['read_at']?'':' — unread').((string)$r['message_type']==='handoff'?($r['acknowledged_at']?' — acknowledged':' — needs acknowledgment').($r['escalated_at']?' — escalated':''):'');
     }
     $answer=$rows?"Here is the current shift handoff:\n- ".implode("\n- ",$lines):'No manually posted shift handoffs are active.';
     if($prep)$answer.="\n".$prep['summary'];
