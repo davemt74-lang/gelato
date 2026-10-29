@@ -23,6 +23,36 @@ if($handoffWrite){
     app_json_response(['ok'=>true,'skill'=>'employee.handoff.create','answer'=>'I saved that handoff for the next matching shift. It will appear in Employee Home and the arrival brief.','data'=>$row,'sources'=>[(string)$row['public_id']]]);
 }
 
+if($handoffReady&&preg_match('/\b(?:acknowledge|confirm receipt of)\b.*\bhandoffs?\b/u',$normalized)){
+    if(!app_has_permission('employee.handoffs.view',$user)&&!app_has_permission('employee.self',$user))
+        app_json_response(['ok'=>false,'message'=>'Handoff view permission required.'],403);
+    $rows=array_values(array_filter(employee_shift_messages_for_user($pdo,$org,$uid),
+        static fn(array $r):bool=>(string)$r['message_type']==='handoff'&&empty($r['acknowledged_at'])));
+    $id=null;
+    if(preg_match('/\b(handoff-[a-f0-9]{20})\b/u',$normalized,$match))$id=$match[1];
+    elseif(count($rows)===1)$id=(string)$rows[0]['public_id'];
+    if($id===null)app_json_response(['ok'=>true,'skill'=>'employee.handoff.acknowledgment_prompt',
+        'answer'=>count($rows)===0?'There are no unacknowledged handoffs addressed to you.':'You have '.count($rows).' open handoffs. Tell me the handoff ID you want to acknowledge, or use the Acknowledge button in Employee Home.',
+        'data'=>['unacknowledged'=>$rows],'sources'=>array_column($rows,'public_id')]);
+    try{$receipt=employee_shift_message_acknowledge($pdo,$org,$uid,$id);}
+    catch(InvalidArgumentException $error){app_json_response(['ok'=>false,'message'=>$error->getMessage()],422);}
+    catch(RuntimeException $error){app_json_response(['ok'=>false,'message'=>$error->getMessage()],503);}
+    app_audit($pdo,$org,$uid,'agent.employee_handoff_acknowledged','employee_shift_message',$id,null,$receipt);
+    app_json_response(['ok'=>true,'skill'=>'employee.handoff.acknowledged',
+        'answer'=>'I recorded your acknowledgment. This does not mark any unfinished prep task complete.',
+        'data'=>$receipt,'sources'=>[$id]]);
+}
+if($handoffReady&&preg_match('/\b(?:handoff history|past handoffs|previous handoffs|resolved handoffs)\b/u',$normalized)){
+    if(!app_has_permission('employee.handoffs.view',$user)&&!app_has_permission('employee.self',$user))
+        app_json_response(['ok'=>false,'message'=>'Handoff view permission required.'],403);
+    $rows=employee_shift_messages_for_user($pdo,$org,$uid,true);
+    $lines=[];foreach(array_slice($rows,0,16) as $row)$lines[]=$row['created_at'].' — '.$row['title'].
+        ' ('.$row['status'].($row['acknowledged_at']?', acknowledged '.$row['acknowledged_at']:'').')';
+    app_json_response(['ok'=>true,'skill'=>'employee.handoff.history',
+        'answer'=>$lines?"Your handoff timeline:\n- ".implode("\n- ",$lines):'There is no handoff history in your current shift scope.',
+        'data'=>$rows,'sources'=>array_column($rows,'public_id')]);
+}
+
 if($handoffReady&&preg_match('/\b(what happened before i got here|what happened before my shift|what changed|handoff|handoffs|shift notes?|station notes?|anything i should know|before i got here|before my shift)\b/u',$normalized)){
     $rows=employee_shift_messages_for_user($pdo,$org,$uid);
     $unread=array_values(array_filter($rows,static fn(array $r):bool=>empty($r['read_at'])));
@@ -36,7 +66,7 @@ if($handoffReady&&preg_match('/\b(what happened before i got here|what happened 
         $scope=array_filter([$r['station']?('station '.$r['station']):null,$r['location_name']??null,$r['position_name']??null]);
         $lines[]=$r['title'].($r['priority']&&$r['priority']!=='normal'?' — '.$r['priority']:'').
             ($scope?' — '.implode(' / ',$scope):'').': '.mb_substr((string)$r['body'],0,420,'UTF-8').
-            ($r['read_at']?'':' — unread');
+            ($r['read_at']?'':' — unread').((string)$r['message_type']==='handoff'?($r['acknowledged_at']?' — acknowledged':' — needs acknowledgment'):'');
     }
     $answer=$rows?"Here is the current shift handoff:\n- ".implode("\n- ",$lines):'No manually posted shift handoffs are active.';
     if($prep)$answer.="\n".$prep['summary'];
