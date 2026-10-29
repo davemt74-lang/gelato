@@ -23,9 +23,9 @@ $principal=['id'=>$uid,'organization_id'=>$org,'display_name'=>'Menu Tester',
     'permissions'=>['menu.view','recipes.view']];
 b8d5_assert(menu_manager_ready($pdo),'Menu Manager tables installed');
 b8d5_assert(restaurant_brain_table_ready($pdo,'recipes'),'Recipes tables installed');
-$category=menu_manager_category_save($pdo,$org,null,['name'=>'Pizza','description'=>'Pizza','sortOrder'=>1,'status'=>'active']);
+$category=menu_manager_category_save($pdo,$org,null,['name'=>'Wood Fired Pizza','description'=>'Pizza','sortOrder'=>1,'status'=>'active']);
 $item=menu_manager_save_item($pdo,$org,null,[
-    'name'=>'Testarosa Pizza','categoryId'=>(int)$category['id'],
+    'name'=>'Testarossa','categoryId'=>(int)$category['id'],
     'description'=>'Wood-fired white pizza with roasted garlic and ricotta.',
     'sizes'=>[['label'=>'12-inch','sizeCode'=>'12','amount'=>18.00,'sortOrder'=>1]],
     'distribution'=>['publicMenu'=>true,'onlineOrder'=>true],
@@ -38,7 +38,7 @@ $item=menu_manager_save_item($pdo,$org,null,[
 ],$uid);
 b8d5_assert((int)$item['id']>0,'Testarosa fixture saved to real menu database');
 menu_manager_set_status($pdo,$org,(int)$item['id'],'publish',$uid);
-b8d5_assert(menu_training_search_items($pdo,$org,'Testarosa Pizza')!==[],
+b8d5_assert(menu_training_search_items($pdo,$org,'Testarossa')!==[],
     'acceptance fixture is published and available to the active-menu broker');
 $draft=menu_manager_save_item($pdo,$org,null,[
     'name'=>'Secret Draft Pizza','categoryId'=>(int)$category['id'],
@@ -75,25 +75,65 @@ b8d5_assert(!isset($publicOnly['get_menu_item'],$publicOnly['get_recipe_details'
     'unknown room speakers receive no private menu ingredients or recipes');
 $listMenu=$reg['list_available_menu_items']['execute'];
 $menuList=$listMenu(['category'=>'pizzas'],$principal);
-b8d5_assert(str_contains($menuList['data']['answer'],'Testarosa Pizza')
+b8d5_assert(str_contains($menuList['data']['answer'],'Testarossa')
     &&str_contains($menuList['data']['answer'],'18.00'),
     'published menu-list tool retrieves live pizza and price without names hardcoded');
 b8d5_assert(!str_contains($menuList['data']['answer'],'Secret Draft')
     &&!str_contains($menuList['data']['answer'],'99.99'),
     'menu-list tool excludes draft items');
 $brokerPizzas=fmuk_answer($pdo,$principal,'Show me the menu');
-b8d5_assert(str_contains($brokerPizzas['answer'],'Testarosa Pizza')
+b8d5_assert(str_contains($brokerPizzas['answer'],'Testarossa')
     &&!str_contains($brokerPizzas['answer'],'Secret Draft'),
     'offline menu broker uses only published records');
 $draftDetail=fm8d5_menu_find($pdo,$org,'Secret Draft Pizza');
 b8d5_assert(isset($draftDetail['error']),
     'named-item lookup cannot disclose draft details');
 $getMenu=$reg['get_menu_item']['execute'];
-$details=$getMenu(['item_name'=>'Testarosa Pizza'],$principal);
+$details=$getMenu(['item_name'=>'Testarossa'],$principal);
 b8d5_assert(str_contains($details['data']['answer'],'Roasted Garlic')&&
     str_contains($details['data']['answer'],'Fresh Mozzarella'),'real named item ingredient list');
 b8d5_assert(str_contains($details['data']['answer'],'supplier labels'),
     'allergen advisory included without invented clearance');
+
+/**
+ * Production regression: the real published name is "Testarossa", the model
+ * requests "Testarosa Pizza", and it may select the LIST tool for "what's on".
+ * Previous tests supplied a pre-corrected tool argument and missed this bug.
+ */
+$typoList=$listMenu(['category'=>'pizzas','item_name'=>'Testarosa Pizza'],$principal);
+b8d5_assert(str_contains($typoList['data']['answer'],'Wood Fired Pizza — Testarossa')
+    &&str_contains($typoList['data']['answer'],'Roasted Garlic')
+    &&str_contains($typoList['data']['answer'],'Ricotta'),
+    'named list resolves one-letter typo + category suffix to real published toppings');
+b8d5_assert(!str_contains($typoList['data']['answer'],'Secret Draft'),
+    'named fuzzy list never includes unpublished pizzas');
+$typoDetail=$getMenu(['item_name'=>'Testarosa Pizza'],$principal);
+b8d5_assert(str_contains($typoDetail['data']['answer'],'Testarossa')
+    &&str_contains($typoDetail['data']['answer'],'Roasted Garlic'),
+    'named detail shares published-menu typo resolution with list');
+$fullUtteranceDetail=$getMenu(['item_name'=>"What's on a Testarosa Pizza?"],$principal);
+b8d5_assert(str_contains($fullUtteranceDetail['data']['answer'],'Testarossa'),
+    'item lookup tolerates model passing an entire natural-language question');
+$rawTypoListProvider=static fn():array=>['output'=>[['type'=>'function_call',
+    'call_id'=>'real-misroute','name'=>'list_available_menu_items',
+    'arguments'=>'{"category":"pizzas","item_name":"Testarosa Pizza"}']]];
+$screenshotScenario=fm8d3_turn($pdo,$principal,'openai','fake',
+    [['role'=>'user','content'=>"What's on a Testarosa Pizza?"]],'',
+    $rawTypoListProvider,$reg,static fn():array=>$principal,
+    static function(array $event):void{},['channel'=>'text','verifiedSameUser'=>false]);
+b8d5_assert(($screenshotScenario['data']['tools'][0]??'')==='list_available_menu_items'
+    &&str_contains($screenshotScenario['answer'],'Testarossa')
+    &&str_contains($screenshotScenario['answer'],'Roasted Garlic'),
+    'screenshot two-turn failure cannot recur when model misroutes to list');
+$voiceNamed=fm8d3_turn($pdo,$principal,'openai','fake',
+    [['role'=>'user','content'=>"What's on a Testarosa Pizza?"]],'',
+    $rawTypoListProvider,$publicOnly,static fn():array=>$principal,
+    static function(array $event):void{},['channel'=>'voice','verifiedSameUser'=>false]);
+b8d5_assert(str_contains($voiceNamed['answer'],'Testarossa')
+    &&str_contains($voiceNamed['answer'],'Roasted Garlic')
+    &&!str_contains($voiceNamed['answer'],'Stonefellows Dough'),
+    'unverified voice may read public toppings without accessing private recipes');
+
 
 $providerCalls=0;
 $providerRefusal=static function()use(&$providerCalls):array{
@@ -120,7 +160,7 @@ foreach([
                 'type'=>'output_text','text'=>"I can't verify this pizza without a menu read."
             ]]]]];
         }
-        $args=json_encode(['item_name'=>'Testarosa Pizza','include_prices'=>$priceQuestion],JSON_THROW_ON_ERROR);
+        $args=json_encode(['item_name'=>'Testarossa','include_prices'=>$priceQuestion],JSON_THROW_ON_ERROR);
         return ['output'=>[['type'=>'function_call','call_id'=>'named-menu',
             'name'=>'get_menu_item','arguments'=>$args]]];
     };
@@ -130,14 +170,14 @@ foreach([
     b8d5_assert(($grounded['data']['cognitiveRetrySelectedRead']??false)===true
         &&($grounded['data']['tools'][0]??'')==='get_menu_item',
         'second cognitive attempt selects real named-item DB tool: '.$question);
-    if(!str_contains($grounded['answer'],'Testarosa Pizza')){
+    if(!str_contains($grounded['answer'],'Testarossa')){
         fwrite(STDERR,'B8D5 named menu diagnosis: '.json_encode([
             'question'=>$question,'subject'=>fmuk_menu_subject($question),
             'answer'=>$grounded['answer'],'sources'=>$grounded['sources']??[],
             'directMatches'=>array_column(fmuk_menu_items($pdo,$org,$question),'name'),
         ],JSON_UNESCAPED_UNICODE)."\n");
     }
-    b8d5_assert(str_contains($grounded['answer'],'Testarosa Pizza'),
+    b8d5_assert(str_contains($grounded['answer'],'Testarossa'),
         'recorded name is returned even for a one-letter spelling difference');
     if($priceQuestion){
         b8d5_assert(str_contains($grounded['answer'],'18.00'),
@@ -153,7 +193,7 @@ foreach([
 b8d5_assert($providerCalls===6,'three named questions received precisely one cognitive retry each');
 $verifiedNamedProvider=static fn():array=>['output'=>[['type'=>'function_call',
     'call_id'=>'owner-voice','name'=>'get_menu_item',
-    'arguments'=>'{"item_name":"Testarosa Pizza"}']]];
+    'arguments'=>'{"item_name":"Testarossa"}']]];
 $verifiedMenuVoice=fm8d3_turn($pdo,$principal,'openai','fake',
     [['role'=>'user','content'=>"What's on the Testarossa Pizza?"]],'',
     $verifiedNamedProvider,null,static fn():array=>$principal,
@@ -175,7 +215,7 @@ $unverifiedPublicVoice=fm8d3_turn($pdo,$principal,'openai','fake',
     [['role'=>'user','content'=>'Show me the pizzas']],'',
     $listingProvider,$publicOnly,static fn():array=>$principal,
     static function(array $event):void{},['channel'=>'voice','verifiedSameUser'=>false]);
-b8d5_assert(str_contains($unverifiedPublicVoice['answer'],'Testarosa Pizza')
+b8d5_assert(str_contains($unverifiedPublicVoice['answer'],'Testarossa')
     &&($unverifiedPublicVoice['data']['tools'][0]??'')==='list_available_menu_items',
     'unknown voice can ask the same natural-language public-menu question');
 b8d5_assert(!str_contains($unverifiedPublicVoice['answer'],'Secret Draft')
@@ -194,7 +234,7 @@ $abstainingVoice=fm8d3_turn($pdo,$principal,'openai','fake',
     [['role'=>'user','content'=>'Show me the pizzas']],'',
     $cognitiveMenu,$publicOnly,static fn():array=>$principal,
     static function(array $event):void{},['channel'=>'voice','verifiedSameUser'=>false]);
-b8d5_assert(str_contains($abstainingVoice['answer'],'Testarosa Pizza')
+b8d5_assert(str_contains($abstainingVoice['answer'],'Testarossa')
     &&!str_contains($abstainingVoice['answer'],'Roasted Garlic')
     &&($abstainingVoice['data']['cognitiveRetrySelectedRead']??false),
     'LLM retry turns voice abstention into authorized public-menu read');
@@ -202,14 +242,14 @@ $modelFirstMenu=fm8d3_turn($pdo,$principal,'openai','fake',
     [['role'=>'user','content'=>'Pizzas available today?']],'',
     $listingProvider,$reg,static fn():array=>$principal,
     static function(array $event):void{},['channel'=>'text','verifiedSameUser'=>false]);
-b8d5_assert(str_contains($modelFirstMenu['answer'],'Testarosa Pizza')
+b8d5_assert(str_contains($modelFirstMenu['answer'],'Testarossa')
     &&($modelFirstMenu['data']['tools'][0]??'')==='list_available_menu_items',
     'typed natural-language menu question uses the LLM-selected read tool');
 $abstainingText=fm8d3_turn($pdo,$principal,'openai','fake',
     [['role'=>'user','content'=>'Show me the pizzas']],'',
     $cognitiveMenu,$reg,static fn():array=>$principal,
     static function(array $event):void{},['channel'=>'text','verifiedSameUser'=>false]);
-b8d5_assert(str_contains($abstainingText['answer'],'Testarosa Pizza')
+b8d5_assert(str_contains($abstainingText['answer'],'Testarossa')
     &&($abstainingText['data']['cognitiveRetrySelectedRead']??false),
     'LLM retry turns typed abstention into the same published menu as voice');
 $maliciousVoiceModel=static function($endpoint,$headers,$payload):array{
@@ -229,10 +269,10 @@ b8d5_assert(!str_contains($blockedVoice['answer'],'1000 g')
     &&($blockedVoice['data']['toolCalls']??-1)===0,
     'unverified voice cannot exploit retry to obtain a private production recipe');
 
-$priced=$getMenu(['item_name'=>'Testarosa Pizza','include_prices'=>true],$principal);
+$priced=$getMenu(['item_name'=>'Testarossa','include_prices'=>true],$principal);
 b8d5_assert(str_contains($priced['data']['answer'],'18.00'),'real menu price is returned');
 $absent=$getMenu(['item_name'=>'A made-up special'],$principal);
-b8d5_assert(str_contains($absent['data']['answer'],'No matching recorded item'),
+b8d5_assert(str_contains($absent['data']['answer'],'No matching published menu item'),
     'unknown menu item explicitly reported, not hallucinated');
 $lookup=$reg['search_menu_ingredients']['execute'](['ingredient_name'=>'Ricotta'],$principal);
 b8d5_assert(str_contains($lookup['data']['answer'],'Ricotta'),'recorded ingredient search');
@@ -247,7 +287,7 @@ $otherOrg='Another Restaurant '.$slug;
 $pdo->prepare("INSERT INTO organizations (name,status,timezone) VALUES (?,'active','America/Phoenix')")
     ->execute([$otherOrg]);
 $otherActor=array_replace($principal,['organization_id'=>(int)$pdo->lastInsertId()]);
-$leak=$getMenu(['item_name'=>'Testarosa Pizza'],$otherActor);
+$leak=$getMenu(['item_name'=>'Testarossa'],$otherActor);
 b8d5_assert(!str_contains($leak['data']['answer'],'Roasted Garlic'),
     'other restaurant cannot access item ingredients');
 $secret=$getRecipe(['recipe_name'=>'Stonefellows Dough'],$otherActor);
@@ -257,10 +297,10 @@ $aiPayload=[];
 $openai=static function($endpoint,$headers,$payload)use(&$aiPayload):array{
     $aiPayload[]=$payload;
     return ['output'=>[['type'=>'function_call','call_id'=>'c1',
-        'name'=>'get_menu_item','arguments'=>'{"item_name":"Testarosa Pizza"}']]];
+        'name'=>'get_menu_item','arguments'=>'{"item_name":"Testarossa"}']]];
 };
 $reply=fm8d3_turn($pdo,$principal,'openai','fake',
-    [['role'=>'user','content'=>'What ingredients are on the Testarosa Pizza?']],'',$openai,$reg,
+    [['role'=>'user','content'=>'What ingredients are on the Testarossa?']],'',$openai,$reg,
     static fn():array=>$principal,static function(array $event):void{});
 b8d5_assert(str_contains($reply['answer'],'Roasted Garlic')&&
     ($reply['data']['tools'][0]??'')==='get_menu_item','OpenAI tool selection retrieves verified ingredients');
