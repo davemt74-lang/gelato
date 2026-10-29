@@ -15,7 +15,18 @@ if($_SERVER['REQUEST_METHOD']==='GET'){
     if($action==='bootstrap'){
         $dashboard=employee_home_dashboard($pdo,$org,$uid);
         if($commsReady&&$canHandoffView){$dashboard['handoffs']=employee_shift_messages_for_user($pdo,$org,$uid);$dashboard['arrivalBrief']=employee_shift_arrival_brief($pdo,$org,$uid,$user);$dashboard['summary']['unreadHandoffs']=count(array_filter($dashboard['handoffs'],static fn(array $r):bool=>empty($r['read_at'])));}else{$dashboard['handoffs']=[];$dashboard['arrivalBrief']=['active'=>false,'headline'=>'Shift handoff upgrade is pending.','messages'=>[],'announcements'=>[],'tasks'=>[],'summary'=>['unreadHandoffs'=>0,'unreadAnnouncements'=>0,'openTasks'=>0]];$dashboard['summary']['unreadHandoffs']=0;}
-        app_json_response(['ok'=>true]+$dashboard+['team'=>$canManage?employee_home_team($pdo,$org):[],'audiences'=>($commsReady&&$canHandoffManage)?employee_shift_audiences($pdo,$org):['locations'=>[],'positions'=>[],'shifts'=>[],'users'=>[]],'permissions'=>['self'=>$canSelf,'manage'=>$canManage,'announcementsManage'=>eh_can($user,'employee.announcements.manage'),'policiesManage'=>eh_can($user,'employee.policies.manage'),'timeclockSelf'=>eh_can($user,'timeclock.self'),'scheduleSelf'=>eh_can($user,'schedule.self'),'tasksSelf'=>eh_can($user,'tasks.self'),'trainingSelf'=>eh_can($user,'training.self_view'),'handoffsReady'=>$commsReady,'handoffsView'=>$canHandoffView,'handoffsCreate'=>$canHandoffCreate,'handoffsManage'=>$canHandoffManage]]);
+        $dashboard['handoffHistory']=($commsReady&&$canHandoffView)?array_values(array_filter(
+            employee_shift_messages_for_user($pdo,$org,$uid,true),
+            static fn(array $row):bool=>(string)$row['status']!=='open')):[];
+        $dashboard['handoffManagerSummary']=null;
+        if($commsReady&&$canHandoffManage){
+            $teamRows=employee_shift_messages_for_user($pdo,$org,$uid,false,true);
+            $openHandoffs=array_values(array_filter($teamRows,static fn(array $row):bool=>(string)$row['message_type']==='handoff'));
+            $dashboard['handoffManagerSummary']=['open'=>count($openHandoffs),
+                'awaitingFirstAcknowledgment'=>count(array_filter($openHandoffs,static fn(array $row):bool=>(int)($row['ack_count']??0)===0)),
+                'recent'=>array_slice($openHandoffs,0,12)];
+        }
+        app_json_response(['ok'=>true]+$dashboard+['team'=>$canManage?employee_home_team($pdo,$org):[],'audiences'=>($commsReady&&$canHandoffManage)?employee_shift_audiences($pdo,$org):['locations'=>[],'positions'=>[],'shifts'=>[],'users'=>[]],'permissions'=>['self'=>$canSelf,'manage'=>$canManage,'announcementsManage'=>eh_can($user,'employee.announcements.manage'),'policiesManage'=>eh_can($user,'employee.policies.manage'),'timeclockSelf'=>eh_can($user,'timeclock.self'),'scheduleSelf'=>eh_can($user,'schedule.self'),'tasksSelf'=>eh_can($user,'tasks.self'),'trainingSelf'=>eh_can($user,'training.self_view'),'handoffsReady'=>$commsReady,'handoffsAckReady'=>employee_shift_acks_ready($pdo),'handoffsView'=>$canHandoffView,'handoffsCreate'=>$canHandoffCreate,'handoffsManage'=>$canHandoffManage]]);
     }
     if($action==='team'){if(!$canManage)app_json_response(['ok'=>false,'message'=>'Employee management permission required.'],403);app_json_response(['ok'=>true,'team'=>employee_home_team($pdo,$org)]);}
     if($action==='employee'){
@@ -68,6 +79,13 @@ try{
     }
     if($action==='handoff_read'){
         if(!$commsReady)app_json_response(['ok'=>false,'message'=>'Shift handoff migration is not installed. Run upgrade.php.'],503);if(!$canHandoffView)app_json_response(['ok'=>false,'message'=>'Shift handoff view permission required.'],403);$id=trim((string)($in['id']??''));employee_shift_message_read($pdo,$org,$uid,$id);app_json_response(['ok'=>true,'message'=>'Shift communication marked read.']);
+    }
+    if($action==='handoff_acknowledge'){
+        if(!$canHandoffView)app_json_response(['ok'=>false,'message'=>'Shift handoff view permission required.'],403);
+        $id=trim((string)($in['id']??''));
+        $receipt=employee_shift_message_acknowledge($pdo,$org,$uid,$id);
+        app_audit($pdo,$org,$uid,'employee.handoff_acknowledged','employee_shift_message',$id,null,$receipt);
+        app_json_response(['ok'=>true,'message'=>'Handoff acknowledged.','receipt'=>$receipt]);
     }
     if($action==='handoff_resolve'){
         if(!$commsReady)app_json_response(['ok'=>false,'message'=>'Shift handoff migration is not installed. Run upgrade.php.'],503);if(!$canHandoffManage)app_json_response(['ok'=>false,'message'=>'Shift handoff management permission required.'],403);$id=trim((string)($in['id']??''));employee_shift_message_resolve($pdo,$org,$id,$uid);app_audit($pdo,$org,$uid,'employee.handoff_resolved','employee_shift_message',$id);app_json_response(['ok'=>true,'message'=>'Shift communication resolved.']);
