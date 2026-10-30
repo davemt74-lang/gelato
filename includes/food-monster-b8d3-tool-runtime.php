@@ -217,7 +217,8 @@ function fm8d3_turn(
     // operations, or one user turn might cause multiple downstream effects.
     if(count($calls)>1){
         foreach($calls as $selectedCall){
-            if(in_array(($selectedCall['name']??''),['delegate_restaurant_domain','continue_pending_restaurant_action','propose_inventory_stock_change','propose_prep_tasks'],true))
+            if(in_array(($selectedCall['name']??''),['delegate_restaurant_domain','continue_pending_restaurant_action'],true)
+               ||in_array(($selectedCall['name']??''),['propose_inventory_stock_change','propose_prep_tasks'],true))
                 return ['ok'=>true,'skill'=>'agent.delegation_needs_separate_turn',
                     'answer'=>'Please make one restaurant-agent request at a time so I can verify its result.',
                     'sources'=>[],'data'=>['status'=>'needs_input','toolCalls'=>0]];

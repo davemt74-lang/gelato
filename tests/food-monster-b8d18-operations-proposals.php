@@ -62,6 +62,7 @@ $GLOBALS['database']->exec('CREATE TABLE inventory_items (public_id TEXT, organi
 $insert=$GLOBALS['database']->prepare('INSERT INTO inventory_items VALUES (?,?,?,?,?,NULL)');
 $insert->execute(['inv-1',7,'Fresh Mozzarella','lb',10]);
 $insert->execute(['inv-2',8,'Fresh Mozzarella','lb',50]);
+if(session_status()!==PHP_SESSION_ACTIVE&&!session_start())throw new RuntimeException('Test session unavailable');
 $stock=$catalogue['propose_inventory_stock_change']['execute'];
 $prep=$catalogue['propose_prep_tasks']['execute'];
 $stockArgs=['item_name'=>'Fresh Mozzarella','action'=>'receive','quantity'=>5,'unit'=>'lb'];
@@ -96,4 +97,5 @@ $operations=(string)file_get_contents(dirname(__DIR__).'/api/operations-agent.ph
 b18a_check(str_contains($operations,"'inventory_adjust'")&&str_contains($operations,"'prep_tasks'")
     &&str_contains($operations,'session_write_close()'),'existing one-use approval and Operations execution retained');
 gac_pending_clear('operations',7,101);
+session_write_close();
 echo "B8D18A model-selected Operations proposals: $checks assertions passed\n";
