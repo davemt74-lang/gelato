@@ -9,6 +9,7 @@ require_once __DIR__.'/../includes/food-monster-g13a-engagement.php';
 require_once __DIR__.'/../includes/agent-voice-conversation.php';
 require_once __DIR__.'/../includes/agent-private-voice.php';
 require_once __DIR__.'/../includes/food-monster-b8d3-tool-runtime.php';
+require_once __DIR__.'/../includes/food-monster-menu-context.php';
 
 $user=app_require_auth();
 $org=(int)$user['organization_id'];$uid=(int)$user['id'];
@@ -120,6 +121,10 @@ try{
         $personMemory=mb_substr((string)$engagement['context']."\n".$personMemory,0,1100,'UTF-8');
     }
     if(!$history||end($history)['role']!=='user')throw new InvalidArgumentException('A user message is required.');
+    // Feed the model only a canonical published item NAME for a real follow-up.
+    // The history was already isolated by speaker above; tool results stay redacted.
+    $menuContext=fmmc_tenant_hint($pdo,$org,$history);
+    if($menuContext!=='')$personMemory=mb_substr($menuContext."\n".$personMemory,0,1100,'UTF-8');
     $selected=fmllm_choose($credentials,$provider);
     if($selected===null)app_json_response(['ok'=>false,'code'=>'provider_not_configured','message'=>'Selected AI provider is not configured. Ask a Gelato administrator to configure an OpenAI or Anthropic API key.'],503);
     fmllm_rate_limit($org,$uid);
