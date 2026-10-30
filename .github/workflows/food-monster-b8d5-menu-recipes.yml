@@ -8,6 +8,8 @@ on:
       - 'includes/food-monster-b8d5-menu-recipes.php'
       - 'includes/food-monster-unified-knowledge.php'
       - 'api/food-monster-llm.php'
+      - 'includes/food-monster-menu-context.php'
+      - 'tests/food-monster-menu-context.php'
       - 'js/global-agent.js'
       - 'tests/food-monster-b8d5-menu-recipes.php'
       - 'tests/food-monster-b8d14-grounded-fallback.php'
@@ -20,6 +22,8 @@ on:
       - 'includes/food-monster-b8d5-menu-recipes.php'
       - 'includes/food-monster-unified-knowledge.php'
       - 'api/food-monster-llm.php'
+      - 'includes/food-monster-menu-context.php'
+      - 'tests/food-monster-menu-context.php'
       - 'js/global-agent.js'
       - 'tests/food-monster-b8d5-menu-recipes.php'
       - 'tests/food-monster-b8d14-grounded-fallback.php'
@@ -60,6 +64,8 @@ jobs:
           php -l includes/food-monster-b8d5-menu-recipes.php
           php -l includes/food-monster-unified-knowledge.php
           php -l api/food-monster-llm.php
+          php -l includes/food-monster-menu-context.php
+          php -l tests/food-monster-menu-context.php
           php -l tests/food-monster-b8d5-menu-recipes.php
           php -l tests/food-monster-b8d14-grounded-fallback.php
           php -l tests/scheduling-contract.php
@@ -165,4 +171,5 @@ jobs:
       - name: Model-selected Menu + Recipe skills, live MariaDB, permission and history isolation
         run: |
           php tests/food-monster-b8d5-menu-recipes.php
+          php tests/food-monster-menu-context.php
           php tests/food-monster-b8d14-grounded-fallback.php
