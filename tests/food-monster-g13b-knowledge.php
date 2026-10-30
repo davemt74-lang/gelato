@@ -36,6 +36,16 @@ foreach(['Change the recipe price','Delete the pesto pizza','Add milk to the dou
  check13b(fm13b_intent($q)===null,'mutation never enters evidence route: '.$q);
 check13b(fm13b_subject('Does the pesto pizza contain dairy?')==='pesto pizza','safe subject stripping retains menu name');
 check13b(fm13b_subject('How do I prepare the pesto pizza?')==='pesto pizza','training words not search terms');
+check13b(menu_published_name_key("What's on a Testarosa Pizza?")==='testarosa',
+ 'canonical name keys discard question words and category suffix');
+$publishedRows=[['id'=>1,'name'=>'Testarossa'],['id'=>2,'name'=>'Four Cheese Pizza']];
+$resolved=menu_published_match_rows($publishedRows,"What's on a Testarosa Pizza?");
+check13b(count($resolved)===1&&$resolved[0]['id']===1,
+ 'published item resolver tolerates typo but does not mistake another pizza');
+$ambiguous=menu_published_match_rows([
+ ['id'=>3,'name'=>'Pepperoni Pizza'],['id'=>4,'name'=>'Pepperoni Calzone']
+], 'pepperoni');
+check13b(count($ambiguous)===2,'ambiguous published names produce choices instead of a guess');
 check13b(fm13b_allergen_key('Does this contain milk?')==='milk','milk allergen selector');
 check13b(fm13b_allergen_key('Does this contain gluten?')==='wheat','gluten mapped to wheat indicator not clearance');
 $pepper=['id'=>4,'name'=>'Pesto Pizza','description'=>'Basil pesto pizza','ingredients'=>['Mozzarella','Pesto','Dough'],
