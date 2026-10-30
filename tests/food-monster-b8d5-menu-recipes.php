@@ -114,6 +114,29 @@ b8d5_assert(str_contains($typoDetail['data']['answer'],'Testarossa')
 $fullUtteranceDetail=$getMenu(['item_name'=>"What's on a Testarosa Pizza?"],$principal);
 b8d5_assert(str_contains($fullUtteranceDetail['data']['answer'],'Testarossa'),
     'item lookup tolerates model passing an entire natural-language question');
+
+$publishedIndex=menu_published_index($pdo,$org);
+b8d5_assert(count($publishedIndex)===1&&$publishedIndex[0]['name']==='Testarossa'
+    &&!str_contains(json_encode($publishedIndex,JSON_THROW_ON_ERROR),'Secret Draft'),
+    'canonical published index excludes drafts before any knowledge adapter reads them');
+$brokerTypo=fmuk_menu_items($pdo,$org,"What's on a Testarosa Pizza?");
+b8d5_assert(count($brokerTypo)===1&&$brokerTypo[0]['name']==='Testarossa'
+    &&in_array('Roasted Garlic',$brokerTypo[0]['ingredients'],true),
+    'unified broker resolves typo against the same published item ID and ingredient data');
+$knowledgeTypo=fm13b_knowledge($pdo,$principal,"What's on a Testarosa Pizza?",
+    'menu',false,false);
+b8d5_assert(str_contains($knowledgeTypo['answer'],'Testarossa')
+    &&str_contains($knowledgeTypo['answer'],'Roasted Garlic'),
+    'knowledge endpoint shares the canonical published name resolver');
+$knowledgeDraft=fm13b_knowledge($pdo,$principal,
+    'What ingredients are in Secret Draft Pizza?','menu',false,false);
+b8d5_assert(($knowledgeDraft['sources']??[])===[]&&!str_contains($knowledgeDraft['answer'],'99.99'),
+    'legacy ingredient-search fallback cannot reveal an unpublished item');
+$brokerDraft=fmuk_menu_items($pdo,$org,'What is on Secret Draft Pizza?');
+b8d5_assert($brokerDraft===[],'unified broker cannot retrieve unpublished draft');
+$crossOrgIndex=menu_published_index($pdo,$org+500000);
+b8d5_assert($crossOrgIndex===[],'published menu index is tenant-scoped');
+
 $rawTypoListProvider=static fn():array=>['output'=>[['type'=>'function_call',
     'call_id'=>'real-misroute','name'=>'list_available_menu_items',
     'arguments'=>'{"category":"pizzas","item_name":"Testarosa Pizza"}']]];
