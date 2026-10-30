@@ -44,7 +44,7 @@ check13b(count($resolved)===1&&$resolved[0]['id']===1,
  'published item resolver tolerates typo but does not mistake another pizza');
 $ambiguous=menu_published_match_rows([
  ['id'=>3,'name'=>'Pepperoni Pizza'],['id'=>4,'name'=>'Pepperoni Calzone']
-], 'pepperoni');
+], 'pepper');
 check13b(count($ambiguous)===2,'ambiguous published names produce choices instead of a guess');
 check13b(fm13b_allergen_key('Does this contain milk?')==='milk','milk allergen selector');
 check13b(fm13b_allergen_key('Does this contain gluten?')==='wheat','gluten mapped to wheat indicator not clearance');
