@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__.'/menu-training-knowledge.php';
+require_once __DIR__.'/menu-published-resolver.php';
 require_once __DIR__.'/restaurant-brain.php';
 require_once __DIR__.'/food-monster-g13a-engagement.php';
 
@@ -140,6 +141,21 @@ function fm13b_knowledge(PDO $pdo,array $operator,string $question,string $inten
         $matches=restaurant_brain_recipe_search($pdo,$org,$query,5);
         return fm13b_recipe_answer($matches,$question);
     }
-    $items=menu_training_search_items($pdo,$org,$query,5);
+    // Identity is resolved only from the same published list shown in chat.
+    // The legacy ingredient/description search may run as a fallback, but its
+    // candidates must pass through this published-ID allowlist.
+    $public=menu_published_index($pdo,$org);
+    $matches=menu_published_match_rows($public,$query);
+    if(!$matches){
+        $allowed=array_fill_keys(array_column($public,'id'),true);
+        foreach(menu_training_search_items($pdo,$org,$query,12) as $candidate)
+            if(isset($allowed[(int)$candidate['id']]))$matches[]=$candidate;
+    }
+    $ids=array_map(static fn(array $item):int=>(int)$item['id'],array_slice($matches,0,5));
+    $items=menu_training_items_by_ids($pdo,$org,$ids,5);
+    $publishedPrices=[];
+    foreach($public as $row)$publishedPrices[(int)$row['id']]=$row['prices'];
+    foreach($items as &$item)$item['prices']=$publishedPrices[(int)$item['id']]??[];
+    unset($item);
     return fm13b_menu_answer($items,$intent,$question);
 }
