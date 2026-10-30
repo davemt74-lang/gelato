@@ -58,8 +58,8 @@ b18a_check(fm8d18_prep_fields(['items'=>['Ball dough',42]])===['items'],'non-str
 
 $GLOBALS['database']=new PDO('sqlite::memory:');
 $GLOBALS['database']->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);
-$GLOBALS['database']->exec('CREATE TABLE inventory_items (public_id TEXT, organization_id INT, name TEXT, base_unit TEXT, on_hand_quantity REAL, archived_at TEXT)');
-$insert=$GLOBALS['database']->prepare('INSERT INTO inventory_items VALUES (?,?,?,?,?,NULL)');
+$GLOBALS['database']->exec('CREATE TABLE inventory_items (public_id TEXT, organization_id INT, name TEXT, base_unit TEXT, on_hand_quantity REAL, archived_at TEXT, normalized_key TEXT)');
+$insert=$GLOBALS['database']->prepare('INSERT INTO inventory_items(public_id,organization_id,name,base_unit,on_hand_quantity,archived_at) VALUES (?,?,?,?,?,NULL)');
 $insert->execute(['inv-1',7,'Fresh Mozzarella','lb',10]);
 $insert->execute(['inv-2',8,'Fresh Mozzarella','lb',50]);
 if(session_status()!==PHP_SESSION_ACTIVE&&!session_start())throw new RuntimeException('Test session unavailable');
@@ -96,6 +96,45 @@ b18a_check(str_contains($runtime,"'propose_inventory_stock_change','propose_prep
 $operations=(string)file_get_contents(dirname(__DIR__).'/api/operations-agent.php');
 b18a_check(str_contains($operations,"'inventory_adjust'")&&str_contains($operations,"'prep_tasks'")
     &&str_contains($operations,'session_write_close()'),'existing one-use approval and Operations execution retained');
+
+gac_pending_clear('operations',7,101);
+b18a_check(isset($catalogue['propose_inventory_item_creation'],$catalogue['propose_task_status_change']),'Section 3B native tools available');
+$newTool=$catalogue['propose_inventory_item_creation']['execute'];
+$statusTool=$catalogue['propose_task_status_change']['execute'];
+b18a_check(in_array('starting_quantity',fm8d18_new_item_fields(['item_name'=>'Fresh Yeast','unit'=>'g','starting_quantity'=>-2]),true),'negative initial stock rejected');
+b18a_check(fm8d18_new_item_fields(['item_name'=>'Fresh Yeast','unit'=>'grams','starting_quantity'=>0,'category'=>'Baking'])===[],'zero-stock creation accepted');
+b18a_check(in_array('unit',fm8d18_new_item_fields(['item_name'=>'Fresh Yeast','unit'=>'magicbeans','starting_quantity'=>0]),true),'unknown creation unit rejected');
+b18a_check(in_array('item_name',fm8d18_new_item_fields(['item_name'=>"Yeast; drop table",'unit'=>'g','starting_quantity'=>0]),true),'injected new name rejected');
+b18a_check(fm8d18_task_status_fields(['task_title'=>'Clean oven','status'=>'completed'])===[],'single exact task status accepted');
+b18a_check(in_array('status',fm8d18_task_status_fields(['task_title'=>'Clean oven','status'=>'delete']),true),'unsafe task status rejected');
+try{$newTool(['item_name'=>'Fresh Yeast','unit'=>'g','starting_quantity'=>0],$onlyRead);b18a_check(false,'unauthorized creation blocked');}
+catch(DomainException $e){b18a_check(str_contains($e->getMessage(),'permission'),'unauthorized creation blocked');}
+try{$statusTool(['task_title'=>'Clean oven','status'=>'completed'],$onlyRead);b18a_check(false,'unauthorized task status blocked');}
+catch(DomainException $e){b18a_check(str_contains($e->getMessage(),'permission'),'unauthorized task status blocked');}
+$GLOBALS['database']->exec("UPDATE inventory_items SET normalized_key='fresh-mozzarella' WHERE public_id='inv-1'");
+b18a_invalid(static fn()=>$newTool(['item_name'=>'Fresh Mozzarella','unit'=>'lb','starting_quantity'=>2],$actor),'already exists');
+$newResult=$newTool(['item_name'=>'Fresh Yeast','unit'=>'g','starting_quantity'=>0,'category'=>'Baking'],$actor);
+b18a_check(($newResult['data']['proposal']['type']??'')==='inventory_create','new inventory is a proposal');
+$createdProposal=gac_pending_get('operations',7,101);
+b18a_check(($createdProposal['payload']['normalizedKey']??'')==='fresh-yeast'
+    &&($createdProposal['payload']['quantity']??null)===0.0,'creation payload canonicalized and starts at zero');
+b18a_check((int)$GLOBALS['database']->query('SELECT COUNT(*) FROM inventory_items')->fetchColumn()===2,'proposing item creation writes no inventory records');
+gac_pending_clear('operations',7,101);
+$GLOBALS['database']->exec('CREATE TABLE restaurant_tasks (public_id TEXT, organization_id INT, title TEXT, status TEXT, requires_photo INT, requires_verification INT, archived_at TEXT)');
+$GLOBALS['database']->exec("INSERT INTO restaurant_tasks VALUES ('task-1',7,'Clean oven','in_progress',0,0,NULL)");
+$GLOBALS['database']->exec("INSERT INTO restaurant_tasks VALUES ('task-2',8,'Clean oven','in_progress',0,0,NULL)");
+$GLOBALS['database']->exec("INSERT INTO restaurant_tasks VALUES ('task-3',7,'Log oven temperature','in_progress',1,0,NULL)");
+b18a_invalid(static fn()=>$statusTool(['task_title'=>'Log oven temperature','status'=>'completed'],$actor),'requires proof');
+b18a_invalid(static fn()=>$statusTool(['task_title'=>'Missing task','status'=>'completed'],$actor),'No exact task');
+$taskResult=$statusTool(['task_title'=>'Clean oven','status'=>'completed'],$actor);
+b18a_check(($taskResult['data']['proposal']['type']??'')==='task_status_change','task status requires confirmation');
+$pending=gac_pending_get('operations',7,101);
+b18a_check(($pending['payload']['publicId']??'')==='task-1'
+    &&($pending['payload']['expectedStatus']??'')==='in_progress','task status uniquely scoped with stale-version guard');
+b18a_check($GLOBALS['database']->query("SELECT status FROM restaurant_tasks WHERE public_id='task-1'")->fetchColumn()==='in_progress','task not updated before confirmation');
+b18a_check(count($GLOBALS['auditEvents']??[])===4,'four proposals total audited, no rejected action audited');
+b18a_check(str_contains($runtime,"'propose_inventory_item_creation','propose_task_status_change'"),'new proposals cannot mix with other model tools');
+
 gac_pending_clear('operations',7,101);
 session_write_close();
 echo "B8D18A model-selected Operations proposals: $checks assertions passed\n";

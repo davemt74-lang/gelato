@@ -9,6 +9,8 @@ declare(strict_types=1);
  */
 require_once __DIR__.'/operations-agent-inventory-actions.php';
 require_once __DIR__.'/agent-confirmation-core.php';
+require_once __DIR__.'/operations-agent-task-actions.php';
+require_once __DIR__.'/operations-core.php';
 
 function fm8d18_can(array $actor,string $area):bool
 {
@@ -56,6 +58,39 @@ function fm8d18_prep_fields(array $args):array
         $seen[$normalized]=true;
     }
     return [];
+}
+
+
+function fm8d18_new_item_fields(array $args):array
+{
+    $missing=[];
+    $name=$args['item_name']??null;
+    if(!is_string($name)||trim($name)===''||mb_strlen(trim($name),'UTF-8')>220
+       ||preg_match('/[;\\r\\n]/u',$name))$missing[]='item_name';
+    $raw=$args['unit']??null;
+    $unit=is_string($raw)?ops_agent_inventory_unit($raw):'';
+    if(!in_array($unit,['lb','oz','g','kg','l','ml','ea','case','bag','box',
+        'bottle','gal','qt','pan','tray','batch','container','dozen','cup'],true))
+        $missing[]='unit';
+    $quantity=$args['starting_quantity']??null;
+    if((!is_float($quantity)&&!is_int($quantity))||!is_finite((float)$quantity)
+       ||$quantity<0||$quantity>10000000||round((float)$quantity,4)!==(float)$quantity)
+        $missing[]='starting_quantity';
+    $category=$args['category']??'';
+    if(!is_string($category)||mb_strlen(trim($category),'UTF-8')>100
+       ||preg_match('/[;\\r\\n]/u',(string)$category))$missing[]='category';
+    return $missing;
+}
+
+function fm8d18_task_status_fields(array $args):array
+{
+    $missing=[];
+    $name=$args['task_title']??null;
+    if(!is_string($name)||trim($name)===''||mb_strlen(trim($name),'UTF-8')>240
+       ||preg_match('/[;\\r\\n]/u',$name))$missing[]='task_title';
+    if(!in_array($args['status']??null,['in_progress','completed','blocked','accepted'],true))
+        $missing[]='status';
+    return $missing;
 }
 
 function fm8d18_propose(string $type,array $payload,string $summary,array $actor):array
@@ -140,5 +175,61 @@ function fm8d18_catalogue(array $principal):array
             },
         ];
     }
+
+    if(fm8d18_can($principal,'inventory')){
+        $tools['propose_inventory_item_creation']=[
+            'description'=>'ONLY for an explicit request to create a NEW inventory catalog record, not for receiving stock into an existing item. Require one full item name, saved standard base unit and starting on-hand quantity. The user must separately confirm the proposed item creation; no stock or catalog record is saved by this tool. Do not invent a unit or starting quantity.',
+            'parameters'=>['type'=>'object','properties'=>[
+                'item_name'=>['type'=>'string','description'=>'Complete name for the new item'],
+                'unit'=>['type'=>'string','description'=>'Standard saved base unit'],
+                'starting_quantity'=>['type'=>'number','description'=>'Initial on-hand quantity; zero is allowed'],
+                'category'=>['type'=>'string','description'=>'Optional explicit inventory category'],
+            ],'required'=>['item_name','unit','starting_quantity'],'additionalProperties'=>false],
+            'allowedArguments'=>['item_name','unit','starting_quantity','category'],
+            'impact'=>'read',
+            'authorize'=>static fn(array $actor,array $args):bool=>fm8d18_can($actor,'inventory'),
+            'validate'=>static fn(array $args,array $actor):array=>fm8d18_new_item_fields($args),
+            'execute'=>static function(array $args,array $actor):array{
+                if(!fm8d18_can($actor,'inventory'))
+                    throw new DomainException('Inventory management permission is required.');
+                if($missing=fm8d18_new_item_fields($args))
+                    throw new InvalidArgumentException('Provide a valid new item name, unit and initial quantity: '.implode(', ',$missing).'.');
+                $intent=['name'=>trim($args['item_name']),
+                    'unit'=>ops_agent_inventory_unit($args['unit']),
+                    'quantity'=>(float)$args['starting_quantity'],
+                    'category'=>trim((string)($args['category']??''))];
+                $payload=ops_agent_inventory_new_prepare(app_pdo(),(int)$actor['organization_id'],$intent);
+                $summary='Proposed NEW inventory record “'.$payload['name'].'”, base unit '.$payload['unit'].
+                    ', starting stock '.number_format((float)$payload['quantity'],4).
+                    ($payload['category']!==''?', category '.$payload['category']:'').'. No item has been created.';
+                return fm8d18_propose('inventory_create',$payload,$summary,$actor);
+            },
+        ];
+    }
+    if(fm8d18_can($principal,'tasks')){
+        $tools['propose_task_status_change']=[
+            'description'=>'ONLY for an explicit request to change the status of one EXISTING restaurant task with an exact complete task title. Supported statuses are in_progress, completed, blocked and accepted. Never guess a task title or bulk-update. The existing Operations Agent verifies the task is active, uniquely matched and free from required proof before asking for separate confirmation.',
+            'parameters'=>['type'=>'object','properties'=>[
+                'task_title'=>['type'=>'string','description'=>'Exact complete saved title of one restaurant task'],
+                'status'=>['type'=>'string','enum'=>['in_progress','completed','blocked','accepted']],
+            ],'required'=>['task_title','status'],'additionalProperties'=>false],
+            'allowedArguments'=>['task_title','status'],'impact'=>'read',
+            'authorize'=>static fn(array $actor,array $args):bool=>fm8d18_can($actor,'tasks'),
+            'validate'=>static fn(array $args,array $actor):array=>fm8d18_task_status_fields($args),
+            'execute'=>static function(array $args,array $actor):array{
+                if(!fm8d18_can($actor,'tasks'))
+                    throw new DomainException('Task management permission is required.');
+                if($missing=fm8d18_task_status_fields($args))
+                    throw new InvalidArgumentException('Specify one exact task and allowed status: '.implode(', ',$missing).'.');
+                $payload=ops_agent_task_status_prepare(app_pdo(),(int)$actor['organization_id'],
+                    ['name'=>trim($args['task_title']),'status'=>$args['status']]);
+                $summary='Proposed task status change for “'.$payload['title'].'”: '.
+                    str_replace('_',' ',$payload['expectedStatus']).' → '.
+                    str_replace('_',' ',$payload['status']).'. Confirm to apply.';
+                return fm8d18_propose('task_status_change',$payload,$summary,$actor);
+            },
+        ];
+    }
+
     return $tools;
 }
