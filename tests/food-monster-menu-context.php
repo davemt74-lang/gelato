@@ -13,7 +13,7 @@ function fmmc_check(bool $ok,string $description):void
 $published=[
     ['id'=>11,'name'=>'Testarossa','section'=>'Wood Fired Pizza'],
     ['id'=>12,'name'=>'Margherita Pizza','section'=>'Wood Fired Pizza'],
-    ['id'=>13,'name'=>'Pepperoni Pizza','section'=>'Wood Fired Pizza'],
+    ['id'=>13,'name'=>'Classic Pepperoni Pizza','section'=>'Wood Fired Pizza'],
     ['id'=>14,'name'=>'Pepperoni Calzone','section'=>'Calzones'],
 ];
 $subject=[
