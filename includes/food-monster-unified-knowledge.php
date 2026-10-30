@@ -7,6 +7,7 @@ declare(strict_types=1);
  */
 require_once __DIR__.'/food-monster-g13b-knowledge.php';
 require_once __DIR__.'/food-monster-read-tools.php';
+require_once __DIR__.'/menu-published-resolver.php';
 
 function fmuk_topics(string $question): array
 {
@@ -175,16 +176,9 @@ function fmuk_menu_items(PDO $pdo,int $org,string $question): array
     if(!menu_manager_ready($pdo))return [];
     // Reuse the same published, channel-enabled menu that the public site
     // renders. The previous parallel SQL search could leak draft products.
-    $public=[];$publishedPrices=[];
-    foreach(menu_manager_channel_menu($pdo,$org,'public_menu') as $section)
-        foreach($section['items'] as $item){
-            $public[]=['id'=>(int)$item['id'],'name'=>(string)$item['name'],
-                'section'=>(string)$section['name']];
-            $publishedPrices[(int)$item['id']]=array_map(static fn(array $price):array=>[
-                'id'=>(int)$price['id'],'label'=>(string)$price['optionName'],
-                'amount'=>(float)$price['amount'],'currency'=>(string)$price['currency'],
-            ],$item['prices']);
-        }
+    $public=menu_published_index($pdo,$org);
+    $publishedPrices=[];
+    foreach($public as $row)$publishedPrices[(int)$row['id']]=$row['prices'];
     $resolve=static function(array $ids,int $limit)use($pdo,$org,$publishedPrices):array{
         $items=menu_training_items_by_ids($pdo,$org,array_slice($ids,0,$limit),$limit);
         foreach($items as &$item)$item['prices']=$publishedPrices[(int)$item['id']]??[];
@@ -207,30 +201,8 @@ function fmuk_menu_items(PDO $pdo,int $org,string $question): array
         return $resolve($ids,20);
     }
     if(mb_strlen($needle,'UTF-8')<2)return [];
-    $name=trim(preg_replace('/\b(?:pizza|pie|pasta|dish|item)\b/iu',' ',$needle)??$needle);
-    $ids=[];$candidates=[];
-    foreach($public as $row){
-        $label=mb_strtolower($row['name'],'UTF-8');
-        if(str_contains($label,$needle)||($name!==''&&str_contains($label,$name)))
-            $ids[]=$row['id'];
-        $candidates[]=['id'=>$row['id'],'name'=>trim(preg_replace(
-            '/\b(?:pizza|pie|pasta|dish|item)\b/iu',' ',$label)??$label)];
-    }
-    if(!$ids&&mb_strlen($name,'UTF-8')>=5){
-        // Typo tolerance is limited to the official published items.
-        $compact=preg_replace('/[^\p{L}\p{N}]/u','',$name)??$name;
-        if(strlen($compact)>=5&&strlen($compact)<=80){
-            $best=[];$distanceLimit=3;
-            foreach($candidates as $row){
-                $candidate=preg_replace('/[^\p{L}\p{N}]/u','',$row['name'])??$row['name'];
-                $distance=levenshtein($compact,$candidate);
-                if($distance<$distanceLimit){$distanceLimit=$distance;$best=[$row['id']];}
-                elseif($distance===$distanceLimit)$best[]=$row['id'];
-            }
-            if($distanceLimit<=2&&count($best)===1)$ids=$best;
-        }
-    }
-    return $resolve($ids,12);
+    $matched=menu_published_match_rows($public,$subject);
+    return $resolve(array_map(static fn(array $row):int=>(int)$row['id'],$matched),12);
 }
 
 function fmuk_render_menu(array $items): array

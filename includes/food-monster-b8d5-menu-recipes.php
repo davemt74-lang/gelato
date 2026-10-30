@@ -9,6 +9,7 @@ declare(strict_types=1);
  */
 require_once __DIR__.'/menu-manager-core.php';
 require_once __DIR__.'/recipe-agent-core.php';
+require_once __DIR__.'/menu-published-resolver.php';
 
 function fm8d5_named_match(array $rows,string $raw):array
 {
@@ -33,39 +34,6 @@ function fm8d5_named_match(array $rows,string $raw):array
  * word in an utterance ("Testarosa Pizza") is not necessarily part of the
  * stored product name ("Testarossa"). Never fuzzy-match unpublished records.
  */
-function fm8d5_menu_name_key(string $raw):string
-{
-    $raw=mb_strtolower(trim($raw),'UTF-8');
-    $raw=preg_replace('/[^\p{L}\p{N}]+/u',' ',$raw)??$raw;
-    $raw=preg_replace('/\b(?:what|which|where|whats|s|is|are|does|do|the|this|that|on|in|of|for|to|a|an|me|you|please|tell|about|how|much|price|prices|cost|ingredients?|toppings?|contains?|have|has|menu|item|items|pizza|pizzas|pie|pies|dish|dishes)\b/u',' ',$raw)??$raw;
-    return trim(preg_replace('/\s+/u',' ',$raw)??$raw);
-}
-/** Exact > partial > unique short-typo match; return ambiguity, not a guess. */
-function fm8d5_menu_match_rows(array $rows,string $raw):array
-{
-    $query=fm8d5_menu_name_key($raw);
-    if(mb_strlen($query,'UTF-8')<2||mb_strlen($query,'UTF-8')>140)return [];
-    $exact=[];$partial=[];$nearest=[];$best=3;
-    foreach($rows as $row){
-        $name=fm8d5_menu_name_key((string)($row['name']??''));
-        if($name==='')continue;
-        if($name===$query)$exact[]=$row;
-        elseif(str_contains($name,$query))$partial[]=$row;
-        elseif(strlen($query)>=5&&strlen($query)<=80&&strlen($name)<=80){
-            // A single-character transcription/typing error is common, but
-            // two edits are allowed only for longer distinctive names.
-            $distance=levenshtein($query,$name);
-            $allowed=mb_strlen($query,'UTF-8')>=9?2:1;
-            if($distance>$allowed)continue;
-            if($distance<$best){$best=$distance;$nearest=[$row];}
-            elseif($distance===$best)$nearest[]=$row;
-        }
-    }
-    if($exact)return $exact;
-    if($partial)return $partial;
-    return count($nearest)===1?$nearest:[];
-}
-
 function fm8d5_menu_find(PDO $pdo,int $org,string $name):array
 {
     if(!menu_manager_ready($pdo))return ['error'=>'The Menu Manager database is not installed or upgraded.'];
@@ -80,7 +48,7 @@ function fm8d5_menu_find(PDO $pdo,int $org,string $name):array
                 'section'=>(string)$section['name']];
             $publicItems[(int)$item['id']]=$item;
         }
-    $matches=fm8d5_menu_match_rows($rows,$name);
+    $matches=menu_published_match_rows($rows,$name);
     if(!$matches)return ['error'=>'No matching published menu item was found. Check the name or ask me to show the menu.'];
     if(count($matches)>1)
         return ['error'=>'Several published items match: '.implode(', ',array_slice(
@@ -117,7 +85,7 @@ function fm8d5_available_menu_summary(
     $matchedIds=null;
     if($itemName!==''){
         $matchedIds=array_fill_keys(array_map(static fn(array $row):int=>$row['id'],
-            fm8d5_menu_match_rows($all,$itemName)),true);
+            menu_published_match_rows($all,$itemName)),true);
     }
     $rows=[];
     foreach($sections as $section){
