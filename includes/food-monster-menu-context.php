@@ -22,6 +22,19 @@ function fmmc_is_followup(string $text):bool
     return preg_match('/^(?:(?:and|also|so)\s+)?(?:how much\b|whats?\s+the\s+price\b|what\s+is\s+the\s+price\b|what\s+(?:ingredients|toppings|sizes|price)\b|what about (?:the )?(?:price|ingredients|toppings|sizes)\b)/u',$text)===1;
 }
 
+/**
+ * A pronoun such as "it" must never be treated as a substring match for an
+ * item such as Margherita. Keep the canonical menu matcher, but strip
+ * referential terms before requesting an explicit item identity.
+ */
+function fmmc_explicit_menu_matches(array $publishedRows,string $utterance):array
+{
+    $key=menu_published_name_key($utterance);
+    $key=trim(preg_replace('/\b(?:it|its|that|this|those|them|same)\b/u',' ',$key)??'');
+    if(mb_strlen($key,'UTF-8')<4)return [];
+    return menu_published_match_rows($publishedRows,$key);
+}
+
 /** Pure helper for regression tests and for a validated, tenant-scoped index. */
 function fmmc_focus_hint(array $history,array $publishedRows):string
 {
@@ -31,13 +44,13 @@ function fmmc_focus_hint(array $history,array $publishedRows):string
         ||!fmmc_is_followup((string)($last['content']??'')))return '';
     // A newly named item must stand on its own. Never silently replace it
     // with the previously discussed item, including ambiguous matches.
-    if(menu_published_match_rows($publishedRows,(string)$last['content'])!==[])return '';
+    if(fmmc_explicit_menu_matches($publishedRows,(string)$last['content'])!==[])return '';
     $previous=array_slice($history,0,-1);
     for($i=count($previous)-1;$i>=0;$i--){
         $row=$previous[$i];
         if(!is_array($row)||($row['role']??'')!=='user')continue;
         $text=trim((string)($row['content']??''));
-        $matches=menu_published_match_rows($publishedRows,$text);
+        $matches=fmmc_explicit_menu_matches($publishedRows,$text);
         if(count($matches)>1)return '';
         if(count($matches)===1){
             $name=trim(preg_replace('/[\x00-\x1F\x7F]+/u',' ',(string)$matches[0]['name'])??'');

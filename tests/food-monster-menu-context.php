@@ -52,6 +52,10 @@ fmmc_check(fmmc_focus_hint([
     ['role'=>'user','content'=>'Tell me about Testarossa'],
     ['role'=>'user','content'=>'What is the price of Margherita Pizza?'],
 ],$published)==='','new named item never overwritten by old reference');
+fmmc_check(fmmc_explicit_menu_matches($published,'How much is it?')===[],
+    'referential it is never a substring match for Margherita');
+fmmc_check(count(fmmc_explicit_menu_matches($published,'How much is that Margherita Pizza?'))===1,
+    'explicit new menu subject still detected');
 fmmc_check(fmmc_is_followup('How much is it?'),'short price pronoun detected');
 fmmc_check(fmmc_is_followup('What is the price?'),'short elliptical price detected');
 fmmc_check(fmmc_is_followup('What ingredients does it have?'),'ingredient pronoun detected');
