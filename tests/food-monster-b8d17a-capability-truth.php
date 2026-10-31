@@ -25,11 +25,13 @@ function b8d17a_check(bool $ok,string $label):void
 
 $employee=['id'=>5,'organization_id'=>21,'role_slug'=>'employee','permissions'=>[]];
 $employeeReport=fm8d17a_snapshot($employee);
-b8d17a_check(($employeeReport['schemaVersion']??'')==='1.0.0','stable structured contract');
+b8d17a_check(($employeeReport['schemaVersion']??'')==='1.1.0','versioned structured coverage contract');
 b8d17a_check(($employeeReport['inventoryVisibility']??'')==='withheld_for_this_account','staff cannot list privileged proposed actions');
 b8d17a_check($employeeReport['planned']===[],'staff proposed action inventory withheld');
 b8d17a_check(array_key_exists('plannedNotExecutable',$employeeReport['counts'])
     &&$employeeReport['counts']['plannedNotExecutable']===null,'staff does not receive privileged count');
+b8d17a_check($employeeReport['counts']['sourceCandidatesWithRelatedNativeTool']===null,
+    'staff does not receive privileged coverage counts');
 b8d17a_check(in_array('get_current_user',array_column($employeeReport['nativeTools'],'id'),true),'authenticated identity read shown');
 b8d17a_check(!in_array('get_employee_schedule',array_column($employeeReport['nativeTools'],'id'),true),'staff cannot discover ungranted scheduling read');
 b8d17a_check(!in_array('scheduling',array_column($employeeReport['delegatedAgents'],'id'),true),'ungranted agent handoff absent');
@@ -61,10 +63,43 @@ b8d17a_check($report['chatPrompts'][0]['status']==='prompt_template_only','chat 
 b8d17a_check($report['planned']===[],'injected privileged candidates withheld for manager');
 b8d17a_check($report['inventoryStatus']==='not_requested','no unneeded inventory read for manager');
 
+$fakeOwner=array_replace($manager,['role_slug'=>'super_admin']);
+$relatedFixture=['status'=>'source_inventory_only','items'=>[
+    ['id'=>'crm.note_add','label'=>'CRM note','status'=>'proposed_not_executable'],
+    ['id'=>'crm.consent','label'=>'CRM consent','status'=>'proposed_not_executable'],
+]];
+$fakeRelated=['propose_crm_customer_note'=>['impact'=>'read'],
+    'unrelated_tool'=>['impact'=>'read']];
+$mapped=fm8d17a_snapshot($fakeOwner,[],$fakeRelated,[],[],$relatedFixture);
+b8d17a_check($mapped['counts']['sourceCandidatesWithRelatedNativeTool']===1,
+    'only explicitly related candidate mapped');
+b8d17a_check($mapped['counts']['sourceCandidatesWithoutRelatedNativeTool']===1,
+    'remaining candidate remains unintegrated by native route');
+b8d17a_check($mapped['planned'][0]['relatedNativeTools']===['propose_crm_customer_note'],
+    'owner receives exact, available native tool relationship');
+b8d17a_check($mapped['planned'][1]['relatedNativeTools']===[],
+    'high impact consent candidate is not inferred from CRM note tool');
+b8d17a_check($mapped['planned'][0]['status']==='proposed_not_executable',
+    'related native tool never grants old endpoint contract');
+b8d17a_check($mapped['nativeTools'][0]['actionMode']==='proposal_requires_confirmation',
+    'proposal with read impact is correctly classified as confirmation gated');
+$noPermission=fm8d17a_snapshot($fakeOwner,[],['get_current_user'=>['impact'=>'read']],[],[],$relatedFixture);
+b8d17a_check($noPermission['counts']['sourceCandidatesWithRelatedNativeTool']===0,
+    'relationship requires tool in the authenticated account catalogue');
+
 $owner=array_replace($manager,['role_slug'=>'super_admin','permissions'=>['*']]);
 $ownerReport=fm8d17a_snapshot($owner);
 b8d17a_check(($ownerReport['inventoryStatus']??'')==='source_inventory_only','source inventory remains discovery only');
 b8d17a_check(count($ownerReport['planned'])===73,'all 73 audited proposed contracts included');
+b8d17a_check(($ownerReport['counts']['sourceCandidatesWithRelatedNativeTool']??0)>0,
+    'new actions are reflected in the legacy inventory comparison');
+b8d17a_check(($ownerReport['counts']['sourceCandidatesWithoutRelatedNativeTool']??0)>0,
+    'legacy inventory remains incomplete and accurately represented');
+b8d17a_check(in_array('propose_purchase_order_status',
+    $ownerReport['planned'][array_search('purchasing.po_submit',array_column($ownerReport['planned'],'id'),true)]['relatedNativeTools'],true),
+    'PO submit has a related confirmation-only native tool');
+b8d17a_check($ownerReport['planned'][array_search('crm.consent',array_column($ownerReport['planned'],'id'),true)]['relatedNativeTools']===[],
+    'CRM consent remains without direct model action');
 b8d17a_check(in_array('schedule.shift_save',array_column($ownerReport['planned'],'id'),true),'priority schedule candidate visible to owner');
 b8d17a_check(in_array('vision.dataset_create',array_column($ownerReport['planned'],'id'),true),'priority vision candidate visible to owner');
 b8d17a_check(count(array_filter($ownerReport['planned'],

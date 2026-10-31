@@ -87,13 +87,25 @@
       esc(count.delegationRegistered ?? agents.length) + ' specialist handoffs · ' +
       esc(count.promptTemplates ?? prompts.length) + ' prompt templates</p>' +
       detail('Native registered tools', native, item => row(item.id, item.impact,
-        'registered, not execution-tested')) +
+        item.actionMode === 'proposal_requires_confirmation'
+          ? 'proposal only — separate human confirmation; not execution-tested'
+          : 'registered, not execution-tested')) +
       detail('Specialist agent handoffs', agents, item => row(item.label, item.mode,
         'destination approval/permissions apply')) +
       detail('Chat prompt templates', prompts, item => row(item.label, 'fills draft only')) +
       (report?.inventoryVisibility === 'owner_only' ?
-        detail('Proposed contracts — NOT executable', planned,
-          item => row(item.label || item.id, item.feature, 'not granted')) : '') +
+        '<p><strong>Source-inventory comparison:</strong> ' +
+        esc(count.sourceCandidatesWithRelatedNativeTool ?? 0) +
+        ' of ' + esc(count.plannedNotExecutable ?? planned.length) +
+        ' old discovery contracts have a related native tool registered for this account. ' +
+        'A related tool may cover only part of a request; the original source contract is still NOT granted.</p>' +
+        detail('Source contracts — NOT independently executable', planned,
+          item => row(item.label || item.id, item.feature,
+            (Array.isArray(item.relatedNativeTools) && item.relatedNativeTools.length
+              ? 'Related registered tool: ' + item.relatedNativeTools.join(', ') +
+                ' (different confirmation-gated contract where applicable)'
+              : 'No directly mapped native tool; a specialist may still handle this') +
+            '; original source contract not granted')) : '') +
       inventoryWarning +
       '<details><summary>Diagnostics and acceptance still needed</summary><ul>' +
       readiness + '</ul></details>' +
