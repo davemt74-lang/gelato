@@ -33,6 +33,30 @@ function fm8d17a_candidates():array
 }
 
 /**
+ * FM-B8D18E: explicitly audited relationships between old discovery-only
+ * contracts and newer, independently registered model tools. A relationship
+ * is NOT an execution grant, complete endpoint equivalence, or a passed test.
+ * Keep this list intentionally small: unrelated tools must not appear to
+ * satisfy a proposed contract simply because they share a feature family.
+ */
+function fm8d18e_candidate_tool_links():array
+{
+    return [
+        'schedule.view'=>['get_my_schedule','get_employee_schedule'],
+        'schedule.coverage'=>['get_day_roster'],
+        'schedule.availability'=>['check_staff_availability'],
+        'schedule.shift_save'=>['propose_staff_shift'],
+        'timeclock.view_own'=>['get_my_hours'],
+        'menu.find_item'=>['get_menu_item','list_available_menu_items'],
+        'recipe.find'=>['get_recipe_details'],
+        'operations.task_status'=>['propose_task_status_change'],
+        'purchasing.po_create'=>['propose_purchase_order_draft'],
+        'purchasing.po_submit'=>['propose_purchase_order_status'],
+        'crm.note_add'=>['propose_crm_customer_note'],
+    ];
+}
+
+/**
  * Optional injected registries keep this report deterministic in tests.
  * A registered tool may still fail at execution time because of current
  * records, provider availability or a fresh permission check.
@@ -55,6 +79,11 @@ function fm8d17a_snapshot(
             'id'=>$name,
             'impact'=>$impact,
             'status'=>'registered_for_current_account',
+            // A proposal tool intentionally reports "read" impact because it
+            // stages a pending confirmation rather than modifying business
+            // rows. Showing it as a simple read misleads operators.
+            'actionMode'=>str_starts_with($name,'propose_')
+                ?'proposal_requires_confirmation':'registered_tool',
             'executionVerified'=>false,
             'permissionRecheckedOnUse'=>true,
             'approval'=>'existing_gelato_policy',
@@ -87,14 +116,32 @@ function fm8d17a_snapshot(
     $owner=($actor['role_slug']??'')==='super_admin';
     $inventory=$owner?($candidateInventory??fm8d17a_candidates()):null;
     $planned=$owner?(array)($inventory['items']??[]):[];
+    $related=0;
+    if($owner){
+        $links=fm8d18e_candidate_tool_links();
+        foreach($planned as &$candidate){
+            if(!is_array($candidate))continue;
+            $matching=[];
+            foreach($links[(string)($candidate['id']??'')]??[] as $toolId){
+                if(isset($tools[$toolId])&&is_array($tools[$toolId]))
+                    $matching[]=$toolId;
+            }
+            $candidate['relatedNativeTools']=$matching;
+            $candidate['relationship']='related_registered_model_tool_not_same_endpoint';
+            if($matching)$related++;
+        }
+        unset($candidate);
+    }
     return [
-        'schemaVersion'=>'1.0.0','section'=>'FM-B8D17A',
+        'schemaVersion'=>'1.1.0','section'=>'FM-B8D18E',
         'source'=>'authenticated runtime registries and nonexecuting source inventory',
         'claim'=>'Registry presence is not a successful end-to-end execution test.',
         'counts'=>[
             'nativeRegistered'=>count($native),'delegationRegistered'=>count($nodes),
             'promptTemplates'=>count($templates),
             'plannedNotExecutable'=>$owner?count($planned):null,
+            'sourceCandidatesWithRelatedNativeTool'=>$owner?$related:null,
+            'sourceCandidatesWithoutRelatedNativeTool'=>$owner?count($planned)-$related:null,
         ],
         'nativeTools'=>$native,
         'delegatedAgents'=>$nodes,
@@ -120,5 +167,6 @@ function fm8d17a_summary(array $report):string
     return 'Registered Gelato tools for this account: '.($native?implode(', ',$native):'none').
         '. Available specialist handoffs: '.($domains?implode(', ',$domains):'none').
         '. These are registry capabilities, not proof of successful execution. '.
-        'The chat prompt picker does not run tools, and proposed skill contracts are not execution grants.';
+        'Tools named propose_ only stage actions for separate confirmation. '.
+        'The chat prompt picker does not run tools, and source-inventory skill contracts are not execution grants.';
 }
