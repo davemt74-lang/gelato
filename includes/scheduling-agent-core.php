@@ -148,6 +148,50 @@ function sac_time_off_check_existing(PDO $pdo,int $org,int $userId,array $dates)
     if((int)$query->fetchColumn()>0)throw new InvalidArgumentException('A pending or approved time-off request already overlaps those dates. Review it before asking again.');
 }
 
+/** Revalidates shift ownership, status, target and existing requests at proposal and confirm. */
+function sac_swap_preflight(PDO $pdo,int $org,int $uid,array $actor,array $payload):array
+{
+    if(!sac_has($actor,'schedule.agent')||!sac_has($actor,'schedule.self'))
+        throw new SchedulingAgentPermissionException('Personal Scheduling Agent permission is required.');
+    if((int)($payload['userId']??$uid)!==$uid)
+        throw new SchedulingAgentPermissionException('You can only request a swap for your own shift.');
+    if(!scheduling_staff_user($pdo,$org,$uid))throw new InvalidArgumentException('Your active staff profile was not found.');
+    $shift=scheduling_shift_by_public_id($pdo,$org,(string)($payload['shiftId']??''));
+    if(!$shift||(int)($shift['user_id']??0)!==$uid)
+        throw new InvalidArgumentException('The shift must be assigned to your account.');
+    if(!in_array((string)$shift['week_status'],['published','locked'],true))
+        throw new InvalidArgumentException('Shift requests are available only after the schedule is published.');
+    if(in_array((string)$shift['status'],['cancelled','open'],true)||strtotime((string)$shift['starts_at'])<=time())
+        throw new InvalidArgumentException('Only a future assigned shift can be swapped.');
+    $target=(int)($payload['targetUserId']??0);
+    if($target<=0||$target===$uid)throw new InvalidArgumentException('Choose another active employee as your swap partner.');
+    $staff=scheduling_staff_user($pdo,$org,$target);
+    if(!$staff)throw new InvalidArgumentException('The swap partner is not active staff.');
+    $proposed=null;$proposedId=(string)($payload['proposedShiftId']??'');
+    if($proposedId!==''){
+        $proposed=scheduling_shift_by_public_id($pdo,$org,$proposedId);
+        if(!$proposed||(int)($proposed['user_id']??0)!==$target||
+           !in_array((string)$proposed['week_status'],['published','locked'],true)||
+           in_array((string)$proposed['status'],['cancelled','open'],true)||
+           strtotime((string)$proposed['starts_at'])<=time())
+            throw new InvalidArgumentException('The proposed exchange shift must be an upcoming published shift assigned to that employee.');
+        if((int)$proposed['id']===(int)$shift['id'])
+            throw new InvalidArgumentException('Select a different shift for the exchange.');
+    }
+    $q=$pdo->prepare("SELECT COUNT(*) FROM schedule_shift_requests WHERE organization_id=? AND shift_id=? AND requester_user_id=? AND status='pending'");
+    $q->execute([$org,(int)$shift['id'],$uid]);
+    if((int)$q->fetchColumn()>0)throw new InvalidArgumentException('A pending request already exists for your shift.');
+    $availability=scheduling_availability_check($pdo,$org,$target,(string)$shift['starts_at'],(string)$shift['ends_at']);
+    if(!$availability['ok'])throw new InvalidArgumentException('The swap partner is unavailable for your shift: '.$availability['reason']);
+    $conflicts=scheduling_shift_conflicts($pdo,$org,$target,(string)$shift['starts_at'],(string)$shift['ends_at'],(int)$shift['id']);
+    if($proposed)$conflicts=array_values(array_filter($conflicts,static fn(array $row):bool=>(string)$row['public_id']!==(string)$proposed['public_id']));
+    if($conflicts)throw new InvalidArgumentException('The swap partner has a conflicting shift.');
+    $summary='Proposed action: request a swap of your '.$shift['title'].' shift on '.date('M j',strtotime((string)$shift['starts_at'])).
+        ' with '.sac_staff_name($staff).($proposed?' in exchange for '.$proposed['title']:'').
+        '. This creates a pending request for manager review, not an approved schedule change.';
+    return ['shift'=>$shift,'proposed'=>$proposed,'summary'=>$summary];
+}
+
 function sac_execute_pending(PDO $pdo,int $org,int $userId,array $user,array $proposal): array
 {
     if((int)($proposal['organizationId']??0)!==$org||(int)($proposal['userId']??0)!==$userId)throw new SchedulingAgentPermissionException('This Scheduling Agent proposal does not belong to your session.');
@@ -158,6 +202,29 @@ function sac_execute_pending(PDO $pdo,int $org,int $userId,array $user,array $pr
         $staff=scheduling_staff_user($pdo,$org,(int)($payload['userId']??0));if(!$staff)throw new InvalidArgumentException('The proposed employee is no longer active restaurant staff.');
         $shift=scheduling_shift_save($pdo,$org,$payload,$userId);app_audit($pdo,$org,$userId,'schedule.agent_shift_created','schedule_shift',(string)$shift['public_id'],null,['proposalId'=>$proposal['id']]);
         return ['skill'=>'schedule.action_confirmed','answer'=>'Confirmed. Scheduled '.sac_staff_name($staff).' on '.date('l M j',strtotime($shift['starts_at'])).' from '.date('g:i A',strtotime($shift['starts_at'])).' to '.date('g:i A',strtotime($shift['ends_at'])).'.','data'=>['action'=>'shift_create','shiftId'=>$shift['public_id']],'sources'=>['Staff Scheduling','Employee Availability']];
+    }
+    if($type==='shift_swap_request'){
+        $checked=sac_swap_preflight($pdo,$org,$userId,$user,$payload);
+        if((string)$checked['shift']['updated_at']!==(string)($payload['expectedUpdatedAt']??'')||
+            (string)($checked['proposed']['updated_at']??'')!==(string)($payload['expectedProposedUpdatedAt']??'')){
+            sac_pending_clear($org,$userId);
+            throw new InvalidArgumentException('A shift changed after the proposal. Review the schedule and request again.');
+        }
+        $pdo->beginTransaction();
+        try{
+            $row=scheduling_request_create($pdo,$org,$userId,[
+                'shiftId'=>(string)$payload['shiftId'],'type'=>'swap',
+                'targetUserId'=>(int)$payload['targetUserId'],
+                'proposedShiftId'=>(string)($payload['proposedShiftId']??''),
+                'note'=>(string)($payload['note']??'')]);
+            app_audit($pdo,$org,$userId,'schedule.shift_request_created','shift_request',
+                (string)$row['public_id'],null,['proposalId'=>$proposal['id'],'source'=>'food_monster_model']);
+            $pdo->commit();
+        }catch(Throwable $e){$pdo->rollBack();throw $e;}
+        return ['skill'=>'schedule.action_confirmed',
+            'answer'=>'Confirmed. Your shift-swap request was submitted for manager review. Your schedule has not changed.',
+            'data'=>['action'=>'shift_swap_request','requestId'=>$row['public_id'],'status'=>'pending'],
+            'sources'=>['Staff Scheduling']];
     }
     if($type==='time_off_request'){
         if(!sac_has($user,'schedule.agent')||!sac_has($user,'schedule.self'))
