@@ -21,6 +21,8 @@ on:
       - 'tests/food-monster-b8d18-scheduling-proposals.php'
       - 'includes/food-monster-b8d18-shift-swap-proposals.php'
       - 'tests/food-monster-b8d18-shift-swap-proposals.php'
+      - 'includes/food-monster-b8d18-schedule-publish-proposals.php'
+      - 'tests/food-monster-b8d18-schedule-publish-proposals.php'
       - 'includes/scheduling-agent-core.php'
       - 'tests/food-monster-b8d4-scheduling.php'
       - 'tests/food-monster-menu-context.php'
@@ -49,6 +51,8 @@ on:
       - 'tests/food-monster-b8d18-scheduling-proposals.php'
       - 'includes/food-monster-b8d18-shift-swap-proposals.php'
       - 'tests/food-monster-b8d18-shift-swap-proposals.php'
+      - 'includes/food-monster-b8d18-schedule-publish-proposals.php'
+      - 'tests/food-monster-b8d18-schedule-publish-proposals.php'
       - 'includes/scheduling-agent-core.php'
       - 'tests/food-monster-b8d4-scheduling.php'
       - 'tests/food-monster-menu-context.php'
@@ -101,6 +105,8 @@ jobs:
           php -l tests/food-monster-b8d18-scheduling-proposals.php
           php -l includes/food-monster-b8d18-shift-swap-proposals.php
           php -l tests/food-monster-b8d18-shift-swap-proposals.php
+          php -l includes/food-monster-b8d18-schedule-publish-proposals.php
+          php -l tests/food-monster-b8d18-schedule-publish-proposals.php
           php -l includes/scheduling-agent-core.php
           php -l tests/food-monster-b8d4-scheduling.php
           php -l includes/food-monster-b8d5-menu-recipes.php
@@ -220,4 +226,5 @@ jobs:
           php tests/food-monster-b8d18-timeclock-proposals.php
           php tests/food-monster-b8d18-scheduling-proposals.php
           php tests/food-monster-b8d18-shift-swap-proposals.php
+          php tests/food-monster-b8d18-schedule-publish-proposals.php
           php tests/food-monster-b8d14-grounded-fallback.php

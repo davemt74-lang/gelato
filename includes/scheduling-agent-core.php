@@ -104,6 +104,31 @@ function sac_week_snapshot(PDO $pdo,int $org,string $week): array
     return $row?['exists'=>true,'status'=>(string)$row['status'],'updatedAt'=>(string)$row['updated_at']]:['exists'=>false,'status'=>'draft','updatedAt'=>''];
 }
 
+/** Fingerprint every active shift, not merely the schedule week timestamp. */
+function sac_publish_fingerprint(PDO $pdo,int $org,string $week):array
+{
+    $q=$pdo->prepare("SELECT s.id,s.public_id,s.updated_at,s.status,s.user_id,s.starts_at,s.ends_at
+        FROM schedule_shifts s INNER JOIN schedule_weeks w ON w.id=s.schedule_week_id
+        WHERE s.organization_id=? AND w.organization_id=? AND w.week_start=? AND s.archived_at IS NULL
+        ORDER BY s.id");
+    $q->execute([$org,$org,$week]);
+    $rows=$q->fetchAll(PDO::FETCH_ASSOC);
+    return ['count'=>count($rows),'hash'=>hash('sha256',json_encode($rows,JSON_THROW_ON_ERROR))];
+}
+function sac_publish_preflight(PDO $pdo,int $org,array $actor,string $week):array
+{
+    if(!sac_has($actor,'schedule.agent')||!sac_has($actor,'schedule.manage'))
+        throw new SchedulingAgentPermissionException('Scheduling Agent management permission is required.');
+    $snapshot=sac_week_snapshot($pdo,$org,$week);
+    if(!$snapshot['exists']||$snapshot['status']!=='draft')
+        throw new InvalidArgumentException('Only an existing draft schedule can be published.');
+    $fingerprint=sac_publish_fingerprint($pdo,$org,$week);
+    if($fingerprint['count']<1)throw new InvalidArgumentException('Add shifts to the schedule before publishing it.');
+    return ['snapshot'=>$snapshot,'fingerprint'=>$fingerprint,
+        'summary'=>'Proposed action: publish the draft schedule for the week of '.$week.
+            ' containing '.$fingerprint['count'].' shift(s). This makes the schedule visible to employees.'];
+}
+
 function sac_guard_shift_version(int $org,int $userId,array $proposal,array $shift): void
 {
     $payload=(array)$proposal['payload'];$expected=(string)($payload['expectedUpdatedAt']??'');
@@ -267,6 +292,13 @@ function sac_execute_pending(PDO $pdo,int $org,int $userId,array $user,array $pr
         return ['skill'=>'schedule.action_confirmed','answer'=>'Confirmed. Cancelled '.$shift['title'].' on '.date('l M j',strtotime($shift['starts_at'])).'.','data'=>['action'=>'shift_cancel','shiftId'=>$shift['public_id']],'sources'=>['Staff Scheduling']];
     }
     if($type==='week_publish'){
+        if(($payload['source']??'')==='food_monster_model'){
+            $checked=sac_publish_preflight($pdo,$org,$user,$week=(string)($payload['week']??''));
+            if($checked['fingerprint']!==(array)($payload['expectedShiftFingerprint']??[])){
+                sac_pending_clear($org,$userId);
+                throw new InvalidArgumentException('The draft shifts changed after the publishing proposal. Review and request again.');
+            }
+        }
         $week=scheduling_week_start((string)($payload['week']??''));$current=sac_week_snapshot($pdo,$org,$week);$expected=(array)($payload['expected']??[]);
         if((bool)$current['exists']!==(bool)($expected['exists']??false)||(string)$current['status']!==(string)($expected['status']??'draft')||(string)$current['updatedAt']!==(string)($expected['updatedAt']??'')){sac_pending_clear($org,$userId);throw new InvalidArgumentException('That schedule week changed after I proposed publishing it. Review the week and ask again.');}
         $row=scheduling_ensure_week($pdo,$org,$week,$userId);$pdo->prepare("UPDATE schedule_weeks SET status='published',published_at=NOW(6),published_by=?,updated_by=?,updated_at=NOW(6) WHERE id=? AND organization_id=?")->execute([$userId,$userId,(int)$row['id'],$org]);app_audit($pdo,$org,$userId,'schedule.agent_week_published','schedule_week',$week,null,['proposalId'=>$proposal['id']]);
