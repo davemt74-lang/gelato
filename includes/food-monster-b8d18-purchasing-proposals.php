@@ -6,8 +6,88 @@ declare(strict_types=1);
  * only: the existing Purchasing Agent owns final confirmation, fresh tenant/
  * permission checks, stale-order checks, and Super Admin purchase approvals.
  */
-require_once __DIR__.'/purchasing-agent-core.php';
+// Do not load purchasing-agent-core.php into the main chat process: that
+// legacy specialist and prep-agent-core.php both declare pac_require().
+// Stage its documented session contract without loading its execution code.
+require_once __DIR__.'/purchasing-orders.php';
 require_once __DIR__.'/agent-node-registry.php';
+
+function fm8d18p_suggestion_lines(PDO $pdo,int $org,string $vendorId):array
+{
+    $lines=[];
+    foreach(purchasing_suggestions($pdo,$org) as $row){
+        if((string)($row['vendor']['id']??'')!==$vendorId)continue;
+        $lines[]=['inventoryId'=>(string)$row['inventoryId'],
+            'name'=>(string)$row['name'],'packs'=>(float)$row['suggestedPacks'],
+            'packSize'=>(float)($row['vendor']['packSize']??1),
+            'pricePerPack'=>$row['vendor']['pricePerPack']??null];
+    }
+    usort($lines,static fn($a,$b)=>strcmp($a['inventoryId'],$b['inventoryId']));
+    return $lines;
+}
+
+function fm8d18p_lines_signature(array $lines):string
+{
+    $normalized=[];
+    foreach($lines as $line)$normalized[]=[
+        'inventoryId'=>(string)($line['inventoryId']??''),
+        'packs'=>round((float)($line['packs']??0),4),
+        'packSize'=>round((float)($line['packSize']??0),4),
+        'pricePerPack'=>isset($line['pricePerPack'])&&$line['pricePerPack']!==null
+            ?round((float)$line['pricePerPack'],4):null];
+    return hash('sha256',json_encode($normalized,JSON_UNESCAPED_SLASHES));
+}
+
+function fm8d18p_order_version(array $po):array
+{
+    return ['status'=>(string)($po['status']??''),
+        'updatedAt'=>(string)($po['updated_at']??'')];
+}
+
+function fm8d18p_outstanding_lines(array $po):array
+{
+    $lines=[];
+    foreach((array)($po['items']??[]) as $item){
+        $remaining=max(0,(float)$item['ordered_base_quantity']-(float)$item['received_base_quantity']);
+        if($remaining>0.0001)$lines[]=['itemId'=>(string)$item['public_id'],
+            'inventoryId'=>(string)$item['inventory_public_id'],
+            'name'=>(string)$item['inventory_name'],'quantity'=>$remaining];
+    }
+    return $lines;
+}
+
+function fm8d18p_outstanding_signature(array $lines):string
+{
+    $normalized=[];
+    foreach($lines as $line)$normalized[]=[
+        'itemId'=>(string)$line['itemId'],
+        'quantity'=>round((float)$line['quantity'],4)];
+    return hash('sha256',json_encode($normalized,JSON_UNESCAPED_SLASHES));
+}
+
+function fm8d18p_pending_get(int $org,int $uid):?array
+{
+    $key=$org.':'.$uid;
+    $row=$_SESSION['purchasing_agent_pending'][$key]??null;
+    if(!is_array($row)||($row['expires']??0)<time()){
+        unset($_SESSION['purchasing_agent_pending'][$key]);return null;
+    }
+    return $row;
+}
+
+function fm8d18p_pending_clear(int $org,int $uid):void
+{
+    unset($_SESSION['purchasing_agent_pending'][$org.':'.$uid]);
+}
+
+function fm8d18p_pending_store(int $org,int $uid,string $type,array $payload,string $summary):array
+{
+    $row=['id'=>'pap-'.bin2hex(random_bytes(8)),
+        'organizationId'=>$org,'userId'=>$uid,'type'=>$type,'payload'=>$payload,
+        'summary'=>$summary,'expires'=>time()+600];
+    $_SESSION['purchasing_agent_pending'][$org.':'.$uid]=$row;
+    return $row;
+}
 
 function fm8d18p_can(array $actor,string $action):bool
 {
@@ -63,9 +143,9 @@ function fm8d18p_propose(array $actor,string $type,array $payload,string $summar
     if($opened&&!session_start())
         throw new RuntimeException('Could not start the secure Purchasing confirmation session.');
     try{
-        if(gaw_pending_action_node($org,$uid)!==null||pac_pending_get($org,$uid)!==null)
+        if(gaw_pending_action_node($org,$uid)!==null||fm8d18p_pending_get($org,$uid)!==null)
             throw new InvalidArgumentException('There is already a pending restaurant action. Confirm or Cancel it before requesting another.');
-        $proposal=pac_pending_store($org,$uid,$type,$payload,$summary);
+        $proposal=fm8d18p_pending_store($org,$uid,$type,$payload,$summary);
         app_audit(app_pdo(),$org,$uid,'purchasing.agent_action_proposed',
             'purchasing_agent_proposal',(string)$proposal['id'],null,
             ['type'=>$type,'source'=>'food_monster_model']);
@@ -97,7 +177,7 @@ function fm8d18p_catalogue(array $actor):array
                 if(fm8d18p_fields($args,'vendor_name'))throw new InvalidArgumentException('Provide an exact saved vendor name.');
                 $pdo=app_pdo();$org=(int)$user['organization_id'];
                 $vendor=fm8d18p_exact_vendor($pdo,$org,(string)$args['vendor_name']);
-                $lines=pac_vendor_suggestion_lines($pdo,$org,(string)$vendor['public_id']);
+                $lines=fm8d18p_suggestion_lines($pdo,$org,(string)$vendor['public_id']);
                 if(!$lines)throw new InvalidArgumentException('No current purchasing suggestions are mapped to that vendor.');
                 $estimated=0.0;foreach($lines as $line)
                     if($line['pricePerPack']!==null)$estimated+=(float)$line['pricePerPack']*(float)$line['packs'];
@@ -105,7 +185,7 @@ function fm8d18p_catalogue(array $actor):array
                     ' current suggested line(s), estimated $'.number_format($estimated,2).
                     '. The Purchasing Agent will recheck suggestions at confirmation.';
                 return fm8d18p_propose($user,'draft_po',
-                    ['vendorId'=>$vendor['public_id'],'signature'=>pac_lines_signature($lines)],$summary);
+                    ['vendorId'=>$vendor['public_id'],'signature'=>fm8d18p_lines_signature($lines)],$summary);
             },
         ];
         $tools['propose_purchase_order_status']=[
@@ -135,7 +215,7 @@ function fm8d18p_catalogue(array $actor):array
                     ' ($'.number_format((float)$po['total_amount'],2).').'.
                     ($type==='submit_po'?' Super Admin purchase approval remains required.':'');
                 return fm8d18p_propose($user,$type,
-                    ['purchaseOrderId'=>$po['public_id'],'expected'=>pac_order_version($po)],$summary);
+                    ['purchaseOrderId'=>$po['public_id'],'expected'=>fm8d18p_order_version($po)],$summary);
             },
         ];
     }
@@ -160,13 +240,13 @@ function fm8d18p_catalogue(array $actor):array
                 $po=fm8d18p_exact_order(app_pdo(),(int)$user['organization_id'],(string)$args['order_number']);
                 if(!in_array($po['status'],['submitted','partially_received'],true))
                     throw new InvalidArgumentException('Only a submitted or partially received purchase order can be received.');
-                $lines=pac_outstanding_lines($po);
+                $lines=fm8d18p_outstanding_lines($po);
                 if(!$lines)throw new InvalidArgumentException('No outstanding quantity remains on that purchase order.');
                 $summary='Proposed full receipt of '.count($lines).' outstanding line(s) on '.$po['order_number'].
                     ', with no shortages or damage. Confirmation will increase usable inventory.';
                 return fm8d18p_propose($user,'receive_po_full',[
-                    'purchaseOrderId'=>$po['public_id'],'expected'=>pac_order_version($po),
-                    'outstandingSignature'=>pac_outstanding_signature($lines)],$summary);
+                    'purchaseOrderId'=>$po['public_id'],'expected'=>fm8d18p_order_version($po),
+                    'outstandingSignature'=>fm8d18p_outstanding_signature($lines)],$summary);
             },
         ];
     }
