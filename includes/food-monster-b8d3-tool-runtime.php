@@ -227,7 +227,7 @@ function fm8d3_turn(
             if(in_array(($selectedCall['name']??''),['delegate_restaurant_domain','continue_pending_restaurant_action'],true)
                ||in_array(($selectedCall['name']??''),['propose_inventory_stock_change','propose_prep_tasks','propose_inventory_item_creation','propose_task_status_change'],true)
                ||in_array(($selectedCall['name']??''),['propose_purchase_order_draft','propose_purchase_order_status','propose_purchase_order_full_receipt'],true)
-               ||in_array(($selectedCall['name']??''),['propose_crm_customer_note','propose_crm_customer_tag'],true))
+               ||in_array(($selectedCall['name']??''),['propose_crm_customer_note','propose_crm_customer_tag'],true)
                ||($selectedCall['name']??'')==='propose_my_timeclock_action')
                 return ['ok'=>true,'skill'=>'agent.delegation_needs_separate_turn',
                     'answer'=>'Please make one restaurant-agent request at a time so I can verify its result.',
