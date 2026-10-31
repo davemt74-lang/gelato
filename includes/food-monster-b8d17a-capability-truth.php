@@ -48,6 +48,7 @@ function fm8d18e_candidate_tool_links():array
         'schedule.shift_save'=>['propose_staff_shift'],
         'schedule.request_time_off'=>['propose_my_time_off_request'],
         'schedule.request_swap'=>['propose_my_shift_swap'],
+        'schedule.week_publish'=>['propose_publish_schedule_week'],
         'timeclock.view_own'=>['get_my_hours'],
         'timeclock.clock_in'=>['propose_my_timeclock_action'],
         'timeclock.clock_out'=>['propose_my_timeclock_action'],
