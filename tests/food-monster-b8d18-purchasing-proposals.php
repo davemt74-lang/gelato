@@ -52,7 +52,7 @@ $db->exec('CREATE TABLE inventory_vendor_items (organization_id INT,vendor_id IN
 $db->exec('CREATE TABLE purchase_orders (id INT,organization_id INT,public_id TEXT,vendor_id INT,order_number TEXT,status TEXT,archived_at TEXT,expected_delivery_date TEXT,created_at TEXT,updated_at TEXT,total_amount REAL)');
 $db->exec('CREATE TABLE purchase_order_items (id INT,organization_id INT,purchase_order_id INT,inventory_item_id INT,public_id TEXT,ordered_base_quantity REAL,received_base_quantity REAL,unit TEXT)');
 $db->exec('CREATE TABLE inventory_items (id INT,organization_id INT,public_id TEXT,name TEXT)');
-$db->exec('CREATE TABLE purchase_order_events (organization_id INT,purchase_order_id INT,event_type TEXT,summary TEXT,created_at TEXT)');
+$db->exec('CREATE TABLE purchase_order_events (id INT,organization_id INT,purchase_order_id INT,event_type TEXT,summary TEXT,created_at TEXT)');
 $db->exec("INSERT INTO vendors VALUES (1,7,'vendor-1','Valley Foods','active',NULL,0,1,NULL),(2,8,'vendor-2','Valley Foods','active',NULL,0,1,NULL),(3,7,'vendor-3','Inactive Foods','inactive',NULL,0,1,NULL)");
 $db->exec("INSERT INTO purchase_orders VALUES (1,7,'po-1',1,'PO-7-DRAFT','draft',NULL,NULL,'2026-10-30','2026-10-30 11:00:00',240),(2,7,'po-2',1,'PO-7-OPEN','submitted',NULL,NULL,'2026-10-30','2026-10-30 11:00:00',190),(3,8,'po-3',2,'PO-8-PRIVATE','draft',NULL,NULL,'2026-10-30','2026-10-30 11:00:00',999),(4,7,'po-4',1,'PO-7-RECEIVED','received',NULL,NULL,'2026-10-30','2026-10-30 11:00:00',50)");
 $db->exec("INSERT INTO inventory_items VALUES (1,7,'inv-1','Mozzarella'),(2,8,'inv-2','Private item')");
