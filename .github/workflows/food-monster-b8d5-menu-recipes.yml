@@ -13,6 +13,8 @@ on:
       - 'tests/food-monster-b8d18-operations-proposals.php'
       - 'includes/food-monster-b8d18-purchasing-proposals.php'
       - 'tests/food-monster-b8d18-purchasing-proposals.php'
+      - 'includes/food-monster-b8d18-crm-proposals.php'
+      - 'tests/food-monster-b8d18-crm-proposals.php'
       - 'tests/food-monster-menu-context.php'
       - 'js/global-agent.js'
       - 'tests/food-monster-b8d5-menu-recipes.php'
@@ -31,6 +33,8 @@ on:
       - 'tests/food-monster-b8d18-operations-proposals.php'
       - 'includes/food-monster-b8d18-purchasing-proposals.php'
       - 'tests/food-monster-b8d18-purchasing-proposals.php'
+      - 'includes/food-monster-b8d18-crm-proposals.php'
+      - 'tests/food-monster-b8d18-crm-proposals.php'
       - 'tests/food-monster-menu-context.php'
       - 'js/global-agent.js'
       - 'tests/food-monster-b8d5-menu-recipes.php'
@@ -73,6 +77,8 @@ jobs:
           php -l tests/food-monster-b8d18-operations-proposals.php
           php -l includes/food-monster-b8d18-purchasing-proposals.php
           php -l tests/food-monster-b8d18-purchasing-proposals.php
+          php -l includes/food-monster-b8d18-crm-proposals.php
+          php -l tests/food-monster-b8d18-crm-proposals.php
           php -l includes/food-monster-b8d5-menu-recipes.php
           php -l includes/food-monster-unified-knowledge.php
           php -l api/food-monster-llm.php
@@ -186,4 +192,5 @@ jobs:
           php tests/food-monster-menu-context.php
           php tests/food-monster-b8d18-operations-proposals.php
           php tests/food-monster-b8d18-purchasing-proposals.php
+          php tests/food-monster-b8d18-crm-proposals.php
           php tests/food-monster-b8d14-grounded-fallback.php
