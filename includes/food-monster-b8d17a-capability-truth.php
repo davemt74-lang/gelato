@@ -46,6 +46,7 @@ function fm8d18e_candidate_tool_links():array
         'schedule.coverage'=>['get_day_roster'],
         'schedule.availability'=>['check_staff_availability'],
         'schedule.shift_save'=>['propose_staff_shift'],
+        'schedule.request_time_off'=>['propose_my_time_off_request'],
         'timeclock.view_own'=>['get_my_hours'],
         'timeclock.clock_in'=>['propose_my_timeclock_action'],
         'timeclock.clock_out'=>['propose_my_timeclock_action'],

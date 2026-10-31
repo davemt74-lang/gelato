@@ -116,6 +116,38 @@ function sac_validate_candidate(PDO $pdo,int $org,int $staffId,string $start,str
     if(scheduling_shift_conflicts($pdo,$org,$staffId,$start,$end,$excludeShiftId))throw new InvalidArgumentException('Employee already has an overlapping shift.');
 }
 
+/** Strict, future-facing range; one scheduling exception record per day. */
+function sac_time_off_dates(array $payload,?DateTimeImmutable $today=null):array
+{
+    $zone=new DateTimeZone('America/Phoenix');
+    $today=($today??new DateTimeImmutable('today',$zone))->setTimezone($zone)->setTime(0,0);
+    $start=(string)($payload['startDate']??'');$end=(string)($payload['endDate']??$start);
+    $parse=static function(string $value)use($zone):DateTimeImmutable{
+        $date=DateTimeImmutable::createFromFormat('!Y-m-d',$value,$zone);
+        if(!$date||$date->format('Y-m-d')!==$value)throw new InvalidArgumentException('Specify an exact valid date in YYYY-MM-DD format.');
+        return $date;
+    };
+    $first=$parse($start);$last=$parse($end);
+    if($first<$today)throw new InvalidArgumentException('Time-off requests must start today or later in restaurant time.');
+    if($last<$first||$last>$first->modify('+30 days'))throw new InvalidArgumentException('Time-off requests must cover 1 to 31 consecutive days.');
+    $from=trim((string)($payload['startTime']??''));$to=trim((string)($payload['endTime']??''));
+    if($from!==''||$to!==''){
+        if(!preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/D',$from)||
+           !preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d$/D',$to)||$to<=$from)
+            throw new InvalidArgumentException('Provide both start and end times in 24-hour HH:MM format, with end after start.');
+        if($last!=$first)throw new InvalidArgumentException('For a multi-day request use full days; request partial hours for one day at a time.');
+    }
+    $dates=[];for($date=$first;$date<=$last;$date=$date->modify('+1 day'))$dates[]=$date->format('Y-m-d');
+    return $dates;
+}
+
+function sac_time_off_check_existing(PDO $pdo,int $org,int $userId,array $dates):void
+{
+    $query=$pdo->prepare("SELECT COUNT(*) FROM staff_availability_exceptions WHERE organization_id=? AND user_id=? AND exception_type='time_off' AND status IN ('pending','approved') AND exception_date BETWEEN ? AND ?");
+    $query->execute([$org,$userId,$dates[0],$dates[count($dates)-1]]);
+    if((int)$query->fetchColumn()>0)throw new InvalidArgumentException('A pending or approved time-off request already overlaps those dates. Review it before asking again.');
+}
+
 function sac_execute_pending(PDO $pdo,int $org,int $userId,array $user,array $proposal): array
 {
     if((int)($proposal['organizationId']??0)!==$org||(int)($proposal['userId']??0)!==$userId)throw new SchedulingAgentPermissionException('This Scheduling Agent proposal does not belong to your session.');
@@ -126,6 +158,35 @@ function sac_execute_pending(PDO $pdo,int $org,int $userId,array $user,array $pr
         $staff=scheduling_staff_user($pdo,$org,(int)($payload['userId']??0));if(!$staff)throw new InvalidArgumentException('The proposed employee is no longer active restaurant staff.');
         $shift=scheduling_shift_save($pdo,$org,$payload,$userId);app_audit($pdo,$org,$userId,'schedule.agent_shift_created','schedule_shift',(string)$shift['public_id'],null,['proposalId'=>$proposal['id']]);
         return ['skill'=>'schedule.action_confirmed','answer'=>'Confirmed. Scheduled '.sac_staff_name($staff).' on '.date('l M j',strtotime($shift['starts_at'])).' from '.date('g:i A',strtotime($shift['starts_at'])).' to '.date('g:i A',strtotime($shift['ends_at'])).'.','data'=>['action'=>'shift_create','shiftId'=>$shift['public_id']],'sources'=>['Staff Scheduling','Employee Availability']];
+    }
+    if($type==='time_off_request'){
+        if(!sac_has($user,'schedule.agent')||!sac_has($user,'schedule.self'))
+            throw new SchedulingAgentPermissionException('Your personal Scheduling Agent permission is required to submit time off.');
+        if((int)($payload['userId']??0)!==$userId)
+            throw new SchedulingAgentPermissionException('Time-off requests must belong to your signed-in account.');
+        $dates=sac_time_off_dates($payload);
+        if(!scheduling_staff_user($pdo,$org,$userId))throw new InvalidArgumentException('Your active restaurant staff profile is no longer available.');
+        sac_time_off_check_existing($pdo,$org,$userId,$dates);
+        $pdo->beginTransaction();
+        try{
+            // A request is always pending, including when the requester has
+            // manager permissions. A manager must separately review it.
+            foreach($dates as $date){
+                $row=scheduling_exception_create($pdo,$org,$userId,[
+                    'date'=>$date,'type'=>'time_off',
+                    'start'=>(string)($payload['startTime']??''),
+                    'end'=>(string)($payload['endTime']??''),
+                    'note'=>(string)($payload['note']??''),
+                ],$userId,false);
+                app_audit($pdo,$org,$userId,'schedule.availability_exception_created','availability_exception',
+                    (string)($row['public_id']??''),null,['proposalId'=>$proposal['id'],'source'=>'food_monster_model']);
+            }
+            $pdo->commit();
+        }catch(Throwable $e){$pdo->rollBack();throw $e;}
+        return ['skill'=>'schedule.action_confirmed',
+            'answer'=>'Confirmed. Submitted your time-off request for '.count($dates).' day(s), '.$dates[0].($dates[count($dates)-1]!==$dates[0]?' through '.$dates[count($dates)-1]:'').'. It is pending management review.',
+            'data'=>['action'=>'time_off_request','days'=>count($dates),'status'=>'pending'],
+            'sources'=>['Staff Scheduling','Employee Availability']];
     }
     if($type==='shift_update'){
         $existing=scheduling_shift_by_public_id($pdo,$org,(string)($payload['shiftId']??''));if(!$existing)throw new InvalidArgumentException('The selected shift no longer exists.');sac_guard_shift_version($org,$userId,$proposal,$existing);
