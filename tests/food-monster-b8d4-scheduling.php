@@ -129,4 +129,35 @@ $reply=fm8d3_turn($pdo,$manager,'anthropic','test',
     [['role'=>'user','content'=>'Who works Friday?']],'',$claude,$registry,
     static fn():array=>$manager,static function(array $event):void{});
 b8d4_assert(str_contains($reply['answer'],'David Worker'),'Claude-selected roster skill works');
+
+// 3G: native model-selected personal time off shares the same specialist.
+$future=(new DateTimeImmutable('today',new DateTimeZone('America/Phoenix')))->modify('+9 days');
+$first=$future->format('Y-m-d');$last=$future->modify('+1 day')->format('Y-m-d');
+$timeOffTool=fm8d18g_catalogue($manager)['propose_my_time_off_request'];
+$before=(int)$pdo->query('SELECT COUNT(*) FROM staff_availability_exceptions WHERE organization_id='.$org)->fetchColumn();
+$timeOff=$timeOffTool['execute'](['start_date'=>$first,'end_date'=>$last,'note'=>'Personal scheduling test'],$manager);
+b8d4_assert(($timeOff['data']['requiresConfirmation']??false)===true,
+    'model-selected personal time off stages a confirmation');
+b8d4_assert((int)$pdo->query('SELECT COUNT(*) FROM staff_availability_exceptions WHERE organization_id='.$org)->fetchColumn()===$before,
+    'unconfirmed time off writes no availability exceptions');
+$pending=sac_pending_get($org,$managerId);
+b8d4_assert(($pending['type']??'')==='time_off_request'&&($pending['payload']['userId']??0)===$managerId,
+    'time off is bound to signed-in user and existing Scheduling Agent');
+try{sac_execute_pending($pdo,$org,$managerId,array_replace($manager,['permissions'=>[]]),$pending);
+    b8d4_assert(false,'revoked manager could submit time off');
+}catch(SchedulingAgentPermissionException){b8d4_assert(true,'fresh permissions required at confirm');}
+b8d4_assert((int)$pdo->query('SELECT COUNT(*) FROM staff_availability_exceptions WHERE organization_id='.$org)->fetchColumn()===$before,
+    'failed confirmation never creates a request');
+$timeOffConfirmed=scheduling_agent_handle($pdo,$manager,['message'=>'Confirm']);
+b8d4_assert(($timeOffConfirmed['data']['status']??'')==='pending'&&($timeOffConfirmed['data']['days']??0)===2,
+    'canonical confirmation creates precisely two pending dates');
+$check=$pdo->prepare('SELECT exception_date,status,reviewed_by FROM staff_availability_exceptions WHERE organization_id=? AND user_id=? ORDER BY exception_date');
+$check->execute([$org,$managerId]);$offRows=$check->fetchAll();
+b8d4_assert(count($offRows)===2&&$offRows[0]['exception_date']===$first&&$offRows[1]['exception_date']===$last
+    &&$offRows[0]['status']==='pending'&&$offRows[1]['status']==='pending'
+    &&$offRows[0]['reviewed_by']===null,'manager self-request still needs a separate approval');
+b8d4_assert(sac_pending_get($org,$managerId)===null,'confirmed time off cannot be replayed');
+try{$timeOffTool['execute'](['start_date'=>$first],$manager);
+    b8d4_assert(false,'duplicate pending time-off request accepted');
+}catch(InvalidArgumentException){b8d4_assert(true,'duplicate pending time off rejected');}
 echo 'food-monster-b8d4-scheduling-ok assertions='.$n."\n";

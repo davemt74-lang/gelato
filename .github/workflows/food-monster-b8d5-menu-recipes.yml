@@ -17,6 +17,10 @@ on:
       - 'tests/food-monster-b8d18-crm-proposals.php'
       - 'includes/food-monster-b8d18-timeclock-proposals.php'
       - 'tests/food-monster-b8d18-timeclock-proposals.php'
+      - 'includes/food-monster-b8d18-scheduling-proposals.php'
+      - 'tests/food-monster-b8d18-scheduling-proposals.php'
+      - 'includes/scheduling-agent-core.php'
+      - 'tests/food-monster-b8d4-scheduling.php'
       - 'tests/food-monster-menu-context.php'
       - 'js/global-agent.js'
       - 'tests/food-monster-b8d5-menu-recipes.php'
@@ -39,6 +43,10 @@ on:
       - 'tests/food-monster-b8d18-crm-proposals.php'
       - 'includes/food-monster-b8d18-timeclock-proposals.php'
       - 'tests/food-monster-b8d18-timeclock-proposals.php'
+      - 'includes/food-monster-b8d18-scheduling-proposals.php'
+      - 'tests/food-monster-b8d18-scheduling-proposals.php'
+      - 'includes/scheduling-agent-core.php'
+      - 'tests/food-monster-b8d4-scheduling.php'
       - 'tests/food-monster-menu-context.php'
       - 'js/global-agent.js'
       - 'tests/food-monster-b8d5-menu-recipes.php'
@@ -85,6 +93,10 @@ jobs:
           php -l tests/food-monster-b8d18-crm-proposals.php
           php -l includes/food-monster-b8d18-timeclock-proposals.php
           php -l tests/food-monster-b8d18-timeclock-proposals.php
+          php -l includes/food-monster-b8d18-scheduling-proposals.php
+          php -l tests/food-monster-b8d18-scheduling-proposals.php
+          php -l includes/scheduling-agent-core.php
+          php -l tests/food-monster-b8d4-scheduling.php
           php -l includes/food-monster-b8d5-menu-recipes.php
           php -l includes/food-monster-unified-knowledge.php
           php -l api/food-monster-llm.php
@@ -200,4 +212,5 @@ jobs:
           php tests/food-monster-b8d18-purchasing-proposals.php
           php tests/food-monster-b8d18-crm-proposals.php
           php tests/food-monster-b8d18-timeclock-proposals.php
+          php tests/food-monster-b8d18-scheduling-proposals.php
           php tests/food-monster-b8d14-grounded-fallback.php
