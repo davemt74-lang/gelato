@@ -62,6 +62,7 @@ b8d17a_check($report['delegatedAgents'][0]['destinationPolicyRequired']===true,'
 b8d17a_check($report['chatPrompts'][0]['status']==='prompt_template_only','chat prompts are nonexecuting');
 b8d17a_check($report['planned']===[],'injected privileged candidates withheld for manager');
 b8d17a_check($report['inventoryStatus']==='not_requested','no unneeded inventory read for manager');
+b8d17a_check($managerReport['relationshipAudit']===null,'only owner sees detailed link audit');
 
 $fakeOwner=array_replace($manager,['role_slug'=>'super_admin']);
 $relatedFixture=['status'=>'source_inventory_only','items'=>[
@@ -89,6 +90,19 @@ b8d17a_check($noPermission['counts']['sourceCandidatesWithRelatedNativeTool']===
 
 $owner=array_replace($manager,['role_slug'=>'super_admin','permissions'=>['*']]);
 $ownerReport=fm8d17a_snapshot($owner);
+b8d17a_check(($ownerReport['relationshipAudit']['staleCandidateIds']??null)===[],
+    'every native relationship key exists in the 73 source candidates');
+b8d17a_check(($ownerReport['relationshipAudit']['explicitlyMappedCandidates']??0)===17,
+    'all seventeen explicitly reviewed candidate mappings remain in place');
+b8d17a_check(($ownerReport['relationshipAudit']['mappedButUnavailableForAccount']??-1)===0,
+    'all mapped native tools exist for fully privileged owner in typed chat');
+b8d17a_check(in_array('schedule.publish',
+    array_column($ownerReport['planned'],'id'),true)
+    &&in_array('propose_publish_schedule_week',
+    $ownerReport['planned'][array_search('schedule.publish',array_column($ownerReport['planned'],'id'),true)]['relatedNativeTools'],true),
+    'schedule publishing source contract correctly linked to its native proposal');
+b8d17a_check(($ownerReport['relationshipAudit']['withoutExplicitNativeRelationship']??0)>0,
+    'remaining unlinked operations are disclosed');
 b8d17a_check(($ownerReport['inventoryStatus']??'')==='source_inventory_only','source inventory remains discovery only');
 b8d17a_check(count($ownerReport['planned'])===73,'all 73 audited proposed contracts included');
 b8d17a_check(($ownerReport['counts']['sourceCandidatesWithRelatedNativeTool']??0)>0,
