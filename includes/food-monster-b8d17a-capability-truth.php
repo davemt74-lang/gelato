@@ -48,7 +48,7 @@ function fm8d18e_candidate_tool_links():array
         'schedule.shift_save'=>['propose_staff_shift'],
         'schedule.request_time_off'=>['propose_my_time_off_request'],
         'schedule.request_swap'=>['propose_my_shift_swap'],
-        'schedule.week_publish'=>['propose_publish_schedule_week'],
+        'schedule.publish'=>['propose_publish_schedule_week'],
         'timeclock.view_own'=>['get_my_hours'],
         'timeclock.clock_in'=>['propose_my_timeclock_action'],
         'timeclock.clock_out'=>['propose_my_timeclock_action'],
@@ -59,6 +59,34 @@ function fm8d18e_candidate_tool_links():array
         'purchasing.po_create'=>['propose_purchase_order_draft'],
         'purchasing.po_submit'=>['propose_purchase_order_status'],
         'crm.note_add'=>['propose_crm_customer_note'],
+    ];
+}
+
+/**
+ * B8D18J1: diagnostic-only relationship integrity audit. This never grants
+ * an old contract or executes a tool. A missing tool can be permission-scoped.
+ */
+function fm8d18j1_relationship_audit(array $registeredTools,array $candidateItems):array
+{
+    $links=fm8d18e_candidate_tool_links();
+    $ids=array_fill_keys(array_column($candidateItems,'id'),true);
+    $staleCandidates=[];$absentForAccount=[];$related=[];
+    foreach($links as $candidateId=>$toolIds){
+        if(!isset($ids[$candidateId])){$staleCandidates[]=$candidateId;continue;}
+        $matching=array_values(array_filter($toolIds,static fn(string $toolId):bool=>isset($registeredTools[$toolId])));
+        if(!$matching)$absentForAccount[]=$candidateId;
+        else $related[]=$candidateId;
+    }
+    return [
+        'sourceCandidateCount'=>count($candidateItems),
+        'explicitlyMappedCandidates'=>count($links)-count($staleCandidates),
+        'relatedRegisteredForAccount'=>count($related),
+        'mappedButUnavailableForAccount'=>count($absentForAccount),
+        'withoutExplicitNativeRelationship'=>count($candidateItems)-count($related),
+        'staleCandidateIds'=>$staleCandidates,
+        'mappedButUnavailableCandidateIds'=>$absentForAccount,
+        'unlinkedCandidateIds'=>array_values(array_diff(array_keys($ids),array_keys($links))),
+        'meaning'=>'Relationships show registration for the current account, not endpoint equivalence or successful execution.',
     ];
 }
 
@@ -122,9 +150,10 @@ function fm8d17a_snapshot(
     $owner=($actor['role_slug']??'')==='super_admin';
     $inventory=$owner?($candidateInventory??fm8d17a_candidates()):null;
     $planned=$owner?(array)($inventory['items']??[]):[];
-    $related=0;
+    $related=0;$relationshipAudit=null;
     if($owner){
         $links=fm8d18e_candidate_tool_links();
+        $relationshipAudit=fm8d18j1_relationship_audit($tools,$planned);
         foreach($planned as &$candidate){
             if(!is_array($candidate))continue;
             $matching=[];
@@ -153,6 +182,7 @@ function fm8d17a_snapshot(
         'delegatedAgents'=>$nodes,
         'chatPrompts'=>$templates,
         'planned'=> $owner?$planned:[],
+        'relationshipAudit'=>$owner?$relationshipAudit:null,
         'inventoryVisibility'=>$owner?'owner_only':'withheld_for_this_account',
         'inventoryStatus'=>$owner?(string)($inventory['status']??'unavailable'):'not_requested',
         'readiness'=>[
