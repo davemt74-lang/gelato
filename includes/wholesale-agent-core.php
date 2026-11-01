@@ -174,7 +174,8 @@ function waa_execute_pending(PDO $pdo,int $org,int $uid,array $user,array $propo
                 if(!hash_equals((string)$payload['requirementsSignature'],waa_delivery_signature($now)))
                     throw new InvalidArgumentException('Wholesale inventory requirements changed after the delivery proposal. Review the batch and ask again.');
             }
-            $saved=wholesale_fulfillment_deliver($pdo,$org,(string)$batch['public_id'],$uid);
+            $saved=wholesale_fulfillment_deliver($pdo,$org,(string)$batch['public_id'],$uid,
+                isset($payload['requirementsSignature'])?(string)$payload['requirementsSignature']:null);
             operations_sync_wholesale_tasks($pdo,$org,$uid);
             app_audit($pdo,$org,$uid,'wholesale.agent_batch_delivered','wholesale_fulfillment',(string)$batch['public_id'],null,['proposalId'=>$proposal['id'],'orderId'=>$batch['order_public_id']]);
             return ['skill'=>'wholesale.action_confirmed','answer'=>'Confirmed. Marked '.$batch['fulfillment_number'].' delivered and consumed its canonical inventory requirements.','data'=>['action'=>'batch_deliver','batchId'=>$batch['public_id'],'orderId'=>$batch['order_public_id']],'sources'=>['Wholesale Fulfillment','Inventory']];
