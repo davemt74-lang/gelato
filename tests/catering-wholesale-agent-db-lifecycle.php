@@ -115,6 +115,12 @@ cwdb_assert($q->fetchColumn()==='cancelled','Confirmed Wholesale batch cancellat
 require __DIR__.'/../includes/food-monster-b8d18-wholesale-lifecycle-reads.php';
 require __DIR__.'/../includes/food-monster-b8d18-wholesale-lifecycle-proposals.php';
 require __DIR__.'/../includes/wholesale-receivables.php';
+$j9Confirm=static function(string $orderPublic)use($pdo,$user):array{
+    if(session_status()!==PHP_SESSION_ACTIVE)session_start();
+    try{return wholesale_agent_handle($pdo,$user,
+        ['message'=>'Confirm','pageContext'=>['module'=>'wholesale','selectedWholesaleOrderPublicId'=>$orderPublic]]);}
+    finally{if(session_status()===PHP_SESSION_ACTIVE)session_write_close();}
+};
 $newOrder=static function(string $status='requested')use($pdo,$org,$account,$sku,$uid):array{
     $made=wholesale_commerce_create_order($pdo,$org,$account,
         ['items'=>[['skuId'=>$sku['public_id'],'quantity'=>3]],'status'=>$status,'fulfillmentType'=>'pickup'],$uid);
@@ -134,14 +140,14 @@ $planArgs=$exact+['promised_start'=>'2026-12-04T09:00','promised_end'=>'2026-12-
 $planProposal=fm8d18j9b_propose($planArgs,$user,'order_promise');
 cwdb_assert(($planProposal['data']['requiresConfirmation']??false)===true,'Promised window proposal was not staged.');
 cwdb_assert((wholesale_fulfillment_order($pdo,$org,$requested['public_id']))['promised_window_start']===null,'Promised window was changed before confirmation.');
-$planConfirmed=wholesale_agent_handle($pdo,$user,['message'=>'Confirm','pageContext'=>['module'=>'wholesale','selectedWholesaleOrderPublicId'=>$requested['public_id']]]);
+$planConfirmed=$j9Confirm($requested['public_id']);
 cwdb_assert(($planConfirmed['data']['action']??null)==='order_promise','Promised window confirmation not routed to specialist.');
 $planned=wholesale_fulfillment_order($pdo,$org,$requested['public_id']);
 cwdb_assert(str_starts_with((string)$planned['promised_window_start'],'2026-12-04 09:00'),'Promised start not saved.');
 cwdb_assert($planned['fulfillment_type']==='pickup'&&$planned['requested_window_start']===null,'Promised update erased another plan field.');
 $locationArgs=$exact+['location_public_id'=>'wloc-agent-ci','location_name'=>'Lifecycle Cafe Main'];
 fm8d18j9b_propose($locationArgs,$user,'order_location');
-$locConfirmed=wholesale_agent_handle($pdo,$user,['message'=>'Confirm','pageContext'=>['module'=>'wholesale','selectedWholesaleOrderPublicId'=>$requested['public_id']]]);
+$locConfirmed=$j9Confirm($requested['public_id']);
 cwdb_assert(($locConfirmed['data']['action']??null)==='order_location','Location confirmation not routed to specialist.');
 $afterLoc=wholesale_fulfillment_order($pdo,$org,$requested['public_id']);
 cwdb_assert(str_starts_with((string)$afterLoc['promised_window_start'],'2026-12-04 09:00'),'Location update erased promised window.');
@@ -149,7 +155,7 @@ cwdb_assert((int)$afterLoc['wholesale_account_location_id']>0,'Location confirma
 $confirmArgs=$exact+['saved_total'=>(float)$requested['total'],'acknowledge_saved_total'=>true];
 fm8d18j9b_propose($confirmArgs,$user,'order_confirm');
 cwdb_assert((wholesale_fulfillment_order($pdo,$org,$requested['public_id']))['status']==='requested','Order confirmation wrote before Confirm.');
-$confirmedOrder=wholesale_agent_handle($pdo,$user,['message'=>'Confirm','pageContext'=>['module'=>'wholesale','selectedWholesaleOrderPublicId'=>$requested['public_id']]]);
+$confirmedOrder=$j9Confirm($requested['public_id']);
 cwdb_assert(($confirmedOrder['data']['action']??null)==='order_confirm','Order confirmation not routed to specialist.');
 cwdb_assert((wholesale_fulfillment_order($pdo,$org,$requested['public_id']))['status']==='confirmed','Order not persisted as confirmed.');
 $stale=$newOrder();
@@ -158,7 +164,7 @@ $staleArgs=['order_public_id'=>$stale['public_id'],'order_number'=>$stale['order
 fm8d18j9b_propose($staleArgs,$user,'order_promise');
 $pdo->prepare('UPDATE wholesale_orders SET updated_at=DATE_ADD(NOW(6),INTERVAL 1 SECOND) WHERE organization_id=? AND id=?')->execute([$org,$stale['id']]);
 $staleRejected=false;
-try{wholesale_agent_handle($pdo,$user,['message'=>'Confirm','pageContext'=>['module'=>'wholesale','selectedWholesaleOrderPublicId'=>$stale['public_id']]]);}catch(InvalidArgumentException $e){$staleRejected=str_contains($e->getMessage(),'changed');}
+try{$j9Confirm($stale['public_id']);}catch(InvalidArgumentException $e){$staleRejected=str_contains($e->getMessage(),'changed');}
 cwdb_assert($staleRejected,'Stale lifecycle proposal was not rejected.');
 cwdb_assert((wholesale_fulfillment_order($pdo,$org,$stale['public_id']))['promised_window_start']===null,'Stale lifecycle action changed the order.');
 $toCancel=$newOrder();
@@ -166,7 +172,7 @@ $cancelArgs=['order_public_id'=>$toCancel['public_id'],'order_number'=>$toCancel
     'reason'=>'Buyer requested early cancellation','acknowledge_cancel'=>true];
 fm8d18j9b_propose($cancelArgs,$user,'order_cancel');
 cwdb_assert((wholesale_fulfillment_order($pdo,$org,$toCancel['public_id']))['status']==='requested','Cancel proposal changed order prematurely.');
-$cancelConfirmed=wholesale_agent_handle($pdo,$user,['message'=>'Confirm','pageContext'=>['module'=>'wholesale','selectedWholesaleOrderPublicId'=>$toCancel['public_id']]]);
+$cancelConfirmed=$j9Confirm($toCancel['public_id']);
 cwdb_assert(($cancelConfirmed['data']['action']??null)==='order_cancel','Order cancellation confirmation not routed to specialist.');
 cwdb_assert((wholesale_fulfillment_order($pdo,$org,$toCancel['public_id']))['status']==='cancelled','Order cancellation not persisted.');
 $invoiced=$newOrder();
