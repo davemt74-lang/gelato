@@ -48,7 +48,7 @@ j7b_check(str_contains($adapter,'caa_task_row($pdo,$org,'),'task scoped by event
 j7b_check(str_contains($adapter,'expectedUpdatedAt'),'task status version saved');
 j7b_check(str_contains($adapter,"gac_pending_store('catering'"),'existing confirmation store used');
 j7b_check(str_contains($adapter,'gaw_pending_action_node($org,$uid)'),'pending conflict blocked');
-j7b_check(str_contains($specialist,"caa_require($user,'catering.manage'"),'specialist rechecks permission');
+j7b_check(str_contains($specialist,'caa_require($user,\'catering.manage\''),'specialist rechecks permission');
 j7b_check(str_contains($specialist,"if($"."type==='task_add')"),'specialist handles add');
 j7b_check(str_contains($specialist,"if($"."type==='task_status')"),'specialist handles status');
 j7b_check(!str_contains($adapter,'UPDATE restaurant_operation_tasks'),'model tool cannot directly update tasks');
