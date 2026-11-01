@@ -46,8 +46,8 @@ j6b_check(str_contains($adapter,'WHERE organization_id=? AND public_id=?'),'exac
 j6b_check(str_contains($adapter,'expectedUpdatedAt'),'snapshot version recorded');
 j6b_check(str_contains($adapter,"gac_pending_store('marketing'"),'specialist pending confirmation used');
 j6b_check(str_contains($adapter,'gaw_pending_action_node($org,$uid)'),'pending node collision rejected');
-j6b_check(str_contains($specialist,"mac_guard_package($pdo,$org,$payload)"),'specialist rechecks unchanged package');
-j6b_check(str_contains($specialist,"mac_require_package_manage($user)"),'specialist rechecks manage permission');
+j6b_check(str_contains($specialist,'mac_guard_package($pdo,$org,$payload)'),'specialist rechecks unchanged package');
+j6b_check(str_contains($specialist,'mac_require_package_manage($user)'),'specialist rechecks manage permission');
 j6b_check(str_contains($specialist,'package_deal_set_status('),'specialist owns business rules');
 j6b_check(!str_contains($adapter,'package_deal_set_status('),'model cannot write package status directly');
 j6b_check(!str_contains($adapter,'crm_consent_set('),'model cannot alter consent');
