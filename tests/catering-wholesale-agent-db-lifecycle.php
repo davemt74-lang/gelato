@@ -114,7 +114,7 @@ cwdb_assert($q->fetchColumn()==='cancelled','Confirmed Wholesale batch cancellat
 // Wholesale Agent Confirm, then use tenant-scoped locked canonical state.
 require __DIR__.'/../includes/food-monster-b8d18-wholesale-lifecycle-reads.php';
 require __DIR__.'/../includes/food-monster-b8d18-wholesale-lifecycle-proposals.php';
-require __DIR__.'/../includes/wholesale-receivables.php';
+require_once __DIR__.'/../includes/wholesale-receivables.php';
 $j9Confirm=static function(string $orderPublic)use($pdo,$user):array{
     if(session_status()!==PHP_SESSION_ACTIVE)session_start();
     try{return wholesale_agent_handle($pdo,$user,
@@ -186,6 +186,83 @@ $existingBatchBlocked=false;
 try{fm8d18j9b_propose(['order_public_id'=>$order['public_id'],'order_number'=>$order['order_number'],'business_name'=>$order['business_name'],
     'reason'=>'Cancel despite batch','acknowledge_cancel'=>true],$user,'order_cancel');}catch(InvalidArgumentException){$existingBatchBlocked=true;}
 cwdb_assert($existingBatchBlocked,'Cancellation did not block existing fulfillment batch.');
+
+
+// B8D18J10: Wholesale Receivables read/propose/Confirm lifecycle using canonical
+// MariaDB, including stale-transaction guards and untouched-draft restrictions.
+require __DIR__.'/../includes/food-monster-b8d18-wholesale-receivables-reads.php';
+require __DIR__.'/../includes/food-monster-b8d18-wholesale-receivables-proposals.php';
+$j10Order=$newOrder('confirmed');
+$j10Base=['order_public_id'=>$j10Order['public_id'],'order_number'=>$j10Order['order_number'],
+    'business_name'=>$j10Order['business_name'],'saved_total'=>(float)$j10Order['total'],
+    'issue_date'=>date('Y-m-d'),'create_draft'=>true];
+$j10Stage=fm8d18j10b_propose($j10Base,$user,'invoice_create_draft');
+cwdb_assert(($j10Stage['data']['requiresConfirmation']??false)===true,'Draft invoice did not stage pending Confirm.');
+cwdb_assert(cwdb_count($pdo,'SELECT COUNT(*) FROM wholesale_invoices WHERE organization_id=? AND wholesale_order_id=?',
+    [$org,$j10Order['id']])===0,'Model draft proposal wrote an invoice prematurely.');
+$j10Confirmed=$j9Confirm($j10Order['public_id']);
+cwdb_assert(($j10Confirmed['data']['action']??null)==='invoice_create_draft','Specialist did not handle draft invoice confirmation.');
+$j10Id=(string)($j10Confirmed['data']['invoiceId']??'');
+cwdb_assert($j10Id!=='','Confirmed draft returned no exact invoice ID.');
+$j10Invoice=wholesale_receivables_invoice($pdo,$org,$j10Id);
+cwdb_assert($j10Invoice['status']==='draft','Specialist draft created an issued invoice.');
+cwdb_assert(cwdb_count($pdo,'SELECT COUNT(*) FROM wholesale_receivable_entries WHERE organization_id=? AND wholesale_invoice_id=?',
+    [$org,$j10Invoice['id']])===0,'Draft creation wrote a financial ledger entry.');
+$j10Search=fm8d18j10a_search(['query'=>$j10Invoice['invoice_number']],$user);
+cwdb_assert(($j10Search['data']['matches'][0]['invoicePublicId']??null)===$j10Id,'Search did not find exact saved invoice.');
+$j10Read=fm8d18j10a_read(['invoice_public_id'=>$j10Id,'section'=>'summary'],$user);
+cwdb_assert(($j10Read['data']['records']['status']??null)==='draft','Read did not return canonical draft status.');
+$j10Ledger=fm8d18j10a_read(['invoice_public_id'=>$j10Id,'section'=>'ledger'],$user);
+cwdb_assert(($j10Ledger['data']['records']??null)===[],'Draft invoice should have no payment ledger.');
+$j10Aging=fm8d18j10a_aging([],$user);
+cwdb_assert(is_array($j10Aging['data']['aging']??null),'A/R aging read failed.');
+$j10WrongOrg=$user;$j10WrongOrg['organization_id']=$org+9100;
+$j10ForeignDenied=false;
+try{fm8d18j10a_read(['invoice_public_id'=>$j10Id,'section'=>'summary'],$j10WrongOrg);}
+catch(InvalidArgumentException $e){$j10ForeignDenied=str_contains($e->getMessage(),'not found');}
+cwdb_assert($j10ForeignDenied,'Cross-tenant invoice read leaked records.');
+$j10VoidArgs=['invoice_public_id'=>$j10Id,'invoice_number'=>$j10Invoice['invoice_number'],
+    'order_number'=>$j10Invoice['order_number'],'business_name'=>$j10Invoice['business_name'],
+    'reason'=>'Duplicate test draft','void_draft'=>true];
+$j10VoidStage=fm8d18j10b_propose($j10VoidArgs,$user,'invoice_void_draft');
+cwdb_assert(($j10VoidStage['data']['requiresConfirmation']??false)===true,'Draft-void did not stage.');
+cwdb_assert((wholesale_receivables_invoice($pdo,$org,$j10Id))['status']==='draft','Draft void changed state before Confirm.');
+$j10VoidConfirmed=$j9Confirm($j10Order['public_id']);
+cwdb_assert(($j10VoidConfirmed['data']['action']??null)==='invoice_void_draft','Specialist did not handle void draft.');
+cwdb_assert((wholesale_receivables_invoice($pdo,$org,$j10Id))['status']==='void','Confirmed untouched draft not voided.');
+$j10CreateBlocked=false;
+try{fm8d18j10b_propose($j10Base,$user,'invoice_create_draft');}catch(InvalidArgumentException $e){$j10CreateBlocked=str_contains($e->getMessage(),'already exists');}
+cwdb_assert($j10CreateBlocked,'New draft proposal allowed duplicate/voided invoice.');
+$j10StaleOrder=$newOrder('confirmed');
+$j10StaleBase=['order_public_id'=>$j10StaleOrder['public_id'],'order_number'=>$j10StaleOrder['order_number'],
+    'business_name'=>$j10StaleOrder['business_name'],'saved_total'=>(float)$j10StaleOrder['total'],
+    'issue_date'=>date('Y-m-d'),'create_draft'=>true];
+fm8d18j10b_propose($j10StaleBase,$user,'invoice_create_draft');
+$pdo->prepare('UPDATE wholesale_orders SET updated_at=DATE_ADD(NOW(6),INTERVAL 1 SECOND) WHERE organization_id=? AND id=?')
+    ->execute([$org,$j10StaleOrder['id']]);
+$j10OrderStaleDenied=false;
+try{$j9Confirm($j10StaleOrder['public_id']);}catch(InvalidArgumentException $e){$j10OrderStaleDenied=str_contains($e->getMessage(),'changed');}
+cwdb_assert($j10OrderStaleDenied,'Stale order did not block draft at confirmation.');
+cwdb_assert(cwdb_count($pdo,'SELECT COUNT(*) FROM wholesale_invoices WHERE organization_id=? AND wholesale_order_id=?',
+    [$org,$j10StaleOrder['id']])===0,'Stale draft proposal created an invoice.');
+$j10StaleInvoiceOrder=$newOrder('confirmed');
+$j10StaleInvoice=wholesale_receivables_create_invoice($pdo,$org,$j10StaleInvoiceOrder['public_id'],
+    ['issueDate'=>date('Y-m-d')],$uid);
+$j10StaleInvoiceId=(string)$j10StaleInvoice['invoice']['id'];
+$j10SavedInvoice=wholesale_receivables_invoice($pdo,$org,$j10StaleInvoiceId);
+fm8d18j10b_propose([
+    'invoice_public_id'=>$j10StaleInvoiceId,
+    'invoice_number'=>$j10SavedInvoice['invoice_number'],'order_number'=>$j10SavedInvoice['order_number'],
+    'business_name'=>$j10SavedInvoice['business_name'],'reason'=>'Stale void should fail','void_draft'=>true],
+    $user,'invoice_void_draft');
+$pdo->prepare('UPDATE wholesale_invoices SET updated_at=DATE_ADD(NOW(6),INTERVAL 1 SECOND) WHERE organization_id=? AND id=?')
+    ->execute([$org,$j10SavedInvoice['id']]);
+$j10InvoiceStaleDenied=false;
+try{$j9Confirm($j10StaleInvoiceOrder['public_id']);}catch(InvalidArgumentException $e){$j10InvoiceStaleDenied=str_contains($e->getMessage(),'changed');}
+cwdb_assert($j10InvoiceStaleDenied,'Stale invoice did not block draft-void at confirmation.');
+cwdb_assert((wholesale_receivables_invoice($pdo,$org,$j10StaleInvoiceId))['status']==='draft','Stale draft-void changed invoice.');
+$j10ViewOnly=$user;$j10ViewOnly['permissions']=['wholesale.view','wholesale.agent','wholesale.receivables.view'];
+cwdb_assert(fm8d18j10b_catalogue($j10ViewOnly)===[],'View-only actor exposed financial proposals.');
 
 // Permission regression: a user that can view/use the node but cannot manage Wholesale
 // must not even receive a write proposal.

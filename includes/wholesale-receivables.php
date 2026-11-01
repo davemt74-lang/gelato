@@ -110,12 +110,29 @@ function wholesale_receivables_release_sales_lock(PDO $pdo,?string $lockName): v
     try{$q=$pdo->prepare('SELECT RELEASE_LOCK(?)');$q->execute([$lockName]);}catch(Throwable){}
 }
 
-function wholesale_receivables_create_invoice(PDO $pdo,int $org,string $orderPublic,array $input,int $userId): array
+function wholesale_receivables_create_invoice(PDO $pdo,int $org,string $orderPublic,array $input,int $userId,?array $expectedOrder=null): array
 {
     if(!wholesale_receivables_ready($pdo))throw new RuntimeException('Wholesale receivables migration is not installed.');
     $pdo->beginTransaction();try{
-        $order=wholesale_receivables_order($pdo,$org,$orderPublic,true);if($order['status']==='cancelled')throw new InvalidArgumentException('Cancelled Wholesale orders cannot be invoiced.');
-        $existing=$pdo->prepare('SELECT public_id FROM wholesale_invoices WHERE organization_id=? AND wholesale_order_id=? LIMIT 1');$existing->execute([$org,(int)$order['id']]);if($public=$existing->fetchColumn()){$pdo->commit();return wholesale_receivables_detail($pdo,$org,(string)$public);}
+        $order=wholesale_receivables_order($pdo,$org,$orderPublic,true);
+        if($expectedOrder!==null){
+            if((string)$order['status']!==(string)($expectedOrder['status']??'')
+                ||(string)$order['updated_at']!==(string)($expectedOrder['updatedAt']??'')
+                ||(string)$order['order_number']!==(string)($expectedOrder['orderNumber']??'')
+                ||(string)$order['business_name']!==(string)($expectedOrder['businessName']??'')
+                ||abs((float)$order['total']-(float)($expectedOrder['total']??-1))>.005)
+                throw new InvalidArgumentException('Wholesale order changed after the draft proposal. Review it again.');
+            if(!in_array((string)$order['status'],['confirmed','in_production','ready','out_for_delivery','delivered'],true)
+                ||(string)$order['account_status']!=='active')
+                throw new InvalidArgumentException('Draft invoice proposal requires an active account and a confirmed or later non-cancelled order.');
+            $savedLines=wholesale_receivables_snapshot_lines($pdo,$org,$order);
+            if(!$savedLines)throw new InvalidArgumentException('Draft invoice requires canonical saved order lines.');
+        }
+        if($order['status']==='cancelled')throw new InvalidArgumentException('Cancelled Wholesale orders cannot be invoiced.');
+        $existing=$pdo->prepare('SELECT public_id FROM wholesale_invoices WHERE organization_id=? AND wholesale_order_id=? LIMIT 1');$existing->execute([$org,(int)$order['id']]);if($public=$existing->fetchColumn()){
+            if($expectedOrder!==null)throw new InvalidArgumentException('An invoice already exists for this order. Review its current status.');
+            $pdo->commit();return wholesale_receivables_detail($pdo,$org,(string)$public);
+        }
         $issue=wholesale_receivables_date($input['issueDate']??null,'Issue date');$terms=mb_substr(trim((string)($input['paymentTerms']??$order['payment_terms']??'')),0,120,'UTF-8')?:null;
         $dueRaw=trim((string)($input['dueDate']??''));$due=$dueRaw!==''?wholesale_receivables_date($dueRaw,'Due date'):wholesale_receivables_due_date($issue,$terms);if($due!==null&&$due<$issue)throw new InvalidArgumentException('Due date cannot be before the issue date.');
         $public=wholesale_commerce_public_id('winv');$number='WINV-'.date('ymd').'-'.strtoupper(substr(bin2hex(random_bytes(4)),0,8));$customerRef=mb_substr(trim((string)($input['customerReference']??'')),0,180,'UTF-8')?:null;$customerNote=mb_substr(trim((string)($input['customerNote']??'')),0,10000,'UTF-8')?:null;$internalNote=mb_substr(trim((string)($input['internalNote']??'')),0,10000,'UTF-8')?:null;
@@ -162,11 +179,25 @@ function wholesale_receivables_record(PDO $pdo,int $org,string $invoicePublic,st
     if(function_exists('app_audit'))app_audit($pdo,$org,$userId,'wholesale.receivable_'.$type,'wholesale_invoice',$invoicePublic,null,['amount'=>$amount,'effectiveDate'=>$date]);return wholesale_receivables_detail($pdo,$org,$invoicePublic);
 }
 
-function wholesale_receivables_void(PDO $pdo,int $org,string $invoicePublic,string $reason,int $userId): array
+function wholesale_receivables_void(PDO $pdo,int $org,string $invoicePublic,string $reason,int $userId,?array $expectedInvoice=null): array
 {
     $reason=mb_substr(trim($reason),0,1000,'UTF-8');if($reason==='')throw new InvalidArgumentException('A void reason is required.');$issueDate=null;$salesLock=null;
     $pdo->beginTransaction();try{
-        $invoice=wholesale_receivables_invoice($pdo,$org,$invoicePublic,true);if($invoice['status']==='void'){$pdo->commit();return wholesale_receivables_detail($pdo,$org,$invoicePublic);}
+        $invoice=wholesale_receivables_invoice($pdo,$org,$invoicePublic,true);
+        if($expectedInvoice!==null){
+            if((string)$invoice['status']!=='draft'
+                ||(string)$invoice['status']!==(string)($expectedInvoice['status']??'')
+                ||(string)$invoice['updated_at']!==(string)($expectedInvoice['updatedAt']??'')
+                ||(string)$invoice['invoice_number']!==(string)($expectedInvoice['invoiceNumber']??'')
+                ||(string)$invoice['order_public_id']!==(string)($expectedInvoice['orderPublicId']??''))
+                throw new InvalidArgumentException('Wholesale invoice changed after the draft-void proposal. Review it again.');
+            $q=$pdo->prepare('SELECT COUNT(*) FROM wholesale_receivable_entries WHERE organization_id=? AND wholesale_invoice_id=?');
+            $q->execute([$org,(int)$invoice['id']]);
+            if((int)$q->fetchColumn()>0)throw new InvalidArgumentException('Cannot void a draft that has financial ledger entries.');
+            if(abs(wholesale_receivables_balance($pdo,$org,(int)$invoice['id']))>.005)
+                throw new InvalidArgumentException('This draft invoice has a nonzero balance and cannot be voided through the agent.');
+        }
+        if($invoice['status']==='void'){$pdo->commit();return wholesale_receivables_detail($pdo,$org,$invoicePublic);}
         if($invoice['status']==='draft'){$pdo->prepare("UPDATE wholesale_invoices SET status='void',voided_at=NOW(6),internal_note=CONCAT(COALESCE(internal_note,''),IF(COALESCE(internal_note,'')='','',CHAR(10)),'Void: ',?),updated_by=?,updated_at=NOW(6) WHERE organization_id=? AND id=?")->execute([$reason,$userId,$org,(int)$invoice['id']]);}
         else{$q=$pdo->prepare("SELECT COUNT(*) FROM wholesale_receivable_entries WHERE organization_id=? AND wholesale_invoice_id=? AND entry_type IN ('payment','credit','refund')");$q->execute([$org,(int)$invoice['id']]);if((int)$q->fetchColumn()>0)throw new InvalidArgumentException('Invoices with payments, credits, or refunds cannot be voided; use a credit/refund workflow instead.');$balance=wholesale_receivables_balance($pdo,$org,(int)$invoice['id']);if(abs($balance-(float)$invoice['total'])>.005)throw new InvalidArgumentException('Invoice balance is no longer eligible for voiding.');$date=date('Y-m-d');wholesale_receivables_insert_entry($pdo,$org,$invoice,'void',-(float)$invoice['total'],$date,$userId,['note'=>$reason]);$issueDate=(string)$invoice['issue_date'];$pdo->prepare("UPDATE wholesale_invoices SET status='void',voided_at=NOW(6),paid_at=NULL,internal_note=CONCAT(COALESCE(internal_note,''),IF(COALESCE(internal_note,'')='','',CHAR(10)),'Void: ',?),updated_by=?,updated_at=NOW(6) WHERE organization_id=? AND id=?")->execute([$reason,$userId,$org,(int)$invoice['id']]);}
         wholesale_receivables_event($pdo,$org,(int)$invoice['id'],'voided','Invoice '.$invoice['invoice_number'].' voided.',$userId,['reason'=>$reason]);wholesale_commerce_order_event($pdo,$org,(int)$invoice['wholesale_order_id'],'invoice_voided','Wholesale invoice '.$invoice['invoice_number'].' voided.',$userId,['invoiceId'=>$invoicePublic,'reason'=>$reason]);if($issueDate)$salesLock=wholesale_receivables_sync_sales_date($pdo,$org,$issueDate,true);$pdo->commit();

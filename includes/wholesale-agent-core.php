@@ -5,6 +5,7 @@ require_once __DIR__.'/wholesale-fulfillment.php';
 require_once __DIR__.'/operations-wholesale-agent.php';
 require_once __DIR__.'/agent-confirmation-core.php';
 require_once __DIR__.'/wholesale-order-lifecycle-actions.php';
+require_once __DIR__.'/wholesale-receivables-agent-actions.php';
 
 final class WholesaleAgentPermissionException extends RuntimeException {}
 
@@ -153,6 +154,9 @@ function waa_execute_pending(PDO $pdo,int $org,int $uid,array $user,array $propo
     if((int)($proposal['organizationId']??0)!==$org||(int)($proposal['userId']??0)!==$uid)throw new WholesaleAgentPermissionException('This Wholesale Agent proposal does not belong to your session.');
     $type=(string)$proposal['type'];$payload=(array)$proposal['payload'];
     waa_require($user,'wholesale.manage','Wholesale management permission is required for this action.');
+
+    if(in_array($type,['invoice_create_draft','invoice_void_draft'],true))
+        return wa10_execute_pending($pdo,$org,$uid,$user,$proposal);
 
     if(in_array($type,['order_confirm','order_cancel','order_promise','order_location'],true))
         return wol_execute_pending($pdo,$org,$uid,$user,$proposal);
