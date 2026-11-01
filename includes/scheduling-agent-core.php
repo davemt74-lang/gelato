@@ -223,6 +223,33 @@ function sac_execute_pending(PDO $pdo,int $org,int $userId,array $user,array $pr
     $type=(string)$proposal['type'];$payload=(array)$proposal['payload'];
     if(in_array($type,['shift_create','shift_update','shift_cancel','week_publish'],true))sac_require($user,'schedule.manage','Schedule manage permission is required for this action.');
 
+    if($type==='availability_exception_review'){
+        if(!sac_has($user,'schedule.agent')||!sac_has($user,'schedule.manage'))
+            throw new SchedulingAgentPermissionException('Scheduling Agent management permission is required to review availability exceptions.');
+        $id=(string)($payload['requestId']??'');$decision=(string)($payload['decision']??'');
+        if($id===''||strlen($id)>120||!preg_match('/^[A-Za-z0-9_.:-]+$/D',$id)||
+            !in_array($decision,['approved','rejected'],true))
+            throw new InvalidArgumentException('Pending availability review details are invalid.');
+        $pdo->beginTransaction();
+        try{
+            $q=$pdo->prepare("UPDATE staff_availability_exceptions
+                SET status=?,reviewed_by=?,reviewed_at=NOW(6),updated_at=NOW(6)
+                WHERE organization_id=? AND public_id=?
+                  AND exception_type IN ('available','unavailable')
+                  AND status='pending' AND updated_at <=> ?");
+            $q->execute([$decision,$userId,$org,$id,$payload['expectedUpdatedAt']??null]);
+            if($q->rowCount()!==1)
+                throw new InvalidArgumentException('The availability request changed or is no longer pending. Review the current request again.');
+            app_audit($pdo,$org,$userId,'schedule.availability_exception_reviewed',
+                'availability_exception',$id,null,
+                ['decision'=>$decision,'proposalId'=>$proposal['id'],'source'=>'food_monster_model']);
+            $pdo->commit();
+        }catch(Throwable $e){$pdo->rollBack();throw $e;}
+        return ['skill'=>'schedule.action_confirmed',
+            'answer'=>'Confirmed. Availability exception '.$id.' was '.$decision.'. Existing assigned shifts were not changed.',
+            'data'=>['action'=>'availability_exception_review','requestId'=>$id,'status'=>$decision],
+            'sources'=>['Staff Scheduling']];
+    }
     if($type==='availability_exception_request'){
         if((int)($proposal['userId']??0)!==$userId)
             throw new SchedulingAgentPermissionException('Availability requests belong to the signed-in employee.');
