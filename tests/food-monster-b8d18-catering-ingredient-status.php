@@ -40,7 +40,7 @@ j7c_check(str_contains($adapter,'caa_operation_writable($operation)')===false,'w
 j7c_check(str_contains($adapter,'fm8d18j7b_operation($pdo,$actor,$args)'),'uses shared event writable/identity gate');
 j7c_check(str_contains($adapter,"(string)$"."row['ingredient_name']!==trim("),'exact ingredient identity checked');
 j7c_check(str_contains($adapter,'expectedUpdatedAt'),'stale requirement version captured');
-j7c_check(str_contains($adapter,"fm8d18j7b_stage($actor,'requirement_status'"),'existing confirmation staging');
+j7c_check(str_contains($adapter,"fm8d18j7b_stage(\$actor,'requirement_status'"),'existing confirmation staging');
 j7c_check(str_contains($specialist,'caa_requirement_row($pdo,$org,$operationId,'),'specialist rechecks exact requirement');
 j7c_check(str_contains($specialist,'expectedUpdatedAt'),'specialist rejects changed requirement');
 j7c_check(!str_contains($adapter,'UPDATE restaurant_operation_requirements'),'model tool does not write requirements');
