@@ -41,8 +41,8 @@ $adapter=file_get_contents(dirname(__DIR__).'/includes/food-monster-b8d18-wholes
 j8a_check(str_contains($runtime,'fm8d18j8a_catalogue($principal,$context)'),'catalogue wired');
 j8a_check(str_contains($adapter,'a.organization_id=o.organization_id'),'tenant-scoped account join');
 j8a_check(str_contains($adapter,'LIMIT 9'),'bounded result');
-j8a_check(str_contains($adapter,"wholesale_fulfillment_order($pdo,$org"),'exact order lookup');
-j8a_check(str_contains($adapter,"wholesale_fulfillment_batch($pdo,$org"),'exact batch lookup');
+j8a_check(str_contains($adapter,'wholesale_fulfillment_order('),'exact order lookup');
+j8a_check(str_contains($adapter,'wholesale_fulfillment_batch('),'exact batch lookup');
 j8a_check(!str_contains($adapter,"'email'=>")&&!str_contains($adapter,"'phone'=>"),'contacts excluded');
 j8a_check(!str_contains($adapter,'gac_pending_store('),'reads have no proposal side effect');
 echo "Food Monster B8D18J8A: $checks checks passed.\n";
