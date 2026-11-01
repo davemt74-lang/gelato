@@ -35,6 +35,9 @@ on:
       - 'tests/food-monster-b8d18-catering-task-proposals.php'
       - 'includes/food-monster-b8d18-catering-ingredient-status.php'
       - 'tests/food-monster-b8d18-catering-ingredient-status.php'
+      - 'includes/food-monster-b8d18-catering-rebuild-proposals.php'
+      - 'tests/food-monster-b8d18-catering-rebuild-proposals.php'
+      - 'includes/catering-agent-actions.php'
       - 'includes/food-monster-b8d18-timeclock-proposals.php'
       - 'tests/food-monster-b8d18-timeclock-proposals.php'
       - 'includes/food-monster-b8d18-scheduling-proposals.php'
@@ -105,6 +108,9 @@ on:
       - 'tests/food-monster-b8d18-catering-task-proposals.php'
       - 'includes/food-monster-b8d18-catering-ingredient-status.php'
       - 'tests/food-monster-b8d18-catering-ingredient-status.php'
+      - 'includes/food-monster-b8d18-catering-rebuild-proposals.php'
+      - 'tests/food-monster-b8d18-catering-rebuild-proposals.php'
+      - 'includes/catering-agent-actions.php'
       - 'includes/food-monster-b8d18-timeclock-proposals.php'
       - 'tests/food-monster-b8d18-timeclock-proposals.php'
       - 'includes/food-monster-b8d18-scheduling-proposals.php'
@@ -199,6 +205,9 @@ jobs:
           php -l tests/food-monster-b8d18-catering-task-proposals.php
           php -l includes/food-monster-b8d18-catering-ingredient-status.php
           php -l tests/food-monster-b8d18-catering-ingredient-status.php
+          php -l includes/food-monster-b8d18-catering-rebuild-proposals.php
+          php -l tests/food-monster-b8d18-catering-rebuild-proposals.php
+          php -l includes/catering-agent-actions.php
           php -l includes/food-monster-b8d18-timeclock-proposals.php
           php -l tests/food-monster-b8d18-timeclock-proposals.php
           php -l includes/food-monster-b8d18-scheduling-proposals.php
@@ -353,6 +362,7 @@ jobs:
           php tests/food-monster-b8d18-catering-reads.php
           php tests/food-monster-b8d18-catering-task-proposals.php
           php tests/food-monster-b8d18-catering-ingredient-status.php
+          php tests/food-monster-b8d18-catering-rebuild-proposals.php
           php tests/food-monster-b8d18-timeclock-proposals.php
           php tests/food-monster-b8d18-scheduling-proposals.php
           php tests/food-monster-b8d18-shift-swap-proposals.php
