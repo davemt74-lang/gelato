@@ -34,9 +34,13 @@ foreach(['delivered','cancelled','dispatched','',null] as $status){
     j8c_check(in_array('transition',($tool['validate'])($bad,$manager),true),'no unsafe transition');
 }
 $runtime=file_get_contents(dirname(__DIR__).'/includes/food-monster-b8d3-tool-runtime.php');
+$guardStart=strpos($runtime,'if(count($calls)>1){');
+$guardEnd=$guardStart===false?false:strpos($runtime,'    $plan=[];',$guardStart);
+$guard=$guardStart!==false&&$guardEnd!==false?substr($runtime,$guardStart,$guardEnd-$guardStart):'';
+
 $adapter=file_get_contents(dirname(__DIR__).'/includes/food-monster-b8d18-wholesale-status.php');
 j8c_check(str_contains($runtime,'fm8d18j8c_catalogue($principal,$context)'),'runtime registered');
-j8c_check(str_contains($runtime,"'propose_wholesale_batch_transition'],true)"),'unbatched proposal');
+j8c_check(str_contains($guard,"'propose_wholesale_batch_transition'"),'unbatched proposal');
 j8c_check(str_contains($adapter,"'batch_ready'")&&str_contains($adapter,"'batch_dispatch'")&&str_contains($adapter,"'batch_cancel'"),'existing specialist actions');
 j8c_check(str_contains($adapter,'waa_batch_version($batch)'),'stale batch guard stored');
 j8c_check(str_contains($adapter,'order_status'),'production gate present');
