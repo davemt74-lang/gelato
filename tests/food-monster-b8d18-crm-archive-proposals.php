@@ -42,9 +42,9 @@ j5c_check(str_contains($adapter,"$"."customer['display_name']!==trim("),'exact n
 j5c_check(str_contains($adapter,"'updatedAt'=>(string)$"."customer['updated_at']"),'version token recorded');
 j5c_check(str_contains($adapter,"fm8d18d_propose($actor,'archive_customer'"),'stages existing CRM pending proposal');
 j5c_check(str_contains($existing,"gac_pending_store('crm'"),'proposal uses secure pending confirmation');
-j5c_check(str_contains($specialist,"cac_guard_customer($pdo,$org,$public"),'confirmation rechecks unchanged active row');
-j5c_check(str_contains($specialist,"cac_require($user,'crm.manage'"),'confirmation rechecks manager permission');
-j5c_check(str_contains($specialist,"if($type==='archive_customer')"),'specialist handles exact proposal type');
+j5c_check(str_contains($specialist,'cac_guard_customer($pdo,$org,$public'),'confirmation rechecks unchanged active row');
+j5c_check(str_contains($specialist,"cac_require(\\$user,'crm.manage'"),'confirmation rechecks manager permission');
+j5c_check(str_contains($specialist,"if(\\$type==='archive_customer')"),'specialist handles exact proposal type');
 j5c_check(!str_contains($adapter,'crm_customer_archive('),'model never archives directly');
 j5c_check(!str_contains($adapter,'crm_consent_set('),'model never changes marketing consent');
 echo "Food Monster B8D18J5C: $checks checks passed.\n";
