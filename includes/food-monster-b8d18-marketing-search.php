@@ -2,8 +2,6 @@
 declare(strict_types=1);
 
 /** B8D18J6A: model-selected promotion lookup, minimal tenant-scoped package facts. */
-require_once __DIR__.'/package-deals-core.php';
-
 function fm8d18j6a_can(array $actor):bool
 {
     return (int)($actor['id']??0)>0&&(int)($actor['organization_id']??0)>0
@@ -21,6 +19,7 @@ function fm8d18j6a_search(array $args,array $actor):array
 {
     if(!fm8d18j6a_can($actor))throw new DomainException('Package Deals view permission is required.');
     if($missing=fm8d18j6a_fields($args))throw new InvalidArgumentException('Specify a specific promotion name or saved ID.');
+    require_once __DIR__.'/package-deals-core.php';
     $pdo=app_pdo();$org=(int)$actor['organization_id'];$query=trim((string)$args['query']);
     if(!package_deals_ready($pdo))throw new RuntimeException('Package Deals is unavailable. Complete upgrade.php first.');
     $q=$pdo->prepare("SELECT public_id,name,status,featured,starts_at,ends_at
