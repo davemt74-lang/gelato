@@ -52,6 +52,27 @@ function waa_progress_signature(array $progress): string
     return hash('sha256',json_encode($rows,JSON_UNESCAPED_SLASHES));
 }
 
+/** Stable requirement snapshot for an explicitly acknowledged inventory-consuming delivery. */
+function waa_delivery_signature(array $availability): string
+{
+    $rows=[];
+    foreach((array)($availability['items']??[]) as $item){
+        $lines=[];
+        foreach((array)($item['lines']??[]) as $line)$lines[]=[
+            'fulfillmentItemId'=>(int)$line['fulfillmentItemId'],
+            'orderItemId'=>(int)$line['orderItemId'],
+            'lineNumber'=>(int)$line['lineNumber'],
+            'quantity'=>round((float)$line['quantity'],4),
+            'commitmentPublicId'=>(string)($line['commitmentPublicId']??''),
+        ];
+        $rows[]=['inventoryId'=>(string)$item['inventoryId'],
+            'required'=>round((float)$item['required'],4),
+            'unit'=>(string)$item['unit'],'lines'=>$lines];
+    }
+    return hash('sha256',json_encode(['items'=>$rows,'issues'=>$availability['issues']??[]],
+        JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR));
+}
+
 function waa_batch_version(array $batch): array
 {
     return ['status'=>(string)$batch['status'],'updatedAt'=>(string)($batch['updated_at']??'')];
@@ -148,6 +169,11 @@ function waa_execute_pending(PDO $pdo,int $org,int $uid,array $user,array $propo
         $batch=waa_guard_batch($pdo,$org,(string)$payload['batchPublicId'],(array)$payload['expectedBatch']);
         if($type==='batch_deliver'){
             waa_require($user,'inventory.manage','Delivering a Wholesale fulfillment consumes physical inventory and requires inventory.manage permission.');
+            if(isset($payload['requirementsSignature'])){
+                $now=wholesale_fulfillment_batch_availability($pdo,$org,$batch);
+                if(!hash_equals((string)$payload['requirementsSignature'],waa_delivery_signature($now)))
+                    throw new InvalidArgumentException('Wholesale inventory requirements changed after the delivery proposal. Review the batch and ask again.');
+            }
             $saved=wholesale_fulfillment_deliver($pdo,$org,(string)$batch['public_id'],$uid);
             operations_sync_wholesale_tasks($pdo,$org,$uid);
             app_audit($pdo,$org,$uid,'wholesale.agent_batch_delivered','wholesale_fulfillment',(string)$batch['public_id'],null,['proposalId'=>$proposal['id'],'orderId'=>$batch['order_public_id']]);
