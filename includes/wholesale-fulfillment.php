@@ -234,7 +234,7 @@ function wholesale_fulfillment_batch_availability(PDO $pdo,int $org,array $batch
     return ['items'=>array_values($aggregated),'issues'=>$issues,'shortages'=>count(array_filter($aggregated,static fn($r)=>$r['shortage']>.0001))];
 }
 
-function wholesale_fulfillment_deliver(PDO $pdo,int $org,string $publicId,int $userId): array
+function wholesale_fulfillment_deliver(PDO $pdo,int $org,string $publicId,int $userId,?string $expectedRequirementsSignature=null): array
 {
     if(!wholesale_fulfillment_ready($pdo))throw new RuntimeException('Wholesale fulfillment migration is not installed.');
     $pdo->beginTransaction();
@@ -245,6 +245,14 @@ function wholesale_fulfillment_deliver(PDO $pdo,int $org,string $publicId,int $u
         if(!in_array((string)$batch['status'],['ready','dispatched'],true))throw new InvalidArgumentException('Mark the fulfillment batch ready before delivery.');
         if(!in_array((string)$batch['order_status'],['ready','out_for_delivery'],true))throw new InvalidArgumentException('Wholesale production must be ready before delivery.');
         $availability=wholesale_fulfillment_batch_availability($pdo,$org,$batch);
+        // Recheck the explicitly confirmed inventory requirements under the batch transaction lock.
+        // The optional signature preserves existing UI/legacy Agent callers unchanged.
+        if($expectedRequirementsSignature!==null){
+            if(!function_exists('waa_delivery_signature'))
+                throw new RuntimeException('Wholesale delivery requirement guard is unavailable.');
+            if(!hash_equals($expectedRequirementsSignature,waa_delivery_signature($availability)))
+                throw new InvalidArgumentException('Wholesale inventory requirements changed after confirmation. Review the batch and ask again.');
+        }
         if($availability['issues'])throw new RuntimeException('Inventory consumption cannot be resolved for this batch: '.($availability['issues'][0]['message']??'Resolve the Wholesale demand mapping first.'));
         if((int)$availability['shortages']>0){$short=array_values(array_filter($availability['items'],static fn($r)=>$r['shortage']>.0001));$first=$short[0];throw new RuntimeException('Insufficient '.$first['name'].' for delivery: short '.rtrim(rtrim(number_format((float)$first['shortage'],4,'.',''),'0'),'.').' '.$first['unit'].'.');}
         $transaction=$pdo->prepare("INSERT INTO inventory_transactions (organization_id,inventory_item_id,transaction_type,quantity_delta,resulting_quantity,unit,note,source_type,source_public_id,created_by) VALUES (?,?,'use',?,?,?,?, 'wholesale_fulfillment',?,?)");
