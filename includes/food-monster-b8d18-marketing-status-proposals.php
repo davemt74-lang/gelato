@@ -46,7 +46,7 @@ function fm8d18j6b_propose(array $args,array $actor):array
         throw new InvalidArgumentException('The saved promotion name does not match the selected public ID.');
     $action=(string)$args['action'];$status=(string)$row['status'];
     if(!fm8d18j6b_state_allows($status,$action))
-        throw new InvalidArgumentException('This promotion cannot be '.$action.'d from its current '.$status.' state.');
+        throw new InvalidArgumentException('The requested promotion action '.$action.' is not allowed from its current '.$status.' state.');
     $opened=session_status()!==PHP_SESSION_ACTIVE;
     if($opened&&!session_start())throw new RuntimeException('Could not start the secure marketing confirmation session.');
     try{
