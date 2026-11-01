@@ -4,6 +4,7 @@ declare(strict_types=1);
 /** B8D18J10B: model-selected Wholesale receivables draft proposals. */
 require_once __DIR__.'/food-monster-b8d18-wholesale-lifecycle-proposals.php';
 require_once __DIR__.'/wholesale-receivables-agent-actions.php';
+require_once __DIR__.'/wholesale-receivables.php';
 
 function fm8d18j10b_can(array $actor):bool
 {

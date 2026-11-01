@@ -2,10 +2,9 @@
 declare(strict_types=1);
 
 /** B8D18J10: Wholesale specialist confirmation of draft-only financial actions. */
-require_once __DIR__.'/wholesale-receivables.php';
-
 function wa10_execute_pending(PDO $pdo,int $org,int $uid,array $user,array $proposal):array
 {
+    require_once __DIR__.'/wholesale-receivables.php';
     waa_require($user,'wholesale.receivables.manage',
         'Wholesale receivables management permission is required for this action.');
     waa_require($user,'wholesale.receivables.view',

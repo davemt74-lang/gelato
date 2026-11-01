@@ -114,7 +114,7 @@ cwdb_assert($q->fetchColumn()==='cancelled','Confirmed Wholesale batch cancellat
 // Wholesale Agent Confirm, then use tenant-scoped locked canonical state.
 require __DIR__.'/../includes/food-monster-b8d18-wholesale-lifecycle-reads.php';
 require __DIR__.'/../includes/food-monster-b8d18-wholesale-lifecycle-proposals.php';
-require __DIR__.'/../includes/wholesale-receivables.php';
+require_once __DIR__.'/../includes/wholesale-receivables.php';
 $j9Confirm=static function(string $orderPublic)use($pdo,$user):array{
     if(session_status()!==PHP_SESSION_ACTIVE)session_start();
     try{return wholesale_agent_handle($pdo,$user,
