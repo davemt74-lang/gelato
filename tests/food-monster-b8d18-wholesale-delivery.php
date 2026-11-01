@@ -39,6 +39,9 @@ j8d_check(str_contains($core,"isset(\$payload['requirementsSignature'])"),'speci
 j8d_check(str_contains($core,'hash_equals('),'snapshot checked safely');
 j8d_check(str_contains($core,'wholesale_fulfillment_deliver('),'specialist runs existing inventory transaction');
 j8d_check(!str_contains($adapter,'wholesale_fulfillment_deliver('),'model does not deduct inventory');
+$fulfillment=file_get_contents(dirname(__DIR__).'/includes/wholesale-fulfillment.php');
+j8d_check(str_contains($fulfillment,'?string $expectedRequirementsSignature=null'),'delivery supports atomic guard without breaking existing callers');
+j8d_check(str_contains($fulfillment,"waa_delivery_signature(\$availability)"),'delivery rechecks canonical requirements under transaction lock');
 require dirname(__DIR__).'/includes/wholesale-agent-core.php';
 $availability=['items'=>[[
     'inventoryId'=>'inventory-1','required'=>2.0,'unit'=>'kg','onHand'=>8.0,
