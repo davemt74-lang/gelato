@@ -23,6 +23,8 @@ on:
       - 'tests/food-monster-b8d18-crm-archive-proposals.php'
       - 'includes/food-monster-b8d18-marketing-search.php'
       - 'tests/food-monster-b8d18-marketing-search.php'
+      - 'includes/food-monster-b8d18-marketing-status-proposals.php'
+      - 'tests/food-monster-b8d18-marketing-status-proposals.php'
       - 'includes/food-monster-b8d18-timeclock-proposals.php'
       - 'tests/food-monster-b8d18-timeclock-proposals.php'
       - 'includes/food-monster-b8d18-scheduling-proposals.php'
@@ -81,6 +83,8 @@ on:
       - 'tests/food-monster-b8d18-crm-archive-proposals.php'
       - 'includes/food-monster-b8d18-marketing-search.php'
       - 'tests/food-monster-b8d18-marketing-search.php'
+      - 'includes/food-monster-b8d18-marketing-status-proposals.php'
+      - 'tests/food-monster-b8d18-marketing-status-proposals.php'
       - 'includes/food-monster-b8d18-timeclock-proposals.php'
       - 'tests/food-monster-b8d18-timeclock-proposals.php'
       - 'includes/food-monster-b8d18-scheduling-proposals.php'
@@ -163,6 +167,8 @@ jobs:
           php -l tests/food-monster-b8d18-crm-archive-proposals.php
           php -l includes/food-monster-b8d18-marketing-search.php
           php -l tests/food-monster-b8d18-marketing-search.php
+          php -l includes/food-monster-b8d18-marketing-status-proposals.php
+          php -l tests/food-monster-b8d18-marketing-status-proposals.php
           php -l includes/food-monster-b8d18-timeclock-proposals.php
           php -l tests/food-monster-b8d18-timeclock-proposals.php
           php -l includes/food-monster-b8d18-scheduling-proposals.php
@@ -311,6 +317,7 @@ jobs:
           php tests/food-monster-b8d18-crm-profile-read.php
           php tests/food-monster-b8d18-crm-archive-proposals.php
           php tests/food-monster-b8d18-marketing-search.php
+          php tests/food-monster-b8d18-marketing-status-proposals.php
           php tests/food-monster-b8d18-timeclock-proposals.php
           php tests/food-monster-b8d18-scheduling-proposals.php
           php tests/food-monster-b8d18-shift-swap-proposals.php
