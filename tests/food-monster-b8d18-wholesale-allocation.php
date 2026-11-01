@@ -33,9 +33,13 @@ foreach(['','x','bad id','%'] as $id){
 $bad=$valid;$bad['all_remaining']=false;
 j8b_check(in_array('all_remaining',($tool['validate'])($bad,$manager),true),'broad allocation requires explicit true');
 $runtime=file_get_contents(dirname(__DIR__).'/includes/food-monster-b8d3-tool-runtime.php');
+$guardStart=strpos($runtime,'if(count($calls)>1){');
+$guardEnd=$guardStart===false?false:strpos($runtime,'    $plan=[];',$guardStart);
+$guard=$guardStart!==false&&$guardEnd!==false?substr($runtime,$guardStart,$guardEnd-$guardStart):'';
+
 $adapter=file_get_contents(dirname(__DIR__).'/includes/food-monster-b8d18-wholesale-allocation.php');
 j8b_check(str_contains($runtime,'fm8d18j8b_catalogue($principal,$context)'),'model catalogue wired');
-j8b_check(str_contains($runtime,"'propose_wholesale_allocate_remaining'],true)"),'proposal excludes batching');
+j8b_check(str_contains($guard,"'propose_wholesale_allocate_remaining'"),'proposal excludes batching');
 j8b_check(str_contains($adapter,"gac_pending_store('wholesale'"),'specialist pending action used');
 j8b_check(str_contains($adapter,"'create_remaining_batch'"),'existing specialist action used');
 j8b_check(str_contains($adapter,'waa_progress_signature($progress)'),'stale allocation signature captured');
