@@ -223,6 +223,29 @@ function sac_execute_pending(PDO $pdo,int $org,int $userId,array $user,array $pr
     $type=(string)$proposal['type'];$payload=(array)$proposal['payload'];
     if(in_array($type,['shift_create','shift_update','shift_cancel','week_publish'],true))sac_require($user,'schedule.manage','Schedule manage permission is required for this action.');
 
+    if($type==='shift_request_review'){
+        if(!sac_has($user,'schedule.agent')||!sac_has($user,'schedule.manage'))
+            throw new SchedulingAgentPermissionException('Scheduling Agent management permission is required to review shift requests.');
+        $id=(string)($payload['requestId']??'');$decision=(string)($payload['decision']??'');
+        $note=(string)($payload['note']??'');
+        if($id===''||strlen($id)>120||!preg_match('/^[A-Za-z0-9_.:-]+$/D',$id)||
+            !in_array($decision,['approved','rejected'],true)||mb_strlen($note,'UTF-8')>1000)
+            throw new InvalidArgumentException('Pending shift review details are invalid.');
+        require_once __DIR__.'/food-monster-b8d18-shift-review-proposals.php';
+        $current=fm8d18j3b_snapshot($pdo,$org,$id);
+        if(fm8d18j3b_fingerprint($current)!==(string)($payload['expectedFingerprint']??'')){
+            sac_pending_clear($org,$userId);
+            throw new InvalidArgumentException('The shift request or underlying shift changed after the proposal. Review again.');
+        }
+        $row=scheduling_request_review($pdo,$org,$id,$decision,$userId,$note);
+        app_audit($pdo,$org,$userId,'schedule.shift_request_reviewed','shift_request',$id,null,
+            ['status'=>$decision,'proposalId'=>$proposal['id'],'source'=>'food_monster_model']);
+        return ['skill'=>'schedule.action_confirmed',
+            'answer'=>'Confirmed. Shift request '.$id.' was '.$decision.'.'.
+                ($decision==='approved'?' The Scheduling Agent applied the verified shift decision.':' No shift assignment was changed.'),
+            'data'=>['action'=>'shift_request_review','requestId'=>$id,'status'=>$row['status']],
+            'sources'=>['Staff Scheduling','Employee Availability']];
+    }
     if($type==='time_off_review'){
         if(!sac_has($user,'schedule.agent')||!sac_has($user,'schedule.manage'))
             throw new SchedulingAgentPermissionException('Scheduling Agent management permission is required to review time off.');
