@@ -29,10 +29,14 @@ foreach(array_keys($args) as $field){
 $bad=$args;$bad['consume_inventory']=false;
 j8d_check(in_array('consume_inventory',($tool['validate'])($bad,$manager),true),'inventory acknowledgement required');
 $runtime=file_get_contents(dirname(__DIR__).'/includes/food-monster-b8d3-tool-runtime.php');
+$guardStart=strpos($runtime,'if(count($calls)>1){');
+$guardEnd=$guardStart===false?false:strpos($runtime,'    $plan=[];',$guardStart);
+$guard=$guardStart!==false&&$guardEnd!==false?substr($runtime,$guardStart,$guardEnd-$guardStart):'';
+
 $adapter=file_get_contents(dirname(__DIR__).'/includes/food-monster-b8d18-wholesale-delivery.php');
 $core=file_get_contents(dirname(__DIR__).'/includes/wholesale-agent-core.php');
 j8d_check(str_contains($runtime,'fm8d18j8d_catalogue($principal,$context)'),'catalogue registered');
-j8d_check(str_contains($runtime,"'propose_wholesale_batch_delivery'],true)"),'delivery cannot batch');
+j8d_check(str_contains($guard,"'propose_wholesale_batch_delivery'"),'delivery cannot batch');
 j8d_check(str_contains($adapter,"'batch_deliver'"),'existing specialist proposal');
 j8d_check(str_contains($adapter,'waa_delivery_signature($availability)'),'requirements snapshot captured');
 j8d_check(str_contains($core,"isset(\$payload['requirementsSignature'])"),'specialist rechecks only new proposals');
