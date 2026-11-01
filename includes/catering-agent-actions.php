@@ -88,6 +88,20 @@ function caa_menu_signature(PDO $pdo,int $org,int $operationId): string
     return hash('sha256',json_encode($normalized,JSON_UNESCAPED_SLASHES));
 }
 
+/** Stable snapshots for model-selected ingredient regeneration: menu + recipe content + rows. */
+function caa_rebuild_inputs_signature(PDO $pdo,int $org,int $operationId):string
+{
+    $q=$pdo->prepare('SELECT m.id,m.recipe_id,m.target_servings,m.batches,m.updated_at menu_updated_at,r.ingredients_json,r.yield_quantity,r.yield_unit,r.updated_at recipe_updated_at FROM restaurant_operation_menu_items m LEFT JOIN recipes r ON r.id=m.recipe_id AND r.organization_id=m.organization_id WHERE m.organization_id=? AND m.operation_id=? ORDER BY m.id');
+    $q->execute([$org,$operationId]);
+    return hash('sha256',json_encode($q->fetchAll(PDO::FETCH_ASSOC),JSON_INVALID_UTF8_SUBSTITUTE|JSON_UNESCAPED_SLASHES));
+}
+function caa_requirements_signature(PDO $pdo,int $org,int $operationId):string
+{
+    $q=$pdo->prepare('SELECT id,menu_item_id,recipe_id,ingredient_name,required_quantity,unit,status,notes,updated_at FROM restaurant_operation_requirements WHERE organization_id=? AND operation_id=? ORDER BY id');
+    $q->execute([$org,$operationId]);
+    return hash('sha256',json_encode($q->fetchAll(PDO::FETCH_ASSOC),JSON_INVALID_UTF8_SUBSTITUTE|JSON_UNESCAPED_SLASHES));
+}
+
 function caa_task_status_from_message(string $message): ?array
 {
     if(!preg_match('~\b(?:mark|set|move)\s+(?:the\s+)?task\s+(.+?)\s+(?:as\s+|to\s+)?(done|complete|completed|in\s+progress|blocked|open|cancelled|canceled)\b~iu',$message,$m))return null;
@@ -174,10 +188,43 @@ function caa_execute_pending(PDO $pdo,int $org,int $uid,array $user,array $propo
     }
 
     if($type==='requirements_rebuild'){
-        if(caa_menu_signature($pdo,$org,$operationId)!==(string)($payload['menuSignature']??''))throw new InvalidArgumentException('The catering menu changed after I proposed rebuilding ingredients. Review the menu and ask again.');
-        $count=catering_operations_rebuild_requirements($pdo,$org,$operationId,$uid);
-        caa_after_change($pdo,$org,$operationId,$uid,'catering.agent_requirements_rebuilt',$public,['proposalId'=>$proposal['id'],'requirements'=>$count]);
-        return ['skill'=>'catering.action_confirmed','answer'=>'Confirmed. Regenerated '.$count.' ingredient requirement row'.($count===1?'':'s').' for '.$operation['title'].'.','data'=>['action'=>'requirements_rebuild','operationId'=>$public,'requirements'=>$count],'sources'=>['Catering Operations → Menu & Recipes','Catering Operations → Ingredients']];
+        $guarded=array_key_exists('requirementsSignature',$payload);
+        if($guarded){
+            // New model-selected proposals explicitly warn that regeneration deletes
+            // and replaces every saved requirement, including staff-updated statuses.
+            if(($payload['resetAcknowledged']??null)!==true)
+                throw new InvalidArgumentException('The ingredient reset was not explicitly acknowledged.');
+            foreach(['requirementsSignature','menuInputsSignature'] as $key)
+                if(!is_string($payload[$key]??null)
+                   ||!preg_match('/^[a-f0-9]{64}$/D',$payload[$key]))
+                    throw new InvalidArgumentException('The saved ingredient regeneration snapshot is invalid.');
+        }
+        $ownsTransaction=$guarded&&!$pdo->inTransaction();
+        if($ownsTransaction)$pdo->beginTransaction();
+        try{
+            if($guarded){
+                // Lock current menu, linked recipes and existing requirements
+                // before comparing snapshots and destructive regeneration.
+                $lock=$pdo->prepare('SELECT id FROM restaurant_operation_menu_items WHERE organization_id=? AND operation_id=? ORDER BY id FOR UPDATE');
+                $lock->execute([$org,$operationId]);$lock->fetchAll(PDO::FETCH_COLUMN);
+                $lock=$pdo->prepare('SELECT r.id FROM recipes r INNER JOIN restaurant_operation_menu_items m ON m.recipe_id=r.id AND m.organization_id=r.organization_id WHERE m.organization_id=? AND m.operation_id=? ORDER BY r.id FOR UPDATE');
+                $lock->execute([$org,$operationId]);$lock->fetchAll(PDO::FETCH_COLUMN);
+                $lock=$pdo->prepare('SELECT id FROM restaurant_operation_requirements WHERE organization_id=? AND operation_id=? ORDER BY id FOR UPDATE');
+                $lock->execute([$org,$operationId]);$lock->fetchAll(PDO::FETCH_COLUMN);
+                if(!hash_equals((string)$payload['menuInputsSignature'],caa_rebuild_inputs_signature($pdo,$org,$operationId))
+                   ||!hash_equals((string)$payload['requirementsSignature'],caa_requirements_signature($pdo,$org,$operationId)))
+                    throw new InvalidArgumentException('Catering ingredients, recipes or menu changed since the reset proposal. Review the latest event and ask again.');
+            }
+            if(caa_menu_signature($pdo,$org,$operationId)!==(string)($payload['menuSignature']??''))
+                throw new InvalidArgumentException('The catering menu changed after I proposed rebuilding ingredients. Review the menu and ask again.');
+            $count=catering_operations_rebuild_requirements($pdo,$org,$operationId,$uid);
+            if($ownsTransaction)$pdo->commit();
+        }catch(Throwable $e){
+            if($ownsTransaction&&$pdo->inTransaction())$pdo->rollBack();
+            throw $e;
+        }
+        caa_after_change($pdo,$org,$operationId,$uid,'catering.agent_requirements_rebuilt',$public,['proposalId'=>$proposal['id'],'requirements'=>$count,'guardedReset'=>$guarded]);
+        return ['skill'=>'catering.action_confirmed','answer'=>'Confirmed. Regenerated '.$count.' ingredient requirement row'.($count===1?'':'s').' for '.$operation['title'].'. Existing statuses were reset to planned.','data'=>['action'=>'requirements_rebuild','operationId'=>$public,'requirements'=>$count],'sources'=>['Catering Operations → Menu & Recipes','Catering Operations → Ingredients']];
     }
     throw new InvalidArgumentException('That pending Catering Agent action is no longer supported.');
 }
