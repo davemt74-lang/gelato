@@ -362,6 +362,7 @@ jobs:
           php tests/food-monster-b8d18-catering-reads.php
           php tests/food-monster-b8d18-wholesale-reads.php
           php tests/food-monster-b8d18-wholesale-allocation.php
+          php tests/food-monster-b8d18-wholesale-status.php
           php tests/food-monster-b8d18-catering-task-proposals.php
           php tests/food-monster-b8d18-catering-ingredient-status.php
           php tests/food-monster-b8d18-catering-rebuild-proposals.php
