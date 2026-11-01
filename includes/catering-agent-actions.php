@@ -203,6 +203,11 @@ function caa_execute_pending(PDO $pdo,int $org,int $uid,array $user,array $propo
         if($ownsTransaction)$pdo->beginTransaction();
         try{
             if($guarded){
+                // Recheck that the selected event is still writable under a row lock.
+                $lock=$pdo->prepare('SELECT status FROM restaurant_operations WHERE organization_id=? AND id=? AND archived_at IS NULL FOR UPDATE');
+                $lock->execute([$org,$operationId]);$freshStatus=$lock->fetchColumn();
+                if($freshStatus===false||in_array((string)$freshStatus,['completed','cancelled'],true))
+                    throw new InvalidArgumentException('The catering operation is no longer writable. Review the current event and ask again.');
                 // Lock current menu, linked recipes and existing requirements
                 // before comparing snapshots and destructive regeneration.
                 $lock=$pdo->prepare('SELECT id FROM restaurant_operation_menu_items WHERE organization_id=? AND operation_id=? ORDER BY id FOR UPDATE');
