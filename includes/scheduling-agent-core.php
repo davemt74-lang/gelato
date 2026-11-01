@@ -223,6 +223,12 @@ function sac_execute_pending(PDO $pdo,int $org,int $userId,array $user,array $pr
     $type=(string)$proposal['type'];$payload=(array)$proposal['payload'];
     if(in_array($type,['shift_create','shift_update','shift_cancel','week_publish'],true))sac_require($user,'schedule.manage','Schedule manage permission is required for this action.');
 
+    if($type==='availability_exception_request'){
+        if((int)($proposal['userId']??0)!==$userId)
+            throw new SchedulingAgentPermissionException('Availability requests belong to the signed-in employee.');
+        require_once __DIR__.'/food-monster-b8d18-availability-exception-proposals.php';
+        return fm8d18j4c_apply($pdo,$org,$userId,$user,$proposal,$payload);
+    }
     if($type==='self_availability_day'){
         if((int)($proposal['userId']??0)!==$userId)
             throw new SchedulingAgentPermissionException('Availability actions are restricted to the signed-in employee.');
