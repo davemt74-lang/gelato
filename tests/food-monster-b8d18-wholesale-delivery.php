@@ -39,4 +39,20 @@ j8d_check(str_contains($core,"isset(\$payload['requirementsSignature'])"),'speci
 j8d_check(str_contains($core,'hash_equals('),'snapshot checked safely');
 j8d_check(str_contains($core,'wholesale_fulfillment_deliver('),'specialist runs existing inventory transaction');
 j8d_check(!str_contains($adapter,'wholesale_fulfillment_deliver('),'model does not deduct inventory');
+require dirname(__DIR__).'/includes/wholesale-agent-core.php';
+$availability=['items'=>[[
+    'inventoryId'=>'inventory-1','required'=>2.0,'unit'=>'kg','onHand'=>8.0,
+    'lines'=>[[
+        'fulfillmentItemId'=>7,'orderItemId'=>12,'lineNumber'=>1,
+        'quantity'=>2.0,'commitmentPublicId'=>'commit-1',
+    ]],
+]],'issues'=>[]];
+$signature=waa_delivery_signature($availability);
+j8d_check(strlen($signature)===64,'requirement signature is SHA-256');
+$stockMoved=$availability;$stockMoved['items'][0]['onHand']=7.5;
+j8d_check(waa_delivery_signature($stockMoved)===$signature,'stock moves rechecked at delivery without changing approved consumption requirements');
+$changedQty=$availability;$changedQty['items'][0]['required']=3.0;
+j8d_check(waa_delivery_signature($changedQty)!==$signature,'changed requirement invalidates proposal');
+$changedMapping=$availability;$changedMapping['items'][0]['lines'][0]['commitmentPublicId']='commit-2';
+j8d_check(waa_delivery_signature($changedMapping)!==$signature,'changed demand mapping invalidates proposal');
 echo "Food Monster B8D18J8D: $checks checks passed.\n";
