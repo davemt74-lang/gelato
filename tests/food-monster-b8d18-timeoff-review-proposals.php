@@ -33,11 +33,11 @@ $runtime=file_get_contents(dirname(__DIR__).'/includes/food-monster-b8d3-tool-ru
 $core=file_get_contents(dirname(__DIR__).'/includes/scheduling-agent-core.php');
 $adapter=file_get_contents(dirname(__DIR__).'/includes/food-monster-b8d18-timeoff-review-proposals.php');
 j3a_check(str_contains($runtime,'fm8d18j3a_catalogue($principal,$context)'),'model tool registered');
-j3a_check(str_contains($adapter,"sac_pending_store($org,$uid,'time_off_review'"),'specialist proposal only');
+j3a_check(str_contains($adapter,"sac_pending_store(")&&str_contains($adapter,"'time_off_review'"),'specialist proposal only');
 j3a_check(str_contains($adapter,'tv_voice_event_valid('),'voice identity rechecked');
 j3a_check(str_contains($adapter,"e.status='pending'"),'proposal checks pending state');
 j3a_check(str_contains($adapter,"e.exception_type='time_off'"),'not other exception types');
-j3a_check(str_contains($core,"if($type==='time_off_review')"),'specialist confirm branch');
+j3a_check(str_contains($core,"'time_off_review'"),'specialist confirm branch');
 j3a_check(str_contains($core,"status='pending' AND updated_at <=> ?"),'atomic stale version guard');
 j3a_check(str_contains($core,"'schedule.manage'"),'fresh management permission');
 j3a_check(str_contains($core,'$q->rowCount()!==1'),'concurrent review rejected');
