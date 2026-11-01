@@ -33,6 +33,8 @@ on:
       - 'tests/food-monster-b8d18-timeoff-review-proposals.php'
       - 'includes/food-monster-b8d18-shift-review-proposals.php'
       - 'tests/food-monster-b8d18-shift-review-proposals.php'
+      - 'includes/food-monster-b8d18-availability-read.php'
+      - 'tests/food-monster-b8d18-availability-read.php'
       - 'includes/scheduling-core.php'
       - 'includes/scheduling-agent-core.php'
       - 'includes/scheduling-agent-core.php'
@@ -75,6 +77,8 @@ on:
       - 'tests/food-monster-b8d18-timeoff-review-proposals.php'
       - 'includes/food-monster-b8d18-shift-review-proposals.php'
       - 'tests/food-monster-b8d18-shift-review-proposals.php'
+      - 'includes/food-monster-b8d18-availability-read.php'
+      - 'tests/food-monster-b8d18-availability-read.php'
       - 'includes/scheduling-core.php'
       - 'includes/scheduling-agent-core.php'
       - 'includes/scheduling-agent-core.php'
@@ -141,6 +145,8 @@ jobs:
           php -l tests/food-monster-b8d18-timeoff-review-proposals.php
           php -l includes/food-monster-b8d18-shift-review-proposals.php
           php -l tests/food-monster-b8d18-shift-review-proposals.php
+          php -l includes/food-monster-b8d18-availability-read.php
+          php -l tests/food-monster-b8d18-availability-read.php
           php -l includes/scheduling-core.php
           php -l includes/scheduling-agent-core.php
           php -l includes/scheduling-agent-core.php
@@ -268,4 +274,5 @@ jobs:
           php tests/food-monster-b8d18-prep-shortages-read.php
           php tests/food-monster-b8d18-timeoff-review-proposals.php
           php tests/food-monster-b8d18-shift-review-proposals.php
+          php tests/food-monster-b8d18-availability-read.php
           php tests/food-monster-b8d14-grounded-fallback.php
