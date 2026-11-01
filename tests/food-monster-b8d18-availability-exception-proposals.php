@@ -24,9 +24,10 @@ j4c_check(isset(fm8d18j4c_catalogue($employee,['channel'=>'voice','privateVoiceA
 $tool=fm8d18j4c_catalogue($employee)['propose_my_availability_exception'];
 j4c_check($tool['impact']==='read','no direct model write');
 j4c_check(!in_array('user_id',$tool['allowedArguments'],true),'model cannot name other employee');
-$full=['date'=>'2030-02-28','type'=>'unavailable','all_day'=>true];
+$future=(new DateTimeImmutable('today',new DateTimeZone('America/Phoenix')))->modify('+7 days')->format('Y-m-d');
+$full=['date'=>$future,'type'=>'unavailable','all_day'=>true];
 j4c_check(($tool['validate'])($full,$employee)===[],'valid full day');
-$partial=['date'=>'2030-02-28','type'=>'available','all_day'=>false,'start'=>'13:00','end'=>'17:30'];
+$partial=['date'=>$future,'type'=>'available','all_day'=>false,'start'=>'13:00','end'=>'17:30'];
 j4c_check(($tool['validate'])($partial,$employee)===[],'valid partial day');
 j4c_check(fm8d18j4c_payload($partial)['end']==='17:30','partial time retained');
 foreach(['2030-02-30','2030-13-01','tomorrow'] as $bad){
