@@ -29,6 +29,9 @@ on:
       - 'tests/food-monster-b8d18-prep-items-proposals.php'
       - 'includes/food-monster-b8d18-prep-shortages-read.php'
       - 'tests/food-monster-b8d18-prep-shortages-read.php'
+      - 'includes/food-monster-b8d18-timeoff-review-proposals.php'
+      - 'tests/food-monster-b8d18-timeoff-review-proposals.php'
+      - 'includes/scheduling-agent-core.php'
       - 'includes/scheduling-agent-core.php'
       - 'tests/food-monster-b8d4-scheduling.php'
       - 'tests/food-monster-menu-context.php'
@@ -65,6 +68,9 @@ on:
       - 'tests/food-monster-b8d18-prep-items-proposals.php'
       - 'includes/food-monster-b8d18-prep-shortages-read.php'
       - 'tests/food-monster-b8d18-prep-shortages-read.php'
+      - 'includes/food-monster-b8d18-timeoff-review-proposals.php'
+      - 'tests/food-monster-b8d18-timeoff-review-proposals.php'
+      - 'includes/scheduling-agent-core.php'
       - 'includes/scheduling-agent-core.php'
       - 'tests/food-monster-b8d4-scheduling.php'
       - 'tests/food-monster-menu-context.php'
@@ -125,6 +131,9 @@ jobs:
           php -l tests/food-monster-b8d18-prep-items-proposals.php
           php -l includes/food-monster-b8d18-prep-shortages-read.php
           php -l tests/food-monster-b8d18-prep-shortages-read.php
+          php -l includes/food-monster-b8d18-timeoff-review-proposals.php
+          php -l tests/food-monster-b8d18-timeoff-review-proposals.php
+          php -l includes/scheduling-agent-core.php
           php -l includes/scheduling-agent-core.php
           php -l tests/food-monster-b8d4-scheduling.php
           php -l includes/food-monster-b8d5-menu-recipes.php
@@ -248,4 +257,5 @@ jobs:
           php tests/food-monster-b8d18-prep-list-proposals.php
           php tests/food-monster-b8d18-prep-items-proposals.php
           php tests/food-monster-b8d18-prep-shortages-read.php
+          php tests/food-monster-b8d18-timeoff-review-proposals.php
           php tests/food-monster-b8d14-grounded-fallback.php
