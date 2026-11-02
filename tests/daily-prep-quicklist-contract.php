@@ -151,4 +151,89 @@ try{daily_quicklist_mutate($pdo,$other,$actor,'set_target',
     throw new RuntimeException('cross-tenant target mutation accepted');}catch(InvalidArgumentException){}
 dq_assert(daily_quicklist_items($pdo,$other,$day)===[],'target update does not leak across tenants');
 
+
+// Section 3K2B: menu suggestions use published source records, never derived sales quantities.
+$menuExample=[['name'=>'Pizza','items'=>[
+    ['name'=>'Gelato Pizza','ingredients'=>['Pizza Dough','Basil']],
+    ['name'=>'Calzone','ingredients'=>['Pizza Dough','Mozzarella']],
+]]];
+$hist=[['title'=>'Prep Pizza Dough','recommendedBase'=>8.5,'unit'=>'balls','sampleCount'=>4,'confidence'=>0.75]];
+$preview=daily_quicklist_suggestions_from_menu($menuExample,$recipes,$hist);
+$doughRows=array_values(array_filter($preview,static fn(array $r):bool=>$r['title']==='Prep Pizza Dough'));
+dq_assert(count($doughRows)===1,'repeated menu ingredients collapse into one suggested prep item');
+$dough=$doughRows[0];
+dq_assert($dough['menuCount']===2&&count($dough['menuDishes'])===2,'menu references count distinct published dishes');
+dq_assert($dough['recipeId']===$recipeId,'only an exact verified saved recipe is linked');
+dq_assert($dough['historicalQuantity']===8.5&&$dough['historySamples']===4,'sufficient comparable completed prep history is advisory');
+dq_assert(str_starts_with($dough['key'],'ing-'),'menu candidate has a deterministic server-side key');
+$untrusted=daily_quicklist_suggestions_from_menu($menuExample,$recipes,
+    [['title'=>'Prep Pizza Dough','recommendedBase'=>999,'unit'=>'balls','sampleCount'=>1,'confidence'=>1]]);
+dq_assert($untrusted[0]['historicalQuantity']===null,'one prior task is insufficient to infer demand');
+$dupRecipes=[$recipes[0],array_merge($recipes[0],['id'=>'recipe-duplicate'])];
+$ambiguous=daily_quicklist_suggestions_from_menu($menuExample,$dupRecipes,[]);
+dq_assert($ambiguous[0]['recipeId']===null,'ambiguous recipe names cannot be guessed');
+$fingerprint=daily_quicklist_selection_fingerprint([$dough]);
+$changed=$dough;$changed['menuCount']=3;
+dq_assert(!hash_equals($fingerprint,daily_quicklist_selection_fingerprint([$changed])),
+    'menu snapshot fingerprint rejects changed source evidence');
+
+require_once __DIR__.'/../includes/prep-agent-core.php';
+require_once __DIR__.'/../includes/agent-workspace-core.php';
+dq_assert(menu_manager_ready($pdo),'menu manager schema must be installed for generation');
+$cat=pos_transaction($pdo,fn():array=>menu_manager_category_save($pdo,$org,null,['name'=>'Gelato CI Pizza','sortOrder'=>10,'status'=>'active']));
+$menuItem=menu_manager_save_item($pdo,$org,null,[
+    'name'=>'Gelato CI Pizza','categoryId'=>$cat['id'],
+    'sizes'=>[['clientKey'=>'standard','label'=>'Standard','amount'=>15.00]],
+    'ingredients'=>[['name'=>'Pizza Dough'],['name'=>'Basil']],
+    'distribution'=>['publicMenu'=>true],
+],$actor);
+$menuItem=menu_manager_set_status($pdo,$org,(int)$menuItem['id'],'publish',$actor);
+$live=daily_quicklist_menu_suggestions($pdo,$org,$recipes,$day);
+dq_assert(count($live)>=2,'published menu provides real ingredient checklist suggestions');
+$doughLive=array_values(array_filter($live,static fn(array $r):bool=>$r['title']==='Prep Pizza Dough'));
+dq_assert(count($doughLive)===1&&$doughLive[0]['recipeId']===$recipeId,
+    'real published menu ingredient connects to the exact saved recipe');
+$selectedKeys=array_column($live,'key');
+try{daily_quicklist_apply_menu_selection($pdo,$org,$actor,$day,$selectedKeys,true,'old-menu-snapshot');
+    throw new RuntimeException('stale menu snapshot accepted');}catch(InvalidArgumentException){}
+$staffAgent=['id'=>$actor,'organization_id'=>$org,
+    'permissions'=>['prep.intelligence.view','prep.intelligence.agent','tasks.self','recipes.view','menu.view']];
+$route=gaw_route($staffAgent,'Generate daily prep checklist from the menu');
+dq_assert($route['route']==='api/prep-intelligence-agent.php','menu-backed prep routes to canonical Prep Agent before menu-answer tool');
+$route=gaw_route($staffAgent,'What is on our Need More list?');
+dq_assert($route['route']==='api/prep-intelligence-agent.php','Need More quicklist reads use official Prep Agent');
+$route=gaw_route($staffAgent,'Show the published menu');
+dq_assert($route['route']==='api/agent-brain.php','plain menu lookups keep their canonical Brain route');
+app_boot_session();
+$read=prep_agent_handle($pdo,$staffAgent,['message'=>'Show daily prep checklist for '.$day]);
+dq_assert($read['skill']==='prep.daily_quicklist'&&($read['data']['proof']['url']??'')==='daily-prep.php'
+    &&str_contains($read['answer'],'Need More'),
+    'official agent reads the shared quicklist and returns a real UI link');
+$voiceProposal=prep_agent_handle($pdo,$staffAgent,
+    ['message'=>'Generate daily prep checklist for '.$day.' from menu','voice'=>true]);
+dq_assert($voiceProposal['skill']==='prep.action_proposal','authorized voice and typed requests use the same proposal path');
+$cancelled=prep_agent_handle($pdo,$staffAgent,['message'=>'Cancel','voice'=>true]);
+dq_assert($cancelled['skill']==='prep.action_cancelled','spoken cancellation does not create tasks');
+$proposal=prep_agent_handle($pdo,$staffAgent,['message'=>'Generate daily prep checklist for '.$day.' from menu']);
+dq_assert($proposal['skill']==='prep.action_proposal','agent generation is confirmation-only');
+$pending=gac_pending_get('prep',$org,$actor);
+dq_assert($pending!==null&&$pending['type']==='quicklist_generate'&&count($pending['payload']['keys'])>=1,
+    'official Prep Agent stores server-selected menu keys, not arbitrary titles');
+$confirmed=prep_agent_handle($pdo,$staffAgent,['message'=>'Confirm']);
+dq_assert($confirmed['skill']==='prep.action_confirmed'
+    &&($confirmed['data']['proof']['url']??'')==='daily-prep.php',
+    'confirmation writes the same shared Daily Prep checklist as the UI');
+$created=$confirmed['data']['created'];
+dq_assert(count($created)>=1,'confirmed generation creates menu-backed prep items');
+$recipeLinked=array_values(array_filter($created,static fn(array $i):bool=>$i['recipeId']===$recipeId));
+dq_assert(count($recipeLinked)===1,'menu-generated item retains canonical saved recipe reference');
+$retry=daily_quicklist_apply_menu_selection($pdo,$org,$actor,$day,$selectedKeys,true);
+dq_assert(count($retry['created'])===0&&count($retry['skipped'])===count($selectedKeys),
+    'repeated UI/agent generation skips existing items instead of duplicating them');
+$generatedHistory=daily_quicklist_history($pdo,$org,$created[0]['id']);
+dq_assert($generatedHistory[0]['event']==='menu_generated','menu generation records append-only source evidence');
+try{daily_quicklist_apply_menu_selection($pdo,$other,$actor,$day,$selectedKeys,true);
+    throw new RuntimeException('cross-tenant menu keys accepted');}catch(InvalidArgumentException){}
+dq_assert(!gac_pending_get('prep',$org,$actor),'successful confirmation consumes the pending action');
+
 echo "daily-prep-quicklist contract passed\n";

@@ -26,7 +26,7 @@ try{
             'ok'=>true,'date'=>$date,'manager'=>$manager,'canRecipe'=>$canRecipe,'canInventory'=>$canInventory,
             'items'=>$items,
             'recipeScales'=>$canRecipe?daily_quicklist_recipe_projections($items,$recipes):[],
-            'suggestions'=>daily_quicklist_menu_suggestions($pdo,$org,$recipes),
+            'suggestions'=>daily_quicklist_menu_suggestions($pdo,$org,$recipes,$date),
             'recipes'=>$recipes,
             'inventory'=>$canInventory?daily_quicklist_inventory($pdo,$org):[],
         ]);
@@ -36,6 +36,14 @@ try{
     }
     $input=app_json_input();app_verify_request_csrf($input);
     $action=(string)($input['action']??'');
+    if($action==='generate_menu'){
+        $result=daily_quicklist_apply_menu_selection($pdo,$org,$actor,
+            (string)($input['date']??''),is_array($input['keys']??null)?$input['keys']:[],
+            $canRecipe);
+        app_audit($pdo,$org,$actor,'daily_quicklist.menu_generated','daily_quicklist_item',null,null,
+            ['date'=>$result['date'],'requested'=>$result['requested'],'created'=>count($result['created']),'skipped'=>count($result['skipped'])]);
+        app_json_response(['ok'=>true]+$result);
+    }
     if($action==='seed'){
         $count=daily_quicklist_seed($pdo,$org,$actor,(string)($input['date']??''),$canRecipe);
         app_audit($pdo,$org,$actor,'daily_quicklist.seed','daily_quicklist_item',null,null,['count'=>$count]);

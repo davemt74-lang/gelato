@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__.'/prep-intelligence-core.php';
+require_once __DIR__.'/daily-quicklist-core.php';
 require_once __DIR__.'/agent-confirmation-core.php';
 require_once __DIR__.'/prep-agent-followups.php';
 require_once __DIR__.'/prep-agent-readiness.php';
@@ -139,6 +140,60 @@ function pac_visible(array $detail,bool $canForecast): array
     return $detail;
 }
 
+/** Official Prep Agent read path for the staff Daily Prep / Need More quicklist. */
+function pac_quicklist_brief(PDO $pdo,int $org,array $user,string $date): array
+{
+    if(!daily_quicklist_can_view($user))throw new PrepAgentPermissionException('Daily Prep access requires operational staff permissions.');
+    if(!daily_quicklist_ready($pdo))
+        return ['ok'=>true,'skill'=>'prep.daily_not_installed',
+            'answer'=>'Daily Prep is not installed on this restaurant yet. Run upgrade.php before using the checklist.',
+            'data'=>null,'sources'=>[]];
+    $date=daily_quicklist_date($date);$rows=daily_quicklist_items($pdo,$org,$date);
+    $prep=array_values(array_filter($rows,static fn(array $r):bool=>$r['type']==='prep'));
+    $needed=array_values(array_filter($rows,static fn(array $r):bool=>$r['type']==='inventory'&&$r['status']!=='received'));
+    $done=count(array_filter($prep,static fn(array $r):bool=>$r['status']==='done'));
+    $labels=array_map(static fn(array $r):string=>$r['title'].' ('.str_replace('_',' ',$r['status']).')',array_slice($prep,0,8));
+    $answer='Daily Prep checklist for '.$date.': '.$done.' of '.count($prep).' item(s) complete.';
+    $answer.=$labels?' Prep: '.implode('; ',$labels).'.':' No checklist entries yet.';
+    $answer.=' Need More: '.count($needed).' active item(s).';
+    if($needed)$answer.=' '.implode('; ',array_column(array_slice($needed,0,5),'title')).'.';
+    $answer.=' Open Daily Prep to review the list and linked recipes.';
+    return ['ok'=>true,'skill'=>'prep.daily_quicklist','answer'=>$answer,
+        'data'=>['date'=>$date,'prep'=>$prep,'needMore'=>$needed,
+            'proof'=>['url'=>'daily-prep.php']],
+        'sources'=>array_column($prep,'id')];
+}
+function pac_quicklist_generate_proposal(PDO $pdo,int $org,int $uid,array $user,string $date): array
+{
+    if(!daily_quicklist_can_view($user))throw new PrepAgentPermissionException('Daily Prep access requires operational staff permissions.');
+    if(!daily_quicklist_ready($pdo))throw new InvalidArgumentException('Daily Prep is not installed. Run upgrade.php.');
+    $date=daily_quicklist_date($date);
+    $canRecipe=app_has_permission('recipes.view',$user);
+    $recipes=$canRecipe?daily_quicklist_recipes($pdo,$org):[];
+    $suggestions=daily_quicklist_menu_suggestions($pdo,$org,$recipes,$date);
+    $items=daily_quicklist_items($pdo,$org,$date);
+    $existing=array_fill_keys(array_map(static fn(array $r):string=>mb_strtolower($r['title'],'UTF-8'),
+        array_values(array_filter($items,static fn(array $r):bool=>$r['type']==='prep'))),true);
+    $selected=[];
+    foreach($suggestions as $candidate){
+        if(isset($existing[mb_strtolower($candidate['title'],'UTF-8')]))continue;
+        $selected[]=$candidate;if(count($selected)===12)break;
+    }
+    if(!$selected)return ['ok'=>true,'skill'=>'prep.daily_no_new_menu_items',
+        'answer'=>'No new published-menu prep suggestions are available for '.$date.'. Existing items remain unchanged. Review Daily Prep to add a custom task.',
+        'data'=>['date'=>$date,'proof'=>['url'=>'daily-prep.php']],'sources'=>[]];
+    $keys=array_column($selected,'key');
+    $summary='Proposed Daily Prep checklist for '.$date.': add '.count($selected).
+        ' published-menu item(s): '.implode(', ',array_slice(array_column($selected,'title'),0,6)).
+        (count($selected)>6?', and '.(count($selected)-6).' more':'').
+        '. No entries have been added. Say Confirm to apply or Cancel to discard.';
+    $proposal=gac_pending_store('prep',$org,$uid,'quicklist_generate',[
+        'date'=>$date,'keys'=>$keys,'fingerprint'=>daily_quicklist_selection_fingerprint($selected)
+    ],$summary);
+    app_audit($pdo,$org,$uid,'prep.agent_action_proposed','prep_agent_proposal',(string)$proposal['id'],
+        null,['type'=>'quicklist_generate','date'=>$date,'count'=>count($selected)]);
+    return gac_proposal_result($proposal,'prep.action_proposal',['Daily Prep','Published Menu','Saved Recipes']);
+}
 function pac_execute(PDO $pdo,int $org,int $uid,array $user,array $proposal,bool $canForecast): array
 {
     if((int)($proposal['organizationId']??0)!==$org||(int)($proposal['userId']??0)!==$uid)throw new PrepAgentPermissionException('This Prep Agent proposal does not belong to your session.');
@@ -146,6 +201,22 @@ function pac_execute(PDO $pdo,int $org,int $uid,array $user,array $proposal,bool
     $type=(string)$proposal['type'];
     if(in_array($type,['task_status','task_quantity','task_assign','task_progress','task_blocker','task_resolve'],true))
         return pac_execute_followup($pdo,$org,$uid,$user,$payload,$type);
+    if($type==='quicklist_generate'){
+        pac_require($user,'prep.intelligence.view','Prep Intelligence view permission is required.');
+        pac_require($user,'prep.intelligence.agent','Prep Agent permission is required.');
+        if(!daily_quicklist_can_view($user))throw new PrepAgentPermissionException('Daily Prep staff access is required.');
+        if(!daily_quicklist_ready($pdo))throw new InvalidArgumentException('Daily Prep is not installed. Run upgrade.php.');
+        $result=daily_quicklist_apply_menu_selection($pdo,$org,$uid,
+            (string)($payload['date']??''),(array)($payload['keys']??[]),
+            app_has_permission('recipes.view',$user),(string)($payload['fingerprint']??''));
+        $created=$result['created'];$skipped=$result['skipped'];
+        return ['ok'=>true,'skill'=>'prep.action_confirmed',
+            'answer'=>'Confirmed. Added '.count($created).' menu-backed item(s) to Daily Prep for '.$result['date'].
+                (count($skipped)?'; '.count($skipped).' item(s) were already present':'').
+                '. Open Daily Prep to check off work or view recipes.',
+            'data'=>['action'=>'quicklist_generate']+$result+['proof'=>['url'=>'daily-prep.php']],
+            'sources'=>array_column($created,'id')];
+    }
     pac_require($user,'prep.intelligence.manage','Prep Intelligence management permission is required for this action.');
 
     if($type==='create_plan'){
@@ -352,6 +423,13 @@ function prep_agent_handle(PDO $pdo,array $user,array $input): array
         app_audit($pdo,$org,$uid,'prep.agent_action_discarded','prep_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);
         return ['ok'=>true,'skill'=>'prep.action_cancelled','answer'=>'Cancelled. I did not change the prep plan.','data'=>['cancelledProposal'=>$pending['id']],'sources'=>['Prep + Inventory Intelligence']];
     }
+
+    // Explicit Daily Prep quicklist phrases are intentionally separate from formal prep plans.
+    if(preg_match('/\b(?:generate|build|create|populate)\b.{0,90}\b(?:daily\s+prep|menu[- ]based\s+prep|prep\s+checklist)\b/iu',$lower)
+        ||preg_match('/\b(?:generate|build)\b.{0,90}\bprep\b.{0,60}\b(?:from|based on)\b.{0,30}\bmenu\b/iu',$lower))
+        return pac_quicklist_generate_proposal($pdo,$org,$uid,$user,prep_parse_date_phrase($text));
+    if(preg_match('/\b(?:daily\s+prep|prep\s+checklist|need\s+more\s+(?:inventory\s+)?list)\b/iu',$lower))
+        return pac_quicklist_brief($pdo,$org,$user,prep_parse_date_phrase($text));
 
     if(($followup=pac_followup_intent($text))!==null){
         $plan=pac_context_plan($pdo,$org,$uid,$text);
