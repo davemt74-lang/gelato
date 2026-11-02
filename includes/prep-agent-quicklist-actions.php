@@ -25,7 +25,7 @@ function pqa_parse_request(string $message): ?array
 
     if(preg_match('~^(?:please\s+)?(?:set|change)\s+(.+?)\s+(?:batch\s+)?(?:target|yield)\s+(?:to|at)\s+(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?\s+'.$c.$p.'[.!]?$~iu',$text,$m))
         return ['op'=>'set_target','kind'=>'prep','target'=>trim($m[1]),'quantity'=>(float)$m[2],'unit'=>trim($m[3]??'')];
-    if(preg_match('~^(?:please\s+)?(?:start|pause|resume|stop)\s+(?:the\s+)?timer\s+(?:for|on)\s+(.+?)\s+'.$c.$p.'[.!]?$~iu',$text,$m))
+    if(preg_match('~^(?:please\s+)?(start|pause|resume|stop)\s+(?:the\s+)?timer\s+(?:for|on)\s+(.+?)\s+'.$c.$p.'[.!]?$~iu',$text,$m))
         return ['op'=>'timer','kind'=>'prep','target'=>trim($m[2]),'mode'=>mb_strtolower($m[1],'UTF-8')];
     if(preg_match('~^(?:please\s+)?(start|pause|resume|stop)\s+(.+?)\s+timer\s+'.$c.$p.'[.!]?$~iu',$text,$m))
         return ['op'=>'timer','kind'=>'prep','target'=>trim($m[2]),'mode'=>mb_strtolower($m[1],'UTF-8')];
