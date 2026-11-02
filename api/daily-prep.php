@@ -21,9 +21,11 @@ try{
         if($action!=='bootstrap')throw new InvalidArgumentException('Unknown list action.');
         $date=daily_quicklist_date($_GET['date']??date('Y-m-d'));
         $recipes=$canRecipe?daily_quicklist_recipes($pdo,$org):[];
+        $items=daily_quicklist_items($pdo,$org,$date);
         app_json_response([
             'ok'=>true,'date'=>$date,'manager'=>$manager,'canRecipe'=>$canRecipe,'canInventory'=>$canInventory,
-            'items'=>daily_quicklist_items($pdo,$org,$date),
+            'items'=>$items,
+            'recipeScales'=>$canRecipe?daily_quicklist_recipe_projections($items,$recipes):[],
             'suggestions'=>daily_quicklist_menu_suggestions($pdo,$org,$recipes),
             'recipes'=>$recipes,
             'inventory'=>$canInventory?daily_quicklist_inventory($pdo,$org):[],
@@ -46,10 +48,10 @@ try{
             ['type'=>(string)($input['type']??'')]);
         app_json_response(['ok'=>true,'id'=>$id]);
     }
-    if(in_array($action,['toggle','timer','archive','update','notify'],true)){
-        $result=daily_quicklist_mutate($pdo,$org,$actor,$action,$input,$manager);
+    if(in_array($action,['toggle','timer','archive','update','notify','set_target'],true)){
+        $result=daily_quicklist_mutate($pdo,$org,$actor,$action,$input,$manager,$canRecipe);
         app_audit($pdo,$org,$actor,'daily_quicklist.'.$action,'daily_quicklist_item',$result['id'],null,
-            ['status'=>$result['status']??null,'timerMode'=>$input['mode']??null]);
+            ['status'=>$result['status']??null,'timerMode'=>$input['mode']??null,'targetYieldQuantity'=>$action==='set_target'?($input['targetYieldQuantity']??null):null]);
         app_json_response(['ok'=>true]+$result);
     }
     throw new InvalidArgumentException('Unsupported list action.');

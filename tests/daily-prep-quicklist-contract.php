@@ -91,4 +91,64 @@ dq_assert($notifications===1,'manager notifications target eligible recipients o
 $q=$pdo->prepare("SELECT COUNT(*) FROM notifications WHERE organization_id=? AND user_id=? AND notification_type='daily_quicklist.update'");
 $q->execute([$org,$manager]);dq_assert((int)$q->fetchColumn()>=1,'notification is recorded in existing inbox');
 dq_assert(is_file(__DIR__.'/../daily-prep.php')&&is_file(__DIR__.'/../js/daily-prep.js'),'staff UI and timer code bundled');
+
+// Section 3K2A: batch yield projections use saved recipes and preserve qualitative amounts.
+$source=['yieldQuantity'=>8.0,'yieldUnit'=>'portions','ingredients'=>[
+    ['quantity'=>'1 1/2','unit'=>'kg','name'=>'Mozzarella'],
+    ['quantity'=>'½','unit'=>'cup','name'=>'Olive oil'],
+    ['quantity'=>'to taste','unit'=>'','name'=>'Salt'],
+    ['quantity'=>'1-2','unit'=>'pinches','name'=>'Herbs'],
+    'Additional garnish as desired',
+]];
+$sourceBefore=json_encode($source,JSON_THROW_ON_ERROR);
+$projected=daily_quicklist_scale_recipe($source,16.0,'portions');
+dq_assert($projected['scalable']&&$projected['factor']===2.0,'double batch factor');
+dq_assert($projected['ingredients'][0]['quantity']==='3','mixed fraction scales to accurate numeric quantity');
+dq_assert($projected['ingredients'][1]['quantity']==='1','unicode fraction scales accurately');
+dq_assert($projected['ingredients'][2]['quantity']==='to taste','qualitative seasoning is never invented');
+dq_assert($projected['ingredients'][3]['quantity']==='1-2','range never silently scaled');
+dq_assert($projected['unscaledCount']===3,'unstructured amounts explicitly flagged');
+dq_assert(json_encode($source,JSON_THROW_ON_ERROR)===$sourceBefore,'projection does not edit saved source');
+dq_assert(!daily_quicklist_scale_recipe($source,16.0,'kg')['scalable'],'unit drift prevents unsafe scaling');
+dq_assert(!daily_quicklist_scale_recipe($source,16.0,null)['scalable'],'missing stored unit cannot silently override recipe unit');
+dq_assert(!daily_quicklist_scale_recipe(['yieldQuantity'=>null,'yieldUnit'=>'','ingredients'=>[]],4.0,null)['scalable'],
+    'missing canonical yield cannot be scaled');
+try{daily_quicklist_scale_recipe($source,10001.0,'portions');throw new RuntimeException('unbounded scaling accepted');}
+catch(InvalidArgumentException){}
+dq_assert(daily_quicklist_numeric_quantity('1/0')===null,'zero denominator safely rejected');
+dq_assert(daily_quicklist_numeric_quantity('as needed')===null,'qualitative amounts are not parsed');
+$targetItem=daily_quicklist_add($pdo,$org,$actor,
+    ['type'=>'prep','date'=>$day,'title'=>'Scaled dough batch','recipeId'=>$recipeId],true);
+try{daily_quicklist_mutate($pdo,$org,$actor,'set_target',
+    ['id'=>$targetItem,'targetYieldQuantity'=>16],false,false);
+    throw new RuntimeException('Recipe access check bypassed');}catch(InvalidArgumentException){}
+try{daily_quicklist_mutate($pdo,$org,$actor,'set_target',
+    ['id'=>$targetItem,'targetYieldQuantity'=>0],false,true);
+    throw new RuntimeException('zero batch target accepted');}catch(InvalidArgumentException){}
+try{daily_quicklist_mutate($pdo,$org,$actor,'set_target',
+    ['id'=>$needId,'targetYieldQuantity'=>16],false,true);
+    throw new RuntimeException('inventory item accepted recipe yield');}catch(InvalidArgumentException){}
+$targetResult=daily_quicklist_mutate($pdo,$org,$actor,'set_target',
+    ['id'=>$targetItem,'targetYieldQuantity'=>16],false,true);
+dq_assert($targetResult['id']===$targetItem,'staff can persist an authorized target');
+$items=daily_quicklist_items($pdo,$org,$day);
+$targetRow=current(array_values(array_filter($items,static fn(array $r):bool=>$r['id']===$targetItem)));
+dq_assert($targetRow['targetYieldQuantity']===16.0&&$targetRow['targetYieldUnit']==='balls',
+    'target and canonical unit persisted on shared checklist');
+$projections=daily_quicklist_recipe_projections($items,$recipes);
+dq_assert($projections[$targetItem]['factor']===2.0,'shared list projects double recipe yield');
+dq_assert($projections[$targetItem]['ingredients'][0]['quantity']==='4','stored batch target scales recipe flour');
+$q=$pdo->prepare('SELECT yield_quantity,ingredients_json FROM recipes WHERE organization_id=? AND public_id=?');
+$q->execute([$org,$recipeId]);$canonical=$q->fetch();
+dq_assert((float)$canonical['yield_quantity']===8.0,'batch target does not change saved recipe yield');
+dq_assert(json_decode($canonical['ingredients_json'],true)[0]['quantity']==='2',
+    'batch target does not change saved recipe ingredient amounts');
+$history=daily_quicklist_history($pdo,$org,$targetItem);
+dq_assert($history[0]['event']==='target_set'&&(float)($history[0]['details']['after']['targetYieldQuantity']??0)===16.0,
+    'target edits recorded in the quicklist event history');
+try{daily_quicklist_mutate($pdo,$other,$actor,'set_target',
+    ['id'=>$targetItem,'targetYieldQuantity'=>20],false,true);
+    throw new RuntimeException('cross-tenant target mutation accepted');}catch(InvalidArgumentException){}
+dq_assert(daily_quicklist_items($pdo,$other,$day)===[],'target update does not leak across tenants');
+
 echo "daily-prep-quicklist contract passed\n";

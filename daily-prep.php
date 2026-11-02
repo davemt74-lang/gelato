@@ -11,7 +11,7 @@ $displayName=htmlspecialchars((string)($user['display_name']??'Team member'),ENT
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#183a2a">
 <title>Daily Prep · Gelato</title>
-<link rel="stylesheet" href="assets/css/daily-prep.css?v=3k1">
+<link rel="stylesheet" href="assets/css/daily-prep.css?v=3k2">
 </head><body>
 <div class="workspace">
 <header class="masthead">
@@ -50,5 +50,5 @@ $displayName=htmlspecialchars((string)($user['display_name']??'Team member'),ENT
   <p class="footer-note">Shared with your Gelato team · Changes are logged · Inventory counts update only in <a href="operations.php">Operations</a></p>
 </main></div>
 <script>window.DAILY_PREP_CSRF=<?php echo json_encode(app_csrf_token(),JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT); ?>;</script>
-<script src="js/daily-prep.js?v=3k1" defer></script>
+<script src="js/daily-prep.js?v=3k2" defer></script>
 </body></html>

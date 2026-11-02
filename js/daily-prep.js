@@ -11,23 +11,37 @@ function statusLabel(s){return ({todo:'To do',in_progress:'In progress',paused:'
 function timerDisplay(s){s=Math.max(0,Number(s)||0);var hrs=Math.floor(s/3600);var min=Math.floor((s%3600)/60);var sec=Math.floor(s%60);return (hrs?String(hrs).padStart(2,'0')+':':'')+String(min).padStart(2,'0')+':'+String(sec).padStart(2,'0');}
 function textOfPart(v){if(typeof v==='string')return v;if(!v||typeof v!=='object')return String(v||'');return [v.quantity,v.unit,v.ingredient||v.name||v.item||v.text||v.description,v.notes].filter(function(x){return x!==null&&x!==undefined&&String(x).trim()!=='';}).join(' ');}
 function stepOfPart(v){if(typeof v==='string')return v;if(!v||typeof v!=='object')return String(v||'');return String(v.instruction||v.text||v.description||v.step||v.content||'');}
-function recipeHtml(recipe){
+function recipeHtml(recipe,scale,item){
  if(!recipe)return '<p class="recipe-missing">Linked recipe is unavailable or you do not have Recipe Library access.</p>';
  var ing=Array.isArray(recipe.ingredients)?recipe.ingredients:[];
  var steps=Array.isArray(recipe.instructions)?recipe.instructions:[];
- var yieldText=recipe.yieldQuantity!=null?'<div class="yield">YIELD · '+html(recipe.yieldQuantity)+' '+html(recipe.yieldUnit||'')+'</div>':'';
+ var canScale=recipe.yieldQuantity!=null&&Number(recipe.yieldQuantity)>0;
+ var applied=scale&&scale.scalable?scale.ingredients:ing;
+ var factor=scale&&scale.scalable?Number(scale.factor):1;
+ var target=scale&&scale.scalable?scale.targetQuantity:recipe.yieldQuantity;
+ var yieldText=canScale?'<div class="yield">SAVED RECIPE · '+html(recipe.yieldQuantity)+' '+html(recipe.yieldUnit||'')+'</div>':'';
+ var batch=canScale?'<div class="batch-controls"><div class="batch-copy"><strong>Batch target</strong><span>Scale ingredients from the saved recipe yield.</span></div>'+
+  '<label class="target-label"><input class="recipe-target" type="number" step="0.001" min="0.001" max="10000" inputmode="decimal" aria-label="Target recipe yield" value="'+html(target)+'"> '+html(recipe.yieldUnit||'yield units')+'</label>'+
+  '<button class="small-btn batch-save" type="button" data-action="save-target">Apply batch</button>'+
+  '<span class="batch-factor">'+(scale&&scale.scalable?'× '+html(Number(factor.toFixed(3))):'× 1')+'</span></div>':
+  '<p class="recipe-missing">Add a numeric yield to this saved recipe to enable batch scaling.</p>';
+ var warning=scale&&scale.warning?'<p class="recipe-missing">'+html(scale.warning)+'</p>':'';
+ var unscaled=scale&&scale.scalable&&Math.abs(factor-1)>0.000001&&scale.unscaledCount>0?
+  '<p class="recipe-missing">'+html(scale.unscaledCount)+' qualitative or unstructured amount(s) remain as saved. Check these manually.</p>':'';
  return '<div class="recipe-sheet"><h4>'+html(recipe.name)+'</h4>'+yieldText+
- (recipe.description?'<p>'+html(recipe.description)+'</p>':'')+
- '<div class="recipe-columns"><div><h5>Ingredients</h5>'+
- (ing.length?'<ul>'+ing.map(function(x){return '<li>'+html(textOfPart(x))+'</li>';}).join('')+'</ul>':'<p>No ingredients recorded.</p>')+
- '</div><div><h5>Method</h5>'+
+ (recipe.description?'<p>'+html(recipe.description)+'</p>':'')+batch+warning+
+ '<div class="recipe-columns"><div><h5>'+(Math.abs(factor-1)>0.000001?'Ingredients · scaled':'Ingredients')+'</h5>'+
+ (applied.length?'<ul>'+applied.map(function(x){return '<li>'+html(textOfPart(x))+'</li>';}).join('')+'</ul>':'<p>No ingredients recorded.</p>')+unscaled+
+ '</div><div><h5>Method · saved recipe</h5>'+
  (steps.length?'<ol>'+steps.map(function(x){return '<li>'+html(stepOfPart(x))+'</li>';}).join('')+'</ol>':'<p>No instructions recorded.</p>')+
  '</div></div>'+(recipe.notes?'<p><strong>Recipe notes:</strong> '+html(recipe.notes)+'</p>':'')+'</div>';
 }
 function recipeDetails(item){
  if(!item.recipeId)return '';
  var recipe=(state.data.recipes||[]).find(function(r){return r.id===item.recipeId;});
- return '<details class="recipe-details"><summary>📖 Recipe · '+html(recipe?recipe.name:'View linked recipe')+'</summary>'+recipeHtml(recipe)+'</details>';
+ var scale=(state.data.recipeScales||{})[item.id]||null;
+ var label=recipe&&recipe.yieldQuantity!=null?' · target '+html(item.targetYieldQuantity==null?recipe.yieldQuantity:item.targetYieldQuantity)+' '+html(recipe.yieldUnit||''):'';
+ return '<details class="recipe-details"><summary>📖 Recipe · '+html(recipe?recipe.name:'View linked recipe')+label+'</summary>'+recipeHtml(recipe,scale,item)+'</details>';
 }
 function managerControls(item){
  if(!state.data.manager)return '';
@@ -106,6 +120,7 @@ document.addEventListener('click',function(e){
  var card=button.closest('[data-id]');if(!card)return;var id=card.dataset.id,action=button.dataset.action;
  if(action==='archive'){if(confirm('Remove this item from the shared list? You can review its history as a manager.'))act('archive',{id:id});}
  if(action==='timer')act('timer',{id:id,mode:button.dataset.mode});
+ if(action==='save-target'){var field=card.querySelector('.recipe-target');if(!field||!field.value||!field.checkValidity()){notify('Choose a valid positive batch target.',true);return;}act('set_target',{id:id,targetYieldQuantity:Number(field.value)});}
  if(action==='manager-save')act('update',{id:id,status:card.querySelector('.manager-status').value,adminNote:card.querySelector('.manager-note').value});
  if(action==='notify')act('notify',{id:id});
  if(action==='history'){json('api/daily-prep.php?action=history&id='+encodeURIComponent(id)).then(function(d){var slot=card.querySelector('.history-slot');slot.className='history';slot.innerHTML=d.events.length?d.events.map(function(ev){return '<div>'+html(ev.when)+' · <strong>'+html(ev.event)+'</strong> · '+html(ev.by)+'</div>';}).join(''):'No changes logged.';}).catch(function(err){notify(err.message,true);});}

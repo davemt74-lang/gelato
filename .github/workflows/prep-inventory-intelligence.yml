@@ -11,6 +11,7 @@ on:
       - 'assets/css/daily-prep.css'
       - 'operations.php'
       - 'database/20261224_daily_prep_quicklist.sql'
+      - 'database/20261225_daily_prep_recipe_targets.sql'
       - 'tests/daily-prep-quicklist-contract.php'
       - 'api/prep-intelligence.php'
       - 'api/prep-intelligence-agent.php'
@@ -39,6 +40,7 @@ on:
       - 'assets/css/daily-prep.css'
       - 'operations.php'
       - 'database/20261224_daily_prep_quicklist.sql'
+      - 'database/20261225_daily_prep_recipe_targets.sql'
       - 'tests/daily-prep-quicklist-contract.php'
       - 'api/prep-intelligence.php'
       - 'api/prep-intelligence-agent.php'
@@ -117,6 +119,8 @@ jobs:
           grep -q "inventory.shortage_forecast" api/proactive-agent.php
           grep -q "originalTranscript\|transcript" api/prep-intelligence-agent.php
           grep -q "app_verify_request_csrf" api/prep-intelligence.php
+          grep -q 'ADD COLUMN target_yield_quantity' database/20261225_daily_prep_recipe_targets.sql
+          grep -q 'daily_quicklist_scale_recipe' includes/daily-quicklist-core.php
       - name: Install and upgrade schema
         run: |
           sudo apt-get update -qq
