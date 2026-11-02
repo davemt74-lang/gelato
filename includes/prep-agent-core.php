@@ -6,6 +6,7 @@ require_once __DIR__.'/daily-quicklist-core.php';
 require_once __DIR__.'/agent-confirmation-core.php';
 require_once __DIR__.'/prep-agent-followups.php';
 require_once __DIR__.'/prep-agent-readiness.php';
+require_once __DIR__.'/prep-agent-quicklist-actions.php';
 
 final class PrepAgentPermissionException extends RuntimeException {}
 
@@ -201,6 +202,9 @@ function pac_execute(PDO $pdo,int $org,int $uid,array $user,array $proposal,bool
     $type=(string)$proposal['type'];
     if(in_array($type,['task_status','task_quantity','task_assign','task_progress','task_blocker','task_resolve'],true))
         return pac_execute_followup($pdo,$org,$uid,$user,$payload,$type);
+    if($type==='quicklist_item_action'){
+        return pqa_execute($pdo,$org,$uid,$user,$payload);
+    }
     if($type==='quicklist_generate'){
         pac_require($user,'prep.intelligence.view','Prep Intelligence view permission is required.');
         pac_require($user,'prep.intelligence.agent','Prep Agent permission is required.');
@@ -428,6 +432,8 @@ function prep_agent_handle(PDO $pdo,array $user,array $input): array
     if(preg_match('/\b(?:generate|build|create|populate)\b.{0,90}\b(?:daily\s+prep|menu[- ]based\s+prep|prep\s+checklist)\b/iu',$lower)
         ||preg_match('/\b(?:generate|build)\b.{0,90}\bprep\b.{0,60}\b(?:from|based on)\b.{0,30}\bmenu\b/iu',$lower))
         return pac_quicklist_generate_proposal($pdo,$org,$uid,$user,prep_parse_date_phrase($text));
+    if(($quicklistIntent=pqa_parse_request($text))!==null)
+        return pqa_propose($pdo,$org,$uid,$user,$quicklistIntent,prep_parse_date_phrase($text));
     if(preg_match('/\b(?:daily\s+prep|prep\s+checklist|need\s+more\s+(?:inventory\s+)?list)\b/iu',$lower))
         return pac_quicklist_brief($pdo,$org,$user,prep_parse_date_phrase($text));
 

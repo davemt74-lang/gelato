@@ -13,14 +13,18 @@
 7. **Audits and testing.** Keep append-only event history, standard audit log, source-drift protection, CSRF on UI POSTs, and PHP/MariaDB regression tests for permission, replay, data isolation, voice parity, and the canonical route.
 8. **Deployment.** Require green PR checks before merge, merged-main verification, and one verified full ZIP with upgrade.php.
 
-## Current Daily Prep coverage
+## Current Daily Prep coverage (Section 3K2C)
 
-- daily-prep.php and api/daily-prep.php share includes/daily-quicklist-core.php.
-- Official Prep Agent handles **Daily Prep checklist read**, current **Need More list read**, and **menu-backed Daily Prep list proposals**. Confirmed list generation reuses the same server-side selection function as the page.
-- Saved recipe viewing and batch targets continue to use canonical Recipe Library records.
+- Daily Prep UI, Prep Agent and Brain/Chat route share the canonical daily-quicklist-core.php records.
+- The Prep Agent can read the dated checklist and Need More inventory, generate published-menu suggestions, and propose individual checklist actions for explicit natural-language requests.
+- Staff agent proposals: check off/reopen prep items, start/pause/resume/stop timers, set authorized recipe batch targets, add/remove Need More requests, and soft-remove prep items.
+- Manager agent proposals: change checklist/Need More statuses, add notes and send manager notifications, using the existing permission check on both proposal and confirmation.
+- Requests are resolved to a live, tenant-scoped item; proposals store a source fingerprint, and confirmation checks it again under the mutation's row lock. Recipe yield permissions and canonical units are rechecked. Changes produce standard checklist events and audit records.
+- Typed and voice requests enter the same official Prep Agent handler. The existing voice session is responsible for speaker authorization; an input flag by itself cannot certify identity.
+- Curated Agent Brain skill discovery offers a Daily Prep entry and a direct prompt into the same chat route.
 
-## Remaining integration requirements
+## Limits and deployment acceptance
 
-The following existing UI operations still need **individual model-selected agent skills** before the Daily Prep/Inventory domain can be called fully integrated: staff check-off/undo; timer start/pause/resume/stop; recipe target changes; ad hoc Need More additions and removals; manager inventory status/notes/notifications. Each must use the current confirmation and permission workflows without weakening inventory-count permissions.
-
-The current section does not claim these actions are already model-selectable. Treat them as explicit follow-on work.
+- The explicit Daily Prep action phrases are routed deterministically through the official Prep Agent. This is not a claim that every spontaneous sentence is model-selected as a structured tool call; broader natural-language coverage and embedded "this item" references require a separate model tool/catalog integration pass.
+- Need More "received" is a request status, **not** an inventory count change. Batch targets are display-only projections and never edit saved recipes.
+- CI verifies authorization, stale/replay protections and voice/text handler parity, **not** actual face/voice matching quality or deployed employee acceptance. Test these on gelato.vp3.me before production reliance.

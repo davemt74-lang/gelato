@@ -18,6 +18,8 @@ on:
       - 'api/proactive-agent.php'
       - 'includes/prep-intelligence-core.php'
       - 'includes/prep-agent-core.php'
+      - 'includes/prep-agent-quicklist-actions.php'
+      - 'includes/food-monster-skill-registry.php'
       - 'includes/prep-agent-handoffs.php'
       - 'includes/prep-agent-readiness.php'
       - 'includes/prep-agent-followups.php'
@@ -47,6 +49,8 @@ on:
       - 'api/proactive-agent.php'
       - 'includes/prep-intelligence-core.php'
       - 'includes/prep-agent-core.php'
+      - 'includes/prep-agent-quicklist-actions.php'
+      - 'includes/food-monster-skill-registry.php'
       - 'includes/prep-agent-handoffs.php'
       - 'includes/prep-agent-readiness.php'
       - 'includes/prep-agent-followups.php'
@@ -90,6 +94,8 @@ jobs:
           php -l api/proactive-agent.php
           php -l includes/prep-intelligence-core.php
           php -l includes/prep-agent-core.php
+          php -l includes/prep-agent-quicklist-actions.php
+          php -l includes/food-monster-skill-registry.php
           php -l includes/prep-agent-handoffs.php
           php -l includes/prep-agent-readiness.php
           php -l includes/prep-agent-followups.php
@@ -123,6 +129,9 @@ jobs:
           grep -q 'daily_quicklist_scale_recipe' includes/daily-quicklist-core.php
           grep -q 'daily_quicklist_apply_menu_selection' includes/daily-quicklist-core.php
           grep -q 'quicklist_generate' includes/prep-agent-core.php
+          grep -q 'quicklist_item_action' includes/prep-agent-quicklist-actions.php
+          grep -q 'expectedFingerprint' includes/daily-quicklist-core.php
+          grep -q 'daily_prep' includes/food-monster-skill-registry.php
           grep -q 'generate_menu' api/daily-prep.php
       - name: Install and upgrade schema
         run: |
