@@ -375,6 +375,7 @@ dq_assert(!gac_pending_get('prep',$org,$actor)&&!gac_pending_get('prep',$org,$ma
 
 // Section 3K2D: native Food Monster model-selected Daily Prep tools and
 // server-owned conversation references (not fabricated tool text or row IDs).
+require_once __DIR__.'/../includes/food-monster-llm.php';
 require_once __DIR__.'/../includes/food-monster-b8d3-tool-runtime.php';
 $chatThread='agent-'.str_repeat('b',20);
 $chatContext=['threadId'=>$chatThread,'channel'=>'text'];
