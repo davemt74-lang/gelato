@@ -55,6 +55,16 @@ function pqa_resolve_item(PDO $pdo,int $org,string $date,string $kind,string $ta
     if($key===''||mb_strlen($key,'UTF-8')>220)throw new InvalidArgumentException('Name a Daily Prep or Need More item.');
     $rows=array_values(array_filter(daily_quicklist_items($pdo,$org,daily_quicklist_date($date)),
         static fn(array $r):bool=>$r['type']===$kind));
+    // A received shortage can remain visible for history while a new active
+    // shortage exists for the same stock item. Select only active requests
+    // when possible; never silently choose between two active duplicates.
+    if($kind==='inventory'){
+        $active=array_values(array_filter($rows,static function(array $r)use($key):bool{
+            return $r['status']!=='received'
+                &&str_contains(daily_quicklist_normalize((string)$r['title']),$key);
+        }));
+        if($active)$rows=$active;
+    }
     $exact=array_values(array_filter($rows,static function(array $r)use($key):bool{
         $title=daily_quicklist_normalize((string)$r['title']);
         return $title===$key||($r['type']==='prep'&&preg_replace('/^prep\s+/u','',$title)===$key);
