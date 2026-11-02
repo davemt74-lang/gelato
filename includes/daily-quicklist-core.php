@@ -409,6 +409,13 @@ function daily_quicklist_mutate(PDO $pdo,int $org,int $actor,string $action,arra
     $pdo->beginTransaction();
     try{
         $row=daily_quicklist_row_lock($pdo,$org,$id);
+        // Agent proposals carry a source fingerprint. Re-check it under the
+        // same row lock as the mutation, preventing a confirm/edit race.
+        if(isset($input['expectedFingerprint'])
+            &&(!function_exists('pqa_item_fingerprint')
+                ||!hash_equals((string)$input['expectedFingerprint'],
+                    pqa_item_fingerprint(daily_quicklist_item_public($row)))))
+            throw new InvalidArgumentException('The checklist item changed. Review it and ask again.');
         $previous=['status'=>$row['status'],'elapsedSeconds'=>$row['elapsed_seconds'],'running'=>$row['timer_started_at']!==null];
         $event=$action;$newStatus=(string)$row['status'];
         $elapsed=(int)$row['elapsed_seconds'];
@@ -443,6 +450,10 @@ function daily_quicklist_mutate(PDO $pdo,int $org,int $actor,string $action,arra
             $q->execute([$org,$row['recipe_public_id']]);$recipe=$q->fetch();
             if(!$recipe||$recipe['yield_quantity']===null||(float)$recipe['yield_quantity']<=0)
                 throw new InvalidArgumentException('Set a valid recipe yield in Recipe Library first.');
+            if(isset($input['expectedRecipeBase'])
+                &&((float)$input['expectedRecipeBase']!==(float)$recipe['yield_quantity']
+                    ||(string)($input['expectedRecipeUnit']??'')!==(string)($recipe['yield_unit']??'')))
+                throw new InvalidArgumentException('The saved recipe yield changed. Review the batch target.');
             if($quantity/(float)$recipe['yield_quantity']>1000)
                 throw new InvalidArgumentException('The requested batch multiplier is too large.');
             $unit=(string)($recipe['yield_unit']??'');
@@ -458,7 +469,7 @@ function daily_quicklist_mutate(PDO $pdo,int $org,int $actor,string $action,arra
             $valid=$row['list_type']==='prep'?['todo','in_progress','paused','done']:['need_more','ordered','received'];
             $newStatus=(string)($input['status']??$row['status']);
             if(!in_array($newStatus,$valid,true))throw new InvalidArgumentException('Invalid status for this list.');
-            $note=mb_substr(trim((string)($input['adminNote']??'')),0,2000,'UTF-8');
+            $note=mb_substr(trim((string)($input['adminNote']??($row['admin_note']??''))),0,2000,'UTF-8');
             if($newStatus==='done'||$newStatus==='received'){$elapsed+=$running;$started=null;}
             $pdo->prepare('UPDATE daily_quicklist_items SET admin_note=?,updated_by=? WHERE id=?')->execute([$note?:null,$actor,$row['id']]);
         }elseif($action==='notify'){
