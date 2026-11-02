@@ -42,6 +42,68 @@ function daily_quicklist_normalize(string $name): string
 {
     return mb_strtolower(trim(preg_replace('/\s+/u',' ',$name) ?? $name),'UTF-8');
 }
+/** Numeric recipe amounts only; qualitative measures are deliberately never invented. */
+function daily_quicklist_numeric_quantity(mixed $raw): ?float
+{
+    if(is_int($raw)||is_float($raw))return is_finite((float)$raw)&&$raw>=0?(float)$raw:null;
+    if(!is_string($raw))return null;
+    $value=trim($raw);
+    if($value==='')return null;
+    foreach(['½'=>' 1/2','⅓'=>' 1/3','⅔'=>' 2/3','¼'=>' 1/4','¾'=>' 3/4','⅛'=>' 1/8','⅜'=>' 3/8','⅝'=>' 5/8','⅞'=>' 7/8'] as $glyph=>$fraction)
+        $value=str_replace($glyph,$fraction,$value);
+    $value=trim(preg_replace('/\s+/u',' ',$value)??$value);
+    if(is_numeric($value)){$n=(float)$value;return is_finite($n)&&$n>=0?$n:null;}
+    if(preg_match('~^(\d+(?:\.\d+)?)\s+(\d+)/(\d+)$~D',$value,$m))
+        return (int)$m[3]>0?(float)$m[1]+(int)$m[2]/(int)$m[3]:null;
+    if(preg_match('~^(\d+)/(\d+)$~D',$value,$m))
+        return (int)$m[2]>0?(int)$m[1]/(int)$m[2]:null;
+    return null;
+}
+function daily_quicklist_format_quantity(float $value): string
+{
+    return rtrim(rtrim(number_format($value,8,'.',''),'0'),'.')?:'0';
+}
+/** Calculate a display-only batch projection from saved canonical recipe content. */
+function daily_quicklist_scale_recipe(array $recipe,?float $targetQuantity,?string $targetUnit): array
+{
+    $base=$recipe['yieldQuantity']??null;
+    $unit=(string)($recipe['yieldUnit']??'');
+    $ingredients=is_array($recipe['ingredients']??null)?$recipe['ingredients']:[];
+    $unavailable=['scalable'=>false,'baseQuantity'=>$base,'targetQuantity'=>$targetQuantity,
+        'unit'=>$unit,'factor'=>null,'ingredients'=>$ingredients,'unscaledCount'=>0];
+    if($base===null||!is_numeric($base)||(float)$base<=0)
+        return $unavailable+['warning'=>'Set a numeric yield in Recipe Library before scaling this recipe.'];
+    if($targetQuantity!==null&&(!is_finite($targetQuantity)||$targetQuantity<=0||$targetQuantity>10000))
+        throw new InvalidArgumentException('Target yield must be greater than zero and no more than 10,000.');
+    if($targetQuantity!==null&&$targetUnit!==$unit)
+        return $unavailable+['warning'=>'The saved recipe yield unit changed. Save a new target to scale again.'];
+    $target=$targetQuantity??(float)$base;$factor=$target/(float)$base;
+    if(!is_finite($factor)||$factor>1000)throw new InvalidArgumentException('The requested batch multiplier is too large.');
+    $scaled=[];$unscaled=0;
+    foreach($ingredients as $ingredient){
+        if(!is_array($ingredient)){$scaled[]=$ingredient;$unscaled++;continue;}
+        $copy=$ingredient;
+        if(!array_key_exists('quantity',$ingredient)){$scaled[]=$copy;$unscaled++;continue;}
+        $n=daily_quicklist_numeric_quantity($ingredient['quantity']);
+        if($n===null){$scaled[]=$copy;$unscaled++;continue;}
+        if(abs($factor-1.0)>0.00000001)$copy['quantity']=daily_quicklist_format_quantity($n*$factor);
+        $scaled[]=$copy;
+    }
+    return ['scalable'=>true,'baseQuantity'=>(float)$base,'targetQuantity'=>$target,
+        'unit'=>$unit,'factor'=>$factor,'ingredients'=>$scaled,'unscaledCount'=>$unscaled,'warning'=>null];
+}
+function daily_quicklist_recipe_projections(array $items,array $recipes): array
+{
+    $index=[];foreach($recipes as $recipe)$index[$recipe['id']]=$recipe;
+    $result=[];
+    foreach($items as $item){
+        $recipeId=$item['recipeId']??null;
+        if($item['type']!=='prep'||!$recipeId||!isset($index[$recipeId]))continue;
+        $target=$item['targetYieldQuantity']===null?null:(float)$item['targetYieldQuantity'];
+        $result[$item['id']]=daily_quicklist_scale_recipe($index[$recipeId],$target,$item['targetYieldUnit']);
+    }
+    return $result;
+}
 function daily_quicklist_recipe_public(array $row): array
 {
     return [
@@ -107,6 +169,8 @@ function daily_quicklist_item_public(array $row): array
         'title'=>(string)$row['title'],'status'=>(string)$row['status'],
         'quantityNote'=>(string)($row['quantity_note']??''),
         'recipeId'=>$row['recipe_public_id']?:null,
+        'targetYieldQuantity'=>$row['target_yield_quantity']===null?null:(float)$row['target_yield_quantity'],
+        'targetYieldUnit'=>$row['target_yield_unit']?:null,
         'inventoryId'=>$row['source_inventory_public_id']?:null,
         'elapsedSeconds'=>(int)$row['elapsed_seconds']
             + ($row['timer_started_at']!==null ? max(0,(int)($row['running_seconds']??0)) : 0),
@@ -219,7 +283,7 @@ function daily_quicklist_seed(PDO $pdo,int $org,int $actor,string $date,bool $ca
     }
     return $created;
 }
-function daily_quicklist_mutate(PDO $pdo,int $org,int $actor,string $action,array $input,bool $manager): array
+function daily_quicklist_mutate(PDO $pdo,int $org,int $actor,string $action,array $input,bool $manager,bool $canReadRecipes=false): array
 {
     $id=trim((string)($input['id']??''));
     if($id==='')throw new InvalidArgumentException('Choose a list item.');
@@ -247,6 +311,27 @@ function daily_quicklist_mutate(PDO $pdo,int $org,int $actor,string $action,arra
             elseif($mode==='pause'){if($started===null)throw new InvalidArgumentException('Timer is not running.');$elapsed+=$running;$started=null;$newStatus='paused';}
             elseif($mode==='stop'){$elapsed+=$running;$started=null;$newStatus='todo';}
             $event='timer_'.$mode;
+        }elseif($action==='set_target'){
+            if(!$canReadRecipes)throw new InvalidArgumentException('Recipe Library access is required to set a batch target.');
+            if($row['list_type']!=='prep'||!$row['recipe_public_id'])
+                throw new InvalidArgumentException('Only prep items with a linked recipe can set a target.');
+            $raw=$input['targetYieldQuantity']??null;
+            if(!is_numeric($raw)||!is_finite((float)$raw)||(float)$raw<0.001||(float)$raw>10000)
+                throw new InvalidArgumentException('Target yield must be between 0.001 and 10,000.');
+            $quantity=round((float)$raw,3);
+            $q=$pdo->prepare("SELECT yield_quantity,yield_unit FROM recipes
+                WHERE organization_id=? AND public_id=? AND status='active' AND archived_at IS NULL LIMIT 1");
+            $q->execute([$org,$row['recipe_public_id']]);$recipe=$q->fetch();
+            if(!$recipe||$recipe['yield_quantity']===null||(float)$recipe['yield_quantity']<=0)
+                throw new InvalidArgumentException('Set a valid recipe yield in Recipe Library first.');
+            if($quantity/(float)$recipe['yield_quantity']>1000)
+                throw new InvalidArgumentException('The requested batch multiplier is too large.');
+            $unit=(string)($recipe['yield_unit']??'');
+            $pdo->prepare('UPDATE daily_quicklist_items SET target_yield_quantity=?,target_yield_unit=?,updated_by=? WHERE id=?')
+                ->execute([$quantity,$unit,$actor,$row['id']]);
+            $event='target_set';
+            $previous['targetYieldQuantity']=$row['target_yield_quantity']===null?null:(float)$row['target_yield_quantity'];
+            $previous['targetYieldUnit']=$row['target_yield_unit'];
         }elseif($action==='archive'){
             $pdo->prepare('UPDATE daily_quicklist_items SET archived_at=UTC_TIMESTAMP(6),updated_by=? WHERE id=?')->execute([$actor,$row['id']]);
         }elseif($action==='update'){
@@ -267,7 +352,7 @@ function daily_quicklist_mutate(PDO $pdo,int $org,int $actor,string $action,arra
             $pdo->prepare('UPDATE daily_quicklist_items SET status=?,elapsed_seconds=?,timer_started_at=?,updated_by=? WHERE id=?')
                 ->execute([$newStatus,$elapsed,$started,$actor,$row['id']]);
         }
-        daily_quicklist_event($pdo,$org,(int)$row['id'],$actor,$event,['before'=>$previous,'after'=>['status'=>$newStatus,'elapsedSeconds'=>$elapsed,'running'=>$started!==null,'adminNote'=>$action==='update'?$note:null]]);
+        daily_quicklist_event($pdo,$org,(int)$row['id'],$actor,$event,['before'=>$previous,'after'=>['status'=>$newStatus,'elapsedSeconds'=>$elapsed,'running'=>$started!==null,'adminNote'=>$action==='update'?$note:null,'targetYieldQuantity'=>$action==='set_target'?$quantity:null,'targetYieldUnit'=>$action==='set_target'?$unit:null]]);
         if($row['list_type']==='inventory'&&$action==='update'&&$row['status']!==$newStatus){
             daily_quicklist_notify_managers($pdo,$org,$actor,'Inventory update: '.$row['title'],$row['title'].' is now '.$newStatus.'.');
         }
