@@ -19,6 +19,8 @@ on:
       - 'includes/prep-intelligence-core.php'
       - 'includes/prep-agent-core.php'
       - 'includes/prep-agent-quicklist-actions.php'
+      - 'includes/food-monster-b8d18-daily-prep-model-tools.php'
+      - 'includes/food-monster-b8d3-tool-runtime.php'
       - 'includes/food-monster-skill-registry.php'
       - 'includes/prep-agent-handoffs.php'
       - 'includes/prep-agent-readiness.php'
@@ -50,6 +52,8 @@ on:
       - 'includes/prep-intelligence-core.php'
       - 'includes/prep-agent-core.php'
       - 'includes/prep-agent-quicklist-actions.php'
+      - 'includes/food-monster-b8d18-daily-prep-model-tools.php'
+      - 'includes/food-monster-b8d3-tool-runtime.php'
       - 'includes/food-monster-skill-registry.php'
       - 'includes/prep-agent-handoffs.php'
       - 'includes/prep-agent-readiness.php'
@@ -95,6 +99,8 @@ jobs:
           php -l includes/prep-intelligence-core.php
           php -l includes/prep-agent-core.php
           php -l includes/prep-agent-quicklist-actions.php
+          php -l includes/food-monster-b8d18-daily-prep-model-tools.php
+          php -l includes/food-monster-b8d3-tool-runtime.php
           php -l includes/food-monster-skill-registry.php
           php -l includes/prep-agent-handoffs.php
           php -l includes/prep-agent-readiness.php
@@ -130,6 +136,8 @@ jobs:
           grep -q 'daily_quicklist_apply_menu_selection' includes/daily-quicklist-core.php
           grep -q 'quicklist_generate' includes/prep-agent-core.php
           grep -q 'quicklist_item_action' includes/prep-agent-quicklist-actions.php
+          grep -q 'propose_daily_prep_action' includes/food-monster-b8d18-daily-prep-model-tools.php
+          grep -q 'fm8d18j11_catalogue' includes/food-monster-b8d3-tool-runtime.php
           grep -q 'expectedFingerprint' includes/daily-quicklist-core.php
           grep -q 'daily_prep' includes/food-monster-skill-registry.php
           grep -q 'generate_menu' api/daily-prep.php

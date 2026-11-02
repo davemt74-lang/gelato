@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__.'/prep-agent-quicklist-actions.php';
+
 function gaw_ready(PDO $pdo): bool
 {
     try {
@@ -108,7 +110,7 @@ function gaw_append(PDO $pdo,int $org,int $userId,string $threadPublicId,string 
     return ['id'=>$public,'databaseId'=>$messageId,'role'=>$role,'channel'=>$channel,'content'=>$content,'skill'=>$meta['skill']??null,'tool'=>$meta['tool']??null,'structured'=>$meta['structured']??null,'sources'=>$meta['sources']??[],'createdAt'=>date('Y-m-d H:i:s')];
 }
 
-function gaw_route(array $user,string $message): array
+function gaw_route(array $user,string $message,string $threadId=''): array
 {
     $text=mb_strtolower(preg_replace('/^hey\s+gelato[,\s]*/iu','',trim($message))??trim($message),'UTF-8');
     $menu='/\b(menu|menu item|sold.?out|86(?:d)?|eighty.?six|food item|drink item|menu price|pizza size|modifier|toppings?|add.?on)\b/u';
@@ -140,12 +142,17 @@ function gaw_route(array $user,string $message): array
         if($pendingNode==='timeclock'&&app_has_permission('timeclock.agent',$user))return gaw_node_route('timeclock','timeclock_confirmation');
     }
 
-    // Explicit Daily Prep / Need More requests take priority over generic inventory,
-    // employee checklist, recipes and menu routes. This remains the official Prep Agent.
-    if(preg_match('/\b(?:daily\s+prep|prep\s+checklist|menu[- ]based\s+prep|need\s+more(?:\s+(?:inventory\s+)?list)?|(?:build|generate)\b.{0,60}\bprep\b.{0,60}\b(?:from|based\s+on)\b.{0,30}\bmenu)\b/u',$text)
-        &&app_has_permission('prep.intelligence.view',$user)
-        &&app_has_permission('prep.intelligence.agent',$user))
-        return ['route'=>'api/prep-intelligence-agent.php','domain'=>'daily_prep_quicklist'];
+    // Model-selected Daily Prep actions live in the official Food Monster tool
+    // catalogue. The specialist Prep Agent is still the sole execution gate.
+    $dailyPrepAccess=app_has_permission('prep.intelligence.view',$user)
+        &&app_has_permission('prep.intelligence.agent',$user);
+    $dailyPrepExplicit=preg_match('/\b(?:daily\s+prep|prep\s+checklist|menu[- ]based\s+prep|need\s+more(?:\s+(?:inventory\s+)?list)?|(?:build|generate)\b.{0,60}\bprep\b.{0,60}\b(?:from|based\s+on)\b.{0,30}\bmenu)\b/u',$text)===1;
+    $quicklistContext=$threadId!==''&&function_exists('pqa_context_get')
+        ?pqa_context_get((int)($user['organization_id']??0),(int)($user['id']??0),$threadId):null;
+    $contextAction=$quicklistContext
+        &&preg_match('/\b(?:mark|check|complete|finish|reopen|undo|start|pause|resume|stop|set|change|remove|delete|notify)\b.{0,90}\b(?:that|this|first|second|third|fourth|fifth|\d{1,2}(?:st|nd|rd|th)?)\b.{0,50}\b(?:item|task|timer|batch|one)\b/u',$text)===1;
+    if($dailyPrepAccess&&($dailyPrepExplicit||$contextAction))
+        return ['route'=>null,'domain'=>'daily_prep_model_tools','nodeMode'=>'conversation'];
 
     // A previously read prep list provides scoped context for short follow-ups.
     // Keep this restricted to explicit task verbs, never arbitrary chat.

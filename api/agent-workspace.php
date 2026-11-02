@@ -545,7 +545,7 @@ try{
         $handoffIntent=preg_match('/\b(handoff|handoffs|shift note|station note|arrival brief|what happened before i got here|what happened before my shift|anything i should know|tell (?:the )?next shift|leave .*next shift|note .*next shift)\b/u',$text)===1;
         if($handoffIntent&&(app_has_permission('employee.handoffs.view',$user)||app_has_permission('employee.handoffs.create',$user)||app_has_permission('employee.handoffs.manage',$user)||app_has_permission('employee.self',$user)||app_has_permission('agent.employee_view',$user)))app_json_response(['ok'=>true]+gaw_node_route('employee_handoff'));
 
-        $fallback=gaw_route($user,$message);
+        $fallback=gaw_route($user,$message,$roomThread);
         if($isTableServiceContext){
             $fallbackDomain=(string)($fallback['domain']??'general');
             $localIntent=preg_match('/\b(this table|selected table|this bar seat|selected bar seat|this check|selected check|this order|server|seat|party|transfer|move|fire|hold|send|unsent|ready|late|food|kitchen|turn|reset|reservation|attach customer|add item|remove item|item note|what needs attention|what should we do|what(?:\x27s| is) going on)\b/u',$text)===1;
