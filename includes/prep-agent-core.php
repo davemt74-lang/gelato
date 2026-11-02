@@ -153,12 +153,14 @@ function pac_quicklist_brief(PDO $pdo,int $org,array $user,string $date): array
     $prep=array_values(array_filter($rows,static fn(array $r):bool=>$r['type']==='prep'));
     $needed=array_values(array_filter($rows,static fn(array $r):bool=>$r['type']==='inventory'&&$r['status']!=='received'));
     $done=count(array_filter($prep,static fn(array $r):bool=>$r['status']==='done'));
-    $labels=array_map(static fn(array $r):string=>$r['title'].' ('.str_replace('_',' ',$r['status']).')',array_slice($prep,0,8));
-    $answer='Daily Prep checklist for '.$date.': '.$done.' of '.count($prep).' item(s) complete.';
-    $answer.=$labels?' Prep: '.implode('; ',$labels).'.':' No checklist entries yet.';
-    $answer.=' Need More: '.count($needed).' active item(s).';
-    if($needed)$answer.=' '.implode('; ',array_column(array_slice($needed,0,5),'title')).'.';
-    $answer.=' Open Daily Prep to review the list and linked recipes.';
+    $answer='Daily Prep checklist for '.$date.': '.$done.' of '.count($prep).' item(s) complete. ';
+    $answer.='Need More: '.count($needed).' active item(s). ';
+    if(session_status()===PHP_SESSION_ACTIVE)
+        $answer.=pqa_numbered_brief(pqa_context_save($org,(int)$user['id'],$date,$rows));
+    else{
+        $answer.='Open Daily Prep to view the numbered checklist.';
+    }
+    $answer.=' Open Daily Prep for linked recipes, timers and manager notes.';
     return ['ok'=>true,'skill'=>'prep.daily_quicklist','answer'=>$answer,
         'data'=>['date'=>$date,'prep'=>$prep,'needMore'=>$needed,
             'proof'=>['url'=>'daily-prep.php']],

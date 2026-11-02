@@ -6,6 +6,106 @@ declare(strict_types=1);
  * Loaded by the official Prep Agent; never called as a separate unauthenticated API.
  * The user-facing name is resolved to a current, tenant-scoped row before proposal.
  */
+/**
+ * Server-owned conversational selection. Numbered items are never supplied
+ * by the LLM, and a short-lived snapshot cannot select a different tenant.
+ */
+function pqa_context_key(int $org,int $uid,string $threadId=''): string
+{
+    return $org.':'.$uid.':'.($threadId===''?'direct':substr(hash('sha256',$threadId),0,24));
+}
+function pqa_context_get(int $org,int $uid,string $threadId=''): ?array
+{
+    if(session_status()!==PHP_SESSION_ACTIVE)return null;
+    $key=pqa_context_key($org,$uid,$threadId);
+    $row=$_SESSION['prep_quicklist_selection'][$key]??null;
+    if(!is_array($row)||(int)($row['expires']??0)<time()
+        ||(int)($row['org']??0)!==$org||(int)($row['user']??0)!==$uid){
+        unset($_SESSION['prep_quicklist_selection'][$key]);
+        return null;
+    }
+    return $row;
+}
+function pqa_context_save(int $org,int $uid,string $date,array $rows,string $threadId=''): array
+{
+    if(session_status()!==PHP_SESSION_ACTIVE)throw new RuntimeException('A secure Agent Chat session is required for checklist context.');
+    $date=daily_quicklist_date($date);
+    $lists=['prep'=>[],'inventory'=>[]];
+    foreach($rows as $row){
+        $kind=(string)($row['type']??'');
+        if(!isset($lists[$kind]))continue;
+        if($kind==='inventory'&&$row['status']==='received')continue;
+        if($kind==='prep'&&$row['date']!==$date)continue;
+        if(count($lists[$kind])>=20)continue;
+        $lists[$kind][]=['id'=>(string)$row['id'],'title'=>(string)$row['title'],
+            'fingerprint'=>pqa_item_fingerprint($row),'status'=>(string)$row['status']];
+    }
+    $prior=pqa_context_get($org,$uid,$threadId);
+    $focus=$prior['focus']??null;
+    if($focus){
+        $present=false;
+        foreach($lists[$focus['kind']]??[] as $item)
+            if($item['id']===$focus['id']){$present=true;break;}
+        if(!$present)$focus=null;
+    }
+    $context=['org'=>$org,'user'=>$uid,'date'=>$date,'expires'=>time()+900,
+        'lists'=>$lists,'focus'=>$focus];
+    $_SESSION['prep_quicklist_selection'][pqa_context_key($org,$uid,$threadId)]=$context;
+    return $context;
+}
+function pqa_context_focus(int $org,int $uid,string $threadId,string $kind,string $id): void
+{
+    $row=pqa_context_get($org,$uid,$threadId);
+    if(!$row)return;
+    foreach($row['lists'][$kind]??[] as $item)if($item['id']===$id){
+        $row['focus']=['kind'=>$kind,'id'=>$id];
+        $_SESSION['prep_quicklist_selection'][pqa_context_key($org,$uid,$threadId)]=$row;
+        return;
+    }
+}
+/** Resolve only a displayed ordinal or an explicitly established focus. */
+function pqa_context_resolve(PDO $pdo,int $org,int $uid,string $threadId,string $date,
+    string $kind,string $mode,int $ordinal=0): array
+{
+    $saved=pqa_context_get($org,$uid,$threadId);
+    if(!$saved||$saved['date']!==$date)
+        throw new InvalidArgumentException('Please ask Gelato AI to show this dated Daily Prep list first.');
+    $selection=null;
+    if($mode==='ordinal'){
+        $selection=$saved['lists'][$kind][$ordinal-1]??null;
+        if(!$selection)throw new InvalidArgumentException('That number was not in the displayed '.($kind==='prep'?'prep':'Need More').' list.');
+    }elseif($mode==='focused'){
+        $focus=$saved['focus']??null;
+        if($focus&&$focus['kind']===$kind){
+            foreach($saved['lists'][$kind]??[] as $row)if($row['id']===$focus['id']){$selection=$row;break;}
+        }
+        if(!$selection&&count($saved['lists'][$kind]??[])===1)$selection=$saved['lists'][$kind][0];
+        if(!$selection)throw new InvalidArgumentException('Which item do you mean? Say its name or a number from the displayed list.');
+    }else throw new InvalidArgumentException('Use a name or a numbered checklist reference.');
+    $rows=daily_quicklist_items($pdo,$org,$date);
+    foreach($rows as $live){
+        if($live['id']===$selection['id']&&$live['type']===$kind){
+            if($mode==='ordinal'&&!hash_equals($selection['fingerprint'],pqa_item_fingerprint($live)))
+                throw new InvalidArgumentException('The numbered checklist changed. Show the list again before selecting by number.');
+            return $live;
+        }
+    }
+    throw new InvalidArgumentException('That checklist item is no longer available. Show the list again.');
+}
+function pqa_numbered_brief(array $context): string
+{
+    $lines=[];
+    foreach(['prep'=>'Daily Prep','inventory'=>'Need More'] as $kind=>$label){
+        $items=$context['lists'][$kind];
+        if(!$items){$lines[]=$label.': no active items.';continue;}
+        $parts=[];
+        foreach($items as $index=>$item)$parts[]=($index+1).'. '.$item['title'].' ('.str_replace('_',' ',$item['status']).')';
+        $lines[]=$label.': '.implode('; ',$parts).'.';
+        if(count($items)===20)$lines[]='Showing only the first 20 '.$label.' items; open Daily Prep for the full list.';
+    }
+    return implode(' ',$lines);
+}
+
 function pqa_parse_request(string $message): ?array
 {
     $text=trim(preg_replace('/\s+/u',' ',$message)??$message);
@@ -131,7 +231,12 @@ function pqa_propose(PDO $pdo,int $org,int $uid,array $user,array $intent,string
         if($active)throw new InvalidArgumentException('This item is already on the active Need More list.');
         $description='Add '.$title.' to Need More'.($note!==''?' with note "'.$note.'"':'');
     }else{
-        $row=pqa_resolve_item($pdo,$org,$date,$kind,$title);
+        if(isset($intent['resolvedItemId'])){
+            $row=null;
+            foreach(daily_quicklist_items($pdo,$org,$date) as $candidate)
+                if($candidate['id']===$intent['resolvedItemId']&&$candidate['type']===$kind){$row=$candidate;break;}
+            if(!$row)throw new InvalidArgumentException('The selected checklist item is no longer available.');
+        }else $row=pqa_resolve_item($pdo,$org,$date,$kind,$title);
         $payload['itemId']=$row['id'];$payload['fingerprint']=pqa_item_fingerprint($row);
         $title=$row['title'];$payload['kind']=$kind;
         if($op==='toggle'){

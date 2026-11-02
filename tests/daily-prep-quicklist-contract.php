@@ -199,9 +199,9 @@ try{daily_quicklist_apply_menu_selection($pdo,$org,$actor,$day,$selectedKeys,tru
 $staffAgent=['id'=>$actor,'organization_id'=>$org,
     'permissions'=>['prep.intelligence.view','prep.intelligence.agent','tasks.self','recipes.view','menu.view']];
 $route=gaw_route($staffAgent,'Generate daily prep checklist from the menu');
-dq_assert($route['route']==='api/prep-intelligence-agent.php','menu-backed prep routes to canonical Prep Agent before menu-answer tool');
+dq_assert($route['route']===null&&$route['domain']==='daily_prep_model_tools','menu-backed prep routes to registered native model tools');
 $route=gaw_route($staffAgent,'What is on our Need More list?');
-dq_assert($route['route']==='api/prep-intelligence-agent.php','Need More quicklist reads use official Prep Agent');
+dq_assert($route['route']===null&&$route['domain']==='daily_prep_model_tools','Need More quicklist reads use native model tools');
 $route=gaw_route($staffAgent,'Show the published menu');
 dq_assert($route['route']==='api/agent-brain.php','plain menu lookups keep their canonical Brain route');
 app_boot_session();
@@ -249,9 +249,9 @@ dq_assert(pqa_parse_request('Set manager note for Flour on Need More: Vendor con
 dq_assert(pqa_parse_request('Notify managers about Flour on Need More')['op']==='notify','manager notification intent');
 dq_assert(pqa_parse_request('What do we need to prep for dinner?')===null,'formal prep plan requests are not stolen');
 dq_assert(pqa_parse_request('Start my break')===null,'Time Clock action is never stolen');
-dq_assert(gaw_route($staffAgent,'Start timer for Agent Batch on Daily Prep')['route']==='api/prep-intelligence-agent.php',
+dq_assert(gaw_route($staffAgent,'Start timer for Agent Batch on Daily Prep')['route']===null,
     'timer requests route through the official Prep Agent');
-dq_assert(gaw_route($staffAgent,'Add Pizza Boxes to Need More')['route']==='api/prep-intelligence-agent.php',
+dq_assert(gaw_route($staffAgent,'Add Pizza Boxes to Need More')['route']===null,
     'Need More mutations route to the official Prep Agent ahead of inventory tools');
 
 $agentItem=daily_quicklist_add($pdo,$org,$actor,
@@ -371,5 +371,126 @@ try{pqa_resolve_item($pdo,$other,$agentDay,'inventory','Flour');
     throw new RuntimeException('agent lookup crossed tenant boundary');}catch(InvalidArgumentException){}
 dq_assert(!gac_pending_get('prep',$org,$actor)&&!gac_pending_get('prep',$org,$manager),
     'all successful agent actions consume pending proposals');
+
+
+// Section 3K2D: native Food Monster model-selected Daily Prep tools and
+// server-owned conversation references (not fabricated tool text or row IDs).
+require_once __DIR__.'/../includes/food-monster-b8d3-tool-runtime.php';
+$chatThread='agent-'.str_repeat('b',20);
+$chatContext=['threadId'=>$chatThread,'channel'=>'text'];
+$nativeCatalogue=fm8d18j11_catalogue($staffAgent,$chatContext);
+dq_assert(isset($nativeCatalogue['get_daily_prep_checklist'])
+    &&isset($nativeCatalogue['propose_daily_prep_action']),
+    'authorized signed-in staff have registered native model-selected Daily Prep tools');
+dq_assert(!fm8d18j11_catalogue(['id'=>$actor,'organization_id'=>$org,'permissions'=>[]],$chatContext),
+    'unprivileged accounts cannot discover private checklist tools');
+dq_assert(!fm8d18j11_catalogue($staffAgent,
+    ['threadId'=>$chatThread,'channel'=>'voice','privateVoiceApproved'=>false]),
+    'unverified voice cannot select private Daily Prep tools');
+try{fm8d18j11_read([],$staffAgent,['channel'=>'voice','privateVoiceApproved'=>false]);
+    throw new RuntimeException('unverified speaker read private checklist');}catch(DomainException){}
+$managerNative=fm8d18j11_catalogue($managerAgent,$chatContext);
+dq_assert(!in_array('set_manager_note',
+    $nativeCatalogue['propose_daily_prep_action']['parameters']['properties']['action']['enum'],true)
+    &&in_array('set_manager_note',
+        $managerNative['propose_daily_prep_action']['parameters']['properties']['action']['enum'],true),
+    'manager-only model actions are absent from staff schema');
+$badArguments=['action'=>'mark_done','list'=>'prep','reference_mode'=>'ordinal','ordinal'=>999];
+dq_assert(fm8d18j11_action_fields($badArguments,$staffAgent)===['ordinal'],
+    'out-of-range ordinals blocked before model tool execution');
+$foreignActor=['id'=>$actor,'organization_id'=>$other,
+    'permissions'=>$staffAgent['permissions']];
+dq_assert(pqa_context_get($other,$actor,$chatThread)===null,
+    'conversation selections are tenant scoped');
+$nativeRead=fm8d18j11_read(['date'=>$agentDay],$staffAgent,$chatContext);
+dq_assert(str_contains($nativeRead['data']['answer'],'Daily Prep for '.$agentDay)
+    &&str_contains($nativeRead['data']['answer'],'1. ')
+    &&str_contains($nativeRead['data']['answer'],'Need More'),
+    'native model read returns real indexed prep and Need More records');
+$selection=pqa_context_get($org,$actor,$chatThread);
+dq_assert($selection!==null&&count($selection['lists']['prep'])>=2,
+    'server stores numbered snapshot for follow-up selection');
+dq_assert(gaw_route($staffAgent,'mark the second item done',$chatThread)['domain']==='daily_prep_model_tools',
+    'ambiguous-looking short follow-up reaches the model with an existing numbered context');
+dq_assert(gaw_route($staffAgent,'mark the second item done','agent-'.str_repeat('c',20))['domain']!=='daily_prep_model_tools',
+    'context from another chat thread does not hijack an unrelated request');
+$second=$selection['lists']['prep'][1];
+$currentRows=daily_quicklist_items($pdo,$org,$agentDay);
+$secondRow=current(array_values(array_filter($currentRows,static fn(array $r):bool=>$r['id']===$second['id'])));
+$ordinalAction=$secondRow['status']==='done'?'reopen':'mark_done';
+$ordinalProposal=fm8d18j11_propose([
+    'action'=>$ordinalAction,'list'=>'prep','reference_mode'=>'ordinal','ordinal'=>2,'date'=>$agentDay,
+],$staffAgent,$chatContext);
+dq_assert(($ordinalProposal['data']['requiresConfirmation']??false)===true,
+    'model-selected second item stages a confirmation, no immediate write');
+$afterProposal=daily_quicklist_items($pdo,$org,$agentDay);
+$secondBeforeConfirm=current(array_values(array_filter($afterProposal,static fn(array $r):bool=>$r['id']===$second['id'])));
+dq_assert($secondBeforeConfirm['status']===$secondRow['status'],'ordinal proposal made no mutation');
+prep_agent_handle($pdo,$staffAgent,['message'=>'Confirm']);
+$afterOrdinal=daily_quicklist_items($pdo,$org,$agentDay);
+$secondAfter=current(array_values(array_filter($afterOrdinal,static fn(array $r):bool=>$r['id']===$second['id'])));
+dq_assert($secondAfter['status']!==$secondRow['status'],'server-bound ordinal modified precisely the selected item');
+try{fm8d18j11_propose(['action'=>'reopen','list'=>'prep',
+    'reference_mode'=>'ordinal','ordinal'=>2,'date'=>$agentDay],$staffAgent,$chatContext);
+    throw new RuntimeException('stale ordinal reused');}catch(InvalidArgumentException){}
+dq_assert(fm8d18j11_action_fields(['action'=>'timer_pause','list'=>'prep',
+    'reference_mode'=>'focused'],$staffAgent)===[],
+    'focused timer action has a complete canonical schema');
+$namedPause=fm8d18j11_propose([
+    'action'=>'timer_pause','list'=>'prep','reference_mode'=>'name','name'=>'Agent Batch','date'=>$agentDay,
+],$staffAgent,$chatContext);
+dq_assert(($namedPause['data']['requiresConfirmation']??false)===true,'native selected timer pause stages proposal');
+prep_agent_handle($pdo,$staffAgent,['message'=>'Confirm']);
+$focusedResume=fm8d18j11_propose([
+    'action'=>'timer_resume','list'=>'prep','reference_mode'=>'focused','date'=>$agentDay,
+],$staffAgent,$chatContext);
+dq_assert(($focusedResume['data']['requiresConfirmation']??false)===true,
+    '"that timer" resolves only to a previously selected, tenant-scoped task');
+prep_agent_handle($pdo,$staffAgent,['message'=>'Confirm']);
+$afterFocus=daily_quicklist_items($pdo,$org,$agentDay);
+$focusedRow=current(array_values(array_filter($afterFocus,static fn(array $r):bool=>$r['id']===$agentItem)));
+dq_assert($focusedRow['timerRunning'],'focused model action resumed only Agent Batch');
+try{fm8d18j11_propose([
+    'action'=>'timer_stop','list'=>'prep','reference_mode'=>'focused','date'=>$agentDay,
+],$foreignActor,$chatContext);throw new RuntimeException('foreign tenant used conversation focus');}
+catch(InvalidArgumentException|DomainException){}
+
+$staffTools=fm8d3_catalogue($staffAgent,$chatContext);
+dq_assert(isset($staffTools['get_daily_prep_checklist'])&&isset($staffTools['propose_daily_prep_action']),
+    'Gelato real tool catalogue exposes both native Daily Prep functions');
+$openaiTools=fm8d3_provider_tools('openai',$nativeCatalogue);
+$anthropicTools=fm8d3_provider_tools('anthropic',$nativeCatalogue);
+dq_assert(count($openaiTools)===2&&count($anthropicTools)===2
+    &&in_array('propose_daily_prep_action',array_column($anthropicTools,'name'),true),
+    'OpenAI and Claude receive the real parameter schemas');
+$mockSelect=static fn()=>['output'=>[['type'=>'function_call','call_id'=>'daily01',
+    'name'=>'get_daily_prep_checklist','arguments'=>'{"date":"'.$agentDay.'"}']]];
+$mockAudit=static function(array $e):void{};
+$mockRefresh=static fn():array=>$staffAgent;
+$modelResponse=fm8d3_turn($pdo,$staffAgent,'openai','fake-key',
+    [['role'=>'user','content'=>'Show today\'s Daily Prep']],
+    '',$mockSelect,['get_daily_prep_checklist'=>$nativeCatalogue['get_daily_prep_checklist']],
+    $mockRefresh,$mockAudit,$chatContext);
+dq_assert($modelResponse['skill']==='agent.model_selected_tools'
+    &&str_contains($modelResponse['answer'],'Daily Prep for '.$agentDay),
+    'mocked provider model-selection executes registered native read through official runtime');
+$mockClaude=static fn()=>['content'=>[['type'=>'tool_use','id'=>'toolu_daily',
+    'name'=>'get_daily_prep_checklist','input'=>['date'=>$agentDay]]]];
+$claudeResponse=fm8d3_turn($pdo,$staffAgent,'anthropic','fake-key',
+    [['role'=>'user','content'=>'Show prep checklist']],
+    '',$mockClaude,['get_daily_prep_checklist'=>$nativeCatalogue['get_daily_prep_checklist']],
+    $mockRefresh,$mockAudit,$chatContext);
+dq_assert($claudeResponse['skill']==='agent.model_selected_tools',
+    'Claude model selection calls identical server-scoped read tool');
+$mockDouble=static fn()=>['content'=>[
+    ['type'=>'tool_use','id'=>'a','name'=>'get_daily_prep_checklist','input'=>[]],
+    ['type'=>'tool_use','id'=>'b','name'=>'propose_daily_prep_action','input'=>[
+        'action'=>'timer_stop','list'=>'prep','reference_mode'=>'name','name'=>'Agent Batch']],
+]];
+$blockedBundle=fm8d3_turn($pdo,$staffAgent,'anthropic','fake-key',
+    [['role'=>'user','content'=>'Show prep and stop timer']],
+    '',$mockDouble,$nativeCatalogue,$mockRefresh,$mockAudit,$chatContext);
+dq_assert($blockedBundle['skill']==='agent.delegation_needs_separate_turn',
+    'one model turn cannot combine prep changes with reads or other tools');
 
 echo "daily-prep-quicklist contract passed\n";

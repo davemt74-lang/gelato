@@ -13,18 +13,18 @@
 7. **Audits and testing.** Keep append-only event history, standard audit log, source-drift protection, CSRF on UI POSTs, and PHP/MariaDB regression tests for permission, replay, data isolation, voice parity, and the canonical route.
 8. **Deployment.** Require green PR checks before merge, merged-main verification, and one verified full ZIP with upgrade.php.
 
-## Current Daily Prep coverage (Section 3K2C)
+## Current Daily Prep coverage (Section 3K2D)
 
-- Daily Prep UI, Prep Agent and Brain/Chat route share the canonical daily-quicklist-core.php records.
-- The Prep Agent can read the dated checklist and Need More inventory, generate published-menu suggestions, and propose individual checklist actions for explicit natural-language requests.
-- Staff agent proposals: check off/reopen prep items, start/pause/resume/stop timers, set authorized recipe batch targets, add/remove Need More requests, and soft-remove prep items.
-- Manager agent proposals: change checklist/Need More statuses, add notes and send manager notifications, using the existing permission check on both proposal and confirmation.
-- Requests are resolved to a live, tenant-scoped item; proposals store a source fingerprint, and confirmation checks it again under the mutation's row lock. Recipe yield permissions and canonical units are rechecked. Changes produce standard checklist events and audit records.
-- Typed and voice requests enter the same official Prep Agent handler. The existing voice session is responsible for speaker authorization; an input flag by itself cannot certify identity.
-- Curated Agent Brain skill discovery offers a Daily Prep entry and a direct prompt into the same chat route.
+- The official Food Monster / Gelato Brain model-selected tool runtime (fm8d3_catalogue) exposes **get_daily_prep_checklist** and **propose_daily_prep_action** for the signed-in operator. Both Claude and OpenAI use the same server-validated schemas and never receive a private checklist in a follow-up provider call.
+- Authorized read requests return numbered, current Daily Prep and active Need More rows through canonical daily-quicklist-core.php, with a short-lived, user/tenant/conversation-scoped selection snapshot.
+- "Second item" is bound to the numbered snapshot and rejected if the item changed. "That item / that timer" uses a previously selected server-owned focus; when ambiguous, the agent asks for a name or list number rather than guessing.
+- Explicit changes stage existing Prep Agent quicklist_item_action or quicklist_generate proposals and **never mutate records during model selection**. Confirmation rechecks current permissions, item fingerprint under row lock, saved recipe yields, and Need More duplicates. Cancel consumes no mutation.
+- Employee actions: complete/reopen prep, timer start/pause/resume/stop, recipe batch target, add/remove Need More, archive prep; managers also have statuses, notes, and notifications. The model cannot supply arbitrary organization, employee or database item IDs.
+- Chat routing of explicit Daily Prep/Need More requests and scoped contextual follow-ups prefers the official native model skill catalog; the specialist Prep Agent remains the sole execution and confirmation gate. Typed requests and operator-approved voice requests use the same tools. Unverified room voices do not see private tools and fail fresh voice-event validation.
+- Curated Agent Brain skill discovery, official chat, and the Daily Prep UI all reference canonical records. No shadow inventory, assistant or duplicate list exists.
 
-## Limits and deployment acceptance
+## Limits and deployed acceptance
 
-- The explicit Daily Prep action phrases are routed deterministically through the official Prep Agent. This is not a claim that every spontaneous sentence is model-selected as a structured tool call; broader natural-language coverage and embedded "this item" references require a separate model tool/catalog integration pass.
-- Need More "received" is a request status, **not** an inventory count change. Batch targets are display-only projections and never edit saved recipes.
-- CI verifies authorization, stale/replay protections and voice/text handler parity, **not** actual face/voice matching quality or deployed employee acceptance. Test these on gelato.vp3.me before production reliance.
+- Native tool selection is real, but a model may still ask for missing context, abstain or choose the wrong intent; the server never executes an unsafe selection. Run end-to-end acceptance prompts in Gelato chat with actual data, including ambiguous names and concurrent edits.
+- Need More "received" never adjusts inventory on-hand. Recipe targets are display-only and never modify saved recipes. Recording a real inventory receipt remains the separate authorized inventory workflow.
+- CI verifies provider schema/selection, proposal safety, role restrictions, stale snapshots and voice gating. It does **not** certify real voice identification quality, acoustic overlap, or employees' deployed browser acceptance.
