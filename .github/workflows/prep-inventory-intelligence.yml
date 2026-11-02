@@ -4,6 +4,14 @@ on:
   pull_request:
     paths:
       - 'prep-intelligence.php'
+      - 'daily-prep.php'
+      - 'api/daily-prep.php'
+      - 'includes/daily-quicklist-core.php'
+      - 'js/daily-prep.js'
+      - 'assets/css/daily-prep.css'
+      - 'operations.php'
+      - 'database/20261224_daily_prep_quicklist.sql'
+      - 'tests/daily-prep-quicklist-contract.php'
       - 'api/prep-intelligence.php'
       - 'api/prep-intelligence-agent.php'
       - 'api/proactive-agent.php'
@@ -24,6 +32,14 @@ on:
     branches: [main]
     paths:
       - 'prep-intelligence.php'
+      - 'daily-prep.php'
+      - 'api/daily-prep.php'
+      - 'includes/daily-quicklist-core.php'
+      - 'js/daily-prep.js'
+      - 'assets/css/daily-prep.css'
+      - 'operations.php'
+      - 'database/20261224_daily_prep_quicklist.sql'
+      - 'tests/daily-prep-quicklist-contract.php'
       - 'api/prep-intelligence.php'
       - 'api/prep-intelligence-agent.php'
       - 'api/proactive-agent.php'
@@ -62,6 +78,10 @@ jobs:
           extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
       - name: Syntax checks
         run: |
+          php -l daily-prep.php
+          php -l api/daily-prep.php
+          php -l includes/daily-quicklist-core.php
+          php -l tests/daily-prep-quicklist-contract.php
           php -l prep-intelligence.php
           php -l api/prep-intelligence.php
           php -l api/prep-intelligence-agent.php
@@ -74,6 +94,7 @@ jobs:
           php -l includes/prep-agent-proactive.php
           php -l includes/agent-workspace-core.php
           php -l tests/prep-inventory-intelligence-contract.php
+          node --check js/daily-prep.js
           node --check js/prep-intelligence.js
           node --check js/restaurant-agent-bridge.js
           node tests/prep-agent-bridge-routing.cjs
@@ -126,6 +147,8 @@ jobs:
           test "$(mariadb --skip-ssl -N -h 127.0.0.1 -uroot -proot gelato_restaurant_ai_ci -e "SELECT COUNT(*) FROM schema_migrations WHERE migration_key='20260913_zzzzzzzz_prep_inventory_intelligence';")" = "1"
       - name: Historical planning, forecast and publish contract
         run: php tests/prep-inventory-intelligence-contract.php
+      - name: Staff daily prep, recipe and Need More contract
+        run: php tests/daily-prep-quicklist-contract.php
       - name: Verify upgrader idempotence
         run: |
           php <<'PHP'
