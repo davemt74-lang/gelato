@@ -47,8 +47,9 @@ function managerControls(item){
  if(!state.data.manager)return '';
  var statuses=item.type==='prep'?['todo','in_progress','paused','done']:['need_more','ordered','received'];
  return '<div class="manager-bar"><span class="muted">ADMIN</span><select class="manager-status" aria-label="Admin status">'+statuses.map(function(s){return '<option value="'+s+'"'+(item.status===s?' selected':'')+'>'+statusLabel(s)+'</option>';}).join('')+'</select>'+
+ (item.type==='inventory'?'<input class="manager-quantity" aria-label="Requested amount" placeholder="Requested amount…" maxlength="120" value="'+html(item.quantityNote||'')+'">':'')+
  '<input class="manager-note" aria-label="Admin note" placeholder="Internal status note…" maxlength="2000" value="'+html(item.adminNote)+'">'+
- '<button class="small-btn" type="button" data-action="manager-save">Save status</button>'+
+ '<button class="small-btn" type="button" data-action="manager-save">Save changes</button>'+
  '<button class="small-btn" type="button" data-action="history">History</button>'+
  '<button class="small-btn" type="button" data-action="notify">Notify</button></div><div class="history-slot"></div>';
 }
@@ -102,6 +103,13 @@ function renderInventory(){
   return '<article class="task" data-id="'+html(item.id)+'"><div class="task-main"><span class="status-tag '+html(item.status)+'">'+statusLabel(item.status)+'</span><div class="task-body"><div class="task-title">'+html(item.title)+'</div><div class="task-sub">'+(item.quantityNote?'<span>Requested: '+html(item.quantityNote)+'</span>':'')+(item.adminNote?'<span>Manager note: '+html(item.adminNote)+'</span>':'')+'</div></div><button class="small-btn danger" data-action="archive">Remove</button></div>'+
   managerControls(item)+'</article>';
  }).join(''):'<div class="empty">Nothing in Need More. Tap an inventory item or add something above.</div>';
+ var alerts=(state.data.stockAlerts||[]);
+ $('stock-alert-panel').hidden=!state.data.canInventory||alerts.length===0;
+ $('stock-alerts').innerHTML=alerts.map(function(x){
+  var recipes=x.prepRecipes&&x.prepRecipes.length?'<small>Active prep today: '+html(x.prepRecipes.join(' · '))+'</small>':'';
+  return '<div class="stock-alert"><div><strong>'+html(x.name)+'</strong><small>On hand '+html(x.onHand)+' '+html(x.unit)+' · Reorder point '+html(x.reorderPoint)+' '+html(x.unit)+'</small>'+recipes+'</div>'+
+    '<button class="small-btn" type="button" '+(x.alreadyRequested?'disabled':'')+' data-stock-id="'+html(x.inventoryId)+'" data-stock-name="'+html(x.name)+'">'+(x.alreadyRequested?'On Need More':'+ Need More')+'</button></div>';
+ }).join('');
  var stock=(state.data.inventory||[]).filter(function(x){return !state.search||x.name.toLowerCase().includes(state.search)||x.category.toLowerCase().includes(state.search);});
  $('stock-list').innerHTML=!state.data.canInventory?'<div class="empty">Stock directory requires Inventory View permission. You can still add a Need More request above.</div>':
  stock.length?stock.slice(0,150).map(function(x){
@@ -133,7 +141,11 @@ document.addEventListener('click',function(e){
  if(action==='archive'){if(confirm('Remove this item from the shared list? You can review its history as a manager.'))act('archive',{id:id});}
  if(action==='timer')act('timer',{id:id,mode:button.dataset.mode});
  if(action==='save-target'){var field=card.querySelector('.recipe-target');if(!field||!field.value||!field.checkValidity()){notify('Choose a valid positive batch target.',true);return;}act('set_target',{id:id,targetYieldQuantity:Number(field.value)});}
- if(action==='manager-save')act('update',{id:id,status:card.querySelector('.manager-status').value,adminNote:card.querySelector('.manager-note').value});
+ if(action==='manager-save'){
+  var body={id:id,status:card.querySelector('.manager-status').value,adminNote:card.querySelector('.manager-note').value};
+  var requested=card.querySelector('.manager-quantity');if(requested)body.quantityNote=requested.value;
+  act('update',body);
+ }
  if(action==='notify')act('notify',{id:id});
  if(action==='history'){json('api/daily-prep.php?action=history&id='+encodeURIComponent(id)).then(function(d){var slot=card.querySelector('.history-slot');slot.className='history';slot.innerHTML=d.events.length?d.events.map(function(ev){return '<div>'+html(ev.when)+' · <strong>'+html(ev.event)+'</strong> · '+html(ev.by)+'</div>';}).join(''):'No changes logged.';}).catch(function(err){notify(err.message,true);});}
 });

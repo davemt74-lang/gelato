@@ -22,13 +22,15 @@ try{
         $date=daily_quicklist_date($_GET['date']??date('Y-m-d'));
         $recipes=$canRecipe?daily_quicklist_recipes($pdo,$org):[];
         $items=daily_quicklist_items($pdo,$org,$date);
+        $inventory=$canInventory?daily_quicklist_inventory($pdo,$org):[];
         app_json_response([
             'ok'=>true,'date'=>$date,'manager'=>$manager,'canRecipe'=>$canRecipe,'canInventory'=>$canInventory,
             'items'=>$items,
             'recipeScales'=>$canRecipe?daily_quicklist_recipe_projections($items,$recipes):[],
             'suggestions'=>daily_quicklist_menu_suggestions($pdo,$org,$recipes,$date),
             'recipes'=>$recipes,
-            'inventory'=>$canInventory?daily_quicklist_inventory($pdo,$org):[],
+            'inventory'=>$inventory,
+            'stockAlerts'=>$canInventory?daily_quicklist_stock_alerts($inventory,$recipes,$items):[],
         ]);
     }
     if($_SERVER['REQUEST_METHOD']!=='POST'){

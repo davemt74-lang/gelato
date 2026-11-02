@@ -147,11 +147,14 @@ function gaw_route(array $user,string $message,string $threadId=''): array
     $dailyPrepAccess=app_has_permission('prep.intelligence.view',$user)
         &&app_has_permission('prep.intelligence.agent',$user);
     $dailyPrepExplicit=preg_match('/\b(?:daily\s+prep|prep\s+checklist|menu[- ]based\s+prep|need\s+more(?:\s+(?:inventory\s+)?list)?|(?:build|generate)\b.{0,60}\bprep\b.{0,60}\b(?:from|based\s+on)\b.{0,30}\bmenu)\b/u',$text)===1;
+    $dailyPrepStockInsights=(app_has_permission('inventory.view',$user)||app_has_permission('inventory.manage',$user))
+        &&preg_match('/\b(?:reorder\s+(?:point|level|threshold)|below\s+par|low\s+stock|stock\s+alerts?)\b/u',$text)===1
+        &&preg_match('/\b(?:prep|recipe|need\s+more|inventory|stock|par|reorder)\b/u',$text)===1;
     $quicklistContext=$threadId!==''&&function_exists('pqa_context_get')
         ?pqa_context_get((int)($user['organization_id']??0),(int)($user['id']??0),$threadId):null;
     $contextAction=$quicklistContext
         &&preg_match('/\b(?:mark|check|complete|finish|reopen|undo|start|pause|resume|stop|set|change|remove|delete|notify)\b.{0,90}\b(?:that|this|first|second|third|fourth|fifth|\d{1,2}(?:st|nd|rd|th)?)\b.{0,50}\b(?:item|task|timer|batch|one)\b/u',$text)===1;
-    if($dailyPrepAccess&&($dailyPrepExplicit||$contextAction))
+    if($dailyPrepAccess&&($dailyPrepExplicit||$contextAction||$dailyPrepStockInsights))
         return ['route'=>null,'domain'=>'daily_prep_model_tools','nodeMode'=>'conversation'];
 
     // A previously read prep list provides scoped context for short follow-ups.

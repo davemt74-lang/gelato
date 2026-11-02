@@ -255,6 +255,56 @@ function daily_quicklist_inventory(PDO $pdo,int $org): array
         'reorderPoint'=>$r['reorder_point']===null?null:(float)$r['reorder_point'],
     ],$rows);
 }
+/**
+ * 3K2E: read-only, exact-name stock signals for the Need More panel and Agent.
+ * A reorder point is a threshold, NOT a purchase quantity or recipe shortage.
+ * Only active dated prep recipes are used for context; no unit conversions.
+ */
+function daily_quicklist_stock_alerts(array $stock,array $recipes,array $items): array
+{
+    $recipesById=[];
+    foreach($recipes as $recipe)if(is_array($recipe)&&isset($recipe['id']))
+        $recipesById[(string)$recipe['id']]=$recipe;
+    $usedBy=[];
+    foreach($items as $item){
+        if(($item['type']??'')!=='prep'||($item['status']??'')==='done')continue;
+        $recipe=$recipesById[(string)($item['recipeId']??'')]??null;
+        if(!$recipe)continue;
+        foreach((array)($recipe['ingredients']??[]) as $ingredient){
+            if(!is_array($ingredient))continue;
+            $name=trim((string)($ingredient['ingredient']??$ingredient['name']??$ingredient['item']??''));
+            $key=daily_quicklist_normalize($name);
+            if($key==='')continue;
+            $usedBy[$key][(string)$recipe['id']]=(string)$recipe['name'];
+        }
+    }
+    $requested=[];
+    foreach($items as $item){
+        if(($item['type']??'')!=='inventory'||($item['status']??'')==='received')continue;
+        if(!empty($item['inventoryId']))$requested['id:'.$item['inventoryId']]=true;
+        $key=daily_quicklist_normalize((string)($item['title']??''));
+        if($key!=='')$requested['name:'.$key]=true;
+    }
+    $alerts=[];
+    foreach($stock as $item){
+        if(!array_key_exists('reorderPoint',$item)||$item['reorderPoint']===null
+            ||!is_numeric($item['reorderPoint']))continue;
+        $point=(float)$item['reorderPoint'];$onHand=(float)($item['onHand']??0);
+        if(!is_finite($point)||!is_finite($onHand)||$point<0||$onHand>$point)continue;
+        $key=daily_quicklist_normalize((string)$item['name']);
+        $alerts[]=[
+            'inventoryId'=>(string)$item['id'],'name'=>(string)$item['name'],
+            'unit'=>(string)$item['unit'],'onHand'=>$onHand,'reorderPoint'=>$point,
+            'differenceToPoint'=>max(0,$point-$onHand),
+            'prepRecipes'=>array_slice(array_values($usedBy[$key]??[]),0,5),
+            'alreadyRequested'=>isset($requested['id:'.$item['id']])||isset($requested['name:'.$key]),
+        ];
+    }
+    usort($alerts,static fn(array $a,array $b):int=>
+        (int)$a['alreadyRequested']<=>(int)$b['alreadyRequested']
+        ?:strcmp($a['name'],$b['name']));
+    return array_slice($alerts,0,100);
+}
 function daily_quicklist_row_lock(PDO $pdo,int $org,string $id): array
 {
     $q=$pdo->prepare('SELECT * FROM daily_quicklist_items WHERE organization_id=? AND public_id=? AND archived_at IS NULL LIMIT 1 FOR UPDATE');
@@ -470,8 +520,16 @@ function daily_quicklist_mutate(PDO $pdo,int $org,int $actor,string $action,arra
             $newStatus=(string)($input['status']??$row['status']);
             if(!in_array($newStatus,$valid,true))throw new InvalidArgumentException('Invalid status for this list.');
             $note=mb_substr(trim((string)($input['adminNote']??($row['admin_note']??''))),0,2000,'UTF-8');
+            $quantityNote=(string)($row['quantity_note']??'');
+            if(array_key_exists('quantityNote',$input)){
+                if($row['list_type']!=='inventory'||!is_string($input['quantityNote'])
+                    ||mb_strlen(trim($input['quantityNote']),'UTF-8')>120)
+                    throw new InvalidArgumentException('Need More requested amounts must be 120 characters or less.');
+                $quantityNote=trim($input['quantityNote']);
+            }
             if($newStatus==='done'||$newStatus==='received'){$elapsed+=$running;$started=null;}
-            $pdo->prepare('UPDATE daily_quicklist_items SET admin_note=?,updated_by=? WHERE id=?')->execute([$note?:null,$actor,$row['id']]);
+            $pdo->prepare('UPDATE daily_quicklist_items SET admin_note=?,quantity_note=?,updated_by=? WHERE id=?')
+                ->execute([$note?:null,$quantityNote?:null,$actor,$row['id']]);
         }elseif($action==='notify'){
             if(!$manager)throw new InvalidArgumentException('Manager permission is required to notify the team.');
             $recipients=daily_quicklist_notify_managers($pdo,$org,$actor,'Daily list: '.$row['title'],'Please check the status of '.$row['title'].' in Daily Prep.');
@@ -482,7 +540,7 @@ function daily_quicklist_mutate(PDO $pdo,int $org,int $actor,string $action,arra
             $pdo->prepare('UPDATE daily_quicklist_items SET status=?,elapsed_seconds=?,timer_started_at=?,updated_by=? WHERE id=?')
                 ->execute([$newStatus,$elapsed,$started,$actor,$row['id']]);
         }
-        daily_quicklist_event($pdo,$org,(int)$row['id'],$actor,$event,['before'=>$previous,'after'=>['status'=>$newStatus,'elapsedSeconds'=>$elapsed,'running'=>$started!==null,'adminNote'=>$action==='update'?$note:null,'targetYieldQuantity'=>$action==='set_target'?$quantity:null,'targetYieldUnit'=>$action==='set_target'?$unit:null]]);
+        daily_quicklist_event($pdo,$org,(int)$row['id'],$actor,$event,['before'=>$previous+['quantityNote'=>(string)($row['quantity_note']??'')],'after'=>['status'=>$newStatus,'elapsedSeconds'=>$elapsed,'running'=>$started!==null,'adminNote'=>$action==='update'?$note:null,'quantityNote'=>$action==='update'?$quantityNote:null,'targetYieldQuantity'=>$action==='set_target'?$quantity:null,'targetYieldUnit'=>$action==='set_target'?$unit:null]]);
         if($row['list_type']==='inventory'&&$action==='update'&&$row['status']!==$newStatus){
             daily_quicklist_notify_managers($pdo,$org,$actor,'Inventory update: '.$row['title'],$row['title'].' is now '.$newStatus.'.');
         }

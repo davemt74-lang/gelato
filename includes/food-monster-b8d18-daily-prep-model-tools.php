@@ -56,12 +56,39 @@ function fm8d18j11_read(array $args,array $actor,array $context): array
         ]];
     }finally{if($opened&&session_status()===PHP_SESSION_ACTIVE)session_write_close();}
 }
+/** Reorder-point signals and exact recipe-name links, never a stock forecast. */
+function fm8d18j11_stock_read(array $args,array $actor,array $context): array
+{
+    if(!fm8d18j11_can($actor)
+        ||!(app_has_permission('inventory.view',$actor)||app_has_permission('inventory.manage',$actor)))
+        throw new DomainException('Inventory View and Daily Prep Agent permissions are required.');
+    $pdo=app_pdo();fm8d18j11_voice_guard($pdo,$actor,$context);
+    if(!daily_quicklist_ready($pdo))throw new RuntimeException('Daily Prep is not installed. Run upgrade.php.');
+    $org=(int)$actor['organization_id'];$date=fm8d18j11_date($args);
+    $items=daily_quicklist_items($pdo,$org,$date);
+    $recipes=app_has_permission('recipes.view',$actor)?daily_quicklist_recipes($pdo,$org):[];
+    $alerts=daily_quicklist_stock_alerts(daily_quicklist_inventory($pdo,$org),$recipes,$items);
+    $parts=[];
+    foreach(array_slice($alerts,0,12) as $row){
+        $parts[]=$row['name'].' (on hand '.daily_quicklist_format_quantity($row['onHand']).
+            ' '.$row['unit'].', reorder point '.daily_quicklist_format_quantity($row['reorderPoint']).
+            ', '.($row['alreadyRequested']?'already on Need More':'not on Need More').')'.
+            ($row['prepRecipes']?' · used by active prep recipe(s): '.implode(', ',$row['prepRecipes']):'');
+    }
+    $answer=$alerts?'Items at or below their saved reorder point: '.implode('; ',$parts).'.'
+        :'No inventory items are at or below a configured reorder point in the available stock snapshot.';
+    if(count($alerts)>12)$answer.=' Showing the first 12 of '.count($alerts).'; open Inventory for the complete list.';
+    $answer.=' These are reorder-point indicators, not calculated recipe shortages or purchase quantities. No stock or Need More request changed.';
+    return ['ok'=>true,'data'=>['answer'=>$answer,
+        'source'=>'Gelato saved inventory reorder points and authorized active Daily Prep recipes',
+        'date'=>$date,'alerts'=>$alerts,'proof'=>['url'=>'daily-prep.php']]];
+}
 function fm8d18j11_allowed_actions(array $actor): array
 {
     $actions=['generate_menu','mark_done','reopen','timer_start','timer_pause',
         'timer_resume','timer_stop','set_batch_target','add_need_more','remove_item'];
     if(daily_quicklist_can_manage($actor))
-        array_push($actions,'set_status','set_manager_note','notify_managers');
+        array_push($actions,'set_status','set_manager_note','set_requested_amount','notify_managers');
     return $actions;
 }
 function fm8d18j11_action_fields(array $args,array $actor): array
@@ -106,6 +133,11 @@ function fm8d18j11_action_fields(array $args,array $actor): array
     if($action==='set_manager_note'
         &&(!is_string($args['note']??null)||trim($args['note'])===''||
             mb_strlen($args['note'],'UTF-8')>2000))$missing[]='note';
+    if($action==='set_requested_amount'){
+        if($list!=='inventory')$missing[]='list';
+        if(!array_key_exists('note',$args)||!is_string($args['note'])
+            ||mb_strlen(trim((string)$args['note']),'UTF-8')>120)$missing[]='note';
+    }
     if($action==='add_need_more'&&isset($args['note'])
         &&(!is_string($args['note'])||mb_strlen($args['note'],'UTF-8')>120))$missing[]='note';
     return array_values(array_unique($missing));
@@ -123,6 +155,7 @@ function fm8d18j11_intent(array $args,array $row): array
     if($action==='remove_item')return $intent+['op'=>'archive'];
     if($action==='set_status')return $intent+['op'=>'update','status'=>$args['status']];
     if($action==='set_manager_note')return $intent+['op'=>'update','note'=>trim((string)$args['note'])];
+    if($action==='set_requested_amount')return $intent+['op'=>'update','quantityNote'=>trim((string)$args['note'])];
     if($action==='notify_managers')return $intent+['op'=>'notify'];
     throw new InvalidArgumentException('Unsupported Daily Prep tool action.');
 }
@@ -177,7 +210,7 @@ function fm8d18j11_catalogue(array $actor,array $context=[]): array
     if(!fm8d18j11_can($actor))return [];
     if(($context['channel']??'')==='voice'&&($context['privateVoiceApproved']??false)!==true)return [];
     $actions=fm8d18j11_allowed_actions($actor);
-    return [
+    $tools=[
         'get_daily_prep_checklist'=>[
             'description'=>'Read the signed-in restaurant dated Daily Prep and active Need More lists. Show current numbered item names and statuses; store a short-lived, user-scoped numbered selection so follow-up phrases such as "the second item" can be resolved without giving the model database IDs. Date optional: omit for restaurant-local today. Read only; no updates.',
             'parameters'=>['type'=>'object','properties'=>[
@@ -191,7 +224,7 @@ function fm8d18j11_catalogue(array $actor,array $context=[]): array
             'execute'=>static fn(array $a,array $user):array=>fm8d18j11_read($a,$user,$context),
         ],
         'propose_daily_prep_action'=>[
-            'description'=>'ONLY when the employee explicitly asks to change Daily Prep or Need More. Choose the real action and one item by exact name, ordinal from a previously displayed numbered list, or focused "that item" after a prior selection. The model NEVER supplies item IDs. Use reference_mode none only for generate_menu or adding a named Need More request. For targets use saved recipe yield and do not invent units. Manager status, notes and notices require management permission. This tool stages an expiring official Prep Agent proposal; a separate Confirm and fresh server checks execute it. No stock adjustments or edits to master recipes. Unverified voice cannot use it.',
+            'description'=>'ONLY when the employee explicitly asks to change Daily Prep or Need More. Choose one item by exact name, ordinal from a previously displayed numbered list, or focused "that item" after a prior selection. The model NEVER supplies item IDs. Use reference_mode none only for generate_menu or adding a named Need More request. For recipe targets use saved yield. Manager status, internal notes, requested Need More amounts, and notices require management permission. The note field carries the exact requested amount for set_requested_amount, not a stock adjustment; an empty note explicitly clears it. This stages an expiring Prep Agent proposal; a separate Confirm and fresh checks execute it. No stock adjustments or edits to master recipes. Unverified voice cannot use it.',
             'parameters'=>['type'=>'object','properties'=>[
                 'action'=>['type'=>'string','enum'=>$actions],
                 'list'=>['type'=>'string','enum'=>['prep','inventory'],
@@ -206,7 +239,7 @@ function fm8d18j11_catalogue(array $actor,array $context=[]): array
                 'unit'=>['type'=>'string','description'=>'Optional supplied saved recipe yield unit, must match canonical unit'],
                 'status'=>['type'=>'string','enum'=>['todo','in_progress','paused','done','need_more','ordered','received']],
                 'note'=>['type'=>'string','maxLength'=>2000,
-                    'description'=>'Explicit manager note or Need More quantity note; never infer it'],
+                    'description'=>'Explicit manager note, Need More quantity request, or new requested amount; never invent a unit or quantity'],
             ],'required'=>['action','list','reference_mode'],'additionalProperties'=>false],
             'allowedArguments'=>['action','list','reference_mode','name','ordinal','date','quantity','unit','status','note'],
             'impact'=>'read',
@@ -216,4 +249,20 @@ function fm8d18j11_catalogue(array $actor,array $context=[]): array
             'execute'=>static fn(array $a,array $user):array=>fm8d18j11_propose($a,$user,$context),
         ],
     ];
+    if(app_has_permission('inventory.view',$actor)||app_has_permission('inventory.manage',$actor)){
+        $tools['get_need_more_stock_insights']=[
+            'description'=>'Read real inventory items AT or BELOW their saved reorder point, tell which are already on Need More and which exact-name ingredient appears in active dated prep recipes when Recipe View is authorized. No inferred purchase amounts, unit conversions, or physical stock changes. Use when asked what is low for prep, what is below par or reorder level, or which low-stock ingredients affect current prep. Date optional, defaults to restaurant-local today.',
+            'parameters'=>['type'=>'object','properties'=>[
+                'date'=>['type'=>'string','description'=>'Optional YYYY-MM-DD prep date; omit for today'],
+            ],'additionalProperties'=>false],
+            'allowedArguments'=>['date'],'impact'=>'read',
+            'authorize'=>static fn(array $user,array $a):bool=>fm8d18j11_can($user)
+                &&(app_has_permission('inventory.view',$user)||app_has_permission('inventory.manage',$user)),
+            'validate'=>static function(array $a,array $user):array{
+                try{fm8d18j11_date($a);return [];}catch(InvalidArgumentException){return ['date'];}
+            },
+            'execute'=>static fn(array $a,array $user):array=>fm8d18j11_stock_read($a,$user,$context),
+        ];
+    }
+    return $tools;
 }

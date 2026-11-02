@@ -120,6 +120,8 @@ function pqa_parse_request(string $message): ?array
         return ['op'=>'update','kind'=>'inventory','target'=>trim($m[1]),'status'=>str_replace(' ','_',mb_strtolower($m[2],'UTF-8'))];
     if(preg_match('~^(?:please\s+)?(?:add|set|update)\s+(?:manager\s+)?note\s+(?:for|on)\s+(.+?)\s+'.$c.$n.'\s*:\s*(.+)$~iu',$text,$m))
         return ['op'=>'update','kind'=>'inventory','target'=>trim($m[1]),'note'=>trim($m[2])];
+    if(preg_match('~^(?:please\s+)?(?:set|change|update)\s+(?:requested\s+)?(?:amount|quantity)\s+(?:for|on)\s+(.+?)\s+'.$c.$n.'\s*:\s*(.*)$~iu',$text,$m))
+        return ['op'=>'update','kind'=>'inventory','target'=>trim($m[1]),'quantityNote'=>trim($m[2])];
     if(preg_match('~^(?:please\s+)?notify\s+(?:the\s+)?(?:team|managers?)\s+(?:about|regarding)\s+(.+?)\s+'.$c.$n.'[.!]?$~iu',$text,$m))
         return ['op'=>'notify','kind'=>'inventory','target'=>trim($m[1])];
 
@@ -183,7 +185,7 @@ function pqa_resolve_item(PDO $pdo,int $org,string $date,string $kind,string $ta
 function pqa_item_fingerprint(array $row): string
 {
     $evidence=[];
-    foreach(['id','type','date','status','recipeId','targetYieldQuantity','targetYieldUnit','timerRunning','adminNote','updatedAt'] as $field)
+    foreach(['id','type','date','status','recipeId','targetYieldQuantity','targetYieldUnit','timerRunning','adminNote','quantityNote','updatedAt'] as $field)
         $evidence[$field]=$row[$field]??null;
     return hash('sha256',json_encode($evidence,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR));
 }
@@ -271,11 +273,17 @@ function pqa_propose(PDO $pdo,int $org,int $uid,array $user,array $intent,string
             if(!in_array($status,$allowed,true))throw new InvalidArgumentException('Unsupported list status.');
             $note=$intent['note']??$row['adminNote'];
             if(mb_strlen((string)$note,'UTF-8')>2000)throw new InvalidArgumentException('Manager note exceeds 2,000 characters.');
-            if($status===$row['status']&&$note===$row['adminNote'])
+            $quantityNote=$intent['quantityNote']??$row['quantityNote'];
+            if(array_key_exists('quantityNote',$intent)
+                &&($kind!=='inventory'||!is_string($intent['quantityNote'])
+                    ||mb_strlen(trim($intent['quantityNote']),'UTF-8')>120))
+                throw new InvalidArgumentException('Need More requested amount must be 120 characters or less.');
+            if($status===$row['status']&&$note===$row['adminNote']&&$quantityNote===$row['quantityNote'])
                 return ['ok'=>true,'skill'=>'prep.daily_no_change','answer'=>'That status and note are already current. No change was made.',
                     'data'=>['proof'=>['url'=>'daily-prep.php']],'sources'=>[$row['id']]];
             $description='Update '.$title.($status!==$row['status']?' status to '.str_replace('_',' ',$status):'').
-                ($note!==$row['adminNote']?' with manager note "'.$note.'"':'');
+                ($note!==$row['adminNote']?' with manager note "'.$note.'"':'').
+                ($quantityNote!==$row['quantityNote']?' with requested amount "'.$quantityNote.'"':'');
         }elseif($op==='notify')$description='Notify managers to check '.$title;
         elseif($op==='archive')$description='Remove '.$title.' from '.($kind==='prep'?'Daily Prep':'Need More').' (retain audit history)';
         else throw new InvalidArgumentException('Unsupported Daily Prep action.');
@@ -342,6 +350,7 @@ function pqa_execute(PDO $pdo,int $org,int $uid,array $user,array $payload): arr
         }elseif($op==='update'){
             $input['status']=$intent['status']??$row['status'];
             $input['adminNote']=$intent['note']??$row['adminNote'];
+            if(array_key_exists('quantityNote',$intent))$input['quantityNote']=$intent['quantityNote'];
         }
         $result=daily_quicklist_mutate($pdo,$org,$uid,$op,$input,daily_quicklist_can_manage($user),
             app_has_permission('recipes.view',$user));
