@@ -121,6 +121,9 @@ jobs:
           grep -q "app_verify_request_csrf" api/prep-intelligence.php
           grep -q 'ADD COLUMN target_yield_quantity' database/20261225_daily_prep_recipe_targets.sql
           grep -q 'daily_quicklist_scale_recipe' includes/daily-quicklist-core.php
+          grep -q 'daily_quicklist_apply_menu_selection' includes/daily-quicklist-core.php
+          grep -q 'quicklist_generate' includes/prep-agent-core.php
+          grep -q 'generate_menu' api/daily-prep.php
       - name: Install and upgrade schema
         run: |
           sudo apt-get update -qq

@@ -140,6 +140,13 @@ function gaw_route(array $user,string $message): array
         if($pendingNode==='timeclock'&&app_has_permission('timeclock.agent',$user))return gaw_node_route('timeclock','timeclock_confirmation');
     }
 
+    // Daily Prep is a real staff checklist, distinct from formal published prep plans.
+    // Route explicit menu-backed checklist requests to the official Prep Agent.
+    if(preg_match('/\b(?:daily\s+prep|prep\s+checklist|menu[- ]based\s+prep|need\s+more\s+(?:inventory\s+)?list|(?:build|generate)\b.{0,60}\bprep\b.{0,60}\b(?:from|based\s+on)\b.{0,30}\bmenu)\b/u',$text)
+        &&app_has_permission('prep.intelligence.view',$user)
+        &&app_has_permission('prep.intelligence.agent',$user))
+        return ['route'=>'api/prep-intelligence-agent.php','domain'=>'daily_prep_quicklist'];
+
     // A previously read prep list provides scoped context for short follow-ups.
     // Keep this restricted to explicit task verbs, never arbitrary chat.
     $prepKey=(int)($user['organization_id']??0).':'.(int)($user['id']??0);

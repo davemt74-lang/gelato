@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/restaurant-brain.php';
 require_once __DIR__ . '/menu-manager-core.php';
 require_once __DIR__ . '/operations-core.php';
+require_once __DIR__ . '/prep-intelligence-core.php';
 
 /** Quicklist access is for signed-in operational staff, not external customer accounts. */
 function daily_quicklist_can_view(array $user): bool
@@ -124,43 +125,96 @@ function daily_quicklist_recipes(PDO $pdo,int $org): array
     $q->execute([$org]);
     return array_map('daily_quicklist_recipe_public',$q->fetchAll());
 }
-/** Suggestions are sourced from published menu ingredients, never invented quantities. */
-function daily_quicklist_menu_suggestions(PDO $pdo,int $org,array $recipes): array
+/** Only published menu records can suggest checklist work; counts are menu references, not demand. */
+function daily_quicklist_suggestions_from_menu(array $sections,array $recipes,array $baselines=[]): array
 {
-    if (!menu_manager_ready($pdo)) return [];
-    $counts=[];$dishNames=[];
-    foreach (menu_manager_public_sections($pdo,$org) as $section) {
-        foreach ($section['items'] as $dish) {
+    $counts=[];$dishes=[];
+    foreach($sections as $section){
+        $sectionName=(string)($section['name']??'Menu');
+        foreach((array)($section['items']??[]) as $dish){
             $dishName=trim((string)($dish['name']??''));
-            if ($dishName!=='') $dishNames[$dishName]=true;
-            foreach (array_unique(array_map('strval',(array)($dish['ingredients']??[]))) as $ingredient) {
+            if($dishName!==''){
+                $dishKey=daily_quicklist_normalize($dishName);
+                if(!isset($dishes[$dishKey]))$dishes[$dishKey]=['name'=>$dishName,'section'=>$sectionName];
+            }
+            foreach(array_unique(array_map('strval',(array)($dish['ingredients']??[]))) as $ingredient){
                 $name=trim($ingredient);$key=daily_quicklist_normalize($name);
-                if ($key==='') continue;
-                if (!isset($counts[$key])) $counts[$key]=['name'=>$name,'menuCount'=>0];
+                if($key==='')continue;
+                if(!isset($counts[$key]))$counts[$key]=['name'=>$name,'menuCount'=>0,'dishes'=>[]];
                 $counts[$key]['menuCount']++;
+                if($dishName!==''&&count($counts[$key]['dishes'])<4)$counts[$key]['dishes'][$dishName]=true;
             }
         }
     }
     uasort($counts,static fn(array $a,array $b):int=>$b['menuCount']<=>$a['menuCount'] ?: strcmp($a['name'],$b['name']));
-    $byName=[];$ambiguous=[];
-    foreach ($recipes as $recipe) {
-        $key=daily_quicklist_normalize($recipe['name']);
-        if(isset($byName[$key]))$ambiguous[$key]=true;
-        $byName[$key]=$recipe['id'];
+    $recipeNames=[];$ambiguous=[];
+    foreach($recipes as $recipe){
+        $key=daily_quicklist_normalize((string)$recipe['name']);
+        if(isset($recipeNames[$key]))$ambiguous[$key]=true;
+        $recipeNames[$key]=(string)$recipe['id'];
     }
-    $result=[];
-    foreach (array_slice($counts,0,35,true) as $key=>$data) {
-        $result[]=['title'=>'Prep '.$data['name'],'source'=>$data['menuCount'].' published menu item'.($data['menuCount']===1?'':'s'),
-            'recipeId'=>isset($byName[$key])&&!isset($ambiguous[$key])?$byName[$key]:null];
+    $historyByTitle=[];
+    foreach($baselines as $base){
+        if((int)($base['sampleCount']??0)<3)continue;
+        $key=prep_normalized_key((string)($base['title']??''));
+        $historyByTitle[$key][]=$base;
     }
-    // A published dish with an exact, unambiguous saved recipe can be prepped directly.
-    foreach (array_keys($dishNames) as $dishName) {
-        $key=daily_quicklist_normalize($dishName);
-        if (isset($byName[$key])&&!isset($ambiguous[$key])) {
-            $result[]=['title'=>'Prep '.$dishName,'source'=>'Published menu recipe','recipeId'=>$byName[$key]];
+    $decorate=static function(array $row)use($historyByTitle):array{
+        $matches=$historyByTitle[prep_normalized_key($row['title'])]??[];
+        if(count($matches)===1){
+            $base=$matches[0];
+            $row['historicalQuantity']=(float)$base['recommendedBase'];
+            $row['historicalUnit']=(string)$base['unit'];
+            $row['historySamples']=(int)$base['sampleCount'];
+            $row['historyConfidence']=(float)$base['confidence'];
+        }else{
+            $row['historicalQuantity']=null;$row['historicalUnit']='';$row['historySamples']=0;$row['historyConfidence']=null;
         }
+        return $row;
+    };
+    $result=[];
+    foreach(array_slice($counts,0,35,true) as $key=>$data){
+        $recipeId=isset($recipeNames[$key])&&!isset($ambiguous[$key])?$recipeNames[$key]:null;
+        $result[]=$decorate([
+            'key'=>'ing-'.substr(hash('sha256',$key),0,20),'type'=>'ingredient','title'=>'Prep '.$data['name'],
+            'source'=>$data['menuCount'].' published menu item'.($data['menuCount']===1?'':'s'),
+            'menuCount'=>$data['menuCount'],'menuDishes'=>array_keys($data['dishes']),
+            'recipeId'=>$recipeId,
+        ]);
     }
-    return array_slice($result,0,60);
+    foreach($dishes as $key=>$dish){
+        if(!isset($recipeNames[$key])||isset($ambiguous[$key]))continue;
+        $result[]=$decorate([
+            'key'=>'dish-'.substr(hash('sha256',$key),0,20),'type'=>'recipe','title'=>'Prep '.$dish['name'],
+            'source'=>'Published dish · '.$dish['section'],'menuCount'=>1,
+            'menuDishes'=>[$dish['name']],'recipeId'=>$recipeNames[$key],
+        ]);
+    }
+    $unique=[];$seenTitles=[];
+    foreach($result as $candidate){
+        $titleKey=daily_quicklist_normalize($candidate['title']);
+        if(isset($seenTitles[$titleKey]))continue;
+        $seenTitles[$titleKey]=true;$unique[]=$candidate;
+    }
+    return array_slice($unique,0,60);
+}
+function daily_quicklist_menu_suggestions(PDO $pdo,int $org,array $recipes,?string $date=null): array
+{
+    if(!menu_manager_ready($pdo))return [];
+    $sections=menu_manager_public_sections($pdo,$org);
+    $history=[];
+    if($date!==null&&prep_intelligence_ready($pdo))
+        $history=prep_historical_baselines($pdo,$org,daily_quicklist_date($date),8);
+    return daily_quicklist_suggestions_from_menu($sections,$recipes,$history);
+}
+function daily_quicklist_selection_fingerprint(array $rows): string
+{
+    $evidence=array_map(static fn(array $r):array=>[
+        'key'=>$r['key'],'title'=>$r['title'],'recipeId'=>$r['recipeId'],
+        'menuCount'=>$r['menuCount'],'historicalQuantity'=>$r['historicalQuantity'],
+        'historicalUnit'=>$r['historicalUnit'],'historySamples'=>$r['historySamples'],
+    ],$rows);
+    return hash('sha256',json_encode($evidence,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR));
 }
 function daily_quicklist_item_public(array $row): array
 {
@@ -270,7 +324,7 @@ function daily_quicklist_seed(PDO $pdo,int $org,int $actor,string $date,bool $ca
 {
     $date=daily_quicklist_date($date);
     $recipes=$canReadRecipes?daily_quicklist_recipes($pdo,$org):[];
-    $suggestions=array_slice(daily_quicklist_menu_suggestions($pdo,$org,$recipes),0,12);
+    $suggestions=array_slice(daily_quicklist_menu_suggestions($pdo,$org,$recipes,$date),0,12);
     $q=$pdo->prepare("SELECT LOWER(title) FROM daily_quicklist_items WHERE organization_id=? AND list_type='prep' AND list_date=? AND archived_at IS NULL");
     $q->execute([$org,$date]);$existing=array_fill_keys($q->fetchAll(PDO::FETCH_COLUMN),true);
     $created=0;
@@ -282,6 +336,71 @@ function daily_quicklist_seed(PDO $pdo,int $org,int $actor,string $date,bool $ca
         $existing[$key]=true;$created++;
     }
     return $created;
+}
+/**
+ * Commit only server-resolved, reviewed menu suggestions. Callers never supply task
+ * titles or recipe IDs. A short per-date lock makes repeated confirmations safe.
+ */
+function daily_quicklist_apply_menu_selection(PDO $pdo,int $org,int $actor,string $date,array $keys,bool $canReadRecipes,?string $expectedFingerprint=null): array
+{
+    $date=daily_quicklist_date($date);
+    if(count($keys)<1||count($keys)>40)throw new InvalidArgumentException('Select between 1 and 40 menu suggestions.');
+    $unique=[];
+    foreach($keys as $key){
+        if(!is_string($key)||!preg_match('/^(?:ing|dish)-[a-f0-9]{20}$/D',$key))
+            throw new InvalidArgumentException('A menu suggestion ID is invalid.');
+        if(isset($unique[$key]))throw new InvalidArgumentException('Choose each menu suggestion only once.');
+        $unique[$key]=true;
+    }
+    $recipes=$canReadRecipes?daily_quicklist_recipes($pdo,$org):[];
+    $current=daily_quicklist_menu_suggestions($pdo,$org,$recipes,$date);
+    $lookup=[];foreach($current as $suggestion)$lookup[$suggestion['key']]=$suggestion;
+    $chosen=[];
+    foreach($keys as $key){
+        if(!isset($lookup[$key]))throw new InvalidArgumentException('The published menu changed or that suggestion is unavailable. Review the list again.');
+        $chosen[]=$lookup[$key];
+    }
+    if($expectedFingerprint!==null&&!hash_equals($expectedFingerprint,daily_quicklist_selection_fingerprint($chosen)))
+        throw new InvalidArgumentException('Menu or prep history changed since the agent proposal. Review the current suggestions.');
+    $lock='gelato:menu-quick:'.$org.':'.$date;
+    $lockQuery=$pdo->prepare('SELECT GET_LOCK(?,5)');$lockQuery->execute([$lock]);
+    if((int)$lockQuery->fetchColumn()!==1)throw new RuntimeException('The daily list is being updated. Please retry.');
+    try{
+        $pdo->beginTransaction();
+        $existingQuery=$pdo->prepare("SELECT LOWER(title) FROM daily_quicklist_items WHERE organization_id=?
+            AND list_type='prep' AND list_date=? AND archived_at IS NULL FOR UPDATE");
+        $existingQuery->execute([$org,$date]);
+        $existing=array_fill_keys($existingQuery->fetchAll(PDO::FETCH_COLUMN),true);
+        $created=[];$skipped=[];
+        foreach($chosen as $candidate){
+            $title=(string)$candidate['title'];$normalized=mb_strtolower($title,'UTF-8');
+            if(isset($existing[$normalized])){$skipped[]=$title;continue;}
+            $note='';
+            if($candidate['historicalQuantity']!==null&&$candidate['historySamples']>=3)
+                $note='Historical guidance: '.daily_quicklist_format_quantity((float)$candidate['historicalQuantity']).' '.
+                    (string)$candidate['historicalUnit'].' from '.$candidate['historySamples'].' completed prep samples (review quantity).';
+            $id=daily_quicklist_add($pdo,$org,$actor,[
+                'type'=>'prep','date'=>$date,'title'=>$title,
+                'recipeId'=>$canReadRecipes?($candidate['recipeId']??''):'',
+                'quantityNote'=>$note,
+            ],$canReadRecipes);
+            $q=$pdo->prepare('SELECT id FROM daily_quicklist_items WHERE organization_id=? AND public_id=? LIMIT 1');
+            $q->execute([$org,$id]);
+            daily_quicklist_event($pdo,$org,(int)$q->fetchColumn(),$actor,'menu_generated',[
+                'candidateKey'=>$candidate['key'],'menuCount'=>$candidate['menuCount'],
+                'menuDishes'=>$candidate['menuDishes'],'historySamples'=>$candidate['historySamples'],
+            ]);
+            $created[]=['id'=>$id,'title'=>$title,'recipeId'=>$canReadRecipes?$candidate['recipeId']:null];
+            $existing[$normalized]=true;
+        }
+        $pdo->commit();
+        return ['date'=>$date,'created'=>$created,'skipped'=>$skipped,'requested'=>count($keys)];
+    }catch(Throwable $exception){
+        if($pdo->inTransaction())$pdo->rollBack();
+        throw $exception;
+    }finally{
+        $pdo->prepare('SELECT RELEASE_LOCK(?)')->execute([$lock]);
+    }
 }
 function daily_quicklist_mutate(PDO $pdo,int $org,int $actor,string $action,array $input,bool $manager,bool $canReadRecipes=false): array
 {

@@ -11,12 +11,13 @@ $displayName=htmlspecialchars((string)($user['display_name']??'Team member'),ENT
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#183a2a">
 <title>Daily Prep · Gelato</title>
-<link rel="stylesheet" href="assets/css/daily-prep.css?v=3k2">
+<link rel="stylesheet" href="assets/css/daily-prep.css?v=3k2b2">
 </head><body>
 <div class="workspace">
 <header class="masthead">
   <a href="index.php" class="back-link" aria-label="Back to workspace">← Workspace</a>
   <div class="brand"><span class="brand-mark">g.</span><span>GELATO <small>/ DAILY WORKSPACE</small></span></div>
+  <a class="agent-link" href="agent-canvas.php" title="Ask the official Gelato AI Agent">✦ Ask Gelato AI</a>
   <span class="user-chip"><?php echo $displayName; ?></span>
 </header>
 <main>
@@ -40,7 +41,7 @@ $displayName=htmlspecialchars((string)($user['display_name']??'Team member'),ENT
       <label class="sr-only" for="prep-recipe">Recipe</label><select id="prep-recipe" name="recipeId"><option value="">No linked recipe</option></select>
       <button class="primary" type="submit">+ Add</button></form>
     <div id="prep-list" class="task-list"><div class="loading">Loading your prep list…</div></div>
-    <section class="suggestion-panel"><div class="panel-head"><div><span class="eyebrow dark">FROM YOUR MENU</span><h3>Suggested prep</h3><p>Based on ingredients in your published menu. Add the items that belong on today's list.</p></div><button id="seed-prep" class="outline" type="button">+ Add top 12</button></div><div id="suggestions" class="chips"></div></section>
+    <section class="suggestion-panel"><div class="panel-head"><div><span class="eyebrow dark">FROM YOUR MENU</span><h3>Suggested prep</h3><p>Review published-menu ingredients and saved recipes. Select what the kitchen should prepare; historical amounts are guidance, not orders.</p></div><button id="seed-prep" class="outline" type="button">Add selected (0)</button></div><div id="suggestions" class="chips"></div></section>
   </section>
   <section id="inventory-pane" hidden>
     <div class="section-head"><div><div class="eyebrow dark">STOCK & SUPPLIES</div><h2>Inventory</h2><p>Flag shortages without changing actual stock quantities.</p></div><div class="progress-badge stock"><strong id="need-count">0</strong><span>NEED MORE</span></div></div>
@@ -50,5 +51,5 @@ $displayName=htmlspecialchars((string)($user['display_name']??'Team member'),ENT
   <p class="footer-note">Shared with your Gelato team · Changes are logged · Inventory counts update only in <a href="operations.php">Operations</a></p>
 </main></div>
 <script>window.DAILY_PREP_CSRF=<?php echo json_encode(app_csrf_token(),JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT); ?>;</script>
-<script src="js/daily-prep.js?v=3k2" defer></script>
+<script src="js/daily-prep.js?v=3k2b2" defer></script>
 </body></html>
