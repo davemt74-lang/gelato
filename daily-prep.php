@@ -11,7 +11,7 @@ $displayName=htmlspecialchars((string)($user['display_name']??'Team member'),ENT
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#183a2a">
 <title>Daily Prep · Gelato</title>
-<link rel="stylesheet" href="assets/css/daily-prep.css?v=3k2b2">
+<link rel="stylesheet" href="assets/css/daily-prep.css?v=3k2e">
 </head><body>
 <div class="workspace">
 <header class="masthead">
@@ -46,10 +46,11 @@ $displayName=htmlspecialchars((string)($user['display_name']??'Team member'),ENT
   <section id="inventory-pane" hidden>
     <div class="section-head"><div><div class="eyebrow dark">STOCK & SUPPLIES</div><h2>Inventory</h2><p>Flag shortages without changing actual stock quantities.</p></div><div class="progress-badge stock"><strong id="need-count">0</strong><span>NEED MORE</span></div></div>
     <form id="inventory-add" class="add-bar"><label class="sr-only" for="inventory-title">New inventory request</label><input id="inventory-title" name="title" placeholder="Add something we need…" maxlength="220" required><label class="sr-only" for="inventory-qty">Quantity needed</label><input id="inventory-qty" name="quantityNote" placeholder="Amount / notes (optional)" maxlength="120"><button class="primary" type="submit">+ Need More</button></form>
+    <section class="stock-alert-panel" id="stock-alert-panel" hidden><div class="panel-head"><div><h3>Stock at reorder point</h3><p class="muted">Based on saved stock thresholds. Recipe links are exact-name context, not calculated shortages or order amounts.</p></div></div><div id="stock-alerts" class="stock-alerts"></div></section>
     <div class="inventory-grid"><section><div class="panel-head"><h3>Need More list</h3><span id="need-caption" class="muted"></span></div><div id="need-list" class="task-list"></div></section><section class="stock-panel"><div class="panel-head"><h3>Stock directory</h3></div><input id="stock-search" type="search" placeholder="Search your current stock…" aria-label="Search inventory"><div id="stock-list" class="stock-list"></div></section></div>
   </section>
   <p class="footer-note">Shared with your Gelato team · Changes are logged · Inventory counts update only in <a href="operations.php">Operations</a></p>
 </main></div>
 <script>window.DAILY_PREP_CSRF=<?php echo json_encode(app_csrf_token(),JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT); ?>;</script>
-<script src="js/daily-prep.js?v=3k2b2" defer></script>
+<script src="js/daily-prep.js?v=3k2e" defer></script>
 </body></html>

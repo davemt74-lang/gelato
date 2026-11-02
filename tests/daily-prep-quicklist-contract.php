@@ -494,4 +494,103 @@ $blockedBundle=fm8d3_turn($pdo,$staffAgent,'anthropic','fake-key',
 dq_assert($blockedBundle['skill']==='agent.delegation_needs_separate_turn',
     'one model turn cannot combine prep changes with reads or other tools');
 
+// Section 3K2E: real reorder-point alerts, recipe context, and confirmed
+// manager-only changes to a Need More requested amount (NOT stock on hand).
+$pdo->prepare('UPDATE inventory_items SET reorder_point=? WHERE organization_id=? AND public_id=?')
+    ->execute([3,$org,$stockId]);
+$inventory3k2e=daily_quicklist_inventory($pdo,$org);
+$items3k2e=daily_quicklist_items($pdo,$org,$agentDay);
+$signals=daily_quicklist_stock_alerts($inventory3k2e,daily_quicklist_recipes($pdo,$org),$items3k2e);
+dq_assert(count($signals)===1&&$signals[0]['inventoryId']===$stockId
+    &&$signals[0]['onHand']===2.0&&$signals[0]['reorderPoint']===3.0
+    &&$signals[0]['differenceToPoint']===1.0,
+    'stock alerts come from real saved reorder points, not generated order quantities');
+dq_assert($signals[0]['alreadyRequested']===true
+    &&in_array('Pizza Dough',$signals[0]['prepRecipes'],true),
+    'Need More and incomplete prep recipe ingredients connect by exact saved stock name');
+$withoutRecipes=daily_quicklist_stock_alerts($inventory3k2e,[],$items3k2e);
+dq_assert($withoutRecipes[0]['prepRecipes']===[],'recipe names are not inferred without recipe read permission');
+$abovePoint=$inventory3k2e;$abovePoint[0]['onHand']=5;
+dq_assert(daily_quicklist_stock_alerts($abovePoint,daily_quicklist_recipes($pdo,$org),$items3k2e)===[],
+    'inventory above threshold must not be called low stock');
+$unsetPoint=$inventory3k2e;$unsetPoint[0]['reorderPoint']=null;
+dq_assert(daily_quicklist_stock_alerts($unsetPoint,[],$items3k2e)===[],
+    'no saved reorder point cannot manufacture a shortage');
+dq_assert(daily_quicklist_stock_alerts(daily_quicklist_inventory($pdo,$other),[],[])===[],
+    'alerts cannot borrow another restaurant inventory records');
+
+$managerStockTools=fm8d18j11_catalogue($managerAgent,$chatContext);
+dq_assert(isset($managerStockTools['get_need_more_stock_insights'])
+    &&in_array('set_requested_amount',
+        $managerStockTools['propose_daily_prep_action']['parameters']['properties']['action']['enum'],true),
+    'manager receives native stock intelligence and confirmation-only requested amount tools');
+dq_assert(!isset($nativeCatalogue['get_need_more_stock_insights'])
+    &&!in_array('set_requested_amount',
+        $nativeCatalogue['propose_daily_prep_action']['parameters']['properties']['action']['enum'],true),
+    'staff without inventory view or manager permissions cannot discover private actions');
+try{fm8d18j11_stock_read(['date'=>$agentDay],$staffAgent,$chatContext);
+    throw new RuntimeException('unprivileged stock intelligence accepted');}catch(DomainException){}
+try{fm8d18j11_stock_read(['date'=>$agentDay],$managerAgent,
+        ['channel'=>'voice','privateVoiceApproved'=>false]);
+    throw new RuntimeException('unverified voice saw stock intelligence');}catch(DomainException){}
+$stockRead=fm8d18j11_stock_read(['date'=>$agentDay],$managerAgent,$chatContext);
+dq_assert(str_contains($stockRead['data']['answer'],'Flour')
+    &&str_contains($stockRead['data']['answer'],'Pizza Dough')
+    &&str_contains($stockRead['data']['answer'],'not calculated recipe shortages'),
+    'official read grounds stock and recipe context with explicit limitations');
+$managerWithoutRecipes=$managerAgent;
+$managerWithoutRecipes['permissions']=array_values(array_diff($managerAgent['permissions'],['recipes.view']));
+$limitedRead=fm8d18j11_stock_read(['date'=>$agentDay],$managerWithoutRecipes,$chatContext);
+dq_assert($limitedRead['data']['alerts'][0]['prepRecipes']===[],
+    'authorized stock reads never leak recipe content after permission revocation');
+dq_assert(gaw_route($managerAgent,'Which low stock items affect prep recipes?')['domain']==='daily_prep_model_tools',
+    'low stock prep intent routes to native model selection');
+$stockMock=static fn()=>['output'=>[['type'=>'function_call','call_id'=>'needmore01',
+    'name'=>'get_need_more_stock_insights','arguments'=>'{"date":"'.$agentDay.'"}']]];
+$modelStock=fm8d3_turn($pdo,$managerAgent,'openai','fake-key',
+    [['role'=>'user','content'=>'What is low in stock for prep?']],
+    '',$stockMock,['get_need_more_stock_insights'=>$managerStockTools['get_need_more_stock_insights']],
+    static fn():array=>$managerAgent,$mockAudit,$chatContext);
+dq_assert($modelStock['skill']==='agent.model_selected_tools'
+    &&str_contains($modelStock['answer'],'Flour'),
+    'mocked model-selected stock tool reads real server-owned data');
+
+dq_assert(fm8d18j11_action_fields(['action'=>'set_requested_amount','list'=>'inventory',
+    'reference_mode'=>'name','name'=>'Flour','note'=>'3 cases'],$managerAgent)===[],
+    'explicit manager requested amount validates');
+dq_assert(fm8d18j11_action_fields(['action'=>'set_requested_amount','list'=>'inventory',
+    'reference_mode'=>'name','name'=>'Flour','note'=>str_repeat('z',121)],$managerAgent)===['note'],
+    'oversized requested amount blocked');
+try{daily_quicklist_mutate($pdo,$org,$actor,'update',[
+        'id'=>$needIdAgain,'quantityNote'=>'200 cases'],false);
+    throw new RuntimeException('staff modified requested amount');}catch(InvalidArgumentException){}
+$preAmount=$pdo->query("SELECT on_hand_quantity FROM inventory_items WHERE public_id='stock-daily-test'")->fetchColumn();
+$managerProposal=fm8d18j11_propose(['action'=>'set_requested_amount','list'=>'inventory',
+    'reference_mode'=>'name','name'=>'Flour','note'=>'3 cases','date'=>$agentDay],
+    $managerAgent,$chatContext);
+dq_assert(($managerProposal['data']['requiresConfirmation']??false)===true,
+    'model-selected requested amount is only a proposal');
+$preConfirmRows=daily_quicklist_items($pdo,$org,$agentDay);
+$preConfirm=current(array_values(array_filter($preConfirmRows,
+    static fn(array $r):bool=>$r['id']===$needIdAgain)));
+dq_assert($preConfirm['quantityNote']==='',
+    'unconfirmed manager request does not write the amount');
+daily_quicklist_mutate($pdo,$org,$manager,'update',
+    ['id'=>$needIdAgain,'status'=>'ordered','quantityNote'=>'2 cases'],true);
+try{prep_agent_handle($pdo,$managerAgent,['message'=>'Confirm']);
+    throw new RuntimeException('stale requested amount was applied');}catch(InvalidArgumentException){}
+dq_assert(!gac_pending_get('prep',$org,$manager),'stale amount proposal is consumed safely');
+$managerProposal=fm8d18j11_propose(['action'=>'set_requested_amount','list'=>'inventory',
+    'reference_mode'=>'name','name'=>'Flour','note'=>'3 cases','date'=>$agentDay],
+    $managerAgent,$chatContext);
+prep_agent_handle($pdo,$managerAgent,['message'=>'Confirm']);
+$newAmountRows=daily_quicklist_items($pdo,$org,$agentDay);
+$newAmount=current(array_values(array_filter($newAmountRows,
+    static fn(array $r):bool=>$r['id']===$needIdAgain)));
+dq_assert($newAmount['quantityNote']==='3 cases'
+    &&daily_quicklist_history($pdo,$org,$needIdAgain)[0]['event']==='update',
+    'confirmed manager requested amount appears in the same UI and audit trail');
+$postAmount=$pdo->query("SELECT on_hand_quantity FROM inventory_items WHERE public_id='stock-daily-test'")->fetchColumn();
+dq_assert((float)$postAmount===(float)$preAmount,'Need More amount never alters actual stock ledger');
+
 echo "daily-prep-quicklist contract passed\n";

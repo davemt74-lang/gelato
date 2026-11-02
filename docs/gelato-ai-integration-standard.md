@@ -25,6 +25,14 @@
 
 ## Limits and deployed acceptance
 
+### Section 3K2E — Inventory and Need More stock context
+
+- `get_need_more_stock_insights` is an additional native Food Monster read tool for operators with **Inventory View plus Prep Agent access**. It reads saved on-hand quantities and configured reorder points, joins active Need More requests, and displays exact-name ingredient links from incomplete dated prep recipes **only with Recipe View**.
+- The Daily Prep Inventory tab shows the same server-generated reorder-point indicators with one-click *+ Need More*. Threshold indicators are not projected ingredient shortages, suggested order quantities, or permission to update actual inventory.
+- Managers can change the **requested amount text** of an existing Need More item in the UI or by `propose_daily_prep_action` with `set_requested_amount`. Agent changes require separate Confirm/Cancel and fresh per-item and permission checks; staff can continue to add and archive their own needs.
+- All changed requested amounts retain append-only quicklist history. They never mutate the inventory ledger or stock counts. Model-selected stock receipts remain delegated to the existing Operations Agent action, not conflated with marking Need More as received.
+- Reorder-point and recipe checks are read-only, tenant-scoped and safe when thresholds or recipe permissions are missing; no inferred unit conversions, unknown-stock matches, or synthetic menu demand.
+
 - Native tool selection is real, but a model may still ask for missing context, abstain or choose the wrong intent; the server never executes an unsafe selection. Run end-to-end acceptance prompts in Gelato chat with actual data, including ambiguous names and concurrent edits.
 - Need More "received" never adjusts inventory on-hand. Recipe targets are display-only and never modify saved recipes. Recording a real inventory receipt remains the separate authorized inventory workflow.
 - CI verifies provider schema/selection, proposal safety, role restrictions, stale snapshots and voice gating. It does **not** certify real voice identification quality, acoustic overlap, or employees' deployed browser acceptance.
