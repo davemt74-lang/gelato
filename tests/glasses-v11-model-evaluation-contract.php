@@ -1,8 +1,10 @@
 <?php
 declare(strict_types=1);
+if(PHP_SAPI!=='cli'){http_response_code(404);header('Content-Type: text/plain; charset=utf-8');exit('Not found.');}
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/glasses-v11-model-evaluation.php';
 require_once __DIR__.'/../includes/glasses-vision-evidence-review.php';
+require_once __DIR__.'/vision-retained-release-fixture.php';
 
 function v117_assert(bool $c,string $m):void{if(!$c)throw new RuntimeException($m);}
 function v117_count(PDO $pdo,string $sql,array $args=[]):int{$q=$pdo->prepare($sql);$q->execute($args);return (int)$q->fetchColumn();}
@@ -18,18 +20,17 @@ $championPublic='vision-model-champion-'.$slug;$championHash=hash('sha256','cham
 $pdo->prepare("INSERT INTO glasses_vision_model_packages (organization_id,public_id,detector_name,model_name,model_version,runtime_type,platform,artifact_url,artifact_sha256,artifact_bytes,status,metadata_json,created_by) VALUES (?,?,'ingredient_detector','Champion','v1','onnx','air3','https://example.test/champion.onnx',?,100,'ready','{}',?)")
   ->execute([$org,$championPublic,$championHash,$actor]);
 
-$datasetPublic='vision-dataset-'.$slug;$datasetHash=hash('sha256','dataset-'.$slug);$assemblyHash=hash('sha256','assembly-'.$slug);
-$pdo->prepare("INSERT INTO glasses_vision_dataset_versions (organization_id,public_id,name,version_label,status,dataset_hash,assembly_policy_json,assembly_manifest_json,assembly_hash,row_count,class_count,created_by,frozen_by,frozen_at) VALUES (?,?,?,'v11','frozen',?,'{}','{}',?,60,2,?,?,NOW(6))")
-  ->execute([$org,$datasetPublic,'Benchmark Corpus',$datasetHash,$assemblyHash,$actor,$actor]);$datasetId=(int)$pdo->lastInsertId();
+$datasetPublic='vision-dataset-'.$slug;$assemblyHash=hash('sha256','assembly-'.$slug);
+$pdo->prepare("INSERT INTO glasses_vision_dataset_versions (organization_id,public_id,name,version_label,status,assembly_policy_json,assembly_manifest_json,assembly_hash,created_by) VALUES (?,?,?,'v11','draft','{}','{}',?,?)")
+  ->execute([$org,$datasetPublic,'Benchmark Corpus',$assemblyHash,$actor]);$datasetId=(int)$pdo->lastInsertId();
 
 $planPublic='vision-split-'.$slug;$planHash=hash('sha256','split-'.$slug);
 $pdo->prepare("INSERT INTO glasses_vision_dataset_split_plans (organization_id,public_id,dataset_id,status,seed,train_ratio,val_ratio,test_ratio,policy_json,manifest_json,plan_hash,created_by,applied_by,applied_at) VALUES (?,?,?,'applied',74,.7,.15,.15,'{}','{}',?,?,?,NOW(6))")
   ->execute([$org,$planPublic,$datasetId,$planHash,$actor,$actor]);$planId=(int)$pdo->lastInsertId();
 
-$releasePublic='vision-release-'.$slug;$releaseHash=hash('sha256','release-'.$slug);
-$manifest=['schema'=>GLASSES_VISION_TRAINING_RELEASE_SCHEMA,'dataset'=>['publicId'=>$datasetPublic,'datasetHash'=>$datasetHash],'splitPlan'=>['publicId'=>$planPublic,'planHash'=>$planHash],'trainingProfile'=>['name'=>'yolo11n_640'],'items'=>[]];
-$pdo->prepare("INSERT INTO glasses_vision_training_releases (organization_id,public_id,dataset_id,split_plan_id,status,training_profile,profile_json,manifest_json,release_hash,artifact_relative_path,artifact_sha256,artifact_bytes,created_by) VALUES (?,?,?,?,'qualified','yolo11n_640','{}',?,?,?, ?,1,?)")
-  ->execute([$org,$releasePublic,$datasetId,$planId,json_encode($manifest,JSON_UNESCAPED_SLASHES),$releaseHash,$org.'/fixture.zip',hash('sha256','zip-'.$slug),$actor]);$releaseId=(int)$pdo->lastInsertId();
+$retained=vision_contract_retained_release($pdo,$org,$actor,$datasetPublic,60,2);
+$datasetHash=$retained['dataset']['datasetHash'];$releasePublic=$retained['release']['publicId'];$releaseHash=$retained['release']['releaseHash'];$releaseId=(int)$retained['row']['id'];
+$pdo->prepare("UPDATE glasses_vision_training_releases SET status='qualified' WHERE organization_id=? AND id=?")->execute([$org,$releaseId]);
 
 $qualificationPublic='vision-qualification-'.$slug;$qualificationHash=hash('sha256','qualification-'.$slug);
 $pdo->prepare("INSERT INTO glasses_vision_training_qualifications (organization_id,public_id,training_release_id,passed,score,policy_json,result_json,qualification_hash,actor_user_id) VALUES (?,?,?,1,100,'{}','{}',?,?)")

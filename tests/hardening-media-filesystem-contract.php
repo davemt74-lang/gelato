@@ -120,9 +120,9 @@ try{
         $result=hmfs_worker($stage,$database,['action'=>'media_cleanup','org'=>$org,
             'probe'=>$case['path'],'probeChild'=>$mediaPath]);
         hmfs_check($result['ok']&&$result['result']['expired']===0&&$result['result']['failed']===1,
-            'Cleanup must report retryable failure for '.$case['label'].');
+            'Cleanup must report retryable failure for '.$case['label'].'.');
         if($case['mode']===0444)hmfs_check($result['probe']['directoryReadable']&&!$result['probe']['directorySearchable']&&!$result['probe']['childExists'],
-            'The unprivileged process demonstrates false child absence behind '.$case['label'].');
+            'The unprivileged process demonstrates false child absence behind '.$case['label'].'.');
         $current=hmfs_row($pdo,'SELECT status,deleted_at FROM glasses_vision_training_media WHERE id=?',[(int)$media['id']]);
         hmfs_check($current['status']==='active'&&$current['deleted_at']===null,'Inaccessible bytes are never reported deleted.');
         chmod($case['path'],0777);unset($restore[$case['path']]);
