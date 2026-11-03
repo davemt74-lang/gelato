@@ -803,4 +803,55 @@ dq_assert((int)$pdo->query('SELECT COUNT(*) FROM inventory_transactions WHERE or
 $otherBoard=daily_quicklist_purchasing_board($pdo,$other,$agentDay);
 dq_assert(count($otherBoard['requests'])===0,
     'purchasing dashboard never exposes another restaurant tenant');
+
+/* 3K2I-A: exact Need More -> draft only; no new inventory transaction. */
+require_once __DIR__.'/../includes/daily-quicklist-purchase-drafts.php';
+$draftActor=['id'=>$manager,'organization_id'=>$org,
+    'permissions'=>['tasks.manage','inventory.view','purchasing.view','purchasing.manage']];
+$readOnlyActor=$draftActor;$readOnlyActor['permissions']=['tasks.manage','inventory.view','purchasing.view'];
+dq_assert(!dqpo_can_draft($readOnlyActor),'read-only purchasing cannot create draft');
+dq_assert(dqpo_can_draft($draftActor),'manager with purchasing.manage can create drafts');
+try{dqpo_quote($pdo,$other,$afterShortage);throw new RuntimeException('Cross-tenant preview succeeded');}
+catch(InvalidArgumentException){}
+try{dqpo_quote($pdo,$org,$afterShortage);throw new RuntimeException('Missing numeric target accepted');}
+catch(InvalidArgumentException){}
+daily_quicklist_mutate($pdo,$org,$manager,'update',
+    ['id'=>$afterShortage,'requestedStockQuantity'=>5.0],true);
+try{dqpo_quote($pdo,$org,$afterShortage);throw new RuntimeException('Unmapped supplier accepted');}
+catch(InvalidArgumentException){}
+$draftVendor=purchasing_save_vendor($pdo,$org,['name'=>'CI Needs Supplier'],$manager);
+purchasing_save_vendor_item($pdo,$org,[
+    'vendorId'=>$draftVendor['public_id'],'inventoryId'=>$stockId,
+    'packSize'=>2,'packUnit'=>'kg','pricePerPack'=>15,'preferred'=>1
+],$manager);
+$draftQuote=dqpo_quote($pdo,$org,$afterShortage);
+dq_assert($draftQuote['packs']===3&&$draftQuote['orderedQuantity']===6.0
+    &&$draftQuote['overageQuantity']===1.0&&$draftQuote['estimatedSubtotal']===45.0,
+    'explicit 5 kg shortage rounds to three vendor packs, with 1 kg disclosed overage');
+try{dqpo_create_draft($pdo,$org,$manager,$readOnlyActor,$afterShortage,$draftQuote['quoteHash']);
+    throw new RuntimeException('Unauthorized creation accepted');
+}catch(DomainException){}
+try{dqpo_create_draft($pdo,$other,$manager,$draftActor,$afterShortage,$draftQuote['quoteHash']);
+    throw new RuntimeException('Cross-tenant creation accepted');
+}catch(DomainException){}
+try{dqpo_create_draft($pdo,$org,$manager,$draftActor,$afterShortage,str_repeat('0',64));
+    throw new RuntimeException('Stale quote accepted');
+}catch(InvalidArgumentException){}
+$noStockWrite=(int)$pdo->query('SELECT COUNT(*) FROM inventory_transactions WHERE organization_id='.$org)->fetchColumn();
+$createdDraft=dqpo_create_draft($pdo,$org,$manager,$draftActor,$afterShortage,$draftQuote['quoteHash']);
+dq_assert($createdDraft['status']==='draft'&&$createdDraft['orderedQuantity']===6.0,
+    'Need More creates a canonical draft purchase order, not a submitted order');
+$orderRow=purchasing_order($pdo,$org,$createdDraft['orderId']);
+dq_assert((string)$orderRow['status']==='draft'&&count($orderRow['items'])===1
+    &&(float)$orderRow['items'][0]['ordered_base_quantity']===6.0,
+    'canonical purchasing order line retains exact saved inventory identity and quantity');
+dq_assert((int)$pdo->query('SELECT COUNT(*) FROM inventory_transactions WHERE organization_id='.$org)->fetchColumn()===$noStockWrite,
+    'draft creation never changes physical inventory');
+dq_assert(daily_quicklist_history($pdo,$org,$afterShortage)[0]['event']==='po_draft_created',
+    'append-only Need More audit links the draft purchase order');
+try{dqpo_quote($pdo,$org,$afterShortage);throw new RuntimeException('Open draft did not block duplicate');}
+catch(InvalidArgumentException){}
+try{dqpo_create_draft($pdo,$org,$manager,$draftActor,$afterShortage,$draftQuote['quoteHash']);
+    throw new RuntimeException('Duplicate purchase order accepted');}
+catch(InvalidArgumentException){}
 echo "daily-prep-quicklist contract passed\n";
