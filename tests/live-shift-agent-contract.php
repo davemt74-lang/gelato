@@ -43,7 +43,7 @@ $static=[
     'proactive Brain includes live shift events'=>str_contains($events,'live_shift_proactive_events'),
     'Table Service context transports identifiers only'=>str_contains($context,"module:'table_service'")&&str_contains($context,'tablePublicId:c.tablePublicId')&&str_contains($context,'checkPublicId:c.checkPublicId')&&!str_contains($context,'item_name_snapshot'),
     'Table Service workstation loads shared Agent'=>str_contains($loader,'table-service-agent-context.js')&&str_contains($loader,'global-agent.js')&&str_contains($loader,'dynamic-agent-canvas.js'),
-    'Table Service cache key is current'=>str_contains($tablePage,'js/table-cleaning-controls.js?v=20260916-live-shift1'),
+    'Table Service cache key is current'=>str_contains($tablePage,'js/table-cleaning-controls.js?v=20261103-e1'),
     'Live Shift endpoint is POST and CSRF protected'=>str_contains($api,"REQUEST_METHOD']!=='POST'")&&str_contains($api,'app_verify_request_csrf'),
 ];
 foreach($static as $label=>$ok)lsa($ok,$label);

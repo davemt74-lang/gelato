@@ -110,24 +110,50 @@ const {start} = require('./hardening-agent-confirmation-server.cjs');
     assert.equal(response.error, undefined, JSON.stringify(response));
     assert.equal(stock('A'), 12, 'Cancelling a native model proposal leaves stock unchanged.');
 
-    // Standalone Operations uses the shared canonical transport, including reload.
+    // Standalone typed Operations uses the shared canonical transport, including reload.
     const legacy = await context.newPage();
-    // Isolate the real legacy composer from the global presentation shell.
-    // Normal Operations uses that shell's global composer instead. Blocking
-    // its loader also prevents a late global toolbar from covering this one.
+    // Operations also loads global-agent.js directly for canonical microphone
+    // support. Isolate this typed-composer fallback from both global UI entry
+    // points; leave operations-core, review transport, PHP and MariaDB real.
+    // The separate Release E voice browser suite exercises the shared microphone.
     await legacy.route('**/js/universal-admin-page-shell.js*', route => route.abort());
+    await legacy.route('**/js/global-agent.js*', route => route.abort());
+    const standaloneRequests = [], modelCallsBeforeStandalone = calls.length;
+    legacy.on('request', request => {
+      if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/operations-agent.php')
+        standaloneRequests.push(request.postDataJSON());
+    });
     await legacy.goto(env.origin + '/operations.php');
     assert.equal(await legacy.locator('#gelato-agent-bar').count(), 0, 'Standalone fixture excludes the global composer.');
+    assert.equal(await legacy.evaluate(() => typeof window.GelatoGlobalAgent), 'undefined',
+      'The standalone typed fixture cannot send through the global Agent.');
     await legacy.locator('#agentInput').fill('receive 1 kg of ' + data.items.A.name);
     await legacy.locator('#agentSend').click();
     await legacy.waitForFunction(() => document.getElementById('agentStatus')?.textContent.includes('Reply Confirm'));
     assert.equal(stock('A'), 12, 'The standalone rendered proposal does not adjust stock.');
+    assert.equal(standaloneRequests.length, 1, 'The standalone composer stages one actual specialist request.');
+    const standaloneProposal = fixture('pending', owner.sessionId, 'operations');
+    assert.equal(standaloneRequests[0].threadId, standaloneProposal.threadId);
+    assert.equal(standaloneRequests[0].sourceMessageId, standaloneProposal.sourceMessageId);
+    assert.equal(Boolean(standaloneRequests[0].voice), false, 'The standalone typed command retains its text channel.');
     await legacy.reload();
     assert.equal(await legacy.locator('#gelato-agent-bar').count(), 0, 'Standalone reload stays isolated from the global composer.');
+    assert.equal(await legacy.evaluate(() => typeof window.GelatoGlobalAgent), 'undefined');
     await legacy.locator('#agentInput').fill('Confirm');
     await legacy.locator('#agentSend').click();
     await legacy.waitForFunction(() => document.getElementById('agentStatus')?.textContent.includes('Confirmed'));
     assert.equal(stock('A'), 13, 'Reloaded standalone transport confirms its original reviewed action once.');
+    assert.equal(standaloneRequests.length, 2, 'Reload submits one fresh confirmation to the real specialist.');
+    assert.equal(standaloneRequests[1].message, 'Confirm');
+    assert.equal(standaloneRequests[1].threadId, standaloneProposal.threadId);
+    assert.notEqual(standaloneRequests[1].sourceMessageId, standaloneRequests[0].sourceMessageId,
+      'Confirmation is a fresh canonical user turn, not replayed proposal input.');
+    assert.equal(standaloneRequests[1].proposalId, standaloneProposal.id);
+    assert.equal(standaloneRequests[1].proposalHash, standaloneProposal.hash);
+    assert.equal(standaloneRequests[1].proposalMessageId, standaloneProposal.proposalMessageId);
+    assert.equal(Boolean(standaloneRequests[1].voice), false);
+    assert.equal(calls.length, modelCallsBeforeStandalone,
+      'The standalone typed flow executes its own transport, independent of the global model composer.');
     const snapshot = fixture('snapshot', data.organizationId);
     assert.equal(snapshot.inventory_transactions.length, 3, 'Exactly three intended stock changes were executed.');
     const output = process.env.QA_OUTPUT_DIR || '/tmp/gelato-hardening-c-browser';

@@ -30,10 +30,10 @@ foreach (['.gvo-table-wrap','.gvm-table-wrap','.gvp-table-wrap'] as $table) {
 assertAdminResponsive(str_contains($script, 'admin-responsive-layout.css?v=20261012-ui1'), 'canonical shell loads the shared stylesheet');
 assertAdminResponsive(str_contains($script, 'installResponsiveTableLabels()'), 'dynamic table labels installed');
 assertAdminResponsive(str_contains($script, 'new MutationObserver('), 'API-driven rows receive labels');
-assertAdminResponsive(str_contains($bootstrap, 'js/universal-admin-page-shell.js?v=20261023-manual-chat1'), 'core pages get a cache-busted shell');
+assertAdminResponsive(str_contains($bootstrap, 'js/universal-admin-page-shell.js?v=20261103-e1'), 'core pages get a cache-busted shell');
 foreach (['glasses-vision-lab.php','glasses-vision-models.php','glasses-vision-operations.php','glasses-vision-profiles.php'] as $page) {
     $source = file_get_contents($root . '/' . $page);
-    assertAdminResponsive(str_contains($source, 'js/universal-admin-page-shell.js?v=20261012-ui1'), "{$page} loads corrected shell");
+    assertAdminResponsive(str_contains($source, 'js/universal-admin-page-shell.js?v=20261103-e1'), "{$page} loads corrected shell");
     assertAdminResponsive(str_contains($source, 'assets/css/admin-control.css?v=20261012-ui1'), "{$page} refreshes mobile-safe header CSS");
 }
 echo "admin-responsive-layout=ok\n";

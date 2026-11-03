@@ -43,11 +43,17 @@ try{fm9h_prepare_role($pdo,$unprivileged,$summary);fm9h_ok(false,'employee denie
 catch(DomainException){fm9h_ok(true,'employee denied');}
 try{fm9h_prepare_role($pdo,$owner,"role db-role-{$roleId} grant arbitrary.elevate");fm9h_ok(false,'unknown permission denied');}
 catch(InvalidArgumentException){fm9h_ok(true,'unknown permission denied');}
-hac_test_context($pdo,$owner,['threadId'=>$tid]);
+hac_test_context($pdo,$owner,['threadId'=>$tid,'message'=>'Request approval: permission_change: '.$summary]);
 $pending=fm9f_approval_propose($owner,'permission_change',$summary,$tid,$pdo);
 fm9h_ok(!$pending['executed']&&$pending['requiresApproval'],'request staged not executed');
-$first=fm9f_approval_decide($owner,$pending['proposalId'],'approve',hac_test_review($pdo,$owner,'food_monster_high_impact'));
+$review=hac_test_review($pdo,$owner,'food_monster_high_impact');
+$approvalInput=hac_test_context($pdo,$owner,['message'=>'Approve']+$review);
+$first=fm9f_approval_decide($owner,$pending['proposalId'],'approve',$approvalInput);
 fm9h_ok(!$first['executed']&&$first['handoff']['roleId']==='db-role-'.$roleId,'approval staged exact role');
+$confirmInput=hac_test_context($pdo,$owner,['message'=>'Confirm']+$review);
+fm9f_verify_grant_review($owner,fm9h_active_grant($owner,$tid),$confirmInput);
+fm9h_ok($confirmInput['sourceMessageId']!==$approvalInput['sourceMessageId'],
+    'role execution follows a separate canonical typed Confirm');
 try{fm9h_execute_role($pdo,$unprivileged,$tid);fm9h_ok(false,'unauthorized execute blocked');}
 catch(DomainException){fm9h_ok(true,'unauthorized execute blocked');}
 try{fm9h_execute_role($pdo,$owner,'agent-'.str_repeat('f',20));fm9h_ok(false,'other thread blocked');}
@@ -62,14 +68,23 @@ $events=$pdo->prepare("SELECT COUNT(*) FROM agent_messages
   AND JSON_UNQUOTE(JSON_EXTRACT(structured_json,'$.approvalId'))=?");
 $events->execute([$org,$pending['proposalId']]);
 fm9h_ok((int)$events->fetchColumn()===1,'exactly one durable Agent Brain execution receipt');
-hac_test_context($pdo,$owner,['threadId'=>$tid]);
+hac_test_context($pdo,$owner,['threadId'=>$tid,
+    'message'=>"Request approval: permission_change: role db-role-{$roleId} revoke {$permission}"]);
 $pending=fm9f_approval_propose($owner,'permission_change',"role db-role-{$roleId} revoke {$permission}",$tid,$pdo);
-$approved=fm9f_approval_decide($owner,$pending['proposalId'],'approve',hac_test_review($pdo,$owner,'food_monster_high_impact'));
+$review=hac_test_review($pdo,$owner,'food_monster_high_impact');
+$approvalInput=hac_test_context($pdo,$owner,['message'=>'Approve']+$review);
+$approved=fm9f_approval_decide($owner,$pending['proposalId'],'approve',$approvalInput);
+$confirmInput=hac_test_context($pdo,$owner,['message'=>'Confirm']+$review);
+fm9f_verify_grant_review($owner,fm9h_active_grant($owner,$tid),$confirmInput);
 $revoked=fm9h_execute_role($pdo,$owner,$tid);
 fm9h_ok($revoked['operation']==='revoke'&&!in_array($permission,fm9h_role_state($pdo,$org,$roleId)['keys'],true),'revoke persisted');
-hac_test_context($pdo,$owner,['threadId'=>$tid]);
+hac_test_context($pdo,$owner,['threadId'=>$tid,'message'=>'Request approval: permission_change: '.$summary]);
 $pending=fm9f_approval_propose($owner,'permission_change',$summary,$tid,$pdo);
-$approved=fm9f_approval_decide($owner,$pending['proposalId'],'approve',hac_test_review($pdo,$owner,'food_monster_high_impact'));
+$review=hac_test_review($pdo,$owner,'food_monster_high_impact');
+$approvalInput=hac_test_context($pdo,$owner,['message'=>'Approve']+$review);
+$approved=fm9f_approval_decide($owner,$pending['proposalId'],'approve',$approvalInput);
+$confirmInput=hac_test_context($pdo,$owner,['message'=>'Confirm']+$review);
+fm9f_verify_grant_review($owner,fm9h_active_grant($owner,$tid),$confirmInput);
 $q=$pdo->prepare("SELECT id FROM permissions WHERE permission_key='roles.edit'");$q->execute();$other=(int)$q->fetchColumn();
 if($other>0)$pdo->prepare("INSERT INTO role_permissions (role_id,permission_id) VALUES (?,?)")->execute([$roleId,$other]);
 try{fm9h_execute_role($pdo,$owner,$tid);fm9h_ok(false,'changed role blocked');}

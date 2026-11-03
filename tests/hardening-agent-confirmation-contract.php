@@ -51,12 +51,14 @@ hac_conflict(static fn()=>gac_pending_claim('operations',31,19,$evidenceA),'chan
 $pdo->prepare('UPDATE agent_messages SET content=? WHERE public_id=?')->execute([gac_proposal_answer($live),$publicA['messageId']]);
 hac_conflict(static fn()=>gac_pending_bind_message($pdo,'operations',31,19,$a['id'],$contextA['threadId'],'msg-'.str_repeat('f',20)),'second canonical message');
 // An explicitly reviewed cancellation removes A, and stale A cannot approve later B.
+hac_test_context($pdo,$actor,['threadId'=>$contextA['threadId'],'message'=>'Cancel']);
 $claimed=gac_pending_claim('operations',31,19,$evidenceA);
 hac_check($claimed['id']===$a['id']&&gac_pending_get('operations',31,19)===null,'claim is persisted before execution');
 hac_conflict(static fn()=>gac_pending_claim('operations',31,19,$evidenceA),'simulated replay after claim');
 hac_conflict(static fn()=>gac_pending_store('operations',31,19,'task_create',['items'=>['Item B']],'Create Item B'),'replacement while claim in flight');
 gac_pending_clear('operations',31,19,'gap-'.str_repeat('0',16));hac_check(gac_pending_raw('operations',31,19)!==null,'wrong completion ID cannot clear a claim');
 gac_pending_clear('operations',31,19,$a['id']);
+gac_request_context($contextB,$pdo,$actor);
 $b=gac_pending_store('operations',31,19,'task_create',['items'=>['Item B']],'Create Item B');
 $publicB=hac_test_bind($pdo,$actor,$b);$evidenceB=hac_test_evidence($publicB);
 hac_conflict(static fn()=>gac_pending_claim('operations',31,19,$evidenceA),'stale prior Tab A');

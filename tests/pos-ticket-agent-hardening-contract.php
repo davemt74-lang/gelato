@@ -35,7 +35,7 @@ $checks=[
     'focused line remains transport-minimal'=>str_contains($files['context'],'focusedLineId: context.focusedLineId')&&!str_contains($files['context'],'item_name_snapshot'),
     'POS loader runs page context before runtime'=>strpos($files['loader'],'agent-page-context.js')<strpos($files['loader'],'pos-runtime.js'),
     'POS loader uses fresh cache key'=>str_contains($files['loader'],"20260916-pos-context2"),
-    'POS page busts old loader cache'=>str_contains($files['page'],'js/pos.js?v=20260916-pos-context2'),
+    'POS page busts old loader cache'=>str_contains($files['page'],'js/pos.js?v=20261103-e1'),
     'router treats cook questions as POS intent'=>str_contains($files['router'],'|cook|cooking|')&&str_contains($files['router'],"gaw_node_route('pos')"),
     'POS Agent loads cart menu knowledge'=>str_contains($files['agent'],'menu_training_items_by_ids')&&str_contains($files['agent'],'pos_agent_cart_item_ids'),
     'POS Agent resolves focused line'=>str_contains($files['agent'],'focusedLineId')&&str_contains($files['agent'],'pos_agent_pick_items'),

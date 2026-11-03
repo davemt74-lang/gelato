@@ -9,6 +9,7 @@ function contract(bool $ok,string $message,int $code):void
 $root=dirname(__DIR__);
 $dynamic=(string)file_get_contents($root.'/js/dynamic-agent-canvas.js');
 $globalAdd=(string)file_get_contents($root.'/js/global-add-canvas.js');
+$agent=(string)file_get_contents($root.'/js/global-agent.js');
 $workspace=(string)file_get_contents($root.'/js/workspace-command-enhancements.js');
 $shell=(string)file_get_contents($root.'/js/workspace-shell-sync.js');
 $router=(string)file_get_contents($root.'/includes/agent-workspace-core.php');
@@ -46,7 +47,10 @@ contract(str_contains($dynamic,'function routeFooterToAgentView()'),'footer Agen
 contract(!str_contains($dynamic,'openDrawer({pending:true})'),'footer messages must never auto-open Agent Chat',29);
 contract(str_contains($dynamic,'aria-live'),'response drawer is not announced accessibly',30);
 contract(str_contains($dynamic,'window.addEventListener(\'resize\',syncDrawerPosition)'),'response drawer does not stay anchored to the chat bar',31);
-contract(str_contains($globalAdd,'global-agent.js?v=20261027-b8d17b-navigation1'),'shared loader must bust the current Agent drawer cache',32);
+$drawerAsset='js/dynamic-agent-canvas.js?v=20261027-b8d17b-navigation1-hardening-c1';
+contract(str_contains($globalAdd,'js/global-agent.js?v=20261103-e1')
+    &&str_contains($globalAdd,$drawerAsset)&&str_contains($agent,$drawerAsset),
+    'shared and global loaders must request the current Agent and the same versioned response drawer',32);
 contract(str_contains($dynamic,'drawerRefreshQueued'),'response drawer does not queue a refresh that arrives during an in-flight load',33);
 contract(str_contains($dynamic,"window.addEventListener('gelato-agent-error'"),'response drawer does not surface Agent request failures',34);
 contract(str_contains($dynamic,"'\"':'&quot;'"),'Agent response escaping must encode double quotes correctly',35);
