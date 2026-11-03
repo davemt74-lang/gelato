@@ -11,6 +11,8 @@ const {chromium}=require('playwright');
   try{
     const page=await browser.newPage({viewport:{width:960,height:750},reducedMotion:'reduce'});
     const errors=[];
+    const threadId='agent-0123456789abcdefabcd';
+    let messageSequence=0;
     page.on('pageerror',error=>errors.push(error.message));
     await page.route('https://gelato.test/**',async route=>{
       const url=new URL(route.request().url());
@@ -25,11 +27,16 @@ const {chromium}=require('playwright');
       let data={ok:true};
       if(url.pathname==='/api/agent-workspace.php'){
         if(url.searchParams.get('action')==='bootstrap')
-          data={ok:true,csrf:'manual-chat-csrf',activeThread:'agent-0123456789abcdefabcd',
+          data={ok:true,csrf:'manual-chat-csrf',activeThread:threadId,
             permissions:['menu.view'],user:{id:7,name:'Owner',firstName:'Owner'},messages:[]};
-        else if(body.action==='append')data={ok:true,message:{databaseId:93,public_id:'msg-93'}};
+        else if(body.action==='append'){
+          const id='msg-'+(++messageSequence).toString(16).padStart(20,'0');
+          data={ok:true,message:{id,public_id:id,databaseId:messageSequence,
+            role:body.role,content:body.content,structured:body.structured??null,
+            channel:body.channel||'text'}};
+        }
         else if(body.action==='route')data={ok:true,route:'api/food-monster-knowledge.php',domain:'food_monster_grounded_knowledge'};
-        else if(url.searchParams.get('action')==='thread')data={ok:true,thread:{title:'Conversation'},messages:[]};
+        else if(url.searchParams.get('action')==='thread')data={ok:true,thread:{public_id:threadId,title:'Conversation'},messages:[]};
         else if(url.searchParams.get('action')==='threads')data={ok:true,threads:[]};
       }else if(url.pathname==='/api/food-monster-llm.php'&&url.searchParams.get('action')==='status')
         data={ok:true,providers:{anthropic:true,openai:true},defaultProvider:'auto',models:{anthropic:'test',openai:'test'}};
@@ -45,6 +52,7 @@ const {chromium}=require('playwright');
     });
     await page.goto('https://gelato.test/vision-lab.php');
     await page.addStyleTag({content:source('css/food-monster.css')});
+    await page.addScriptTag({content:source('js/agent-confirmation-transport.js')});
     await page.addScriptTag({content:source('js/global-agent.js')});
     await page.addScriptTag({content:source('js/food-monster.js')});
     // Page loads only the shared agent bar; CHAT popup must self-load.
@@ -100,6 +108,7 @@ const {chromium}=require('playwright');
     // Workspace used to suppress the transcript button; verify its
     // explicit, non-modal drawer even on this special route.
     await page.goto('https://gelato.test/workspace.php');
+    await page.addScriptTag({content:source('js/agent-confirmation-transport.js')});
     await page.addScriptTag({content:source('js/global-agent.js')});
     await page.locator('#gaResponseToggle').waitFor();
     ok(await page.locator('#gaResponseToggle').textContent()==='CHAT',

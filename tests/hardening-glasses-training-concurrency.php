@@ -56,8 +56,10 @@ function hgtr_race(PDO $pdo,int $org,array $inputs,?callable $beforeRelease=null
         $placeholders=implode(',',array_fill(0,count($connections),'?'));
         $q=$pdo->prepare("SELECT trx_mysql_thread_id FROM information_schema.INNODB_TRX WHERE trx_state='LOCK WAIT' AND trx_mysql_thread_id IN ($placeholders)");
         $deadline=microtime(true)+5;$waiting=[];
-        do{$q->execute($connections);$waiting=$q->fetchAll(PDO::FETCH_COLUMN);if(count($waiting)===count($connections))break;usleep(10000);}while(microtime(true)<$deadline);
-        hgtr_check(count($waiting)===count($connections),'Every competing process is observed waiting in InnoDB before release.');
+        // MariaDB refreshes the shared INNODB_TRX cache only after >100 ms without a read.
+        // A 10 ms poll can keep an initial empty snapshot alive indefinitely.
+        do{$q->execute($connections);$waiting=$q->fetchAll(PDO::FETCH_COLUMN);if(count($waiting)===count($connections))break;usleep(200000);}while(microtime(true)<$deadline);
+        hgtr_check(count($waiting)===count($connections),'Every competing process is observed waiting in InnoDB before release. Expected '.json_encode($connections).'; observed '.json_encode($waiting).'.');
         if($beforeRelease)$beforeRelease();
         $pdo->commit();
         foreach($workers as [$process,$pipes]){

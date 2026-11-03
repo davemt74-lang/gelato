@@ -101,10 +101,13 @@ function fm9h_execute_role(PDO $pdo,array $operator,string $threadId):array {
             throw new DomainException('A current role permission approval is required in this conversation.');
         // The receipt makes one-use execution durable even if the session save is lost
         // and a later legitimate role edit restores the old permission-state hash.
-        $q=$pdo->prepare("SELECT id FROM agent_messages WHERE organization_id=? AND user_id=?
-            AND JSON_UNQUOTE(JSON_EXTRACT(structured_json,'$.collection'))='fm9h_high_impact_execution'
-            AND JSON_UNQUOTE(JSON_EXTRACT(structured_json,'$.approvalId'))=? LIMIT 1");
-        $q->execute([$org,$uid,(string)$grant['approvalId']]);
+        // System messages have no user_id; ownership belongs to their conversation.
+        $q=$pdo->prepare("SELECT m.id FROM agent_messages m
+            JOIN agent_conversations c ON c.id=m.conversation_id AND c.organization_id=m.organization_id
+            WHERE c.organization_id=? AND c.user_id=? AND c.public_id=? AND m.role='system'
+            AND JSON_UNQUOTE(JSON_EXTRACT(m.structured_json,'$.collection'))='fm9h_high_impact_execution'
+            AND JSON_UNQUOTE(JSON_EXTRACT(m.structured_json,'$.approvalId'))=? LIMIT 1");
+        $q->execute([$org,$uid,$threadId,(string)$grant['approvalId']]);
         if($q->fetchColumn())throw new DomainException('This role permission approval has already been executed.');
         $state=fm9h_role_state($pdo,$org,(int)$grant['roleId'],true);
         if(!hash_equals((string)$grant['version'],$state['version']))

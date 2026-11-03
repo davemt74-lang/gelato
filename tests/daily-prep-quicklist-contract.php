@@ -637,7 +637,9 @@ $readReceipts=fm8d18j11_receipts_read(['name'=>'Flour','date'=>$agentDay],$manag
 dq_assert(str_contains($readReceipts['data']['answer'],'1. 2 kg received')
     &&!str_contains($readReceipts['data']['answer'],(string)$receiptTxn.' transaction ID'),
     'model reads numbered receipt evidence, not raw transaction IDs');
-$unrelatedThread='agent-'.str_repeat('d',20);
+$unrelatedThread='agent-'.str_repeat('e',20);
+dq_assert($unrelatedThread!==$managerChatThread&&$unrelatedThread!==$chatThread,
+    'receipt isolation fixture uses a conversation distinct from both authenticated test threads');
 try{pqa_receipt_context_resolve($org,$manager,$unrelatedThread,$needIdAgain,1);
     throw new RuntimeException('receipt selection leaked across conversations');}catch(InvalidArgumentException){}
 try{pqa_receipt_context_resolve($other,$manager,$managerChatThread,$needIdAgain,1);

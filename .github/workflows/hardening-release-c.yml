@@ -131,7 +131,6 @@ jobs:
         run: |
           php tests/food-monster-b8d2-execution-loop.php
           php tests/food-monster-b8d3-tool-selection.php
-          php tests/food-monster-b8d3-mariadb.php
           php tests/food-monster-b8d4-scheduling.php
           php tests/food-monster-b8d12-pending-actions.php
           php tests/food-monster-b8d18-operations-proposals.php
@@ -142,6 +141,15 @@ jobs:
           php tests/glasses-v11-production-evidence-contract.php
           php tests/glasses-employee-runtime-contract.php
           php tests/hardening-glasses-account-authority.php
+
+      - name: Isolated native-PDO personal-hours regression
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' }}
+        env:
+          B8D3_MYSQL_DSN: mysql:host=127.0.0.1;port=3306;dbname=gelato_hardening_c_b8d3;charset=utf8mb4
+          B8D3_MYSQL_PASSWORD: root
+        run: |
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot -e 'CREATE DATABASE gelato_hardening_c_b8d3 CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci'
+          php tests/food-monster-b8d3-mariadb.php
 
       - name: Install the repository-pinned Playwright browser runtime
         id: browser_runtime

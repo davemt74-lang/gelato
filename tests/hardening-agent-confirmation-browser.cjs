@@ -112,21 +112,18 @@ const {start} = require('./hardening-agent-confirmation-server.cjs');
 
     // Standalone Operations uses the shared canonical transport, including reload.
     const legacy = await context.newPage();
+    // Isolate the real legacy controls from the presentation adapter that
+    // replaces them with the global composer on the normal Operations page.
+    await legacy.route('**/js/operations-agent-context.js*', route => route.abort());
     await legacy.goto(env.origin + '/operations.php');
-    await legacy.evaluate(async ({message}) => {
-      if (!window.GelatoAgentReview) await import('/js/agent-confirmation-transport.js?v=20261103-c1');
-      const result = await window.GelatoAgentReview.ask('api/operations-agent.php', {message},
-        {csrf: window.OPERATIONS_CONFIG.csrf, key: 'operations-page'});
-      document.getElementById('agentStatus').textContent = result.answer;
-      window.GelatoAgentReview.acknowledge(result);
-    }, {message: 'receive 1 kg of ' + data.items.A.name});
+    await legacy.locator('#agentInput').fill('receive 1 kg of ' + data.items.A.name);
+    await legacy.locator('#agentSend').click();
+    await legacy.waitForFunction(() => document.getElementById('agentStatus')?.textContent.includes('Reply Confirm'));
+    assert.equal(stock('A'), 12, 'The standalone rendered proposal does not adjust stock.');
     await legacy.reload();
-    const legacyResult = await legacy.evaluate(async () => {
-      await import('/js/agent-confirmation-transport.js?v=20261103-c1');
-      return window.GelatoAgentReview.ask('api/operations-agent.php', {message: 'Confirm'},
-        {csrf: window.OPERATIONS_CONFIG.csrf, key: 'operations-page'});
-    });
-    assert.match(legacyResult.answer, /Confirmed/);
+    await legacy.locator('#agentInput').fill('Confirm');
+    await legacy.locator('#agentSend').click();
+    await legacy.waitForFunction(() => document.getElementById('agentStatus')?.textContent.includes('Confirmed'));
     assert.equal(stock('A'), 13, 'Reloaded standalone transport confirms its original reviewed action once.');
     const snapshot = fixture('snapshot', data.organizationId);
     assert.equal(snapshot.inventory_transactions.length, 3, 'Exactly three intended stock changes were executed.');

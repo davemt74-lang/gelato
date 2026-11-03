@@ -78,8 +78,9 @@ function hhr_workers(PDO $pdo,int $org,array $owner,array $approved,int $count,?
         }
         $q=$pdo->prepare("SELECT trx_mysql_thread_id FROM information_schema.INNODB_TRX WHERE trx_state='LOCK WAIT' AND trx_mysql_thread_id IN (".implode(',',array_fill(0,count($connections),'?')).')');
         $deadline=microtime(true)+5;$waiting=[];
-        do{$q->execute($connections);$waiting=$q->fetchAll(PDO::FETCH_COLUMN);if(count($waiting)===$count)break;usleep(10000);}while(microtime(true)<$deadline);
-        hhr_check(count($waiting)===$count,'All role workers are observed waiting in InnoDB before the authority change commits.');
+        // Leave MariaDB's shared INNODB_TRX cache idle for >100 ms so it can refresh.
+        do{$q->execute($connections);$waiting=$q->fetchAll(PDO::FETCH_COLUMN);if(count($waiting)===$count)break;usleep(200000);}while(microtime(true)<$deadline);
+        hhr_check(count($waiting)===$count,'All role workers are observed waiting in InnoDB before the authority change commits. Expected '.json_encode($connections).'; observed '.json_encode($waiting).'.');
         if($beforeRelease)$beforeRelease();$pdo->commit();
         foreach($workers as [$process,$pipes]){
             $output=stream_get_contents($pipes[1]);$errors=stream_get_contents($pipes[2]);fclose($pipes[1]);fclose($pipes[2]);hhr_check(proc_close($process)===0,'Role worker must not hide a PDO error or deadlock: '.$errors);

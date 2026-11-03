@@ -68,9 +68,12 @@ $turn=static function(string $tool,array $args,string $prompt)use($pdo,$owner,$r
     return [$result,$observation,$ctx];
 };
 [$capReply,$cap,$capCtx]=$turn('list_my_gelato_capabilities',[],'What tools can my account use?');
-$report=fm8d17a_snapshot($owner);
-hfodb_check(strlen(fm8do_json($report['planned']))>3072&&$cap['capabilityTruth']['counts']===$report['counts'],
-    'real owner source inventory exceeds old limit while terminal counts remain exact');
+// Canonical turns also register the training/vision routine tools. Compare
+// the same authorized context rather than a context-free discovery snapshot.
+$report=fm8d17a_snapshot($owner,$capCtx);
+hfodb_check(strlen(fm8do_json($report['planned']))>3072,'real owner source inventory exceeds old limit');
+hfodb_check($cap['capabilityTruth']['counts']===$report['counts'],
+    'terminal counts match the same canonical-turn catalogue exactly');
 
 $stockInsert=$pdo->prepare('INSERT INTO inventory_items
     (organization_id,public_id,normalized_key,name,base_unit,on_hand_quantity,reorder_point,created_by)
