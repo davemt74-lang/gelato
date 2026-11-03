@@ -55,13 +55,14 @@ try{
         app_json_response(['ok'=>true,'rollout'=>$rollout],201);
     }
 
-    if(in_array($action,['rollout.shadow_evidence','rollout.activate'],true)){
-        if($action==='rollout.shadow_evidence'){
-            $gate=glasses_vision_shadow_rollout_gate($pdo,$org,(int)$rollout['id']);
-            if(!$gate['eligible'])
-                throw new InvalidArgumentException('Complete a passing shadow run with at least 30 detection-bearing frames before reviewing activation.');
-            app_json_response(['ok'=>true,'shadowEvidence'=>$gate['summary']]);
-        }
+    if($action==='rollout.shadow_evidence'){
+        $gate=glasses_vision_shadow_rollout_gate($pdo,$org,(int)$rollout['id']);
+        if(!$gate['eligible'])
+            throw new InvalidArgumentException('Complete a passing shadow run with at least 30 detection-bearing frames before reviewing activation.');
+        app_json_response(['ok'=>true,'shadowEvidence'=>$gate['summary']]);
+    }
+
+    if($action==='rollout.activate'){
         $review=is_array($in['shadowReview']??null)?$in['shadowReview']:[];
         $rollout=glasses_vision_model_rollout_activate($pdo,$org,$publicId,(int)$user['id'],$review);
         app_json_response(['ok'=>true,'rollout'=>$rollout]);

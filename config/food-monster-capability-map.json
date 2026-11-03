@@ -974,7 +974,7 @@
     {
       "path": "api/glasses-device.php",
       "feature": "smart_glasses",
-      "sourceBlob": "54b92010d9be2d25e4396e0a385b3af2c93ea567",
+      "sourceBlob": "b53f20fa80585c505e1c773eaeb5982b46657c09",
       "discoveredActions": [
         "build.confirm",
         "build.correct_observation",
@@ -1081,7 +1081,7 @@
     {
       "path": "api/glasses-simulator.php",
       "feature": "smart_glasses",
-      "sourceBlob": "4c26e03e174ba55d45d1900ba13585c0ecc45413",
+      "sourceBlob": "3268646ae817384e75091fef1cfcdb78b283039f",
       "discoveredActions": [
         "runtime.create",
         "runtime.employee_update",
@@ -1135,7 +1135,7 @@
     {
       "path": "api/glasses-vision-lab.php",
       "feature": "vision_lab",
-      "sourceBlob": "899e5235040cb7619405927b5ae82db9347221b5",
+      "sourceBlob": "759c99093678d47966077b10337537ce50e2c2ce",
       "discoveredActions": [
         "active_learning.create_mission",
         "active_learning.dismiss",
@@ -1273,7 +1273,7 @@
     {
       "path": "api/glasses-vision-media.php",
       "feature": "vision_lab",
-      "sourceBlob": "ea4d3451ae75491921874ac9111dc1500974ab3d",
+      "sourceBlob": "ba153b83d8ec03b9e917fe0426e363ba8b7f20df",
       "discoveredActions": [
         "dataset_quality",
         "delete",
@@ -1293,7 +1293,7 @@
     {
       "path": "api/glasses-vision-models.php",
       "feature": "vision_lab",
-      "sourceBlob": "ff4c63ff7e67af551a8aa4fa7e8ca8a0f4c57385",
+      "sourceBlob": "61b2cb63d4171e135bbff6ed6eafcc080fb85e0e",
       "discoveredActions": [
         "package.create",
         "package.retire",
@@ -1302,7 +1302,8 @@
         "rollout.advance_override",
         "rollout.create",
         "rollout.pause",
-        "rollout.rollback"
+        "rollout.rollback",
+        "rollout.shadow_evidence"
       ],
       "permissionTokensSeen": [
         "glasses.manage",
@@ -1346,7 +1347,7 @@
     {
       "path": "api/glasses-vision-training-release.php",
       "feature": "vision_lab",
-      "sourceBlob": "0df18c04be65e034f107bd0a97cb2bc2e4020dd4",
+      "sourceBlob": "3d474d58311e10e4e1f06dd9b32b13c742d70157",
       "discoveredActions": [],
       "permissionTokensSeen": [
         "glasses.manage",
