@@ -11,7 +11,16 @@ let checks=0;
 function equal(actual,expected,message){assert.deepEqual(actual,expected,message);checks++;}
 function check(value,message){assert.ok(value,message);checks++;}
 const kdsMarkup=`<!doctype html><html><body><div id="launch"><button id="startKds">Start</button></div><select id="location"></select><button id="refresh">Refresh</button><button id="history">Order history</button><div id="tabs"></div><div id="unroutedAlert"></div><div id="allDay"></div><div id="kdsSlotBar"></div><div id="board"></div><div id="toast"></div><script>window.KDS_CONFIG={csrf:'fixture-csrf'};</script><script src="/js/kds.js"></script></body></html>`;
-function cartMarkup(legacy){return `<!doctype html><html><head><style>body{font-family:sans-serif}button{padding:8px}.order-cart-backdrop{display:none}#orderCartDrawer{position:relative;width:650px;margin:120px auto 20px}</style></head><body><header id="nav"><span id="cartHeaderCount">0</span></header><aside id="orderCartDrawer"><button id="orderCartClose">Close</button><div id="cartCount"></div><div id="cartSubtotal"></div><div id="cartLines"></div><form id="checkoutForm"><textarea name="order_note"></textarea><input id="cartJson"><input id="idempotencyKey"><button id="placeOrder">Order</button></form></aside><div id="orderCartBackdrop"></div><script>window.STONEFELLOWS_ORDER={locationId:1,authenticated:true};</script><script src="/assets/js/public-shell.js"></script><script src="/assets/js/${legacy?'online-order':'online-order-food'}.js"></script></body></html>`;}
+// Match public_site_render_header(): the ordering script adds its trigger inside
+// #nav, then public-shell replaces the whole .site-header (including that trigger).
+const cartHeaderMarkup='<header class="site-header inner"><div class="shell nav" id="nav"><a class="brand" href="index.php">Fixture Restaurant</a><button class="menu-toggle" id="menuToggle" type="button" aria-label="Open navigation" aria-expanded="false">Menu</button></div></header>';
+function cartMarkup(legacy){return `<!doctype html><html><head><style>body{font-family:sans-serif}button{padding:8px}.order-cart-backdrop{display:none}#orderCartDrawer{position:relative;width:650px;margin:120px auto 20px}</style></head><body>${cartHeaderMarkup}<aside id="orderCartDrawer"><button id="orderCartClose">Close</button><div id="cartCount"></div><div id="cartSubtotal"></div><div id="cartLines"></div><form id="checkoutForm"><textarea name="order_note"></textarea><input id="cartJson"><input id="idempotencyKey"><button id="placeOrder">Order</button></form></aside><div id="orderCartBackdrop"></div><script>window.STONEFELLOWS_ORDER={locationId:1,authenticated:true};</script><script src="/assets/js/public-shell.js"></script><script src="/assets/js/${legacy?'online-order':'online-order-food'}.js"></script></body></html>`;}
+async function assertCartBadges(page,quantity,message){
+  // Inspect every visible badge, so a second stale badge cannot be hidden by
+  // selecting the first match. Also reject duplicate IDs, even if not visible.
+  equal(await page.locator('[id="cartHeaderCount"]:visible').allTextContents(),[String(quantity)],message);
+  equal(await page.locator('[id="cartHeaderCount"]').count(),1,'public shell replaces the original header without duplicate cart badge IDs');
+}
 function board(locationId,id){return {ok:true,locationId,locations:[{id:1,name:'One'},{id:2,name:'Two'},{id:3,name:'Three'}],permissions:{update:true},board:{stations:[{public_id:'hot',name:'Hot'}],tickets:[{checkPublicId:id,checkNumber:id,serviceMode:'pickup',guestCount:1,queued:1,items:[{public_id:'item-'+id,item_name_snapshot:id,quantity:1,status:'queued',station_id:1,station_public_id:'hot'}]}]}};}
 function catalog(priceId){return {ok:true,customization:{priceId,sectionName:priceId===11?'Pizza options':'Salad options',ingredients:[{id:5,name:'Onion',canRemove:true},{id:9,name:'Tomato',canRemove:true}],substitutions:[{id:10,name:'Spinach'}],addOnGroups:[{id:'extras',name:'Extra toppings',maxSelect:3,options:[{id:8,name:'Cheese',priceDelta:1,maxQuantity:3}]}]}};}
 async function queued(queue,count){const deadline=Date.now()+10000;while(queue.length<count){if(Date.now()>deadline)throw new Error(`Expected request ${count}, got ${queue.length}`);await new Promise(resolve=>setTimeout(resolve,10));}return queue[count-1];}
@@ -50,7 +59,7 @@ async function editorJourney(browser,origin,legacy){
   await page.addInitScript(rows=>{sessionStorage.setItem('stonefellows.onlineCart.v3.1',JSON.stringify(rows));sessionStorage.setItem('stonefellows.onlineCart.v1.1',JSON.stringify([{priceId:99,quantity:50}]));sessionStorage.setItem('stonefellows.onlineCart.v3.2',JSON.stringify([{priceId:99,quantity:90}]));},initial);
   await page.route('**/api/online-order-customizations.php?*',route=>requests.push({route,url:route.request().url()}));
   await page.goto(origin+'/fixtures/cart'+(legacy?'?legacy=1':''));
-  await page.locator('.public-shell-header').waitFor();equal(await page.locator('#cartHeaderCount').textContent(),'3','public badge uses current pickup cart without legacy/other-location double count');
+  await page.locator('.public-shell-header').waitFor();await assertCartBadges(page,3,'all visible cart badges use current pickup cart without legacy/other-location double count');
   const customize=index=>page.locator(legacy?`[data-cart-action="customize"][data-index="${index}"]`:`[data-customize="${index}"]`);
   const save=page.locator(legacy?'[data-ocm-save]':'[data-save]'),cancel=page.locator(legacy?'[data-ocm-cancel]':'[data-cancel]');
   const read=()=>page.evaluate(()=>JSON.parse(sessionStorage.getItem('stonefellows.onlineCart.v3.1')));
@@ -67,12 +76,12 @@ async function editorJourney(browser,origin,legacy){
   await page.locator('[data-ingredient="5"] [data-remove]').uncheck();await page.locator('[data-ingredient="9"] select').selectOption('');
   await page.locator('[data-addon="8"] [data-addon-plus]').click();await page.locator('#ocmNote').fill('Light bake');await save.click();rows=await read();
   equal(rows[0].customizations.removals,[],'intentional removal reset is saved');equal(rows[0].customizations.substitutions,[],'intentional substitution reset is saved');equal(rows[0].customizations.addOns[0].quantity,3,'paid add-on quantity control updates draft');equal(rows[0].customizations.note,'Light bake','note input updates draft');
-  equal(await page.locator('#cartHeaderCount').textContent(),'3','badge remains stable after save and shell updates');
+  await assertCartBadges(page,3,'all visible cart badges remain stable after save and shell updates');
   await customize(0).click();const deleted=await queued(requests,5);
   const minus=page.locator(legacy?'[data-cart-action="minus"][data-index="0"]':'[data-minus="0"]');
   await minus.evaluate(el=>el.click());await minus.evaluate(el=>el.click());
   await respond(deleted,catalog(11)).catch(()=>{});check(!(await page.locator('#orderCustomizeModal').evaluate(el=>el.classList.contains('open'))),'removing edited row closes pending editor');rows=await read();equal(rows.map(x=>x.priceId),[22],'late response cannot customize the row that moved into an old index');equal(rows[0].customizations.note,'Keep dressing separate','remaining row instructions preserved');
-  equal(await page.locator('#cartHeaderCount').textContent(),'1','same-page cart event updates public badge after removal');
+  await assertCartBadges(page,1,'same-page cart event updates every visible badge after removal');
   await page.close();
 }
 (async()=>{
