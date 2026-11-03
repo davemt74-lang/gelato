@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'license-updates.php'
+      - 'includes/admin-control-core.php'
       - 'GELATO_VERSION.txt'
       - 'includes/food-monster-installation*.php'
       - 'includes/food-monster-b8d3-tool-runtime.php'
@@ -14,6 +15,7 @@ on:
     branches: [main]
     paths:
       - 'license-updates.php'
+      - 'includes/admin-control-core.php'
       - 'GELATO_VERSION.txt'
       - 'includes/food-monster-installation*.php'
       - 'includes/food-monster-b8d3-tool-runtime.php'
@@ -35,6 +37,7 @@ jobs:
           extensions: curl, mbstring, pdo_sqlite
       - run: |
           php -l license-updates.php
+          php -l includes/admin-control-core.php
           php -l includes/food-monster-installation.php
           php -l includes/food-monster-installation-tools.php
           php tests/food-monster-installation.php
