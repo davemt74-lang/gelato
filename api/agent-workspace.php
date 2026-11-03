@@ -41,9 +41,11 @@ if(!gaw_ready($pdo))app_json_response(['ok'=>false,'message'=>'Agent Workspace m
 if($_SERVER['REQUEST_METHOD']==='GET'){
     $action=(string)($_GET['action']??'bootstrap');
     if($action==='bootstrap'){
+        if(empty($_SESSION['browser_state_id']))$_SESSION['browser_state_id']=bin2hex(random_bytes(16));
+        $browserState=['organizationId'=>$org,'userId'=>'db-user-'.$uid,'identity'=>(string)$_SESSION['browser_state_id']];
         $threads=gaw_threads($pdo,$org,$uid,40);$active=$threads[0]['public_id']??null;
         if(!$active){$thread=gaw_create_thread($pdo,$org,$uid);$threads=gaw_threads($pdo,$org,$uid,40);$active=$thread['public_id']??null;}
-        app_json_response(['ok'=>true,'csrf'=>app_csrf_token(),'threads'=>$threads,'activeThread'=>$active,'messages'=>$active?gaw_messages($pdo,$org,$uid,(string)$active,120):[],'user'=>['id'=>$uid,'name'=>$user['display_name'],'firstName'=>$user['first_name'],'role'=>$user['role_slug']],'permissions'=>$user['permissions'],'foodMonsterContext'=>fm9a_context($pdo,$user)]);
+        app_json_response(['ok'=>true,'csrf'=>app_csrf_token(),'browserState'=>$browserState,'threads'=>$threads,'activeThread'=>$active,'messages'=>$active?gaw_messages($pdo,$org,$uid,(string)$active,120):[],'user'=>['id'=>$uid,'name'=>$user['display_name'],'firstName'=>$user['first_name'],'role'=>$user['role_slug']],'permissions'=>$user['permissions'],'foodMonsterContext'=>fm9a_context($pdo,$user)]);
     }
     if($action==='food_monster_context')app_json_response(['ok'=>true,'foodMonsterContext'=>fm9a_context($pdo,$user)]);
     if($action==='person_memory'){

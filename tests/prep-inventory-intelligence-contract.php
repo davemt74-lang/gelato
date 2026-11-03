@@ -104,14 +104,15 @@ $pendingIncrease=gac_pending_get('prep',$orgId,$userId);
 pit_assert(($pendingIncrease['type']??'')==='task_quantity','pending quantity action targets the canonical task');
 // Reloading the page does not consume or replay the one-use server-side proposal.
 unset($_SESSION['prep_agent_context'][pac_context_key($orgId,$userId)]);
-$confirmedIncrease=prep_agent_handle($pdo,$prepActor,hac_test_input($pdo,$prepActor,'prep',['message'=>'Confirm']));
+$increaseConfirmation=hac_test_input($pdo,$prepActor,'prep',['message'=>'Confirm']);
+$confirmedIncrease=prep_agent_handle($pdo,$prepActor,$increaseConfirmation);
 pit_assert(($confirmedIncrease['data']['before']??null)===6.0
     &&($confirmedIncrease['data']['after']??null)===8.0,'confirmed quantity update is additive and exact');
 pit_assert(($confirmedIncrease['data']['proof']['taskId']??'')!=='','quantity action includes a verifiable task receipt');
 try{pac_execute($pdo,$orgId,$userId,$prepActor,$pendingIncrease,false);
     throw new RuntimeException('Replaying confirmed quantity proposal should fail');}
 catch(InvalidArgumentException $expected){}
-try{prep_agent_handle($pdo,$prepActor,hac_test_input($pdo,$prepActor,'prep',['message'=>'Confirm']));
+try{prep_agent_handle($pdo,$prepActor,$increaseConfirmation);
     throw new RuntimeException('A second confirmation must not replay the completed write');}
 catch(GacConfirmationConflict $expected){}
 $afterIncrease=prep_agent_handle($pdo,$prepActor,hac_test_input($pdo,$prepActor,'prep',['message'=>'Show the prep list on 2026-11-06']));
@@ -163,13 +164,17 @@ prep_agent_handle($pdo,$staffActor,hac_test_input($pdo,$staffActor,'prep',['mess
 try{prep_agent_handle($pdo,$staffActor,hac_test_input($pdo,$staffActor,'prep',['message'=>'Assign dough to Prep CI Staff']));
     throw new RuntimeException('Employee may not reassign prep tasks');}
 catch(PrepAgentPermissionException $expected){}
-$assignedDough=prep_agent_handle($pdo,$prepActor,hac_test_input($pdo,$prepActor,'prep',['message'=>'Confirm']));
+$assignmentConfirmation=hac_test_input($pdo,$prepActor,'prep',['message'=>'Confirm']);
+$assignedDough=prep_agent_handle($pdo,$prepActor,$assignmentConfirmation);
 pit_assert(($assignedDough['data']['action']??'')==='task_assign','manager confirmation records assignment action');
 $doughDetail=operations_task_detail($pdo,$orgId,$doughId);
 pit_assert(count($doughDetail['assignments'])===1&&(int)$doughDetail['assignments'][0]['user_id']===$staffId,
     'canonical task assignment targets the named employee exactly');
-try{prep_agent_handle($pdo,$prepActor,hac_test_input($pdo,$prepActor,'prep',['message'=>'Confirm']));throw new RuntimeException('Replayed assignment must fail');}
-catch(InvalidArgumentException $expected){}
+try{prep_agent_handle($pdo,$prepActor,$assignmentConfirmation);throw new RuntimeException('Replayed assignment must fail');}
+catch(GacConfirmationConflict $expected){}
+$afterReplay=operations_task_detail($pdo,$orgId,$doughId);
+pit_assert($afterReplay['assignments']===$doughDetail['assignments'],
+    'replaying the exact reviewed assignment does not change or duplicate canonical assignments');
 $progressProposal=prep_agent_handle($pdo,$staffActor,hac_test_input($pdo,$staffActor,'prep',['message'=>'Mark dough in progress']));
 pit_assert(($progressProposal['data']['requiresConfirmation']??false)===true,'assigned employee progress needs confirmation');
 $progress=prep_agent_handle($pdo,$staffActor,hac_test_input($pdo,$staffActor,'prep',['message'=>'Confirm']));

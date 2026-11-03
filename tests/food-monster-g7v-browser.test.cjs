@@ -13,6 +13,7 @@ const base=path.resolve(__dirname,'..');
   await page.setContent('<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body class="food-monster-stage-page"><main id="food-monster-stage"></main></body></html>');
   await page.evaluate(()=>{
    window.__recognizers=[];window.__requests=[];
+   let messageSequence=0;
    window.SpeechRecognition=class{
     constructor(){window.__recognizers.push(this)}
     start(){this.onstart?.()}
@@ -29,16 +30,18 @@ const base=path.resolve(__dirname,'..');
    window.fetch=async(url,opt={})=>{
     const request=opt.body?JSON.parse(opt.body):{};window.__requests.push({url,request});
     let data={ok:true};
-    if(url.includes('agent-workspace.php?action=bootstrap'))data={ok:true,csrf:'test',activeThread:'thread',permissions:['voice.agent','agent.proactive'],user:{id:4,name:'Tester'}};
+    if(url.includes('agent-workspace.php?action=bootstrap'))data={ok:true,csrf:'test',activeThread:'agent-'+ '4'.repeat(20),permissions:['voice.agent','agent.proactive'],user:{id:4,name:'Tester'}};
     else if(url.includes('proactive-agent.php?action=preferences'))data={ok:true,preferences:{listening_enabled:0,proactive_voice_enabled:0,wake_phrase:'Hey Gelato'}};
     else if(url.includes('proactive-agent.php')&&request.action==='preferences')data={ok:true,preferences:{listening_enabled:request.listeningEnabled?1:0,proactive_voice_enabled:0}};
     else if(url.includes('voice-identity.php'))data={ok:true,match:{matched:true,sessionUserMatch:true,userId:4,displayName:'Tester',eventId:'verified'}};
     else if(url.includes('proactive-agent.php'))data={ok:true,events:[]};
-    else if(request.action==='append')data={ok:true,message:{databaseId:4}};
+    else if(request.action==='append')data={ok:true,message:{id:'msg-'+ (++messageSequence).toString(16).padStart(20,'0'),
+      databaseId:messageSequence,role:request.role,content:request.content,structured:request.structured??null,channel:request.channel||'text'}};
     return {ok:true,json:async()=>data};
    };
   });
   await page.addStyleTag({content:fs.readFileSync(path.join(base,'css/food-monster.css'),'utf8')});
+  await page.addScriptTag({content:fs.readFileSync(path.join(base,'js/agent-confirmation-transport.js'),'utf8')});
   await page.addScriptTag({content:fs.readFileSync(path.join(base,'js/global-agent.js'),'utf8')});
   await page.addScriptTag({content:fs.readFileSync(path.join(base,'js/food-monster.js'),'utf8')});
   await page.locator('#gaInput').waitFor();

@@ -11,6 +11,7 @@ const {chromium}=require('playwright'),base=path.resolve(__dirname,'..');
   await page.setContent('<!doctype html><html><body></body></html>');
   await page.evaluate(()=>{
     window.__recognizers=[];window.__requests=[];window.__answers=[];
+    let messageSequence=0;
     window.__tts={speaking:false,interruptions:0};
     window.SpeechRecognition=class {
       constructor(){window.__recognizers.push(this)}
@@ -39,7 +40,7 @@ const {chromium}=require('playwright'),base=path.resolve(__dirname,'..');
       const request=options.body?JSON.parse(options.body):{};
       window.__requests.push({url,request});let data={ok:true};
       if(url.includes('agent-workspace.php?action=bootstrap'))
-        data={ok:true,csrf:'token',activeThread:'thread',user:{id:9,name:'Cook'},permissions:['voice.agent','agent.proactive','menu.view']};
+        data={ok:true,csrf:'token',activeThread:'agent-'+ '9'.repeat(20),user:{id:9,name:'Cook'},permissions:['voice.agent','agent.proactive','menu.view']};
       else if(url.includes('proactive-agent.php?action=preferences'))
         data={ok:true,preferences:{listening_enabled:0,proactive_voice_enabled:0}};
       else if(url.includes('proactive-agent.php')&&request.action==='preferences')
@@ -49,11 +50,13 @@ const {chromium}=require('playwright'),base=path.resolve(__dirname,'..');
       else if(url.includes('agent-workspace.php')&&request.action==='route')
         data={ok:true,route:null,domain:'general'};
       else if(url.includes('agent-workspace.php')&&request.action==='append')
-        data={ok:true,message:{databaseId:12}};
+        data={ok:true,message:{id:'msg-'+ (++messageSequence).toString(16).padStart(20,'0'),
+          databaseId:messageSequence,role:request.role,content:request.content,structured:request.structured??null,channel:request.channel||'text'}};
       else if(url.includes('proactive-agent.php'))data={ok:true,events:[]};
       return {ok:true,json:async()=>data};
     };
   });
+  await page.addScriptTag({content:fs.readFileSync(path.join(base,'js/agent-confirmation-transport.js'),'utf8')});
   await page.addScriptTag({content:fs.readFileSync(path.join(base,'js/global-agent.js'),'utf8')});
   await page.waitForFunction(()=>window.GelatoGlobalAgent?.user?.id===9);
   await page.evaluate(()=>{window.GelatoFoodMonsterLLM={

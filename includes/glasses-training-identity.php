@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 require_once __DIR__.'/glasses-core.php';
 require_once __DIR__.'/employee-home-core.php';
-require_once __DIR__.'/user-accounts.php';
 
 const GLASSES_TRAINING_ASSIGNMENT_SCHEMA='gelato.glasses_training_assignment.v1';
 
@@ -97,6 +96,7 @@ function glasses_training_session(PDO $pdo,int $org,string $public): array {
 }
 /** One restaurant lock orders training transitions and canonical account/role changes. */
 function glasses_training_transaction(PDO $pdo,int $org,callable $work): array {
+  require_once __DIR__.'/user-accounts.php';
   $own=!$pdo->inTransaction();$savepoint='glasses_training_'.bin2hex(random_bytes(8));
   if($own)$pdo->beginTransaction();else $pdo->exec('SAVEPOINT '.$savepoint);
   try{
@@ -129,6 +129,7 @@ function glasses_training_lock_device(PDO $pdo,int $org,array $device): array {
 
 /** Canonical permissions, with current locking reads even inside an older outer snapshot. */
 function glasses_training_require_manager(PDO $pdo,int $org,int $actor): array {
+  require_once __DIR__.'/user-accounts.php';
   if(!$pdo->inTransaction())throw new LogicException('Training management requires a transaction.');
   try{glasses_require_accountable_user($pdo,['organization_id'=>$org,'paired_by'=>$actor],true);}
   catch(InvalidArgumentException){throw new DomainException('Your account no longer has access to this restaurant.');}

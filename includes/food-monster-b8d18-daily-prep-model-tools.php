@@ -163,9 +163,9 @@ function fm8d18j11_stock_read(array $args,array $actor,array $context): array
     $stock=array_map(static fn(array $r):array=>['id'=>(string)$r['public_id'],'name'=>(string)$r['name'],
         'unit'=>(string)$r['base_unit'],'onHand'=>(float)$r['on_hand_quantity'],'reorderPoint'=>(float)$r['reorder_point']],$records);
     $alerts=daily_quicklist_stock_alerts($stock,$recipes,$items);
-    $shown=[];$data=fm8d18j11_stock_data($date,$total,[],count($alerts));
+    $shown=[];$data=fm8d18j11_stock_data($date,$total,[],count($records));
     foreach(array_slice($alerts,0,12) as $row){
-        $candidate=fm8d18j11_stock_data($date,$total,[...$shown,$row],count($alerts));
+        $candidate=fm8d18j11_stock_data($date,$total,[...$shown,$row],count($records));
         if(!fm8do_fits('get_need_more_stock_insights',$candidate))break;
         $shown[]=$row;$data=$candidate;
     }

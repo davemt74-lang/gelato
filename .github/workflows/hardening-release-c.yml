@@ -62,6 +62,7 @@ jobs:
         run: node tests/deployed-test-entrypoints.cjs
 
       - name: Install and fully upgrade a clean MariaDB database
+        id: setup_database
         run: |
           set -euo pipefail
           sudo apt-get update -qq
@@ -96,30 +97,37 @@ jobs:
           PHP
 
       - name: Encoded observation budgets, truthful truncation and strict unknown contracts
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' }}
         run: |
           php tests/hardening-food-monster-observations.php
           php tests/hardening-food-monster-observations-mariadb.php
 
       - name: Canonical proposal identity, single use and current permissions
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' }}
         run: php tests/hardening-agent-confirmation-contract.php
 
       - name: Two-device training ownership and atomic lifecycle
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' }}
         run: |
           php tests/hardening-glasses-training-contract.php
           php tests/hardening-glasses-training-concurrency.php
 
       - name: High-impact role approvals, fresh authority and affected session revocation
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' }}
         run: |
           php tests/hardening-high-impact-role-contract.php
           php tests/food-monster-g9h-roles.php
 
       - name: Actual PHP HTTP sessions and concurrent proposal confirmations
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' }}
         run: node tests/hardening-agent-confirmation-http.cjs
 
       - name: Authenticated paired devices over HTTP
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' }}
         run: node tests/hardening-glasses-training-http.cjs
 
       - name: Existing runtime, purchasing and glasses regressions
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' }}
         run: |
           php tests/food-monster-b8d2-execution-loop.php
           php tests/food-monster-b8d3-tool-selection.php
@@ -136,17 +144,21 @@ jobs:
           php tests/hardening-glasses-account-authority.php
 
       - name: Install the repository-pinned Playwright browser runtime
+        id: browser_runtime
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' }}
         run: |
           npm install --prefix /tmp/gelato-hardening-browser --no-audit --no-fund playwright@1.62.1
           node /tmp/gelato-hardening-browser/node_modules/playwright/cli.js install --with-deps chromium
 
       - name: Real browser conversations, two tabs, stale confirmations and reload
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' && steps.browser_runtime.outcome == 'success' }}
         env:
           NODE_PATH: /tmp/gelato-hardening-browser/node_modules
           QA_OUTPUT_DIR: /tmp/gelato-hardening-c-browser
         run: node tests/hardening-agent-confirmation-browser.cjs
 
       - name: Preserve migration checksums and repeat upgrade
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' }}
         run: |
           php <<'PHP'
           <?php

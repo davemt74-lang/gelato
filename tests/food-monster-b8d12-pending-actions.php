@@ -117,7 +117,7 @@ b8d12_check(str_contains($client,'delegation.continuation===true')
     &&str_contains($client,'message:delegatedMessage'),
     'client sends only the server-approved canonical pending decision');
 b8d12_check(str_contains($client,"serverMessage!==String(submitted?.message?.id||'')")
-    &&str_contains($client,"serverThread!==S.thread"),
+    &&str_contains($client,"serverThread!==turnThread"),
     'pending delegation remains bound to authenticated chat turn');
 $runtime=(string)file_get_contents(dirname(__DIR__).'/includes/food-monster-b8d3-tool-runtime.php');
 b8d12_check(str_contains($runtime,'fm8d12_pending_catalogue($principal,$context)')

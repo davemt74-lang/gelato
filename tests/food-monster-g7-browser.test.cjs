@@ -6,6 +6,7 @@ let checks=0;const ok=(truth,label)=>{assert.ok(truth,label);checks++};
 try{
  const page=await browser.newPage({viewport:{width:390,height:800},reducedMotion:'reduce'});
  const errors=[],calls=[];
+ const threadId='agent-'+ '7'.repeat(20);let messageSequence=0,sourceMessageId='';
  page.on('pageerror',e=>errors.push(e.message));
  await page.route('https://gelato.test/**',async route=>{
    const url=new URL(route.request().url()),name=url.pathname;
@@ -15,8 +16,13 @@ try{
    calls.push({path:name,body,method:route.request().method()});
    let response={ok:true};
    if(name==='/api/agent-workspace.php'){
-     if(url.searchParams.get('action')==='bootstrap')response={ok:true,csrf:'g7-csrf',activeThread:'own-thread',permissions:[],user:{id:7,name:'Test User',firstName:'Test'}};
-     else if(body.action==='append')response={ok:true,message:{id:'msg-aaaaaaaaaaaaaaaaaaaa',databaseId:96}};
+     if(url.searchParams.get('action')==='bootstrap')response={ok:true,csrf:'g7-csrf',activeThread:threadId,permissions:[],user:{id:7,name:'Test User',firstName:'Test'}};
+     else if(body.action==='append'){
+       const id='msg-'+ (++messageSequence).toString(16).padStart(20,'0');
+       if(body.role==='user')sourceMessageId=id;
+       response={ok:true,message:{id,databaseId:messageSequence,role:body.role,content:body.content,
+         structured:body.structured??null,channel:body.channel||'text'}};
+     }
 
      else if(body.action==='record_action')response={ok:true,id:'audit-1'};
    }else if(name==='/api/food-monster-llm.php'){
@@ -24,7 +30,7 @@ try{
        answer:'Handoff prepared.',data:{delegation:{
          route:'api/food-monster-orchestrate.php',
          domain:'multi_node_read',
-         threadId:'own-thread',sourceMessageId:'msg-aaaaaaaaaaaaaaaaaaaa'
+         threadId,sourceMessageId
        }}};
    }else if(name==='/api/food-monster-orchestrate.php'){
      response={ok:true,skill:'agent.multi_node.read_only',answer:'Reviewed orders and inventory. No changes made.',data:{mode:'read_only',steps:[{domain:'kitchen'},{domain:'inventory'}]},sources:['Gelato Agent Brain']};
@@ -32,6 +38,7 @@ try{
    return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(response)});
  });
  await page.goto('https://gelato.test/');
+ await page.addScriptTag({content:fs.readFileSync(path.resolve(__dirname,'../js/agent-confirmation-transport.js'),'utf8')});
  await page.addScriptTag({content:fs.readFileSync(path.resolve(__dirname,'../js/global-agent.js'),'utf8')});
  await page.waitForFunction(()=>window.GelatoGlobalAgent?.user?.id===7);
  ok(await page.locator('#gelato-agent-bar').count()===1,'Existing chat bar mounted only once');
@@ -43,7 +50,7 @@ try{
    'Model-selected skill discovery happens before domain delegation');
  ok(!calls.some(c=>c.body.action==='route'),
    'Configured model does not use legacy keyword router');
- ok(call.body.threadId==='own-thread','Canonical session thread accompanies request');
+ ok(call.body.threadId===threadId,'Canonical session thread accompanies request');
  ok(call.body.csrf_token==='g7-csrf','CSRF included in original tool call');
  ok(call.body.action==='ask','No write action from client');
  const rec=calls.find(c=>c.path==='/api/agent-workspace.php'&&c.body.action==='record_action');

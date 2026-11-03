@@ -1,9 +1,8 @@
 <?php
 declare(strict_types=1);
-if(PHP_SAPI!=='cli'){http_response_code(404);exit;}
-require_once __DIR__.'/hardening-agent-confirmation-test-support.php';
 // Full deployment archives retain tests; database fixtures may run only from CLI.
 if(PHP_SAPI!=='cli'){http_response_code(404);header('Content-Type: text/plain; charset=utf-8');exit('Not found.');}
+require_once __DIR__.'/hardening-agent-confirmation-test-support.php';
 
 
 /** 3K2I-B: real MariaDB records through the official Food Monster / Prep Agent path. */

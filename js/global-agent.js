@@ -352,7 +352,10 @@
 
     try {
       const review = await reviewTransport();
+      const reviewGeneration = review.generation;
+      const checkSession = () => review.assertGeneration(reviewGeneration);
       const turnThread = await ensureThread();
+      checkSession();
       const reviewed = review.fields(turnThread);
       // One signed voice event is evidence for ONE completed transcript only.
       // A subsequent turn without fresh verification is deliberately unknown.
@@ -370,6 +373,7 @@
             possibleVoiceEvent=String(verification.match.eventId||'');
         }catch(error){diag('voice-turn-unverified',{reason:String(error?.name||'unavailable')});}
       }
+      checkSession();
       // Never reuse a prior manual voice match for a new utterance.
       const freshSpeakerEvent=/^voice-[a-zA-Z0-9-]{8,90}$/.test(possibleVoiceEvent)
         &&!S.usedVoiceEvents.has(possibleVoiceEvent)?possibleVoiceEvent:'';
@@ -377,6 +381,7 @@
         channel: voice ? 'voice' : 'text',
         voiceEventId: freshSpeakerEvent,
       }, turnThread);
+      checkSession();
       window.dispatchEvent(new CustomEvent('gelato-agent-task-start',{
         detail:{threadId:turnThread,turnId:String(submitted?.message?.id||'')}
       }));
@@ -399,6 +404,7 @@
       // This consent is bound to the committed transcript, not a voiceprint.
       const privateTurnToken=voice
         ?await approvedPrivateVoiceToken(text,submitted,turnThread):'';
+      checkSession();
 
       // FM-B8D11: every chat turn goes through the configured AI provider
       // for model-selected native skills or a permission-scoped existing
@@ -416,6 +422,7 @@
         result=await response.json().catch(()=>({ok:false,message:'Invalid AI service response.'}));
         if(!response.ok||!result.ok)throw new Error(result.message||'The configured AI service is unavailable.');
       }
+      checkSession();
 
       // Missing providers must not route room speech to owner-scoped agents.
 
@@ -469,11 +476,13 @@
         result=await response.json().catch(()=>({ok:false,message:'Invalid destination Agent response.'}));
         if(!response.ok||!result.ok)
           throw new Error(result.message||'The authorized restaurant Agent could not complete the request.');
+        checkSession();
       }
 
       let reviewedHandoff = null;
       if (result.data?.reviewedProposal) {
         reviewedHandoff = await review.handoff(turnThread, result.data.reviewedProposal, S.csrf);
+        checkSession();
         result.answer = (result.answer || 'Approval saved.') + '\n\n' + reviewedHandoff.content;
       }
 
@@ -509,6 +518,7 @@
         structured: createdTaskId ? {responseData:result.data??null,operationalFollowup:{taskId:createdTaskId,reportMessageId:String(followup.reportMessageId||''),alreadyCreated:followup.alreadyCreated===true}} : (result.data ?? null),
         sources: Array.isArray(result.sources) ? result.sources : [],
       }, turnThread);
+      checkSession();
       // Use the server's canonical review text and final message-bound hash.
       answer = agentMessage.message.content;
       if(result?.data?.proposal) result.data = agentMessage.message.structured;
@@ -526,11 +536,13 @@
         request: {message: text, voice: Boolean(voice)},
         result: {answer, data: result.data ?? null, sources: result.sources ?? []},
       }).catch(error => diag('action-receipt-unavailable', {reason:String(error?.name || 'unavailable')}));
+      checkSession();
 
       status(answer, 7000);
       window.dispatchEvent(new CustomEvent('gelato-agent-response', {
         detail: {answer, result, threadId: turnThread},
       }));
+      checkSession();
       if (review.isDecision(text)) review.forget(turnThread, reviewed.proposalId);
       review.remember(turnThread, reviewedHandoff || agentMessage.message);
       const navigation=result?.data?.navigation;
@@ -538,7 +550,7 @@
          && /^[a-z][a-z0-9-]*\.php(?:#[a-z][a-z0-9-]*)?$/.test(String(navigation.href||''))){
         // Never navigate before canonical chat history and the action receipt
         // have been recorded. Only a server-selected, local page can redirect.
-        window.setTimeout(()=>window.location.assign(navigation.href),900);
+        window.setTimeout(()=>{if(review.generation===reviewGeneration)window.location.assign(navigation.href);},900);
       }
       if (voice && window.speechSynthesis && has('voice.agent')) speak(answer);
       else if(S.conversation&&voice) status('Reply ready. Browser voice output is unavailable; read the response above.',7000);

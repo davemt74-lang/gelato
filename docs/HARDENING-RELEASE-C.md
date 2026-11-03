@@ -77,6 +77,9 @@ kept per conversation and per browser tab. Standalone clients acknowledge a
 proposal only after displaying its canonical answer. Reload restores only an
 exact saved review message. High-impact approval handoffs retrieve and display
 the original approved proposal before restoring its evidence for a later Confirm.
+Standalone review pointers use organization, account and login-session scope,
+store only identity metadata, and clear with private browser state. A response
+arriving after sign-out cannot restore old evidence or continue the old request.
 
 Each asynchronous Food Monster turn captures its original conversation. Changing
 the selected conversation while a request is running cannot retarget the

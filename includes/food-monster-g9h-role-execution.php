@@ -8,7 +8,6 @@ declare(strict_types=1);
  */
 require_once __DIR__.'/food-monster-identity-authority.php';
 require_once __DIR__.'/agent-workspace-core.php';
-require_once __DIR__.'/user-accounts.php';
 
 function fm9h_owner_required(array $operator):void {
     if(!fm9a_is_super_admin_session($operator)
@@ -78,6 +77,7 @@ function fm9h_active_grant(array $operator,string $threadId):?array {
         &&hash_equals((string)($grant['threadId']??''),$threadId)?$grant:null;
 }
 function fm9h_execute_role(PDO $pdo,array $operator,string $threadId):array {
+    require_once __DIR__.'/user-accounts.php';
     fm9h_owner_required($operator);
     $grant=fm9h_active_grant($operator,$threadId);
     if(!$grant)throw new DomainException('A current role permission approval is required in this conversation.');

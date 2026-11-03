@@ -2,6 +2,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const parse=fs.readFileSync('js/proactive-listening-commands.js','utf8');
 const global=fs.readFileSync('js/global-agent.js','utf8');
+const review=fs.readFileSync('js/agent-confirmation-transport.js','utf8');
 let preferences={listening_enabled:1,proactive_voice_enabled:0,wake_phrase:'Hey Gelato'};
 const records=[],micStarts=[],listeners={};let captureCalls=0;
 class Recognition{
@@ -17,6 +18,7 @@ class Context{
 }
 function build(){
   const events=[];
+  let messageSequence=0;
   const document={readyState:'complete',hidden:false,body:{dataset:{agentCanvas:'1'}},
     addEventListener(name,fn){listeners[name]=fn;},
     getElementById(){return null;},
@@ -29,12 +31,15 @@ function build(){
     records.push({url,action:req.action||'',pref:req});
     let data={ok:true};
     if(url.includes('agent-workspace.php?action=bootstrap'))
-      data={ok:true,csrf:'test-csrf',activeThread:'thread',user:{id:99,name:'Test User'},permissions:['agent.proactive','voice.agent']};
+      data={ok:true,csrf:'test-csrf',activeThread:'agent-'+ '9'.repeat(20),user:{id:99,name:'Test User'},permissions:['agent.proactive','voice.agent']};
     else if(url.includes('proactive-agent.php?action=preferences'))
       data={ok:true,preferences:{...preferences},microphoneActive:false};
     else if(url.includes('api/proactive-agent.php')&&req.action==='preferences'){
       preferences={listening_enabled:req.listeningEnabled?1:0,proactive_voice_enabled:req.proactiveVoiceEnabled?1:0,wake_phrase:req.wakePhrase};
       data={ok:true,preferences:{...preferences}};
+    }else if(req.action==='append'){
+      data={ok:true,message:{id:'msg-'+ (++messageSequence).toString(16).padStart(20,'0'),
+        databaseId:messageSequence,role:req.role,content:req.content,structured:req.structured??null,channel:req.channel||'text'}};
     }else if(url.includes('api/voice-identity.php')){
       data={ok:true,match:{matched:true,sessionUserMatch:true,userId:99,displayName:'Test User',eventId:'matched-test',confidence:.92}};
     }else if(url.includes('api/proactive-agent.php'))data={ok:true,events:[]};
@@ -46,6 +51,7 @@ function build(){
     setInterval:fn=>{fn();return 1;},clearInterval:()=>{},
     setTimeout:(fn,ms)=>{if(ms<=8000)queueMicrotask(fn);return 1;},clearTimeout:()=>{}};
   vm.runInNewContext(parse,context,{filename:'proactive-listening-commands.js'});
+  vm.runInNewContext(review,context,{filename:'agent-confirmation-transport.js'});
   vm.runInNewContext(global,context,{filename:'global-agent.js'});
   return {win,events};
 }

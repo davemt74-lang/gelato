@@ -4,5 +4,6 @@ assert.match(js,/submitted\?\.operationalFollowup/);
 assert.match(js,/\^task-\[a-f0-9\]\{20\}\$/);
 assert.match(js,/followup\.alreadyCreated/);
 assert.match(js,/operationalFollowup:\{taskId:createdTaskId/);
-assert.match(js,/const answer=\(greeting\?/);
+assert.match(js,/let answer=\(greeting\?/);
+assert.match(js,/answer = agentMessage\.message\.content/,'display and receipt use the server-canonical message');
 console.log('FM-G9F conversational task receipt contract PASS (5 assertions)');
