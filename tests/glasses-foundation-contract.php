@@ -15,6 +15,7 @@ $pdo->prepare("INSERT INTO organizations (name,status,timezone) VALUES (?,'activ
 $pdo->prepare("INSERT INTO locations (organization_id,name,city,state,status) VALUES (?,'Main Kitchen','Phoenix','AZ','active')")->execute([$org]);$location=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO locations (organization_id,name,city,state,status) VALUES (?,'Second Kitchen','Phoenix','AZ','active')")->execute([$org]);$location2=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO users (email,password_hash,first_name,last_name,display_name,status) VALUES (?,?,?,?,?,'active')")->execute([$slug.'@example.test',password_hash('CI-only-password',PASSWORD_DEFAULT),'AR','Manager','AR Manager']);$user=(int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO organization_memberships (organization_id,user_id,status) VALUES (?,?,'active')")->execute([$org,$user]);
 
 $station=kds_station_save($pdo,$org,$location,['name'=>'Sandwich','slug'=>'sandwich','targetSeconds'=>300],$user);
 $station2=kds_station_save($pdo,$org,$location2,['name'=>'Expo','slug'=>'expo','targetSeconds'=>180],$user);

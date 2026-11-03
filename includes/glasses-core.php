@@ -188,6 +188,24 @@ function glasses_pair_device(PDO $pdo,string $pairingCode,array $device): array
     });
 }
 
+/** Device credentials remain accountable to an active member of their restaurant. */
+function glasses_require_accountable_user(PDO $pdo,array $device,bool $forUpdate=false): int
+{
+    $org=(int)($device['organization_id']??0);$uid=(int)($device['paired_by']??0);
+    $unavailable='This glasses device has no active accountable restaurant account. Ask an active manager to revoke and re-pair it.';
+    if($org<1||$uid<1)throw new InvalidArgumentException($unavailable);
+    if($forUpdate&&!$pdo->inTransaction())throw new LogicException('Accountability locks require a transaction.');
+    $lock=$forUpdate?' FOR UPDATE':'';
+    // Match account lifecycle's user-before-membership order when attributing writes.
+    $q=$pdo->prepare('SELECT id,status,archived_at FROM users WHERE id=?'.$lock);
+    $q->execute([$uid]);$user=$q->fetch();
+    if(!$user||$user['status']!=='active'||$user['archived_at']!==null)throw new InvalidArgumentException($unavailable);
+    $q=$pdo->prepare('SELECT id,status FROM organization_memberships WHERE organization_id=? AND user_id=?'.$lock);
+    $q->execute([$org,$uid]);$membership=$q->fetch();
+    if(!$membership||$membership['status']!=='active')throw new InvalidArgumentException($unavailable);
+    return $uid;
+}
+
 function glasses_authenticate_token(PDO $pdo,string $token): array
 {
     $token=trim($token);
@@ -201,6 +219,7 @@ function glasses_authenticate_token(PDO $pdo,string $token): array
     $q->execute([$hash]);
     $row=$q->fetch();
     if(!$row)throw new InvalidArgumentException('Device authentication failed.');
+    glasses_require_accountable_user($pdo,$row);
     return $row;
 }
 

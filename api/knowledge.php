@@ -261,13 +261,13 @@ try {
             $statement = $pdo->prepare(
                 "INSERT INTO knowledge_documents
                  (organization_id, public_id, title, source_type, original_filename, mime_type, content, content_sha256, status, agent_enabled, created_by, updated_by)
-                 VALUES (:organization_id, :public_id, :title, :source_type, :original_filename, :mime_type, :content, :content_sha256, 'published', :agent_enabled, :user_id, :user_id)"
+                 VALUES (:organization_id, :public_id, :title, :source_type, :original_filename, :mime_type, :content, :content_sha256, 'published', :agent_enabled, :created_by, :updated_by)"
             );
             $statement->execute([
                 'organization_id' => $organizationId, 'public_id' => $publicId, 'title' => $title,
                 'source_type' => $sourceType, 'original_filename' => $originalFilename, 'mime_type' => $mimeType,
                 'content' => $content, 'content_sha256' => hash('sha256', $content),
-                'agent_enabled' => $agentEnabled, 'user_id' => (int)$user['id'],
+                'agent_enabled' => $agentEnabled, 'created_by' => (int)$user['id'], 'updated_by' => (int)$user['id'],
             ]);
             $documentId = (int)$pdo->lastInsertId();
         }

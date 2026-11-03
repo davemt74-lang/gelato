@@ -113,7 +113,7 @@ function timeclock_agent_propose(PDO $pdo,array $user,string $type,array $payloa
 
 function timeclock_agent_assert_state(PDO $pdo,int $org,int $uid,array $payload): ?array
 {
-    $clock=tv_open_clock($pdo,$org,$uid);
+    $clock=tv_open_clock($pdo,$org,$uid,true);
     $expected=(string)($payload['expectedClockPublicId']??'');
     if($expected===''){
         if($clock)throw new InvalidArgumentException('Your time-clock state changed after this proposal was created. Refresh and ask again.');
@@ -122,8 +122,7 @@ function timeclock_agent_assert_state(PDO $pdo,int $org,int $uid,array $payload)
     if(!$clock||(string)$clock['public_id']!==$expected||(string)$clock['updated_at']!==(string)($payload['expectedClockUpdatedAt']??'')){
         throw new InvalidArgumentException('Your time-clock state changed after this proposal was created. Refresh and ask again.');
     }
-    $b=$pdo->prepare('SELECT id FROM time_clock_breaks WHERE time_clock_entry_id=? AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1');
-    $b->execute([(int)$clock['id']]);$current=$b->fetchColumn();$currentBreakId=$current!==false?(int)$current:null;
+    $current=tv_open_break($pdo,$org,(int)$clock['id']);$currentBreakId=$current?(int)$current['id']:null;
     $expectedBreakId=array_key_exists('expectedOpenBreakId',$payload)&&$payload['expectedOpenBreakId']!==null?(int)$payload['expectedOpenBreakId']:null;
     if($currentBreakId!==$expectedBreakId){
         throw new InvalidArgumentException('Your break state changed after this proposal was created. Refresh and ask again.');
@@ -141,7 +140,7 @@ function timeclock_agent_execute_pending(PDO $pdo,array $user,array $proposal): 
     $voiceEventId=(string)($payload['voiceEventId']??'');
     $pdo->beginTransaction();
     try{
-        $lock=$pdo->prepare('SELECT id FROM users WHERE id=? FOR UPDATE');$lock->execute([$uid]);if(!$lock->fetchColumn())throw new InvalidArgumentException('Employee account is no longer available.');
+        tv_lock_employee($pdo,$org,$uid);
         $clock=timeclock_agent_assert_state($pdo,$org,$uid,$payload);
         if($type==='clock_in'){
             if($clock)throw new InvalidArgumentException('You are already clocked in.');

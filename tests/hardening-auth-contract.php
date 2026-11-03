@@ -73,7 +73,7 @@ ha_assert(session_id() !== $firstId, 'Every sign-in must rotate the session ID.'
 ha_assert($first['browser_state_id'] !== $second['browser_state_id'], 'A new login must not reuse browser-private drafts.');
 ha_assert(app_current_user(true) !== null, 'PIN session must use the same credential contract.');
 
-$row = $pdo->query('SELECT id,password_hash,password_changed_at,' . $org . ' AS organization_id FROM users WHERE id=' . $uid)->fetch();
+$row = $pdo->query('SELECT u.id,u.password_hash,u.password_changed_at,om.organization_id,om.updated_at AS membership_updated_at FROM users u JOIN organization_memberships om ON om.user_id=u.id WHERE u.id=' . $uid . ' AND om.organization_id=' . $org)->fetch();
 $now = time();
 ha_assert(app_session_is_current($first, $row, [], $now), 'Fresh independent password session must be valid.');
 $legacy = ['user_id'=>$uid,'organization_id'=>$org,'authenticated_at'=>$now];

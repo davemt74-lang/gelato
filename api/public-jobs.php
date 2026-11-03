@@ -2,22 +2,11 @@
 declare(strict_types=1);
 
 require __DIR__ . '/../includes/bootstrap.php';
+require_once __DIR__ . '/../includes/hiring-core.php';
 
 try {
     $pdo = app_pdo();
-    $organizationId = (int)($pdo->query(
-        "SELECT organization_id FROM brand_settings ORDER BY id ASC LIMIT 1"
-    )->fetchColumn() ?: 0);
-
-    if ($organizationId <= 0) {
-        $organizationId = (int)($pdo->query(
-            "SELECT id FROM organizations WHERE status = 'active' ORDER BY id ASC LIMIT 1"
-        )->fetchColumn() ?: 0);
-    }
-
-    if ($organizationId <= 0) {
-        app_json_response(['ok' => true, 'jobs' => []]);
-    }
+    $organizationId = hiring_public_organization_id($pdo);
 
     $statement = $pdo->prepare(
         "SELECT public_id, slug, title, department, location_name, employment_type, schedule_text,

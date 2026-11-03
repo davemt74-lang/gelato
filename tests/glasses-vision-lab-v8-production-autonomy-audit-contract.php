@@ -46,6 +46,7 @@ v87_assert(glasses_vision_autonomy_ready($pdo),'V8 autonomy-audit migration must
 $slug='vl87-'.bin2hex(random_bytes(4));
 $pdo->prepare("INSERT INTO organizations (name,status,timezone) VALUES (?,'active','America/Phoenix')")->execute(['Autonomy Audit '.$slug]);$org=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO users (email,password_hash,first_name,last_name,display_name,status) VALUES (?,?,?,?,?,'active')")->execute([$slug.'@example.test','fixture-hash','Audit','Reviewer','Audit Reviewer']);$actor=(int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO organization_memberships (organization_id,user_id,status) VALUES (?,?,'active')")->execute([$org,$actor]);
 
 $pdo->prepare("INSERT INTO locations (organization_id,name,city,state,status) VALUES (?,'Runtime Kitchen','Phoenix','AZ','active')")->execute([$org]);$location=(int)$pdo->lastInsertId();
 $station=kds_station_save($pdo,$org,$location,['name'=>'Runtime Line','slug'=>'v87-runtime-'.$slug,'targetSeconds'=>300],$actor);

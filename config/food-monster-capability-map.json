@@ -595,7 +595,7 @@
     {
       "path": "api/equipment.php",
       "feature": "equipment",
-      "sourceBlob": "d09bcd61e99f6020c7dd7a3aa7fdf47dcb6ea78b",
+      "sourceBlob": "000e7bdb216cac222f58f1b3ffb87bb2965407c4",
       "discoveredActions": [
         "archive_asset",
         "link_contact",
@@ -1387,7 +1387,7 @@
     {
       "path": "api/jobs.php",
       "feature": "employee_workspace",
-      "sourceBlob": "0e2fe9e57bc48701fae2fb443afb99d585a0ff82",
+      "sourceBlob": "60889c12d751303e0c37aeb591b3b3fc9e524af0",
       "discoveredActions": [],
       "permissionTokensSeen": [
         "jobs.publish",
@@ -1449,7 +1449,7 @@
     {
       "path": "api/knowledge.php",
       "feature": "agent_core",
-      "sourceBlob": "fb91a0d96712851b3efe56b62e941d58e12eec7c",
+      "sourceBlob": "d1b3544a88831969c1a042b4236058308ae9f53b",
       "discoveredActions": [],
       "permissionTokensSeen": [],
       "directAppRequireAuthCall": true,
@@ -1634,7 +1634,7 @@
     {
       "path": "api/operations.php",
       "feature": "operations",
-      "sourceBlob": "b1856cd3dfe55f7a2cf48d2048ff408b3ef4ed0b",
+      "sourceBlob": "e02aebe9aa96f6e33d2a65dd9db1890a0de37c26",
       "discoveredActions": [
         "categories",
         "category_archive",
@@ -1881,6 +1881,17 @@
       "notes": "No direct app_require_auth() marker; check included core, public surface and session flow. Do not infer that this endpoint is public."
     },
     {
+      "path": "api/public-applications.php",
+      "feature": "public_site",
+      "sourceBlob": "ed0c4149611264e646742fd62ffcce3840f1d209",
+      "discoveredActions": [],
+      "permissionTokensSeen": [],
+      "directAppRequireAuthCall": false,
+      "dispatch": "discovery_only",
+      "permissionStatus": "needs_endpoint_contract_review",
+      "notes": "No direct app_require_auth() marker; check included core, public surface and session flow. Do not infer that this endpoint is public."
+    },
+    {
       "path": "api/public-brand.php",
       "feature": "public_site",
       "sourceBlob": "67fc15c3c7d584890da0df6d71faf16c778201ec",
@@ -1905,7 +1916,7 @@
     {
       "path": "api/public-jobs.php",
       "feature": "public_site",
-      "sourceBlob": "ad2a25de15120b412b562ffb1d1bf2ab8d44382d",
+      "sourceBlob": "69e57336c22f96add1a87f34bb1d7ede3f310a31",
       "discoveredActions": [],
       "permissionTokensSeen": [],
       "directAppRequireAuthCall": false,
@@ -1982,7 +1993,7 @@
     {
       "path": "api/purchasing.php",
       "feature": "purchasing",
-      "sourceBlob": "06308062ed8bbca1ca60a398420434a4a7cfc3f5",
+      "sourceBlob": "baef62ac5da5079ae14bcff0a42ca4c36ebca879",
       "discoveredActions": [
         "bootstrap",
         "catalog",
@@ -2058,20 +2069,49 @@
       "notes": "No direct app_require_auth() marker; check included core, public surface and session flow. Do not infer that this endpoint is public."
     },
     {
-      "path": "api/roles.php",
-      "feature": "admin_settings",
-      "sourceBlob": "7937134de57c3a13603921085a5ab4c5e7a4c67c",
-      "discoveredActions": [
-        "create"
-      ],
+      "path": "api/resume-file.php",
+      "feature": "employee_workspace",
+      "sourceBlob": "61aaae0d403679dd4b831c7c4ed0fcaf1bb9bc2e",
+      "discoveredActions": [],
       "permissionTokensSeen": [
-        "roles.assign_permissions",
-        "roles.create"
+        "resumes.view"
       ],
       "directAppRequireAuthCall": false,
       "dispatch": "discovery_only",
       "permissionStatus": "needs_endpoint_contract_review",
       "notes": "No direct app_require_auth() marker; check included core, public surface and session flow. Do not infer that this endpoint is public."
+    },
+    {
+      "path": "api/resumes.php",
+      "feature": "employee_workspace",
+      "sourceBlob": "a0633c3c1e9de3a121f704f4fff17d7c21973a36",
+      "discoveredActions": [],
+      "permissionTokensSeen": [
+        "resumes.view"
+      ],
+      "directAppRequireAuthCall": false,
+      "dispatch": "discovery_only",
+      "permissionStatus": "needs_endpoint_contract_review",
+      "notes": "No direct app_require_auth() marker; check included core, public surface and session flow. Do not infer that this endpoint is public."
+    },
+    {
+      "path": "api/roles.php",
+      "feature": "admin_settings",
+      "sourceBlob": "347acc99be20787bb74f40b3d1d633bd1ed88815",
+      "discoveredActions": [
+        "create",
+        "update"
+      ],
+      "permissionTokensSeen": [
+        "roles.assign_permissions",
+        "roles.create",
+        "roles.edit",
+        "roles.view"
+      ],
+      "directAppRequireAuthCall": true,
+      "dispatch": "discovery_only",
+      "permissionStatus": "needs_endpoint_contract_review",
+      "notes": "Direct app_require_auth() marker found; additional checks may apply."
     },
     {
       "path": "api/sales-agent.php",
@@ -2290,7 +2330,7 @@
     {
       "path": "api/timeclock.php",
       "feature": "time_attendance",
-      "sourceBlob": "fb82472b946d30fbd37b23ff6832c7b31d8b669e",
+      "sourceBlob": "fcccaa34d60c897cb82222d5c9190454dd4bb9e8",
       "discoveredActions": [
         "bootstrap",
         "break_start",
@@ -2305,6 +2345,23 @@
       "dispatch": "discovery_only",
       "permissionStatus": "needs_endpoint_contract_review",
       "notes": "Direct app_require_auth() marker found; additional checks may apply."
+    },
+    {
+      "path": "api/users.php",
+      "feature": "admin_settings",
+      "sourceBlob": "0f42b3944a3c78e40f2857a81221a8e46c2c5766",
+      "discoveredActions": [
+        "invite"
+      ],
+      "permissionTokensSeen": [
+        "users.create",
+        "users.edit",
+        "users.view"
+      ],
+      "directAppRequireAuthCall": false,
+      "dispatch": "discovery_only",
+      "permissionStatus": "needs_endpoint_contract_review",
+      "notes": "No direct app_require_auth() marker; check included core, public surface and session flow. Do not infer that this endpoint is public."
     },
     {
       "path": "api/voice-identity.php",

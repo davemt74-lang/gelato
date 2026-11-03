@@ -185,7 +185,7 @@ function app_current_user(bool $refresh = false): ?array
 
     $sql = "SELECT u.id, u.email, u.first_name, u.last_name, u.display_name, u.phone,
                    u.status, u.last_login_at, u.created_at, u.email_verified_at, u.password_hash, u.password_changed_at,
-                   om.id AS membership_id, om.organization_id, om.job_title,
+                   om.id AS membership_id, om.organization_id, om.job_title, om.updated_at AS membership_updated_at,
                    o.name AS organization_name,
                    r.id AS role_id, r.name AS role_name, r.slug AS role_slug,
                    r.description AS role_description, r.is_system_role, r.is_owner_role

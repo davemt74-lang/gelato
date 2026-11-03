@@ -1,0 +1,96 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs');
+const {start}=require('./hardening-accounts-server.cjs');
+(async()=>{
+  const env=await start(),{data,Client,fixture,csrf}=env;
+  const owner=new Client(),manager=new Client(),employee=new Client(),outsider=new Client(),anonymous=new Client();
+  try{
+    await owner.login(data.users.owner.email);await manager.login(data.users.manager.email);
+    await employee.login(data.users.employee.email);await outsider.login(data.users.otherOwner.email);
+    const invitation={action:'invite',firstName:'Invited',lastName:'Employee',displayName:'Invited Employee',phone:'6025550111',
+      email:data.inviteEmail,position:'Pizza cook',roleId:'db-role-'+data.roles.employee};
+    let r=await employee.request('/api/users.php',invitation);assert.equal(r.status,403,r.text);
+    r=await owner.request('/api/users.php',invitation,false,'invalid');assert.equal(r.status,419,r.text);
+    r=await manager.request('/api/users.php',{...invitation,roleId:'db-role-'+data.roles.broader});assert.equal(r.status,403,r.text);
+    assert.equal(fixture('inspect',data.inviteEmail).user,null,'Denied invitation cannot create an identity');
+    r=await manager.request('/api/users.php',invitation);assert.equal(r.status,200,r.text);assert.equal(r.json.invitation.delivery,'sent');
+    assert.doesNotMatch(r.text,/account-invitation\.php\?token=|password_hash|token_hash/,'Manager must not receive credentials or activation link');
+    const id=r.json.user.id,token=env.token();
+    let saved=fixture('inspect',data.inviteEmail);
+    assert.equal(saved.user.status,'invited');assert.equal(saved.memberships.length,0,'Invitation must not establish restaurant membership');
+    assert.equal(saved.invitations.length,1);
+    r=await manager.request('/api/users.php');assert.ok(r.json.users.some(u=>u.id===id&&u.status==='invited'));
+    let page=await anonymous.request('/login.php');
+    page=await anonymous.request('/login.php',{csrf_token:csrf(page.text),email:data.inviteEmail,password:'Recipient-Accounts!43'},true);
+    assert.equal(page.status,200,'Unaccepted account cannot sign in');
+    page=await anonymous.request('/account-invitation.php?token='+token);
+    assert.equal(page.status,200);assert.equal(page.headers.get('referrer-policy'),'no-referrer');assert.match(page.headers.get('cache-control'),/no-store/);
+    const formToken=csrf(page.text);
+    page=await anonymous.request('/account-invitation.php',{token,csrf_token:'invalid',password:'Recipient-Accounts!43',password_confirm:'Recipient-Accounts!43'},true);
+    assert.match(page.text,/form expired/);
+    page=await anonymous.request('/account-invitation.php',{token,csrf_token:formToken,password:'Recipient-Accounts!43',password_confirm:'Recipient-Accounts!43'},true);
+    assert.equal(page.status,302,page.text);assert.equal(page.location,'workspace.php');
+    saved=fixture('inspect',data.inviteEmail);
+    assert.equal(saved.user.status,'active');assert.ok(saved.user.email_verified_at);
+    assert.equal(saved.memberships.length,1);assert.deepEqual(saved.memberships[0].roleIds,[data.roles.employee]);
+    page=await new Client().request('/account-invitation.php?token='+token);
+    assert.match(page.text,/invalid, expired, or already used/);assert.doesNotMatch(page.text,/name="password"/);
+    const first=new Client(),second=new Client();
+    await first.login(data.inviteEmail,'Recipient-Accounts!43');await second.login(data.inviteEmail,'Recipient-Accounts!43');
+    const edited={action:'update',id,email:data.inviteEmail,firstName:'Saved',lastName:'Employee',displayName:'Saved Employee',
+      phone:'6025550222',position:'Lead pizza cook',roleIds:['db-role-'+data.roles.employee]};
+    r=await manager.request('/api/users.php',edited);assert.equal(r.status,200,r.text);
+    saved=fixture('inspect',data.inviteEmail);assert.equal(saved.user.first_name,'Saved');assert.equal(saved.memberships[0].jobTitle,'Lead pizza cook');
+    await first.login(data.inviteEmail,'Recipient-Accounts!43');await second.login(data.inviteEmail,'Recipient-Accounts!43');
+    r=await manager.request('/api/users.php',{action:'status',id,status:'suspended'});assert.equal(r.status,200,r.text);
+    assert.equal((await first.request('/api/users.php')).status,401,'Existing session must be revoked');
+    r=await manager.request('/api/users.php',{action:'status',id,status:'active'});assert.equal(r.status,200,r.text);
+    assert.equal((await second.request('/api/users.php')).status,401,'Reactivation cannot revive an earlier session');
+    await second.login(data.inviteEmail,'Recipient-Accounts!43');
+    r=await manager.request('/api/users.php',{action:'status',id:'db-user-'+data.users.owner.id,status:'suspended'});assert.equal(r.status,403);
+    r=await owner.request('/api/users.php',{action:'status',id:'db-user-'+data.users.owner.id,status:'suspended'});assert.equal(r.status,403);
+    r=await outsider.request('/api/users.php',edited);assert.equal(r.status,422,r.text);
+    r=await employee.request('/api/users.php',{action:'profile',firstName:'Self',lastName:'Saved',displayName:'Self Saved',phone:'6025550333'});
+    assert.equal(r.status,200,r.text);assert.equal(fixture('inspect',data.users.employee.email).user.display_name,'Self Saved');
+
+    const sharedHome=new Client();await sharedHome.login(data.users.shared.email);
+    const otherSession=fixture('session',data.users.shared.id,data.organizations.other),sharedOther=new Client(otherSession.cookie);
+    r=await owner.request('/api/users.php',{action:'status',id:'db-user-'+data.users.shared.id,status:'suspended'});assert.equal(r.status,200,r.text);
+    assert.equal((await sharedHome.request('/workspace.php')).status,302);
+    assert.equal((await sharedOther.request('/workspace.php')).status,200,'Other restaurant session must remain valid');
+    assert.equal(fixture('inspect',data.users.shared.email).user.status,'active','Restaurant suspension cannot globally disable a shared identity');
+
+    const foreignInput={...invitation,email:data.users.foreign.email,firstName:'Submitted',lastName:'Candidate',displayName:'Submitted Candidate',phone:'6025550444'};
+    r=await manager.request('/api/users.php',foreignInput);assert.equal(r.status,200,r.text);
+    const foreignToken=env.token();
+    for(const secret of Object.values(data.foreignPrivate))assert.ok(!r.text.includes(secret),'Pending invitation cannot expose foreign identity: '+secret);
+    r=await manager.request('/api/users.php');
+    for(const secret of Object.values(data.foreignPrivate))assert.ok(!r.text.includes(secret),'Directory cannot expose foreign identity before acceptance');
+    assert.equal(fixture('inspect',data.users.foreign.email,data.organizations.home).memberships.length,0);
+    const foreignRecipient=new Client();page=await foreignRecipient.request('/account-invitation.php?token='+foreignToken);
+    assert.match(page.text,/Existing password/);
+    page=await foreignRecipient.request('/account-invitation.php',{token:foreignToken,csrf_token:csrf(page.text),password:'Wrong-Existing!42'},true);
+    assert.match(page.text,/existing account password is incorrect/);
+    page=await foreignRecipient.request('/account-invitation.php',{token:foreignToken,csrf_token:csrf(page.text),password:data.password},true);
+    assert.equal(page.status,302,page.text);
+    assert.equal(fixture('inspect',data.users.foreign.email,data.organizations.home).memberships.length,1);
+    assert.equal(fixture('inspect',data.users.foreign.email).user.phone,data.foreignPrivate.phone,'Accepting an invitation cannot overwrite global profile');
+
+    const failedEmail='failed-'+data.inviteEmail;fs.writeFileSync(env.capture+'.fail','fail');
+    r=await manager.request('/api/users.php',{...invitation,email:failedEmail});assert.equal(r.status,200,r.text);
+    assert.equal(r.json.invitation.delivery,'failed');assert.match(r.json.message,/could not be sent/);
+    const failedId=r.json.user.id;assert.equal(fixture('inspect',failedEmail).memberships.length,0);
+    fs.unlinkSync(env.capture+'.fail');
+    r=await manager.request('/api/users.php',{action:'resend',id:failedId});assert.equal(r.status,200,r.text);assert.equal(r.json.invitation.delivery,'sent');
+    const failedToken=env.token();
+    r=await manager.request('/api/users.php',{action:'status',id:failedId,status:'suspended'});assert.equal(r.status,200,r.text);
+    page=await new Client().request('/account-invitation.php?token='+failedToken);assert.match(page.text,/invalid, expired, or already used/);
+    r=await manager.request('/api/users.php',{action:'resend',id:failedId});assert.equal(r.status,200,r.text);
+    const expired=env.token();fixture('expire',failedEmail,data.organizations.home);
+    page=await new Client().request('/account-invitation.php?token='+expired);assert.match(page.text,/invalid, expired, or already used/);
+    assert.equal((await new Client().request('/tests/hardening-accounts-fixture.php')).status,404);
+    assert.equal((await new Client().request('/tests/hardening-accounts-contract.php')).status,404);
+    assert.ok(!/PHP (?:Fatal|Parse) error/.test(env.logs()),env.logs());
+    console.log('Account lifecycle HTTP: PASS (durable invitation/acceptance, independent login, edits, tenant suspension, session nonresurrection, owner/role/CSRF/tenant denial, foreign identity privacy, failed delivery, cancellation and expiry)');
+  } finally {await env.close();}
+})().catch(error=>{console.error(error);process.exitCode=1;});

@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 require __DIR__ . '/includes/bootstrap.php';
+header('Cache-Control: no-store, private');
+header('Referrer-Policy: no-referrer');
 
 $user = app_require_auth();
 if (!app_has_permission('resumes.view', $user)) {
@@ -9,9 +11,9 @@ if (!app_has_permission('resumes.view', $user)) {
 }
 
 $resumeId = trim((string)($_GET['id'] ?? ''));
-$returnPath = trim((string)($_GET['return'] ?? 'index.php#resumes'));
-if ($returnPath === '' || preg_match('/^(?:https?:)?\/\//i', $returnPath)) {
-    $returnPath = 'index.php#resumes';
+$returnPath = trim((string)($_GET['return'] ?? 'workspace.php#resumes'));
+if (!in_array($returnPath, ['workspace.php#resumes','index.php#resumes'], true)) {
+    $returnPath = 'workspace.php#resumes';
 }
 
 $payload = [
@@ -41,14 +43,14 @@ $payload = [
 <header class="resume-topbar">
   <div class="resume-topbar-inner">
     <button class="back-button" id="resumeBackButton" type="button">← Back to Resume Submissions</button>
-    <a class="resume-brand" href="index.php#resumes" aria-label="Return to the training workspace">
+    <a class="resume-brand" href="workspace.php#resumes" aria-label="Return to the training workspace">
       <span class="resume-brand-logo" id="resumeBrandLogo">FR</span>
       <span><strong id="resumeBrandName">Restaurant</strong><small>Private applicant review</small></span>
     </a>
     <div class="resume-user">
       <span class="resume-user-avatar"><?= app_escape($payload['currentUser']['initials']) ?></span>
       <span><strong><?= app_escape($payload['currentUser']['displayName']) ?></strong><small><?= app_escape($payload['currentUser']['roleName']) ?></small></span>
-      <a href="index.php#resumes">Workspace</a>
+      <a href="workspace.php#resumes">Workspace</a>
     </div>
   </div>
 </header>
@@ -63,8 +65,7 @@ $payload = [
 
 <div class="resume-toast hidden" id="resumeToast" role="status"></div>
 <script>window.RESTAURANT_RESUME_PAGE = <?= json_encode($payload, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?>;</script>
-<script src="js/auth.js"></script>
-<script src="js/form-media-storage.js?v=20260804-media1"></script>
-<script src="js/resume-detail.js?v=20260804-media1"></script>
+<script src="js/public-brand-render.js?v=hardening-a1"></script>
+<script src="js/resume-detail.js?v=hardening-b1"></script>
 </body>
 </html>

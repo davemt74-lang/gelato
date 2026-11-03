@@ -44,6 +44,7 @@ $location=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO users (email,password_hash,first_name,last_name,display_name,status) VALUES (?,?,?,?,?,'active')")
     ->execute([$slug.'@example.test',password_hash('CI-only-password',PASSWORD_DEFAULT),'Expo','Lead','Expo Lead']);
 $user=(int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO organization_memberships (organization_id,user_id,status) VALUES (?,?,'active')")->execute([$org,$user]);
 
 $station=kds_station_save($pdo,$org,$location,[
     'name'=>'Sandwich','slug'=>'sandwich','targetSeconds'=>300,'sortOrder'=>10

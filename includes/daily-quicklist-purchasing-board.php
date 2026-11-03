@@ -9,7 +9,7 @@ function daily_quicklist_purchasing_board(PDO $pdo,int $org,string $date): array
         if(!restaurant_brain_table_ready($pdo,$table))throw new RuntimeException('Purchasing is not installed.');
     $q=$pdo->prepare("SELECT inv.public_id stock_id,po.public_id order_id,po.order_number,
         po.status,po.expected_delivery_date,v.name vendor_name,poi.ordered_base_quantity,
-        poi.received_base_quantity,inv.base_unit FROM purchase_order_items poi
+        poi.received_base_quantity,poi.unit FROM purchase_order_items poi
         JOIN purchase_orders po ON po.id=poi.purchase_order_id AND po.organization_id=poi.organization_id
         JOIN vendors v ON v.id=po.vendor_id AND v.organization_id=po.organization_id
         JOIN inventory_items inv ON inv.id=poi.inventory_item_id AND inv.organization_id=poi.organization_id
@@ -22,7 +22,7 @@ function daily_quicklist_purchasing_board(PDO $pdo,int $org,string $date): array
             'orderNumber'=>$r['order_number'],'status'=>$r['status'],
             'expectedDate'=>$r['expected_delivery_date'],'vendor'=>$r['vendor_name'],
             'orderedQuantity'=>(float)$r['ordered_base_quantity'],
-            'receivedQuantity'=>(float)$r['received_base_quantity'],'unit'=>$r['base_unit']];
+            'receivedQuantity'=>(float)$r['received_base_quantity'],'unit'=>$r['unit']];
     $q=$pdo->prepare("SELECT inv.public_id stock_id,gr.receipt_number,gr.received_at,
         po.order_number,v.name vendor_name,gri.received_base_quantity,gri.unit
         FROM goods_receipt_items gri JOIN goods_receipts gr
