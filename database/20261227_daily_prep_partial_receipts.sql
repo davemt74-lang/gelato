@@ -5,7 +5,7 @@ ALTER TABLE daily_quicklist_items
 
 -- Keep a supporting index in place for the item foreign key before dropping the old unique index.
 ALTER TABLE daily_quicklist_receipts
-  ADD KEY idx_quicklist_receipt_item (organization_id,item_id,linked_at);
+  ADD KEY idx_quicklist_receipt_item (item_id,linked_at);
 
 ALTER TABLE daily_quicklist_receipts
   DROP INDEX uq_quicklist_receipt_item,
