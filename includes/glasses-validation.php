@@ -193,13 +193,13 @@ function glasses_validation_evaluate(PDO $pdo,array $device,string $sessionPubli
     });
 }
 
-function glasses_validation_get(PDO $pdo,array $device,string $sessionPublicId): array
+function glasses_validation_get(PDO $pdo,array $device,string $sessionPublicId,bool $evaluateIfMissing=false): ?array
 {
     $org=(int)$device['organization_id'];
     $session=glasses_build_session_row($pdo,$org,$sessionPublicId,false);
     glasses_build_assert_device_session($device,$session);
     $row=glasses_validation_for_session_row($pdo,$org,(int)$session['id'],false);
-    if(!$row)return glasses_validation_evaluate($pdo,$device,$sessionPublicId);
+    if(!$row)return $evaluateIfMissing?glasses_validation_evaluate($pdo,$device,$sessionPublicId):null;
     $full=glasses_validation_row($pdo,$org,(string)$row['public_id'],false);
     return glasses_validation_public($full);
 }

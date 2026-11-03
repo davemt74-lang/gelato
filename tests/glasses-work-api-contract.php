@@ -65,7 +65,14 @@ $device=glasses_authenticate_token($pdo,(string)$paired['deviceToken']);
 
 $beforeClub=(string)glasseswork_one($pdo,'SELECT status FROM kds_order_items WHERE organization_id=? AND pos_check_item_id=?',[$org,$clubLine]);
 $beforePickles=(string)glasseswork_one($pdo,'SELECT status FROM kds_order_items WHERE organization_id=? AND pos_check_item_id=?',[$org,$pickleLine]);
-$work=glasses_current_work($pdo,$device);
+$stale='2020-01-01 00:00:00.000000';
+$pdo->prepare('UPDATE glasses_devices SET last_seen_at=? WHERE organization_id=? AND id=?')->execute([$stale,$org,$device['id']]);
+$work=glasses_current_work($pdo,glasses_device_row($pdo,$org,(string)$device['public_id']));
+glasseswork_assert($work['device']['lastSeenAt']===$stale&&$work['device']['heartbeatAgeSeconds']>60
+    &&$work['device']['deviceOnline']===false,'Default work projection preserves the offline device heartbeat.');
+glasseswork_assert((string)glasseswork_one($pdo,'SELECT last_seen_at FROM glasses_devices WHERE organization_id=? AND id=?',[$org,$device['id']])===$stale,'Default work projection cannot update the physical device.');
+$deviceWork=glasses_current_work($pdo,glasses_authenticate_token($pdo,(string)$paired['deviceToken']),true);
+glasseswork_assert($deviceWork['device']['lastSeenAt']!==$stale&&$deviceWork['device']['deviceOnline']===true,'Paired-device work still records a real device heartbeat.');
 
 glasseswork_assert($work['assignmentRequired']===false,'Assigned glasses must receive station work.');
 glasseswork_assert((string)$work['station']['publicId']===(string)$sandwichStation['public_id'],'Work projection must be scoped to the assigned station.');

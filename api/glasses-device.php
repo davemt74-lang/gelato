@@ -71,7 +71,7 @@ try{
     }
 
     if($action==='current_work'){
-        $work=glasses_current_work($pdo,$device);
+        $work=glasses_current_work($pdo,$device,true);
         app_json_response(['ok'=>true,'work'=>$work,'serverTime'=>(new DateTimeImmutable())->format(DATE_ATOM)]);
     }
 
@@ -363,7 +363,8 @@ try{
     if($action==='validation.get'){
         $sessionPublicId=trim((string)($in['buildSessionPublicId']??''));
         if($sessionPublicId==='')throw new InvalidArgumentException('Build session is required.');
-        $validation=glasses_validation_get($pdo,$device,$sessionPublicId);
+        // Existing paired clients may use the first lookup to create a validation.
+        $validation=glasses_validation_get($pdo,$device,$sessionPublicId,true);
         app_json_response(['ok'=>true,'validation'=>$validation]);
     }
 

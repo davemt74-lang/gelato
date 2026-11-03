@@ -2,6 +2,8 @@
 
 Vision Lab V2 is Gelato's governed workspace for assigning AR glasses to people and turning production evidence into versioned model-training datasets.
 
+The Lab pools evidence and datasets across the restaurant account. Opening the Lab requires restaurant-wide glasses view. Managing its missions, datasets and releases requires restaurant-wide glasses management. The simulator and device tools continue to use their location grants.
+
 ## User ↔ glasses assignment
 
 Assignments are historical records, not a single user field on a device.
@@ -42,6 +44,8 @@ Mission targets include total samples, positive examples, negatives and hard exa
 
 Mission provenance supports manual, active-learning, drift, new-menu and other source references.
 
+Mission locations, stations and assigned devices must belong to the same restaurant account and agree on the kitchen route. A scoped mission accepts observations from that route.
+
 Employee training is intentionally separate from model training.
 
 ## Review queue
@@ -68,6 +72,8 @@ Approved samples can be assigned to train, validation or test splits. Freezing a
 - creates an immutable SHA-256 over the canonical manifest.
 
 Frozen datasets cannot be modified.
+
+Apply a governed group-aware split plan before selecting **Freeze**. If the draft changes afterward, apply a new plan for the current samples and splits before trying again.
 
 ## Dataset coverage
 

@@ -131,10 +131,42 @@ function glasses_vision_training_media_current_operator(PDO $pdo,int $org,?int $
     return $id===false?null:(int)$id;
 }
 
-function glasses_vision_training_media_store(PDO $pdo,int $org,array $input,int $actor): array
+function glasses_vision_training_media_store(PDO $pdo,int $org,array $input,int $actor,?array $scopedUploader=null): array
 {
     if(!glasses_vision_training_media_ready($pdo))throw new RuntimeException('Vision Lab V5 migration is not installed.');
     if((string)($input['consentBasis']??'')!=='training_media_opt_in')throw new InvalidArgumentException('Explicit training-media opt-in is required.');
+    if($scopedUploader!==null&&(!empty($input['missionPublicId'])||!empty($input['samplePublicId'])))
+        throw new DomainException('A location-scoped upload must create its own training sample.');
+
+    try{
+        $device=glasses_vision_training_media_resolve_device($pdo,$org,!empty($input['devicePublicId'])?(string)$input['devicePublicId']:null);
+        $build=glasses_vision_training_media_resolve_build($pdo,$org,!empty($input['buildSessionPublicId'])?(string)$input['buildSessionPublicId']:null);
+    }catch(InvalidArgumentException $e){
+        if($scopedUploader!==null)throw new DomainException('Training upload is outside your assigned location.');
+        throw $e;
+    }
+    if($build&&$device&&(int)$build['device_id']!==(int)$device['id'])throw new InvalidArgumentException('Build session does not belong to the selected glasses device.');
+    if(!$device&&$build){
+        $q=$pdo->prepare('SELECT * FROM glasses_devices WHERE organization_id=? AND id=? LIMIT 1');$q->execute([$org,(int)$build['device_id']]);$device=$q->fetch()?:null;
+    }
+    $captureLocation=$device?(int)$device['location_id']:null;
+    $captureStation=$device&&$device['station_id']!==null?(int)$device['station_id']:null;
+    if($build){
+        $q=$pdo->prepare('SELECT location_id,station_id FROM kds_order_items WHERE organization_id=? AND id=?');
+        $q->execute([$org,(int)$build['kds_order_item_id']]);$route=$q->fetch();
+        if(!$route)throw new InvalidArgumentException('Build route was not found.');
+        $binding=json_decode((string)($build['context_json']??'null'),true)['liveBinding']['order']??[];
+        $captureLocation=(int)$route['location_id'];
+        $captureStation=$binding['stationId']??($route['station_id']===null?null:(int)$route['station_id']);
+    }
+    if($scopedUploader!==null&&(!$device||$device['status']!=='active'||$device['revoked_at']!==null||$captureLocation!==(int)$device['location_id']
+        ||!operational_location_allowed($pdo,$scopedUploader,'glasses.view',$captureLocation)
+        ||!operational_location_allowed($pdo,$scopedUploader,'glasses.manage',$captureLocation)))
+        throw new DomainException('Training upload is outside your assigned location.');
+    $mission=glasses_vision_training_media_resolve_mission($pdo,$org,!empty($input['missionPublicId'])?(string)$input['missionPublicId']:null);
+    if($captureLocation!==null&&((isset($mission['location_id'])&&(int)$mission['location_id']!==$captureLocation)
+        ||(isset($mission['station_id'])&&(int)$mission['station_id']!==$captureStation)))
+        throw new InvalidArgumentException('Training media is outside the selected mission location or station.');
 
     $raw=(string)($input['imageBase64']??'');
     if(str_contains($raw,','))$raw=substr($raw,strpos($raw,',')+1);
@@ -160,13 +192,6 @@ function glasses_vision_training_media_store(PDO $pdo,int $org,array $input,int 
     $captureGroup=mb_substr(trim((string)($input['captureGroup']??'')),0,120)?:null;
     $burstIndex=isset($input['burstIndex'])?max(0,(int)$input['burstIndex']):null;
 
-    $device=glasses_vision_training_media_resolve_device($pdo,$org,!empty($input['devicePublicId'])?(string)$input['devicePublicId']:null);
-    $build=glasses_vision_training_media_resolve_build($pdo,$org,!empty($input['buildSessionPublicId'])?(string)$input['buildSessionPublicId']:null);
-    if($build&&$device&&(int)$build['device_id']!==(int)$device['id'])throw new InvalidArgumentException('Build session does not belong to the selected glasses device.');
-    if(!$device&&$build){
-        $q=$pdo->prepare("SELECT * FROM glasses_devices WHERE organization_id=? AND id=? LIMIT 1");$q->execute([$org,(int)$build['device_id']]);$device=$q->fetch()?:null;
-    }
-    $mission=glasses_vision_training_media_resolve_mission($pdo,$org,!empty($input['missionPublicId'])?(string)$input['missionPublicId']:null);
     $operator=glasses_vision_training_media_current_operator($pdo,$org,$device?(int)$device['id']:null,$capturedAt);
 
     $sample=null;
@@ -175,7 +200,12 @@ function glasses_vision_training_media_store(PDO $pdo,int $org,array $input,int 
         if(!$sample)throw new InvalidArgumentException('Vision training sample was not found.');
     }
 
-    return glasses_transaction($pdo,function()use($pdo,$org,$input,$actor,$bytes,$size,$mime,$ext,$width,$height,$annotations,$annotationCheck,$quality,$sha,$pHash,$capturedAt,$captureGroup,$burstIndex,$device,$build,$mission,$operator,$sample):array{
+    return glasses_transaction($pdo,function()use($pdo,$org,$input,$actor,$bytes,$size,$mime,$ext,$width,$height,$annotations,$annotationCheck,$quality,$sha,$pHash,$capturedAt,$captureGroup,$burstIndex,$device,$build,$mission,$operator,$sample,$scopedUploader):array{
+        if($scopedUploader!==null){
+            $q=$pdo->prepare("SELECT id FROM glasses_devices WHERE organization_id=? AND id=? AND location_id=? AND status='active' AND revoked_at IS NULL FOR UPDATE");
+            $q->execute([$org,(int)$device['id'],(int)$device['location_id']]);
+            if(!$q->fetchColumn())throw new DomainException('Training upload is outside your assigned location.');
+        }
         $public=glasses_public_id('vision-media');
 
         if(!$sample){
@@ -233,11 +263,12 @@ function glasses_vision_training_media_store(PDO $pdo,int $org,array $input,int 
             throw $e;
         }
 
-        $exactQ=$pdo->prepare("SELECT public_id FROM glasses_vision_training_media WHERE organization_id=? AND sha256=? AND id<>? AND ".glasses_vision_media_retained_sql()." ORDER BY id DESC LIMIT 20");
-        $exactQ->execute([$org,$sha,$mediaId]);$exact=$exactQ->fetchAll(PDO::FETCH_COLUMN);
-
-        $near=[];
-        if($pHash!==null){
+        $exact=[];$near=[];
+        if($scopedUploader===null){
+            $exactQ=$pdo->prepare("SELECT public_id FROM glasses_vision_training_media WHERE organization_id=? AND sha256=? AND id<>? AND ".glasses_vision_media_retained_sql()." ORDER BY id DESC LIMIT 20");
+            $exactQ->execute([$org,$sha,$mediaId]);$exact=$exactQ->fetchAll(PDO::FETCH_COLUMN);
+        }
+        if($scopedUploader===null&&$pHash!==null){
             $pq=$pdo->prepare("SELECT public_id,perceptual_hash FROM glasses_vision_training_media WHERE organization_id=? AND id<>? AND perceptual_hash IS NOT NULL AND ".glasses_vision_media_retained_sql()." ORDER BY id DESC LIMIT 500");
             $pq->execute([$org,$mediaId]);
             foreach($pq->fetchAll() as $row){
@@ -260,11 +291,11 @@ function glasses_vision_training_media_row(PDO $pdo,int $org,string $publicId,bo
 {
     $q=$pdo->prepare("SELECT m.*,s.public_id sample_public_id,tm.public_id mission_public_id,d.public_id device_public_id,d.display_name device_name,u.display_name operator_name,b.public_id build_public_id
       FROM glasses_vision_training_media m
-      LEFT JOIN glasses_vision_training_samples s ON s.id=m.sample_id
-      LEFT JOIN glasses_vision_training_missions tm ON tm.id=m.mission_id
-      LEFT JOIN glasses_devices d ON d.id=m.device_id
-      LEFT JOIN users u ON u.id=m.operator_user_id
-      LEFT JOIN glasses_build_sessions b ON b.id=m.build_session_id
+      LEFT JOIN glasses_vision_training_samples s ON s.id=m.sample_id AND s.organization_id=m.organization_id
+      LEFT JOIN glasses_vision_training_missions tm ON tm.id=m.mission_id AND tm.organization_id=m.organization_id
+      LEFT JOIN glasses_devices d ON d.id=m.device_id AND d.organization_id=m.organization_id
+      LEFT JOIN users u ON u.id=m.operator_user_id AND EXISTS (SELECT 1 FROM organization_memberships om WHERE om.user_id=u.id AND om.organization_id=m.organization_id)
+      LEFT JOIN glasses_build_sessions b ON b.id=m.build_session_id AND b.organization_id=m.organization_id
       WHERE m.organization_id=? AND m.public_id=? LIMIT 1".($forUpdate?' FOR UPDATE':''));
     $q->execute([$org,$publicId]);$row=$q->fetch();
     if(!$row)throw new InvalidArgumentException('Vision training media was not found.');

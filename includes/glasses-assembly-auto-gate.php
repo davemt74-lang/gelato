@@ -37,7 +37,7 @@ function glasses_assembly_auto_observation_validate(PDO $pdo,array $device,array
     $threshold=(float)($meta['requestedThreshold']??0);
     if(!is_finite($confidence)||!is_finite($threshold)||$threshold<0.40||$threshold>0.99)
         throw new DomainException('Automatic observation confidence policy is invalid.');
-    $assignment=glasses_vision_model_assignment($pdo,$device,$buildSessionPublicId,$detector);
+    $assignment=glasses_vision_model_assignment($pdo,$device,$buildSessionPublicId,$detector,false);
     if(($assignment['action']??null)!=='apply'||($assignment['compatibility']['compatible']??null)!==true)
         throw new DomainException('No approved governed model applies to this build.');
     if(strtolower((string)($assignment['package']['artifactSha256']??''))!==$sha

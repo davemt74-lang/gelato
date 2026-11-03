@@ -15,17 +15,17 @@ function fm8d9_observation(string $message,string $source='Gelato Vision Lab rev
     return ['ok'=>true,'data'=>['answer'=>$message,
         'source'=>$source]];
 }
-function fm8d9_read_allowed(array $actor):bool
+function fm8d9_read_allowed(array $actor,?PDO $pdo=null):bool
 {
-    return app_has_permission('glasses.view',$actor);
+    return glasses_vision_lab_org_access($pdo,$actor,'glasses.view');
 }
-function fm8d9_governance_allowed(array $actor):bool
+function fm8d9_governance_allowed(array $actor,?PDO $pdo=null):bool
 {
-    return app_has_permission('glasses.view',$actor)&&app_has_permission('glasses.manage',$actor);
+    return fm8d9_read_allowed($actor,$pdo)&&glasses_vision_lab_org_access($pdo,$actor,'glasses.manage');
 }
 function fm8d9_review_queue(PDO $pdo,array $actor):array
 {
-    if(!fm8d9_read_allowed($actor))throw new DomainException('Vision review access denied.');
+    if(!fm8d9_read_allowed($actor,$pdo))throw new DomainException('Vision review access denied.');
     if(!glasses_vision_lab_ready($pdo))return fm8d9_observation('Vision review schema is not installed.');
     $samples=glasses_vision_lab_samples($pdo,(int)$actor['organization_id']);
     $counts=['needs_adjudication'=>0,'pending'=>0,'approved'=>0,'rejected'=>0];
@@ -51,7 +51,7 @@ function fm8d9_review_queue(PDO $pdo,array $actor):array
 }
 function fm8d9_sample(PDO $pdo,array $actor,array $args):array
 {
-    if(!fm8d9_read_allowed($actor))throw new DomainException('Vision review access denied.');
+    if(!fm8d9_read_allowed($actor,$pdo))throw new DomainException('Vision review access denied.');
     if(!glasses_vision_lab_ready($pdo))return fm8d9_observation('Vision review schema is not installed.');
     $ref=trim((string)($args['sample_public_id']??''));
     if($ref===''||mb_strlen($ref,'UTF-8')>100
@@ -68,7 +68,7 @@ function fm8d9_sample(PDO $pdo,array $actor,array $args):array
 }
 function fm8d9_quality(PDO $pdo,array $actor):array
 {
-    if(!fm8d9_read_allowed($actor))throw new DomainException('Vision QA access denied.');
+    if(!fm8d9_read_allowed($actor,$pdo))throw new DomainException('Vision QA access denied.');
     if(!glasses_vision_annotation_qa_ready($pdo))
         return fm8d9_observation('Vision annotation QA schema is not installed.');
     $qa=glasses_vision_annotation_qa_analyze($pdo,(int)$actor['organization_id']);
@@ -86,7 +86,7 @@ function fm8d9_quality(PDO $pdo,array $actor):array
 }
 function fm8d9_release_candidates(PDO $pdo,array $actor):array
 {
-    if(!fm8d9_governance_allowed($actor))
+    if(!fm8d9_governance_allowed($actor,$pdo))
         throw new DomainException('Vision model release governance access denied.');
     $catalog=glasses_v11_model_rc_catalog($pdo,(int)$actor['organization_id']);
     if(!($catalog['ready']??false))
@@ -107,6 +107,7 @@ function fm8d9_release_candidates(PDO $pdo,array $actor):array
 }
 function fm8d9_catalogue(array $principal):array
 {
+    if(!app_has_permission('glasses.view',$principal))return [];
     if(!fm8d9_read_allowed($principal))return [];
     $read=static fn(array $actor,array $args):bool=>fm8d9_read_allowed($actor);
     $governance=static fn(array $actor,array $args):bool=>fm8d9_governance_allowed($actor);

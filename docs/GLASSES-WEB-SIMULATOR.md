@@ -44,7 +44,9 @@ Live mode is backed by the real Gelato POS/KDS/AR build system.
 
 The browser does **not** receive or store a glasses bearer token. A logged-in Gelato user selects an existing active glasses device; the server validates organization, location, AR-glasses access, and write authority before using the same domain functions as the device API.
 
-Read access requires `glasses.view`. Live state-changing actions require both `glasses.manage` and `kds.update` at the device location.
+Live kitchen work requires both `glasses.view` and `kds.view` at the selected location. Live build and shadow evaluation actions also require `glasses.manage` and `kds.update`. Virtual displays keep their separate Kitchen Display update controls.
+
+Browser polling reads the physical device's recorded heartbeat. Only the authenticated device can refresh that heartbeat. Loading a model in the browser reads the governed assignment without creating a device assignment record. Reading validation returns the existing result or no result until an operator explicitly evaluates the build. **Start Shadow** opens an evaluation run and requires live write access.
 
 ## Live data path
 
@@ -419,6 +421,4 @@ For each shadow frame:
 
 Shadow telemetry never contains camera image bytes.
 
-The simulator reports current shadow frame count, disagreement rate, critical mismatch rate, and whether the accumulated run currently satisfies the canary gate.
-
-**Complete Shadow Run** closes the run explicitly. Completion alone does not promote a model. Rollout activation remains a separate governed action and will reject comparison-aware challengers unless a completed passing shadow run exists.
+The simulator reports shadow frame count, disagreement rate and critical mismatch rate. Run the camera over representative ingredient work before choosing **Complete Shadow Run**. The completed evidence summary counts distinct frames with detections and indicates whether a manager can review the run for canary in Vision Models.

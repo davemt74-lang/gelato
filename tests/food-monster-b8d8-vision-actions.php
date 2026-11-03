@@ -4,6 +4,7 @@ require_once dirname(__DIR__).'/includes/bootstrap.php';
 require_once dirname(__DIR__).'/includes/agent-workspace-core.php';
 require_once dirname(__DIR__).'/includes/food-monster-llm.php';
 require_once dirname(__DIR__).'/includes/food-monster-b8d3-tool-runtime.php';
+require_once __DIR__.'/glasses-vision-lab-auth-fixture.php';
 
 $checks=0;
 function b8d8_check(bool $ok,string $why):void {
@@ -26,8 +27,7 @@ $pdo->prepare("INSERT INTO users (email,password_hash,first_name,last_name,displ
 $uid=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO organization_memberships (organization_id,user_id,status)
     VALUES (?,?,'active')")->execute([$org,$uid]);
-$actor=['id'=>$uid,'organization_id'=>$org,'display_name'=>'Vision Manager',
-    'permissions'=>['glasses.view','glasses.manage']];
+$actor=vision_lab_test_grant($pdo,$org,$uid,['glasses.view','glasses.manage'])+['display_name'=>'Vision Manager'];
 b8d8_check(gaw_ready($pdo)&&glasses_vision_lab_ready($pdo)&&fm8d8_receipts_ready($pdo),
     'Agent Chat, Vision Lab and durable agent receipt schemas upgraded');
 $room=(string)gaw_create_thread($pdo,$org,$uid,'text','Vision routine actions')['public_id'];
@@ -173,7 +173,8 @@ b8d8_check(($denied['data']['status']??'')==='denied'
     'freshly revoked authority prevents model-requested write');
 $pdo->prepare("INSERT INTO organizations (name,status,timezone) VALUES (?,'active','America/Phoenix')")
     ->execute(['Other Vision '.$slug]);$otherOrg=(int)$pdo->lastInsertId();
-$otherActor=array_replace($viewer,['organization_id'=>$otherOrg]);
+$pdo->prepare("INSERT INTO organization_memberships (organization_id,user_id,status) VALUES (?,?,'active')")->execute([$otherOrg,$uid]);
+$otherActor=vision_lab_test_grant($pdo,$otherOrg,$uid,['glasses.view']);
 $foreignMissions=fm8d8_list_missions($pdo,$otherActor);
 $foreignDatasets=fm8d8_list_datasets($pdo,$otherActor);
 b8d8_check(str_contains($foreignMissions['data']['answer'],'No Vision Lab collection missions')
@@ -184,4 +185,22 @@ try{fm8d8_create_mission($pdo,$actor,$otherContext,['title'=>'Forged context']);
 catch(DomainException){$forged=true;}
 b8d8_check($forged&&b8d8_count($pdo,'glasses_vision_training_missions',$org)===2,
     'forged thread fails canonical read and creates no mission');
+$pdo->prepare("INSERT INTO locations (organization_id,name,status) VALUES (?,'Scoped Vision Location','active')")->execute([$org]);
+$location=(int)$pdo->lastInsertId();
+$pdo->prepare('UPDATE user_roles SET location_id=? WHERE membership_id=?')->execute([$location,$actor['membership_id']]);
+$scoped=fm8d2_refresh_operator($pdo,$actor);
+b8d8_check($scoped!==null&&app_has_permission('glasses.manage',$scoped),'Location assignment retains local management permission.');
+b8d8_check(fm8d8_vision_catalogue($scoped,$context)===[]&&fm8d9_catalogue($scoped)===[]
+    &&fm8d10_catalogue($scoped,$context)===[]&&!isset(fm8d7_vision_catalogue($scoped)['get_vision_lab_overview']),
+    'Location-only grants cannot discover the pooled Vision Lab aliases.');
+$denied=false;
+try{fm8d8_list_missions($pdo,$scoped);}catch(DomainException){$denied=true;}
+b8d8_check($denied,'The already registered mission-list operation rechecks current location scope.');
+$denied=false;
+try{fm8d8_create_mission($pdo,$scoped,$context,['title'=>'Unauthorized pooled mission']);}catch(DomainException){$denied=true;}
+b8d8_check($denied,'Location-only management cannot create a pooled mission through Food Monster.');
+require_once dirname(__DIR__).'/includes/food-monster-unified-knowledge.php';
+$vision=fmuk_evidence($pdo,$scoped,'Show Vision Lab missions',false,false,['vision_lab']);
+b8d8_check($vision['topics']===[]&&str_contains($vision['context'],'NOT AUTHORIZED'),'Unified Food Monster evidence uses the same pooled scope.');
+
 echo 'food-monster-b8d8-vision-actions-ok assertions='.$checks."\n";

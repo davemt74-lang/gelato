@@ -21,23 +21,22 @@ require_once __DIR__.'/glasses-cook-ux.php';
 /** A read-only virtual display for a location or KDS station; no hardware pairing. */
 function glasses_simulator_virtual_devices(PDO $pdo,array $user): array
 {
-    if(!app_has_permission('glasses.view',$user))return [];
+    if(!app_has_permission('glasses.view',$user)||!app_has_permission('kds.view',$user))return [];
     $org=(int)$user['organization_id'];
     $q=$pdo->prepare("SELECT id,name FROM locations WHERE organization_id=? AND status='active' ORDER BY id");
     $q->execute([$org]);
     $out=[];
     foreach($q->fetchAll(PDO::FETCH_ASSOC) as $location){
         $id=(int)$location['id'];
-        if(!operational_location_allowed($pdo,$user,'glasses.view',$id))continue;
+        if(!operational_location_allowed($pdo,$user,'glasses.view',$id)
+            ||!operational_location_allowed($pdo,$user,'kds.view',$id))continue;
         $base=[
             'displayName'=>'Browser preview · All stations',
             'platform'=>'browser_preview','status'=>'active','locationId'=>$id,
             'locationName'=>(string)$location['name'],
             'stationPublicId'=>null,'stationName'=>'All kitchen stations',
             'simulatorWritable'=>false,'virtualPreview'=>true,
-            'kitchenWritable'=>app_has_permission('kds.view',$user)&&app_has_permission('kds.update',$user)
-                &&operational_location_allowed($pdo,$user,'kds.view',$id)
-                &&operational_location_allowed($pdo,$user,'kds.update',$id)
+            'kitchenWritable'=>operational_location_allowed($pdo,$user,'kds.update',$id)
         ];
         $out[]=['publicId'=>'preview:'.$id.':all']+$base;
         $stations=$pdo->prepare("SELECT public_id,name FROM kds_stations WHERE organization_id=? AND location_id=? AND status='active' ORDER BY name,id");
@@ -103,7 +102,14 @@ function glasses_simulator_preview_work(PDO $pdo,array $device): array
 
 function glasses_simulator_can_write(array $user): bool
 {
-    return app_has_permission('glasses.manage',$user) && app_has_permission('kds.update',$user);
+    return app_has_permission('glasses.manage',$user) && app_has_permission('kds.view',$user)
+        && app_has_permission('kds.update',$user);
+}
+
+function glasses_simulator_assert_kitchen_view(PDO $pdo,array $user,array $device): void
+{
+    if(!operational_location_allowed($pdo,$user,'kds.view',(int)$device['location_id']))
+        throw new DomainException('Kitchen Display access is not assigned at this restaurant location.');
 }
 
 function glasses_simulator_devices(PDO $pdo,array $user): array
@@ -115,12 +121,11 @@ function glasses_simulator_devices(PDO $pdo,array $user): array
         if((string)($device['status']??'')!=='active')continue;
         $locationId=(int)($device['locationId']??0);
         if($locationId<1||!operational_location_allowed($pdo,$user,'glasses.view',$locationId))continue;
-        $device['kitchenWritable']=app_has_permission('kds.view',$user)&&app_has_permission('kds.update',$user)
-            &&operational_location_allowed($pdo,$user,'kds.view',$locationId)
+        $canViewKitchen=operational_location_allowed($pdo,$user,'kds.view',$locationId);
+        $device['kitchenWritable']=$canViewKitchen
             &&operational_location_allowed($pdo,$user,'kds.update',$locationId);
-        $device['simulatorWritable']=glasses_simulator_can_write($user)
-            && operational_location_allowed($pdo,$user,'glasses.manage',$locationId)
-            && operational_location_allowed($pdo,$user,'kds.update',$locationId);
+        $device['simulatorWritable']=$device['kitchenWritable']
+            &&operational_location_allowed($pdo,$user,'glasses.manage',$locationId);
         $out[]=$device;
     }
     return $out;
@@ -139,6 +144,7 @@ function glasses_simulator_device(PDO $pdo,array $user,string $publicId,bool $wr
     if(!app_has_permission('glasses.view',$user)||!operational_location_allowed($pdo,$user,'glasses.view',$locationId))
         throw new DomainException('AR glasses access is not assigned at this restaurant location.');
     if($write){
+        glasses_simulator_assert_kitchen_view($pdo,$user,$row);
         if(!glasses_simulator_can_write($user)
             ||!operational_location_allowed($pdo,$user,'glasses.manage',$locationId)
             ||!operational_location_allowed($pdo,$user,'kds.update',$locationId)){
@@ -276,7 +282,7 @@ function glasses_simulator_kds_command(PDO $pdo,array $user,array $device,array 
         if($decision==='operator_reversed'&&!preg_match('/^[a-f0-9]{32}$/D',$referenceToken))
             throw new InvalidArgumentException('A valid original approval is required to undo.');
         // Verify the ingredient against live KDS menu assembly data, never recipe steps.
-        $work=glasses_current_work($pdo,$device);
+        $work=glasses_current_work($pdo,$device,false);
         $matches=array_values(array_filter((array)($work['items']??[]),
             static fn(array $row):bool=>(string)($row['kdsItemPublicId']??'')===$itemPublicId));
         if(count($matches)!==1)
@@ -361,7 +367,7 @@ function glasses_simulator_work_with_notes(PDO $pdo,array $device): array
 {
     $work=!empty($device['virtual_preview'])
         ? glasses_simulator_preview_work($pdo,$device)
-        : glasses_current_work($pdo,$device);
+        : glasses_current_work($pdo,$device,false);
     $items=(array)($work['items']??[]);
     if(!$items)return $work;
     $ids=array_values(array_unique(array_filter(array_map(
@@ -395,9 +401,12 @@ function glasses_simulator_dispatch(PDO $pdo,array $user,array $in): array
     $action=trim((string)($in['action']??''));
     $write=in_array($action,[
         'build.start','build.observe','build.confirm','build.resolve_unexpected',
-        'validation.evaluate','handoff.prepare','handoff.expo','vision.shadow_report','vision.shadow_complete'
+        'validation.evaluate','handoff.prepare','handoff.expo',
+        'vision.shadow_assignment','vision.shadow_report','vision.shadow_complete'
     ],true);
     $device=glasses_simulator_device($pdo,$user,(string)($in['devicePublicId']??''),$write);
+    if(in_array($action,['work','build.get','validation.get','vision.model_assignment','vision.profile'],true))
+        glasses_simulator_assert_kitchen_view($pdo,$user,$device);
     // Runtime IDs are device-bound and never grant the selected employee's privileges.
     $runtimePublicId=trim((string)($in['runtimePublicId']??''));
     if($runtimePublicId!=='')glasses_employee_runtime_assert_binding($pdo,$user,$runtimePublicId,$device);
@@ -478,25 +487,28 @@ function glasses_simulator_dispatch(PDO $pdo,array $user,array $in): array
     if($action==='vision.model_assignment'){
         $detector=trim((string)($in['detectorName']??''));
         if($detector==='')throw new InvalidArgumentException('Detector name is required.');
-        return ['assignment'=>glasses_vision_model_assignment($pdo,$device,$session,$detector)];
+        return ['assignment'=>glasses_vision_model_assignment($pdo,$device,$session,$detector,false)];
     }
     if($action==='vision.profile'){
         $detector=trim((string)($in['detectorName']??''));
         if($detector==='')throw new InvalidArgumentException('Detector name is required.');
         return ['profile'=>glasses_vision_profile_for_build($pdo,$device,$session,$detector)];
     }
-    if($action==='vision.shadow_assignment'){
-        $detector=trim((string)($in['detectorName']??''));
-        if($detector==='')throw new InvalidArgumentException('Detector name is required.');
-        return ['shadow'=>glasses_vision_shadow_assignment($pdo,$device,$session,$detector)];
-    }
-    if($action==='vision.shadow_report'){
-        return ['shadow'=>glasses_vision_shadow_report($pdo,$device,$session,$in)];
-    }
-    if($action==='vision.shadow_complete'){
-        $run=trim((string)($in['shadowRunPublicId']??''));
-        if($run==='')throw new InvalidArgumentException('Shadow run is required.');
-        return ['shadow'=>glasses_vision_shadow_complete($pdo,$device,$session,$run)];
+    if(in_array($action,['vision.shadow_assignment','vision.shadow_report','vision.shadow_complete'],true)){
+        return glasses_transaction($pdo,function()use($pdo,$device,$session,$action,$in):array{
+            glasses_build_lock_current_session($pdo,$device,$session);
+            if($action==='vision.shadow_assignment'){
+                $detector=trim((string)($in['detectorName']??''));
+                if($detector==='')throw new InvalidArgumentException('Detector name is required.');
+                return ['shadow'=>glasses_vision_shadow_assignment($pdo,$device,$session,$detector)];
+            }
+            if($action==='vision.shadow_report'){
+                return ['shadow'=>glasses_vision_shadow_report($pdo,$device,$session,$in,true)];
+            }
+            $run=trim((string)($in['shadowRunPublicId']??''));
+            if($run==='')throw new InvalidArgumentException('Shadow run is required.');
+            return ['shadow'=>glasses_vision_shadow_complete($pdo,$device,$session,$run)];
+        });
     }
     if($action==='build.observe'){
         return ['buildSession'=>glasses_simulator_observe($pdo,$device,$user,$session,$in)];
@@ -512,7 +524,7 @@ function glasses_simulator_dispatch(PDO $pdo,array $user,array $in): array
         return ['buildSession'=>glasses_build_resolve_unexpected($pdo,$device,$session,$key)];
     }
     if($action==='validation.get'){
-        return ['validation'=>glasses_validation_get($pdo,$device,$session)];
+        return ['validation'=>glasses_validation_get($pdo,$device,$session,false)];
     }
     if($action==='validation.evaluate'){
         return ['validation'=>glasses_validation_evaluate($pdo,$device,$session)];

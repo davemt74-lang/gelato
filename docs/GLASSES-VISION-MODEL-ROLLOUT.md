@@ -368,15 +368,16 @@ Frame keys are idempotent for a shadow run.
 
 ### Default canary gate
 
-A completed shadow run is eligible for canary when:
+A completed shadow run can be reviewed for canary when:
 
-- at least 30 evaluated frames were persisted;
-- critical mismatch rate is at most 10%;
-- challenger correction wins are greater than or equal to champion correction wins.
+- at least 30 distinct recorded frames contain a detection from either model.
+- Matches and unmatched counts reconcile with both models' detection totals.
+- At most 10% of detection-bearing frames show a critical mismatch.
+- Reported challenger correction wins are at least as numerous as champion wins.
 
-The offline model-comparison gate still applies first.
+At the assigned station, load the champion and challenger against the same live camera feed. Keep collecting while real ingredients pass through the frame, then choose **Complete Shadow Run**. Empty camera frames and repeats of the same frame key do not count toward 30.
 
-A comparison-aware target cannot be activated from draft to canary until at least one completed shadow run for that rollout passes this live gate.
+In **Vision Models**, choose **Activate**, review the completed run and its champion, challenger and evidence counts, then document why the results are ready for canary. Gelato checks the evidence digest against that exact rollout and records the decision with the manager's identity. Reported correction alignment is telemetry and does not replace the manager's review. The offline comparison gate and the V11 Section 9 gate still apply to their respective workflows.
 
 Legacy packages without comparison metadata retain their existing rollout behavior.
 

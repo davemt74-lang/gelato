@@ -509,6 +509,10 @@ function fmuk_evidence(PDO $pdo,array $user,string $question,bool $voice=false,b
                 [$lines,$used]=fmuk_render_menu(fmuk_menu_items($pdo,$org,$question));
             }elseif($topic==='vision_lab'){
                 require_once __DIR__.'/glasses-vision-lab.php';
+                if(!glasses_vision_lab_org_access($pdo,$user,'glasses.view')){
+                    $sections[]=$topic.': NOT AUTHORIZED for this speaker/account; do not disclose records.';
+                    continue;
+                }
                 [$lines,$used]=fmuk_render_vision_lab(glasses_vision_lab_catalog($pdo,$user));
             }elseif($topic==='recipes'){
                 require_once __DIR__.'/restaurant-brain.php';

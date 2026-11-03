@@ -171,7 +171,7 @@ $boot=[
 <script>
 window.GELATO_VISION_MODELS=<?=json_encode($boot,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE|JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT)?>;
 </script>
-<script src="assets/js/glasses-vision-models.js?v=20260928-recovery1"></script>
+<script src="assets/js/glasses-vision-models.js?v=20261103-shadow-review"></script>
 <script src="js/universal-admin-page-shell.js?v=20261103-e1"></script>
 </body>
 </html>

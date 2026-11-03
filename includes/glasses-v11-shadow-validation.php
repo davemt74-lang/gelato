@@ -56,8 +56,9 @@ function glasses_v11_shadow_assign(PDO $pdo,array $device,string $sessionPublicI
 }
 
 function glasses_v11_shadow_report(PDO $pdo,array $device,string $sessionPublicId,array $input): array {
+  return glasses_transaction($pdo,function()use($pdo,$device,$sessionPublicId,$input):array{
   $result=glasses_vision_shadow_report($pdo,$device,$sessionPublicId,$input);
-  $org=(int)$device['organization_id'];$runPublic=trim((string)($input['shadowRunPublicId']??''));$frameKey=trim((string)($input['frameKey']??''));
+  $org=(int)$device['organization_id'];$runPublic=trim((string)($input['shadowRunPublicId']??''));$frameKey=mb_substr(trim((string)($input['frameKey']??'')),0,160,'UTF-8');
   $q=$pdo->prepare("SELECT e.id FROM glasses_vision_shadow_events e JOIN glasses_vision_shadow_runs r ON r.id=e.shadow_run_id AND r.organization_id=e.organization_id WHERE e.organization_id=? AND r.public_id=? AND e.frame_key=? LIMIT 1");
   $q->execute([$org,$runPublic,$frameKey]);$eventId=(int)$q->fetchColumn();
   if($eventId>0&&empty($result['idempotent'])){
@@ -67,6 +68,7 @@ function glasses_v11_shadow_report(PDO $pdo,array $device,string $sessionPublicI
       ->execute([$cl,$xl,!empty($input['championTimeout'])?1:0,!empty($input['challengerTimeout'])?1:0,!empty($input['championRuntimeError'])?1:0,!empty($input['challengerRuntimeError'])?1:0,$org,$eventId]);
   }
   return $result;
+  });
 }
 
 function glasses_v11_shadow_validation_row(PDO $pdo,int $org,string $publicId): array {

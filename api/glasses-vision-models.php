@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/glasses-vision-models.php';
+require_once __DIR__.'/../includes/operational-access.php';
 
 $user=app_require_auth();
 $pdo=app_pdo();
@@ -27,6 +28,16 @@ try{
     $in=app_json_input();
     app_verify_request_csrf($in);
     $action=(string)($in['action']??'');
+    $publicId=(string)($in['publicId']??'');
+    $managementScope=operational_location_scope($pdo,$user,'glasses.manage');
+    $rollout=null;
+    if($action==='rollout.create'){
+        $locationId=(int)($in['locationId']??0);
+        glasses_vision_require_rollout_scope($managementScope,$locationId>0?$locationId:null);
+    }elseif(in_array($action,['rollout.shadow_evidence','rollout.activate','rollout.advance','rollout.advance_override','rollout.pause','rollout.rollback'],true)){
+        $rollout=glasses_vision_model_rollout_row($pdo,$org,$publicId,false);
+        glasses_vision_require_rollout_scope($managementScope,$rollout['location_id']!==null?(int)$rollout['location_id']:null);
+    }
 
     if($action==='package.create'){
         $package=glasses_vision_model_package_create($pdo,$org,$in,(int)$user['id']);
@@ -34,6 +45,7 @@ try{
     }
 
     if($action==='package.retire'){
+        glasses_vision_require_rollout_scope($managementScope,null);
         $package=glasses_vision_model_package_retire($pdo,$org,(string)($in['publicId']??''),(int)$user['id']);
         app_json_response(['ok'=>true,'package'=>$package]);
     }
@@ -43,8 +55,15 @@ try{
         app_json_response(['ok'=>true,'rollout'=>$rollout],201);
     }
 
-    if($action==='rollout.activate'){
-        $rollout=glasses_vision_model_rollout_activate($pdo,$org,(string)($in['publicId']??''),(int)$user['id']);
+    if(in_array($action,['rollout.shadow_evidence','rollout.activate'],true)){
+        if($action==='rollout.shadow_evidence'){
+            $gate=glasses_vision_shadow_rollout_gate($pdo,$org,(int)$rollout['id']);
+            if(!$gate['eligible'])
+                throw new InvalidArgumentException('Complete a passing shadow run with at least 30 detection-bearing frames before reviewing activation.');
+            app_json_response(['ok'=>true,'shadowEvidence'=>$gate['summary']]);
+        }
+        $review=is_array($in['shadowReview']??null)?$in['shadowReview']:[];
+        $rollout=glasses_vision_model_rollout_activate($pdo,$org,$publicId,(int)$user['id'],$review);
         app_json_response(['ok'=>true,'rollout'=>$rollout]);
     }
 
@@ -75,6 +94,8 @@ try{
     }
 
     if(str_starts_with($action,'drift.')){
+        $incident=glasses_vision_drift_incident_row($pdo,$org,$publicId);
+        glasses_vision_require_rollout_scope($managementScope,(int)$incident['location_id']);
         $incident=glasses_vision_drift_recovery_action(
             $pdo,$org,(string)($in['publicId']??''),substr($action,6),$in,(int)$user['id']
         );
@@ -82,6 +103,8 @@ try{
     }
 
     app_json_response(['ok'=>false,'message'=>'Unsupported vision model action.'],422);
+}catch(DomainException $e){
+    app_json_response(['ok'=>false,'message'=>$e->getMessage()],403);
 }catch(InvalidArgumentException $e){
     app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);
 }catch(Throwable $e){

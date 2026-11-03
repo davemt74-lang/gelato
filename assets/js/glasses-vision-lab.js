@@ -12,4 +12,13 @@ el.importCorrected.addEventListener('click',async function(){try{var m=choose(ca
 el.dataset.addEventListener('click',async function(){try{var name=prompt('Dataset name:','Kitchen Vision'),version=prompt('Version label:','v1');if(!name||!version)return;await post({action:'dataset.create',name:name,versionLabel:version});toast('Dataset draft created.');}catch(x){toast(x.message,true);}});
 el.assignments.addEventListener('click',function(ev){var b=ev.target.closest('[data-release]');if(b)post({action:'assignment.release',publicId:b.dataset.release,reason:'manual release'}).catch(function(x){toast(x.message,true);});});
 el.samples.addEventListener('click',function(ev){var peer=ev.target.closest('[data-peer-review]');if(peer){var decision=prompt('Peer decision: approve, reject, relabel, or needs_adjudication','approve');if(!decision)return;var p={action:'sample.review',publicId:peer.dataset.peerReview,decision:decision};if(decision==='relabel'){var label=prompt('Canonical label:');if(!label)return;p.canonicalLabel=label;}post(p).catch(function(x){toast(x.message,true);});return;}var add=ev.target.closest('[data-dataset-add]');if(add){var ds=choose(catalog.datasets||[],function(x){return x.name+' '+x.versionLabel+' ('+x.status+')';});if(!ds||ds.status!=='draft')return;var split=prompt('Dataset split: train, val, or test','train')||'train';post({action:'dataset.add_sample',datasetPublicId:ds.publicId,samplePublicId:add.dataset.datasetAdd,split:split}).catch(function(x){toast(x.message,true);});return;}var b=ev.target.closest('[data-review]');if(!b)return;var decision=b.dataset.review,p={action:'sample.review',publicId:b.dataset.id,decision:decision};if(decision==='relabel'){var label=prompt('Canonical label:');if(!label)return;p.canonicalLabel=label;}post(p).catch(function(x){toast(x.message,true);});});
-el.datasets.addEventListener('click',function(ev){var b=ev.target.closest('[data-freeze]');if(b&&confirm('Freeze this dataset? It becomes immutable.'))post({action:'dataset.freeze',publicId:b.dataset.freeze}).catch(function(x){toast(x.message,true);});});render();})();
+el.datasets.addEventListener('click',async function(ev){
+  var b=ev.target.closest('button[data-freeze]');
+  if(!b||b.disabled||!confirm('Freeze this dataset? It becomes immutable.'))return;
+  b.disabled=true;
+  try{
+    await post({action:'dataset.freeze',datasetPublicId:b.dataset.freeze});
+    toast('Dataset frozen.');
+  }catch(x){toast(x.message,true);}
+  finally{b.disabled=false;}
+});render();})();

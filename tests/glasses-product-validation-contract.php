@@ -106,7 +106,12 @@ $device=glasses_authenticate_token($pdo,(string)$paired['deviceToken']);
 $session=glasses_build_start($pdo,$device,(string)$kds['public_id'],null);
 $sessionPublic=(string)$session['publicId'];
 
+gvci_assert(glasses_validation_get($pdo,$device,$sessionPublic)===null,'A read-only lookup before evaluation has no result.');
+gvci_assert((int)gvci_one($pdo,'SELECT COUNT(*) FROM glasses_product_validations WHERE organization_id=?',[$org])===0
+    &&(int)gvci_one($pdo,'SELECT COUNT(*) FROM glasses_validation_events WHERE organization_id=?',[$org])===0,
+    'A read-only lookup cannot create a validation or event.');
 $initial=glasses_validation_evaluate($pdo,$device,$sessionPublic);
+gvci_assert(glasses_validation_get($pdo,$device,$sessionPublic)===$initial,'A read-only lookup returns the persisted validation.');
 gvci_assert((string)$initial['status']==='pending','Empty build must validate as pending, not ready.');
 gvci_assert($initial['nextStage']===null,'Expo must not appear before required components are accounted for.');
 gvci_assert((bool)$initial['summary']['allIngredientsAccountedFor']===false,'Initial validation must not claim all ingredients are accounted for.');

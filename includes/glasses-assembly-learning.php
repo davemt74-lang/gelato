@@ -38,6 +38,8 @@ function glasses_assembly_learning_submit(PDO $pdo,array $user,array $input): ar
         throw new DomainException('Only the assigned employee or an authorized glasses manager may submit training feedback.');
     if(!operational_location_allowed($pdo,$user,'glasses.view',(int)$device['location_id']))
         throw new DomainException('This restaurant location is not accessible.');
+    if(!operational_location_allowed($pdo,$user,'kds.view',(int)$device['location_id']))
+        throw new DomainException('Kitchen Display access is not assigned at this restaurant location.');
     if((int)($device['station_id']??0)<1)
         throw new DomainException('Assign this pair of glasses to a kitchen station first.');
     $feedback=(string)($input['feedbackType']??'');
@@ -47,7 +49,7 @@ function glasses_assembly_learning_submit(PDO $pdo,array $user,array $input): ar
     $key=trim((string)($input['ingredientKey']??''));
     if($kdsId===''||strlen($kdsId)>80||$key===''||strlen($key)>190)
         throw new InvalidArgumentException('Select a current KDS item and configured ingredient.');
-    $work=glasses_current_work($pdo,$device);
+    $work=glasses_current_work($pdo,$device,false);
     $selected=null;
     foreach((array)($work['items']??[]) as $item)
         if(hash_equals((string)($item['kdsItemPublicId']??''),$kdsId)){$selected=$item;break;}

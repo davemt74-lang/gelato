@@ -21,9 +21,9 @@ function fm8d8_receipts_ready(PDO $pdo):bool
         WHERE table_schema=DATABASE() AND table_name='food_monster_agent_action_receipts'");
     return (int)$q->fetchColumn()===1;
 }
-function fm8d8_can_manage(array $actor):bool
+function fm8d8_can_manage(array $actor,?PDO $pdo=null):bool
 {
-    return app_has_permission('glasses.view',$actor)&&app_has_permission('glasses.manage',$actor);
+    return glasses_vision_lab_org_access($pdo,$actor,'glasses.view')&&glasses_vision_lab_org_access($pdo,$actor,'glasses.manage');
 }
 function fm8d8_lock_actor(PDO $pdo,int $org,int $uid):void
 {
@@ -36,7 +36,7 @@ function fm8d8_lock_actor(PDO $pdo,int $org,int $uid):void
 }
 function fm8d8_create_mission(PDO $pdo,array $actor,array $context,array $args):array
 {
-    if(!fm8d8_can_manage($actor))throw new DomainException('Vision Lab management is not permitted.');
+    if(!fm8d8_can_manage($actor,$pdo))throw new DomainException('Vision Lab management is not permitted.');
     $org=(int)$actor['organization_id'];$uid=(int)$actor['id'];
     $title=trim((string)($args['title']??''));
     $desc=trim((string)($args['description']??''));
@@ -73,7 +73,7 @@ function fm8d8_create_mission(PDO $pdo,array $actor,array $context,array $args):
 }
 function fm8d8_create_dataset(PDO $pdo,array $actor,array $context,array $args):array
 {
-    if(!fm8d8_can_manage($actor))throw new DomainException('Vision Lab management is not permitted.');
+    if(!fm8d8_can_manage($actor,$pdo))throw new DomainException('Vision Lab management is not permitted.');
     $org=(int)$actor['organization_id'];$uid=(int)$actor['id'];
     $name=trim((string)($args['name']??''));
     $version=trim((string)($args['version_label']??''));
@@ -122,7 +122,7 @@ function fm8d8_read_observe(string $answer):array
 }
 function fm8d8_list_missions(PDO $pdo,array $actor):array
 {
-    if(!app_has_permission('glasses.view',$actor))throw new DomainException('Vision Lab read is not permitted.');
+    if(!glasses_vision_lab_org_access($pdo,$actor,'glasses.view'))throw new DomainException('Vision Lab read is not permitted.');
     if(!glasses_vision_lab_ready($pdo))
         return fm8d8_read_observe('Vision Lab is not installed or upgraded.');
     $rows=glasses_vision_lab_missions($pdo,(int)$actor['organization_id']);
@@ -137,7 +137,7 @@ function fm8d8_list_missions(PDO $pdo,array $actor):array
 }
 function fm8d8_list_datasets(PDO $pdo,array $actor):array
 {
-    if(!app_has_permission('glasses.view',$actor))throw new DomainException('Vision Lab read is not permitted.');
+    if(!glasses_vision_lab_org_access($pdo,$actor,'glasses.view'))throw new DomainException('Vision Lab read is not permitted.');
     if(!glasses_vision_lab_ready($pdo))
         return fm8d8_read_observe('Vision Lab is not installed or upgraded.');
     $rows=glasses_vision_lab_datasets($pdo,(int)$actor['organization_id']);
@@ -152,7 +152,8 @@ function fm8d8_list_datasets(PDO $pdo,array $actor):array
 function fm8d8_vision_catalogue(array $principal,array $context=[]):array
 {
     if(!app_has_permission('glasses.view',$principal))return [];
-    $view=static fn(array $actor,array $args):bool=>app_has_permission('glasses.view',$actor);
+    if(!glasses_vision_lab_org_access(null,$principal,'glasses.view'))return [];
+    $view=static fn(array $actor,array $args):bool=>glasses_vision_lab_org_access(null,$actor,'glasses.view');
     $manage=static fn(array $actor,array $args):bool=>fm8d8_can_manage($actor);
     $none=['type'=>'object','properties'=>new stdClass(),'additionalProperties'=>false];
     $list=[

@@ -18,10 +18,9 @@ function fm8d10_ready(PDO $pdo):bool
         WHERE table_schema=DATABASE() AND table_name='food_monster_agent_approval_requests'");
     return (int)$q->fetchColumn()===1;
 }
-function fm8d10_can_review(array $actor):bool
+function fm8d10_can_review(array $actor,?PDO $pdo=null):bool
 {
-    return app_has_permission('glasses.view',$actor)
-        &&app_has_permission('glasses.manage',$actor);
+    return fm8d8_can_manage($actor,$pdo);
 }
 function fm8d10_sample_row(PDO $pdo,int $org,string $ref,bool $lock=false):?array
 {
@@ -57,7 +56,7 @@ function fm8d10_observation(string $answer,?array $approval=null):array
 }
 function fm8d10_propose(PDO $pdo,array $actor,array $context,array $args):array
 {
-    if(!fm8d10_can_review($actor))
+    if(!fm8d10_can_review($actor,$pdo))
         throw new DomainException('Vision review management is not authorized.');
     $org=(int)$actor['organization_id'];$uid=(int)$actor['id'];
     $ref=trim((string)($args['sample_public_id']??''));
@@ -121,7 +120,7 @@ function fm8d10_propose(PDO $pdo,array $actor,array $context,array $args):array
 }
 function fm8d10_pending(PDO $pdo,array $actor,string $thread):?array
 {
-    if(!fm8d10_can_review($actor)||!fm8d10_ready($pdo)
+    if(!fm8d10_can_review($actor,$pdo)||!fm8d10_ready($pdo)
        ||!preg_match('/^agent-[a-f0-9]{20}$/D',$thread))return null;
     $q=$pdo->prepare("SELECT * FROM food_monster_agent_approval_requests
         WHERE organization_id=? AND actor_user_id=? AND thread_public_id=?
@@ -139,7 +138,7 @@ function fm8d10_decide(PDO $pdo,array $principal,string $public,string $decision
         throw new InvalidArgumentException('Invalid approval selection.');
     if(!fm8d10_ready($pdo))throw new DomainException('Approval schema is not installed.');
     $actor=fm8d2_refresh_operator($pdo,$principal);
-    if(!$actor||!fm8d10_can_review($actor)
+    if(!$actor||!fm8d10_can_review($actor,$pdo)
        ||(int)$actor['id']!==(int)$principal['id']
        ||(int)$actor['organization_id']!==(int)$principal['organization_id'])
         throw new DomainException('Approval authority was revoked or cannot be verified.');
@@ -148,7 +147,7 @@ function fm8d10_decide(PDO $pdo,array $principal,string $public,string $decision
     try{
         fm8d8_lock_actor($pdo,$org,$uid);
         $fresh=fm8d2_refresh_operator($pdo,$principal);
-        if(!$fresh||!fm8d10_can_review($fresh))
+        if(!$fresh||!fm8d10_can_review($fresh,$pdo))
             throw new DomainException('Current review permission is no longer valid.');
         $q=$pdo->prepare("SELECT * FROM food_monster_agent_approval_requests
             WHERE organization_id=? AND actor_user_id=? AND public_id=?
@@ -202,6 +201,7 @@ function fm8d10_decide(PDO $pdo,array $principal,string $public,string $decision
 }
 function fm8d10_catalogue(array $principal,array $context=[]):array
 {
+    if(!app_has_permission('glasses.view',$principal)||!app_has_permission('glasses.manage',$principal))return [];
     if(!fm8d10_can_review($principal)
        ||!preg_match('/^agent-[a-f0-9]{20}$/D',(string)($context['threadId']??''))
        ||!preg_match('/^msg-[a-f0-9]{20}$/D',(string)($context['messageId']??'')))

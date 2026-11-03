@@ -129,7 +129,7 @@ function glasses_work_focus_index(array $items): ?int
     return 0;
 }
 
-function glasses_current_work(PDO $pdo,array $device,bool $recordHeartbeat=true): array
+function glasses_current_work(PDO $pdo,array $device,bool $recordHeartbeat=false): array
 {
     if((string)($device['status']??'')!=='active'||!empty($device['revoked_at']))
         throw new InvalidArgumentException('Glasses device is not active.');

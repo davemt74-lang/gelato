@@ -46,6 +46,35 @@ $blocked=false;try{glasses_vision_lab_add_dataset_sample($pdo,$org,(string)$data
 $ops=glasses_vision_ops_devices($pdo,$org);vl_assert(($ops[0]['wearer']['userId']??null)===$cook,'Vision Operations must expose current wearer assignment.');
 $released=glasses_vision_lab_release_device($pdo,$org,(string)$assignment['publicId'],'shift ended',$admin);vl_assert($released['released']===true,'Glasses assignment must retain explicit release history.');
 $catalog=glasses_vision_lab_catalog($pdo,['id'=>$admin,'organization_id'=>$org,'permissions'=>['*'],'is_owner_role'=>1]);vl_assert($catalog['ready']&&count($catalog['missions'])===1&&count($catalog['datasets'])===1,'Vision Lab catalog must expose assignments, missions and datasets.');
+
+$pdo->prepare("INSERT INTO organizations (name,status,timezone) VALUES (?,'active','America/Phoenix')")->execute(['Other Vision Lab '.$slug]);
+$foreignOrg=(int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO locations (organization_id,name,status) VALUES (?,'Private Foreign Kitchen','active')")->execute([$foreignOrg]);
+$foreignLoc=(int)$pdo->lastInsertId();
+$blocked=false;
+try{glasses_vision_lab_create_mission($pdo,$org,['title'=>'Foreign reference','locationId'=>$foreignLoc],$admin);}
+catch(InvalidArgumentException $e){$blocked=$e->getMessage()==='Vision mission location was not found.';}
+vl_assert($blocked,'A mission cannot link a foreign location or disclose its name.');
+
+$otherStation=kds_station_save($pdo,$org,$loc,['name'=>'Other Line','targetSeconds'=>300],$admin);
+$otherMission=glasses_vision_lab_create_mission($pdo,$org,['title'=>'Other line evidence','stationPublicId'=>$otherStation['public_id']],$admin);
+vl_assert($otherMission['locationName']==='Lab Kitchen','A station-only mission resolves its owned location.');
+$blocked=false;
+try{glasses_vision_lab_queue_observation($pdo,$org,'vision-lab-obs',$otherMission['publicId'],$admin);}
+catch(InvalidArgumentException $e){$blocked=str_contains($e->getMessage(),'outside the selected mission');}
+vl_assert($blocked,'A mission cannot attach an observation from another station.');
+kds_reassign($pdo,$org,$kds,$otherStation['public_id'],$admin);
+$requeued=glasses_vision_lab_queue_observation($pdo,$org,'vision-lab-obs',$mission['publicId'],$admin);
+vl_assert($requeued['publicId']===$sample['publicId']&&$requeued['missionPublicId']===$mission['publicId'],'Rerouting does not change the capture station or duplicate reviewed evidence.');
+$blocked=false;
+try{glasses_vision_lab_import_corrected($pdo,$org,'missing-vision-mission',$admin);}
+catch(InvalidArgumentException $e){$blocked=str_contains($e->getMessage(),'mission was not found');}
+vl_assert($blocked,'An unknown mission cannot silently turn a scoped import into an organization-wide import.');
+
+$legacy=glasses_vision_lab_create_mission($pdo,$org,['title'=>'Legacy mislinked mission'],$admin);
+$pdo->prepare('UPDATE glasses_vision_training_missions SET location_id=? WHERE organization_id=? AND public_id=?')->execute([$foreignLoc,$org,$legacy['publicId']]);
+vl_assert(glasses_vision_lab_mission($pdo,$org,$legacy['publicId'])['locationName']===null,'Existing invalid foreign references are redacted on read.');
+
 $page=file_get_contents(__DIR__.'/../glasses-vision-lab.php');$api=file_get_contents(__DIR__.'/../api/glasses-vision-lab.php');$js=file_get_contents(__DIR__.'/../assets/js/glasses-vision-lab.js');
 vl_assert((str_contains($page,'Vision Lab V2')||str_contains($page,'Vision Lab V3')||str_contains($page,'Vision Lab V4')||str_contains($page,'Vision Lab V5')||str_contains($page,'Vision Lab V6')||str_contains($page,'Vision Lab V7')||str_contains($page,'Vision Lab V8')||str_contains($page,'Vision Lab V9'))&&str_contains($page,'Training Missions')&&str_contains($page,'Review Queue'),'Vision Lab must expose its core governed work areas.');
 vl_assert(str_contains($api,'app_verify_request_csrf')&&str_contains($api,"sample.import_corrected"),'Vision Lab mutations must be CSRF protected and support corrected evidence intake.');
