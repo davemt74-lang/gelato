@@ -71,7 +71,7 @@ v112_assert($excluded['trainingEligibility']==='excluded'&&$excluded['trainingEx
 $wrongDevice=false;try{glasses_v11_production_evidence_capture($pdo,$other,['trainingSessionPublicId'=>$session['public_id'],'imageBase64'=>$image,'capturedAt'=>gmdate('c')],$actor);}catch(InvalidArgumentException){$wrongDevice=true;}
 v112_assert($wrongDevice,'A training session cannot be reused by another glasses device.');
 
-glasses_training_session_end($pdo,$org,$session['public_id'],'completed','done',$actor);
+glasses_training_session_end($pdo,$org,$session['public_id'],'completed','done',$device);
 $endedBlocked=false;try{glasses_v11_production_evidence_capture($pdo,$device,['trainingSessionPublicId'=>$session['public_id'],'imageBase64'=>$image,'capturedAt'=>gmdate('c')],$actor);}catch(InvalidArgumentException){$endedBlocked=true;}
 v112_assert($endedBlocked,'Evidence capture must require an active training session.');
 

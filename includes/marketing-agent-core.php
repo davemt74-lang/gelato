@@ -202,17 +202,19 @@ function mac_execute_pending(PDO $pdo,int $org,int $uid,array $user,array $propo
 
 function marketing_agent_handle(PDO $pdo,array $user,array $input): array
 {
+    gac_request_context($input,$pdo,$user);
     mac_require_read($user);$org=(int)$user['organization_id'];$uid=(int)$user['id'];$message=trim((string)($input['message']??''));
     if($message===''||mb_strlen($message,'UTF-8')>2400)throw new InvalidArgumentException('Ask Gelato a marketing question no longer than 2,400 characters.');
     $context=is_array($input['pageContext']??null)?$input['pageContext']:[];$pending=gac_pending_get('marketing',$org,$uid);
     if(gac_is_confirm($message)){
-        if(!$pending)throw new InvalidArgumentException('There is no pending Marketing Agent action to confirm.');
-        try{$result=mac_execute_pending($pdo,$org,$uid,$user,$pending);}catch(Throwable $e){gac_pending_clear('marketing',$org,$uid);throw $e;}
-        gac_pending_clear('marketing',$org,$uid);app_audit($pdo,$org,$uid,'marketing.agent_action_confirmed','marketing_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);
+        $pending=gac_pending_claim('marketing',$org,$uid,$input);
+        try{$result=mac_execute_pending($pdo,$org,$uid,$user,$pending);}catch(Throwable $e){gac_pending_clear('marketing',$org,$uid,(string)$pending['id']);throw $e;}
+        gac_pending_clear('marketing',$org,$uid,(string)$pending['id']);app_audit($pdo,$org,$uid,'marketing.agent_action_confirmed','marketing_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);
         return ['ok'=>true]+$result;
     }
-    if(gac_is_cancel($message)&&$pending){
-        gac_pending_clear('marketing',$org,$uid);app_audit($pdo,$org,$uid,'marketing.agent_action_discarded','marketing_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);
+    if(gac_is_cancel($message)){
+        $pending=gac_pending_claim('marketing',$org,$uid,$input);
+        gac_pending_clear('marketing',$org,$uid,(string)$pending['id']);app_audit($pdo,$org,$uid,'marketing.agent_action_discarded','marketing_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);
         return ['ok'=>true,'skill'=>'marketing.action_cancelled','answer'=>'Cancelled. I did not change the promotion or public site.','data'=>['cancelledProposal'=>$pending['id']],'sources'=>['Marketing Agent']];
     }
 

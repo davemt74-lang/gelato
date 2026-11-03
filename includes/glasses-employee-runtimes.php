@@ -80,9 +80,9 @@ function glasses_employee_runtime_row(PDO $pdo,array $user,string $publicId,bool
     return $row;
 }
 
-function glasses_employee_runtime_assert_binding(PDO $pdo,array $user,string $publicId,array $device): array
+function glasses_employee_runtime_assert_binding(PDO $pdo,array $user,string $publicId,array $device,?array $lockedRow=null): array
 {
-    $row=glasses_employee_runtime_row($pdo,$user,$publicId);
+    $row=$lockedRow??glasses_employee_runtime_row($pdo,$user,$publicId);
     if($row['status']!=='active'||(int)($row['active_slot']??0)!==1||
        $row['device_status']!=='active'||!empty($row['device_revoked_at'])||
        $row['employee_status']!=='active'||!empty($row['employee_archived_at'])||
@@ -409,11 +409,12 @@ function glasses_employee_runtime_profile_confirm(PDO $pdo,array $user,string $p
 /** Start an EXISTING assigned training program; never create a parallel program. */
 function glasses_employee_runtime_training_start(PDO $pdo,array $user,string $runtimePublicId,string $assignmentPublicId): array
 {
-    if(!app_has_permission('glasses.manage',$user))
-        throw new DomainException('Training session management requires glasses.manage.');
+    return glasses_training_transaction($pdo,(int)$user['organization_id'],function()use($pdo,$user,$runtimePublicId,$assignmentPublicId):array{
+    $user=glasses_training_require_manager($pdo,(int)$user['organization_id'],(int)$user['id']);
     $row=glasses_employee_runtime_row($pdo,$user,$runtimePublicId);
-    $device=glasses_device_row($pdo,(int)$user['organization_id'],(string)$row['device_public_id']);
-    glasses_employee_runtime_assert_binding($pdo,$user,$runtimePublicId,$device);
+    $device=glasses_device_row($pdo,(int)$user['organization_id'],(string)$row['device_public_id'],true);
+    $row=glasses_employee_runtime_row($pdo,$user,$runtimePublicId,true);
+    glasses_employee_runtime_assert_binding($pdo,$user,$runtimePublicId,$device,$row);
     if(!glasses_training_ready($pdo))throw new DomainException('Existing V11 training programs are unavailable.');
     $org=(int)$user['organization_id'];
     $assignment=glasses_training_assignment($pdo,$org,$assignmentPublicId);
@@ -426,17 +427,19 @@ function glasses_employee_runtime_training_start(PDO $pdo,array $user,string $ru
         throw new DomainException('Training is assigned to a different kitchen station.');
     return glasses_training_session_start($pdo,$org,$assignmentPublicId,$device,(int)$user['id'],
         ['runtimePublicId'=>$runtimePublicId,'source'=>'glasses_employee_runtime']);
+    });
 }
 
 function glasses_employee_runtime_training_end(PDO $pdo,array $user,string $runtimePublicId,string $sessionPublicId,string $status): array
 {
-    if(!app_has_permission('glasses.manage',$user))
-        throw new DomainException('Training session management requires glasses.manage.');
     if(!in_array($status,['completed','interrupted'],true))
         throw new InvalidArgumentException('Training session status must be completed or interrupted.');
+    return glasses_training_transaction($pdo,(int)$user['organization_id'],function()use($pdo,$user,$runtimePublicId,$sessionPublicId,$status):array{
+    $user=glasses_training_require_manager($pdo,(int)$user['organization_id'],(int)$user['id']);
     $row=glasses_employee_runtime_row($pdo,$user,$runtimePublicId);
-    $device=glasses_device_row($pdo,(int)$user['organization_id'],(string)$row['device_public_id']);
-    glasses_employee_runtime_assert_binding($pdo,$user,$runtimePublicId,$device);
+    $device=glasses_device_row($pdo,(int)$user['organization_id'],(string)$row['device_public_id'],true);
+    $row=glasses_employee_runtime_row($pdo,$user,$runtimePublicId,true);
+    glasses_employee_runtime_assert_binding($pdo,$user,$runtimePublicId,$device,$row);
     $org=(int)$user['organization_id'];
     $session=glasses_training_session($pdo,$org,$sessionPublicId);
     $context=is_array($session['context']??null)?$session['context']:[];
@@ -444,7 +447,8 @@ function glasses_employee_runtime_training_end(PDO $pdo,array $user,string $runt
         (int)$session['device_id']!==(int)$row['device_id']||
         (string)($context['runtimePublicId']??'')!==$runtimePublicId)
         throw new DomainException('Training session does not belong to this runtime.');
-    return glasses_training_session_end($pdo,$org,$sessionPublicId,$status,'ended_from_glasses_runtime',(int)$user['id']);
+    return glasses_training_session_end_managed($pdo,$user,$sessionPublicId,$status,'ended_from_glasses_runtime');
+    });
 }
 
 /**

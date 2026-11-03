@@ -568,7 +568,7 @@
     root.innerHTML = messages.map((message) => `
       <article class="msg ${message.role === 'user' ? 'user' : 'agent'}">
         <div>
-          <div class="bubble">${esc(message.content)}${(() => {
+          <div class="bubble">${esc(message.content)}${(window.GelatoGlobalAgent?.readDetails?.(message.structured)||[]).map(detail => '<div class="result-card"><a href="'+esc(detail.url)+'">Open '+esc(detail.label)+' ↗</a></div>').join('')}${(() => {
             const nav=message.structured?.navigation || message.structured?.responseData?.navigation;
             return nav?.kind==='verified_internal_page'
               && /^[a-z][a-z0-9-]*\.php(?:#[a-z][a-z0-9-]*)?$/.test(String(nav.href||''))
@@ -579,6 +579,7 @@
       </article>
     `).join('');
     root.scrollTop = root.scrollHeight;
+    void window.GelatoGlobalAgent?.reviewMessages?.(active, messages);
     const structured = [...messages].reverse().find((message) => message.structured != null);
     $('#resultBody').innerHTML = structured
       ? structuredCard(structured.structured, structured.skill, structured.sources || [])

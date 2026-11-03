@@ -232,14 +232,16 @@ function foh_status_intent(string $message): ?string
 
 function front_of_house_agent_handle(PDO $pdo,array $user,array $input): array
 {
+    gac_request_context($input,$pdo,$user);
     foh_require_read($user);$org=(int)$user['organization_id'];$uid=(int)$user['id'];$message=trim((string)($input['message']??''));if($message===''||mb_strlen($message,'UTF-8')>2400)throw new InvalidArgumentException('Ask Gelato a front-of-house question no longer than 2,400 characters.');
     $context=is_array($input['pageContext']??null)?$input['pageContext']:[];$pending=gac_pending_get('front_of_house',$org,$uid);
     if(gac_is_confirm($message)){
-        if(!$pending)throw new InvalidArgumentException('There is no pending Front of House action to confirm.');
-        try{$result=foh_execute_pending($pdo,$user,$pending);}catch(Throwable $e){gac_pending_clear('front_of_house',$org,$uid);throw $e;}
-        gac_pending_clear('front_of_house',$org,$uid);app_audit($pdo,$org,$uid,'front_of_house.agent_action_confirmed','front_of_house_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);return ['ok'=>true]+$result;
+        $pending=gac_pending_claim('front_of_house',$org,$uid,$input);
+        try{$result=foh_execute_pending($pdo,$user,$pending);}catch(Throwable $e){gac_pending_clear('front_of_house',$org,$uid,(string)$pending['id']);throw $e;}
+        gac_pending_clear('front_of_house',$org,$uid,(string)$pending['id']);app_audit($pdo,$org,$uid,'front_of_house.agent_action_confirmed','front_of_house_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);return ['ok'=>true]+$result;
     }
-    if(gac_is_cancel($message)&&$pending){gac_pending_clear('front_of_house',$org,$uid);app_audit($pdo,$org,$uid,'front_of_house.agent_action_discarded','front_of_house_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);return ['ok'=>true,'skill'=>'front_of_house.action_cancelled','answer'=>'Cancelled. I did not change the reservation, waitlist, seating, or table state.','data'=>['cancelledProposal'=>$pending['id']],'sources'=>['Front of House Agent']];}
+    if(gac_is_cancel($message)){
+        $pending=gac_pending_claim('front_of_house',$org,$uid,$input);gac_pending_clear('front_of_house',$org,$uid,(string)$pending['id']);app_audit($pdo,$org,$uid,'front_of_house.agent_action_discarded','front_of_house_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);return ['ok'=>true,'skill'=>'front_of_house.action_cancelled','answer'=>'Cancelled. I did not change the reservation, waitlist, seating, or table state.','data'=>['cancelledProposal'=>$pending['id']],'sources'=>['Front of House Agent']];}
 
     $snapshot=foh_snapshot($pdo,$user,$context);$reservation=foh_find_reservation($snapshot['dashboard'],$message,$context);$table=foh_find_table($snapshot['dashboard'],$message,$context);$lower=mb_strtolower($message,'UTF-8');
 

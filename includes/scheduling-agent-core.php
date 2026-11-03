@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__ . '/agent-confirmation-core.php';
 
 final class SchedulingAgentPermissionException extends RuntimeException {}
 
@@ -81,21 +82,15 @@ function sac_selected_staff(PDO $pdo,int $org,int $userId,array $user,array $con
 }
 
 function sac_pending_key(int $org,int $userId): string{return $org.':'.$userId;}
-function sac_pending_get(int $org,int $userId): ?array
-{
-    $key=sac_pending_key($org,$userId);$row=$_SESSION['schedule_agent_pending'][$key]??null;
-    if(!is_array($row)||($row['expires']??0)<time()){unset($_SESSION['schedule_agent_pending'][$key]);return null;}
-    return $row;
-}
+function sac_pending_get(int $org,int $userId): ?array{return gac_pending_get('scheduling',$org,$userId);}
 function sac_pending_store(int $org,int $userId,string $type,array $payload,string $summary): array
 {
-    $row=['id'=>'sap-'.bin2hex(random_bytes(8)),'organizationId'=>$org,'userId'=>$userId,'type'=>$type,'payload'=>$payload,'summary'=>$summary,'expires'=>time()+600];
-    $_SESSION['schedule_agent_pending'][sac_pending_key($org,$userId)]=$row;return $row;
+    return gac_pending_store('scheduling',$org,$userId,$type,$payload,$summary);
 }
-function sac_pending_clear(int $org,int $userId): void{unset($_SESSION['schedule_agent_pending'][sac_pending_key($org,$userId)]);}
+function sac_pending_clear(int $org,int $userId,?string $expectedId=null): void{gac_pending_clear('scheduling',$org,$userId,$expectedId);}
 function sac_proposal_result(array $proposal,array $sources): array
 {
-    return ['ok'=>true,'skill'=>'schedule.action_proposal','answer'=>$proposal['summary']."\n\nReply Confirm to execute this change, or Cancel to discard it.",'data'=>['requiresConfirmation'=>true,'proposal'=>['id'=>$proposal['id'],'type'=>$proposal['type'],'summary'=>$proposal['summary'],'expiresAt'=>date(DATE_ATOM,(int)$proposal['expires'])]],'sources'=>$sources];
+    return gac_proposal_result($proposal,'schedule.action_proposal',$sources);
 }
 
 function sac_week_snapshot(PDO $pdo,int $org,string $week): array
@@ -404,6 +399,7 @@ function sac_execute_pending(PDO $pdo,int $org,int $userId,array $user,array $pr
 
 function scheduling_agent_handle(PDO $pdo,array $user,array $input): array
 {
+    gac_request_context($input,$pdo,$user);
     $org=(int)$user['organization_id'];$userId=(int)$user['id'];
     $message=trim((string)($input['message']??''));if($message===''||mb_strlen($message,'UTF-8')>1800)throw new InvalidArgumentException('Ask Gelato a scheduling question no longer than 1,800 characters.');
     if(!sac_view_all($user)&&!sac_view_self($user)&&!sac_has($user,'staff.view')&&!sac_has($user,'staff.manage'))throw new SchedulingAgentPermissionException('Scheduling or staff visibility permission is required.');
@@ -415,10 +411,12 @@ function scheduling_agent_handle(PDO $pdo,array $user,array $input): array
     $pending=sac_pending_get($org,$userId);
 
     if(preg_match('/^(?:confirm|yes|yes please|do it|go ahead|execute|apply)(?:\s+(?:it|that|change|action))?[.!]?$/i',$message)){
-        if(!$pending)throw new InvalidArgumentException('There is no pending Scheduling Agent action to confirm.');
-        $result=sac_execute_pending($pdo,$org,$userId,$user,$pending);sac_pending_clear($org,$userId);app_audit($pdo,$org,$userId,'schedule.agent_action_confirmed','schedule_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);return ['ok'=>true]+$result;
+        $pending=gac_pending_claim('scheduling',$org,$userId,$input);
+        try{$result=sac_execute_pending($pdo,$org,$userId,$user,$pending);}
+        catch(Throwable $e){sac_pending_clear($org,$userId,(string)$pending['id']);throw $e;}
+        sac_pending_clear($org,$userId,(string)$pending['id']);app_audit($pdo,$org,$userId,'schedule.agent_action_confirmed','schedule_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);return ['ok'=>true]+$result;
     }
-    if(preg_match('/^(?:cancel|cancel it|discard|never mind|nevermind|stop)[.!]?$/i',$message)&&$pending){sac_pending_clear($org,$userId);app_audit($pdo,$org,$userId,'schedule.agent_action_discarded','schedule_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);return ['ok'=>true,'skill'=>'schedule.action_cancelled','answer'=>'Cancelled. I did not change the schedule.','data'=>['cancelledProposal'=>$pending['id']],'sources'=>['Staff Scheduling']];}
+    if(gac_is_cancel($message)){$pending=gac_pending_claim('scheduling',$org,$userId,$input);sac_pending_clear($org,$userId,(string)$pending['id']);app_audit($pdo,$org,$userId,'schedule.agent_action_discarded','schedule_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);return ['ok'=>true,'skill'=>'schedule.action_cancelled','answer'=>'Cancelled. I did not change the schedule.','data'=>['cancelledProposal'=>$pending['id']],'sources'=>['Staff Scheduling']];}
 
     if($selectedShift&&preg_match('/\b(?:who can cover|who could cover|coverage candidates?|available to cover)\b/i',$message)){
         if(!$viewAll)throw new SchedulingAgentPermissionException('Schedule view permission is required to compare coverage candidates.');$candidates=[];

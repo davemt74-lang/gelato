@@ -236,18 +236,20 @@ function caa_execute_pending(PDO $pdo,int $org,int $uid,array $user,array $propo
 
 function catering_agent_actions_handle(PDO $pdo,array $user,array $input): array
 {
+    gac_request_context($input,$pdo,$user);
     $org=(int)$user['organization_id'];$uid=(int)$user['id'];
     caa_require($user,'catering.view','Catering view permission is required.');caa_require($user,'catering.agent','Catering Agent permission is required.');
     $message=trim((string)($input['message']??''));if($message===''||mb_strlen($message,'UTF-8')>1800)throw new InvalidArgumentException('Ask Gelato a catering question no longer than 1,800 characters.');
     $context=is_array($input['pageContext']??null)?$input['pageContext']:[];$operation=caa_context_operation($pdo,$org,$context);$pending=gac_pending_get('catering',$org,$uid);
 
     if(gac_is_confirm($message)){
-        if(!$pending)throw new InvalidArgumentException('There is no pending Catering Agent action to confirm.');
-        try{$result=caa_execute_pending($pdo,$org,$uid,$user,$pending);}catch(Throwable $e){gac_pending_clear('catering',$org,$uid);throw $e;}
-        gac_pending_clear('catering',$org,$uid);app_audit($pdo,$org,$uid,'catering.agent_action_confirmed','catering_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);return ['ok'=>true]+$result;
+        $pending=gac_pending_claim('catering',$org,$uid,$input);
+        try{$result=caa_execute_pending($pdo,$org,$uid,$user,$pending);}catch(Throwable $e){gac_pending_clear('catering',$org,$uid,(string)$pending['id']);throw $e;}
+        gac_pending_clear('catering',$org,$uid,(string)$pending['id']);app_audit($pdo,$org,$uid,'catering.agent_action_confirmed','catering_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);return ['ok'=>true]+$result;
     }
-    if(gac_is_cancel($message)&&$pending){
-        gac_pending_clear('catering',$org,$uid);app_audit($pdo,$org,$uid,'catering.agent_action_discarded','catering_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);
+    if(gac_is_cancel($message)){
+        $pending=gac_pending_claim('catering',$org,$uid,$input);
+        gac_pending_clear('catering',$org,$uid,(string)$pending['id']);app_audit($pdo,$org,$uid,'catering.agent_action_discarded','catering_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);
         return ['ok'=>true,'skill'=>'catering.action_cancelled','answer'=>'Cancelled. I did not change the catering operation.','data'=>['cancelledProposal'=>$pending['id']],'sources'=>['Catering Operations']];
     }
 

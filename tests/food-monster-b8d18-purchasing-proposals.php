@@ -1,5 +1,7 @@
 <?php
 declare(strict_types=1);
+if(PHP_SAPI!=='cli'){http_response_code(404);exit;}
+require_once __DIR__.'/hardening-agent-confirmation-test-support.php';
 
 function app_has_permission(string $permission,array $actor):bool
 {
@@ -66,6 +68,7 @@ b18c_invalid(static fn()=>fm8d18p_exact_order($db,7,'PO-8-PRIVATE'),'No unique e
 b18c_invalid(static fn()=>fm8d18p_exact_order($db,7,'PO-7'),'No unique exact purchase order');
 
 if(session_status()!==PHP_SESSION_ACTIVE&&!session_start())throw new RuntimeException('Test session unavailable');
+hac_test_context($db,$actor);
 $status=$catalogue['propose_purchase_order_status']['execute'];
 $receipt=$catalogue['propose_purchase_order_full_receipt']['execute'];
 $draft=$catalogue['propose_purchase_order_draft']['execute'];

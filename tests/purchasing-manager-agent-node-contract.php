@@ -8,6 +8,7 @@ $root=dirname(__DIR__);
 $nodes=pman_text($root.'/includes/agent-node-registry.php');
 $route=pman_text($root.'/api/agent-workspace.php');
 $core=pman_text($root.'/includes/purchasing-agent-core.php');
+$confirmation=pman_text($root.'/includes/agent-confirmation-core.php');
 $endpoint=pman_text($root.'/api/purchasing-agent.php');
 $context=pman_text($root.'/js/purchasing-agent-context.js');
 $loader=pman_text($root.'/js/global-add-canvas.js');
@@ -29,15 +30,24 @@ pman_assert(!str_contains($context,'vendor_name')&&!str_contains($context,'price
 pman_assert(str_contains($context,'GelatoAgentPageContext?.register?.(provider)'),'Purchasing must register with the shared main Agent context layer.');
 pman_assert(str_contains($loader,"page === 'purchasing.php'")&&str_contains($loader,'purchasing-agent-context.js'),'Shared Agent loader must install Purchasing context before Agent use.');
 
-pman_assert(str_contains($core,'pac_pending_store')&&str_contains($core,"'expires'=>time()+600"),'Purchasing writes must use short-lived server-side proposals.');
-pman_assert(str_contains($core,'Reply Confirm to execute this change, or Cancel to discard it.'),'Purchasing writes must require explicit confirmation.');
+pman_assert(str_contains($core,"gac_pending_store('purchasing',\$org,\$uid")
+    &&str_contains($confirmation,'int $ttl=600')
+    &&str_contains($confirmation,"'expires'=>time()+max(60,min(1800,\$ttl))"),
+    'Purchasing writes must use short-lived server-side proposals through the shared expiry contract.');
+pman_assert(str_contains($core,'gac_proposal_result(')
+    &&str_contains($core,"gac_pending_claim('purchasing',\$org,\$uid,\$input)")
+    &&str_contains($confirmation,'Reply Confirm to execute this change, or Cancel to discard it.'),
+    'Purchasing writes must require explicit confirmation of the exact reviewed proposal.');
 pman_assert(str_contains($core,"purchasing.agent_action_proposed")&&str_contains($core,"purchasing.agent_action_confirmed")&&str_contains($core,"purchasing.agent_action_discarded"),'Purchasing proposal lifecycle must be audited.');
 pman_assert(str_contains($core,"pac_require(\$user,'purchasing.manage'"),'PO writes must require purchasing.manage.');
 pman_assert(str_contains($core,"receiving.manage")&&str_contains($core,"receive_po_full"),'Receiving writes must require receiving.manage and a distinct confirmed action.');
 pman_assert(str_contains($core,'pac_guard_order')&&str_contains($core,'updatedAt'),'Selected PO writes must use optimistic concurrency protection.');
 pman_assert(str_contains($core,'purchasing_create_order')&&str_contains($core,'purchasing_submit')&&str_contains($core,'purchasing_receive'),'Confirmed actions must reuse canonical Purchasing functions.');
 pman_assert(str_contains($core,'no damage or shortage exceptions'),'Full receiving must explicitly state that damage/shortage exceptions are not being recorded.');
-pman_assert(str_contains($core,"'organizationId'=>\$org")&&str_contains($core,"'userId'=>\$uid")&&str_contains($core,'does not belong to your session'),'Pending Purchasing actions must be bound to the authenticated organization and user.');
+pman_assert(str_contains($confirmation,"'organizationId'=>\$organizationId,'userId'=>\$userId")
+    &&str_contains($confirmation,'gac_creation_binding($organizationId,$userId)')
+    &&str_contains($core,'does not belong to your session'),
+    'Pending Purchasing actions must be bound to the authenticated organization, user, and canonical conversation.');
 
 pman_assert(str_contains($endpoint,"require_once __DIR__.'/../includes/purchasing-agent-core.php'")&&str_contains($endpoint,'purchasing_agent_handle($pdo,$user,$input)'),'Purchasing endpoint must delegate to the confirmed-action core.');
 pman_assert(!str_contains($endpoint,'purchasing_create_order('),'HTTP endpoint must not directly create a PO before the confirmed-action core runs.');

@@ -11,6 +11,7 @@ declare(strict_types=1);
 // Stage its documented session contract without loading its execution code.
 require_once __DIR__.'/purchasing-orders.php';
 require_once __DIR__.'/agent-node-registry.php';
+require_once __DIR__.'/agent-confirmation-core.php';
 
 function fm8d18p_suggestion_lines(PDO $pdo,int $org,string $vendorId):array
 {
@@ -67,26 +68,15 @@ function fm8d18p_outstanding_signature(array $lines):string
 
 function fm8d18p_pending_get(int $org,int $uid):?array
 {
-    $key=$org.':'.$uid;
-    $row=$_SESSION['purchasing_agent_pending'][$key]??null;
-    if(!is_array($row)||($row['expires']??0)<time()){
-        unset($_SESSION['purchasing_agent_pending'][$key]);return null;
-    }
-    return $row;
+    return gac_pending_get('purchasing',$org,$uid);
 }
-
 function fm8d18p_pending_clear(int $org,int $uid):void
 {
-    unset($_SESSION['purchasing_agent_pending'][$org.':'.$uid]);
+    gac_pending_clear('purchasing',$org,$uid);
 }
-
 function fm8d18p_pending_store(int $org,int $uid,string $type,array $payload,string $summary):array
 {
-    $row=['id'=>'pap-'.bin2hex(random_bytes(8)),
-        'organizationId'=>$org,'userId'=>$uid,'type'=>$type,'payload'=>$payload,
-        'summary'=>$summary,'expires'=>time()+600];
-    $_SESSION['purchasing_agent_pending'][$org.':'.$uid]=$row;
-    return $row;
+    return gac_pending_store('purchasing',$org,$uid,$type,$payload,$summary);
 }
 
 function fm8d18p_can(array $actor,string $action):bool
@@ -153,7 +143,7 @@ function fm8d18p_propose(array $actor,string $type,array $payload,string $summar
             'answer'=>$summary."\n\nReply Confirm to proceed through the Purchasing Agent's existing approval workflow, or Cancel to discard it. Nothing has been changed yet.",
             'source'=>'Gelato Purchasing (server-verified proposal)',
             'requiresConfirmation'=>true,
-            'proposal'=>['id'=>$proposal['id'],'type'=>$type],
+            'proposal'=>gac_public_proposal($proposal),
         ]];
     }finally{
         if($opened&&session_status()===PHP_SESSION_ACTIVE)session_write_close();

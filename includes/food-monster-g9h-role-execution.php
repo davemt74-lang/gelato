@@ -8,6 +8,7 @@ declare(strict_types=1);
  */
 require_once __DIR__.'/food-monster-identity-authority.php';
 require_once __DIR__.'/agent-workspace-core.php';
+require_once __DIR__.'/user-accounts.php';
 
 function fm9h_owner_required(array $operator):void {
     if(!fm9a_is_super_admin_session($operator)
@@ -84,6 +85,27 @@ function fm9h_execute_role(PDO $pdo,array $operator,string $threadId):array {
     $org=(int)$operator['organization_id'];$uid=(int)$operator['id'];
     $pdo->beginTransaction();
     try {
+        // Use the same restaurant -> sorted users -> role order as the Roles API.
+        accounts_lock_org($pdo,$org);
+        $affected=accounts_role_user_ids($pdo,$org,(int)$grant['roleId']);
+        accounts_lock_users($pdo,array_merge([$uid],$affected));
+        $fresh=accounts_actor($pdo,$org,$uid,true);
+        $fresh['is_owner_role']=0;
+        foreach(accounts_roles($pdo,$org,(int)$fresh['membership_id']) as $role){
+            if($role['owner']){$fresh['is_owner_role']=1;break;}
+        }
+        // A cached approval never retains authority removed while this call waited.
+        fm9h_owner_required($fresh);
+        $currentGrant=fm9h_active_grant($fresh,$threadId);
+        if(!$currentGrant||!hash_equals((string)$grant['approvalId'],(string)$currentGrant['approvalId']))
+            throw new DomainException('A current role permission approval is required in this conversation.');
+        // The receipt makes one-use execution durable even if the session save is lost
+        // and a later legitimate role edit restores the old permission-state hash.
+        $q=$pdo->prepare("SELECT id FROM agent_messages WHERE organization_id=? AND user_id=?
+            AND JSON_UNQUOTE(JSON_EXTRACT(structured_json,'$.collection'))='fm9h_high_impact_execution'
+            AND JSON_UNQUOTE(JSON_EXTRACT(structured_json,'$.approvalId'))=? LIMIT 1");
+        $q->execute([$org,$uid,(string)$grant['approvalId']]);
+        if($q->fetchColumn())throw new DomainException('This role permission approval has already been executed.');
         $state=fm9h_role_state($pdo,$org,(int)$grant['roleId'],true);
         if(!hash_equals((string)$grant['version'],$state['version']))
             throw new DomainException('Role permissions changed since approval. Request a new approval.');
@@ -103,6 +125,13 @@ function fm9h_execute_role(PDO $pdo,array $operator,string $threadId):array {
             $q->execute([(int)$grant['roleId'],(int)$grant['permissionId']]);
             if($q->rowCount()!==1)throw new RuntimeException('Permission change was not applied.');
         }else throw new DomainException('Invalid approved operation.');
+        accounts_role_revoke_sessions($pdo,$org,(int)$grant['roleId']);
+        $newKeys=$state['keys'];
+        if($grant['operation']==='grant')$newKeys[]=(string)$grant['permission'];
+        else $newKeys=array_values(array_diff($newKeys,[(string)$grant['permission']]));
+        sort($newKeys,SORT_STRING);
+        app_audit($pdo,$org,$uid,'role.updated','role',(string)$grant['roleId'],
+            ['name'=>$state['name'],'permissions'=>$state['keys']],['name'=>$state['name'],'permissions'=>$newKeys]);
         $event=[
             'collection'=>'fm9h_high_impact_execution','kind'=>'permission_change',
             'state'=>'executed','executed'=>true,'roleId'=>(int)$grant['roleId'],

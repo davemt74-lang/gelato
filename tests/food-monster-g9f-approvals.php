@@ -1,5 +1,7 @@
 <?php
 declare(strict_types=1);
+if(PHP_SAPI!=='cli'){http_response_code(404);exit;}
+require_once __DIR__.'/hardening-agent-confirmation-test-support.php';
 function app_role_has_owner_authority(array $u):bool{return ($u['role_slug']??'')==='super_admin';}
 if(!function_exists('mb_strlen')){function mb_strlen(string $s,string $encoding='UTF-8'):int{return strlen($s);}}
 require __DIR__.'/../includes/food-monster-high-impact-approval.php';
@@ -7,22 +9,25 @@ function check_it(bool $b,string $m):void{if(!$b)throw new RuntimeException($m);
 session_start();
 $owner=['id'=>1,'organization_id'=>7,'role_slug'=>'super_admin'];
 $staff=['id'=>2,'organization_id'=>7,'role_slug'=>'employee'];
+$pdo=new PDO('sqlite::memory:');
+hac_test_context($pdo,$owner,['threadId'=>'agent-'.str_repeat('e',20)]);
 try{fm9f_approval_propose($staff,'major_purchase','Buy new oven','agent-'.str_repeat('e',20));check_it(false,'staff rejected');}
 catch(DomainException){check_it(true,'staff rejected');}
 try{fm9f_approval_propose($owner,'arbitrary_tool','Do anything','agent-'.str_repeat('e',20));check_it(false,'allowlist');}
 catch(InvalidArgumentException){check_it(true,'allowlist');}
 $p=fm9f_approval_propose($owner,'large_refund','Review refund proposal','agent-'.str_repeat('e',20));
 check_it($p['requiresApproval']&&!$p['executed'],'proposal never executes');
+$review=hac_test_review($pdo,$owner,'food_monster_high_impact');
 try{fm9f_approval_propose($owner,'large_refund','Try replacing prior approval','agent-'.str_repeat('e',20));check_it(false,'pending proposal protected');}
-catch(DomainException){check_it(true,'pending proposal protected');}
+catch(GacConfirmationConflict){check_it(true,'pending proposal protected');}
 try{fm9f_approval_decide($staff,$p['proposalId'],'approve');check_it(false,'staff decision denied');}
 catch(DomainException){check_it(true,'staff decision denied');}
-try{fm9f_approval_decide($owner,'gap-incorrect','approve');check_it(false,'wrong token denied');}
-catch(InvalidArgumentException){check_it(true,'wrong token denied');}
-$d=fm9f_approval_decide($owner,$p['proposalId'],'approve');
+try{fm9f_approval_decide($owner,'gap-incorrect','approve',$review);check_it(false,'wrong token denied');}
+catch(GacConfirmationConflict){check_it(true,'wrong token denied');}
+$d=fm9f_approval_decide($owner,$p['proposalId'],'approve',$review);
 check_it($d['decision']==='approve'&&!$d['executed'],'owner approval does not execute tool');
-try{fm9f_approval_decide($owner,$p['proposalId'],'approve');check_it(false,'replay blocked');}
-catch(InvalidArgumentException){check_it(true,'replay blocked');}
+try{fm9f_approval_decide($owner,$p['proposalId'],'approve',$review);check_it(false,'replay blocked');}
+catch(GacConfirmationConflict){check_it(true,'replay blocked');}
 
 
 // Audit regression: explicit chat parser cannot infer an arbitrary action.
@@ -47,5 +52,5 @@ check_it(str_contains($workspace,'fm9f_approval_chat_intent')
     &&str_contains($client,'const delegation=result?.data?.delegation;'),
     'Model-first chat retains the owner-only legacy approval gate');
 $p2=fm9f_approval_propose($owner,'large_refund','Review a refund proposal','agent-'.str_repeat('e',20));
-$d2=fm9f_approval_decide($owner,$p2['proposalId'],'reject');
+$d2=fm9f_approval_decide($owner,$p2['proposalId'],'reject',hac_test_review($pdo,$owner,'food_monster_high_impact'));
 check_it($d2['decision']==='reject'&&!$d2['executed'],'owner rejection is nonexecuting');

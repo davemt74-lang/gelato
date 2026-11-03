@@ -112,13 +112,7 @@ function fm8d3_catalogue(array $principal,array $context=[]):array
         'validate'=>static fn(array $args,array $actor):array=>[],
         'execute'=>static function(array $args,array $actor)use($context):array{
             $report=fm8d17a_snapshot($actor,$context);
-            return ['ok'=>true,'data'=>[
-                'answer'=>fm8d17a_summary($report),
-                'source'=>'Gelato permission-scoped registered tools and agent handoffs',
-                'nativeTools'=>array_column($report['nativeTools'],'id'),
-                'agentDomains'=>array_column($report['delegatedAgents'],'id'),
-                'capabilityTruth'=>$report,
-            ]];
+            return ['ok'=>true,'data'=>fm8d17a_observation($report)];
         },
     ];
     return array_merge($base,fm8d17b_catalogue($principal),fm8d17c_catalogue($principal,$context),fm8d4_schedule_catalogue($principal),fm8d5_catalogue($principal),fm8d6_training_catalogue($principal,$context),fm8d7_vision_catalogue($principal),fm8d8_vision_catalogue($principal,$context),fm8d9_catalogue($principal),fm8d10_catalogue($principal,$context),fm8d11_catalogue($principal,$context),fm8d12_pending_catalogue($principal,$context),fm8d18_catalogue($principal),fm8d18p_catalogue($principal),fm8d18d_catalogue($principal),fm8d18f_catalogue($principal,$context),fm8d18g_catalogue($principal,$context),fm8d18h_catalogue($principal,$context),fm8d18i_catalogue($principal,$context),fm8d18j2a_catalogue($principal,$context),fm8d18j2b_catalogue($principal,$context),fm8d18j2c_catalogue($principal),fm8d18j3a_catalogue($principal,$context),fm8d18j3b_catalogue($principal,$context),fm8d18j4a_catalogue($principal,$context),fm8d18j4b_catalogue($principal,$context),fm8d18j4c_catalogue($principal,$context),fm8d18j4d_catalogue($principal,$context),fm8d18j5a_catalogue($principal,$context),fm8d18j5b_catalogue($principal,$context),fm8d18j5c_catalogue($principal,$context),fm8d18j6a_catalogue($principal,$context),fm8d18j6b_catalogue($principal,$context),fm8d18j6c_catalogue($principal,$context),fm8d18j6d_catalogue($principal,$context),fm8d18j7a_catalogue($principal,$context),fm8d18j7b_catalogue($principal,$context),fm8d18j7c_catalogue($principal,$context),fm8d18j7d_catalogue($principal,$context),fm8d18j8a_catalogue($principal,$context),fm8d18j8b_catalogue($principal,$context),fm8d18j8c_catalogue($principal,$context),fm8d18j8d_catalogue($principal,$context),fm8d18j9a_catalogue($principal,$context),fm8d18j9b_catalogue($principal,$context),fm8d18j10a_catalogue($principal,$context),fm8d18j10b_catalogue($principal,$context),fm8d18j11_catalogue($principal,$context));
@@ -240,6 +234,7 @@ function fm8d3_turn(
     $instruction.=' For an authorized manager asking which recorded inventory receipts can satisfy an exact Need More request, select get_need_more_receipts with the exact request name. To link a previously displayed eligible receipt, select propose_daily_prep_action with action link_confirmed_receipt, list inventory, the matching item reference and receipt_number from the same active conversation; the model must NEVER supply a raw transaction ID. The Prep Agent will stage an additional Confirm and recheck the current request, ledger entry, unique link and role. Linking an existing recorded receipt allocates its quantity to a numeric Need More target; the request remains outstanding until enough linked receipts fulfill it. A legacy request without a numeric target closes on one full receipt. An optional explicit quantity may allocate only part of the recorded receipt, and a receipt transaction cannot be linked to multiple requests. This does NOT record another physical receipt or adjust stock. If a real receipt is not recorded, direct the user to the separate Operations Inventory receiving workflow first.';
     $instruction.=' For a manager comparing suppliers for an exact Need More item, select get_need_more_vendor_options. Explain saved per-unit prices alongside the actual rounded pack subtotal, preferred supplier, recorded price history, minimum-order warning and any open-order blocker. Different or unknown pack units are not comparable; never invent conversions or live market prices. To explicitly create a draft using a displayed supplier choice, select propose_daily_prep_action with action create_purchase_draft, list inventory and the selected vendor_number. To explicitly change only the saved preferred supplier, use set_preferred_vendor. Both require the same unexpired user/conversation/item-bound displayed comparison, then a separate Confirm through the Prep Agent. Never treat a comparison or the cheapest price as authorization, never substitute a supplier, and never submit/contact/receive or close Need More through these tools.';
     $instruction.=' When the user explicitly asks to open or switch to a Gelato screen, select navigate_to_gelato_page with an authorized page_id. This prepares a verified internal navigation and does not retrieve business records. Do not invent URLs, claim access to unlisted pages, or confuse navigation with permission to perform actions on that page. To answer a genuine business-record question outside the specific native read tools, select read_gelato_records and its authorized topic. The broker reads the current saved user question on the Gelato server; do not invent a different search query or claim a result without executing the tool.';
+    $instruction.=' A numbered Daily Prep checklist, recorded-receipt list or supplier comparison must be the only tool in its selection response. Each binds displayed numbers to this conversation; ask separate follow-up questions for other lists or reads. Large read results state retrieved/displayed counts and offer a verified internal detail link. Never imply that an omitted row was displayed or selected.';
     if(($context['channel']??'')==='voice'&&($context['privateVoiceApproved']??false)!==true)
         $instruction.=' This is an unverified room-voice turn. Only the published menu read tool is offered intentionally to protect private employee, schedule and restaurant records. The other Gelato tools do exist; they are not missing. If the question needs private data, explain that the logged-in operator must explicitly approve this spoken request in Agent Chat or type the request. Acoustic speaker recognition alone never unlocks private tools. Do not imply private tools are absent, and never guess private facts.';
     if($provider==='openai')$payload['instructions'].=$instruction;
@@ -280,7 +275,8 @@ function fm8d3_turn(
     // operations, or one user turn might cause multiple downstream effects.
     if(count($calls)>1){
         foreach($calls as $selectedCall){
-            if(in_array(($selectedCall['name']??''),['delegate_restaurant_domain','continue_pending_restaurant_action'],true)
+            if(str_starts_with((string)($selectedCall['name']??''),'propose_')
+               ||in_array(($selectedCall['name']??''),['delegate_restaurant_domain','continue_pending_restaurant_action'],true)
                ||in_array(($selectedCall['name']??''),['propose_inventory_stock_change','propose_prep_tasks','propose_inventory_item_creation','propose_task_status_change'],true)
                ||in_array(($selectedCall['name']??''),['propose_purchase_order_draft','propose_purchase_order_status','propose_purchase_order_full_receipt'],true)
                ||in_array(($selectedCall['name']??''),['propose_crm_customer_note','propose_crm_customer_tag','propose_crm_customer_archive','propose_marketing_package_status','propose_marketing_package_feature','propose_public_site_tagline','propose_catering_task_add','propose_catering_task_status','propose_catering_ingredient_status','propose_catering_ingredient_rebuild','propose_wholesale_allocate_remaining','propose_wholesale_batch_transition','propose_wholesale_batch_delivery','propose_wholesale_order_confirmation','propose_wholesale_order_cancellation','propose_wholesale_promised_window','propose_wholesale_order_location','propose_wholesale_invoice_draft','propose_wholesale_invoice_draft_void'],true)
@@ -289,6 +285,16 @@ function fm8d3_turn(
                     'answer'=>'Please make one restaurant-agent request at a time so I can verify its result.',
                     'sources'=>[],'data'=>['status'=>'needs_input','toolCalls'=>0]];
         }
+    }
+    // A numbered list owns one session selection. Combining these reads can
+    // replace a just-displayed selection and exceed the saved reply budget.
+    if(count($calls)>1){
+        foreach($calls as $selectedCall)
+            if(is_string($selectedCall['name']??null)
+                &&(fm8do_contracts()[$selectedCall['name']]['singleTurn']??false))
+                return ['ok'=>true,'skill'=>'agent.numbered_read_needs_separate_turn',
+                    'answer'=>'Please ask for one Daily Prep checklist, recorded-receipt list, or supplier comparison at a time. I will show a complete numbered selection for that request, then you can ask the next question.',
+                    'sources'=>[],'data'=>['status'=>'needs_input','toolCalls'=>0]];
     }
     $plan=[];
     foreach($calls as $call){
@@ -358,9 +364,25 @@ function fm8d3_turn(
             'sources'=>[],'data'=>['status'=>$result['status'],'steps'=>$result['completed']]],
             (int)$result['completed']);
     }
+    $readDetails=[];
     $answers=[];$sources=[];$pendingApproval=null;$delegation=null;$navigation=null;
+    $proposalReview=null;$requiresApproval=false;$reviewedProposal=null;
     foreach($result['steps'] as $step){
         $obs=$step['observation']??[];
+        // Native proposal tools must return their immutable identity to the
+        // canonical chat append. Dropping it leaves a saved proposal unbound
+        // and makes every subsequent exact confirmation fail.
+        if(is_array($obs['proposal']??null)
+            &&(!empty($obs['requiresConfirmation'])||!empty($obs['requiresApproval']))){
+            $proposalReview=$obs['proposal'];
+            $requiresApproval=!empty($obs['requiresApproval']);
+        }
+        if(is_array($obs['reviewedProposal']??null))$reviewedProposal=$obs['reviewedProposal'];
+        // Detail destinations come from the same server allowlist as byte
+        // budgets, never an observation/model-supplied URL.
+        $readContract=fm8do_contracts()[$step['tool']??'']??null;
+        if($readContract!==null)$readDetails[]=['tool'=>$step['tool'],
+            'label'=>$readContract['label'],'url'=>$readContract['url']];
         if(($obs['approval']['type']??'')==='vision_sample_review'
            &&($obs['approval']['state']??'')==='pending')
             $pendingApproval=$obs['approval'];
@@ -383,6 +405,12 @@ function fm8d3_turn(
     if($pendingApproval!==null)$data['approval']=$pendingApproval;
     if($delegation!==null)$data['delegation']=$delegation;
     if($navigation!==null)$data['navigation']=$navigation;
+    if($readDetails)$data['readDetails']=$readDetails;
+    if($proposalReview!==null){
+        $data['proposal']=$proposalReview;
+        $data[$requiresApproval?'requiresApproval':'requiresConfirmation']=true;
+    }
+    if($reviewedProposal!==null)$data['reviewedProposal']=$reviewedProposal;
     return $save(['ok'=>true,'skill'=>'agent.model_selected_tools',
         'answer'=>implode("\n\n",$answers),
         'sources'=>array_values(array_unique($sources)),

@@ -16,7 +16,7 @@ app_verify_request_csrf($input);
 
 try{
     app_json_response(timeclock_agent_handle(app_pdo(),$user,$input));
-}catch(TimeclockAgentPermissionException $e){
+}catch(GacConfirmationConflict $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],409);}catch(TimeclockAgentPermissionException $e){
     app_json_response(['ok'=>false,'message'=>$e->getMessage()],403);
 }catch(InvalidArgumentException|DomainException $e){
     app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);

@@ -1,5 +1,7 @@
 <?php
 declare(strict_types=1);
+if(PHP_SAPI!=='cli'){http_response_code(404);exit;}
+require_once __DIR__.'/hardening-agent-confirmation-test-support.php';
 
 require __DIR__.'/pickup-fulfillment-contract.php';
 require_once __DIR__.'/../includes/online-order-agent-core.php';
@@ -52,32 +54,33 @@ pos_record_tender($pdo,$org,$check2Public,['tenderType'=>'cash','amount'=>(float
 online_order_lifecycle_sync($pdo,$org,$check2Public,$userId);
 
 $selected=['module'=>'pickup_fulfillment','selectedOrderPublicId'=>$order2Public,'locationId'=>$locationId];
-$read=online_order_agent_handle($pdo,$staff,['message'=>'What is going on with this order?','pageContext'=>$selected]);
+$read=online_order_agent_handle($pdo,$staff,hac_test_input($pdo,$staff,'online_orders',['message'=>'What is going on with this order?','pageContext'=>$selected]));
 ooaci_assert(($read['skill']??'')==='online_order_detail','Selected pickup order must re-resolve canonically on the server.');
 ooaci_assert(!empty($read['data']['order']['physicalReady'])&&!empty($read['data']['order']['paymentComplete']),'Ready paid pickup must be reported accurately.');
 
 // An invalid explicit identifier is authoritative and must never fall back to selected page context.
-$explicitMiss=online_order_agent_handle($pdo,$staff,['message'=>'Show online order id missing-order-99999','pageContext'=>$selected]);
+$explicitMiss=online_order_agent_handle($pdo,$staff,hac_test_input($pdo,$staff,'online_orders',['message'=>'Show online order id missing-order-99999','pageContext'=>$selected]));
 ooaci_assert(($explicitMiss['skill']??'')==='online_order_fulfillment_summary','Invalid explicit order ID must not fall back to the selected page-context order.');
 
-$proposal=online_order_agent_handle($pdo,$staff,['message'=>'Mark this pickup as handed to the customer.','pageContext'=>$selected]);
+$proposal=online_order_agent_handle($pdo,$staff,hac_test_input($pdo,$staff,'online_orders',['message'=>'Mark this pickup as handed to the customer.','pageContext'=>$selected]));
 ooaci_assert(!empty($proposal['data']['requiresConfirmation']),'Pickup handoff must be proposed, not executed immediately.');
 ooaci_assert((string)ooaci_one($pdo,'SELECT COALESCE(fulfilled_at,\'\') FROM online_orders WHERE organization_id=? AND public_id=?',[$org,$order2Public])==='','Proposal must not mutate fulfillment state.');
 ooaci_assert(gaw_pending_action_node($org,$userId)==='online_orders','Shared pending-action registry must identify the Online Order Agent.');
-$cancel=online_order_agent_handle($pdo,$staff,['message'=>'Cancel']);
+$cancel=online_order_agent_handle($pdo,$staff,hac_test_input($pdo,$staff,'online_orders',['message'=>'Cancel']));
 ooaci_assert(!empty($cancel['data']['cancelled']),'Cancel must discard the pending pickup action.');
 ooaci_assert((string)ooaci_one($pdo,'SELECT COALESCE(fulfilled_at,\'\') FROM online_orders WHERE organization_id=? AND public_id=?',[$org,$order2Public])==='','Cancelled proposal must not mutate fulfillment state.');
 
 // Stale-write rejection.
-online_order_agent_handle($pdo,$staff,['message'=>'Mark this pickup as handed to the customer.','pageContext'=>$selected]);
+online_order_agent_handle($pdo,$staff,hac_test_input($pdo,$staff,'online_orders',['message'=>'Mark this pickup as handed to the customer.','pageContext'=>$selected]));
 $pdo->prepare("UPDATE online_orders SET updated_at=DATE_ADD(NOW(6), INTERVAL 2 SECOND) WHERE organization_id=? AND public_id=?")->execute([$org,$order2Public]);
 $stale=false;
-try{ online_order_agent_handle($pdo,$staff,['message'=>'Confirm']); }catch(DomainException $e){ $stale=str_contains($e->getMessage(),'changed after the proposal'); }
+try{ online_order_agent_handle($pdo,$staff,hac_test_input($pdo,$staff,'online_orders',['message'=>'Confirm'])); }catch(DomainException $e){ $stale=str_contains($e->getMessage(),'changed after the proposal'); }
 ooaci_assert($stale,'Stale pickup proposal must be rejected.');
-online_order_agent_handle($pdo,$staff,['message'=>'Cancel']);
+try{online_order_agent_handle($pdo,$staff,hac_test_input($pdo,$staff,'online_orders',['message'=>'Cancel']));ooaci_assert(false,'Consumed proposal cancellation must be a conflict.');}
+catch(GacConfirmationConflict){ooaci_assert(true,'Consumed proposal cannot be cancelled or replayed.');}
 
-$proposal=online_order_agent_handle($pdo,$staff,['message'=>'Mark this pickup as handed to the customer.','pageContext'=>$selected]);
-$done=online_order_agent_handle($pdo,$staff,['message'=>'Confirm']);
+$proposal=online_order_agent_handle($pdo,$staff,hac_test_input($pdo,$staff,'online_orders',['message'=>'Mark this pickup as handed to the customer.','pageContext'=>$selected]));
+$done=online_order_agent_handle($pdo,$staff,hac_test_input($pdo,$staff,'online_orders',['message'=>'Confirm']));
 ooaci_assert(!empty($done['data']['executed']),'Confirmed pickup handoff must execute.');
 ooaci_assert((string)ooaci_one($pdo,'SELECT COALESCE(fulfilled_at,\'\') FROM online_orders WHERE organization_id=? AND public_id=?',[$org,$order2Public])!=='','Confirmed pickup handoff must persist canonical fulfilled_at.');
 
@@ -91,18 +94,18 @@ $order3=online_order_submit_pickup($pdo,$org,$account,[
 $order3Public=(string)$order3['public_id'];
 $originalReady=(string)ooaci_one($pdo,'SELECT requested_ready_at FROM online_orders WHERE organization_id=? AND public_id=?',[$org,$order3Public]);
 $delayContext=['module'=>'order_recovery','selectedOrderPublicId'=>$order3Public,'locationId'=>$locationId];
-$delayProposal=online_order_agent_handle($pdo,$staff,['message'=>'Delay pickup promise to 2099-01-01 7:00 PM because kitchen backup','pageContext'=>$delayContext]);
+$delayProposal=online_order_agent_handle($pdo,$staff,hac_test_input($pdo,$staff,'online_orders',['message'=>'Delay pickup promise to 2099-01-01 7:00 PM because kitchen backup','pageContext'=>$delayContext]));
 ooaci_assert(!empty($delayProposal['data']['requiresConfirmation']),'Promise delay must require confirmation.');
 ooaci_assert((string)ooaci_one($pdo,'SELECT requested_ready_at FROM online_orders WHERE organization_id=? AND public_id=?',[$org,$order3Public])===$originalReady,'Delay proposal must not mutate promised time.');
 $refundsBefore=(int)ooaci_one($pdo,'SELECT COUNT(*) FROM pos_refunds WHERE organization_id=?',[$org]);
-$delayDone=online_order_agent_handle($pdo,$staff,['message'=>'Confirm']);
+$delayDone=online_order_agent_handle($pdo,$staff,hac_test_input($pdo,$staff,'online_orders',['message'=>'Confirm']));
 ooaci_assert(!empty($delayDone['data']['executed']),'Confirmed pickup delay must execute.');
 $newReady=(string)ooaci_one($pdo,'SELECT requested_ready_at FROM online_orders WHERE organization_id=? AND public_id=?',[$org,$order3Public]);
 ooaci_assert($newReady!==''&&$newReady!==$originalReady,'Confirmed delay must update canonical requested_ready_at.');
 ooaci_assert((int)ooaci_one($pdo,"SELECT COUNT(*) FROM order_exceptions e JOIN online_orders oo ON oo.id=e.online_order_id AND oo.organization_id=e.organization_id WHERE e.organization_id=? AND oo.public_id=? AND e.exception_type='delay'",[$org,$order3Public])===1,'Confirmed delay must create one canonical recovery exception.');
 ooaci_assert((int)ooaci_one($pdo,'SELECT COUNT(*) FROM pos_refunds WHERE organization_id=?',[$org])===$refundsBefore,'Online Order Agent must not create refund records.');
 
-$summary=online_order_agent_handle($pdo,$staff,['message'=>'Show the pickup queue','pageContext'=>['module'=>'pickup_fulfillment','locationId'=>$locationId]]);
+$summary=online_order_agent_handle($pdo,$staff,hac_test_input($pdo,$staff,'online_orders',['message'=>'Show the pickup queue','pageContext'=>['module'=>'pickup_fulfillment','locationId'=>$locationId]]));
 ooaci_assert(($summary['skill']??'')==='online_order_fulfillment_summary','Pickup queue summary must remain readable after writes.');
 
 echo "online-order-agent=ok\n";

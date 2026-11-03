@@ -12,7 +12,7 @@ require_once __DIR__.'/glasses-v11-model-release-candidates.php';
 
 function fm8d9_observation(string $message,string $source='Gelato Vision Lab review ledger'):array
 {
-    return ['ok'=>true,'data'=>['answer'=>mb_strcut($message,0,2600,'UTF-8'),
+    return ['ok'=>true,'data'=>['answer'=>$message,
         'source'=>$source]];
 }
 function fm8d9_read_allowed(array $actor):bool

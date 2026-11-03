@@ -41,7 +41,7 @@ function fm8d18j10a_search(array $args,array $actor):array
     $answer=$parts?'Saved Wholesale invoices: '.implode('; ',$parts).'.':'No matching Wholesale invoices.';
     if(count($all)>8)$answer.=' More matches exist; refine the search.';
     if(count($rows)>1)$answer.=' Choose one exact invoice ID.';
-    return ['ok'=>true,'data'=>['answer'=>mb_substr($answer,0,1500,'UTF-8'),
+    return ['ok'=>true,'data'=>['answer'=>$answer,
         'source'=>'Gelato Wholesale Receivables','readOnly'=>true,'matches'=>$rows,'truncated'=>count($all)>8]];
 }
 function fm8d18j10a_read(array $args,array $actor):array
@@ -81,7 +81,7 @@ function fm8d18j10a_read(array $args,array $actor):array
     }
     $answer=$invoice['number'].' ['.$invoice['id'].'] · '.$section.': '.($parts?implode('; ',$parts):'No saved records.');
     if($truncated)$answer.=' Additional entries exist.';
-    return ['ok'=>true,'data'=>['answer'=>mb_substr($answer,0,1700,'UTF-8'),
+    return ['ok'=>true,'data'=>['answer'=>$answer,
         'source'=>'Gelato Wholesale Receivables','readOnly'=>true,'invoicePublicId'=>$invoice['id'],
         'section'=>$section,'records'=>$records,'truncated'=>$truncated]];
 }

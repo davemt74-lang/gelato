@@ -15,7 +15,7 @@ require_once __DIR__.'/glasses-vision-fleet-health.php';
 
 function fm8d7_observe(string $answer,string $source='Gelato Vision Lab'):array
 {
-    return ['ok'=>true,'data'=>['answer'=>mb_strcut($answer,0,2600,'UTF-8'),'source'=>$source]];
+    return ['ok'=>true,'data'=>['answer'=>$answer,'source'=>$source]];
 }
 function fm8d7_status(PDO $pdo,array $actor):array
 {

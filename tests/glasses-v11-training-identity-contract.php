@@ -72,14 +72,14 @@ $userAssignment=glasses_training_assignment_create($pdo,$org,[
 $userConflict=false;try{glasses_training_session_start($pdo,$org,$userAssignment['public_id'],$device2,$actor);}catch(Throwable){$userConflict=true;}
 v111_assert($userConflict,'One employee cannot have two simultaneous active glasses training sessions.');
 
-$ended=glasses_training_session_end($pdo,$org,$session['public_id'],'completed','Training complete',$actor);
+$ended=glasses_training_session_end($pdo,$org,$session['public_id'],'completed','Training complete',$device1);
 v111_assert($ended['status']==='completed','Session must complete.');
 v111_assert((string)v111_one($pdo,"SELECT status FROM glasses_training_assignments WHERE id=?",[(int)$assignment['id']])==='completed','V11 assignment must complete.');
 v111_assert((string)v111_one($pdo,"SELECT status FROM training_assignments WHERE id=?",[(int)$assignment['training_assignment_id']])==='completed','Canonical employee training assignment must complete with V11 session.');
 
 $next=glasses_training_session_start($pdo,$org,$userAssignment['public_id'],$device2,$actor);
 v111_assert($next['status']==='active','Employee may start a later training session after prior session ends.');
-glasses_training_session_end($pdo,$org,$next['public_id'],'interrupted','Acceptance cleanup',$actor);
+glasses_training_session_end($pdo,$org,$next['public_id'],'interrupted','Acceptance cleanup',$device2);
 
 $catalog=glasses_training_catalog($pdo,$org);
 v111_assert(count($catalog['employees'])===4,'Employee catalog must use canonical active memberships.');

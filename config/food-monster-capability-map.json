@@ -183,7 +183,7 @@
     {
       "path": "api/agent-workspace.php",
       "feature": "agent_core",
-      "sourceBlob": "4226468eb37a978db90eb34e4f9a9ef5d481da65",
+      "sourceBlob": "f8cad94b91680b8ecf188e1e55de24976d6c01a9",
       "discoveredActions": [
         "append",
         "archive",
@@ -230,10 +230,12 @@
         "order_recovery.manage",
         "order_recovery.refund",
         "order_recovery.view",
+        "packages.view",
         "pos.manage",
         "pos.use",
         "prep.intelligence.agent",
         "prep.intelligence.view",
+        "public_pages.edit",
         "purchasing.agent",
         "purchasing.view",
         "recipes.agent",
@@ -242,12 +244,14 @@
         "sales.costs.view",
         "sales.view",
         "schedule.agent",
+        "settings.organization_edit",
         "staff.manage",
         "table_service.view",
         "tasks.agent",
         "tasks.manage",
         "tasks.view",
         "timeclock.agent",
+        "voice.agent",
         "wholesale.agent",
         "wholesale.view"
       ],
@@ -294,7 +298,7 @@
     {
       "path": "api/catering-agent.php",
       "feature": "catering",
-      "sourceBlob": "8a6c33540bddae370792814ab22795732978000d",
+      "sourceBlob": "3445ccd9be3179f3f97403a818d577918c8a563a",
       "discoveredActions": [
         "ask",
         "operations",
@@ -359,7 +363,7 @@
     {
       "path": "api/customer-crm-agent.php",
       "feature": "crm",
-      "sourceBlob": "38c311c2a0335b5b14fb2623c0d907d53bd5cfcb",
+      "sourceBlob": "31f121762e845c36985bd77a1fc30fc6d99c49e8",
       "discoveredActions": [],
       "permissionTokensSeen": [],
       "directAppRequireAuthCall": true,
@@ -567,7 +571,7 @@
     {
       "path": "api/equipment-agent.php",
       "feature": "equipment",
-      "sourceBlob": "26db7461776a4b5e94d5e676c36150eee284ca2d",
+      "sourceBlob": "5345c79843a8d3ab734cd87e1aa04890d70aebb7",
       "discoveredActions": [],
       "permissionTokensSeen": [],
       "directAppRequireAuthCall": true,
@@ -659,7 +663,7 @@
     {
       "path": "api/food-monster-approvals.php",
       "feature": "food_monster",
-      "sourceBlob": "01058c9fd5de991ba6021fbc24b355a77845cc59",
+      "sourceBlob": "4e3a330cd3f5b71d5f7f7717b83019d42a3722f8",
       "discoveredActions": [
         "ask",
         "decide",
@@ -718,7 +722,7 @@
     {
       "path": "api/food-monster-llm.php",
       "feature": "food_monster",
-      "sourceBlob": "808396d4a9b28027b1aa8ba18adf8e4115b74701",
+      "sourceBlob": "45dcd3e61b2712b6ff47af5fef741d3b668a6f36",
       "discoveredActions": [],
       "permissionTokensSeen": [],
       "directAppRequireAuthCall": true,
@@ -872,7 +876,7 @@
     {
       "path": "api/front-of-house-agent.php",
       "feature": "front_of_house",
-      "sourceBlob": "0975b39d681d8445d10e76ac490b7aaaa2bb232c",
+      "sourceBlob": "dce0e16a92f747ec246706bdbdf0727673bb5acc",
       "discoveredActions": [],
       "permissionTokensSeen": [],
       "directAppRequireAuthCall": true,
@@ -970,7 +974,7 @@
     {
       "path": "api/glasses-device.php",
       "feature": "smart_glasses",
-      "sourceBlob": "691431e72efc718ef9410fedb34179fa4b046adb",
+      "sourceBlob": "54b92010d9be2d25e4396e0a385b3af2c93ea567",
       "discoveredActions": [
         "build.confirm",
         "build.correct_observation",
@@ -1131,7 +1135,7 @@
     {
       "path": "api/glasses-vision-lab.php",
       "feature": "vision_lab",
-      "sourceBlob": "a4c48be5fa16052341339f3bfcbf1491ef5444ba",
+      "sourceBlob": "899e5235040cb7619405927b5ae82db9347221b5",
       "discoveredActions": [
         "active_learning.create_mission",
         "active_learning.dismiss",
@@ -1482,7 +1486,7 @@
     {
       "path": "api/marketing-agent.php",
       "feature": "marketing",
-      "sourceBlob": "6a8ed6dbec9ffb968b1404b39f81562b3e4143a6",
+      "sourceBlob": "fd21cab0411e2f567b5cab959cc3d087d7fd7dad",
       "discoveredActions": [],
       "permissionTokensSeen": [],
       "directAppRequireAuthCall": true,
@@ -1594,7 +1598,7 @@
     {
       "path": "api/online-order-agent.php",
       "feature": "online_orders",
-      "sourceBlob": "e341aa4dbfd27004c83bc10ccecaaaca8bdbe0df",
+      "sourceBlob": "75fa88a0c42bd9e07efc6736707d1f183dfdbaa8",
       "discoveredActions": [],
       "permissionTokensSeen": [],
       "directAppRequireAuthCall": true,
@@ -1616,7 +1620,7 @@
     {
       "path": "api/operations-agent.php",
       "feature": "operations",
-      "sourceBlob": "94c1f2d05add06b615049839190a0bba1ad990cc",
+      "sourceBlob": "8d2453dd4669f0fa08e99eb4067452c8b9bb4689",
       "discoveredActions": [],
       "permissionTokensSeen": [
         "inventory.agent",
@@ -1789,7 +1793,7 @@
     {
       "path": "api/prep-intelligence-agent.php",
       "feature": "prep_inventory",
-      "sourceBlob": "2dbb46d9065c8f5ab08350c1d228a2782f3b339e",
+      "sourceBlob": "70af172a7ef7977b1a663f5c4ce4cd191a0b38f5",
       "discoveredActions": [],
       "permissionTokensSeen": [],
       "directAppRequireAuthCall": true,
@@ -1949,7 +1953,7 @@
     {
       "path": "api/purchasing-agent.php",
       "feature": "purchasing",
-      "sourceBlob": "7dd7a36bfda3842b8fc3dc9ec43921b6f4518ba7",
+      "sourceBlob": "68096e83b53d3f15580a5fbf9eb4b0dbb1508595",
       "discoveredActions": [],
       "permissionTokensSeen": [
         "purchasing.agent",
@@ -2027,7 +2031,7 @@
     {
       "path": "api/recipe-agent.php",
       "feature": "recipes",
-      "sourceBlob": "4480f7f006ec0859b8b896ff161a5d22c7bbed86",
+      "sourceBlob": "0f3aabf16c2bc631e7ae5591f127976862dea7bf",
       "discoveredActions": [],
       "permissionTokensSeen": [],
       "directAppRequireAuthCall": true,
@@ -2097,7 +2101,7 @@
     {
       "path": "api/roles.php",
       "feature": "admin_settings",
-      "sourceBlob": "347acc99be20787bb74f40b3d1d633bd1ed88815",
+      "sourceBlob": "abbbb57c1d5d789ead82270f60bf02d38c0fc444",
       "discoveredActions": [
         "create",
         "update"
@@ -2215,7 +2219,7 @@
     {
       "path": "api/scheduling-agent.php",
       "feature": "employee_scheduling",
-      "sourceBlob": "708ae0abcca69e51601fb7140ef315a284a2096e",
+      "sourceBlob": "6aef5b4e612f3331536d3dc9ed2f5c67f9480284",
       "discoveredActions": [],
       "permissionTokensSeen": [
         "employee.handoffs.manage",
@@ -2319,7 +2323,7 @@
     {
       "path": "api/timeclock-agent.php",
       "feature": "time_attendance",
-      "sourceBlob": "e96bc6a20676e73dfac68ae2e98814daf3e24f4a",
+      "sourceBlob": "67ac3cc7322663f78d28b404e5dc95e11eb1dda3",
       "discoveredActions": [],
       "permissionTokensSeen": [],
       "directAppRequireAuthCall": true,
@@ -2418,7 +2422,7 @@
     {
       "path": "api/wholesale-agent.php",
       "feature": "wholesale",
-      "sourceBlob": "08a9b3251347cc95dd6c480426e28c243f3d55ff",
+      "sourceBlob": "9795e3c23e1f41f97552ce657ffb35869c8bcbd5",
       "discoveredActions": [],
       "permissionTokensSeen": [],
       "directAppRequireAuthCall": true,

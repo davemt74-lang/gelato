@@ -1,5 +1,7 @@
 <?php
 declare(strict_types=1);
+if(PHP_SAPI!=='cli'){http_response_code(404);exit;}
+require_once __DIR__.'/hardening-agent-confirmation-test-support.php';
 
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/pos-core.php';
@@ -50,22 +52,22 @@ $open=pos_create_check($pdo,$org,$location,['serviceMode'=>'dine_in','tableName'
 crm_attach_check($pdo,$org,$openPublic,$customerPublic);
 $context=['module'=>'pos','locationId'=>$location,'checkPublicId'=>$openPublic];
 
-$regular=customer_crm_agent_enhanced_handle($pdo,$user,['message'=>'Is this customer a regular?','pageContext'=>$context]);
+$regular=customer_crm_agent_enhanced_handle($pdo,$user,hac_test_input($pdo,$user,'crm',['message'=>'Is this customer a regular?','pageContext'=>$context]));
 crmai_assert(($regular['skill']??'')==='crm.relationship_intelligence','POS-context relationship question must resolve through CRM intelligence.');
 crmai_assert(($regular['data']['relationship']['stage']??'')==='regular','Five paid visits must produce the Regular relationship stage.');
 crmai_assert((int)($regular['data']['relationship']['visits']??0)===5,'Relationship intelligence must use paid POS visit history.');
 
-$birthday=customer_crm_agent_enhanced_handle($pdo,$user,['message'=>'Is it this customer’s birthday?','pageContext'=>$context]);
+$birthday=customer_crm_agent_enhanced_handle($pdo,$user,hac_test_input($pdo,$user,'crm',['message'=>'Is it this customer’s birthday?','pageContext'=>$context]));
 crmai_assert(($birthday['data']['relationship']['birthday']['today']??false)===true,'Birthday intelligence must resolve month/day in organization timezone.');
-$consent=customer_crm_agent_enhanced_handle($pdo,$user,['message'=>'Can I email this customer?','pageContext'=>$context]);
+$consent=customer_crm_agent_enhanced_handle($pdo,$user,hac_test_input($pdo,$user,'crm',['message'=>'Can I email this customer?','pageContext'=>$context]));
 crmai_assert(in_array('email',(array)($consent['data']['relationship']['contactChannels']??[]),true),'Consent-aware relationship read must expose current opted-in channel.');
 
-$favorites=customer_crm_agent_enhanced_handle($pdo,$user,['message'=>'What does this customer usually order?','pageContext'=>$context]);
+$favorites=customer_crm_agent_enhanced_handle($pdo,$user,hac_test_input($pdo,$user,'crm',['message'=>'What does this customer usually order?','pageContext'=>$context]));
 crmai_assert(($favorites['skill']??'')==='crm.relationship','Favorite-order question must delegate to canonical CRM relationship history.');
 crmai_assert(str_contains((string)$favorites['answer'],'Margherita Pizza'),'Favorite-order answer must come from paid POS line history.');
 
 $beforeTasks=(int)crmai_one($pdo,'SELECT COUNT(*) FROM restaurant_tasks WHERE organization_id=?',[$org]);
-$followup=customer_crm_agent_enhanced_handle($pdo,$user,['message'=>'Create a follow-up task for this customer about catering interest','pageContext'=>$context]);
+$followup=customer_crm_agent_enhanced_handle($pdo,$user,hac_test_input($pdo,$user,'crm',['message'=>'Create a follow-up task for this customer about catering interest','pageContext'=>$context]));
 crmai_assert(($followup['skill']??'')==='operations.action_proposal','CRM follow-up must hand the write to the Operations node.');
 crmai_assert(($followup['data']['targetNode']??'')==='operations','Follow-up proposal must identify Operations as the owning node.');
 crmai_assert((int)crmai_one($pdo,'SELECT COUNT(*) FROM restaurant_tasks WHERE organization_id=?',[$org])===$beforeTasks,'CRM follow-up proposal must not create a task before confirmation.');
@@ -75,7 +77,7 @@ crmai_assert(($pending['type']??'')==='task_create'&&str_contains((string)($pend
 gac_pending_clear('operations',$org,$uid);
 
 $unlinked=pos_create_check($pdo,$org,$location,['serviceMode'=>'bar','tableName'=>'Bar Seat 2','guestCount'=>1],$uid);
-$unlinkedAnswer=customer_crm_agent_enhanced_handle($pdo,$user,['message'=>'Is this customer a regular?','pageContext'=>['module'=>'pos','locationId'=>$location,'checkPublicId'=>$unlinked['publicId']]]);
+$unlinkedAnswer=customer_crm_agent_enhanced_handle($pdo,$user,hac_test_input($pdo,$user,'crm',['message'=>'Is this customer a regular?','pageContext'=>['module'=>'pos','locationId'=>$location,'checkPublicId'=>$unlinked['publicId']]]));
 crmai_assert(($unlinkedAnswer['skill']??'')==='crm.context_unlinked','Unlinked POS checks must not invent customer relationship history.');
 
 $opportunities=cri_global_opportunities($pdo,$user,10);
@@ -89,7 +91,7 @@ $menuRoute=gaw_route($user,'What toppings are on the Margherita Pizza?');
 crmai_assert(($menuRoute['domain']??'')==='restaurant_brain','CRM routing must not steal menu knowledge questions.');
 
 $viewer=['id'=>$uid,'organization_id'=>$org,'membership_id'=>$membership,'permissions'=>['pos.use'],'display_name'=>'POS Only','first_name'=>'POS','role_slug'=>'staff'];
-$blocked=false;try{customer_crm_agent_enhanced_handle($pdo,$viewer,['message'=>'Is this customer a regular?','pageContext'=>$context]);}catch(CrmAgentPermissionException){$blocked=true;}
+$blocked=false;try{customer_crm_agent_enhanced_handle($pdo,$viewer,hac_test_input($pdo,$viewer,'crm',['message'=>'Is this customer a regular?','pageContext'=>$context]));}catch(CrmAgentPermissionException){$blocked=true;}
 crmai_assert($blocked,'POS use alone must not grant CRM relationship history.');
 
 crmai_assert((int)crmai_one($pdo,"SELECT COUNT(*) FROM audit_log WHERE organization_id=? AND action='crm.agent_followup_handoff_proposed'",[$org])===1,'Cross-node CRM follow-up proposal must be audited.');

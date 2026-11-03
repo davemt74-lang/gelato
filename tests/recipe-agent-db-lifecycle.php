@@ -1,5 +1,7 @@
 <?php
 declare(strict_types=1);
+if(PHP_SAPI!=='cli'){http_response_code(404);exit;}
+require_once __DIR__.'/hardening-agent-confirmation-test-support.php';
 
 require __DIR__.'/../includes/bootstrap.php';
 require __DIR__.'/../includes/agent-node-registry.php';
@@ -51,84 +53,85 @@ $generic=gaw_route($user,'Show me the ingredients.');
 radb_assert(($generic['domain']??'')!=='recipe_production_standards','Generic ingredient wording was globally hijacked by Recipe Agent.');
 
 // Read selected recipe context, scaling and allergen keyword screening without writes.
-$read=recipe_agent_handle($pdo,$user,['message'=>'How do we make this recipe?','pageContext'=>$context]);
+$read=recipe_agent_handle($pdo,$user,hac_test_input($pdo,$user,'recipes',['message'=>'How do we make this recipe?','pageContext'=>$context]));
 radb_assert(($read['data']['recipe']['publicId']??'')==='recipe-agent-ci','Selected recipe context was not resolved server-side.');
-$named=recipe_agent_handle($pdo,$user,['message'=>'Show the Tomato Sauce recipe','pageContext'=>$context]);
+$named=recipe_agent_handle($pdo,$user,hac_test_input($pdo,$user,'recipes',['message'=>'Show the Tomato Sauce recipe','pageContext'=>$context]));
 radb_assert(($named['data']['recipe']['publicId']??'')==='recipe-agent-alt','Explicitly named recipe did not override selected page context.');
 $beforeJson=(string)radb_scalar($pdo,"SELECT ingredients_json FROM recipes WHERE organization_id=? AND public_id=?",[$org,'recipe-agent-ci']);
-$scaled=recipe_agent_handle($pdo,$user,['message'=>'Scale this recipe to 20 portions','pageContext'=>$context]);
+$scaled=recipe_agent_handle($pdo,$user,hac_test_input($pdo,$user,'recipes',['message'=>'Scale this recipe to 20 portions','pageContext'=>$context]));
 radb_assert(($scaled['skill']??'')==='recipe.scale','Recipe scale read returned wrong skill.');
 radb_assert(abs((float)($scaled['data']['scale']['factor']??0)-2.0)<0.0001,'Recipe scale factor is incorrect.');
 radb_assert(($scaled['data']['scale']['ingredients'][0]['scaledQuantity']??'')==='4','Recipe quantity scaling is incorrect.');
 $unitRejected=false;
-try{recipe_agent_handle($pdo,$user,['message'=>'Scale this recipe to 20 quarts','pageContext'=>$context]);}catch(InvalidArgumentException $e){$unitRejected=str_contains($e->getMessage(),'recorded in portions');}
+try{recipe_agent_handle($pdo,$user,hac_test_input($pdo,$user,'recipes',['message'=>'Scale this recipe to 20 quarts','pageContext'=>$context]));}catch(InvalidArgumentException $e){$unitRejected=str_contains($e->getMessage(),'recorded in portions');}
 radb_assert($unitRejected,'Recipe scaling accepted a conflicting target yield unit.');
 radb_assert((string)radb_scalar($pdo,"SELECT ingredients_json FROM recipes WHERE organization_id=? AND public_id=?",[$org,'recipe-agent-ci'])===$beforeJson,'Recipe scale read mutated the recipe.');
-$allergen=recipe_agent_handle($pdo,$user,['message'=>'Check this recipe for allergens','pageContext'=>$context]);
+$allergen=recipe_agent_handle($pdo,$user,hac_test_input($pdo,$user,'recipes',['message'=>'Check this recipe for allergens','pageContext'=>$context]));
 radb_assert(in_array('milk/dairy',(array)($allergen['data']['keywordHits']??[]),true),'Dairy keyword screen did not find milk.');
 radb_assert(in_array('wheat/gluten',(array)($allergen['data']['keywordHits']??[]),true),'Wheat keyword screen did not find flour.');
 
 // Yield: Propose -> Confirm -> Execute, no pre-confirm mutation.
-$yieldProposal=recipe_agent_handle($pdo,$user,['message'=>'set yield to 24 portions','pageContext'=>$context]);
+$yieldProposal=recipe_agent_handle($pdo,$user,hac_test_input($pdo,$user,'recipes',['message'=>'set yield to 24 portions','pageContext'=>$context]));
 radb_assert(($yieldProposal['data']['requiresConfirmation']??false)===true,'Recipe yield write skipped proposal state.');
 radb_assert((float)radb_scalar($pdo,"SELECT yield_quantity FROM recipes WHERE organization_id=? AND public_id=?",[$org,'recipe-agent-ci'])===10.0,'Recipe yield changed before confirmation.');
-$pendingRoute=gaw_route($user,'Confirm');
+$review=hac_test_review($pdo,$user,'recipes');
+$pendingRoute=gaw_route($user,'Confirm',$review['threadId'],$review);
 radb_assert(($pendingRoute['route']??'')==='api/recipe-agent.php','Pending Recipe confirmation did not route to Recipe Agent.');
-$yieldConfirmed=recipe_agent_handle($pdo,$user,['message'=>'Confirm','pageContext'=>$context]);
+$yieldConfirmed=recipe_agent_handle($pdo,$user,hac_test_input($pdo,$user,'recipes',['message'=>'Confirm','pageContext'=>$context]));
 radb_assert(($yieldConfirmed['skill']??'')==='recipe.action_confirmed','Recipe yield confirmation did not execute.');
 radb_assert((float)radb_scalar($pdo,"SELECT yield_quantity FROM recipes WHERE organization_id=? AND public_id=?",[$org,'recipe-agent-ci'])===24.0,'Confirmed recipe yield was not persisted.');
 
 // Explicitly named yield target overrides selected context and does not leak the recipe name into the unit.
-$namedYield=recipe_agent_handle($pdo,$user,['message'=>'set yield to 12 quarts for Tomato Sauce','pageContext'=>$context]);
+$namedYield=recipe_agent_handle($pdo,$user,hac_test_input($pdo,$user,'recipes',['message'=>'set yield to 12 quarts for Tomato Sauce','pageContext'=>$context]));
 radb_assert(($namedYield['data']['requiresConfirmation']??false)===true,'Named-recipe yield proposal was not created.');
-recipe_agent_handle($pdo,$user,['message'=>'Confirm','pageContext'=>$context]);
+recipe_agent_handle($pdo,$user,hac_test_input($pdo,$user,'recipes',['message'=>'Confirm','pageContext'=>$context]));
 radb_assert((float)radb_scalar($pdo,"SELECT yield_quantity FROM recipes WHERE organization_id=? AND public_id=?",[$org,'recipe-agent-alt'])===12.0,'Named-recipe yield targeted the wrong recipe.');
 radb_assert((string)radb_scalar($pdo,"SELECT yield_unit FROM recipes WHERE organization_id=? AND public_id=?",[$org,'recipe-agent-alt'])==='quarts','Named-recipe suffix leaked into the yield unit.');
 
 // Add ingredient + Cancel leaves canonical JSON unchanged.
 $ingredientBefore=(string)radb_scalar($pdo,"SELECT ingredients_json FROM recipes WHERE organization_id=? AND public_id=?",[$org,'recipe-agent-ci']);
-$ingredientProposal=recipe_agent_handle($pdo,$user,['message'=>'add ingredient 2 tbsp olive oil','pageContext'=>$context]);
+$ingredientProposal=recipe_agent_handle($pdo,$user,hac_test_input($pdo,$user,'recipes',['message'=>'add ingredient 2 tbsp olive oil','pageContext'=>$context]));
 radb_assert(($ingredientProposal['data']['requiresConfirmation']??false)===true,'Recipe ingredient write skipped proposal state.');
-$cancelled=recipe_agent_handle($pdo,$user,['message'=>'Cancel','pageContext'=>$context]);
+$cancelled=recipe_agent_handle($pdo,$user,hac_test_input($pdo,$user,'recipes',['message'=>'Cancel','pageContext'=>$context]));
 radb_assert(($cancelled['skill']??'')==='recipe.action_cancelled','Recipe ingredient proposal did not cancel.');
 radb_assert((string)radb_scalar($pdo,"SELECT ingredients_json FROM recipes WHERE organization_id=? AND public_id=?",[$org,'recipe-agent-ci'])===$ingredientBefore,'Cancelled ingredient proposal changed recipe JSON.');
-$namedIngredient=recipe_agent_handle($pdo,$user,['message'=>'add ingredient 2 tbsp olive oil to Tomato Sauce','pageContext'=>$context]);
+$namedIngredient=recipe_agent_handle($pdo,$user,hac_test_input($pdo,$user,'recipes',['message'=>'add ingredient 2 tbsp olive oil to Tomato Sauce','pageContext'=>$context]));
 radb_assert(($namedIngredient['data']['requiresConfirmation']??false)===true,'Named-recipe ingredient proposal was not created.');
-recipe_agent_handle($pdo,$user,['message'=>'Confirm','pageContext'=>$context]);
+recipe_agent_handle($pdo,$user,hac_test_input($pdo,$user,'recipes',['message'=>'Confirm','pageContext'=>$context]));
 $altIngredients=json_decode((string)radb_scalar($pdo,"SELECT ingredients_json FROM recipes WHERE organization_id=? AND public_id=?",[$org,'recipe-agent-alt']),true);
 radb_assert(($altIngredients[array_key_last($altIngredients)]['ingredient']??'')==='olive oil','Named recipe suffix leaked into ingredient text or wrong recipe was edited.');
 
 // Instruction + note confirms append to canonical recipe.
-$stepProposal=recipe_agent_handle($pdo,$user,['message'=>'add step rest the dough for 20 minutes','pageContext'=>$context]);
+$stepProposal=recipe_agent_handle($pdo,$user,hac_test_input($pdo,$user,'recipes',['message'=>'add step rest the dough for 20 minutes','pageContext'=>$context]));
 radb_assert(($stepProposal['data']['requiresConfirmation']??false)===true,'Recipe instruction write skipped proposal state.');
-recipe_agent_handle($pdo,$user,['message'=>'Confirm','pageContext'=>$context]);
+recipe_agent_handle($pdo,$user,hac_test_input($pdo,$user,'recipes',['message'=>'Confirm','pageContext'=>$context]));
 $steps=json_decode((string)radb_scalar($pdo,"SELECT instructions_json FROM recipes WHERE organization_id=? AND public_id=?",[$org,'recipe-agent-ci']),true);
 radb_assert(end($steps)==='rest the dough for 20 minutes','Confirmed recipe instruction was not appended.');
-$noteProposal=recipe_agent_handle($pdo,$user,['message'=>'add production note use cold water during summer prep','pageContext'=>$context]);
+$noteProposal=recipe_agent_handle($pdo,$user,hac_test_input($pdo,$user,'recipes',['message'=>'add production note use cold water during summer prep','pageContext'=>$context]));
 radb_assert(($noteProposal['data']['requiresConfirmation']??false)===true,'Recipe note write skipped proposal state.');
-recipe_agent_handle($pdo,$user,['message'=>'Confirm','pageContext'=>$context]);
+recipe_agent_handle($pdo,$user,hac_test_input($pdo,$user,'recipes',['message'=>'Confirm','pageContext'=>$context]));
 radb_assert(str_contains((string)radb_scalar($pdo,"SELECT notes FROM recipes WHERE organization_id=? AND public_id=?",[$org,'recipe-agent-ci']),'use cold water during summer prep'),'Confirmed production note was not appended.');
 
 // Status proposal stale-write rejection preserves newer canonical state.
-$statusProposal=recipe_agent_handle($pdo,$user,['message'=>'mark this recipe inactive','pageContext'=>$context]);
+$statusProposal=recipe_agent_handle($pdo,$user,hac_test_input($pdo,$user,'recipes',['message'=>'mark this recipe inactive','pageContext'=>$context]));
 radb_assert(($statusProposal['data']['requiresConfirmation']??false)===true,'Recipe status write skipped proposal state.');
 $pdo->prepare("UPDATE recipes SET status='active',updated_at=DATE_ADD(NOW(6),INTERVAL 1 SECOND) WHERE organization_id=? AND public_id=?")->execute([$org,'recipe-agent-ci']);
 $staleRejected=false;
-try{recipe_agent_handle($pdo,$user,['message'=>'Confirm','pageContext'=>$context]);}catch(InvalidArgumentException $e){$staleRejected=str_contains($e->getMessage(),'changed');}
+try{recipe_agent_handle($pdo,$user,hac_test_input($pdo,$user,'recipes',['message'=>'Confirm','pageContext'=>$context]));}catch(InvalidArgumentException $e){$staleRejected=str_contains($e->getMessage(),'changed');}
 radb_assert($staleRejected,'Recipe stale proposal was not rejected.');
 radb_assert((string)radb_scalar($pdo,"SELECT status FROM recipes WHERE organization_id=? AND public_id=?",[$org,'recipe-agent-ci'])==='active','Stale Recipe confirmation overwrote newer state.');
 
 // Permission boundary: view + Agent can read, but not propose edits.
 $readOnly=$user;$readOnly['permissions']=['recipes.view','recipes.agent'];
 $editBlocked=false;
-try{recipe_agent_handle($pdo,$readOnly,['message'=>'set yield to 30 portions','pageContext'=>$context]);}catch(RecipeAgentPermissionException){$editBlocked=true;}
+try{recipe_agent_handle($pdo,$readOnly,hac_test_input($pdo,$readOnly,'recipes',['message'=>'set yield to 30 portions','pageContext'=>$context]));}catch(RecipeAgentPermissionException){$editBlocked=true;}
 radb_assert($editBlocked,'Recipe Agent write bypassed recipes.edit permission.');
-$readOnlyRead=recipe_agent_handle($pdo,$readOnly,['message'=>'How do we make this recipe?','pageContext'=>$context]);
+$readOnlyRead=recipe_agent_handle($pdo,$readOnly,hac_test_input($pdo,$readOnly,'recipes',['message'=>'How do we make this recipe?','pageContext'=>$context]));
 radb_assert(($readOnlyRead['skill']??'')==='recipe.standard','Read-only recipe Agent could not read recipe standards.');
 
 // Ingredient read/handoffs do not mutate Purchasing or other node records.
 $poBefore=(int)radb_scalar($pdo,"SELECT COUNT(*) FROM purchase_orders WHERE organization_id=?",[$org]);
-$detail=recipe_agent_handle($pdo,$user,['message'=>'Show this recipe','pageContext'=>$context]);
+$detail=recipe_agent_handle($pdo,$user,hac_test_input($pdo,$user,'recipes',['message'=>'Show this recipe','pageContext'=>$context]));
 radb_assert(in_array('purchasing',array_column((array)($detail['data']['handoffs']??[]),'node'),true),'Recipe detail did not expose Purchasing handoff.');
 radb_assert((int)radb_scalar($pdo,"SELECT COUNT(*) FROM purchase_orders WHERE organization_id=?",[$org])===$poBefore,'Recipe read created a purchase order.');
 

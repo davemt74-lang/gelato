@@ -46,11 +46,12 @@ function accounts_roles(PDO $pdo, int $org, ?int $membership = null): array
     },$roles);
 }
 
-function accounts_actor(PDO $pdo, int $org, int $uid): array
+function accounts_actor(PDO $pdo, int $org, int $uid, bool $lock=false): array
 {
+    if($lock&&!$pdo->inTransaction())throw new LogicException('A locked account authority check requires a transaction.');
     $q=$pdo->prepare("SELECT u.id,u.status,u.archived_at,om.id AS membership_id,om.organization_id
         FROM users u JOIN organization_memberships om ON om.user_id=u.id
-        WHERE u.id=? AND om.organization_id=? AND u.status='active' AND u.archived_at IS NULL AND om.status='active'");
+        WHERE u.id=? AND om.organization_id=? AND u.status='active' AND u.archived_at IS NULL AND om.status='active'".($lock?' FOR UPDATE':''));
     $q->execute([$uid,$org]); $actor=$q->fetch();
     if (!$actor) throw new DomainException('Your account no longer has access to this restaurant.');
     $actor['permissions']=[];
@@ -77,6 +78,25 @@ function accounts_lock_users(PDO $pdo, array $ids): void
     $ids=array_values(array_unique(array_filter(array_map('intval',$ids)))); sort($ids,SORT_NUMERIC);
     $q=$pdo->prepare('SELECT id FROM users WHERE id=? FOR UPDATE');
     foreach($ids as $id) {$q->execute([$id]);$q->fetch();}
+}
+
+/** Call after the restaurant lock, before locking role-change participants. */
+function accounts_role_user_ids(PDO $pdo,int $org,int $roleId): array
+{
+    if(!$pdo->inTransaction())throw new LogicException('Account-type changes require a transaction.');
+    $q=$pdo->prepare('SELECT DISTINCT om.user_id FROM organization_memberships om
+        JOIN user_roles ur ON ur.membership_id=om.id AND ur.revoked_at IS NULL
+        WHERE om.organization_id=? AND ur.role_id=?');
+    $q->execute([$org,$roleId]);return array_map('intval',$q->fetchAll(PDO::FETCH_COLUMN));
+}
+
+/** Every canonical permission change invalidates affected restaurant sessions. */
+function accounts_role_revoke_sessions(PDO $pdo,int $org,int $roleId): void
+{
+    if(!$pdo->inTransaction())throw new LogicException('Account-type session revocation requires a transaction.');
+    $pdo->prepare('UPDATE organization_memberships om JOIN user_roles ur ON ur.membership_id=om.id AND ur.revoked_at IS NULL
+        SET om.updated_at=GREATEST(NOW(6),DATE_ADD(om.updated_at,INTERVAL 1 MICROSECOND))
+        WHERE om.organization_id=? AND ur.role_id=?')->execute([$org,$roleId]);
 }
 
 function accounts_target(PDO $pdo, int $org, int $uid, bool $lock=false): array

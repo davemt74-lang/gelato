@@ -61,7 +61,7 @@ function fm8d18j8a_search(array $args,array $actor):array
     if(count($all)>8)$answer.=' More matches exist; narrow the search.';
     if(count($rows)>1)$answer.=' Select one exact order public ID.';
     return ['ok'=>true,'data'=>[
-        'answer'=>mb_substr($answer,0,1500,'UTF-8'),'source'=>'Gelato Wholesale Fulfillment',
+        'answer'=>$answer,'source'=>'Gelato Wholesale Fulfillment',
         'readOnly'=>true,'matches'=>$rows,'truncated'=>count($all)>8,
     ]];
 }
@@ -109,10 +109,10 @@ function fm8d18j8a_order(array $args,array $actor):array
     $answer=$order['order_number'].' ('.$order['public_id'].') · '.$order['business_name'].' · '.$section.': '.($lines?implode('; ',$lines):'No recorded entries.');
     if(count($all)>10)$answer.=' More records exist; first ten shown.';
     return ['ok'=>true,'data'=>[
-        'answer'=>mb_substr($answer,0,1800,'UTF-8'),'source'=>'Gelato Wholesale Fulfillment',
+        'answer'=>$answer,'source'=>'Gelato Wholesale Fulfillment',
         'readOnly'=>true,'orderPublicId'=>(string)$order['public_id'],
         'orderNumber'=>(string)$order['order_number'],'section'=>$section,
-        'records'=>$rows,'truncated'=>count($all)>10||mb_strlen($answer,'UTF-8')>1800,
+        'records'=>$rows,'truncated'=>count($all)>10,
     ]];
 }
 function fm8d18j8a_batch(array $args,array $actor):array
@@ -151,11 +151,11 @@ function fm8d18j8a_batch(array $args,array $actor):array
     $answer=$batch['fulfillment_number'].' ('.$batch['public_id'].') · '.$section.': '.($lines?implode('; ',$lines):'No recorded entries.');
     if(count($all)>10)$answer.=' More records exist; first ten shown.';
     return ['ok'=>true,'data'=>[
-        'answer'=>mb_substr($answer,0,1800,'UTF-8'),'source'=>'Gelato Wholesale Fulfillment',
+        'answer'=>$answer,'source'=>'Gelato Wholesale Fulfillment',
         'readOnly'=>true,'batchPublicId'=>(string)$batch['public_id'],
         'batchNumber'=>(string)$batch['fulfillment_number'],'orderPublicId'=>(string)$batch['order_public_id'],
         'section'=>$section,'records'=>$rows,
-        'truncated'=>count($all)>10||mb_strlen($answer,'UTF-8')>1800,
+        'truncated'=>count($all)>10,
     ]];
 }
 function fm8d18j8a_catalogue(array $actor,array $context=[]):array

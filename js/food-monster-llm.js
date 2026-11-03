@@ -56,7 +56,7 @@ function init(){
  const trigger=document.createElement('button');trigger.type='button';trigger.title='AI model';trigger.textContent='✦';
  trigger.className='fm-llm-trigger';trigger.setAttribute('aria-label','Language model settings');
  mascot.root.querySelector('.fm-actions')?.append(trigger);trigger.onclick=show;
- async function ask({text,threadId,csrf,privateTurnToken=''}){
+ async function ask({text,threadId,csrf,privateTurnToken='',reviewed={}}){
    const providers=status||await refresh();
    if(!providers||(!providers.openai&&!providers.anthropic))
      throw Error('No AI provider is configured. Connect an OpenAI or Anthropic credential in Gelato LLM Settings; private requests are not routed through an offline keyword fallback.');
@@ -64,7 +64,7 @@ function init(){
    const response=await fetch('api/food-monster-llm.php',{
       method:'POST',cache:'no-store',
       headers:{Accept:'application/json','Content-Type':'application/json','X-CSRF-Token':csrf},
-      body:JSON.stringify({action:'chat',message:text,threadId,provider:selected,privateTurnToken,csrf_token:csrf})
+      body:JSON.stringify({action:'chat',message:text,threadId,provider:selected,privateTurnToken,...reviewed,csrf_token:csrf})
    });
    const result=await response.json().catch(()=>({ok:false,message:'Invalid model response.'}));
    if(!response.ok||!result.ok)throw Error(result.message||'Could not complete model request.');

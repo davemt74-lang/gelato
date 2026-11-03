@@ -156,6 +156,7 @@ function cac_execute_pending(PDO $pdo,int $org,int $uid,array $user,array $propo
 
 function customer_crm_agent_handle(PDO $pdo,array $user,array $input): array
 {
+    gac_request_context($input,$pdo,$user);
     $org=(int)$user['organization_id'];$uid=(int)$user['id'];
     cac_require($user,'crm.view','CRM view permission is required.');
     $message=trim((string)($input['message']??''));
@@ -164,14 +165,15 @@ function customer_crm_agent_handle(PDO $pdo,array $user,array $input): array
     $pending=gac_pending_get('crm',$org,$uid);
 
     if(gac_is_confirm($message)){
-        if(!$pending)throw new InvalidArgumentException('There is no pending CRM Agent action to confirm.');
-        try{$result=cac_execute_pending($pdo,$org,$uid,$user,$pending);}catch(Throwable $e){gac_pending_clear('crm',$org,$uid);throw $e;}
-        gac_pending_clear('crm',$org,$uid);
+        $pending=gac_pending_claim('crm',$org,$uid,$input);
+        try{$result=cac_execute_pending($pdo,$org,$uid,$user,$pending);}catch(Throwable $e){gac_pending_clear('crm',$org,$uid,(string)$pending['id']);throw $e;}
+        gac_pending_clear('crm',$org,$uid,(string)$pending['id']);
         app_audit($pdo,$org,$uid,'crm.agent_action_confirmed','crm_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);
         return ['ok'=>true]+$result;
     }
-    if(gac_is_cancel($message)&&$pending){
-        gac_pending_clear('crm',$org,$uid);
+    if(gac_is_cancel($message)){
+        $pending=gac_pending_claim('crm',$org,$uid,$input);
+        gac_pending_clear('crm',$org,$uid,(string)$pending['id']);
         app_audit($pdo,$org,$uid,'crm.agent_action_discarded','crm_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);
         return ['ok'=>true,'skill'=>'crm.action_cancelled','answer'=>'Cancelled. I did not change the customer profile.','data'=>['cancelledProposal'=>$pending['id']],'sources'=>['Customer CRM']];
     }

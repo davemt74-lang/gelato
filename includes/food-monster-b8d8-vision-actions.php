@@ -116,34 +116,38 @@ function fm8d8_create_dataset(PDO $pdo,array $actor,array $context,array $args):
         (string)$d['name'].' version '.(string)$d['versionLabel'].
         '; status '.(string)$d['status'].'; reference '.(string)$d['publicId'].'.');
 }
+function fm8d8_read_observe(string $answer):array
+{
+    return ['ok'=>true,'data'=>['answer'=>$answer,'source'=>'Gelato Vision Lab mission/dataset ledger']];
+}
 function fm8d8_list_missions(PDO $pdo,array $actor):array
 {
     if(!app_has_permission('glasses.view',$actor))throw new DomainException('Vision Lab read is not permitted.');
     if(!glasses_vision_lab_ready($pdo))
-        return fm8d8_observe('Vision Lab is not installed or upgraded.');
+        return fm8d8_read_observe('Vision Lab is not installed or upgraded.');
     $rows=glasses_vision_lab_missions($pdo,(int)$actor['organization_id']);
-    if(!$rows)return fm8d8_observe('No Vision Lab collection missions are recorded for this restaurant.');
+    if(!$rows)return fm8d8_read_observe('No Vision Lab collection missions are recorded for this restaurant.');
     $lines=['Recorded Vision Lab collection missions:'];
     foreach(array_slice($rows,0,12) as $m)
         $lines[]=(string)($m['title']??'Untitled').': '.(string)($m['status']??'unknown').
             ', '.(int)($m['sampleCount']??0).' samples, reference '.
             (string)($m['publicId']??'unknown').'.';
     if(count($rows)>12)$lines[]='Additional missions exist; only 12 are displayed.';
-    return fm8d8_observe(implode("\n",$lines));
+    return fm8d8_read_observe(implode("\n",$lines));
 }
 function fm8d8_list_datasets(PDO $pdo,array $actor):array
 {
     if(!app_has_permission('glasses.view',$actor))throw new DomainException('Vision Lab read is not permitted.');
     if(!glasses_vision_lab_ready($pdo))
-        return fm8d8_observe('Vision Lab is not installed or upgraded.');
+        return fm8d8_read_observe('Vision Lab is not installed or upgraded.');
     $rows=glasses_vision_lab_datasets($pdo,(int)$actor['organization_id']);
-    if(!$rows)return fm8d8_observe('No Vision Lab dataset versions are recorded for this restaurant.');
+    if(!$rows)return fm8d8_read_observe('No Vision Lab dataset versions are recorded for this restaurant.');
     $lines=['Recorded Vision Lab datasets:'];
     foreach(array_slice($rows,0,12) as $d)
         $lines[]=(string)$d['name'].' version '.(string)$d['versionLabel'].': '.
             (string)$d['status'].', '.(int)$d['itemCount'].' sample items.';
     if(count($rows)>12)$lines[]='Additional datasets exist; only 12 are displayed.';
-    return fm8d8_observe(implode("\n",$lines));
+    return fm8d8_read_observe(implode("\n",$lines));
 }
 function fm8d8_vision_catalogue(array $principal,array $context=[]):array
 {

@@ -190,6 +190,7 @@ function equipment_agent_extract_date(string $text): ?string
 
 function equipment_agent_handle(PDO $pdo,array $user,array $input): array
 {
+    gac_request_context($input,$pdo,$user);
     equipment_agent_require_read($user);
     if(!equipment_agent_ready($pdo))throw new RuntimeException('Equipment data is not installed. Run upgrade.php.');
     $org=(int)$user['organization_id'];$uid=(int)$user['id'];$message=trim((string)($input['message']??''));
@@ -197,14 +198,15 @@ function equipment_agent_handle(PDO $pdo,array $user,array $input): array
     $context=is_array($input['pageContext']??null)?$input['pageContext']:[];$pending=gac_pending_get('equipment',$org,$uid);
 
     if(gac_is_confirm($message)){
-        if(!$pending)throw new InvalidArgumentException('There is no pending Equipment action to confirm.');
-        try{$result=equipment_agent_execute_pending($pdo,$user,$pending);}catch(Throwable $e){gac_pending_clear('equipment',$org,$uid);throw $e;}
-        gac_pending_clear('equipment',$org,$uid);
+        $pending=gac_pending_claim('equipment',$org,$uid,$input);
+        try{$result=equipment_agent_execute_pending($pdo,$user,$pending);}catch(Throwable $e){gac_pending_clear('equipment',$org,$uid,(string)$pending['id']);throw $e;}
+        gac_pending_clear('equipment',$org,$uid,(string)$pending['id']);
         app_audit($pdo,$org,$uid,'equipment.agent_action_confirmed','equipment_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']??null]);
         return ['ok'=>true]+$result;
     }
-    if(gac_is_cancel($message)&&$pending){
-        gac_pending_clear('equipment',$org,$uid);
+    if(gac_is_cancel($message)){
+        $pending=gac_pending_claim('equipment',$org,$uid,$input);
+        gac_pending_clear('equipment',$org,$uid,(string)$pending['id']);
         app_audit($pdo,$org,$uid,'equipment.agent_action_discarded','equipment_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']??null]);
         return ['ok'=>true,'skill'=>'equipment.action_cancelled','answer'=>'Cancelled. I did not change the equipment record or service history.','data'=>['cancelledProposal'=>$pending['id']],'sources'=>['Equipment + Maintenance Agent']];
     }

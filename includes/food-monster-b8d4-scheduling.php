@@ -86,6 +86,10 @@ function fm8d4_schedule_observation(string $answer,string $source='Staff Schedul
 {
     return ['ok'=>true,'data'=>['answer'=>mb_substr($answer,0,2600,'UTF-8'),'source'=>$source]];
 }
+function fm8d4_schedule_read_observation(string $answer,string $source='Staff Scheduling'):array
+{
+    return ['ok'=>true,'data'=>['answer'=>$answer,'source'=>$source]];
+}
 function fm8d4_schedule_catalogue(array $principal):array
 {
     $hasSelf=fm8d4_can($principal,'schedule.self');
@@ -104,8 +108,8 @@ function fm8d4_schedule_catalogue(array $principal):array
                 $pdo=app_pdo();$org=(int)$actor['organization_id'];$uid=(int)$actor['id'];
                 $week=fm8d4_schedule_week($args);
                 $employee=scheduling_staff_user($pdo,$org,$uid);
-                if(!$employee)return fm8d4_schedule_observation('No active employee scheduling profile is linked to your account.');
-                return fm8d4_schedule_observation(fm8d4_schedule_answer(
+                if(!$employee)return fm8d4_schedule_read_observation('No active employee scheduling profile is linked to your account.');
+                return fm8d4_schedule_read_observation(fm8d4_schedule_answer(
                     scheduling_shifts($pdo,$org,$week,$uid),sac_staff_name($employee),$week));
             },
         ];
@@ -125,9 +129,9 @@ function fm8d4_schedule_catalogue(array $principal):array
             'execute'=>static function(array $args,array $actor):array{
                 $pdo=app_pdo();$org=(int)$actor['organization_id'];
                 $match=fm8d4_staff_resolve($pdo,$org,(string)$args['employee_name']);
-                if(isset($match['error']))return fm8d4_schedule_observation($match['error']);
+                if(isset($match['error']))return fm8d4_schedule_read_observation($match['error']);
                 $p=$match['staff'];$week=fm8d4_schedule_week($args);
-                return fm8d4_schedule_observation(fm8d4_schedule_answer(
+                return fm8d4_schedule_read_observation(fm8d4_schedule_answer(
                     scheduling_shifts($pdo,$org,$week,(int)$p['user_id']),sac_staff_name($p),$week));
             },
         ];
@@ -143,10 +147,10 @@ function fm8d4_schedule_catalogue(array $principal):array
                 $pdo=app_pdo();$org=(int)$actor['organization_id'];
                 $rows=array_filter(scheduling_shifts($pdo,$org,scheduling_week_start($day)),
                     static fn(array $r):bool=>substr((string)$r['starts_at'],0,10)===$day&&($r['status']??'')!=='cancelled');
-                if(!$rows)return fm8d4_schedule_observation('No shifts are scheduled for '.$day.'.');
+                if(!$rows)return fm8d4_schedule_read_observation('No shifts are scheduled for '.$day.'.');
                 $parts=[];foreach($rows as $row)
                     $parts[]=($row['display_name']?:'Open shift').' '.fm8d4_shift_text($row);
-                return fm8d4_schedule_observation(date('l M j',strtotime($day)).': '.implode('; ',$parts).'.');
+                return fm8d4_schedule_read_observation(date('l M j',strtotime($day)).': '.implode('; ',$parts).'.');
             },
         ];
         $tools['check_staff_availability']=[
@@ -165,14 +169,14 @@ function fm8d4_schedule_catalogue(array $principal):array
             'execute'=>static function(array $args,array $actor):array{
                 $pdo=app_pdo();$org=(int)$actor['organization_id'];
                 $match=fm8d4_staff_resolve($pdo,$org,(string)$args['employee_name']);
-                if(isset($match['error']))return fm8d4_schedule_observation($match['error']);
+                if(isset($match['error']))return fm8d4_schedule_read_observation($match['error']);
                 [$start,$end]=fm8d4_schedule_range($args);
                 $p=$match['staff'];$who=sac_staff_name($p);
                 $availability=scheduling_availability_check($pdo,$org,(int)$p['user_id'],$start,$end);
                 $conflicts=scheduling_shift_conflicts($pdo,$org,(int)$p['user_id'],$start,$end);
-                if($conflicts)return fm8d4_schedule_observation($who.' has '.count($conflicts).' overlapping scheduled shift(s) for that time.');
-                if(!$availability['ok'])return fm8d4_schedule_observation($who.' is not available for that time: '.$availability['reason']);
-                return fm8d4_schedule_observation($who.' has no shift overlap. Recorded availability check: '.$availability['reason'].' Confirm with the employee when no availability preferences are recorded.','Staff Scheduling / Employee Availability');
+                if($conflicts)return fm8d4_schedule_read_observation($who.' has '.count($conflicts).' overlapping scheduled shift(s) for that time.');
+                if(!$availability['ok'])return fm8d4_schedule_read_observation($who.' is not available for that time: '.$availability['reason']);
+                return fm8d4_schedule_read_observation($who.' has no shift overlap. Recorded availability check: '.$availability['reason'].' Confirm with the employee when no availability preferences are recorded.','Staff Scheduling / Employee Availability');
             },
         ];
     }
@@ -215,7 +219,10 @@ function fm8d4_schedule_catalogue(array $principal):array
                     app_audit($pdo,$org,$uid,'schedule.agent_action_proposed','schedule_agent_proposal',
                         (string)$pending['id'],null,['type'=>'shift_create','source'=>'food_monster_model']);
                 }finally{if($newSession&&session_status()===PHP_SESSION_ACTIVE)session_write_close();}
-                return fm8d4_schedule_observation($summary."\n\nReply Confirm to create the shift, or Cancel to discard it. No shift has been saved yet.",'Staff Scheduling / Employee Availability');
+                $result=fm8d4_schedule_observation(gac_proposal_answer($pending),'Staff Scheduling / Employee Availability');
+                $result['data']['requiresConfirmation']=true;
+                $result['data']['proposal']=gac_public_proposal($pending);
+                return $result;
             },
         ];
     }
@@ -236,24 +243,31 @@ function fm8d4_confirm_pending(PDO $pdo,array $principal,array $history,?callabl
     try{
         $pending=sac_pending_get($org,$uid);
         if(!$pending||($pending['type']??'')!=='shift_create')return null;
+        $evidence=(array)($GLOBALS['gac_request_context']['input']??[]);
+        $fields=gac_confirmation_fields($evidence);
+        if(!hash_equals((string)$pending['id'],$fields['proposalId']))return null;
+        $pending=gac_pending_reviewed('scheduling',$org,$uid,$evidence);
         $actor=$refreshOverride!==null?$refreshOverride():fm8d2_refresh_operator($pdo,$principal);
         if(!is_array($actor)||(int)$actor['id']!==$uid||(int)$actor['organization_id']!==$org)
             return ['ok'=>true,'skill'=>'schedule.permission_denied','answer'=>'Your account access changed; I did not change the schedule.','sources'=>[],'data'=>['status'=>'denied','toolCalls'=>0]];
         if($message==='cancel'){
-            sac_pending_clear($org,$uid);
+            $pending=gac_pending_claim('scheduling',$org,$uid,$evidence);
+            sac_pending_clear($org,$uid,(string)$pending['id']);
             app_audit($pdo,$org,$uid,'schedule.agent_action_discarded','schedule_agent_proposal',
                 (string)$pending['id'],null,['type'=>$pending['type'],'source'=>'food_monster_model']);
             return ['ok'=>true,'skill'=>'schedule.action_cancelled','answer'=>'Cancelled. I did not change the schedule.','sources'=>['Staff Scheduling'],'data'=>['status'=>'cancelled','toolCalls'=>0]];
         }
         if(!fm8d4_can($actor,'schedule.agent')||!fm8d4_can($actor,'schedule.manage'))
             return ['ok'=>true,'skill'=>'schedule.permission_denied','answer'=>'Schedule management permission is required to confirm this shift. Nothing was changed.','sources'=>[],'data'=>['status'=>'denied','toolCalls'=>0]];
+        $pending=gac_pending_claim('scheduling',$org,$uid,$evidence);
         try{$result=sac_execute_pending($pdo,$org,$uid,$actor,$pending);}
         catch(Throwable $e){
+            sac_pending_clear($org,$uid,(string)$pending['id']);
             return ['ok'=>true,'skill'=>'schedule.action_stopped',
                 'answer'=>'I did not complete the schedule change: '.($e instanceof InvalidArgumentException?$e->getMessage():'The existing Scheduling Agent could not verify this action.'),
                 'sources'=>['Staff Scheduling'],'data'=>['status'=>'not_committed','toolCalls'=>0]];
         }
-        sac_pending_clear($org,$uid);
+        sac_pending_clear($org,$uid,(string)$pending['id']);
         app_audit($pdo,$org,$uid,'schedule.agent_action_confirmed','schedule_agent_proposal',
             (string)$pending['id'],null,['type'=>$pending['type'],'source'=>'food_monster_model']);
         return ['ok'=>true,'skill'=>'schedule.action_confirmed',

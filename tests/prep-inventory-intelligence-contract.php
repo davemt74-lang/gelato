@@ -1,5 +1,7 @@
 <?php
 declare(strict_types=1);
+if(PHP_SAPI!=='cli'){http_response_code(404);exit;}
+require_once __DIR__.'/hardening-agent-confirmation-test-support.php';
 
 require __DIR__ . '/../includes/bootstrap.php';
 require __DIR__ . '/../includes/prep-intelligence-core.php';
@@ -89,57 +91,57 @@ catch(PrepAgentPermissionException $expected){}
 
 // B8D17G2B: create -> read -> incremental update -> read -> completion -> read.
 app_boot_session();
-$read=prep_agent_handle($pdo,$prepActor,['message'=>'Show the prep list on 2026-11-06']);
+$read=prep_agent_handle($pdo,$prepActor,hac_test_input($pdo,$prepActor,'prep',['message'=>'Show the prep list on 2026-11-06']));
 pit_assert($read['skill']==='prep.list'&&count($read['data']['tasks'])===2,'dated prep list reads both persisted tasks');
 pit_assert(str_contains($read['answer'],'6 pans of dough')&&str_contains($read['answer'],'4 containers of sauce'),
     'spoken read-back includes item names and quantities; actual: '.$read['answer']);
 pit_assert((pac_context_get($orgId,$userId)['date']??'')==='2026-11-06','prep context is scoped to the current user and plan');
 pit_assert(pac_context_get($orgId+1000,$userId)===null,'prep context is not shared across organizations');
 
-$increase=prep_agent_handle($pdo,$prepActor,['message'=>'Add two more pans of dough']);
+$increase=prep_agent_handle($pdo,$prepActor,hac_test_input($pdo,$prepActor,'prep',['message'=>'Add two more pans of dough']));
 pit_assert(($increase['data']['requiresConfirmation']??false)===true,'incremental prep write requires confirmation');
 $pendingIncrease=gac_pending_get('prep',$orgId,$userId);
 pit_assert(($pendingIncrease['type']??'')==='task_quantity','pending quantity action targets the canonical task');
 // Reloading the page does not consume or replay the one-use server-side proposal.
 unset($_SESSION['prep_agent_context'][pac_context_key($orgId,$userId)]);
-$confirmedIncrease=prep_agent_handle($pdo,$prepActor,['message'=>'Confirm']);
+$confirmedIncrease=prep_agent_handle($pdo,$prepActor,hac_test_input($pdo,$prepActor,'prep',['message'=>'Confirm']));
 pit_assert(($confirmedIncrease['data']['before']??null)===6.0
     &&($confirmedIncrease['data']['after']??null)===8.0,'confirmed quantity update is additive and exact');
 pit_assert(($confirmedIncrease['data']['proof']['taskId']??'')!=='','quantity action includes a verifiable task receipt');
 try{pac_execute($pdo,$orgId,$userId,$prepActor,$pendingIncrease,false);
     throw new RuntimeException('Replaying confirmed quantity proposal should fail');}
 catch(InvalidArgumentException $expected){}
-try{prep_agent_handle($pdo,$prepActor,['message'=>'Confirm']);
+try{prep_agent_handle($pdo,$prepActor,hac_test_input($pdo,$prepActor,'prep',['message'=>'Confirm']));
     throw new RuntimeException('A second confirmation must not replay the completed write');}
-catch(InvalidArgumentException $expected){}
-$afterIncrease=prep_agent_handle($pdo,$prepActor,['message'=>'Show the prep list on 2026-11-06']);
+catch(GacConfirmationConflict $expected){}
+$afterIncrease=prep_agent_handle($pdo,$prepActor,hac_test_input($pdo,$prepActor,'prep',['message'=>'Show the prep list on 2026-11-06']));
 pit_assert(str_contains($afterIncrease['answer'],'8 pans of dough'),'read-back reflects the new persisted quantity');
 
-$assignee=prep_agent_handle($pdo,$prepActor,['message'=>"Who's doing sauce?"]);
+$assignee=prep_agent_handle($pdo,$prepActor,hac_test_input($pdo,$prepActor,'prep',['message'=>"Who's doing sauce?"]));
 pit_assert($assignee['skill']==='prep.task_assignees'&&str_contains($assignee['answer'],'unassigned'),
     'conversational assignment query reads the current canonical task');
 $employeeActor=['id'=>$userId,'organization_id'=>$orgId,'permissions'=>['prep.intelligence.view','prep.intelligence.agent','tasks.self']];
-try{prep_agent_handle($pdo,$employeeActor,['message'=>'Mark the sauce complete']);
+try{prep_agent_handle($pdo,$employeeActor,hac_test_input($pdo,$employeeActor,'prep',['message'=>'Mark the sauce complete']));
     throw new RuntimeException('Unassigned employees may not complete arbitrary prep tasks');}
 catch(PrepAgentPermissionException $expected){}
 $sauce=operations_task_by_public_id($pdo,$orgId,(string)$added['data']['tasks'][1]['public_id']);
 $pdo->prepare("INSERT IGNORE INTO restaurant_task_assignments (organization_id,task_id,user_id,assignment_role,assigned_by) VALUES (?,?,?,'assignee',?)")
     ->execute([$orgId,(int)$sauce['id'],$userId,$userId]);
-$assigned=prep_agent_handle($pdo,$employeeActor,['message'=>"Who's doing sauce?"]);
+$assigned=prep_agent_handle($pdo,$employeeActor,hac_test_input($pdo,$employeeActor,'prep',['message'=>"Who's doing sauce?"]));
 pit_assert(str_contains($assigned['answer'],$actorName),'assignment read-back identifies the actual assigned employee');
-$statusProposal=prep_agent_handle($pdo,$employeeActor,['message'=>'Mark the sauce complete']);
+$statusProposal=prep_agent_handle($pdo,$employeeActor,hac_test_input($pdo,$employeeActor,'prep',['message'=>'Mark the sauce complete']));
 pit_assert(($statusProposal['data']['requiresConfirmation']??false)===true,'assigned employee completion still needs confirmation');
 $pdo->prepare('UPDATE restaurant_tasks SET requires_photo=1 WHERE id=?')->execute([(int)$sauce['id']]);
-try{prep_agent_handle($pdo,$employeeActor,['message'=>'Confirm']);
+try{prep_agent_handle($pdo,$employeeActor,hac_test_input($pdo,$employeeActor,'prep',['message'=>'Confirm']));
     throw new RuntimeException('Photo-required prep task cannot complete without proof');}
 catch(InvalidArgumentException $expected){}
 pit_assert((string)operations_task_by_public_id($pdo,$orgId,(string)$sauce['public_id'])['status']==='queued',
     'denied completion preserves task status');
 $pdo->prepare('UPDATE restaurant_tasks SET requires_photo=0 WHERE id=?')->execute([(int)$sauce['id']]);
-$statusProposal=prep_agent_handle($pdo,$employeeActor,['message'=>'Mark the sauce complete']);
-$statusDone=prep_agent_handle($pdo,$employeeActor,['message'=>'Confirm']);
+$statusProposal=prep_agent_handle($pdo,$employeeActor,hac_test_input($pdo,$employeeActor,'prep',['message'=>'Mark the sauce complete']));
+$statusDone=prep_agent_handle($pdo,$employeeActor,hac_test_input($pdo,$employeeActor,'prep',['message'=>'Confirm']));
 pit_assert(($statusDone['data']['after']??'')==='completed','assigned employee may complete their prep task');
-$afterStatus=prep_agent_handle($pdo,$prepActor,['message'=>'Show the prep list on 2026-11-06']);
+$afterStatus=prep_agent_handle($pdo,$prepActor,hac_test_input($pdo,$prepActor,'prep',['message'=>'Show the prep list on 2026-11-06']));
 pit_assert(str_contains($afterStatus['answer'],'sauce (completed, assigned to '.$actorName.')'),
     'post-write readback includes employee and completed status');
 
@@ -154,38 +156,38 @@ catch(InvalidArgumentException $expected){}
 try{pac_staff_match($pdo,$orgId,'Someone Outside');throw new RuntimeException('Unknown staff identity must be rejected');}
 catch(InvalidArgumentException $expected){}
 $doughId=(string)$added['data']['tasks'][0]['public_id'];
-$assignProposal=prep_agent_handle($pdo,$prepActor,['message'=>'Assign dough to Prep CI Staff']);
+$assignProposal=prep_agent_handle($pdo,$prepActor,hac_test_input($pdo,$prepActor,'prep',['message'=>'Assign dough to Prep CI Staff']));
 pit_assert(($assignProposal['data']['requiresConfirmation']??false)===true,'assignment requires confirmation');
 $staffActor=['id'=>$staffId,'organization_id'=>$orgId,'permissions'=>['prep.intelligence.view','prep.intelligence.agent','tasks.self']];
-prep_agent_handle($pdo,$staffActor,['message'=>'Show the prep list on 2026-11-06']);
-try{prep_agent_handle($pdo,$staffActor,['message'=>'Assign dough to Prep CI Staff']);
+prep_agent_handle($pdo,$staffActor,hac_test_input($pdo,$staffActor,'prep',['message'=>'Show the prep list on 2026-11-06']));
+try{prep_agent_handle($pdo,$staffActor,hac_test_input($pdo,$staffActor,'prep',['message'=>'Assign dough to Prep CI Staff']));
     throw new RuntimeException('Employee may not reassign prep tasks');}
 catch(PrepAgentPermissionException $expected){}
-$assignedDough=prep_agent_handle($pdo,$prepActor,['message'=>'Confirm']);
+$assignedDough=prep_agent_handle($pdo,$prepActor,hac_test_input($pdo,$prepActor,'prep',['message'=>'Confirm']));
 pit_assert(($assignedDough['data']['action']??'')==='task_assign','manager confirmation records assignment action');
 $doughDetail=operations_task_detail($pdo,$orgId,$doughId);
 pit_assert(count($doughDetail['assignments'])===1&&(int)$doughDetail['assignments'][0]['user_id']===$staffId,
     'canonical task assignment targets the named employee exactly');
-try{prep_agent_handle($pdo,$prepActor,['message'=>'Confirm']);throw new RuntimeException('Replayed assignment must fail');}
+try{prep_agent_handle($pdo,$prepActor,hac_test_input($pdo,$prepActor,'prep',['message'=>'Confirm']));throw new RuntimeException('Replayed assignment must fail');}
 catch(InvalidArgumentException $expected){}
-$progressProposal=prep_agent_handle($pdo,$staffActor,['message'=>'Mark dough in progress']);
+$progressProposal=prep_agent_handle($pdo,$staffActor,hac_test_input($pdo,$staffActor,'prep',['message'=>'Mark dough in progress']));
 pit_assert(($progressProposal['data']['requiresConfirmation']??false)===true,'assigned employee progress needs confirmation');
-$progress=prep_agent_handle($pdo,$staffActor,['message'=>'Confirm']);
+$progress=prep_agent_handle($pdo,$staffActor,hac_test_input($pdo,$staffActor,'prep',['message'=>'Confirm']));
 pit_assert(($progress['data']['after']??'')==='in_progress','assigned employee can start prep progress');
-$blockedProposal=prep_agent_handle($pdo,$staffActor,['message'=>'Block prep dough']);
+$blockedProposal=prep_agent_handle($pdo,$staffActor,hac_test_input($pdo,$staffActor,'prep',['message'=>'Block prep dough']));
 pit_assert(($blockedProposal['data']['requiresConfirmation']??false)===true,'blocking a task needs confirmation');
-$blocked=prep_agent_handle($pdo,$staffActor,['message'=>'Confirm']);
+$blocked=prep_agent_handle($pdo,$staffActor,hac_test_input($pdo,$staffActor,'prep',['message'=>'Confirm']));
 pit_assert(($blocked['data']['after']??'')==='blocked','assigned employee can report a blocker');
  
 // B8D17G2D: actor-scoped prep inbox, tenant isolation and restart-safe readbacks.
-$mine=prep_agent_handle($pdo,$staffActor,['message'=>'What is my prep on 2026-11-06?']);
+$mine=prep_agent_handle($pdo,$staffActor,hac_test_input($pdo,$staffActor,'prep',['message'=>'What is my prep on 2026-11-06?']));
 pit_assert(($mine['skill']??'')==='prep.my_tasks','spoken my-prep intent reaches dedicated inbox');
 pit_assert(count($mine['data']['tasks']??[])===1
     &&(string)$mine['data']['tasks'][0]['public_id']===$doughId,
     'employee inbox contains only their actual dated task assignment');
 pit_assert(str_contains($mine['answer'],'blocked')&&!str_contains($mine['answer'],'sauce'),
     'inbox speaks live progress without disclosing another employee\'s prep');
-$managerMine=prep_agent_handle($pdo,$prepActor,['message'=>'Show my prep tasks on 2026-11-06']);
+$managerMine=prep_agent_handle($pdo,$prepActor,hac_test_input($pdo,$prepActor,'prep',['message'=>'Show my prep tasks on 2026-11-06']));
 pit_assert(count($managerMine['data']['tasks']??[])===1
     &&(string)$managerMine['data']['tasks'][0]['public_id']===(string)$sauce['public_id'],
     'manager\'s personal prep inbox does not turn into an unrestricted task list');
@@ -193,7 +195,7 @@ $tenantMine=pac_my_prep($pdo,$orgId+100000,$staffId,'My prep on 2026-11-06');
 pit_assert(($tenantMine['data']['tasks']??[])===[],
     'prep inbox does not read another organization\'s task assignments');
 unset($_SESSION['prep_agent_context']);
-$reloadMine=prep_agent_handle($pdo,$staffActor,['message'=>'My prep on 2026-11-06']);
+$reloadMine=prep_agent_handle($pdo,$staffActor,hac_test_input($pdo,$staffActor,'prep',['message'=>'My prep on 2026-11-06']));
 pit_assert(($reloadMine['sources']??[])===[$doughId],
     'prep inbox reconstructs the same canonical assignment after session reload');
 
@@ -214,10 +216,10 @@ pit_assert(array_column(pac_proactive_signals($pdo,$orgId,$staffId,$staffActor,'
 
 // B8D17G2E: employee blocker reason, manager visibility, deduped escalation, resolution and handoff.
 $reasonProposal=prep_agent_handle($pdo,$staffActor,
-    ['message'=>"I'm blocked on dough because the mixer is overheating"]);
+    hac_test_input($pdo,$staffActor,'prep',['message'=>"I'm blocked on dough because the mixer is overheating"]));
 pit_assert(($reasonProposal['data']['requiresConfirmation']??false)===true,
     'reporting a new reason for an already blocked task requires confirmation');
-$reasonRecorded=prep_agent_handle($pdo,$staffActor,['message'=>'Confirm']);
+$reasonRecorded=prep_agent_handle($pdo,$staffActor,hac_test_input($pdo,$staffActor,'prep',['message'=>'Confirm']));
 pit_assert(($reasonRecorded['data']['action']??'')==='task_blocker',
     'confirmed blocker reason is a distinct canonical task action');
 $eventQuery=$pdo->prepare("SELECT metadata_json FROM restaurant_task_events
@@ -226,29 +228,29 @@ $eventQuery->execute([$orgId,(int)operations_task_by_public_id($pdo,$orgId,$doug
 $reasonEvent=json_decode((string)$eventQuery->fetchColumn(),true);
 pit_assert(($reasonEvent['reason']??'')==='the mixer is overheating',
     'append-only task event retains the employee reported blocker reason');
-$otherBlockers=prep_agent_handle($pdo,$employeeActor,['message'=>'Blocked prep on 2026-11-06']);
+$otherBlockers=prep_agent_handle($pdo,$employeeActor,hac_test_input($pdo,$employeeActor,'prep',['message'=>'Blocked prep on 2026-11-06']));
 pit_assert(($otherBlockers['data']['tasks']??[])===[],
     'employee cannot read another employee’s blocker reason');
 $duplicateProposal=prep_agent_handle($pdo,$staffActor,
-    ['message'=>"I'm blocked on dough because the mixer is overheating"]);
+    hac_test_input($pdo,$staffActor,'prep',['message'=>"I'm blocked on dough because the mixer is overheating"]));
 pit_assert(($duplicateProposal['data']['requiresConfirmation']??false)===true,
     'repeated blocker report is still presented for confirmation');
-try{prep_agent_handle($pdo,$staffActor,['message'=>'Confirm']);
+try{prep_agent_handle($pdo,$staffActor,hac_test_input($pdo,$staffActor,'prep',['message'=>'Confirm']));
     throw new RuntimeException('Identical blocker reason must not create duplicate events');}
 catch(InvalidArgumentException $expected){}
 $eventQuery->execute([$orgId,(int)operations_task_by_public_id($pdo,$orgId,$doughId)['id']]);
 pit_assert(json_decode((string)$eventQuery->fetchColumn(),true)['reason']==='the mixer is overheating',
     'duplicate confirmation preserves the original reason and audit lineage');
-$managerBlockers=prep_agent_handle($pdo,$prepActor,['message'=>"What's blocked on prep on 2026-11-06?"]);
+$managerBlockers=prep_agent_handle($pdo,$prepActor,hac_test_input($pdo,$prepActor,'prep',['message'=>"What's blocked on prep on 2026-11-06?"]));
 pit_assert(($managerBlockers['skill']??'')==='prep.blockers'
     &&count($managerBlockers['data']['tasks']??[])===1
     &&str_contains($managerBlockers['answer'],'the mixer is overheating')
     &&str_contains($managerBlockers['answer'],'Prep CI Staff'),
     'manager sees the live blocker reason and assigned employee');
-$myBlockers=prep_agent_handle($pdo,$staffActor,['message'=>'Blocked prep on 2026-11-06']);
+$myBlockers=prep_agent_handle($pdo,$staffActor,hac_test_input($pdo,$staffActor,'prep',['message'=>'Blocked prep on 2026-11-06']));
 pit_assert(count($myBlockers['data']['tasks']??[])===1,
     'assigned employee sees their own blocked task');
-try{prep_agent_handle($pdo,$staffActor,['message'=>'Resolve blocker on dough']);
+try{prep_agent_handle($pdo,$staffActor,hac_test_input($pdo,$staffActor,'prep',['message'=>'Resolve blocker on dough']));
     throw new RuntimeException('Employee cannot authorize manager-only blocker resolution');}
 catch(PrepAgentPermissionException $expected){}
 $refreshedSignals=pac_proactive_signals($pdo,$orgId,$userId,$prepActor,'2026-11-06');
@@ -260,19 +262,19 @@ pit_assert(count($refreshedBlocked)===1
     'new blocker reason creates a fresh actionable manager alert');
 pit_assert(array_column(pac_proactive_signals($pdo,$orgId,$userId,$prepActor,'2026-11-06'),'key')
     ===array_column($refreshedSignals,'key'),'same blocker reason never creates duplicate alert keys');
-$resolveProposal=prep_agent_handle($pdo,$prepActor,['message'=>'Resolve blocker on dough']);
+$resolveProposal=prep_agent_handle($pdo,$prepActor,hac_test_input($pdo,$prepActor,'prep',['message'=>'Resolve blocker on dough']));
 pit_assert(($resolveProposal['data']['requiresConfirmation']??false)===true,
     'manager resolution requests explicit confirmation; got '.json_encode($resolveProposal,JSON_UNESCAPED_SLASHES));
-$resolved=prep_agent_handle($pdo,$prepActor,['message'=>'Confirm']);
+$resolved=prep_agent_handle($pdo,$prepActor,hac_test_input($pdo,$prepActor,'prep',['message'=>'Confirm']));
 pit_assert(($resolved['data']['after']??'')==='in_progress',
     'manager-confirmed blocker resolution returns task to in progress');
 pit_assert(!in_array('prep.task_blocked',
     array_column(pac_proactive_signals($pdo,$orgId,$userId,$prepActor,'2026-11-06'),'type'),true),
     'resolved blocker disappears from proactive exception feed');
-$reblockProposal=prep_agent_handle($pdo,$prepActor,['message'=>'Block prep dough']);
+$reblockProposal=prep_agent_handle($pdo,$prepActor,hac_test_input($pdo,$prepActor,'prep',['message'=>'Block prep dough']));
 pit_assert(($reblockProposal['data']['requiresConfirmation']??false)===true,
     'new status epoch still permits a bare block without inventing a reason');
-$reblocked=prep_agent_handle($pdo,$prepActor,['message'=>'Confirm']);
+$reblocked=prep_agent_handle($pdo,$prepActor,hac_test_input($pdo,$prepActor,'prep',['message'=>'Confirm']));
 pit_assert(($reblocked['data']['after']??'')==='blocked','reblock changes task status');
 $reblockSignals=pac_proactive_signals($pdo,$orgId,$userId,$prepActor,'2026-11-06');
 $bareBlock=array_values(array_filter($reblockSignals,
@@ -280,21 +282,21 @@ $bareBlock=array_values(array_filter($reblockSignals,
 pit_assert(count($bareBlock)===1
     &&!str_contains($bareBlock[0]['message'],'the mixer is overheating'),
     'new status epoch never reuses a stale blocker reason');
-$reResolve=prep_agent_handle($pdo,$prepActor,['message'=>'Resolve blocker on dough']);
+$reResolve=prep_agent_handle($pdo,$prepActor,hac_test_input($pdo,$prepActor,'prep',['message'=>'Resolve blocker on dough']));
 pit_assert(($reResolve['data']['requiresConfirmation']??false)===true,'manager can resolve a later blocker');
-prep_agent_handle($pdo,$prepActor,['message'=>'Confirm']);
+prep_agent_handle($pdo,$prepActor,hac_test_input($pdo,$prepActor,'prep',['message'=>'Confirm']));
 $reassignProposal=prep_agent_handle($pdo,$prepActor,
-    ['message'=>'Reassign dough to '.$actorName]);
+    hac_test_input($pdo,$prepActor,'prep',['message'=>'Reassign dough to '.$actorName]));
 pit_assert(($reassignProposal['data']['requiresConfirmation']??false)===true,
     'manager handoff to a named employee requires confirmation');
-$reassigned=prep_agent_handle($pdo,$prepActor,['message'=>'Confirm']);
+$reassigned=prep_agent_handle($pdo,$prepActor,hac_test_input($pdo,$prepActor,'prep',['message'=>'Confirm']));
 pit_assert(($reassigned['data']['action']??'')==='task_assign',
     'confirmed blocker handoff changes the canonical task assignment');
 $handoff=operations_task_detail($pdo,$orgId,$doughId);
 pit_assert(count($handoff['assignments'])===1
     &&(int)$handoff['assignments'][0]['user_id']===$userId,
     'old assignee is replaced by new handoff owner, not duplicated');
-try{prep_agent_handle($pdo,$staffActor,['message'=>'Mark dough in progress']);
+try{prep_agent_handle($pdo,$staffActor,hac_test_input($pdo,$staffActor,'prep',['message'=>'Mark dough in progress']));
     throw new RuntimeException('Former assignee must lose task progress authority after handoff');}
 catch(PrepAgentPermissionException $expected){}
 
@@ -302,7 +304,7 @@ catch(PrepAgentPermissionException $expected){}
 
 // B8D17G2F: read-only service readiness plus stable due-soon/overdue reminders.
 $readiness=prep_agent_handle($pdo,$prepActor,
-    ['message'=>'Are we ready for prep on 2026-11-06?']);
+    hac_test_input($pdo,$prepActor,'prep',['message'=>'Are we ready for prep on 2026-11-06?']));
 pit_assert(($readiness['skill']??'')==='prep.readiness'
     &&($readiness['data']['scope']??'')==='manager'
     &&($readiness['data']['counts']['total']??0)===3
@@ -314,7 +316,7 @@ pit_assert(str_contains($readiness['answer'],'Garlic knots')
     &&!str_contains($readiness['answer'],'ready for service'),
     'at-risk prep summary names the outstanding blocker without falsely declaring readiness');
 $employeeReadiness=prep_agent_handle($pdo,$employeeActor,
-    ['message'=>'How much prep is done on 2026-11-06?']);
+    hac_test_input($pdo,$employeeActor,'prep',['message'=>'How much prep is done on 2026-11-06?']));
 pit_assert(($employeeReadiness['skill']??'')==='prep.readiness'
     &&($employeeReadiness['data']['scope']??'')==='assigned_employee'
     &&($employeeReadiness['data']['counts']['total']??0)===2
@@ -323,12 +325,12 @@ pit_assert(($employeeReadiness['skill']??'')==='prep.readiness'
     &&!str_contains($employeeReadiness['answer'],'Garlic knots'),
     'employee readiness is their assignment-only progress without managerial plan exposure');
 $formerReadiness=prep_agent_handle($pdo,$staffActor,
-    ['message'=>'Prep status on 2026-11-06']);
+    hac_test_input($pdo,$staffActor,'prep',['message'=>'Prep status on 2026-11-06']));
 pit_assert(($formerReadiness['data']['counts']['total']??-1)===0
     &&($formerReadiness['data']['state']??'')==='no_tasks',
     'employee removed by handoff does not retain readiness visibility');
 $missingReadiness=prep_agent_handle($pdo,$prepActor,
-    ['message'=>'Prep readiness on 2026-12-31']);
+    hac_test_input($pdo,$prepActor,'prep',['message'=>'Prep readiness on 2026-12-31']));
 pit_assert(($missingReadiness['data']['state']??'')==='no_plan',
     'missing dated plan is never falsely declared ready');
 $foreignReadiness=pac_readiness($pdo,$orgId+100000,$userId,$prepActor,
@@ -367,12 +369,12 @@ pit_assert(($lateReadiness['data']['counts']['overdue']??0)===2
 
 // B8D17G2G: direct voice handoff uses current manager/employee readiness.
 $managerHandoff=prep_agent_handle($pdo,$prepActor,
-    ['message'=>'Prep handoff for lunch on 2026-11-06']);
+    hac_test_input($pdo,$prepActor,'prep',['message'=>'Prep handoff for lunch on 2026-11-06']));
 pit_assert(($managerHandoff['skill']??'')==='prep.shift_handoff'
     &&($managerHandoff['data']['counts']['total']??-1)===3,
     'Prep Agent voice handoff finds canonical plan without an assigned manager shift.');
 $employeeHandoff=prep_agent_handle($pdo,$employeeActor,
-    ['message'=>'Prep handoff for lunch on 2026-11-06']);
+    hac_test_input($pdo,$employeeActor,'prep',['message'=>'Prep handoff for lunch on 2026-11-06']));
 pit_assert(($employeeHandoff['skill']??'')==='prep.shift_handoff'
     &&($employeeHandoff['data']['counts']['total']??-1)===2
     &&!str_contains($employeeHandoff['answer'],'Garlic knots'),

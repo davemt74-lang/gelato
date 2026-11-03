@@ -1,5 +1,7 @@
 <?php
 declare(strict_types=1);
+if(PHP_SAPI!=='cli'){http_response_code(404);exit;}
+require_once __DIR__.'/hardening-agent-confirmation-test-support.php';
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/food-monster-high-impact-approval.php';
 $pdo=app_pdo();$checks=0;
@@ -12,6 +14,10 @@ $pdo->prepare("INSERT INTO users (email,password_hash,first_name,last_name,displ
 $uid=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO organization_memberships (organization_id,user_id,status) VALUES (?,?,'active')")
     ->execute([$org,$uid]);
+$ownerMembership=(int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO roles(organization_id,name,slug,is_owner_role,is_system_role) VALUES (?,'Canonical owner','owner',1,1)")->execute([$org]);
+$ownerRole=(int)$pdo->lastInsertId();
+$pdo->prepare('INSERT INTO user_roles(membership_id,role_id,assigned_by) VALUES (?,?,?)')->execute([$ownerMembership,$ownerRole,$uid]);
 $owner=['id'=>$uid,'organization_id'=>$org,'is_owner_role'=>1,'permissions'=>['*']];
 $unprivileged=$owner;$unprivileged['is_owner_role']=0;
 $pdo->prepare("INSERT INTO roles (organization_id,name,slug,description,is_system_role,is_owner_role,is_assignable)
@@ -37,9 +43,10 @@ try{fm9h_prepare_role($pdo,$unprivileged,$summary);fm9h_ok(false,'employee denie
 catch(DomainException){fm9h_ok(true,'employee denied');}
 try{fm9h_prepare_role($pdo,$owner,"role db-role-{$roleId} grant arbitrary.elevate");fm9h_ok(false,'unknown permission denied');}
 catch(InvalidArgumentException){fm9h_ok(true,'unknown permission denied');}
+hac_test_context($pdo,$owner,['threadId'=>$tid]);
 $pending=fm9f_approval_propose($owner,'permission_change',$summary,$tid,$pdo);
 fm9h_ok(!$pending['executed']&&$pending['requiresApproval'],'request staged not executed');
-$first=fm9f_approval_decide($owner,$pending['proposalId'],'approve');
+$first=fm9f_approval_decide($owner,$pending['proposalId'],'approve',hac_test_review($pdo,$owner,'food_monster_high_impact'));
 fm9h_ok(!$first['executed']&&$first['handoff']['roleId']==='db-role-'.$roleId,'approval staged exact role');
 try{fm9h_execute_role($pdo,$unprivileged,$tid);fm9h_ok(false,'unauthorized execute blocked');}
 catch(DomainException){fm9h_ok(true,'unauthorized execute blocked');}
@@ -55,12 +62,14 @@ $events=$pdo->prepare("SELECT COUNT(*) FROM agent_messages
   AND JSON_UNQUOTE(JSON_EXTRACT(structured_json,'$.approvalId'))=?");
 $events->execute([$org,$pending['proposalId']]);
 fm9h_ok((int)$events->fetchColumn()===1,'exactly one durable Agent Brain execution receipt');
+hac_test_context($pdo,$owner,['threadId'=>$tid]);
 $pending=fm9f_approval_propose($owner,'permission_change',"role db-role-{$roleId} revoke {$permission}",$tid,$pdo);
-$approved=fm9f_approval_decide($owner,$pending['proposalId'],'approve');
+$approved=fm9f_approval_decide($owner,$pending['proposalId'],'approve',hac_test_review($pdo,$owner,'food_monster_high_impact'));
 $revoked=fm9h_execute_role($pdo,$owner,$tid);
 fm9h_ok($revoked['operation']==='revoke'&&!in_array($permission,fm9h_role_state($pdo,$org,$roleId)['keys'],true),'revoke persisted');
+hac_test_context($pdo,$owner,['threadId'=>$tid]);
 $pending=fm9f_approval_propose($owner,'permission_change',$summary,$tid,$pdo);
-$approved=fm9f_approval_decide($owner,$pending['proposalId'],'approve');
+$approved=fm9f_approval_decide($owner,$pending['proposalId'],'approve',hac_test_review($pdo,$owner,'food_monster_high_impact'));
 $q=$pdo->prepare("SELECT id FROM permissions WHERE permission_key='roles.edit'");$q->execute();$other=(int)$q->fetchColumn();
 if($other>0)$pdo->prepare("INSERT INTO role_permissions (role_id,permission_id) VALUES (?,?)")->execute([$roleId,$other]);
 try{fm9h_execute_role($pdo,$owner,$tid);fm9h_ok(false,'changed role blocked');}

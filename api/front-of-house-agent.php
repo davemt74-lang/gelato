@@ -10,7 +10,7 @@ $input=app_json_input();
 app_verify_request_csrf($input);
 try{
     app_json_response(front_of_house_agent_handle($pdo,$user,$input));
-}catch(FrontOfHouseAgentPermissionException $e){
+}catch(GacConfirmationConflict $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],409);}catch(FrontOfHouseAgentPermissionException $e){
     app_json_response(['ok'=>false,'message'=>$e->getMessage()],403);
 }catch(InvalidArgumentException|DomainException $e){
     app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);

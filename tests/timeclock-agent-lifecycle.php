@@ -1,5 +1,7 @@
 <?php
 declare(strict_types=1);
+if(PHP_SAPI!=='cli'){http_response_code(404);exit;}
+require_once __DIR__.'/hardening-agent-confirmation-test-support.php';
 
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/timeclock-voice-core.php';
@@ -69,79 +71,79 @@ tca_ok(($latePickup['node']??'')!=='timeclock'&&($latePickup['route']??'')!=='ap
 $reservationNoShow=gaw_route($user,'mark this reservation no-show');
 tca_ok(($reservationNoShow['node']??'')!=='timeclock'&&($reservationNoShow['route']??'')!=='api/timeclock-agent.php','reservation no-show request was hijacked by timeclock',39);
 
-$proposal=timeclock_agent_handle($pdo,$user,['message'=>'clock me in']);
+$proposal=timeclock_agent_handle($pdo,$user,hac_test_input($pdo,$user,'timeclock',['message'=>'clock me in']));
 tca_ok(!empty($proposal['data']['requiresConfirmation']),'clock-in did not require confirmation',11);
 tca_ok(tv_open_clock($pdo,$org,$uid)===null,'clock-in mutated before confirmation',12);
 tca_ok(gaw_pending_action_node($org,$uid)==='timeclock','pending node was not timeclock',13);
-$confirmed=timeclock_agent_handle($pdo,$user,['message'=>'Confirm']);
+$confirmed=timeclock_agent_handle($pdo,$user,hac_test_input($pdo,$user,'timeclock',['message'=>'Confirm']));
 tca_ok(($confirmed['skill']??'')==='timeclock.action_confirmed','clock-in confirmation failed',14);
 $open=tv_open_clock($pdo,$org,$uid);tca_ok(is_array($open),'confirmed clock-in did not persist',15);
 
-$cancelProposal=timeclock_agent_handle($pdo,$user,['message'=>'start my break']);
+$cancelProposal=timeclock_agent_handle($pdo,$user,hac_test_input($pdo,$user,'timeclock',['message'=>'start my break']));
 tca_ok(!empty($cancelProposal['data']['requiresConfirmation']),'break start did not require confirmation',16);
-$cancelled=timeclock_agent_handle($pdo,$user,['message'=>'Cancel']);
+$cancelled=timeclock_agent_handle($pdo,$user,hac_test_input($pdo,$user,'timeclock',['message'=>'Cancel']));
 tca_ok(($cancelled['skill']??'')==='timeclock.action_cancelled','break cancel failed',17);
 $q=$pdo->prepare('SELECT COUNT(*) FROM time_clock_breaks WHERE time_clock_entry_id=? AND ended_at IS NULL');$q->execute([(int)$open['id']]);
 tca_ok((int)$q->fetchColumn()===0,'cancelled break proposal mutated state',18);
 
-$start=timeclock_agent_handle($pdo,$user,['message'=>'start my break']);
+$start=timeclock_agent_handle($pdo,$user,hac_test_input($pdo,$user,'timeclock',['message'=>'start my break']));
 tca_ok(!empty($start['data']['requiresConfirmation']),'second break proposal missing confirmation',19);
-timeclock_agent_handle($pdo,$user,['message'=>'Confirm']);
+timeclock_agent_handle($pdo,$user,hac_test_input($pdo,$user,'timeclock',['message'=>'Confirm']));
 $q=$pdo->prepare('SELECT id FROM time_clock_breaks WHERE time_clock_entry_id=? AND ended_at IS NULL LIMIT 1');$q->execute([(int)$open['id']]);$breakId=(int)$q->fetchColumn();
 tca_ok($breakId>0,'confirmed break start did not persist',20);
 
-$end=timeclock_agent_handle($pdo,$user,['message'=>'end my break']);
+$end=timeclock_agent_handle($pdo,$user,hac_test_input($pdo,$user,'timeclock',['message'=>'end my break']));
 tca_ok(!empty($end['data']['requiresConfirmation']),'break end did not require confirmation',21);
 $pdo->prepare('UPDATE time_clock_breaks SET ended_at=NOW(6) WHERE id=?')->execute([$breakId]);
-$stale=false;try{timeclock_agent_handle($pdo,$user,['message'=>'Confirm']);}catch(InvalidArgumentException $e){$stale=str_contains($e->getMessage(),'break state changed');}
+$stale=false;try{timeclock_agent_handle($pdo,$user,hac_test_input($pdo,$user,'timeclock',['message'=>'Confirm']));}catch(InvalidArgumentException $e){$stale=str_contains($e->getMessage(),'break state changed');}
 tca_ok($stale,'stale break proposal was not rejected',22);
 
 // Restore an open break and let the Agent close it through the confirmed lifecycle.
 tv_break_action($pdo,$org,$uid,$uid,'start','manual');
-$end2=timeclock_agent_handle($pdo,$user,['message'=>'end my break']);
+$end2=timeclock_agent_handle($pdo,$user,hac_test_input($pdo,$user,'timeclock',['message'=>'end my break']));
 tca_ok(!empty($end2['data']['requiresConfirmation']),'restored break end proposal missing confirmation',23);
-timeclock_agent_handle($pdo,$user,['message'=>'Confirm']);
+timeclock_agent_handle($pdo,$user,hac_test_input($pdo,$user,'timeclock',['message'=>'Confirm']));
 $q=$pdo->prepare('SELECT COUNT(*) FROM time_clock_breaks WHERE time_clock_entry_id=? AND ended_at IS NULL');$q->execute([(int)$open['id']]);
 tca_ok((int)$q->fetchColumn()===0,'confirmed break end did not persist',24);
 
-$out=timeclock_agent_handle($pdo,$user,['message'=>'clock me out']);
+$out=timeclock_agent_handle($pdo,$user,hac_test_input($pdo,$user,'timeclock',['message'=>'clock me out']));
 tca_ok(!empty($out['data']['requiresConfirmation']),'clock-out did not require confirmation',25);
-timeclock_agent_handle($pdo,$user,['message'=>'Confirm']);
+timeclock_agent_handle($pdo,$user,hac_test_input($pdo,$user,'timeclock',['message'=>'Confirm']));
 tca_ok(tv_open_clock($pdo,$org,$uid)===null,'confirmed clock-out did not persist',26);
 
 // A clock-out proposal must reject a changed canonical entry.
 tv_clock_in($pdo,$org,$uid,$uid,'manual');
-$staleOut=timeclock_agent_handle($pdo,$user,['message'=>'clock me out']);
+$staleOut=timeclock_agent_handle($pdo,$user,hac_test_input($pdo,$user,'timeclock',['message'=>'clock me out']));
 tca_ok(!empty($staleOut['data']['requiresConfirmation']),'stale clock-out setup failed',27);
 $clock=tv_open_clock($pdo,$org,$uid);$pdo->prepare('UPDATE time_clock_entries SET updated_at=DATE_ADD(updated_at,INTERVAL 1 SECOND) WHERE id=?')->execute([(int)$clock['id']]);
-$staleClock=false;try{timeclock_agent_handle($pdo,$user,['message'=>'Confirm']);}catch(InvalidArgumentException $e){$staleClock=str_contains($e->getMessage(),'time-clock state changed');}
+$staleClock=false;try{timeclock_agent_handle($pdo,$user,hac_test_input($pdo,$user,'timeclock',['message'=>'Confirm']));}catch(InvalidArgumentException $e){$staleClock=str_contains($e->getMessage(),'time-clock state changed');}
 tca_ok($staleClock,'stale clock proposal was not rejected',28);
 // Clean up without using the Agent so manager-read tests can proceed predictably.
 tv_clock_out($pdo,$org,$uid,$uid,'manual');
 
-$active=timeclock_agent_handle($pdo,$manager,['message'=>'who is clocked in now?','pageContext'=>['module'=>'timeclock','locationId'=>$loc]]);
+$active=timeclock_agent_handle($pdo,$manager,hac_test_input($pdo,$manager,'timeclock',['message'=>'who is clocked in now?','pageContext'=>['module'=>'timeclock','locationId'=>$loc]]));
 tca_ok(($active['skill']??'')==='timeclock.active_staff','manager active-staff read failed',29);
-$attendance=timeclock_agent_handle($pdo,$manager,['message'=>'show attendance exceptions','pageContext'=>['module'=>'timeclock','locationId'=>$loc,'selectedDate'=>date('Y-m-d')]]);
+$attendance=timeclock_agent_handle($pdo,$manager,hac_test_input($pdo,$manager,'timeclock',['message'=>'show attendance exceptions','pageContext'=>['module'=>'timeclock','locationId'=>$loc,'selectedDate'=>date('Y-m-d')]]));
 tca_ok(($attendance['skill']??'')==='attendance.exceptions','attendance exception read failed',30);
 tca_ok(count($attendance['data']['noShows']??[])>=1,'current no-show was not surfaced',31);
-$labor=timeclock_agent_handle($pdo,$manager,['message'=>'show labor variance','pageContext'=>['module'=>'timeclock','locationId'=>$loc,'selectedDate'=>date('Y-m-d')]]);
+$labor=timeclock_agent_handle($pdo,$manager,hac_test_input($pdo,$manager,'timeclock',['message'=>'show labor variance','pageContext'=>['module'=>'timeclock','locationId'=>$loc,'selectedDate'=>date('Y-m-d')]]));
 tca_ok(($labor['skill']??'')==='attendance.labor','labor variance read failed',32);
-$employee=timeclock_agent_handle($pdo,$manager,['message'=>'this employee attendance','pageContext'=>['module'=>'timeclock','selectedUserId'=>$other,'selectedDate'=>date('Y-m-d')]]);
+$employee=timeclock_agent_handle($pdo,$manager,hac_test_input($pdo,$manager,'timeclock',['message'=>'this employee attendance','pageContext'=>['module'=>'timeclock','selectedUserId'=>$other,'selectedDate'=>date('Y-m-d')]]));
 tca_ok(($employee['skill']??'')==='attendance.employee_context'&&($employee['data']['employee']['id']??0)===$other,'selected employee context was not re-resolved canonically',33);
 
 $badDate=timeclock_agent_context(['pageContext'=>['selectedDate'=>'2026-99-99']]);
 tca_ok(($badDate['selectedDate']??'')===date('Y-m-d'),'invalid selected date was not normalized safely',40);
 
 $withoutAgent=$user;$withoutAgent['permissions']=['timeclock.self'];$denied=false;
-try{timeclock_agent_handle($pdo,$withoutAgent,['message'=>'my clock status']);}catch(TimeclockAgentPermissionException){$denied=true;}
+try{timeclock_agent_handle($pdo,$withoutAgent,hac_test_input($pdo,$withoutAgent,'timeclock',['message'=>'my clock status']));}catch(TimeclockAgentPermissionException){$denied=true;}
 tca_ok($denied,'missing timeclock.agent permission was not rejected',34);
 $readOnly=$manager;$selfDenied=false;
-try{timeclock_agent_handle($pdo,$readOnly,['message'=>'clock me in']);}catch(TimeclockAgentPermissionException){$selfDenied=true;}
+try{timeclock_agent_handle($pdo,$readOnly,hac_test_input($pdo,$readOnly,'timeclock',['message'=>'clock me in']));}catch(TimeclockAgentPermissionException){$selfDenied=true;}
 tca_ok($selfDenied,'manager without timeclock.self could mutate personal time clock',35);
 $agentOnly=$manager;$agentOnly['permissions']=['timeclock.agent'];
-$scheduleDenied=false;try{timeclock_agent_handle($pdo,$agentOnly,['message'=>'when do i work']);}catch(TimeclockAgentPermissionException){$scheduleDenied=true;}
+$scheduleDenied=false;try{timeclock_agent_handle($pdo,$agentOnly,hac_test_input($pdo,$agentOnly,'timeclock',['message'=>'when do i work']));}catch(TimeclockAgentPermissionException){$scheduleDenied=true;}
 tca_ok($scheduleDenied,'schedule context was exposed without schedule permission',41);
-$tasksDenied=false;try{timeclock_agent_handle($pdo,$agentOnly,['message'=>'my tasks']);}catch(TimeclockAgentPermissionException){$tasksDenied=true;}
+$tasksDenied=false;try{timeclock_agent_handle($pdo,$agentOnly,hac_test_input($pdo,$agentOnly,'timeclock',['message'=>'my tasks']));}catch(TimeclockAgentPermissionException){$tasksDenied=true;}
 tca_ok($tasksDenied,'task context was exposed without task permission',42);
 
 // An unscheduled clock-in should remain visible in the employee's primary location scope.

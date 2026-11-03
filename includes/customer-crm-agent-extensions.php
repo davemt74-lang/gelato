@@ -67,6 +67,7 @@ function cae_opportunities_answer(PDO $pdo,array $user): array
 
 function customer_crm_agent_enhanced_handle(PDO $pdo,array $user,array $input): array
 {
+    gac_request_context($input,$pdo,$user);
     if(!app_has_permission('crm.view',$user))return customer_crm_agent_handle($pdo,$user,$input);
     $message=trim((string)($input['message']??''));
     if($message==='')return customer_crm_agent_handle($pdo,$user,$input);

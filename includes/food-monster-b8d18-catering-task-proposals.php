@@ -60,7 +60,7 @@ function fm8d18j7b_stage(array $actor,string $type,array $payload,string $summar
         return ['ok'=>true,'data'=>[
             'answer'=>$summary."\n\nReply Confirm to apply through the Catering Agent, or Cancel. No catering record has changed yet.",
             'source'=>'Gelato Catering Operations (server-verified pending proposal)',
-            'requiresConfirmation'=>true,'proposal'=>['id'=>$pending['id'],'type'=>$type],
+            'requiresConfirmation'=>true,'proposal'=>gac_public_proposal($pending),
         ]];
     }finally{if($opened&&session_status()===PHP_SESSION_ACTIVE)session_write_close();}
 }

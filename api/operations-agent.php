@@ -134,23 +134,20 @@ if($_SERVER['REQUEST_METHOD']!=='POST'){header('Allow: GET, POST');app_json_resp
 $input=app_json_input();app_verify_request_csrf($input);$message=trim((string)($input['message']??''));if($message===''||mb_strlen($message,'UTF-8')>4000)app_json_response(['ok'=>false,'message'=>'Enter an operations request no longer than 4,000 characters.'],422);$normalized=mb_strtolower(preg_replace('/^hey\s+gelato[,\s]*/i','',$message)??$message,'UTF-8');
 
 try{
-    $pending=gac_pending_get('operations',$organizationId,$userId);
+    gac_request_context($input,$pdo,$user);
     if(gac_is_confirm($message)){
-        if(!$pending)throw new InvalidArgumentException('There is no pending Operations Agent action to confirm.');
-        if(in_array(($pending['type']??''),['inventory_adjust','inventory_create','task_status_change'],true)){
-            // Consume this one-use stock approval before its side effect, even if the
-            // response is lost. The session lock also serializes concurrent confirms.
-            gac_pending_clear('operations',$organizationId,$userId);
-            if(session_status()===PHP_SESSION_ACTIVE)session_write_close();
-            $result=ops_agent_execute_pending($pdo,$organizationId,$userId,$user,$pending);
-            app_audit($pdo,$organizationId,$userId,'operations.agent_action_confirmed','operations_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);
-            app_json_response($result);
-        }
-        try{$result=ops_agent_execute_pending($pdo,$organizationId,$userId,$user,$pending);}catch(Throwable $e){gac_pending_clear('operations',$organizationId,$userId);throw $e;}
-        gac_pending_clear('operations',$organizationId,$userId);app_audit($pdo,$organizationId,$userId,'operations.agent_action_confirmed','operations_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);app_json_response($result);
+        $pending=gac_pending_claim('operations',$organizationId,$userId,$input);
+        try{$result=ops_agent_execute_pending($pdo,$organizationId,$userId,$user,$pending);}
+        catch(Throwable $e){gac_pending_clear('operations',$organizationId,$userId,(string)$pending['id']);throw $e;}
+        gac_pending_clear('operations',$organizationId,$userId,(string)$pending['id']);
+        app_audit($pdo,$organizationId,$userId,'operations.agent_action_confirmed','operations_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);
+        app_json_response($result);
     }
-    if(gac_is_cancel($message)&&$pending){
-        gac_pending_clear('operations',$organizationId,$userId);app_audit($pdo,$organizationId,$userId,'operations.agent_action_discarded','operations_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);app_json_response(['ok'=>true,'skill'=>'operations.action_cancelled','answer'=>'Cancelled. I did not change restaurant tasks or inventory.','data'=>['cancelledProposal'=>$pending['id']],'sources'=>['Restaurant Operations']]);
+    if(gac_is_cancel($message)){
+        $pending=gac_pending_claim('operations',$organizationId,$userId,$input);
+        gac_pending_clear('operations',$organizationId,$userId,(string)$pending['id']);
+        app_audit($pdo,$organizationId,$userId,'operations.agent_action_discarded','operations_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);
+        app_json_response(['ok'=>true,'skill'=>'operations.action_cancelled','answer'=>'Cancelled. I did not change restaurant tasks or inventory.','data'=>['cancelledProposal'=>$pending['id']],'sources'=>['Restaurant Operations']]);
     }
 
     if($canTasks&&preg_match('/\badd\s+(?:a\s+)?task\s+category(?:\s+(?:called|named))?\s+(.+)$/iu',$normalized,$m)){
@@ -209,4 +206,4 @@ try{
     if($canInventory&&preg_match('/\b(inventory|stock|par|reorder|shortage|running out|ingredient)\b/iu',$normalized)){$result=operations_agent_inventory_answer($pdo,$organizationId,$message);app_audit($pdo,$organizationId,$userId,'agent.operations_skill_used','agent_skill',$result['skill'],null,['message'=>mb_substr($message,0,500,'UTF-8')]);app_json_response(['ok'=>true]+$result);}
     if($canTasks&&preg_match('/\b(task|tasks|prep|opening|closing|cleaning|assignment|assigned|overdue|to do|todo|wholesale|fulfillment|delivery|order|orders)\b/iu',$normalized)){$result=operations_agent_task_answer($pdo,$organizationId,$message,$userId);app_audit($pdo,$organizationId,$userId,'agent.operations_skill_used','agent_skill',$result['skill'],null,['message'=>mb_substr($message,0,500,'UTF-8')]);app_json_response(['ok'=>true]+$result);}
     $summary=operations_core_summary($pdo,$organizationId);$answer='Operations snapshot: '.$summary['openTasks'].' open task(s), '.$summary['inProgress'].' in progress, '.$summary['overdue'].' overdue, '.$summary['inventoryCount'].' inventory item(s), and '.$summary['lowStock'].' at/below reorder point.';app_json_response(['ok'=>true,'skill'=>'operations.summary','answer'=>$answer,'data'=>$summary,'sources'=>[]]);
-}catch(Throwable $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);}
+}catch(GacConfirmationConflict $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],409);}catch(Throwable $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);}

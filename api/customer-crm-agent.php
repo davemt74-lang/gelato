@@ -11,7 +11,7 @@ $input=app_json_input();
 app_verify_request_csrf($input);
 try{
     app_json_response(customer_crm_agent_enhanced_handle($pdo,$user,$input));
-}catch(CrmAgentPermissionException|DomainException $e){
+}catch(GacConfirmationConflict $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],409);}catch(CrmAgentPermissionException|DomainException $e){
     app_json_response(['ok'=>false,'message'=>$e->getMessage()],403);
 }catch(Throwable $e){
     app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);

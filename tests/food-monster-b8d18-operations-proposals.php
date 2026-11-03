@@ -1,5 +1,7 @@
 <?php
 declare(strict_types=1);
+if(PHP_SAPI!=='cli'){http_response_code(404);exit;}
+require_once __DIR__.'/hardening-agent-confirmation-test-support.php';
 
 function app_has_permission(string $permission,array $actor):bool
 {
@@ -64,6 +66,7 @@ $insert->execute(['inv-1',7,'Fresh Mozzarella','lb',10]);
 $insert->execute(['inv-2',8,'Fresh Mozzarella','lb',50]);
 if(session_status()!==PHP_SESSION_ACTIVE&&!session_start())throw new RuntimeException('Test session unavailable');
 $stock=$catalogue['propose_inventory_stock_change']['execute'];
+hac_test_context($GLOBALS['database'],$actor);
 $prep=$catalogue['propose_prep_tasks']['execute'];
 $stockArgs=['item_name'=>'Fresh Mozzarella','action'=>'receive','quantity'=>5,'unit'=>'lb'];
 $denied=['id'=>102,'organization_id'=>9,'permissions'=>$inventory];
@@ -95,7 +98,8 @@ b18a_check(str_contains($runtime,"fm8d18_catalogue(\$principal)"),'native tools 
 b18a_check(str_contains($runtime,"'propose_inventory_stock_change','propose_prep_tasks'"),'multiple proposal tool calls rejected');
 $operations=(string)file_get_contents(dirname(__DIR__).'/api/operations-agent.php');
 b18a_check(str_contains($operations,"'inventory_adjust'")&&str_contains($operations,"'prep_tasks'")
-    &&str_contains($operations,'session_write_close()'),'existing one-use approval and Operations execution retained');
+    &&str_contains($operations,'gac_pending_claim(')
+    &&str_contains((string)file_get_contents(dirname(__DIR__).'/includes/agent-confirmation-core.php'),'session_write_close()'),'existing one-use approval and Operations execution retained');
 
 gac_pending_clear('operations',7,101);
 b18a_check(isset($catalogue['propose_inventory_item_creation'],$catalogue['propose_task_status_change']),'Section 3B native tools available');
@@ -136,5 +140,25 @@ b18a_check(count($GLOBALS['auditEvents']??[])===4,'four proposals total audited,
 b18a_check(str_contains($runtime,"'propose_inventory_item_creation','propose_task_status_change'"),'new proposals cannot mix with other model tools');
 
 gac_pending_clear('operations',7,101);
+require_once dirname(__DIR__).'/includes/food-monster-llm.php';
+require_once dirname(__DIR__).'/includes/food-monster-b8d3-tool-runtime.php';
+$turnContext=hac_test_context($GLOBALS['database'],$actor,['message'=>'Create prep tasks Ball dough and Portion mozzarella.']);
+$turnContext['messageId']=$turnContext['sourceMessageId'];
+$modelTransport=static fn()=>['output'=>[['type'=>'function_call','call_id'=>'bound-prep-proposal',
+    'name'=>'propose_prep_tasks','arguments'=>'{"items":["Ball dough","Portion mozzarella"]}']]];
+$fullTurn=fm8d3_turn($GLOBALS['database'],$actor,'openai','test',
+    [['role'=>'user','content'=>'Create prep tasks Ball dough and Portion mozzarella.']],
+    '',$modelTransport,['propose_prep_tasks'=>$catalogue['propose_prep_tasks']],
+    static fn():array=>$actor,static function(array $event):void{},$turnContext);
+$fullPending=gac_pending_get('operations',7,101);
+b18a_check(($fullTurn['data']['requiresConfirmation']??false)===true,
+    'full native model turn preserves the confirmation requirement');
+b18a_check(($fullTurn['data']['proposal']??null)===gac_public_proposal($fullPending),
+    'full native model turn returns exact server proposal metadata without dropping its binding');
+$review=hac_test_bind($GLOBALS['database'],$actor,$fullPending);
+$bound=gac_pending_reviewed('operations',7,101,hac_test_evidence($review));
+b18a_check($bound['payload']['items']===['Ball dough','Portion mozzarella'],
+    'returned native proposal can be canonically reviewed as the exact model-staged action');
+gac_pending_clear('operations',7,101,$fullPending['id']);
 session_write_close();
 echo "B8D18A model-selected Operations proposals: $checks assertions passed\n";

@@ -42,6 +42,9 @@ function makeAgent(permissions, persistedSession = new Map(), actorId = 'ci-mana
       data: proposal ? { requiresConfirmation: true } : {},
     }) };
   };
+  // This suite tests specialist routing. Canonical transport is exercised by
+  // hardening-agent-confirmation-browser.cjs against the actual PHP server.
+  window.GelatoAgentReview = {acknowledge: () => {}, ask: async (endpoint, body) => (await fetch(endpoint, {body: JSON.stringify(body)})).json()};
   vm.runInNewContext(script, { window, document, localStorage, sessionStorage, fetch, Intl, Date, Math, console });
   return { submit: window.GelatoRestaurantAgent.submit, sent };
 }

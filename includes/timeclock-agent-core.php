@@ -165,6 +165,7 @@ function timeclock_agent_execute_pending(PDO $pdo,array $user,array $proposal): 
 
 function timeclock_agent_handle(PDO $pdo,array $user,array $input): array
 {
+    gac_request_context($input,$pdo,$user);
     timeclock_agent_require_access($user);if(!timeclock_agent_ready($pdo))throw new RuntimeException('Time Clock + Attendance is not installed. Run upgrade.php.');
     $org=(int)$user['organization_id'];$uid=(int)$user['id'];$message=trim((string)($input['message']??''));
     if($message===''||mb_strlen($message,'UTF-8')>2400)throw new InvalidArgumentException('Ask Gelato a time-clock or attendance question no longer than 2,400 characters.');
@@ -172,12 +173,13 @@ function timeclock_agent_handle(PDO $pdo,array $user,array $input): array
     $voice=!empty($input['voice']);$voiceEventId=trim((string)($input['voiceEventId']??''));$source=$voice?'voice':'agent';
 
     if(gac_is_confirm($message)){
-        if(!$pending)throw new InvalidArgumentException('There is no pending Time Clock action to confirm.');
-        try{$result=timeclock_agent_execute_pending($pdo,$user,$pending);}catch(Throwable $e){gac_pending_clear('timeclock',$org,$uid);throw $e;}
-        gac_pending_clear('timeclock',$org,$uid);return ['ok'=>true]+$result;
+        $pending=gac_pending_claim('timeclock',$org,$uid,$input);
+        try{$result=timeclock_agent_execute_pending($pdo,$user,$pending);}catch(Throwable $e){gac_pending_clear('timeclock',$org,$uid,(string)$pending['id']);throw $e;}
+        gac_pending_clear('timeclock',$org,$uid,(string)$pending['id']);return ['ok'=>true]+$result;
     }
-    if(gac_is_cancel($message)&&$pending){
-        gac_pending_clear('timeclock',$org,$uid);app_audit($pdo,$org,$uid,'timeclock.agent_action_discarded','timeclock_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']??null]);
+    if(gac_is_cancel($message)){
+        $pending=gac_pending_claim('timeclock',$org,$uid,$input);
+        gac_pending_clear('timeclock',$org,$uid,(string)$pending['id']);app_audit($pdo,$org,$uid,'timeclock.agent_action_discarded','timeclock_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']??null]);
         return ['ok'=>true,'skill'=>'timeclock.action_cancelled','answer'=>'Cancelled. I did not change your time-clock state.','data'=>['cancelledProposal'=>$pending['id']],'sources'=>['Time Clock + Attendance Agent']];
     }
 

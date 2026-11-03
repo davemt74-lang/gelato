@@ -1,5 +1,7 @@
 <?php
 declare(strict_types=1);
+if(PHP_SAPI!=='cli'){http_response_code(404);exit;}
+require_once __DIR__.'/hardening-agent-confirmation-test-support.php';
 
 function app_has_permission(string $name,array $actor):bool
 {
@@ -92,7 +94,9 @@ f18g_reject(static fn()=>sac_time_off_check_existing($pdo,17,9,$dates),
 f18g_check((int)$pdo->query('SELECT COUNT(*) FROM staff_availability_exceptions')->fetchColumn()===4,
     'preflight does not write time-off rows');
 
+if(session_status()!==PHP_SESSION_ACTIVE)session_start();
 $_SESSION=[];
+hac_test_context($pdo,$user);
 $pending=sac_pending_store(17,9,'time_off_request',[
     'userId'=>9,'startDate'=>'2030-01-05','endDate'=>'2030-01-06'], 'Test proposal');
 f18g_check(sac_pending_get(17,9)['id']===$pending['id'],'existing Scheduling Agent owns pending proposal');

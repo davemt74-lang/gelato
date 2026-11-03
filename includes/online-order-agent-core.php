@@ -192,26 +192,28 @@ function online_order_agent_execute_pending(PDO $pdo,array $user,array $proposal
         }
         throw new InvalidArgumentException('Unsupported pending online-order action.');
     });
-    gac_pending_clear('online_orders',$organizationId,$userId);
+    gac_pending_clear('online_orders',$organizationId,$userId,(string)$proposal['id']);
     $order=pickup_fulfillment_order($pdo,$organizationId,$public,false);
     return ['ok'=>true,'skill'=>'online_order_'.$result['type'],'answer'=>$result['type']==='fulfill'?'Pickup handoff recorded.':'Pickup promise updated and the recovery update was recorded.','data'=>['executed'=>true,'result'=>$result['result']],'sources'=>online_order_agent_sources($order?:null)];
 }
 
 function online_order_agent_handle(PDO $pdo,array $user,array $input): array
 {
+    gac_request_context($input,$pdo,$user);
     online_order_agent_require_view($user);
     if(!online_order_agent_ready($pdo))throw new RuntimeException('Online ordering, pickup fulfillment, or order recovery migrations are not installed. Run upgrade.php.');
     $organizationId=(int)$user['organization_id'];$userId=(int)$user['id'];$message=trim((string)($input['message']??''));if($message==='')throw new InvalidArgumentException('Enter an online-order request.');
     $context=is_array($input['pageContext']??null)?$input['pageContext']:[];
     $pending=gac_pending_get('online_orders',$organizationId,$userId);
     if(gac_is_cancel($message)){
-        if(!$pending)return ['ok'=>true,'skill'=>'online_order_confirmation','answer'=>'There is no pending online-order action to cancel.','data'=>['cancelled'=>false],'sources'=>online_order_agent_sources()];
-        gac_pending_clear('online_orders',$organizationId,$userId);
+        $pending=gac_pending_claim('online_orders',$organizationId,$userId,$input);
+        gac_pending_clear('online_orders',$organizationId,$userId,(string)$pending['id']);
         return ['ok'=>true,'skill'=>'online_order_confirmation','answer'=>'Pending online-order action cancelled. No order data was changed.','data'=>['cancelled'=>true],'sources'=>online_order_agent_sources()];
     }
     if(gac_is_confirm($message)){
-        if(!$pending)throw new InvalidArgumentException('There is no pending online-order action to confirm.');
-        return online_order_agent_execute_pending($pdo,$user,$pending);
+        $pending=gac_pending_claim('online_orders',$organizationId,$userId,$input);
+        try{return online_order_agent_execute_pending($pdo,$user,$pending);}
+        catch(Throwable $e){gac_pending_clear('online_orders',$organizationId,$userId,(string)$pending['id']);throw $e;}
     }
 
     $order=online_order_agent_resolve_order($pdo,$organizationId,$message,$context);

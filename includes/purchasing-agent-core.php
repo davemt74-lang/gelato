@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__.'/purchasing-receiving.php';
+require_once __DIR__.'/agent-confirmation-core.php';
 require_once __DIR__.'/food-monster-g9g-purchase-execution.php';
 
 final class PurchasingAgentPermissionException extends RuntimeException {}
@@ -8,18 +9,13 @@ final class PurchasingAgentPermissionException extends RuntimeException {}
 function pac_has(array $user,string $permission): bool{return app_has_permission($permission,$user);}
 function pac_require(array $user,string $permission,string $message): void{if(!pac_has($user,$permission))throw new PurchasingAgentPermissionException($message);}
 function pac_pending_key(int $org,int $uid): string{return $org.':'.$uid;}
-function pac_pending_get(int $org,int $uid): ?array{
-    $key=pac_pending_key($org,$uid);$row=$_SESSION['purchasing_agent_pending'][$key]??null;
-    if(!is_array($row)||($row['expires']??0)<time()){unset($_SESSION['purchasing_agent_pending'][$key]);return null;}
-    return $row;
-}
+function pac_pending_get(int $org,int $uid): ?array{return gac_pending_get('purchasing',$org,$uid);}
 function pac_pending_store(int $org,int $uid,string $type,array $payload,string $summary): array{
-    $row=['id'=>'pap-'.bin2hex(random_bytes(8)),'organizationId'=>$org,'userId'=>$uid,'type'=>$type,'payload'=>$payload,'summary'=>$summary,'expires'=>time()+600];
-    $_SESSION['purchasing_agent_pending'][pac_pending_key($org,$uid)]=$row;return $row;
+    return gac_pending_store('purchasing',$org,$uid,$type,$payload,$summary);
 }
-function pac_pending_clear(int $org,int $uid): void{unset($_SESSION['purchasing_agent_pending'][pac_pending_key($org,$uid)]);}
+function pac_pending_clear(int $org,int $uid,?string $expectedId=null): void{gac_pending_clear('purchasing',$org,$uid,$expectedId);}
 function pac_proposal_result(array $proposal,array $sources=['Purchasing + Receiving']): array{
-    return ['ok'=>true,'skill'=>'purchasing.action_proposal','answer'=>$proposal['summary']."\n\nReply Confirm to execute this change, or Cancel to discard it.",'data'=>['requiresConfirmation'=>true,'proposal'=>['id'=>$proposal['id'],'type'=>$proposal['type'],'summary'=>$proposal['summary'],'expiresAt'=>date(DATE_ATOM,(int)$proposal['expires'])]],'sources'=>$sources];
+    return gac_proposal_result($proposal,'purchasing.action_proposal',$sources);
 }
 function pac_clean_public_id(mixed $value): string{return preg_replace('/[^A-Za-z0-9_.:-]/','',trim((string)$value))??'';}
 function pac_selected_order(PDO $pdo,int $org,array $context): ?array{
@@ -116,14 +112,26 @@ function pac_execute_pending(PDO $pdo,int $org,int $uid,array $user,array $propo
 }
 
 function purchasing_agent_handle(PDO $pdo,array $user,array $input): array{
+    gac_request_context($input,$pdo,$user);
     $org=(int)$user['organization_id'];$uid=(int)$user['id'];$message=trim((string)($input['message']??''));if($message===''||mb_strlen($message,'UTF-8')>1800)throw new InvalidArgumentException('Ask Gelato a purchasing question no longer than 1,800 characters.');
     pac_require($user,'purchasing.view','Purchasing view permission is required.');
     $context=is_array($input['pageContext']??null)?$input['pageContext']:[];$selected=($context['module']??'')==='purchasing'?pac_selected_order($pdo,$org,$context):null;$pending=pac_pending_get($org,$uid);
 
     if(preg_match('/^(?:confirm|yes|yes please|do it|go ahead|execute|apply)(?:\s+(?:it|that|change|action))?[.!]?$/i',$message)){
-        if(!$pending)throw new InvalidArgumentException('There is no pending Purchasing Agent action to confirm.');$result=pac_execute_pending($pdo,$org,$uid,$user,$pending);pac_pending_clear($org,$uid);app_audit($pdo,$org,$uid,'purchasing.agent_action_confirmed','purchasing_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);return ['ok'=>true]+$result;
+        $pending=gac_pending_reviewed('purchasing',$org,$uid,$input);
+        // Missing owner approval is a recoverable preflight denial: keep this exact PO for approval.
+        if(($pending['type']??'')==='submit_po'){
+            $current=purchasing_order($pdo,$org,(string)$pending['payload']['purchaseOrderId']);
+            if(!$current)throw new InvalidArgumentException('The selected purchase order no longer exists.');
+            pac_guard_order($current,(array)$pending['payload']['expected']);
+            fm9g_authorize_purchase($user,$pending);
+        }
+        $pending=gac_pending_claim('purchasing',$org,$uid,$input);
+        try{$result=pac_execute_pending($pdo,$org,$uid,$user,$pending);}
+        catch(Throwable $e){pac_pending_clear($org,$uid,(string)$pending['id']);throw $e;}
+        pac_pending_clear($org,$uid,(string)$pending['id']);app_audit($pdo,$org,$uid,'purchasing.agent_action_confirmed','purchasing_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);return ['ok'=>true]+$result;
     }
-    if(preg_match('/^(?:cancel|cancel it|discard|never mind|nevermind|stop)[.!]?$/i',$message)&&$pending){pac_pending_clear($org,$uid);app_audit($pdo,$org,$uid,'purchasing.agent_action_discarded','purchasing_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);return ['ok'=>true,'skill'=>'purchasing.action_cancelled','answer'=>'Cancelled. I did not change purchasing or inventory.','data'=>['cancelledProposal'=>$pending['id']],'sources'=>['Purchasing + Receiving']];}
+    if(gac_is_cancel($message)){$pending=gac_pending_claim('purchasing',$org,$uid,$input);pac_pending_clear($org,$uid,(string)$pending['id']);app_audit($pdo,$org,$uid,'purchasing.agent_action_discarded','purchasing_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);return ['ok'=>true,'skill'=>'purchasing.action_cancelled','answer'=>'Cancelled. I did not change purchasing or inventory.','data'=>['cancelledProposal'=>$pending['id']],'sources'=>['Purchasing + Receiving']];}
 
     if($selected&&preg_match('/\b(?:show|describe|details?|status|what is|what\x27s|about)\s+(?:this|selected)\s+(?:po|purchase order)\b/i',$message))return ['ok'=>true,'skill'=>'purchasing.context_order','answer'=>pac_order_answer($selected).'.','data'=>['purchaseOrderId'=>$selected['public_id']],'sources'=>['Purchase Orders']];
     if($selected&&preg_match('/\b(?:outstanding|remaining|missing|still due|still coming)\b/i',$message)){$lines=pac_outstanding_lines($selected);$answer=$lines?implode('; ',array_map(static fn($line)=>$line['name'].' '.round((float)$line['quantity'],4),$lines)).' outstanding on '.$selected['order_number'].'.':'Nothing remains outstanding on '.$selected['order_number'].'.';return ['ok'=>true,'skill'=>'purchasing.context_outstanding','answer'=>$answer,'data'=>['purchaseOrderId'=>$selected['public_id'],'outstandingLines'=>count($lines)],'sources'=>['Purchase Orders','Goods Receiving']];}

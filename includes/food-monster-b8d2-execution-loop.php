@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__.'/food-monster-observation-contracts.php';
 
 /**
  * FM-B8D2. Bounded, request-local plan -> authorize -> execute -> observe loop.
@@ -121,7 +122,8 @@ function fm8d2_run(array $plan,array $principal,array $catalogue,array $policy):
                 ||($prior['index']??null)!==$i
                 ||($prior['tool']??null)!==$id
                 ||($prior['status']??null)!=='completed'
-                ||!is_array($prior['observation']??null))
+                ||!is_array($prior['observation']??null)
+                ||!fm8do_fits($id,$prior['observation'],$impact))
                 return $finish('denied','Saved task checkpoint is not authorized.',$i);
             $trace[]=$prior;
             continue;
@@ -150,14 +152,15 @@ function fm8d2_run(array $plan,array $principal,array $catalogue,array $policy):
             return $finish($impact==='routine'?'execution_unverified':'failed',
                 'Skill returned no verified observation; do not retry automatically.',$i);
         }
-        try{$json=json_encode($observation['data'],JSON_THROW_ON_ERROR|JSON_INVALID_UTF8_SUBSTITUTE);}
-        catch(Throwable){$json=false;}
-        if(!is_string($json)||strlen($json)>3072){
+        // Only explicitly reviewed pure reads may be summarized. Unknown,
+        // proposal and routine outcomes keep the original strict contract.
+        $data=fm8do_prepare($id,$impact,$observation['data']);
+        if($data===null){
             $trace[]=['index'=>$i,'tool'=>$id,'status'=>'unverified'];
             return $finish($impact==='routine'?'execution_unverified':'failed',
                 'Skill observation exceeded its contract; do not retry automatically.',$i);
         }
-        $trace[]=['index'=>$i,'tool'=>$id,'status'=>'completed','observation'=>$observation['data']];
+        $trace[]=['index'=>$i,'tool'=>$id,'status'=>'completed','observation'=>$data];
         if(is_callable($policy['audit']??null)){
             try{($policy['audit'])([
                 'tool'=>$id,'step'=>$i,'status'=>'completed',

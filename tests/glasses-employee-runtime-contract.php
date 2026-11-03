@@ -21,7 +21,7 @@ runtimeCheck(str_contains($php,"require_once __DIR__.'/glasses-vision-lab.php'")
 runtimeCheck(str_contains($php,"require_once __DIR__.'/glasses-training-identity.php'"),'must use V11 training programs and sessions');
 runtimeCheck(str_contains($php,"glasses_vision_lab_assign_device("),'must attach runtime to existing Vision Lab device identity');
 runtimeCheck(str_contains($php,"glasses_training_session_start("),'training starts through canonical sessions');
-runtimeCheck(str_contains($php,"glasses_training_session_end("),'training ends through canonical sessions');
+runtimeCheck(str_contains($php,"glasses_training_session_end_managed("),'training ends through the canonical manager-authorized session path');
 runtimeCheck(str_contains($php,"SELECT r.public_id,r.device_id,r.employee_user_id"),'runtime catalog includes device ID for training assignment filtering');
 runtimeCheck(str_contains($php,"'deviceId'=>(int)$"."row['device_id']"),'public runtime carries device ID');
 runtimeCheck(str_contains($php,"a.location_id,a.station_id"),'training catalog includes location and station assignment');

@@ -1,5 +1,7 @@
 <?php
 declare(strict_types=1);
+if(PHP_SAPI!=='cli'){http_response_code(404);exit;}
+require_once __DIR__.'/hardening-agent-confirmation-test-support.php';
 require __DIR__.'/../includes/bootstrap.php';
 require __DIR__.'/../includes/daily-quicklist-core.php';
 function dq_assert(bool $value,string $why):void{if(!$value)throw new RuntimeException($why);}
@@ -205,21 +207,21 @@ dq_assert($route['route']===null&&$route['domain']==='daily_prep_model_tools','N
 $route=gaw_route($staffAgent,'Show the published menu');
 dq_assert($route['route']==='api/agent-brain.php','plain menu lookups keep their canonical Brain route');
 app_boot_session();
-$read=prep_agent_handle($pdo,$staffAgent,['message'=>'Show daily prep checklist for '.$day]);
+$read=prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Show daily prep checklist for '.$day]));
 dq_assert($read['skill']==='prep.daily_quicklist'&&($read['data']['proof']['url']??'')==='daily-prep.php'
     &&str_contains($read['answer'],'Need More'),
     'official agent reads the shared quicklist and returns a real UI link');
 $voiceProposal=prep_agent_handle($pdo,$staffAgent,
-    ['message'=>'Generate daily prep checklist for '.$day.' from menu','voice'=>true]);
+    hac_test_input($pdo,$staffAgent,'prep',['message'=>'Generate daily prep checklist for '.$day.' from menu','voice'=>true]));
 dq_assert($voiceProposal['skill']==='prep.action_proposal','authorized voice and typed requests use the same proposal path');
-$cancelled=prep_agent_handle($pdo,$staffAgent,['message'=>'Cancel','voice'=>true]);
+$cancelled=prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Cancel','voice'=>true]));
 dq_assert($cancelled['skill']==='prep.action_cancelled','spoken cancellation does not create tasks');
-$proposal=prep_agent_handle($pdo,$staffAgent,['message'=>'Generate daily prep checklist for '.$day.' from menu']);
+$proposal=prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Generate daily prep checklist for '.$day.' from menu']));
 dq_assert($proposal['skill']==='prep.action_proposal','agent generation is confirmation-only');
 $pending=gac_pending_get('prep',$org,$actor);
 dq_assert($pending!==null&&$pending['type']==='quicklist_generate'&&count($pending['payload']['keys'])>=1,
     'official Prep Agent stores server-selected menu keys, not arbitrary titles');
-$confirmed=prep_agent_handle($pdo,$staffAgent,['message'=>'Confirm']);
+$confirmed=prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Confirm']));
 dq_assert($confirmed['skill']==='prep.action_confirmed'
     &&($confirmed['data']['proof']['url']??'')==='daily-prep.php',
     'confirmation writes the same shared Daily Prep checklist as the UI');
@@ -260,110 +262,110 @@ $agentItem=daily_quicklist_add($pdo,$org,$actor,
 // fixtures deliberately use 2026-11-02 and must not be counted as today's items.
 daily_quicklist_add($pdo,$org,$actor,
     ['type'=>'prep','date'=>$agentDay,'title'=>'Agent Numbered Companion'],true);
-$voiceStart=prep_agent_handle($pdo,$staffAgent,['message'=>'Start timer for Agent Batch on Daily Prep','voice'=>true]);
+$voiceStart=prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Start timer for Agent Batch on Daily Prep','voice'=>true]));
 dq_assert($voiceStart['skill']==='prep.action_proposal'
     &&($voiceStart['data']['requiresConfirmation']??false),'voice timer request only proposes');
 dq_assert(!current(array_values(array_filter(daily_quicklist_items($pdo,$org,$agentDay),
     static fn(array $r):bool=>$r['id']===$agentItem)))['timerRunning'],'voice proposal did not start a timer');
-$voiceStartDone=prep_agent_handle($pdo,$staffAgent,['message'=>'Confirm','voice'=>true]);
+$voiceStartDone=prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Confirm','voice'=>true]));
 dq_assert($voiceStartDone['skill']==='prep.action_confirmed'
     &&($voiceStartDone['data']['proof']['url']??'')==='daily-prep.php','confirmed spoken timer uses shared checklist');
 $agentRows=daily_quicklist_items($pdo,$org,$agentDay);
 $agentRow=current(array_values(array_filter($agentRows,static fn(array $r):bool=>$r['id']===$agentItem)));
 dq_assert($agentRow['timerRunning']&&$agentRow['status']==='in_progress','confirmed timer actually starts');
-$pause=prep_agent_handle($pdo,$staffAgent,['message'=>'Pause Agent Batch timer on Daily Prep']);
+$pause=prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Pause Agent Batch timer on Daily Prep']));
 dq_assert($pause['skill']==='prep.action_proposal','pause requires confirmation');
-$cancel=prep_agent_handle($pdo,$staffAgent,['message'=>'Cancel']);
+$cancel=prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Cancel']));
 dq_assert($cancel['skill']==='prep.action_cancelled','cancel must not pause timer');
 $agentRows=daily_quicklist_items($pdo,$org,$agentDay);
 $agentRow=current(array_values(array_filter($agentRows,static fn(array $r):bool=>$r['id']===$agentItem)));
 dq_assert($agentRow['timerRunning'],'cancel leaves timer running');
-prep_agent_handle($pdo,$staffAgent,['message'=>'Pause Agent Batch timer on Daily Prep']);
-prep_agent_handle($pdo,$staffAgent,['message'=>'Confirm']);
+prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Pause Agent Batch timer on Daily Prep']));
+prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Confirm']));
 $agentRows=daily_quicklist_items($pdo,$org,$agentDay);
 $agentRow=current(array_values(array_filter($agentRows,static fn(array $r):bool=>$r['id']===$agentItem)));
 dq_assert(!$agentRow['timerRunning']&&$agentRow['status']==='paused','pause persists through official agent');
-prep_agent_handle($pdo,$staffAgent,['message'=>'Resume Agent Batch timer on Daily Prep']);
-prep_agent_handle($pdo,$staffAgent,['message'=>'Confirm']);
+prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Resume Agent Batch timer on Daily Prep']));
+prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Confirm']));
 $agentRows=daily_quicklist_items($pdo,$org,$agentDay);
 $agentRow=current(array_values(array_filter($agentRows,static fn(array $r):bool=>$r['id']===$agentItem)));
 dq_assert($agentRow['timerRunning'],'resume restarts same timer');
-prep_agent_handle($pdo,$staffAgent,['message'=>'Stop Agent Batch timer on Daily Prep']);
-prep_agent_handle($pdo,$staffAgent,['message'=>'Confirm']);
+prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Stop Agent Batch timer on Daily Prep']));
+prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Confirm']));
 $agentRows=daily_quicklist_items($pdo,$org,$agentDay);
 $agentRow=current(array_values(array_filter($agentRows,static fn(array $r):bool=>$r['id']===$agentItem)));
 dq_assert(!$agentRow['timerRunning']&&$agentRow['status']==='todo','stop leaves item open');
 
-prep_agent_handle($pdo,$staffAgent,['message'=>'Mark Agent Batch done on Daily Prep']);
-$done=prep_agent_handle($pdo,$staffAgent,['message'=>'Confirm']);
+prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Mark Agent Batch done on Daily Prep']));
+$done=prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Confirm']));
 dq_assert($done['skill']==='prep.action_confirmed','agent can check off daily prep');
 $agentRows=daily_quicklist_items($pdo,$org,$agentDay);
 $agentRow=current(array_values(array_filter($agentRows,static fn(array $r):bool=>$r['id']===$agentItem)));
 dq_assert($agentRow['status']==='done','confirmed prep check-off stored');
-prep_agent_handle($pdo,$staffAgent,['message'=>'Reopen Agent Batch on Daily Prep']);
-prep_agent_handle($pdo,$staffAgent,['message'=>'Confirm']);
+prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Reopen Agent Batch on Daily Prep']));
+prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Confirm']));
 $agentRows=daily_quicklist_items($pdo,$org,$agentDay);
 $agentRow=current(array_values(array_filter($agentRows,static fn(array $r):bool=>$r['id']===$agentItem)));
 dq_assert($agentRow['status']==='todo','undo path is reversible');
 
-$proposedTarget=prep_agent_handle($pdo,$staffAgent,['message'=>'Set Agent Batch batch target to 16 balls on Daily Prep']);
+$proposedTarget=prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Set Agent Batch batch target to 16 balls on Daily Prep']));
 dq_assert($proposedTarget['skill']==='prep.action_proposal','batch target is confirmation-only');
 $noRecipeAgent=$staffAgent;$noRecipeAgent['permissions']=array_values(array_diff($staffAgent['permissions'],['recipes.view']));
-try{prep_agent_handle($pdo,$noRecipeAgent,['message'=>'Confirm']);throw new RuntimeException('revoked recipe permission accepted');}
+try{prep_agent_handle($pdo,$noRecipeAgent,hac_test_input($pdo,$noRecipeAgent,'prep',['message'=>'Confirm']));throw new RuntimeException('revoked recipe permission accepted');}
 catch(PrepAgentPermissionException){}
 dq_assert(!gac_pending_get('prep',$org,$actor),'failed confirmation clears pending target');
-prep_agent_handle($pdo,$staffAgent,['message'=>'Set Agent Batch batch target to 16 balls on Daily Prep']);
-prep_agent_handle($pdo,$staffAgent,['message'=>'Confirm']);
+prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Set Agent Batch batch target to 16 balls on Daily Prep']));
+prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Confirm']));
 $agentRows=daily_quicklist_items($pdo,$org,$agentDay);
 $agentRow=current(array_values(array_filter($agentRows,static fn(array $r):bool=>$r['id']===$agentItem)));
 dq_assert($agentRow['targetYieldQuantity']===16.0&&$agentRow['targetYieldUnit']==='balls',
     'agent target uses canonical recipe unit, never changes physical inventory');
-try{prep_agent_handle($pdo,$staffAgent,['message'=>'Set Agent Batch batch target to 16 kg on Daily Prep']);
+try{prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Set Agent Batch batch target to 16 kg on Daily Prep']));
     throw new RuntimeException('wrong recipe unit accepted');}catch(InvalidArgumentException){}
 
-$stale=prep_agent_handle($pdo,$staffAgent,['message'=>'Mark Agent Batch done on Daily Prep']);
+$stale=prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Mark Agent Batch done on Daily Prep']));
 dq_assert($stale['skill']==='prep.action_proposal','stale mutation setup');
 daily_quicklist_mutate($pdo,$org,$actor,'timer',['id'=>$agentItem,'mode'=>'start'],false,true);
-try{prep_agent_handle($pdo,$staffAgent,['message'=>'Confirm']);throw new RuntimeException('stale checklist action accepted');}
+try{prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Confirm']));throw new RuntimeException('stale checklist action accepted');}
 catch(InvalidArgumentException){}
 dq_assert(!gac_pending_get('prep',$org,$actor),'stale proposal is consumed without changing task');
 
 $managerAgent=['id'=>$manager,'organization_id'=>$org,
     'permissions'=>['prep.intelligence.view','prep.intelligence.agent','tasks.manage','inventory.view','recipes.view']];
-try{prep_agent_handle($pdo,$staffAgent,['message'=>'Mark Flour as ordered on Need More']);
+try{prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Mark Flour as ordered on Need More']));
     throw new RuntimeException('staff manager action was proposed');}catch(PrepAgentPermissionException){}
-$manageProposal=prep_agent_handle($pdo,$managerAgent,['message'=>'Mark Flour as ordered on Need More']);
+$manageProposal=prep_agent_handle($pdo,$managerAgent,hac_test_input($pdo,$managerAgent,'prep',['message'=>'Mark Flour as ordered on Need More']));
 dq_assert($manageProposal['skill']==='prep.action_proposal','manager can propose status update');
 $notManager=$managerAgent;$notManager['permissions']=array_values(array_diff($managerAgent['permissions'],['tasks.manage']));
-try{prep_agent_handle($pdo,$notManager,['message'=>'Confirm']);
+try{prep_agent_handle($pdo,$notManager,hac_test_input($pdo,$notManager,'prep',['message'=>'Confirm']));
     throw new RuntimeException('manager permission revocation bypassed');}catch(PrepAgentPermissionException){}
-prep_agent_handle($pdo,$managerAgent,['message'=>'Mark Flour as ordered on Need More']);
-prep_agent_handle($pdo,$managerAgent,['message'=>'Confirm']);
+prep_agent_handle($pdo,$managerAgent,hac_test_input($pdo,$managerAgent,'prep',['message'=>'Mark Flour as ordered on Need More']));
+prep_agent_handle($pdo,$managerAgent,hac_test_input($pdo,$managerAgent,'prep',['message'=>'Confirm']));
 $needRows=daily_quicklist_items($pdo,$org,$agentDay);
 $flourRow=current(array_values(array_filter($needRows,static fn(array $r):bool=>$r['id']===$needIdAgain)));
 dq_assert($flourRow['status']==='ordered','manager can update Need More status via agent');
-prep_agent_handle($pdo,$managerAgent,['message'=>'Set manager note for Flour on Need More: Vendor contacted']);
-prep_agent_handle($pdo,$managerAgent,['message'=>'Confirm']);
+prep_agent_handle($pdo,$managerAgent,hac_test_input($pdo,$managerAgent,'prep',['message'=>'Set manager note for Flour on Need More: Vendor contacted']));
+prep_agent_handle($pdo,$managerAgent,hac_test_input($pdo,$managerAgent,'prep',['message'=>'Confirm']));
 $needRows=daily_quicklist_items($pdo,$org,$agentDay);
 $flourRow=current(array_values(array_filter($needRows,static fn(array $r):bool=>$r['id']===$needIdAgain)));
 dq_assert($flourRow['adminNote']==='Vendor contacted','agent manager note persists');
-$notify=prep_agent_handle($pdo,$managerAgent,['message'=>'Notify managers about Flour on Need More']);
+$notify=prep_agent_handle($pdo,$managerAgent,hac_test_input($pdo,$managerAgent,'prep',['message'=>'Notify managers about Flour on Need More']));
 dq_assert($notify['skill']==='prep.action_proposal','notification must be confirmed');
-prep_agent_handle($pdo,$managerAgent,['message'=>'Confirm']);
+prep_agent_handle($pdo,$managerAgent,hac_test_input($pdo,$managerAgent,'prep',['message'=>'Confirm']));
 dq_assert(daily_quicklist_history($pdo,$org,$needIdAgain)[0]['event']==='notified',
     'manager notice recorded in existing notification/history systems');
 
 $stockBefore=$pdo->query("SELECT on_hand_quantity FROM inventory_items WHERE public_id='stock-daily-test'")->fetchColumn();
-$newNeed=prep_agent_handle($pdo,$staffAgent,['message'=>'Add Pizza Boxes to Need More: 2 cases']);
+$newNeed=prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Add Pizza Boxes to Need More: 2 cases']));
 dq_assert($newNeed['skill']==='prep.action_proposal','ad hoc Need More requires confirmation');
-prep_agent_handle($pdo,$staffAgent,['message'=>'Confirm']);
+prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Confirm']));
 $needRows=daily_quicklist_items($pdo,$org,$agentDay);
 $boxes=array_values(array_filter($needRows,static fn(array $r):bool=>$r['title']==='Pizza Boxes'));
 dq_assert(count($boxes)===1&&$boxes[0]['quantityNote']==='2 cases','ad hoc Need More created in shared UI');
-try{prep_agent_handle($pdo,$staffAgent,['message'=>'Add Pizza Boxes to Need More']);
+try{prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Add Pizza Boxes to Need More']));
     throw new RuntimeException('duplicate Need More proposal accepted');}catch(InvalidArgumentException){}
-prep_agent_handle($pdo,$staffAgent,['message'=>'Remove Pizza Boxes from Need More']);
-prep_agent_handle($pdo,$staffAgent,['message'=>'Confirm']);
+prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Remove Pizza Boxes from Need More']));
+prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Confirm']));
 $needRows=daily_quicklist_items($pdo,$org,$agentDay);
 dq_assert(!array_filter($needRows,static fn(array $r):bool=>$r['title']==='Pizza Boxes'),
     'staff removal is a recoverable archive');
@@ -383,6 +385,8 @@ require_once __DIR__.'/../includes/food-monster-llm.php';
 require_once __DIR__.'/../includes/food-monster-b8d3-tool-runtime.php';
 $chatThread='agent-'.str_repeat('b',20);
 $chatContext=['threadId'=>$chatThread,'channel'=>'text'];
+$managerChatThread='agent-'.str_repeat('d',20);
+$managerChatContext=['threadId'=>$managerChatThread,'channel'=>'text'];
 $nativeCatalogue=fm8d18j11_catalogue($staffAgent,$chatContext);
 dq_assert(isset($nativeCatalogue['get_daily_prep_checklist'])
     &&isset($nativeCatalogue['propose_daily_prep_action']),
@@ -394,7 +398,7 @@ dq_assert(!fm8d18j11_catalogue($staffAgent,
     'unverified voice cannot select private Daily Prep tools');
 try{fm8d18j11_read([],$staffAgent,['channel'=>'voice','privateVoiceApproved'=>false]);
     throw new RuntimeException('unverified speaker read private checklist');}catch(DomainException){}
-$managerNative=fm8d18j11_catalogue($managerAgent,$chatContext);
+$managerNative=fm8d18j11_catalogue($managerAgent,$managerChatContext);
 dq_assert(!in_array('set_manager_note',
     $nativeCatalogue['propose_daily_prep_action']['parameters']['properties']['action']['enum'],true)
     &&in_array('set_manager_note',
@@ -425,39 +429,39 @@ $secondRow=current(array_values(array_filter($currentRows,static fn(array $r):bo
 $ordinalAction=$secondRow['status']==='done'?'reopen':'mark_done';
 $ordinalProposal=fm8d18j11_propose([
     'action'=>$ordinalAction,'list'=>'prep','reference_mode'=>'ordinal','ordinal'=>2,'date'=>$agentDay,
-],$staffAgent,$chatContext);
+],$staffAgent,hac_test_model_context($pdo,$staffAgent,$chatContext));
 dq_assert(($ordinalProposal['data']['requiresConfirmation']??false)===true,
     'model-selected second item stages a confirmation, no immediate write');
 $afterProposal=daily_quicklist_items($pdo,$org,$agentDay);
 $secondBeforeConfirm=current(array_values(array_filter($afterProposal,static fn(array $r):bool=>$r['id']===$second['id'])));
 dq_assert($secondBeforeConfirm['status']===$secondRow['status'],'ordinal proposal made no mutation');
-prep_agent_handle($pdo,$staffAgent,['message'=>'Confirm']);
+prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Confirm']));
 $afterOrdinal=daily_quicklist_items($pdo,$org,$agentDay);
 $secondAfter=current(array_values(array_filter($afterOrdinal,static fn(array $r):bool=>$r['id']===$second['id'])));
 dq_assert($secondAfter['status']!==$secondRow['status'],'server-bound ordinal modified precisely the selected item');
 try{fm8d18j11_propose(['action'=>'reopen','list'=>'prep',
-    'reference_mode'=>'ordinal','ordinal'=>2,'date'=>$agentDay],$staffAgent,$chatContext);
+    'reference_mode'=>'ordinal','ordinal'=>2,'date'=>$agentDay],$staffAgent,hac_test_model_context($pdo,$staffAgent,$chatContext));
     throw new RuntimeException('stale ordinal reused');}catch(InvalidArgumentException){}
 dq_assert(fm8d18j11_action_fields(['action'=>'timer_pause','list'=>'prep',
     'reference_mode'=>'focused'],$staffAgent)===[],
     'focused timer action has a complete canonical schema');
 $namedPause=fm8d18j11_propose([
     'action'=>'timer_pause','list'=>'prep','reference_mode'=>'name','name'=>'Agent Batch','date'=>$agentDay,
-],$staffAgent,$chatContext);
+],$staffAgent,hac_test_model_context($pdo,$staffAgent,$chatContext));
 dq_assert(($namedPause['data']['requiresConfirmation']??false)===true,'native selected timer pause stages proposal');
-prep_agent_handle($pdo,$staffAgent,['message'=>'Confirm']);
+prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Confirm']));
 $focusedResume=fm8d18j11_propose([
     'action'=>'timer_resume','list'=>'prep','reference_mode'=>'focused','date'=>$agentDay,
-],$staffAgent,$chatContext);
+],$staffAgent,hac_test_model_context($pdo,$staffAgent,$chatContext));
 dq_assert(($focusedResume['data']['requiresConfirmation']??false)===true,
     '"that timer" resolves only to a previously selected, tenant-scoped task');
-prep_agent_handle($pdo,$staffAgent,['message'=>'Confirm']);
+prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Confirm']));
 $afterFocus=daily_quicklist_items($pdo,$org,$agentDay);
 $focusedRow=current(array_values(array_filter($afterFocus,static fn(array $r):bool=>$r['id']===$agentItem)));
 dq_assert($focusedRow['timerRunning'],'focused model action resumed only Agent Batch');
 try{fm8d18j11_propose([
     'action'=>'timer_stop','list'=>'prep','reference_mode'=>'focused','date'=>$agentDay,
-],$foreignActor,$chatContext);throw new RuntimeException('foreign tenant used conversation focus');}
+],$foreignActor,hac_test_model_context($pdo,$foreignActor,$chatContext));throw new RuntimeException('foreign tenant used conversation focus');}
 catch(InvalidArgumentException|DomainException){}
 
 $staffTools=fm8d3_catalogue($staffAgent,$chatContext);
@@ -523,7 +527,7 @@ dq_assert(daily_quicklist_stock_alerts($unsetPoint,[],$items3k2e)===[],
 dq_assert(daily_quicklist_stock_alerts(daily_quicklist_inventory($pdo,$other),[],[])===[],
     'alerts cannot borrow another restaurant inventory records');
 
-$managerStockTools=fm8d18j11_catalogue($managerAgent,$chatContext);
+$managerStockTools=fm8d18j11_catalogue($managerAgent,$managerChatContext);
 dq_assert(isset($managerStockTools['get_need_more_stock_insights'])
     &&in_array('set_requested_amount',
         $managerStockTools['propose_daily_prep_action']['parameters']['properties']['action']['enum'],true),
@@ -537,14 +541,14 @@ try{fm8d18j11_stock_read(['date'=>$agentDay],$staffAgent,$chatContext);
 try{fm8d18j11_stock_read(['date'=>$agentDay],$managerAgent,
         ['channel'=>'voice','privateVoiceApproved'=>false]);
     throw new RuntimeException('unverified voice saw stock intelligence');}catch(DomainException){}
-$stockRead=fm8d18j11_stock_read(['date'=>$agentDay],$managerAgent,$chatContext);
+$stockRead=fm8d18j11_stock_read(['date'=>$agentDay],$managerAgent,$managerChatContext);
 dq_assert(str_contains($stockRead['data']['answer'],'Flour')
     &&str_contains($stockRead['data']['answer'],'Pizza Dough')
     &&str_contains($stockRead['data']['answer'],'not calculated recipe shortages'),
     'official read grounds stock and recipe context with explicit limitations');
 $managerWithoutRecipes=$managerAgent;
 $managerWithoutRecipes['permissions']=array_values(array_diff($managerAgent['permissions'],['recipes.view']));
-$limitedRead=fm8d18j11_stock_read(['date'=>$agentDay],$managerWithoutRecipes,$chatContext);
+$limitedRead=fm8d18j11_stock_read(['date'=>$agentDay],$managerWithoutRecipes,$managerChatContext);
 dq_assert($limitedRead['data']['alerts'][0]['prepRecipes']===[],
     'authorized stock reads never leak recipe content after permission revocation');
 dq_assert(gaw_route($managerAgent,'Which low stock items affect prep recipes?')['domain']==='daily_prep_model_tools',
@@ -571,7 +575,7 @@ try{daily_quicklist_mutate($pdo,$org,$actor,'update',[
 $preAmount=$pdo->query("SELECT on_hand_quantity FROM inventory_items WHERE public_id='stock-daily-test'")->fetchColumn();
 $managerProposal=fm8d18j11_propose(['action'=>'set_requested_amount','list'=>'inventory',
     'reference_mode'=>'name','name'=>'Flour','note'=>'3 cases','date'=>$agentDay],
-    $managerAgent,$chatContext);
+    $managerAgent,hac_test_model_context($pdo,$managerAgent,$managerChatContext));
 dq_assert(($managerProposal['data']['requiresConfirmation']??false)===true,
     'model-selected requested amount is only a proposal');
 $preConfirmRows=daily_quicklist_items($pdo,$org,$agentDay);
@@ -581,13 +585,13 @@ dq_assert($preConfirm['quantityNote']==='',
     'unconfirmed manager request does not write the amount');
 daily_quicklist_mutate($pdo,$org,$manager,'update',
     ['id'=>$needIdAgain,'status'=>'ordered','quantityNote'=>'2 cases'],true);
-try{prep_agent_handle($pdo,$managerAgent,['message'=>'Confirm']);
+try{prep_agent_handle($pdo,$managerAgent,hac_test_input($pdo,$managerAgent,'prep',['message'=>'Confirm']));
     throw new RuntimeException('stale requested amount was applied');}catch(InvalidArgumentException){}
 dq_assert(!gac_pending_get('prep',$org,$manager),'stale amount proposal is consumed safely');
 $managerProposal=fm8d18j11_propose(['action'=>'set_requested_amount','list'=>'inventory',
     'reference_mode'=>'name','name'=>'Flour','note'=>'3 cases','date'=>$agentDay],
-    $managerAgent,$chatContext);
-prep_agent_handle($pdo,$managerAgent,['message'=>'Confirm']);
+    $managerAgent,hac_test_model_context($pdo,$managerAgent,$managerChatContext));
+prep_agent_handle($pdo,$managerAgent,hac_test_input($pdo,$managerAgent,'prep',['message'=>'Confirm']));
 $newAmountRows=daily_quicklist_items($pdo,$org,$agentDay);
 $newAmount=current(array_values(array_filter($newAmountRows,
     static fn(array $r):bool=>$r['id']===$needIdAgain)));
@@ -600,7 +604,7 @@ dq_assert((float)$postAmount===(float)$preAmount,'Need More amount never alters 
 // Section 3K2F: reconcile an ALREADY-RECORDED inventory receipt once, without
 // receiving it twice. Model numbers are bound to the manager's chat session.
 dq_assert(daily_quicklist_receipts_ready($pdo),'upgrade installs the receipt link table');
-$managerReceipts=fm8d18j11_catalogue($managerAgent,$chatContext);
+$managerReceipts=fm8d18j11_catalogue($managerAgent,$managerChatContext);
 dq_assert(isset($managerReceipts['get_need_more_receipts'])
     &&in_array('link_confirmed_receipt',
         $managerReceipts['propose_daily_prep_action']['parameters']['properties']['action']['enum'],true),
@@ -616,7 +620,7 @@ try{fm8d18j11_receipts_read(['name'=>'Flour','date'=>$agentDay],$managerAgent,
     throw new RuntimeException('unverified room voice read inventory receipts');}catch(DomainException){}
 try{fm8d18j11_propose(['action'=>'link_confirmed_receipt','list'=>'inventory',
         'reference_mode'=>'name','name'=>'Flour','receipt_number'=>1,'date'=>$agentDay],
-        $managerAgent,$chatContext);
+        $managerAgent,hac_test_model_context($pdo,$managerAgent,$managerChatContext));
     throw new RuntimeException('receipt proposal allowed without a prior numbered read');}
 catch(InvalidArgumentException){}
 $received=operations_inventory_adjust($pdo,$org,$stockId,2.0,'receive',$actor,'CI recorded physical receipt');
@@ -629,21 +633,21 @@ dq_assert(count($candidates)===1&&$candidates[0]['id']===$receiptTxn
     'eligible receipt is exact saved tenant inventory ledger evidence');
 try{daily_quicklist_receipt_candidates($pdo,$other,$needIdAgain);
     throw new RuntimeException('foreign organization enumerated stock receipts');}catch(InvalidArgumentException){}
-$readReceipts=fm8d18j11_receipts_read(['name'=>'Flour','date'=>$agentDay],$managerAgent,$chatContext);
+$readReceipts=fm8d18j11_receipts_read(['name'=>'Flour','date'=>$agentDay],$managerAgent,$managerChatContext);
 dq_assert(str_contains($readReceipts['data']['answer'],'1. 2 kg received')
     &&!str_contains($readReceipts['data']['answer'],(string)$receiptTxn.' transaction ID'),
     'model reads numbered receipt evidence, not raw transaction IDs');
 $unrelatedThread='agent-'.str_repeat('d',20);
 try{pqa_receipt_context_resolve($org,$manager,$unrelatedThread,$needIdAgain,1);
     throw new RuntimeException('receipt selection leaked across conversations');}catch(InvalidArgumentException){}
-try{pqa_receipt_context_resolve($other,$manager,$chatThread,$needIdAgain,1);
+try{pqa_receipt_context_resolve($other,$manager,$managerChatThread,$needIdAgain,1);
     throw new RuntimeException('receipt selection leaked to another tenant');}catch(InvalidArgumentException){}
 dq_assert(fm8d18j11_action_fields(['action'=>'link_confirmed_receipt','list'=>'inventory',
     'reference_mode'=>'name','name'=>'Flour','receipt_number'=>21],$managerAgent)===['receipt_number'],
     'unknown receipt ordinal rejected before proposal');
 $proposalReceipt=fm8d18j11_propose(['action'=>'link_confirmed_receipt','list'=>'inventory',
     'reference_mode'=>'name','name'=>'Flour','receipt_number'=>1,'date'=>$agentDay],
-    $managerAgent,$chatContext);
+    $managerAgent,hac_test_model_context($pdo,$managerAgent,$managerChatContext));
 dq_assert(($proposalReceipt['data']['requiresConfirmation']??false)===true,
     'linking recorded stock receipt stages a separate confirmation');
 $rowsBeforeLink=daily_quicklist_items($pdo,$org,$agentDay);
@@ -652,14 +656,14 @@ dq_assert($needBeforeLink['status']==='ordered'&&daily_quicklist_receipt_links($
     'unconfirmed receipt never resolves Need More');
 daily_quicklist_mutate($pdo,$org,$manager,'update',
     ['id'=>$needIdAgain,'status'=>'ordered','quantityNote'=>'4 cases'],true);
-try{prep_agent_handle($pdo,$managerAgent,['message'=>'Confirm']);
+try{prep_agent_handle($pdo,$managerAgent,hac_test_input($pdo,$managerAgent,'prep',['message'=>'Confirm']));
     throw new RuntimeException('stale receipt link proposal was applied');}catch(InvalidArgumentException){}
 dq_assert(!gac_pending_get('prep',$org,$manager),'stale receipt proposal was consumed');
-$readReceipts=fm8d18j11_receipts_read(['name'=>'Flour','date'=>$agentDay],$managerAgent,$chatContext);
+$readReceipts=fm8d18j11_receipts_read(['name'=>'Flour','date'=>$agentDay],$managerAgent,$managerChatContext);
 $proposed=fm8d18j11_propose(['action'=>'link_confirmed_receipt','list'=>'inventory',
     'reference_mode'=>'name','name'=>'Flour','receipt_number'=>1,'date'=>$agentDay],
-    $managerAgent,$chatContext);
-$completeReceipt=prep_agent_handle($pdo,$managerAgent,['message'=>'Confirm']);
+    $managerAgent,hac_test_model_context($pdo,$managerAgent,$managerChatContext));
+$completeReceipt=prep_agent_handle($pdo,$managerAgent,hac_test_input($pdo,$managerAgent,'prep',['message'=>'Confirm']));
 dq_assert($completeReceipt['skill']==='prep.action_confirmed','agent confirmation resolved Need More');
 $receiptLinks=daily_quicklist_receipt_links($pdo,$org);
 dq_assert(($receiptLinks[$needIdAgain]['receiptId']??null)===$receiptTxn,
@@ -695,7 +699,7 @@ $partialProgress=daily_quicklist_receipt_progress($pdo,$org,$newRequest);
 dq_assert($partialProgress['requestedQuantity']===null
     &&$partialProgress['receivedQuantity']===0.0
     &&$partialProgress['unit']==='kg','legacy Need More has no invented numeric target');
-$managerPartialCatalogue=fm8d18j11_catalogue($managerAgent,$chatContext);
+$managerPartialCatalogue=fm8d18j11_catalogue($managerAgent,$managerChatContext);
 dq_assert(in_array('set_requested_stock_quantity',
         $managerPartialCatalogue['propose_daily_prep_action']['parameters']['properties']['action']['enum'],true)
     &&!in_array('set_requested_stock_quantity',
@@ -706,20 +710,20 @@ dq_assert(fm8d18j11_action_fields(['action'=>'set_requested_stock_quantity','lis
     'native model validates numeric target in saved stock unit');
 try{fm8d18j11_propose(['action'=>'set_requested_stock_quantity','list'=>'inventory',
     'reference_mode'=>'name','name'=>'Flour','quantity'=>5.0,'date'=>$agentDay],
-    $staffAgent,$chatContext);
+    $staffAgent,hac_test_model_context($pdo,$staffAgent,$chatContext));
     throw new RuntimeException('staff proposed manager-only numeric stock target');}catch(InvalidArgumentException){}
 try{fm8d18j11_propose(['action'=>'set_requested_stock_quantity','list'=>'inventory',
     'reference_mode'=>'name','name'=>'Flour','quantity'=>5.0,'unit'=>'boxes','date'=>$agentDay],
-    $managerAgent,$chatContext);
+    $managerAgent,hac_test_model_context($pdo,$managerAgent,$managerChatContext));
     throw new RuntimeException('model invented stock unit');}catch(InvalidArgumentException){}
 $proposedTarget=fm8d18j11_propose(['action'=>'set_requested_stock_quantity','list'=>'inventory',
     'reference_mode'=>'name','name'=>'Flour','quantity'=>5.0,'unit'=>'kg','date'=>$agentDay],
-    $managerAgent,$chatContext);
+    $managerAgent,hac_test_model_context($pdo,$managerAgent,$managerChatContext));
 dq_assert(($proposedTarget['data']['requiresConfirmation']??false)===true,
     'numeric target is not saved before explicit Confirm');
 $pendingTarget=daily_quicklist_receipt_progress($pdo,$org,$newRequest);
 dq_assert($pendingTarget['requestedQuantity']===null,'proposal cannot mutate target by itself');
-$confirmedTarget=prep_agent_handle($pdo,$managerAgent,['message'=>'Confirm']);
+$confirmedTarget=prep_agent_handle($pdo,$managerAgent,hac_test_input($pdo,$managerAgent,'prep',['message'=>'Confirm']));
 dq_assert($confirmedTarget['skill']==='prep.action_confirmed',
     'typed/authorized voice confirmation uses existing Prep Agent action gate');
 $partialProgress=daily_quicklist_receipt_progress($pdo,$org,$newRequest);
@@ -754,18 +758,18 @@ $secondStock=operations_inventory_adjust($pdo,$org,$stockId,4.0,'receive',$actor
 $secondTxn=(int)$secondStock['last_transaction_id'];
 $afterActualReceiving=(float)$secondStock['on_hand_quantity'];
 $beforeFinalAlloc=(int)$pdo->query('SELECT COUNT(*) FROM inventory_transactions WHERE organization_id='.$org)->fetchColumn();
-$readSecond=fm8d18j11_receipts_read(['name'=>'Flour','date'=>$agentDay],$managerAgent,$chatContext);
+$readSecond=fm8d18j11_receipts_read(['name'=>'Flour','date'=>$agentDay],$managerAgent,$managerChatContext);
 dq_assert(str_contains($readSecond['data']['answer'],'still outstanding: 3 kg')
     &&str_contains($readSecond['data']['answer'],'1. 4 kg received'),
     'official Agent/Brain/Chat read reports genuine stock receipt and remaining quantity');
 $proposalFinal=fm8d18j11_propose(['action'=>'link_confirmed_receipt','list'=>'inventory',
     'reference_mode'=>'name','name'=>'Flour','receipt_number'=>1,'quantity'=>3.0,'date'=>$agentDay],
-    $managerAgent,$chatContext);
+    $managerAgent,hac_test_model_context($pdo,$managerAgent,$managerChatContext));
 dq_assert(($proposalFinal['data']['requiresConfirmation']??false)===true,
     'partial receipt allocation is confirmation-only');
 $beforeFinal=daily_quicklist_receipt_progress($pdo,$org,$newRequest);
 dq_assert($beforeFinal['remainingQuantity']===3.0,'proposal has not allocated any stock');
-$finalConfirmed=prep_agent_handle($pdo,$managerAgent,['message'=>'Confirm']);
+$finalConfirmed=prep_agent_handle($pdo,$managerAgent,hac_test_input($pdo,$managerAgent,'prep',['message'=>'Confirm']));
 dq_assert($finalConfirmed['skill']==='prep.action_confirmed',
     'manager confirms partial quantity from numbered immutable ledger receipt');
 $finalProgress=daily_quicklist_receipt_progress($pdo,$org,$newRequest);

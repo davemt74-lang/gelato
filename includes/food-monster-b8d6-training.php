@@ -13,21 +13,25 @@ function fm8d6_observe(string $answer,string $source='Gelato Guided Training'):a
 {
     return ['ok'=>true,'data'=>['answer'=>mb_strcut($answer,0,2600,'UTF-8'),'source'=>$source]];
 }
+function fm8d6_read_observe(string $answer,string $source='Gelato Guided Training'):array
+{
+    return ['ok'=>true,'data'=>['answer'=>$answer,'source'=>$source]];
+}
 function fm8d6_my_progress(PDO $pdo,array $actor):array
 {
     $org=(int)$actor['organization_id'];$uid=(int)$actor['id'];
     $thread=fm13c_training_thread($pdo,$org,$uid,false);
-    if(!$thread)return fm8d6_observe('You have no saved guided-training session yet. I can start one using an active menu procedure or an authorized recipe.');
+    if(!$thread)return fm8d6_read_observe('You have no saved guided-training session yet. I can start one using an active menu procedure or an authorized recipe.');
     $state=fm13c_read_state($pdo,$org,$uid,$thread);
-    if(!$state)return fm8d6_observe('There is no verified guided-training progress in your saved training thread.');
+    if(!$state)return fm8d6_read_observe('There is no verified guided-training progress in your saved training thread.');
     if(($state['kind']??'')==='recipe'&&!fm13b_allowed($actor,'recipe',false,false))
-        return fm8d6_observe('Your saved training includes a restricted procedure. You do not currently have permission to view it.');
+        return fm8d6_read_observe('Your saved training includes a restricted procedure. You do not currently have permission to view it.');
     $material=fm13c_fetch_material($pdo,$org,$state);
     $safe=$material&&($material['digest']??'')===($state['digest']??'');
     $status=(string)($state['status']??'unknown');
     $step=max(1,(int)($state['index']??0)+1);$count=max(1,(int)($state['stepCount']??1));
-    if(!$safe)return fm8d6_observe('Your training state is '.$status.' at step '.$step.' of '.$count.', but the saved procedure has changed or is unavailable. Please review the updated source before continuing.');
-    return fm8d6_observe('Your training on '.$material['name'].' is '.$status.', step '.$step.' of '.$count.'. Recorded practice answers: '.
+    if(!$safe)return fm8d6_read_observe('Your training state is '.$status.' at step '.$step.' of '.$count.', but the saved procedure has changed or is unavailable. Please review the updated source before continuing.');
+    return fm8d6_read_observe('Your training on '.$material['name'].' is '.$status.', step '.$step.' of '.$count.'. Recorded practice answers: '.
         max(0,(int)($state['practiceCorrect']??0)).' correct of '.max(0,(int)($state['practiceAttempts']??0)).
         ' attempts. This is guided practice, not a competency certification.');
 }
@@ -56,7 +60,7 @@ function fm8d6_team_insights(PDO $pdo,array $actor):array
     }
     unset($entry);
     $result=fm13e_answer($summary,'team',$people);
-    return fm8d6_observe($result['answer'],'Gelato Training Intelligence');
+    return fm8d6_read_observe($result['answer'],'Gelato Training Intelligence');
 }
 function fm8d6_canonical_turn(PDO $pdo,array $actor,array $context):?string
 {

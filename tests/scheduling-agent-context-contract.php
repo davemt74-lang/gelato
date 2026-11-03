@@ -12,6 +12,7 @@ $route=sac_text($root.'/api/agent-workspace.php');
 $nodes=sac_text($root.'/includes/agent-node-registry.php');
 $endpoint=sac_text($root.'/api/scheduling-agent.php');
 $core=sac_text($root.'/includes/scheduling-agent-core.php');
+$confirmation=sac_text($root.'/includes/agent-confirmation-core.php');
 $posLoader=sac_text($root.'/js/pos.js');
 $posContext=sac_text($root.'/js/pos-agent-context.js');
 
@@ -30,15 +31,21 @@ $contextPos=strpos($loader,'agent-page-context.js');$schedulePos=strpos($loader,
 sac_assert($contextPos!==false&&$schedulePos!==false&&$globalPos!==false&&$contextPos<$schedulePos&&$schedulePos<$globalPos,'Global loader must install shared context and page adapter before the Agent transport starts.');
 sac_assert(str_contains($nodes,"'scheduling'=>[")&&str_contains($nodes,"'route'=>'api/scheduling-agent.php'")&&str_contains($nodes,"'mode'=>'read_confirmed_write'"),'Scheduling must remain a first-class confirmed-write Agent node.');
 sac_assert(str_contains($route,"\$isSchedulingContext")&&str_contains($route,"gaw_node_route('scheduling','scheduling_context')")&&str_contains($route,'$localIntent'),'Agent Workspace must route ambiguous Scheduling page language through the named Scheduling node.');
-sac_assert(str_contains($route,'$confirmationIntent')&&str_contains($route,'gaw_pending_action_node($org,$uid)')&&str_contains($route,"gaw_node_route('scheduling','scheduling_confirmation')"),'Scheduling confirmations must route back to their owning node even outside the Scheduling page.');
+sac_assert(str_contains($route,'$confirmationIntent')&&str_contains($route,'gaw_pending_action_node($org,$uid,$in)')&&str_contains($route,"gaw_node_route('scheduling','scheduling_confirmation')"),'Scheduling confirmations must route back to their owning node even outside the Scheduling page.');
 
 sac_assert(str_contains($endpoint,"require_once __DIR__.'/../includes/scheduling-agent-core.php'")&&str_contains($endpoint,'scheduling_agent_handle($pdo,$user,$input)'),'Scheduling Agent HTTP endpoint must delegate to the reusable secure action core.');
 sac_assert(str_contains($endpoint,'catch(SchedulingAgentPermissionException $e)')&&str_contains($endpoint,'],403)'),'Scheduling Agent endpoint must distinguish permission failures from validation failures.');
 sac_assert(str_contains($endpoint,'$hasScheduleVisibility')&&str_contains($endpoint,'$confirmingStaffMessage')&&str_contains($endpoint,'Schedule visibility permission is required for scheduling intelligence.'),'Staff identity access must not silently grant scheduling intelligence; staff-message confirmations are the scoped exception.');
 
 sac_assert(str_contains($core,'sac_pending_store')&&str_contains($core,'sac_pending_get')&&str_contains($core,'sac_pending_clear'),'Scheduling Agent writes must use server-side pending proposals.');
-sac_assert(str_contains($core,"'expires'=>time()+600"),'Scheduling Agent proposals must expire quickly.');
-sac_assert(str_contains($core,'Reply Confirm to execute this change, or Cancel to discard it.'),'Scheduling Agent must require explicit human confirmation.');
+sac_assert(str_contains($core,"gac_pending_store('scheduling',\$org,\$userId")
+    &&str_contains($confirmation,'int $ttl=600')
+    &&str_contains($confirmation,"'expires'=>time()+max(60,min(1800,\$ttl))"),
+    'Scheduling Agent proposals must use the shared short expiry.');
+sac_assert(str_contains($core,'gac_proposal_result(')
+    &&str_contains($core,"gac_pending_claim('scheduling',\$org,\$userId,\$input)")
+    &&str_contains($confirmation,'Reply Confirm to execute this change, or Cancel to discard it.'),
+    'Scheduling Agent must require explicit human confirmation of the exact reviewed proposal.');
 sac_assert(str_contains($core,"schedule.agent_action_proposed")&&str_contains($core,"schedule.agent_action_confirmed")&&str_contains($core,"schedule.agent_action_discarded"),'Scheduling Agent proposal lifecycle must be audited.');
 sac_assert(str_contains($core,"sac_require(\$user,'schedule.manage'"),'Schedule mutations must remain permission-gated.');
 sac_assert(str_contains($core,"employee.handoffs.manage")&&str_contains($core,'employee_shift_message_save'),'Employee messages must use the existing permission-gated shift communications system.');
@@ -48,7 +55,10 @@ sac_assert(str_contains($core,'expectedUpdatedAt')&&str_contains($core,'sac_guar
 sac_assert(str_contains($core,'sac_week_snapshot')&&str_contains($core,"That schedule week changed after I proposed publishing it."),'Week publication must reject stale proposals.');
 sac_assert(str_contains($core,'sac_view_all')&&str_contains($core,'sac_view_self')&&str_contains($core,'Scheduling or staff visibility permission is required.'),'Scheduling Agent permission must not bypass underlying schedule/staff visibility permissions.');
 sac_assert(str_contains($core,"Schedule view permission is required for the restaurant roster.")&&str_contains($core,"Schedule view permission is required to compare staff availability."),'Cross-staff roster and availability intelligence must require schedule-wide visibility.');
-sac_assert(str_contains($core,"'organizationId'=>\$org")&&str_contains($core,"'userId'=>\$userId")&&str_contains($core,'does not belong to your session'),'Pending actions must be bound to the authenticated organization and user.');
+sac_assert(str_contains($confirmation,"'organizationId'=>\$organizationId,'userId'=>\$userId")
+    &&str_contains($confirmation,'gac_creation_binding($organizationId,$userId)')
+    &&str_contains($core,'does not belong to your session'),
+    'Pending actions must be bound to the authenticated organization, user, and canonical conversation.');
 
 sac_assert(str_contains($posLoader,'js/agent-page-context.js'),'POS must load the shared context layer before its adapter.');
 sac_assert(str_contains($posContext,"module: 'pos'")&&str_contains($posContext,'GelatoAgentPageContext?.register?.(provider)'),'POS must register with the same shared context layer.');

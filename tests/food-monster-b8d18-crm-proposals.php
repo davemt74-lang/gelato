@@ -1,5 +1,7 @@
 <?php
 declare(strict_types=1);
+if(PHP_SAPI!=='cli'){http_response_code(404);exit;}
+require_once __DIR__.'/hardening-agent-confirmation-test-support.php';
 
 function app_has_permission(string $permission,array $actor):bool
 {
@@ -53,6 +55,7 @@ b18d_invalid(static fn()=>fm8d18d_exact_customer($db,7,'Duplicate Name'),'No uni
 b18d_invalid(static fn()=>fm8d18d_exact_customer($db,7,'Archived Customer'),'No unique exact');
 
 if(session_status()!==PHP_SESSION_ACTIVE&&!session_start())throw new RuntimeException('Test session unavailable');
+hac_test_context($db,$actor);
 $note=$catalogue['propose_crm_customer_note']['execute'];
 $tag=$catalogue['propose_crm_customer_tag']['execute'];
 try{$note(['customer_name'=>'Jane Smith','note'=>'Regular'],$viewer);b18d_check(false,'note denied');}

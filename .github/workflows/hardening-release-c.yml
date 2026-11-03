@@ -1,0 +1,172 @@
+name: Hardening Release C - Food Monster and Device Ownership
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  ai-runtime:
+    name: MariaDB behavior, concurrency, HTTP and browser journeys
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_hardening_c_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - name: Check out the tested revision
+        uses: actions/checkout@v4
+
+      - name: Install PHP with native database and private-file extensions
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, pdo_sqlite, mbstring, curl, fileinfo, sodium, zip
+          coverage: none
+          ini-values: date.timezone=UTC, memory_limit=512M
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Lint every tracked PHP entrypoint and module
+        run: |
+          set -euo pipefail
+          git ls-files -z '*.php' | xargs -0 -n1 php -l > /tmp/gelato-hardening-c-php-lint.log
+
+      - name: Exact reviewed proposal browser state and existing specialist routing
+        run: |
+          node tests/hardening-agent-confirmation-browser-state.cjs
+          node tests/prep-agent-bridge-routing.cjs
+          node --check js/global-agent.js
+          node --check js/agent-confirmation-transport.js
+          node --check js/food-monster-llm.js
+          node --check js/agent-canvas.js
+          node --check js/dynamic-agent-canvas.js
+
+      - name: Deny deployed test entrypoints before configuration exists
+        run: node tests/deployed-test-entrypoints.cjs
+
+      - name: Install and fully upgrade a clean MariaDB database
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_hardening_c_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Hardening C CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_hardening_c_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_hardening_c_ci','session_lifetime_seconds'=>28800,'session_idle_timeout_seconds'=>28800,'session_absolute_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+            'storage'=>['private_root'=>'/tmp/gelato-hardening-c-private'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $pdo=app_pdo();
+          if($pdo->getAttribute(PDO::ATTR_DRIVER_NAME)!=='mysql'||(bool)$pdo->getAttribute(PDO::ATTR_EMULATE_PREPARES)) {
+              throw new RuntimeException('Release C requires MariaDB with native PDO prepares.');
+          }
+          $upgrade=new UpgradeService($pdo,__DIR__);
+          $upgrade->ensureTrackingTables();
+          $upgrade->bootstrapLegacyHistory(null);
+          $applied=$upgrade->applyPending(null);
+          $upgrade->assertAppliedChecksumsUnchanged();
+          if($upgrade->pendingMigrations()!==[])throw new RuntimeException('Clean upgrade left pending migrations.');
+          if($upgrade->applyPending(null)!==[])throw new RuntimeException('Repeat upgrade was not idempotent.');
+          $upgrade->assertAppliedChecksumsUnchanged();
+          echo 'Clean install, full upgrade and repeat upgrade passed; applied '.count($applied)." migrations.\n";
+          PHP
+
+      - name: Encoded observation budgets, truthful truncation and strict unknown contracts
+        run: |
+          php tests/hardening-food-monster-observations.php
+          php tests/hardening-food-monster-observations-mariadb.php
+
+      - name: Canonical proposal identity, single use and current permissions
+        run: php tests/hardening-agent-confirmation-contract.php
+
+      - name: Two-device training ownership and atomic lifecycle
+        run: |
+          php tests/hardening-glasses-training-contract.php
+          php tests/hardening-glasses-training-concurrency.php
+
+      - name: High-impact role approvals, fresh authority and affected session revocation
+        run: |
+          php tests/hardening-high-impact-role-contract.php
+          php tests/food-monster-g9h-roles.php
+
+      - name: Actual PHP HTTP sessions and concurrent proposal confirmations
+        run: node tests/hardening-agent-confirmation-http.cjs
+
+      - name: Authenticated paired devices over HTTP
+        run: node tests/hardening-glasses-training-http.cjs
+
+      - name: Existing runtime, purchasing and glasses regressions
+        run: |
+          php tests/food-monster-b8d2-execution-loop.php
+          php tests/food-monster-b8d3-tool-selection.php
+          php tests/food-monster-b8d3-mariadb.php
+          php tests/food-monster-b8d4-scheduling.php
+          php tests/food-monster-b8d12-pending-actions.php
+          php tests/food-monster-b8d18-operations-proposals.php
+          php tests/food-monster-b8d17d-inventory-actions.php
+          php tests/purchasing-manager-agent-node-contract.php
+          php tests/purchasing-agent-actions-contract.php
+          php tests/glasses-v11-training-identity-contract.php
+          php tests/glasses-v11-production-evidence-contract.php
+          php tests/glasses-employee-runtime-contract.php
+          php tests/hardening-glasses-account-authority.php
+
+      - name: Install the repository-pinned Playwright browser runtime
+        run: |
+          npm install --prefix /tmp/gelato-hardening-browser --no-audit --no-fund playwright@1.62.1
+          node /tmp/gelato-hardening-browser/node_modules/playwright/cli.js install --with-deps chromium
+
+      - name: Real browser conversations, two tabs, stale confirmations and reload
+        env:
+          NODE_PATH: /tmp/gelato-hardening-browser/node_modules
+          QA_OUTPUT_DIR: /tmp/gelato-hardening-c-browser
+        run: node tests/hardening-agent-confirmation-browser.cjs
+
+      - name: Preserve migration checksums and repeat upgrade
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $upgrade=new UpgradeService(app_pdo(),__DIR__);
+          $upgrade->assertAppliedChecksumsUnchanged();
+          if($upgrade->pendingMigrations()!==[]||$upgrade->applyPending(null)!==[]) {
+              throw new RuntimeException('Release C tests must leave migration history unchanged.');
+          }
+          echo "Migration checksums and repeat upgrade remain clean.\n";
+          PHP
+
+      - name: Retain lint and browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hardening-release-c-validation
+          path: |
+            /tmp/gelato-hardening-c-php-lint.log
+            /tmp/gelato-hardening-c-browser
+          if-no-files-found: warn
+          retention-days: 14
