@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__.'/glasses-vision-media-retention.php';
 
 require_once __DIR__.'/glasses-vision-mining.php';
 require_once __DIR__.'/glasses-production-evidence.php';
@@ -53,7 +54,7 @@ function glasses_v11_mining_source_rows(PDO $pdo,int $org): array {
     LEFT JOIN glasses_devices d ON d.id=m.device_id
     LEFT JOIN kds_stations ks ON ks.id=ts.station_id
     LEFT JOIN glasses_vision_training_samples s ON s.id=m.sample_id
-    WHERE m.organization_id=? AND m.status='active' AND m.training_session_id IS NOT NULL AND m.training_eligibility<>'excluded'
+    WHERE m.organization_id=? AND ".glasses_vision_media_retained_sql('m')." AND m.training_session_id IS NOT NULL AND m.training_eligibility<>'excluded'
       AND (m.validation_outcome IN ('needs_correction','not_ready_for_final_validation','rework_failure','final_failure','insufficient') OR m.quality_state='poor')
     ORDER BY m.id");
   $mq->execute([$org]);
@@ -68,7 +69,7 @@ function glasses_v11_mining_source_rows(PDO $pdo,int $org): array {
     LEFT JOIN glasses_training_programs tp ON tp.id=m.training_program_id
     LEFT JOIN glasses_devices d ON d.id=m.device_id
     LEFT JOIN kds_stations ks ON ks.id=ts.station_id
-    WHERE c.organization_id=? AND m.status='active' AND m.training_eligibility<>'excluded'
+    WHERE c.organization_id=? AND ".glasses_vision_media_retained_sql('m')." AND m.training_eligibility<>'excluded'
     ORDER BY c.id");
   $cq->execute([$org]);
   foreach($cq->fetchAll() as $r){$r['source_kind']='correction';$rows[]=$r;}

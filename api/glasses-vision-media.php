@@ -6,20 +6,23 @@ require_once __DIR__.'/../includes/glasses-vision-training-media.php';
 $user=app_require_auth();
 if(!app_has_permission('glasses.view',$user))app_json_response(['ok'=>false,'message'=>'AR glasses permission required.'],403);
 $pdo=app_pdo();$org=(int)$user['organization_id'];
+header('Cache-Control: private, no-store, max-age=0');
+header('X-Content-Type-Options: nosniff');
 
 if($_SERVER['REQUEST_METHOD']==='GET' && !empty($_GET['publicId'])){
     if(!app_has_permission('glasses.manage',$user)){http_response_code(403);exit('AR glasses management permission required.');}
     try{
         $row=glasses_vision_training_media_row($pdo,$org,(string)$_GET['publicId'],false);
-        if((string)$row['status']!=='active'){http_response_code(410);exit('Training media is no longer available.');}
-        $path=glasses_vision_training_media_storage_root().'/'.(string)$row['storage_relative_path'];
+        glasses_vision_media_require_retained($row);
+        $path=glasses_vision_training_media_storage_path($org,(string)$row['storage_relative_path']);
         if(!is_file($path)){http_response_code(404);exit('Training media bytes are missing.');}
         header('Content-Type: '.(string)$row['mime_type']);
         header('Content-Length: '.(string)filesize($path));
         header('Cache-Control: private, no-store, max-age=0');
         header('Content-Disposition: inline; filename="'.preg_replace('/[^a-zA-Z0-9._-]+/','-',(string)$row['public_id']).'"');
         readfile($path);exit;
-    }catch(Throwable $e){http_response_code(404);exit('Training media was not found.');}
+    }catch(GlassesVisionMediaUnavailable $e){http_response_code(410);exit('Training media is no longer available.');}
+    catch(Throwable $e){http_response_code(404);exit('Training media was not found.');}
 }
 
 try{

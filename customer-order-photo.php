@@ -23,8 +23,7 @@ try{
     $record=glasses_vision_training_media_row($pdo,$org,(string)$match['mediaPublicId'],false);
     $mime=(string)$record['mime_type'];
     if(!in_array($mime,['image/jpeg','image/png','image/webp'],true)
-        ||(string)$record['status']!=='active'
-        ||($record['retention_until']!==null&&strtotime((string)$record['retention_until'])<=time())){
+        ||!glasses_vision_media_retained($record)){
         http_response_code(404);exit;
     }
     $root=realpath(glasses_vision_training_media_storage_root());

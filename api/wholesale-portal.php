@@ -10,7 +10,7 @@ $account=wholesale_portal_require_account($pdo,$user);
 $accountId=(int)$account['id'];
 
 if($_SERVER['REQUEST_METHOD']==='GET'){
-    $context=wholesale_portal_dashboard($pdo,$organizationId,$accountId);
+    $context=wholesale_portal_dashboard($pdo,$organizationId,$accountId,max(0,(int)($_GET['invoiceOffset']??0)));
     if(isset($context['account']))unset($context['account']['id'],$context['account']['organization_id'],$context['account']['internal_notes'],$context['account']['created_by'],$context['account']['updated_by'],$context['account']['archived_at'],$context['account']['wholesale_lead_id']);
     $context['portal']=['user'=>['displayName'=>$user['display_name'],'email'=>$user['email'],'accountRole'=>$account['account_role']],'w5Ready'=>wholesale_portal_operations_ready($pdo)];
     app_json_response(['ok'=>true]+$context);

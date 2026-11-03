@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/restaurant-brain.php';
+require_once __DIR__ . '/recipe-ingredient-parser.php';
 
 function operations_core_ready(PDO $pdo): bool
 {
@@ -33,18 +34,7 @@ function operations_normalized_ingredient(string $value): string
 
 function operations_parse_ingredient(mixed $ingredient): ?array
 {
-    if (is_string($ingredient)) {
-        $text=trim($ingredient); if($text==='') return null;
-        if(preg_match('/^([0-9]+(?:\.[0-9]+)?)\s+([A-Za-z][A-Za-z .-]{0,30})\s+(.+)$/u',$text,$m)) return ['name'=>trim($m[3]),'quantity'=>(float)$m[1],'unit'=>trim($m[2])];
-        return ['name'=>$text,'quantity'=>null,'unit'=>''];
-    }
-    if(!is_array($ingredient)) return null;
-    $name=trim((string)($ingredient['name']??$ingredient['ingredient']??$ingredient['item']??$ingredient['description']??''));
-    if($name===''&&isset($ingredient[0])&&is_string($ingredient[0])) return operations_parse_ingredient($ingredient[0]);
-    if($name==='') return null;
-    $quantity=$ingredient['quantity']??$ingredient['amount']??$ingredient['qty']??null;
-    if(is_string($quantity)&&!is_numeric($quantity)){if(preg_match('/([0-9]+(?:\.[0-9]+)?)/',$quantity,$m))$quantity=(float)$m[1];else $quantity=null;}
-    return ['name'=>$name,'quantity'=>is_numeric($quantity)?(float)$quantity:null,'unit'=>trim((string)($ingredient['unit']??$ingredient['measure']??''))];
+    return recipe_ingredient_parse($ingredient);
 }
 
 function operations_ensure_default_categories(PDO $pdo,int $organizationId,?int $userId=null): void
@@ -78,34 +68,101 @@ function operations_inventory_upsert(PDO $pdo,int $organizationId,string $name,?
     $load=$pdo->prepare('SELECT * FROM inventory_items WHERE organization_id=? AND normalized_key=? LIMIT 1');$load->execute([$organizationId,$key]);$row=$load->fetch();if(!$row)throw new RuntimeException('Inventory item could not be loaded.');return $row;
 }
 
+/** Build the complete desired recipe projection before touching inventory or source links. */
+function operations_recipe_source_plan(array $recipes): array
+{
+    $plan=[];
+    foreach($recipes as $recipe){
+        if((string)$recipe['status']!=='active'||$recipe['archived_at']!==null)continue;
+        try{$ingredients=json_decode((string)($recipe['ingredients_json']??'[]'),true,512,JSON_THROW_ON_ERROR);}
+        catch(JsonException){throw new InvalidArgumentException('Recipe '.$recipe['name'].' has invalid ingredient data. Review it before synchronizing inventory.');}
+        if(!is_array($ingredients)||!array_is_list($ingredients)||count($ingredients)>250)
+            throw new InvalidArgumentException('Recipe '.$recipe['name'].' needs a reviewed list of at most 250 ingredients.');
+        $set=[];
+        foreach($ingredients as $index=>$ingredient){
+            $parsed=operations_parse_ingredient($ingredient);
+            if(!$parsed||!empty($parsed['needsReview']))
+                throw new InvalidArgumentException('Review ingredient '.($index+1).' in recipe '.$recipe['name'].' before synchronizing inventory. '.($parsed['reviewReason']??'A named ingredient and a numeric quantity are required.'));
+            $name=operations_normalized_ingredient($parsed['name']);$key=operations_slug($name);
+            if(mb_strlen($key,'UTF-8')>180||$parsed['quantity']>9999999999.9999)
+                throw new InvalidArgumentException('Recipe '.$recipe['name'].' contains an ingredient outside the inventory limits.');
+            if(isset($set[$key])&&($set[$key]['name']!==$name||$set[$key]['unit']!==$parsed['unit']))
+                throw new InvalidArgumentException('Review duplicate ingredient '.$parsed['name'].' in recipe '.$recipe['name'].': use one unambiguous name and unit.');
+            if(!isset($set[$key]))$set[$key]=['name'=>$name,'unit'=>$parsed['unit'],'quantity'=>0.0,'lines'=>[]];
+            $set[$key]['quantity']+=(float)$parsed['quantity'];$set[$key]['lines'][]=$parsed['raw'];
+            if(!is_finite($set[$key]['quantity'])||$set[$key]['quantity']>9999999999.9999)
+                throw new InvalidArgumentException('Recipe '.$recipe['name'].' has an ingredient quantity outside the inventory limits.');
+        }
+        foreach($set as $parsed){
+            if($parsed['quantity']>0&&round($parsed['quantity'],4)<=0)
+                throw new InvalidArgumentException('Review ingredient '.$parsed['name'].' in recipe '.$recipe['name'].': its positive quantity is below the inventory precision. Use a supported unit or a reviewed amount.');
+        }
+        ksort($set,SORT_STRING);
+        $plan['recipe:'.$recipe['public_id']]=['recipe'=>$recipe,'ingredients'=>$set,
+            'hash'=>hash('sha256',json_encode(['name'=>$recipe['name'],'ingredients'=>$ingredients],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR))];
+    }
+    return $plan;
+}
+
+/** Inventory history is immutable; only the current recipe-to-inventory projection is replaced. */
 function operations_sync_inventory_sources(PDO $pdo,int $organizationId,?int $userId=null): array
 {
-    $menuCount=0;$recipeCount=0;$itemsTouched=[];
-    $catalogPath=RESTAURANT_APP_ROOT.'/data/ingredient-catalog.json';
-    if(is_file($catalogPath)){
-        $catalog=json_decode((string)file_get_contents($catalogPath),true);
-        foreach((array)($catalog['ingredients']??[]) as $ingredient){
-            $name=trim((string)($ingredient['name']??''));if($name==='')continue;
-            $item=operations_inventory_upsert($pdo,$organizationId,$name,$userId,['menuCategories'=>$ingredient['categories']??[]]);$itemsTouched[(int)$item['id']]=true;
-            $menuItems=(array)($ingredient['menuItems']??[]);$sourceId='menu:'.((string)($ingredient['id']??operations_slug($name)));
-            $stmt=$pdo->prepare("INSERT INTO inventory_item_sources (organization_id,inventory_item_id,source_type,source_public_id,source_name,metadata_json) VALUES (?,?, 'menu',?,?,?) ON DUPLICATE KEY UPDATE source_name=VALUES(source_name),metadata_json=VALUES(metadata_json),updated_at=NOW(6)");
-            $stmt->execute([$organizationId,(int)$item['id'],$sourceId,$name,json_encode(['menuItems'=>$menuItems,'allergens'=>$ingredient['allergens']??[]],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)]);$menuCount+=count($menuItems);
+    $ownsTransaction=!$pdo->inTransaction();$savepoint='inventory_sources_'.bin2hex(random_bytes(6));
+    if($ownsTransaction)$pdo->beginTransaction();else $pdo->exec('SAVEPOINT '.$savepoint);
+    try{
+        // A shared tenant lock protects availability without blocking stock writers' FK checks.
+        // Ordered recipe locks serialize source refreshes and protect their saved revisions.
+        $lock=$pdo->prepare("SELECT id FROM organizations WHERE id=? AND status='active' LOCK IN SHARE MODE");$lock->execute([$organizationId]);
+        if(!$lock->fetchColumn())throw new InvalidArgumentException('The restaurant is unavailable.');
+        $hasRecipes=restaurant_brain_table_ready($pdo,'recipes');$plan=[];
+        if($hasRecipes){
+            $q=$pdo->prepare('SELECT id,public_id,name,status,archived_at,ingredients_json,updated_at FROM recipes WHERE organization_id=? ORDER BY id FOR UPDATE');$q->execute([$organizationId]);
+            $plan=operations_recipe_source_plan($q->fetchAll());
+            if(!function_exists('app_audit'))throw new RuntimeException('Auditing is required to synchronize recipe sources.');
         }
-    }
-    if(restaurant_brain_table_ready($pdo,'recipes')){
-        $stmt=$pdo->prepare("SELECT id,public_id,name,ingredients_json FROM recipes WHERE organization_id=? AND status='active' AND archived_at IS NULL");$stmt->execute([$organizationId]);
-        foreach($stmt->fetchAll() as $recipe){
-            $ingredients=json_decode((string)($recipe['ingredients_json']??'[]'),true);if(!is_array($ingredients))continue;
-            foreach($ingredients as $ingredient){
-                $parsed=operations_parse_ingredient($ingredient);if(!$parsed)continue;
-                $item=operations_inventory_upsert($pdo,$organizationId,$parsed['name'],$userId);$itemsTouched[(int)$item['id']]=true;$sourceId='recipe:'.$recipe['public_id'];
-                $source=$pdo->prepare("INSERT INTO inventory_item_sources (organization_id,inventory_item_id,source_type,source_public_id,source_name,quantity_per_source,unit,metadata_json) VALUES (?,?, 'recipe',?,?,?,?,?) ON DUPLICATE KEY UPDATE source_name=VALUES(source_name),quantity_per_source=VALUES(quantity_per_source),unit=VALUES(unit),metadata_json=VALUES(metadata_json),updated_at=NOW(6)");
-                $source->execute([$organizationId,(int)$item['id'],$sourceId,$recipe['name'],$parsed['quantity'],$parsed['unit']?:null,json_encode(['recipePublicId'=>$recipe['public_id'],'recipeName'=>$recipe['name']],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)]);$recipeCount++;
+        $menuCount=0;$recipeCount=0;$retired=0;$itemsTouched=[];
+        $catalogPath=RESTAURANT_APP_ROOT.'/data/ingredient-catalog.json';
+        if(is_file($catalogPath)){
+            $catalog=json_decode((string)file_get_contents($catalogPath),true,512,JSON_THROW_ON_ERROR);
+            foreach((array)($catalog['ingredients']??[]) as $ingredient){
+                $name=trim((string)($ingredient['name']??''));if($name==='')continue;
+                $item=operations_inventory_upsert($pdo,$organizationId,$name,$userId,['menuCategories'=>$ingredient['categories']??[]]);$itemsTouched[(int)$item['id']]=true;
+                $menuItems=(array)($ingredient['menuItems']??[]);$sourceId='menu:'.((string)($ingredient['id']??operations_slug($name)));
+                $stmt=$pdo->prepare("INSERT INTO inventory_item_sources (organization_id,inventory_item_id,source_type,source_public_id,source_name,metadata_json) VALUES (?,?, 'menu',?,?,?) ON DUPLICATE KEY UPDATE source_name=VALUES(source_name),metadata_json=VALUES(metadata_json),updated_at=NOW(6)");
+                $stmt->execute([$organizationId,(int)$item['id'],$sourceId,$name,json_encode(['menuItems'=>$menuItems,'allergens'=>$ingredient['allergens']??[]],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)]);$menuCount+=count($menuItems);
             }
         }
+        if($hasRecipes){
+            $q=$pdo->prepare("SELECT inventory_item_id,source_public_id,source_name,quantity_per_source,unit,metadata_json FROM inventory_item_sources WHERE organization_id=? AND source_type='recipe' ORDER BY source_public_id,inventory_item_id FOR UPDATE");$q->execute([$organizationId]);$before=[];
+            foreach($q->fetchAll() as $row){$sourceId=(string)$row['source_public_id'];unset($row['source_public_id']);$row['inventory_item_id']=(int)$row['inventory_item_id'];$row['metadata']=json_decode((string)($row['metadata_json']??'null'),true);unset($row['metadata_json']);$before[$sourceId][]=$row;}
+            $source=$pdo->prepare("INSERT INTO inventory_item_sources (organization_id,inventory_item_id,source_type,source_public_id,source_name,quantity_per_source,unit,metadata_json) VALUES (?,?, 'recipe',?,?,?,?,?) ON DUPLICATE KEY UPDATE source_name=VALUES(source_name),quantity_per_source=VALUES(quantity_per_source),unit=VALUES(unit),metadata_json=VALUES(metadata_json),updated_at=NOW(6)");
+            foreach(array_unique(array_merge(array_keys($before),array_keys($plan))) as $sourceId){
+                $desired=[];$recipe=$plan[$sourceId]['recipe']??null;
+                foreach($plan[$sourceId]['ingredients']??[] as $parsed){
+                    $item=operations_inventory_upsert($pdo,$organizationId,$parsed['name'],$userId);$itemId=(int)$item['id'];$itemsTouched[$itemId]=true;
+                    // The existing source column has four decimal places; retain raw quantities in audit metadata.
+                    $quantity=operations_quantity_decimal(operations_quantity_ticks(round($parsed['quantity'],4)));
+                    $metadata=['recipePublicId'=>$recipe['public_id'],'recipeName'=>$recipe['name'],'recipeUpdatedAt'=>$recipe['updated_at'],
+                        'recipeContentSha256'=>$plan[$sourceId]['hash'],'parserVersion'=>1,'ingredientLines'=>$parsed['lines']];
+                    $row=['inventory_item_id'=>$itemId,'source_name'=>$recipe['name'],'quantity_per_source'=>$quantity,'unit'=>$parsed['unit']?:null,'metadata'=>$metadata];$desired[]=$row;
+                    $source->execute([$organizationId,$itemId,$sourceId,$recipe['name'],$quantity,$row['unit'],json_encode($metadata,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR)]);$recipeCount++;
+                }
+                usort($desired,static fn(array $a,array $b):int=>$a['inventory_item_id']<=>$b['inventory_item_id']);
+                $ids=array_column($desired,'inventory_item_id');
+                $sql="DELETE FROM inventory_item_sources WHERE organization_id=? AND source_type='recipe' AND source_public_id=?";
+                if($ids)$sql.=' AND inventory_item_id NOT IN ('.implode(',',array_fill(0,count($ids),'?')).')';
+                $remove=$pdo->prepare($sql);$remove->execute(array_merge([$organizationId,$sourceId],$ids));$retired+=$remove->rowCount();
+                if(($before[$sourceId]??[])!==$desired)
+                    app_audit($pdo,$organizationId,$userId,'inventory.recipe_sources_reconciled','recipe',substr($sourceId,7),['sources'=>$before[$sourceId]??[]],['sources'=>$desired,'recipeContentSha256'=>$plan[$sourceId]['hash']??null,'retired'=>$recipe===null]);
+            }
+        }
+        $refresh=$pdo->prepare("UPDATE inventory_items i SET menu_source_count=(SELECT COALESCE(SUM(JSON_LENGTH(JSON_EXTRACT(s.metadata_json,'$.menuItems'))),0) FROM inventory_item_sources s WHERE s.organization_id=i.organization_id AND s.inventory_item_id=i.id AND s.source_type='menu'),recipe_source_count=(SELECT COUNT(*) FROM inventory_item_sources s WHERE s.organization_id=i.organization_id AND s.inventory_item_id=i.id AND s.source_type='recipe'),updated_at=NOW(6) WHERE i.organization_id=? AND i.archived_at IS NULL");$refresh->execute([$organizationId]);
+        if($ownsTransaction)$pdo->commit();else $pdo->exec('RELEASE SAVEPOINT '.$savepoint);
+        return ['items'=>count($itemsTouched),'menuReferences'=>$menuCount,'recipeReferences'=>$recipeCount,'retiredRecipeReferences'=>$retired];
+    }catch(Throwable $error){
+        if($pdo->inTransaction()){if($ownsTransaction)$pdo->rollBack();else{$pdo->exec('ROLLBACK TO SAVEPOINT '.$savepoint);$pdo->exec('RELEASE SAVEPOINT '.$savepoint);}}
+        throw $error;
     }
-    $refresh=$pdo->prepare("UPDATE inventory_items i SET menu_source_count=(SELECT COALESCE(SUM(JSON_LENGTH(JSON_EXTRACT(s.metadata_json,'$.menuItems'))),0) FROM inventory_item_sources s WHERE s.inventory_item_id=i.id AND s.source_type='menu'),recipe_source_count=(SELECT COUNT(*) FROM inventory_item_sources s WHERE s.inventory_item_id=i.id AND s.source_type='recipe'),updated_at=NOW(6) WHERE i.organization_id=? AND i.archived_at IS NULL");$refresh->execute([$organizationId]);
-    return ['items'=>count($itemsTouched),'menuReferences'=>$menuCount,'recipeReferences'=>$recipeCount];
 }
 
 function operations_inventory_list(PDO $pdo,int $organizationId,string $query='',bool $lowOnly=false,int $limit=500): array

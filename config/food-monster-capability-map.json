@@ -1273,7 +1273,7 @@
     {
       "path": "api/glasses-vision-media.php",
       "feature": "vision_lab",
-      "sourceBlob": "85fd02fc141a1ffc307898ab868cb2484dff07de",
+      "sourceBlob": "ea4d3451ae75491921874ac9111dc1500974ab3d",
       "discoveredActions": [
         "dataset_quality",
         "delete",
@@ -1346,9 +1346,10 @@
     {
       "path": "api/glasses-vision-training-release.php",
       "feature": "vision_lab",
-      "sourceBlob": "ba9c5dd01b936e5c2ba8e4395fbd878318ce5a33",
+      "sourceBlob": "0df18c04be65e034f107bd0a97cb2bc2e4020dd4",
       "discoveredActions": [],
       "permissionTokensSeen": [
+        "glasses.manage",
         "glasses.view"
       ],
       "directAppRequireAuthCall": true,
@@ -1931,7 +1932,7 @@
     {
       "path": "api/public-shell.php",
       "feature": "public_site",
-      "sourceBlob": "c6597c1dcf2857e642259ea9bc96d98cbcc9c0cc",
+      "sourceBlob": "99f87827dae82333b223d663ac014325fb51c186",
       "discoveredActions": [],
       "permissionTokensSeen": [],
       "directAppRequireAuthCall": false,
@@ -2516,7 +2517,7 @@
     {
       "path": "api/wholesale-portal.php",
       "feature": "wholesale",
-      "sourceBlob": "46cfa8eb043ab85dc9fb1481f34ab3c612120b6b",
+      "sourceBlob": "31bbf7ae78eed797b3683004cd1b9a255749899e",
       "discoveredActions": [
         "accept_quote",
         "catalog_request",
@@ -2528,7 +2529,8 @@
         "wholesale_portal.orders",
         "wholesale_portal.profile_edit",
         "wholesale_portal.quotes",
-        "wholesale_portal.requests"
+        "wholesale_portal.requests",
+        "wholesale_portal.view"
       ],
       "directAppRequireAuthCall": false,
       "dispatch": "discovery_only",
@@ -2556,7 +2558,7 @@
     {
       "path": "api/wholesale-receivables.php",
       "feature": "wholesale",
-      "sourceBlob": "6cc9d3e877302ada070ac50b38c8aa43daf2a351",
+      "sourceBlob": "04cbd6a0c8e9d3fbfde1737a711e68c9bead4845",
       "discoveredActions": [
         "credit.record",
         "detail",

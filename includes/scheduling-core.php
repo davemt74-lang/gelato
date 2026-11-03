@@ -80,7 +80,7 @@ function scheduling_availability(PDO $pdo,int $organizationId,int $userId): arra
 function scheduling_availability_replace(PDO $pdo,int $organizationId,int $userId,array $windows,int $actorUserId): array {
     if(!scheduling_staff_user($pdo,$organizationId,$userId))throw new RuntimeException('Staff member not found.');
     $clean=[];
-    foreach($windows as $w){$day=(int)($w['weekday']??-1);$start=trim((string)($w['start']??''));$end=trim((string)($w['end']??''));$type=(string)($w['type']??'available');if($day<0||$day>6||!preg_match('/^\d{2}:\d{2}$/',$start)||!preg_match('/^\d{2}:\d{2}$/',$end)||$end<=$start)continue;if(!in_array($type,['available','unavailable'],true))$type='available';$clean[]=['weekday'=>$day,'start'=>$start.':00','end'=>$end.':00','type'=>$type];}
+    foreach($windows as $w){$day=(int)($w['weekday']??-1);$start=trim((string)($w['start']??''));$end=trim((string)($w['end']??''));$type=(string)($w['type']??'available');if($day<0||$day>6||!scheduling_clock_valid($start)||!scheduling_clock_valid($end,true)||$end<=$start)throw new InvalidArgumentException('Availability day/time is invalid.');if(!in_array($type,['available','unavailable'],true))$type='available';$clean[]=['weekday'=>$day,'start'=>$start.':00','end'=>$end.':00','type'=>$type];}
     $pdo->beginTransaction();try{$pdo->prepare('DELETE FROM staff_availability WHERE organization_id=? AND user_id=?')->execute([$organizationId,$userId]);$ins=$pdo->prepare('INSERT INTO staff_availability (organization_id,user_id,weekday,start_time,end_time,availability_type,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?)');foreach($clean as $w)$ins->execute([$organizationId,$userId,$w['weekday'],$w['start'],$w['end'],$w['type'],$actorUserId,$actorUserId]);$pdo->commit();}catch(Throwable $e){$pdo->rollBack();throw $e;}
     return scheduling_availability($pdo,$organizationId,$userId);
 }
@@ -88,7 +88,7 @@ function scheduling_availability_replace(PDO $pdo,int $organizationId,int $userI
 function scheduling_exception_create(PDO $pdo,int $organizationId,int $userId,array $input,int $actorUserId,bool $manager): array {
     if(!scheduling_staff_user($pdo,$organizationId,$userId))throw new RuntimeException('Staff member not found.');
     $date=trim((string)($input['date']??''));$dt=DateTimeImmutable::createFromFormat('Y-m-d',$date);if(!$dt||$dt->format('Y-m-d')!==$date)throw new InvalidArgumentException('A valid exception date is required.');
-    $start=trim((string)($input['start']??''));$end=trim((string)($input['end']??''));if(($start!==''||$end!=='')&&(!preg_match('/^\d{2}:\d{2}$/',$start)||!preg_match('/^\d{2}:\d{2}$/',$end)||$end<=$start))throw new InvalidArgumentException('Exception times are invalid.');
+    $start=trim((string)($input['start']??''));$end=trim((string)($input['end']??''));if(($start!==''||$end!=='')&&(!scheduling_clock_valid($start)||!scheduling_clock_valid($end,true)||$end<=$start))throw new InvalidArgumentException('Exception times are invalid.');
     $type=(string)($input['type']??'time_off');if(!in_array($type,['time_off','unavailable','available'],true))$type='time_off';$status=$manager?'approved':'pending';$public=scheduling_public_id('availability');
     $pdo->prepare('INSERT INTO staff_availability_exceptions (organization_id,public_id,user_id,exception_date,start_time,end_time,exception_type,status,note,requested_by,reviewed_by,reviewed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')->execute([$organizationId,$public,$userId,$date,$start!==''?$start.':00':null,$end!==''?$end.':00':null,$type,$status,mb_substr(trim((string)($input['note']??'')),0,1000,'UTF-8')?:null,$actorUserId,$manager?$actorUserId:null,$manager?date('Y-m-d H:i:s'):null]);
     $stmt=$pdo->prepare('SELECT * FROM staff_availability_exceptions WHERE organization_id=? AND public_id=?');$stmt->execute([$organizationId,$public]);return $stmt->fetch()?:[];
@@ -106,16 +106,127 @@ function scheduling_shift_conflicts(PDO $pdo,int $organizationId,int $userId,str
     $sql="SELECT public_id,title,starts_at,ends_at FROM schedule_shifts WHERE organization_id=? AND user_id=? AND archived_at IS NULL AND status<>'cancelled' AND starts_at<? AND ends_at>?";$args=[$organizationId,$userId,$end,$start];if($excludeId!==null){$sql.=' AND id<>?';$args[]=$excludeId;}$stmt=$pdo->prepare($sql);$stmt->execute($args);return $stmt->fetchAll();
 }
 
-function scheduling_availability_check(PDO $pdo,int $organizationId,int $userId,string $start,string $end): array {
-    $s=new DateTimeImmutable($start);$e=new DateTimeImmutable($end);$date=$s->format('Y-m-d');$day=(int)$s->format('w');$startTime=$s->format('H:i:s');$endTime=$e->format('H:i:s');
-    $stmt=$pdo->prepare("SELECT * FROM staff_availability_exceptions WHERE organization_id=? AND user_id=? AND exception_date=? AND status='approved' ORDER BY created_at DESC");$stmt->execute([$organizationId,$userId,$date]);$exceptions=$stmt->fetchAll();
-    foreach($exceptions as $x){$xs=$x['start_time']?:'00:00:00';$xe=$x['end_time']?:'23:59:59';if($xs<$endTime&&$xe>$startTime&&in_array($x['exception_type'],['time_off','unavailable'],true))return ['ok'=>false,'reason'=>'Approved time off/unavailability overlaps this shift.'];}
-    foreach($exceptions as $x){$xs=$x['start_time']?:'00:00:00';$xe=$x['end_time']?:'23:59:59';if($x['exception_type']==='available'&&$xs<=$startTime&&$xe>=$endTime)return ['ok'=>true,'reason'=>'Explicit availability exception covers this shift.'];}
-    $stmt=$pdo->prepare('SELECT start_time,end_time,availability_type FROM staff_availability WHERE organization_id=? AND user_id=? AND weekday=? ORDER BY start_time');$stmt->execute([$organizationId,$userId,$day]);$rows=$stmt->fetchAll();if(!$rows)return ['ok'=>true,'reason'=>'No recurring availability is recorded for this day.'];
-    foreach($rows as $r)if($r['availability_type']==='unavailable'&&$r['start_time']<$endTime&&$r['end_time']>$startTime)return ['ok'=>false,'reason'=>'Recurring unavailability overlaps this shift.'];
-    $available=array_values(array_filter($rows,fn($r)=>$r['availability_type']==='available'));if(!$available)return ['ok'=>true,'reason'=>'No recurring available window is recorded.'];
-    foreach($available as $r)if($r['start_time']<=$startTime&&$r['end_time']>=$endTime)return ['ok'=>true,'reason'=>'Shift is inside recurring availability.'];
-    return ['ok'=>false,'reason'=>'Shift is outside the employee recurring availability.'];
+function scheduling_timezone(PDO $pdo,int $organizationId): DateTimeZone
+{
+    $q=$pdo->prepare('SELECT timezone FROM organizations WHERE id=?');$q->execute([$organizationId]);$name=$q->fetchColumn();
+    if($name===false)throw new InvalidArgumentException('The restaurant was not found.');
+    try{return new DateTimeZone(trim((string)$name)?:'UTC');}
+    catch(Throwable){throw new InvalidArgumentException('The restaurant timezone is invalid. Review its settings before scheduling.');}
+}
+
+/** All instants that have this local wall time (zero in a DST gap, two in a fold). */
+function scheduling_local_candidates(string $date,string $clock,DateTimeZone $zone): array
+{
+    $local=$date.' '.$clock;$wall=DateTimeImmutable::createFromFormat('!Y-m-d H:i:s',$local,new DateTimeZone('UTC'));
+    if(!$wall||$wall->format('Y-m-d H:i:s')!==$local)throw new InvalidArgumentException('Choose valid calendar dates and clock times.');
+    $stamp=$wall->getTimestamp();$transitions=$zone->getTransitions($stamp-172800,$stamp+172800);
+    $offsets=[];foreach($transitions?:[] as $transition)$offsets[(int)$transition['offset']]=true;
+    if(!$offsets)$offsets[$zone->getOffset($wall)]=true;
+    $candidates=[];foreach(array_keys($offsets) as $offset){$candidate=$stamp-(int)$offset;if((new DateTimeImmutable('@'.$candidate))->setTimezone($zone)->format('Y-m-d H:i:s')===$local)$candidates[]=$candidate;}
+    sort($candidates,SORT_NUMERIC);return array_values(array_unique($candidates));
+}
+
+/** Stored shifts use restaurant-local DATETIME values; ambiguous boundaries cannot retain a fold. */
+function scheduling_shift_datetime(string $raw,DateTimeZone $zone): DateTimeImmutable
+{
+    if(!preg_match('/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2})?)(\.\d{1,6})?(Z|[+-]\d{2}:\d{2})?$/D',trim($raw),$m))
+        throw new InvalidArgumentException('Valid shift start and end times are required.');
+    $clock=strlen($m[2])===5?$m[2].':00':$m[2];$date=$m[1];$fraction=$m[3]??'';$microseconds=$fraction!==''?(int)str_pad(substr($fraction,1),6,'0'):0;
+    // Validate the input calendar date even when an explicit offset is supplied.
+    scheduling_local_candidates($date,$clock,new DateTimeZone('UTC'));
+    if(!empty($m[4])){
+        try{$instant=new DateTimeImmutable($date.' '.$clock.$fraction.$m[4]);}catch(Throwable){throw new InvalidArgumentException('The shift timezone offset is invalid.');}
+        $instant=$instant->setTimezone($zone);$date=$instant->format('Y-m-d');$clock=$instant->format('H:i:s');
+    }
+    $candidates=scheduling_local_candidates($date,$clock,$zone);
+    if(count($candidates)!==1)throw new InvalidArgumentException(count($candidates)===0?'This local shift time does not exist because the clocks change. Choose a time outside the daylight-saving gap.':'This local shift time occurs twice because the clocks change. Choose an unambiguous shift boundary.');
+    return (new DateTimeImmutable('@'.$candidates[0]))->setTimezone($zone)->modify('+'.$microseconds.' microseconds');
+}
+
+function scheduling_shift_interval(PDO $pdo,int $org,string $start,string $end): array
+{
+    $zone=scheduling_timezone($pdo,$org);$s=scheduling_shift_datetime($start,$zone);$e=scheduling_shift_datetime($end,$zone);
+    if($e<=$s)throw new InvalidArgumentException('Shift end must be after shift start.');
+    if((float)$e->format('U.u')-(float)$s->format('U.u')>86400)throw new InvalidArgumentException('Shift length cannot exceed 24 hours.');
+    return [$s,$e,$zone];
+}
+
+function scheduling_clock_valid(string $clock,bool $end=false): bool
+{
+    return (bool)preg_match('/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/D',$clock)||($end&&$clock==='24:00');
+}
+
+/** Map a local wall-clock window through each constant-offset segment.
+ * Repeated hours produce separate pieces; nonexistent spring pieces vanish.
+ */
+function scheduling_window_intervals(string $date,?string $start,?string $end,DateTimeZone $zone): array
+{
+    $utc=new DateTimeZone('UTC');
+    $midnight=DateTimeImmutable::createFromFormat('!Y-m-d',$date,$utc);
+    if(!$midnight||$midnight->format('Y-m-d')!==$date)throw new InvalidArgumentException('An availability window has an invalid date.');
+    $start=($start===null||$start==='')?'00:00:00':$start;
+    $end=($end===null||$end==='')?'24:00:00':$end;
+    $wallStart=scheduling_local_candidates($date,$start,$utc)[0];
+    $wallEnd=$end==='24:00:00'?$midnight->modify('+1 day')->getTimestamp():scheduling_local_candidates($date,$end,$utc)[0];
+    if($wallEnd<=$wallStart)throw new InvalidArgumentException('An availability window must end after it starts.');
+    $rangeStart=$wallStart-172800;$rangeEnd=$wallEnd+172800;
+    $transitions=$zone->getTransitions($rangeStart,$rangeEnd);
+    if(!$transitions)$transitions=[['ts'=>$rangeStart,'offset'=>$zone->getOffset($midnight)]];
+    $pieces=[];$count=count($transitions);
+    foreach($transitions as $index=>$transition){
+        $offset=(int)$transition['offset'];$segmentStart=(int)$transition['ts'];
+        $segmentEnd=$index+1<$count?(int)$transitions[$index+1]['ts']:$rangeEnd;
+        $from=max($wallStart,$segmentStart+$offset);$to=min($wallEnd,$segmentEnd+$offset);
+        if($from>=$to)continue;
+        $piece=[$from-$offset,$to-$offset];$last=count($pieces)-1;
+        // Adjacent real-time pieces can merge; a repeated-hour gap cannot.
+        if($last>=0&&$pieces[$last][1]===$piece[0])$pieces[$last][1]=$piece[1];else $pieces[]=$piece;
+    }
+    return $pieces;
+}
+
+function scheduling_intervals_cover(array $windows,float $start,float $end): bool
+{
+    usort($windows,static fn(array $a,array $b):int=>$a[0]<=>$b[0]);$cursor=$start;
+    foreach($windows as [$from,$to]){if($to<=$cursor)continue;if($from>$cursor)return false;$cursor=max($cursor,$to);if($cursor>=$end)return true;}
+    return $cursor>=$end;
+}
+
+function scheduling_availability_check(PDO $pdo,int $organizationId,int $userId,string $start,string $end): array
+{
+    [$s,$e,$zone]=scheduling_shift_interval($pdo,$organizationId,$start,$end);
+    $lastDate=$e->modify('-1 microsecond')->format('Y-m-d');
+    $q=$pdo->prepare("SELECT exception_date,start_time,end_time,exception_type FROM staff_availability_exceptions WHERE organization_id=? AND user_id=? AND exception_date BETWEEN ? AND ? AND status='approved' ORDER BY exception_date,start_time");
+    $q->execute([$organizationId,$userId,$s->format('Y-m-d'),$lastDate]);$exceptions=[];
+    foreach($q->fetchAll() as $row)$exceptions[$row['exception_date']][]=$row;
+    $q=$pdo->prepare('SELECT weekday,start_time,end_time,availability_type FROM staff_availability WHERE organization_id=? AND user_id=? ORDER BY weekday,start_time');$q->execute([$organizationId,$userId]);$recurring=[];
+    foreach($q->fetchAll() as $row)$recurring[(int)$row['weekday']][]=$row;
+    // Iterate calendar dates in UTC so a missing/repeated local midnight cannot
+    // move the next day's boundary to 01:00 or skip its early-morning leave.
+    $day=new DateTimeImmutable($s->format('Y-m-d').' 00:00:00',new DateTimeZone('UTC'));
+    $shiftStart=(float)$s->format('U.u');$shiftEnd=(float)$e->format('U.u');
+    for(;$day->format('Y-m-d')<=$lastDate;$day=$day->modify('+1 day')){
+        $date=$day->format('Y-m-d');$explicit=[];$denied=[];$available=[];$unavailable=[];$hasAvailable=false;
+        foreach($exceptions[$date]??[] as $row){
+            $pieces=scheduling_window_intervals($date,$row['start_time'],$row['end_time'],$zone);
+            if(in_array($row['exception_type'],['time_off','unavailable'],true))array_push($denied,...$pieces);
+            if($row['exception_type']==='available')array_push($explicit,...$pieces);
+        }
+        foreach($recurring[(int)$day->format('w')]??[] as $row){
+            $pieces=scheduling_window_intervals($date,$row['start_time'],$row['end_time'],$zone);
+            if($row['availability_type']==='unavailable')array_push($unavailable,...$pieces);
+            if($row['availability_type']==='available'){$hasAvailable=true;array_push($available,...$pieces);}
+        }
+        foreach(scheduling_window_intervals($date,null,null,$zone) as [$dayStart,$dayEnd]){
+            $from=max($shiftStart,$dayStart);$to=min($shiftEnd,$dayEnd);if($from>=$to)continue;
+            foreach($denied as [$a,$b])if($a<$to&&$b>$from)return ['ok'=>false,'reason'=>'Approved time off/unavailability overlaps this shift on '.$date.'.'];
+            if(scheduling_intervals_cover($explicit,$from,$to))continue;
+            foreach($unavailable as [$a,$b])if($a<$to&&$b>$from&&!scheduling_intervals_cover($explicit,max($a,$from),min($b,$to)))
+                return ['ok'=>false,'reason'=>'Recurring unavailability overlaps this shift on '.$date.'.'];
+            if($hasAvailable&&!scheduling_intervals_cover(array_merge($available,$explicit),$from,$to))return ['ok'=>false,'reason'=>'Shift is outside the employee recurring availability on '.$date.'.'];
+        }
+    }
+    return ['ok'=>true,'reason'=>'Every covered local date satisfies recorded availability and approved exceptions.'];
 }
 
 function scheduling_shift_event(PDO $pdo,int $organizationId,?int $shiftId,string $type,string $summary,?int $actorUserId,array $meta=[]): void {
@@ -123,15 +234,17 @@ function scheduling_shift_event(PDO $pdo,int $organizationId,?int $shiftId,strin
 }
 
 function scheduling_shift_save(PDO $pdo,int $organizationId,array $input,int $actorUserId,?array $existing=null): array {
-    $start=trim((string)($input['startsAt']??($existing['starts_at']??'')));$end=trim((string)($input['endsAt']??($existing['ends_at']??'')));try{$s=new DateTimeImmutable($start);$e=new DateTimeImmutable($end);}catch(Throwable){throw new InvalidArgumentException('Valid shift start and end times are required.');}if($e<=$s)throw new InvalidArgumentException('Shift end must be after shift start.');if($s->format('Y-m-d')!==$e->format('Y-m-d')&&($e->getTimestamp()-$s->getTimestamp())>86400)throw new InvalidArgumentException('Shift length cannot exceed 24 hours.');
+    $start=trim((string)($input['startsAt']??($existing['starts_at']??'')));$end=trim((string)($input['endsAt']??($existing['ends_at']??'')));
+    [$s,$e]=scheduling_shift_interval($pdo,$organizationId,$start,$end);
+
     $userId=isset($input['userId'])&&$input['userId']!==''?(int)$input['userId']:(isset($existing['user_id'])?(int)$existing['user_id']:0);if($userId&&!scheduling_staff_user($pdo,$organizationId,$userId))throw new InvalidArgumentException('Assigned employee is not active restaurant staff.');
-    if($userId){$conflicts=scheduling_shift_conflicts($pdo,$organizationId,$userId,$s->format('Y-m-d H:i:s'),$e->format('Y-m-d H:i:s'),$existing?(int)$existing['id']:null);if($conflicts)throw new InvalidArgumentException('Employee already has an overlapping shift.');$availability=scheduling_availability_check($pdo,$organizationId,$userId,$s->format('Y-m-d H:i:s'),$e->format('Y-m-d H:i:s'));if(!$availability['ok']&&!empty($input['enforceAvailability']))throw new InvalidArgumentException($availability['reason']);}
+    if($userId){$conflicts=scheduling_shift_conflicts($pdo,$organizationId,$userId,$s->format('Y-m-d H:i:s.u'),$e->format('Y-m-d H:i:s.u'),$existing?(int)$existing['id']:null);if($conflicts)throw new InvalidArgumentException('Employee already has an overlapping shift.');$availability=scheduling_availability_check($pdo,$organizationId,$userId,$s->format('Y-m-d H:i:s.u'),$e->format('Y-m-d H:i:s.u'));if(!$availability['ok']&&!empty($input['enforceAvailability']))throw new InvalidArgumentException($availability['reason']);}
     $week=scheduling_ensure_week($pdo,$organizationId,$s->format('Y-m-d'),$actorUserId);$positionId=($input['positionId']??'')!==''?(int)$input['positionId']:null;$locationId=($input['locationId']??'')!==''?(int)$input['locationId']:null;
     if($positionId!==null){$stmt=$pdo->prepare("SELECT COUNT(*) FROM positions WHERE id=? AND organization_id=? AND status='active'");$stmt->execute([$positionId,$organizationId]);if(!(int)$stmt->fetchColumn())throw new InvalidArgumentException('Position is not valid for this restaurant.');}
     if($locationId!==null){$stmt=$pdo->prepare("SELECT COUNT(*) FROM locations WHERE id=? AND organization_id=? AND status='active'");$stmt->execute([$locationId,$organizationId]);if(!(int)$stmt->fetchColumn())throw new InvalidArgumentException('Location is not valid for this restaurant.');}
     $title=mb_substr(trim((string)($input['title']??($existing['title']??'Shift'))),0,180,'UTF-8');if($title==='')$title='Shift';$break=max(0,min(240,(int)($input['breakMinutes']??($existing['break_minutes']??0))));$status=(string)($input['status']??($existing['status']??($userId?'scheduled':'open')));if(!in_array($status,['scheduled','open','cancelled','completed'],true))$status=$userId?'scheduled':'open';if(!$userId&&$status==='scheduled')$status='open';$notes=mb_substr(trim((string)($input['notes']??($existing['notes']??''))),0,1000,'UTF-8')?:null;
-    if($existing){$pdo->prepare('UPDATE schedule_shifts SET schedule_week_id=?,location_id=?,position_id=?,user_id=?,title=?,starts_at=?,ends_at=?,break_minutes=?,status=?,notes=?,updated_by=?,updated_at=NOW(6) WHERE id=? AND organization_id=?')->execute([(int)$week['id'],$locationId,$positionId,$userId?:null,$title,$s->format('Y-m-d H:i:s'),$e->format('Y-m-d H:i:s'),$break,$status,$notes,$actorUserId,(int)$existing['id'],$organizationId]);$public=(string)$existing['public_id'];$event='shift.updated';$shiftId=(int)$existing['id'];}
-    else{$public=scheduling_public_id('shift');$pdo->prepare('INSERT INTO schedule_shifts (organization_id,public_id,schedule_week_id,location_id,position_id,user_id,title,starts_at,ends_at,break_minutes,status,notes,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')->execute([$organizationId,$public,(int)$week['id'],$locationId,$positionId,$userId?:null,$title,$s->format('Y-m-d H:i:s'),$e->format('Y-m-d H:i:s'),$break,$status,$notes,$actorUserId,$actorUserId]);$shiftId=(int)$pdo->lastInsertId();$event='shift.created';}
+    if($existing){$pdo->prepare('UPDATE schedule_shifts SET schedule_week_id=?,location_id=?,position_id=?,user_id=?,title=?,starts_at=?,ends_at=?,break_minutes=?,status=?,notes=?,updated_by=?,updated_at=NOW(6) WHERE id=? AND organization_id=?')->execute([(int)$week['id'],$locationId,$positionId,$userId?:null,$title,$s->format('Y-m-d H:i:s.u'),$e->format('Y-m-d H:i:s.u'),$break,$status,$notes,$actorUserId,(int)$existing['id'],$organizationId]);$public=(string)$existing['public_id'];$event='shift.updated';$shiftId=(int)$existing['id'];}
+    else{$public=scheduling_public_id('shift');$pdo->prepare('INSERT INTO schedule_shifts (organization_id,public_id,schedule_week_id,location_id,position_id,user_id,title,starts_at,ends_at,break_minutes,status,notes,created_by,updated_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')->execute([$organizationId,$public,(int)$week['id'],$locationId,$positionId,$userId?:null,$title,$s->format('Y-m-d H:i:s.u'),$e->format('Y-m-d H:i:s.u'),$break,$status,$notes,$actorUserId,$actorUserId]);$shiftId=(int)$pdo->lastInsertId();$event='shift.created';}
     scheduling_shift_event($pdo,$organizationId,$shiftId,$event,$title,$actorUserId,['userId'=>$userId?:null,'startsAt'=>$s->format(DATE_ATOM),'endsAt'=>$e->format(DATE_ATOM)]);return scheduling_shift_by_public_id($pdo,$organizationId,$public)?:[];
 }
 

@@ -91,10 +91,11 @@ function wholesale_portal_safe_invoice(PDO $pdo,int $org,int $accountId,string $
     ];
 }
 
-function wholesale_portal_safe_invoices(PDO $pdo,int $org,int $accountId): array
+function wholesale_portal_safe_invoices(PDO $pdo,int $org,int $accountId,int $offset=0): array
 {
+    $offset=max(0,$offset);
     if(!wholesale_receivables_ready($pdo))return [];
-    $q=$pdo->prepare('SELECT public_id FROM wholesale_invoices WHERE organization_id=? AND wholesale_account_id=? ORDER BY created_at DESC LIMIT 100');
+    $q=$pdo->prepare("SELECT public_id FROM wholesale_invoices WHERE organization_id=? AND wholesale_account_id=? ORDER BY created_at DESC,id DESC LIMIT 100 OFFSET {$offset}");
     $q->execute([$org,$accountId]);$rows=[];
     foreach($q->fetchAll() as $row){$invoice=wholesale_portal_safe_invoice($pdo,$org,$accountId,(string)$row['public_id']);if($invoice)$rows[]=$invoice;}
     return $rows;
@@ -154,16 +155,16 @@ function wholesale_portal_history(PDO $pdo,int $org,int $accountId): array
     return array_slice($events,0,100);
 }
 
-function wholesale_portal_dashboard(PDO $pdo,int $org,int $accountId): array
+function wholesale_portal_dashboard(PDO $pdo,int $org,int $accountId,int $invoiceOffset=0): array
 {
     $ctx=wholesale_portal_customer_safe_context($pdo,$org,$accountId);if(!$ctx)return [];
     $ctx['catalog']=wholesale_portal_catalog($pdo,$org,$accountId);
     $ctx['orders']=wholesale_portal_safe_orders($pdo,$org,$accountId);
-    $ctx['invoices']=wholesale_portal_safe_invoices($pdo,$org,$accountId);
+    $ctx['invoices']=wholesale_portal_safe_invoices($pdo,$org,$accountId,$invoiceOffset);
     $ctx['history']=wholesale_portal_history($pdo,$org,$accountId);
-    $receivables=0.0;$overdue=0.0;$credits=0.0;
-    foreach($ctx['invoices'] as $i){$balance=(float)$i['balance'];if($balance>0){$receivables+=$balance;if((int)$i['daysOverdue']>0)$overdue+=$balance;}elseif($balance<0)$credits+=-$balance;}
-    $ctx['summary']=['receivables'=>round($receivables,2),'overdue'=>round($overdue,2),'customerCredits'=>round($credits,2),'catalogItems'=>count($ctx['catalog'])];
+    $totals=wholesale_receivables_ready($pdo)?wholesale_receivables_aging($pdo,$org,$accountId):['receivables'=>0.0,'overdue'=>0.0,'customerCredits'=>0.0];
+    $ctx['summary']=['receivables'=>$totals['receivables'],'overdue'=>$totals['overdue'],'customerCredits'=>$totals['customerCredits'],'catalogItems'=>count($ctx['catalog'])];
+    $ctx['invoicePage']=wholesale_receivables_ready($pdo)?wholesale_receivables_page_info($pdo,$org,$accountId,100,max(0,$invoiceOffset),count($ctx['invoices'])):['totalCount'=>0,'displayedCount'=>0,'limit'=>100,'offset'=>0,'nextOffset'=>null,'totalsScope'=>'complete_ledger'];
     return $ctx;
 }
 

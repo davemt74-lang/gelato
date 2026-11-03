@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__.'/glasses-vision-media-retention.php';
 require_once __DIR__.'/glasses-camera-locations.php';
 
 function glasses_camera_photo_ready(PDO $pdo):bool
@@ -31,7 +32,7 @@ function glasses_camera_photo_library(PDO $pdo,array $user,int $locationId):arra
         m.brightness_mean,m.contrast_mean,m.blur_score,m.width,m.height,m.created_at captured_at,
         i.name menu_item_name
         FROM glasses_camera_photo_library p
-        JOIN glasses_vision_training_media m ON m.id=p.media_id AND m.organization_id=p.organization_id AND m.status='active'
+        JOIN glasses_vision_training_media m ON m.id=p.media_id AND m.organization_id=p.organization_id AND ".glasses_vision_media_retained_sql('m')."
         LEFT JOIN menu_items i ON i.id=p.menu_item_id AND i.organization_id=p.organization_id
         WHERE p.organization_id=? AND p.location_id=? AND p.status='active'
         ORDER BY p.id DESC LIMIT 300");
@@ -71,10 +72,10 @@ function glasses_camera_photo_command(PDO $pdo,array $user,int $locationId,array
         $conf=$pdo->prepare("SELECT enabled FROM glasses_camera_locations WHERE organization_id=? AND location_id=? AND slot=? LIMIT 1");
         $conf->execute([$org,$locationId,$slot]);
         if(!(bool)$conf->fetchColumn())throw new DomainException('Camera is off. Enable the camera before saving photos.');
-        $media=$pdo->prepare("SELECT id,status,consent_basis,perceptual_hash,metadata_json FROM glasses_vision_training_media
+        $media=$pdo->prepare("SELECT id,status,retention_until,consent_basis,perceptual_hash,metadata_json FROM glasses_vision_training_media
           WHERE organization_id=? AND public_id=? LIMIT 1");
         $media->execute([$org,$public]);$row=$media->fetch(PDO::FETCH_ASSOC);
-        if(!$row||$row['status']!=='active'||$row['consent_basis']!=='training_media_opt_in')
+        if(!$row||!glasses_vision_media_retained($row)||$row['consent_basis']!=='training_media_opt_in')
             throw new DomainException('Only active, explicitly opted-in Vision Lab media can be saved.');
         $provenance=json_decode((string)($row['metadata_json']??'{}'),true)?:[];
         if(($provenance['source']??null)!=='camera_stage_gallery'||

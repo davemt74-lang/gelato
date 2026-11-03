@@ -29,19 +29,46 @@
     document.head.appendChild(link);
   }
 
-  function cartQuantity() {
-    let total = 0;
+  // One active pickup-location cart. v3 wins even when deliberately empty;
+  // legacy versions are migrated once rather than added to the current total.
+  const cartCounts = new Map();
+  const cartKey = locationId => `stonefellows.onlineCart.v3.${Number(locationId)}`;
+  const validRows = rows => Array.isArray(rows) ? rows.filter(row => row && Number(row.priceId)>0 && Number.isFinite(Number(row.quantity)) && Number(row.quantity)>0) : [];
+  function readCart(locationId) {
+    locationId=Number(locationId);if(!Number.isSafeInteger(locationId)||locationId<1)return [];
     try {
-      for (let index = 0; index < sessionStorage.length; index += 1) {
-        const key = sessionStorage.key(index) || '';
-        if (!key.startsWith('stonefellows.onlineCart.v1.') || key.endsWith('.note')) continue;
-        const rows = JSON.parse(sessionStorage.getItem(key) || '[]');
-        if (!Array.isArray(rows)) continue;
-        total += rows.reduce((sum, row) => sum + Math.max(0, Number(row && row.quantity ? row.quantity : 0)), 0);
+      const key=cartKey(locationId),current=sessionStorage.getItem(key);
+      if(current!==null)return validRows(JSON.parse(current));
+      for(const version of [2,1]){
+        const previous=`stonefellows.onlineCart.v${version}.${locationId}`,raw=sessionStorage.getItem(previous);
+        if(raw===null)continue;
+        const parsed=JSON.parse(raw);if(!Array.isArray(parsed))return [];
+        const rows=validRows(parsed);
+        try{
+          const note=sessionStorage.getItem(previous+'.note');
+          if(note!==null&&sessionStorage.getItem(key+'.note')===null)sessionStorage.setItem(key+'.note',note);
+          sessionStorage.setItem(key,JSON.stringify(rows));
+          for(const oldVersion of [2,1]){const old=`stonefellows.onlineCart.v${oldVersion}.${locationId}`;sessionStorage.removeItem(old);sessionStorage.removeItem(old+'.note');}
+        }catch(_){} // A full/blocked store must not hide the still-readable old cart.
+        return rows;
       }
-    } catch (_) {}
-    return total;
+    }catch(_){}
+    return [];
   }
+  function cartCount(rows){return validRows(rows).reduce((sum,row)=>sum+Number(row.quantity),0);}
+  window.GelatoPublicCart={
+    key:cartKey,
+    read:readCart,
+    save(locationId,rows){
+      locationId=Number(locationId);if(!Number.isSafeInteger(locationId)||locationId<1)return;
+      cartCounts.set(locationId,cartCount(rows));
+      try{sessionStorage.setItem(cartKey(locationId),JSON.stringify(rows));}catch(_){}
+      window.dispatchEvent(new CustomEvent('stonefellows:cart-changed',{detail:{locationId}}));
+    },
+    quantity(locationId){return cartCounts.has(Number(locationId))?cartCounts.get(Number(locationId)):cartCount(readCart(locationId));}
+  };
+  let selectedLocationId=Number(window.STONEFELLOWS_ORDER?.locationId||0);
+  function cartQuantity() {return window.GelatoPublicCart.quantity(selectedLocationId);}
 
   function navLink(key, href, label) {
     return `<a${active === key ? ' class="active"' : ''} href="${href}">${label}</a>`;
@@ -154,9 +181,6 @@
     };
     cart.addEventListener('click', toggle);
     new MutationObserver(syncExpanded).observe(document.body, { attributes: true, attributeFilter: ['class'] });
-
-    const drawerCount = document.getElementById('cartCount');
-    if (drawerCount) new MutationObserver(updateCartBadge).observe(drawerCount, { childList: true, characterData: true, subtree: true });
   }
 
   async function loadShellData() {
@@ -171,6 +195,7 @@
   async function mount() {
     ensureStyles();
     const shell = await loadShellData();
+    if(!window.STONEFELLOWS_ORDER)selectedLocationId=Number(shell.selectedLocationId||0);
     const header = replaceHeader(headerHtml(shell.restaurantName || 'Stonefellows'));
     replaceFooter(footerHtml(shell));
     bindNavigation(header);
@@ -180,6 +205,7 @@
     window.dispatchEvent(new CustomEvent('stonefellows:public-shell-ready'));
   }
 
+  window.addEventListener('stonefellows:cart-changed',updateCartBadge);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount, { once: true });
   else mount();
 })();

@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__.'/glasses-vision-media-retention.php';
 
 require_once __DIR__.'/glasses-vision-annotation-qa.php';
 
@@ -132,11 +133,11 @@ function glasses_vision_training_release_rows(PDO $pdo,int $org,int $datasetId):
 {
     $q=$pdo->prepare("SELECT
       di.split_name,di.source_hash dataset_source_hash,s.id sample_id,s.public_id sample_public_id,s.canonical_label,s.source_type,s.annotation_json sample_annotation_json,
-      m.id media_id,m.public_id media_public_id,m.storage_relative_path,m.mime_type,m.sha256,m.annotation_json media_annotation_json,m.capture_group,m.build_session_id,b.public_id build_public_id,
+      m.id media_id,m.public_id media_public_id,m.storage_relative_path,m.mime_type,m.sha256,m.status,m.retention_until,m.annotation_json media_annotation_json,m.capture_group,m.build_session_id,b.public_id build_public_id,
       ce.decision curation_decision,ce.reason curation_reason
       FROM glasses_vision_dataset_items di
       JOIN glasses_vision_training_samples s ON s.id=di.sample_id AND s.organization_id=di.organization_id
-      JOIN glasses_vision_training_media m ON m.sample_id=s.id AND m.organization_id=s.organization_id AND m.status='active'
+      JOIN glasses_vision_training_media m ON m.sample_id=s.id AND m.organization_id=s.organization_id AND ".glasses_vision_media_retained_sql('m')."
       LEFT JOIN glasses_build_sessions b ON b.id=m.build_session_id AND b.organization_id=m.organization_id
       LEFT JOIN glasses_vision_dataset_curation_events ce ON ce.id=(
         SELECT MAX(c2.id) FROM glasses_vision_dataset_curation_events c2
@@ -158,9 +159,9 @@ function glasses_vision_training_release_public(array $row): array
     ];
 }
 
-function glasses_vision_training_release_row(PDO $pdo,int $org,string $publicId): array
+function glasses_vision_training_release_row(PDO $pdo,int $org,string $publicId,bool $forUpdate=false): array
 {
-    $q=$pdo->prepare("SELECT r.*,d.public_id dataset_public_id FROM glasses_vision_training_releases r JOIN glasses_vision_dataset_versions d ON d.id=r.dataset_id WHERE r.organization_id=? AND r.public_id=? LIMIT 1");
+    $q=$pdo->prepare("SELECT r.*,d.public_id dataset_public_id FROM glasses_vision_training_releases r JOIN glasses_vision_dataset_versions d ON d.id=r.dataset_id WHERE r.organization_id=? AND r.public_id=? LIMIT 1".($forUpdate?' FOR UPDATE':''));
     $q->execute([$org,$publicId]);$row=$q->fetch();if(!$row)throw new InvalidArgumentException('Training release was not found.');return $row;
 }
 
@@ -169,6 +170,32 @@ function glasses_vision_training_release_list(PDO $pdo,int $org,int $limit=50): 
     $limit=max(1,min(200,$limit));
     $q=$pdo->prepare("SELECT public_id FROM glasses_vision_training_releases WHERE organization_id=? ORDER BY id DESC LIMIT ".$limit);
     $q->execute([$org]);return array_map(fn($id)=>glasses_vision_training_release_public(glasses_vision_training_release_row($pdo,$org,(string)$id)),$q->fetchAll(PDO::FETCH_COLUMN));
+}
+
+/** An older ZIP never extends the availability of the private images it contains. */
+function glasses_vision_training_release_require_sources(PDO $pdo,int $org,array $release,bool $forUpdate=false): void
+{
+    if($forUpdate&&!$pdo->inTransaction())throw new RuntimeException('Training source locks require an active transaction.');
+    $manifest=json_decode((string)($release['manifest_json']??''),true);
+    $items=is_array($manifest)?($manifest['items']??null):null;
+    if(!is_array($items)||!$items)throw new GlassesVisionMediaUnavailable('Training release media is no longer available.');
+    $expected=[];
+    foreach($items as $item){
+        $public=is_array($item)?(string)($item['mediaPublicId']??''):'';
+        $sha=is_array($item)?(string)($item['imageSha256']??''):'';
+        if($public===''||strlen($public)>80||!preg_match('/^[a-f0-9]{64}$/D',$sha)||isset($expected[$public]))
+            throw new GlassesVisionMediaUnavailable('Training release media references are unavailable.');
+        $expected[$public]=$sha;
+    }
+    // Keep one global acquisition order even when releases span several chunks.
+    ksort($expected,SORT_STRING);
+    foreach(array_chunk(array_keys($expected),200) as $ids){
+        $q=$pdo->prepare("SELECT public_id,sha256 FROM glasses_vision_training_media WHERE organization_id=? AND public_id IN (".implode(',',array_fill(0,count($ids),'?')).") AND ".glasses_vision_media_retained_sql().($forUpdate?' ORDER BY public_id FOR UPDATE':''));
+        $q->execute(array_merge([$org],$ids));$found=$q->fetchAll();
+        if(count($found)!==count($ids))throw new GlassesVisionMediaUnavailable('Training release contains media that is no longer available.');
+        foreach($found as $row)if(!hash_equals($expected[(string)$row['public_id']],(string)$row['sha256']))
+            throw new GlassesVisionMediaUnavailable('Training release media has changed.');
+    }
 }
 
 function glasses_vision_training_release_build(PDO $pdo,int $org,string $datasetPublic,string $profileName,int $actor): array
@@ -205,6 +232,7 @@ function glasses_vision_training_release_build(PDO $pdo,int $org,string $dataset
         foreach(['train','val','test'] as $split){mkdir($tmp.'/images/'.$split,0700,true);mkdir($tmp.'/labels/'.$split,0700,true);}
         $files=[];$items=[];$index=0;
         foreach($rows as $row){
+            glasses_vision_media_require_retained($row);
             $index++;$split=(string)$row['split_name'];$ext=glasses_vision_training_release_ext((string)$row['mime_type']);
             $base='image-'.str_pad((string)$index,6,'0',STR_PAD_LEFT);
             $imageRel='images/'.$split.'/'.$base.'.'.$ext;$labelRel='labels/'.$split.'/'.$base.'.txt';
@@ -244,6 +272,7 @@ function glasses_vision_training_release_build(PDO $pdo,int $org,string $dataset
         $releaseHash=glasses_vision_training_release_hash($manifest);$manifest['releaseHash']=$releaseHash;
         $manifestBody=json_encode(glasses_vision_training_release_canonicalize($manifest),JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE|JSON_PRESERVE_ZERO_FRACTION|JSON_THROW_ON_ERROR)."\n";
         file_put_contents($tmp.'/provenance-manifest.json',$manifestBody,LOCK_EX);
+        glasses_vision_training_release_require_sources($pdo,$org,['manifest_json'=>$manifestBody]);
 
         $existing=$pdo->prepare("SELECT public_id FROM glasses_vision_training_releases WHERE organization_id=? AND release_hash=? LIMIT 1");
         $existing->execute([$org,$releaseHash]);$existingPublic=$existing->fetchColumn();
@@ -256,6 +285,8 @@ function glasses_vision_training_release_build(PDO $pdo,int $org,string $dataset
         glasses_vision_training_release_zip($tmp,$target);
         $artifactHash=hash_file('sha256',$target);$bytes=filesize($target);
         try{
+            // Building and hashing the archive can outlast a source's deadline.
+            glasses_vision_training_release_require_sources($pdo,$org,['manifest_json'=>$manifestBody]);
             $pdo->prepare("INSERT INTO glasses_vision_training_releases
               (organization_id,public_id,dataset_id,split_plan_id,status,training_profile,profile_json,manifest_json,release_hash,artifact_relative_path,artifact_sha256,artifact_bytes,created_by)
               VALUES (?,?,?,?,'built',?,?,?,?,?,?,?,?)")
@@ -268,12 +299,65 @@ function glasses_vision_training_release_build(PDO $pdo,int $org,string $dataset
 function glasses_vision_training_release_artifact(PDO $pdo,int $org,string $publicId): array
 {
     $row=glasses_vision_training_release_row($pdo,$org,$publicId);
+    glasses_vision_training_release_require_sources($pdo,$org,$row);
     $root=realpath(glasses_vision_training_release_storage_root());
     if($root===false)throw new RuntimeException('Training release storage is unavailable.');
     $path=realpath(glasses_vision_training_release_storage_root().'/'.ltrim((string)$row['artifact_relative_path'],'/\\'));
     if($path===false||!is_file($path)||!str_starts_with($path,$root.DIRECTORY_SEPARATOR))throw new RuntimeException('Training release artifact is missing.');
     if(!hash_equals((string)$row['artifact_sha256'],hash_file('sha256',$path)))throw new RuntimeException('Training release artifact failed integrity verification.');
+    glasses_vision_training_release_require_sources($pdo,$org,$row);
     return ['path'=>$path,'filename'=>'gelato-vision-'.$row['release_hash'].'.zip','sha256'=>$row['artifact_sha256'],'bytes'=>(int)$row['artifact_bytes']];
+}
+
+/** Bounded scan removes derived ZIP bytes; immutable manifests remain audit evidence. */
+function glasses_vision_training_release_expire_batch(PDO $pdo,int $limit=100,int $afterId=0): array
+{
+    $limit=max(1,min(500,$limit));$afterId=max(0,$afterId);
+    $q=$pdo->prepare("SELECT id FROM glasses_vision_training_releases WHERE id>? AND status<>'expired' ORDER BY id LIMIT ".$limit);
+    $q->execute([$afterId]);$ids=$q->fetchAll(PDO::FETCH_COLUMN);$expired=0;$failed=0;
+    foreach($ids as $id){
+        $afterId=(int)$id;
+        try{
+            $didExpire=glasses_vision_media_cleanup_transaction($pdo,function()use($pdo,$id):bool{
+                $q=$pdo->prepare('SELECT * FROM glasses_vision_training_releases WHERE id=? FOR UPDATE');$q->execute([(int)$id]);$row=$q->fetch();
+                if(!$row||$row['status']==='expired')return false;
+                $org=(int)$row['organization_id'];
+                $manifest=json_decode((string)$row['manifest_json'],true);
+                // Malformed evidence is unavailable to download, but never permission to erase a file.
+                if(!is_array($manifest)||!is_array($manifest['items']??null)||!$manifest['items'])throw new RuntimeException('Training release retention evidence is invalid.');
+                foreach($manifest['items'] as $item)if(!is_array($item)||!preg_match('/^[a-zA-Z0-9_-]{1,80}$/D',(string)($item['mediaPublicId']??''))||!preg_match('/^[a-f0-9]{64}$/D',(string)($item['imageSha256']??'')))throw new RuntimeException('Training release retention evidence is invalid.');
+                try{glasses_vision_training_release_require_sources($pdo,$org,$row);return false;}
+                catch(GlassesVisionMediaUnavailable $e){}
+                $public=(string)$row['public_id'];
+                if(!preg_match('/^[a-zA-Z0-9_-]{1,80}$/D',$public))throw new RuntimeException('Training release file identity is invalid.');
+                $root=glasses_vision_training_release_storage_root();
+                $dir=glasses_vision_media_storage_resolve($root,(string)$org);
+                $relative=(string)$row['artifact_relative_path'];
+                if(!preg_match('~^'.preg_quote((string)$org,'~').'/'.preg_quote($public,'~').'(?:-qualified-[a-f0-9]{16})?\.zip$~D',$relative))throw new RuntimeException('Training release artifact path is invalid.');
+                $qualified=glob($dir.'/'.$public.'-qualified-*.zip');
+                if($qualified===false)throw new RuntimeException('Training release directory could not be inspected.');
+                $paths=array_unique(array_merge([$root.'/'.$relative],$qualified,[$dir.'/'.$public.'.zip']));
+                $deleted=0;
+                foreach($paths as $path){
+                    $path=glasses_vision_media_storage_resolve($root,substr($path,strlen($root)+1));
+                    if(file_exists($path)){
+                        if(!is_file($path)||!@unlink($path))throw new RuntimeException('Training release bytes could not be deleted.');
+                        $deleted++;
+                    }
+                }
+                $pdo->prepare("UPDATE glasses_vision_training_releases SET status='expired' WHERE organization_id=? AND id=?")->execute([$org,(int)$id]);
+                app_audit($pdo,$org,null,'glasses.training_release_expired','vision_training_release',$public,null,['reason'=>'source_media_unavailable','deletedFiles'=>$deleted]);
+                return true;
+            });
+            if($didExpire)$expired++;
+        }catch(Throwable $e){
+            $failed++;
+            // Leave the row retryable; deadline checks already deny serving its bytes.
+            $q=$pdo->prepare('SELECT organization_id,public_id FROM glasses_vision_training_releases WHERE id=?');$q->execute([(int)$id]);$row=$q->fetch();
+            if($row)app_audit($pdo,(int)$row['organization_id'],null,'glasses.training_release_cleanup_failed','vision_training_release',(string)$row['public_id'],null,['retryable'=>true]);
+        }
+    }
+    return ['expired'=>$expired,'failed'=>$failed,'scanned'=>count($ids),'nextAfterId'=>count($ids)<$limit?0:$afterId];
 }
 
 function glasses_vision_training_release_catalog(PDO $pdo,int $org): array

@@ -65,19 +65,22 @@ function glasses_vision_training_qualification_leakage(PDO $pdo,int $org,int $pl
 function glasses_vision_training_qualification_evaluate(PDO $pdo,int $org,string $releasePublic,array $requested=[]): array
 {
     $release=glasses_vision_training_release_row($pdo,$org,$releasePublic);
+    glasses_vision_training_release_require_sources($pdo,$org,$release);
     $manifest=json_decode((string)$release['manifest_json'],true)?:[];
     $profile=(string)$release['training_profile'];
     $policy=glasses_vision_training_qualification_policy($profile,$requested);
     $datasetPublic=(string)$release['dataset_public_id'];
+    $releaseItems=$manifest['items'];
+    $sampleIds=array_column($releaseItems,'samplePublicId');$mediaIds=array_column($releaseItems,'mediaPublicId');
 
     $balance=glasses_vision_balance_analyze($pdo,$org,$datasetPublic,[
         'targetPerClass'=>$policy['minimumSamplesPerClass'],
         'targetNegativeRatio'=>0,
         'targetHardRatio'=>0,
         'maxDominantShare'=>.95,
-    ]);
-    $qa=glasses_vision_annotation_qa_analyze($pdo,$org,$datasetPublic);
-    $visual=glasses_vision_training_media_dataset_quality($pdo,$org,$datasetPublic);
+    ],$releaseItems);
+    $qa=glasses_vision_annotation_qa_analyze($pdo,$org,$datasetPublic,$sampleIds);
+    $visual=glasses_vision_training_media_dataset_quality($pdo,$org,$datasetPublic,$mediaIds);
     $leakage=glasses_vision_training_qualification_leakage($pdo,$org,(int)$release['split_plan_id']);
 
     $classCounts=$balance['classes']??[];
@@ -86,6 +89,7 @@ function glasses_vision_training_qualification_evaluate(PDO $pdo,int $org,string
     $div=$balance['diversity']??[];$media=$div['media']??[];
     $blockers=$visual['releaseBlockers']??[];
     $curationRows=array_values(array_filter(glasses_vision_curation_rows($pdo,$org,$datasetPublic),static fn($r)=>($r['curationDecision']??'include')!=='exclude'&&($r['reviewStatus']??'')==='approved'));
+    $included=array_fill_keys($sampleIds,true);$curationRows=array_values(array_filter($curationRows,static fn($r)=>isset($included[$r['samplePublicId']])));
     $operators=[];$locations=[];$stations=[];
     foreach($curationRows as $r){
         if(($r['operatorUserId']??null)!==null)$operators[(int)$r['operatorUserId']]=true;
@@ -147,11 +151,16 @@ function glasses_vision_training_qualification_evaluate(PDO $pdo,int $org,string
 function glasses_vision_training_qualification_attach(PDO $pdo,int $org,array $release,array $result): array
 {
     if(empty($result['passed']))throw new InvalidArgumentException('Only a passing qualification may be attached to a training release.');
+    if(!$pdo->inTransaction())throw new RuntimeException('Qualification publication requires a locked release transaction.');
+    $current=glasses_vision_training_release_row($pdo,$org,(string)$release['public_id'],true);
+    if((string)$current['status']==='expired'||!hash_equals((string)$release['artifact_sha256'],(string)$current['artifact_sha256']))throw new GlassesVisionMediaUnavailable('Training release changed before qualification publication.');
+    glasses_vision_training_release_require_sources($pdo,$org,$current,true);
     $source=glasses_vision_training_release_artifact($pdo,$org,(string)$release['public_id']);
     $root=glasses_vision_training_release_storage_root().'/'.$org;
     $qhash=(string)$result['qualificationHash'];
     $relative=$org.'/'.(string)$release['public_id'].'-qualified-'.substr($qhash,0,16).'.zip';
     $target=glasses_vision_training_release_storage_root().'/'.$relative;
+    if($relative===$current['artifact_relative_path'])return ['relative'=>$relative,'path'=>$source['path'],'sha256'=>$source['sha256'],'bytes'=>$source['bytes'],'created'=>false];
     $tmp=$target.'.tmp-'.bin2hex(random_bytes(4));
     if(!copy($source['path'],$tmp))throw new RuntimeException('Could not stage qualified training artifact.');
     try{
@@ -162,22 +171,26 @@ function glasses_vision_training_qualification_attach(PDO $pdo,int $org,array $r
         if(!$zip->addFromString('qualification.json',$body)){ $zip->close(); throw new RuntimeException('Could not add qualification attestation.'); }
         if(method_exists($zip,'setMtimeName'))$zip->setMtimeName('qualification.json',946684800);
         if(!$zip->close())throw new RuntimeException('Could not finalize qualified training release.');
+        glasses_vision_training_release_require_sources($pdo,$org,$current,true);
         if(!rename($tmp,$target))throw new RuntimeException('Could not publish qualified training release.');
-        return ['relative'=>$relative,'path'=>$target,'sha256'=>hash_file('sha256',$target),'bytes'=>filesize($target)];
+        return ['relative'=>$relative,'path'=>$target,'sha256'=>hash_file('sha256',$target),'bytes'=>filesize($target),'created'=>true];
     }finally{if(is_file($tmp))@unlink($tmp);}
 }
 
 function glasses_vision_training_qualification_run(PDO $pdo,int $org,string $releasePublic,array $requested,int $actor): array
 {
     if(!glasses_vision_training_qualification_ready($pdo))throw new RuntimeException('Vision Lab V6 qualification migration is not installed.');
-    $release=glasses_vision_training_release_row($pdo,$org,$releasePublic);
-    $result=glasses_vision_training_qualification_evaluate($pdo,$org,$releasePublic,$requested);
-    $public=glasses_public_id('vision-qualification');
-    $artifact=null;
-    if($result['passed'])$artifact=glasses_vision_training_qualification_attach($pdo,$org,$release,$result);
-
+    $artifact=null;$owns=!$pdo->inTransaction();$savepoint='vision_qualification_'.bin2hex(random_bytes(6));
     try{
-        $pdo->beginTransaction();
+        if($owns)$pdo->beginTransaction();else $pdo->exec('SAVEPOINT '.$savepoint);
+        // Cleanup takes this same row lock before deleting or expiring an artifact.
+        $release=glasses_vision_training_release_row($pdo,$org,$releasePublic,true);
+        if($release['status']==='expired')throw new GlassesVisionMediaUnavailable('Training release media is no longer available.');
+        glasses_vision_training_release_require_sources($pdo,$org,$release,true);
+        $result=glasses_vision_training_qualification_evaluate($pdo,$org,$releasePublic,$requested);
+        $public=glasses_public_id('vision-qualification');
+        if($result['passed'])$artifact=glasses_vision_training_qualification_attach($pdo,$org,$release,$result);
+        glasses_vision_training_release_require_sources($pdo,$org,$release,true);
         $pdo->prepare("INSERT INTO glasses_vision_training_qualifications
           (organization_id,public_id,training_release_id,passed,score,policy_json,result_json,qualification_hash,actor_user_id)
           VALUES (?,?,?,?,?,?,?,?,?)")
@@ -188,13 +201,13 @@ function glasses_vision_training_qualification_run(PDO $pdo,int $org,string $rel
         }elseif($release['status']!=='qualified'){
             $pdo->prepare("UPDATE glasses_vision_training_releases SET status='blocked' WHERE organization_id=? AND id=?")->execute([$org,(int)$release['id']]);
         }
-        $pdo->commit();
+        if($owns)$pdo->commit();else $pdo->exec('RELEASE SAVEPOINT '.$savepoint);
     }catch(Throwable $e){
-        if($pdo->inTransaction())$pdo->rollBack();
-        if($artifact&&is_file($artifact['path']))@unlink($artifact['path']);
+        if($pdo->inTransaction()){if($owns)$pdo->rollBack();else {$pdo->exec('ROLLBACK TO SAVEPOINT '.$savepoint);$pdo->exec('RELEASE SAVEPOINT '.$savepoint);}}
+        if($artifact&&!empty($artifact['created'])&&is_file($artifact['path']))@unlink($artifact['path']);
         throw $e;
     }
-    if($artifact){
+    if($artifact&&$owns){
         $sourcePath=(string)($release['artifact_relative_path']??'');
         $old=glasses_vision_training_release_storage_root().'/'.ltrim($sourcePath,'/\\');
         if($sourcePath!==''&&$old!==$artifact['path']&&is_file($old))@unlink($old);

@@ -211,9 +211,10 @@ function wholesale_receivables_detail(PDO $pdo,int $org,string $invoicePublic): 
     return ['invoice'=>['id'=>$invoice['public_id'],'number'=>$invoice['invoice_number'],'status'=>$invoice['status'],'businessName'=>$invoice['business_name'],'accountId'=>$invoice['account_public_id'],'orderId'=>$invoice['order_public_id'],'orderNumber'=>$invoice['order_number'],'orderStatus'=>$invoice['order_status'],'issueDate'=>$invoice['issue_date'],'dueDate'=>$invoice['due_date'],'paymentTerms'=>$invoice['payment_terms_snapshot'],'currency'=>$invoice['currency'],'subtotal'=>(float)$invoice['subtotal'],'deliveryFee'=>(float)$invoice['delivery_fee'],'taxTotal'=>(float)$invoice['tax_total'],'total'=>(float)$invoice['total'],'balance'=>$balance,'daysOverdue'=>$daysOverdue,'customerReference'=>$invoice['customer_reference'],'customerNote'=>$invoice['customer_note'],'internalNote'=>$invoice['internal_note'],'issuedAt'=>$invoice['issued_at'],'paidAt'=>$invoice['paid_at'],'voidedAt'=>$invoice['voided_at']],'items'=>wholesale_receivables_invoice_items($pdo,$org,(int)$invoice['id']),'entries'=>wholesale_receivables_entries($pdo,$org,(int)$invoice['id'])];
 }
 
-function wholesale_receivables_list(PDO $pdo,int $org): array
+function wholesale_receivables_list(PDO $pdo,int $org,int $limit=300,int $offset=0): array
 {
-    $q=$pdo->prepare("SELECT i.*,a.business_name,o.order_number,o.public_id order_public_id,COALESCE(e.balance,0) balance FROM wholesale_invoices i JOIN wholesale_accounts a ON a.id=i.wholesale_account_id AND a.organization_id=i.organization_id JOIN wholesale_orders o ON o.id=i.wholesale_order_id AND o.organization_id=i.organization_id LEFT JOIN (SELECT organization_id,wholesale_invoice_id,SUM(amount_delta) balance FROM wholesale_receivable_entries GROUP BY organization_id,wholesale_invoice_id) e ON e.organization_id=i.organization_id AND e.wholesale_invoice_id=i.id WHERE i.organization_id=? ORDER BY CASE WHEN i.status NOT IN ('draft','void','paid') THEN 0 ELSE 1 END,i.due_date,i.created_at DESC LIMIT 300");$q->execute([$org]);$today=date('Y-m-d');$out=[];foreach($q->fetchAll() as $r){$balance=wholesale_receivables_money((float)$r['balance']);$days=$r['due_date']&&$balance>.005&&$r['due_date']<$today?(int)(new DateTimeImmutable($r['due_date']))->diff(new DateTimeImmutable($today))->days:0;$out[]=['id'=>$r['public_id'],'number'=>$r['invoice_number'],'businessName'=>$r['business_name'],'orderNumber'=>$r['order_number'],'orderId'=>$r['order_public_id'],'status'=>$r['status'],'issueDate'=>$r['issue_date'],'dueDate'=>$r['due_date'],'total'=>(float)$r['total'],'balance'=>$balance,'daysOverdue'=>$days];}return $out;
+    $limit=max(1,min(300,$limit));$offset=max(0,$offset);
+    $q=$pdo->prepare("SELECT i.*,a.business_name,o.order_number,o.public_id order_public_id,COALESCE(e.balance,0) balance FROM wholesale_invoices i JOIN wholesale_accounts a ON a.id=i.wholesale_account_id AND a.organization_id=i.organization_id JOIN wholesale_orders o ON o.id=i.wholesale_order_id AND o.organization_id=i.organization_id LEFT JOIN (SELECT organization_id,wholesale_invoice_id,SUM(amount_delta) balance FROM wholesale_receivable_entries GROUP BY organization_id,wholesale_invoice_id) e ON e.organization_id=i.organization_id AND e.wholesale_invoice_id=i.id WHERE i.organization_id=? ORDER BY CASE WHEN i.status NOT IN ('draft','void','paid') THEN 0 ELSE 1 END,i.due_date,i.created_at DESC,i.id DESC LIMIT {$limit} OFFSET {$offset}");$q->execute([$org]);$today=date('Y-m-d');$out=[];foreach($q->fetchAll() as $r){$balance=wholesale_receivables_money((float)$r['balance']);$days=$r['due_date']&&$balance>.005&&$r['due_date']<$today?(int)(new DateTimeImmutable($r['due_date']))->diff(new DateTimeImmutable($today))->days:0;$out[]=['id'=>$r['public_id'],'number'=>$r['invoice_number'],'businessName'=>$r['business_name'],'orderNumber'=>$r['order_number'],'orderId'=>$r['order_public_id'],'status'=>$r['status'],'issueDate'=>$r['issue_date'],'dueDate'=>$r['due_date'],'total'=>(float)$r['total'],'balance'=>$balance,'daysOverdue'=>$days];}return $out;
 }
 
 function wholesale_receivables_orders(PDO $pdo,int $org): array
@@ -221,11 +222,42 @@ function wholesale_receivables_orders(PDO $pdo,int $org): array
     $q=$pdo->prepare("SELECT o.public_id,o.order_number,o.status,o.total,o.delivered_at,a.business_name,a.payment_terms,i.public_id invoice_id,i.invoice_number,i.status invoice_status FROM wholesale_orders o JOIN wholesale_accounts a ON a.id=o.wholesale_account_id AND a.organization_id=o.organization_id LEFT JOIN wholesale_invoices i ON i.wholesale_order_id=o.id AND i.organization_id=o.organization_id WHERE o.organization_id=? AND o.status<>'cancelled' ORDER BY FIELD(o.status,'delivered','out_for_delivery','ready','in_production','confirmed','requested'),o.updated_at DESC LIMIT 300");$q->execute([$org]);return $q->fetchAll();
 }
 
-function wholesale_receivables_aging(PDO $pdo,int $org): array
+/** Full tenant/account ledger totals, independent of any invoice display page. */
+function wholesale_receivables_aging(PDO $pdo,int $org,?int $accountId=null): array
 {
-    $today=new DateTimeImmutable(date('Y-m-d'));$rows=wholesale_receivables_list($pdo,$org);$b=['current'=>0.0,'days1to30'=>0.0,'days31to60'=>0.0,'days61to90'=>0.0,'days90plus'=>0.0,'overdue'=>0.0,'receivables'=>0.0,'customerCredits'=>0.0,'openInvoices'=>0,'overdueInvoices'=>0];
-    foreach($rows as $r){$balance=(float)$r['balance'];if($balance<-.005){$b['customerCredits']+=-$balance;continue;}if($balance<=.005||in_array($r['status'],['draft','void'],true))continue;$b['receivables']+=$balance;$b['openInvoices']++;$days=(int)$r['daysOverdue'];if($days<=0)$b['current']+=$balance;else{$b['overdue']+=$balance;$b['overdueInvoices']++;if($days<=30)$b['days1to30']+=$balance;elseif($days<=60)$b['days31to60']+=$balance;elseif($days<=90)$b['days61to90']+=$balance;else $b['days90plus']+=$balance;}}
-    foreach(['current','days1to30','days31to60','days61to90','days90plus','overdue','receivables','customerCredits'] as $k)$b[$k]=wholesale_receivables_money($b[$k]);return $b;
+    $columns=[
+        'current'=>"SUM(CASE WHEN balance>0.005 AND (days_overdue IS NULL OR days_overdue<=0) THEN balance ELSE 0 END)",
+        'days1to30'=>"SUM(CASE WHEN balance>0.005 AND days_overdue BETWEEN 1 AND 30 THEN balance ELSE 0 END)",
+        'days31to60'=>"SUM(CASE WHEN balance>0.005 AND days_overdue BETWEEN 31 AND 60 THEN balance ELSE 0 END)",
+        'days61to90'=>"SUM(CASE WHEN balance>0.005 AND days_overdue BETWEEN 61 AND 90 THEN balance ELSE 0 END)",
+        'days90plus'=>"SUM(CASE WHEN balance>0.005 AND days_overdue>90 THEN balance ELSE 0 END)",
+        'overdue'=>"SUM(CASE WHEN balance>0.005 AND days_overdue>0 THEN balance ELSE 0 END)",
+        'receivables'=>"SUM(CASE WHEN balance>0.005 THEN balance ELSE 0 END)",
+        'customerCredits'=>"SUM(CASE WHEN balance< -0.005 THEN -balance ELSE 0 END)",
+        'openInvoices'=>"SUM(CASE WHEN balance>0.005 THEN 1 ELSE 0 END)",
+        'overdueInvoices'=>"SUM(CASE WHEN balance>0.005 AND days_overdue>0 THEN 1 ELSE 0 END)",
+    ];
+    $select=[];foreach($columns as $name=>$expression)$select[]='COALESCE('.$expression.',0) AS '.$name;
+    $args=[date('Y-m-d'),$org];$account='';if($accountId!==null){$account=' AND i.wholesale_account_id=?';$args[]=$accountId;}
+    $sql='SELECT '.implode(',',$select)." FROM (
+        SELECT i.id,DATEDIFF(?,i.due_date) AS days_overdue,COALESCE(SUM(e.amount_delta),0) AS balance
+        FROM wholesale_invoices i
+        JOIN wholesale_accounts a ON a.id=i.wholesale_account_id AND a.organization_id=i.organization_id
+        JOIN wholesale_orders o ON o.id=i.wholesale_order_id AND o.organization_id=i.organization_id AND o.wholesale_account_id=i.wholesale_account_id
+        LEFT JOIN wholesale_receivable_entries e ON e.wholesale_invoice_id=i.id AND e.organization_id=i.organization_id AND e.wholesale_account_id=i.wholesale_account_id
+        WHERE i.organization_id=? AND i.status NOT IN ('draft','void')".$account.' GROUP BY i.id,i.due_date) ledger';
+    $q=$pdo->prepare($sql);$q->execute($args);$result=$q->fetch()?:[];
+    foreach($columns as $name=>$_)$result[$name]=in_array($name,['openInvoices','overdueInvoices'],true)?(int)($result[$name]??0):wholesale_receivables_money((float)($result[$name]??0));
+    return $result;
+}
+
+/** Paging describes detail only; callers must use the full ledger aggregate for money. */
+function wholesale_receivables_page_info(PDO $pdo,int $org,?int $accountId,int $limit,int $offset,int $displayed): array
+{
+    $sql='SELECT COUNT(*) FROM wholesale_invoices i JOIN wholesale_accounts a ON a.id=i.wholesale_account_id AND a.organization_id=i.organization_id JOIN wholesale_orders o ON o.id=i.wholesale_order_id AND o.organization_id=i.organization_id WHERE i.organization_id=?';$args=[$org];
+    if($accountId!==null){$sql.=' AND i.wholesale_account_id=?';$args[]=$accountId;}
+    $q=$pdo->prepare($sql);$q->execute($args);$total=(int)$q->fetchColumn();
+    return ['totalCount'=>$total,'displayedCount'=>$displayed,'limit'=>$limit,'offset'=>$offset,'nextOffset'=>$offset+$displayed<$total&&$displayed>0?$offset+$displayed:null,'totalsScope'=>'complete_ledger'];
 }
 
 function wholesale_receivables_sync_sales_date(PDO $pdo,int $org,string $date,bool $keepLock=false): ?string

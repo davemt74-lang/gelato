@@ -59,6 +59,21 @@ function fm9i_execute(PDO $pdo,array $u,string $thread):array {
                 'channel'=>'proactive','structured'=>$meta]);
             app_audit($pdo,$org,$uid,'food_monster.task_archive_executed','restaurant_task',
                 $receipt['taskId'],null,$meta);
+        },
+        static function(array $fresh)use($pdo,$org,$uid,$thread,$grant):void {
+            fm9i_require_owner($fresh);
+            $current=fm9i_active_grant($fresh,$thread);
+            if(!$current||!hash_equals((string)$grant['approvalId'],(string)$current['approvalId']))
+                throw new DomainException('A current task archive approval is required.');
+            // System messages have no user_id. The canonical conversation owns
+            // the durable execution receipt, even if session persistence failed.
+            $q=$pdo->prepare("SELECT m.id FROM agent_messages m
+                JOIN agent_conversations c ON c.id=m.conversation_id AND c.organization_id=m.organization_id
+                WHERE c.organization_id=? AND c.user_id=? AND c.public_id=? AND m.role='system'
+                AND JSON_UNQUOTE(JSON_EXTRACT(m.structured_json,'$.collection'))='fm9i_high_impact_execution'
+                AND JSON_UNQUOTE(JSON_EXTRACT(m.structured_json,'$.approvalId'))=? LIMIT 1");
+            $q->execute([$org,$uid,$thread,(string)$grant['approvalId']]);
+            if($q->fetchColumn())throw new DomainException('This task archive approval has already been executed.');
         });
     $_SESSION['fm9i_task_archive_grants'][fm9i_key($u)]['consumed']=true;
     return $result+['executed'=>true,'approvalId'=>$grant['approvalId']];

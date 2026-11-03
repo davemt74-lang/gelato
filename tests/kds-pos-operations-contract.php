@@ -18,7 +18,7 @@ ops_assert(!str_contains($kds,'body.csrf=C.csrf'),'Full-screen KDS must not use 
 ops_assert(str_contains($dash,"options.headers['X-CSRF-Token']=C.csrf||''"),'KDS configuration mutations must send the accepted CSRF request header.');
 ops_assert(!str_contains($dash,'body.csrf=C.csrf'),'KDS configuration must not use the rejected csrf JSON field.');
 ops_assert(str_contains($kds,'data-live-age')&&str_contains($kds,'setInterval(tickAges,1000)'),'KDS ticket/item clocks must update every second between server refreshes.');
-ops_assert(str_contains($kds,"S.history?await historyApi():await liveApi()"),'KDS must expose a dedicated history mode.');
+ops_assert(str_contains($kds,"view.history?await historyApi(view,controller.signal):await liveApi('GET',null,view,controller.signal)"),'KDS must expose a dedicated history mode.');
 ops_assert(str_contains($history,'INTERVAL 24 HOUR'),'KDS order history must cover the prior 24 hours.');
 ops_assert(str_contains($history,"k.status IN ('completed','cancelled')"),'KDS history must include completed/cancelled kitchen work only.');
 

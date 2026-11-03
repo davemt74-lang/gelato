@@ -88,6 +88,7 @@ function glasses_vision_experiment_create(PDO $pdo,int $org,array $input,int $ac
 
     $release=glasses_vision_training_release_row($pdo,$org,(string)($input['trainingReleasePublicId']??''));
     if((string)$release['status']!=='qualified')throw new InvalidArgumentException('Experiment requires a qualified training release.');
+    glasses_vision_training_release_require_sources($pdo,$org,$release);
     $dq=$pdo->prepare("SELECT * FROM glasses_vision_dataset_versions WHERE organization_id=? AND id=? LIMIT 1");
     $dq->execute([$org,(int)$release['dataset_id']]);$dataset=$dq->fetch();
     if(!$dataset||(string)$dataset['status']!=='frozen'||empty($dataset['dataset_hash']))throw new InvalidArgumentException('Experiment candidate dataset must be frozen and hash-addressed.');
@@ -130,6 +131,7 @@ function glasses_vision_experiment_start(PDO $pdo,int $org,string $publicId,int 
         $r=glasses_vision_experiment_row($pdo,$org,$publicId,true);
         if((string)$r['status']==='running')return glasses_vision_experiment_public($pdo,$org,$r);
         if((string)$r['status']!=='ready')throw new InvalidArgumentException('Only a ready model experiment may start.');
+        glasses_vision_training_release_require_sources($pdo,$org,glasses_vision_training_release_row($pdo,$org,(string)$r['release_public_id']));
         $pdo->prepare("UPDATE glasses_vision_model_experiments SET status='running',started_by=?,started_at=NOW(6) WHERE organization_id=? AND id=?")
           ->execute([$actor,$org,(int)$r['id']]);
         glasses_vision_experiment_event($pdo,$org,(int)$r['id'],'started',['experimentHash'=>$r['experiment_hash']],$actor);

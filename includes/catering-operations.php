@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/restaurant-brain.php';
+require_once __DIR__ . '/recipe-ingredient-parser.php';
 
 function catering_operations_ready(PDO $pdo): bool
 {
@@ -63,36 +64,12 @@ function catering_operations_yield_is_servings(?string $unit): bool
 
 function catering_operations_numeric_quantity(string $value): ?float
 {
-    $value=trim($value);
-    if(is_numeric($value))return (float)$value;
-    if(preg_match('/^(\d+)\/(\d+)$/',$value,$m) && (int)$m[2]!==0)return (float)$m[1]/(float)$m[2];
-    return null;
+    return recipe_ingredient_quantity($value);
 }
 
 function catering_operations_parse_ingredient(mixed $ingredient): ?array
 {
-    if (is_string($ingredient)) {
-        $text=trim($ingredient);if($text==='')return null;
-        $quantityPattern='(?:\d+(?:\.\d+)?|\d+\/\d+)';
-        $unitPattern='(?:tsp|tbsp|teaspoons?|tablespoons?|cups?|fl\s*oz|ounces?|oz|pounds?|lbs?|lb|kilograms?|kg|grams?|g|milliliters?|ml|liters?|l|gallons?|gal|quarts?|qt|pints?|pt|each|ea)';
-        if(preg_match('/^('.$quantityPattern.')\s+('.$unitPattern.')\s+(.+)$/iu',$text,$m)){
-            return ['name'=>trim($m[3]),'quantity'=>catering_operations_numeric_quantity($m[1]),'unit'=>trim($m[2])];
-        }
-        return ['name'=>$text,'quantity'=>null,'unit'=>''];
-    }
-    if (!is_array($ingredient)) return null;
-    $name=trim((string)($ingredient['name']??$ingredient['ingredient']??$ingredient['item']??$ingredient['description']??''));
-    $quantity=$ingredient['quantity']??$ingredient['amount']??$ingredient['qty']??null;
-    $unit=trim((string)($ingredient['unit']??$ingredient['measure']??''));
-    if($name==='' && isset($ingredient[0]) && is_string($ingredient[0])) return catering_operations_parse_ingredient($ingredient[0]);
-    if($name==='')return null;
-    if(is_string($quantity)){
-        $parsedQuantity=catering_operations_numeric_quantity($quantity);
-        if($parsedQuantity===null && preg_match('/((?:\d+(?:\.\d+)?|\d+\/\d+))/',$quantity,$m))$parsedQuantity=catering_operations_numeric_quantity($m[1]);
-        $quantity=$parsedQuantity;
-    }
-    $quantity=is_numeric($quantity)?(float)$quantity:null;
-    return ['name'=>$name,'quantity'=>$quantity,'unit'=>$unit];
+    return recipe_ingredient_parse($ingredient);
 }
 
 function catering_operations_rebuild_requirements(PDO $pdo, int $organizationId, int $operationId, ?int $userId): int
@@ -118,8 +95,8 @@ function catering_operations_rebuild_requirements(PDO $pdo, int $organizationId,
             $scaleNote=$scale===null?'Batch quantity required before total ingredient quantity can be calculated.':null;
             foreach($ingredients as $ingredient){
                 $parsed=catering_operations_parse_ingredient($ingredient);if(!$parsed)continue;
-                $qty=($parsed['quantity']===null||$scale===null)?null:round((float)$parsed['quantity']*$scale,4);
-                $insert->execute([$organizationId,$operationId,(int)$item['id'],(int)$item['recipe_id'],mb_substr($parsed['name'],0,220,'UTF-8'),$qty,mb_substr($parsed['unit'],0,80,'UTF-8')?:null,$scaleNote,$userId,$userId]);$count++;
+                $qty=(!empty($parsed['needsReview'])||$parsed['quantity']===null||$scale===null)?null:round((float)$parsed['quantity']*$scale,4);
+                $insert->execute([$organizationId,$operationId,(int)$item['id'],(int)$item['recipe_id'],mb_substr($parsed['name'],0,220,'UTF-8'),$qty,mb_substr($parsed['unit'],0,80,'UTF-8')?:null,trim(implode(' ',array_filter([$scaleNote,$parsed['reviewReason']??null])))?:null,$userId,$userId]);$count++;
             }
         }
         if($ownsTransaction)$pdo->commit();

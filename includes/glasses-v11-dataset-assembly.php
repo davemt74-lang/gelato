@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__.'/glasses-vision-media-retention.php';
 
 require_once __DIR__.'/glasses-vision-curation.php';
 require_once __DIR__.'/glasses-v11-mining.php';
@@ -50,7 +51,7 @@ function glasses_v11_dataset_assembly_candidates(PDO $pdo,int $org,array $policy
       ts.location_id,ts.station_id,d.public_id device_public_id,
       mc.id mined_candidate_id,mc.public_id mined_candidate_public_id,mc.score hard_score,mc.status hard_status
     FROM glasses_vision_training_samples s
-    JOIN glasses_vision_training_media m ON m.sample_id=s.id AND m.organization_id=s.organization_id AND m.status='active'
+    JOIN glasses_vision_training_media m ON m.sample_id=s.id AND m.organization_id=s.organization_id AND ".glasses_vision_media_retained_sql('m')."
     LEFT JOIN glasses_training_sessions ts ON ts.id=m.training_session_id
     LEFT JOIN glasses_devices d ON d.id=m.device_id
     LEFT JOIN glasses_vision_mined_candidates mc ON mc.id=(

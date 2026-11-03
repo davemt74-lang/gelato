@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__.'/glasses-vision-dataset-intelligence.php';
+require_once __DIR__.'/glasses-vision-media-retention.php';
 
 const GLASSES_VISION_MEDIA_MAX_BYTES=12582912;
 const GLASSES_VISION_MEDIA_NEAR_DUPLICATE_DISTANCE=6;
@@ -232,12 +233,12 @@ function glasses_vision_training_media_store(PDO $pdo,int $org,array $input,int 
             throw $e;
         }
 
-        $exactQ=$pdo->prepare("SELECT public_id FROM glasses_vision_training_media WHERE organization_id=? AND sha256=? AND id<>? AND status='active' ORDER BY id DESC LIMIT 20");
+        $exactQ=$pdo->prepare("SELECT public_id FROM glasses_vision_training_media WHERE organization_id=? AND sha256=? AND id<>? AND ".glasses_vision_media_retained_sql()." ORDER BY id DESC LIMIT 20");
         $exactQ->execute([$org,$sha,$mediaId]);$exact=$exactQ->fetchAll(PDO::FETCH_COLUMN);
 
         $near=[];
         if($pHash!==null){
-            $pq=$pdo->prepare("SELECT public_id,perceptual_hash FROM glasses_vision_training_media WHERE organization_id=? AND id<>? AND perceptual_hash IS NOT NULL AND status='active' ORDER BY id DESC LIMIT 500");
+            $pq=$pdo->prepare("SELECT public_id,perceptual_hash FROM glasses_vision_training_media WHERE organization_id=? AND id<>? AND perceptual_hash IS NOT NULL AND ".glasses_vision_media_retained_sql()." ORDER BY id DESC LIMIT 500");
             $pq->execute([$org,$mediaId]);
             foreach($pq->fetchAll() as $row){
                 $distance=glasses_vision_training_media_hamming($pHash,(string)$row['perceptual_hash']);
@@ -284,7 +285,8 @@ function glasses_vision_training_media_public(array $row): array
         'camera'=>['facing'=>$row['camera_facing'],'deviceKey'=>$row['camera_device_key'],'width'=>$row['camera_width']!==null?(int)$row['camera_width']:null,'height'=>$row['camera_height']!==null?(int)$row['camera_height']:null,'fps'=>$row['camera_fps']!==null?(float)$row['camera_fps']:null],
         'pose'=>['pitch'=>$row['camera_pitch']!==null?(float)$row['camera_pitch']:null,'yaw'=>$row['camera_yaw']!==null?(float)$row['camera_yaw']:null,'roll'=>$row['camera_roll']!==null?(float)$row['camera_roll']:null],
         'distanceBucket'=>$row['distance_bucket'],'occlusionBucket'=>$row['occlusion_bucket'],'consentBasis'=>$row['consent_basis'],
-        'retentionUntil'=>$row['retention_until'],'status'=>$row['status'],'createdAt'=>$row['created_at'],'deletedAt'=>$row['deleted_at'],
+        'retentionUntil'=>$row['retention_until'],'status'=>($row['status']==='active'&&!glasses_vision_media_retained($row)?'expired':$row['status']),
+        'available'=>glasses_vision_media_retained($row),'createdAt'=>$row['created_at'],'deletedAt'=>$row['deleted_at'],
     ];
 }
 
@@ -296,41 +298,70 @@ function glasses_vision_training_media_list(PDO $pdo,int $org,int $limit=250): a
     return array_map(fn($id)=>glasses_vision_training_media_public(glasses_vision_training_media_row($pdo,$org,(string)$id,false)),$q->fetchAll(PDO::FETCH_COLUMN));
 }
 
-function glasses_vision_training_media_delete(PDO $pdo,int $org,string $publicId,string $reason,?int $actor): array
+function glasses_vision_training_media_delete(PDO $pdo,int $org,string $publicId,string $reason,?int $actor,bool $onlyExpired=false): array
 {
     $reason=mb_substr(trim($reason),0,500);
     if($reason==='')throw new InvalidArgumentException('Training-media deletion requires a reason.');
 
-    return glasses_transaction($pdo,function()use($pdo,$org,$publicId,$reason,$actor):array{
-        $row=glasses_vision_training_media_row($pdo,$org,$publicId,true);
-        if((string)$row['status']==='deleted')return ['publicId'=>$publicId,'status'=>'deleted'];
-        $path=glasses_vision_training_media_storage_root().'/'.(string)$row['storage_relative_path'];
-        if(is_file($path)&&!@unlink($path))throw new RuntimeException('Private training-media bytes could not be deleted.');
+    return glasses_vision_media_cleanup_transaction($pdo,function()use($pdo,$org,$publicId,$reason,$actor,$onlyExpired):array{
+        // Only the media row is needed here; do not lock joined users/devices during I/O.
+        $q=$pdo->prepare('SELECT * FROM glasses_vision_training_media WHERE organization_id=? AND public_id=? LIMIT 1 FOR UPDATE');
+        $q->execute([$org,$publicId]);$row=$q->fetch();
+        if(!$row)throw new InvalidArgumentException('Vision training media was not found.');
+        if((string)$row['status']==='deleted')return ['publicId'=>$publicId,'status'=>'deleted','deleted'=>false];
+        if($onlyExpired&&((string)$row['status']!=='active'||$row['retention_until']===null||glasses_vision_media_retained($row)))
+            return ['publicId'=>$publicId,'status'=>$row['status'],'deleted'=>false];
+        $path=glasses_vision_training_media_storage_path($org,(string)$row['storage_relative_path']);
+        $missing=!file_exists($path);
+        if(!$missing&&(!is_file($path)||!@unlink($path)))throw new RuntimeException('Private training-media bytes could not be deleted.');
         $pdo->prepare("UPDATE glasses_vision_training_media SET status='deleted',deleted_by=?,deleted_at=NOW(6),delete_reason=? WHERE organization_id=? AND id=?")
           ->execute([$actor,$reason,$org,(int)$row['id']]);
-        glasses_vision_training_media_event($pdo,$org,(int)$row['id'],'deleted',$actor,['reason'=>$reason]);
-        return ['publicId'=>$publicId,'status'=>'deleted'];
+        glasses_vision_training_media_event($pdo,$org,(int)$row['id'],'deleted',$actor,['reason'=>$reason,'bytesAlreadyMissing'=>$missing]);
+        return ['publicId'=>$publicId,'status'=>'deleted','deleted'=>true];
     });
+}
+
+/** Resolve every component without following links or deleting another tenant's bytes. */
+function glasses_vision_training_media_storage_path(int $org,string $relative): string
+{
+    if(!preg_match('~^'.preg_quote((string)$org,'~').'/[a-zA-Z0-9._/-]+$~D',$relative)||preg_match('~(^|/)\.\.?(/|$)~',$relative))
+        throw new RuntimeException('Private training-media storage reference is invalid.');
+    return glasses_vision_media_storage_resolve(glasses_vision_training_media_storage_root(),$relative);
 }
 
 function glasses_vision_training_media_expire(PDO $pdo,int $org,?int $actor=null,int $limit=500): array
 {
-    $limit=max(1,min(5000,$limit));
-    $q=$pdo->prepare("SELECT public_id FROM glasses_vision_training_media WHERE organization_id=? AND status='active' AND retention_until IS NOT NULL AND retention_until<=NOW(6) ORDER BY retention_until,id LIMIT ".$limit);
-    $q->execute([$org]);$count=0;
-    foreach($q->fetchAll(PDO::FETCH_COLUMN) as $publicId){
-        glasses_vision_training_media_delete($pdo,$org,(string)$publicId,'retention_expired',$actor);$count++;
-    }
-    return ['expired'=>$count];
+    return glasses_vision_training_media_expire_batch($pdo,$org,$actor,$limit,0);
 }
 
-function glasses_vision_training_media_dataset_quality(PDO $pdo,int $org,?string $datasetPublic=null): array
+/** One bounded cursor page. A failed file remains inaccessible and eligible for retry. */
+function glasses_vision_training_media_expire_batch(PDO $pdo,?int $org,?int $actor=null,int $limit=500,int $afterId=0): array
+{
+    $limit=max(1,min(5000,$limit));$afterId=max(0,$afterId);
+    $q=$pdo->prepare("SELECT id,organization_id,public_id FROM glasses_vision_training_media WHERE ".($org!==null?'organization_id=? AND ':'')."id>? AND status='active' AND retention_until IS NOT NULL AND retention_until<=UTC_TIMESTAMP(6) ORDER BY id LIMIT ".$limit);
+    $q->execute($org!==null?[$org,$afterId]:[$afterId]);$rows=$q->fetchAll();$count=0;$failures=[];
+    foreach($rows as $row){
+        $afterId=(int)$row['id'];
+        try{
+            $result=glasses_vision_training_media_delete($pdo,(int)$row['organization_id'],(string)$row['public_id'],'retention_expired',$actor,true);
+            if($result['deleted'])$count++;
+        }catch(Throwable $e){
+            $failures[]=['publicId'=>$row['public_id'],'reason'=>'cleanup_retry_required'];
+            // Keep the reason and attempt for operators without publishing filesystem paths.
+            glasses_vision_training_media_event($pdo,(int)$row['organization_id'],(int)$row['id'],'retention_cleanup_failed',$actor,['retryable'=>true,'reason'=>'private_bytes_not_deleted']);
+        }
+    }
+    return ['expired'=>$count,'failed'=>count($failures),'failures'=>$failures,'scanned'=>count($rows),'nextAfterId'=>count($rows)<$limit?0:$afterId];
+}
+
+function glasses_vision_training_media_dataset_quality(PDO $pdo,int $org,?string $datasetPublic=null,?array $mediaPublicIds=null): array
 {
     $datasetId=glasses_vision_dataset_intelligence_dataset_id($pdo,$org,$datasetPublic);
     $join=$datasetId===null?'':" JOIN glasses_vision_dataset_items di ON di.organization_id=m.organization_id AND di.sample_id=m.sample_id AND di.dataset_id=? ";
     $args=$datasetId===null?[$org]:[$datasetId,$org];
-    $q=$pdo->prepare("SELECT m.*".($datasetId!==null?",di.split_name":"")." FROM glasses_vision_training_media m {$join} WHERE m.organization_id=? AND m.status='active' ORDER BY m.id DESC LIMIT 1000");
+    $q=$pdo->prepare("SELECT m.*".($datasetId!==null?",di.split_name":"")." FROM glasses_vision_training_media m {$join} WHERE m.organization_id=? AND ".glasses_vision_media_retained_sql('m')." ORDER BY m.id DESC".($mediaPublicIds===null?' LIMIT 1000':''));
     $q->execute($args);$rows=$q->fetchAll();
+    if($mediaPublicIds!==null){$allowed=array_fill_keys($mediaPublicIds,true);$rows=array_values(array_filter($rows,static fn($r)=>isset($allowed[$r['public_id']])));}
 
     $exact=[];$shaGroups=[];$captureSplits=[];$poor=0;$warning=0;$tooEasy=0;$poseCount=0;$cameraKeys=[];$distance=[];$occlusion=[];$brightnessBuckets=['dark'=>0,'normal'=>0,'bright'=>0];$timeOfDay=['overnight'=>0,'morning'=>0,'afternoon'=>0,'evening'=>0];$poseCoverage=[];$qualityByMedia=[];
     foreach($rows as $row){
@@ -403,7 +434,7 @@ function glasses_vision_training_media_export_manifest(PDO $pdo,int $org,?string
     $args=$datasetId===null?[$org]:[$datasetId,$org];
     $q=$pdo->prepare("SELECT m.public_id,m.sample_id,m.sha256,m.perceptual_hash,m.perceptual_hash_source,m.mime_type,m.byte_size,m.width,m.height,m.capture_group,m.burst_index,m.quality_state,m.quality_flags_json,m.consent_basis,m.retention_until,m.created_at".($datasetId!==null?",di.split_name":"")."
       FROM glasses_vision_training_media m {$join}
-      WHERE m.organization_id=? AND m.status='active' ORDER BY m.public_id");
+      WHERE m.organization_id=? AND ".glasses_vision_media_retained_sql('m')." ORDER BY m.public_id");
     $q->execute($args);$items=[];
     foreach($q->fetchAll() as $row)$items[]=[
         'publicId'=>$row['public_id'],'sha256'=>$row['sha256'],'perceptualHash'=>$row['perceptual_hash'],'perceptualHashSource'=>$row['perceptual_hash_source'],

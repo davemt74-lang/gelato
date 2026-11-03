@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__.'/glasses-vision-media-retention.php';
 
 require_once __DIR__.'/glasses-vision-curation.php';
 
@@ -29,14 +30,15 @@ function glasses_vision_balance_bucket_pose(?float $pitch,?float $yaw,?float $ro
     return 'p'.$p.'_y'.$y.'_r'.$r;
 }
 
-function glasses_vision_balance_media(PDO $pdo,int $org,int $datasetId): array
+function glasses_vision_balance_media(PDO $pdo,int $org,int $datasetId,?array $mediaPublicIds=null): array
 {
-    $q=$pdo->prepare("SELECT m.sample_id,m.device_id,m.camera_device_key,m.camera_pitch,m.camera_yaw,m.camera_roll,m.distance_bucket,m.occlusion_bucket,m.exposure_state,m.quality_state,m.quality_flags_json,m.sha256
+    $q=$pdo->prepare("SELECT m.public_id,m.sample_id,m.device_id,m.camera_device_key,m.camera_pitch,m.camera_yaw,m.camera_roll,m.distance_bucket,m.occlusion_bucket,m.exposure_state,m.quality_state,m.quality_flags_json,m.sha256
       FROM glasses_vision_dataset_items di
-      JOIN glasses_vision_training_media m ON m.organization_id=di.organization_id AND m.sample_id=di.sample_id AND m.status='active'
+      JOIN glasses_vision_training_media m ON m.organization_id=di.organization_id AND m.sample_id=di.sample_id AND ".glasses_vision_media_retained_sql('m')."
       WHERE di.organization_id=? AND di.dataset_id=?");
     $q->execute([$org,$datasetId]);
     $rows=$q->fetchAll();
+    if($mediaPublicIds!==null){$allowed=array_fill_keys($mediaPublicIds,true);$rows=array_values(array_filter($rows,static fn($r)=>isset($allowed[$r['public_id']])));}
     $devices=[];$cameras=[];$poses=[];$distance=[];$occlusion=[];$exposure=[];$sha=[];$poor=0;$tooEasy=0;
     foreach($rows as $r){
         if($r['device_id']!==null)$devices[(string)$r['device_id']]=true;
@@ -81,11 +83,12 @@ function glasses_vision_balance_overrepresented(array $distribution,int $total,f
     return $out;
 }
 
-function glasses_vision_balance_analyze(PDO $pdo,int $org,string $datasetPublic,array $input=[]): array
+function glasses_vision_balance_analyze(PDO $pdo,int $org,string $datasetPublic,array $input=[],?array $releaseItems=null): array
 {
     $dataset=glasses_vision_curation_dataset($pdo,$org,$datasetPublic);
     $all=glasses_vision_curation_rows($pdo,$org,$datasetPublic);
     $rows=array_values(array_filter($all,static fn($r)=>($r['curationDecision']??'include')!=='exclude'&&($r['reviewStatus']??'')==='approved'));
+    if($releaseItems!==null){$allowed=array_fill_keys(array_column($releaseItems,'samplePublicId'),true);$rows=array_values(array_filter($rows,static fn($r)=>isset($allowed[$r['samplePublicId']])));}
     if(!$rows)throw new InvalidArgumentException('Dataset has no included approved samples to optimize.');
 
     $targetPerClass=max(1,min(100000,(int)($input['targetPerClass']??50)));
@@ -108,7 +111,7 @@ function glasses_vision_balance_analyze(PDO $pdo,int $org,string $datasetPublic,
     $locations=glasses_vision_balance_distribution($rows,'locationName');
     $stations=glasses_vision_balance_distribution($rows,'stationName');
     $menuItems=glasses_vision_balance_distribution($rows,'menuItemName');
-    $media=glasses_vision_balance_media($pdo,$org,(int)$dataset['id']);
+    $media=glasses_vision_balance_media($pdo,$org,(int)$dataset['id'],$releaseItems!==null?array_column($releaseItems,'mediaPublicId'):null);
 
     $recommendations=[];
     foreach($classes as $label=>$count){
