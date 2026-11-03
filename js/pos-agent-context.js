@@ -2,7 +2,6 @@
   'use strict';
   if (window.GelatoPosAgentContext) return;
 
-  const contextFetch = window.fetch.bind(window);
   const state = {
     locationId: 0,
     locationName: '',
@@ -88,7 +87,12 @@
   function applyPosPayload(data) {
     if (!data || typeof data !== 'object' || !data.ok) return;
     const previousLineIds = state.lineItemIds.slice();
-    if (data.locationId !== undefined) state.locationId = asId(data.locationId);
+    if (data.locationId !== undefined) {
+      const locationId = asId(data.locationId);
+      if (locationId !== state.locationId) state.locationName = '';
+      state.locationId = locationId;
+    }
+    if (['menu', 'floor', 'ready'].includes(data.view)) state.view = data.view;
     if (Array.isArray(data.locations) && state.locationId) {
       const location = data.locations.find((entry) => asId(entry?.id) === state.locationId);
       if (location?.name) state.locationName = clean(location.name, 100);
@@ -129,33 +133,7 @@
     publish();
   }
 
-  function targetFile(input) {
-    let value = '';
-    if (typeof input === 'string') value = input;
-    else if (input instanceof URL) value = input.toString();
-    else if (typeof Request !== 'undefined' && input instanceof Request) value = input.url;
-    try { return new URL(value, window.location.href).pathname.split('/').pop() || ''; }
-    catch { return value.split('?')[0].split('/').pop() || ''; }
-  }
-
-  window.fetch = async function gelatoPosStateFetch(input, init) {
-    const response = await contextFetch(input, init);
-    if (['pos.php', 'pos-item-remove.php'].includes(targetFile(input))) {
-      try { applyPosPayload(await response.clone().json()); } catch {}
-    }
-    return response;
-  };
-
-  function setView(view) {
-    if (['menu', 'floor', 'ready'].includes(view)) {
-      state.view = view;
-      publish();
-    }
-  }
-
   document.addEventListener('click', (event) => {
-    const view = event.target.closest('[data-pos-view]');
-    if (view?.dataset.posView) setView(view.dataset.posView);
     const lineAction = event.target.closest('[data-line]');
     if (lineAction?.dataset.line) focusLine(lineAction.dataset.line);
     const check = event.target.closest('[data-check]');

@@ -43,7 +43,7 @@ function host_table_rows(PDO $pdo,int $org,int $locationId,bool $activeOnly=true
 {
     table_service_location($pdo,$org,$locationId);
     $sql="SELECT t.*,s.public_id section_public_id,s.name section_name,u.display_name assigned_user_name,
-                 a.public_id asset_public_id,a.asset_tag,a.asset_type,a.operational_status asset_operational_status,a.condition_status asset_condition_status,a.purchase_price,a.replacement_cost,a.width_inches,a.depth_inches,a.height_inches,a.floor_plan_public_id,a.floor_plan_x_ft,a.floor_plan_y_ft,a.floor_plan_rotation_deg,a.floor_plan_locked,a.archived_at asset_archived_at,
+                 a.public_id asset_public_id,a.asset_tag,a.asset_type,a.operational_status asset_operational_status,a.condition_status asset_condition_status,a.purchase_price,a.replacement_cost,a.width_inches,a.depth_inches,a.height_inches,a.floor_plan_public_id asset_floor_plan_public_id,a.floor_plan_x_ft,a.floor_plan_y_ft,a.floor_plan_rotation_deg,a.floor_plan_locked,a.archived_at asset_archived_at,
                  p.name floor_plan_name,p.width_ft plan_width_ft,p.depth_ft plan_depth_ft,
                  c.public_id check_public_id,c.check_number,c.guest_count,c.opened_at
           FROM service_tables t
@@ -53,12 +53,22 @@ function host_table_rows(PDO $pdo,int $org,int $locationId,bool $activeOnly=true
           LEFT JOIN floor_plans p ON p.organization_id=t.organization_id AND p.public_id=a.floor_plan_public_id AND p.archived_at IS NULL
           LEFT JOIN pos_checks c ON c.id=t.active_check_id AND c.organization_id=t.organization_id
           WHERE t.organization_id=? AND t.location_id=?";
-    if($activeOnly)$sql.=" AND t.status='active'";$sql.=' ORDER BY COALESCE(s.sort_order,9999),s.name,t.name,t.id';$q=$pdo->prepare($sql);$q->execute([$org,$locationId]);$rows=[];
-    foreach($q->fetchAll() as $r){$assetReady=host_asset_available($r);$rows[]=[
+    if($activeOnly)$sql.=" AND (t.status='active' OR (t.status='retired' AND c.status='open'))";$sql.=' ORDER BY COALESCE(s.sort_order,9999),s.name,t.name,t.id';$q=$pdo->prepare($sql);$q->execute([$org,$locationId]);$rows=[];
+    $mapping=null;
+    foreach($q->fetchAll() as $r){
+        if($mapping===null&&!empty($r['floor_plan_public_id'])){
+            require_once __DIR__.'/pos-floor-plan.php';
+            $mapping=pos_floor_plan_current_points($pdo,$org,$locationId);
+        }
+        if(table_service_floor_table_is_retired($pdo,$org,$locationId,$r,$mapping)){
+            if($activeOnly&&$r['check_public_id']===null)continue;
+            $r['status']='retired';
+        }
+        $assetReady=host_asset_available($r);$rows[]=[
         'id'=>(int)$r['id'],'publicId'=>(string)$r['public_id'],'name'=>(string)$r['name'],'capacity'=>(int)$r['capacity'],'shape'=>(string)$r['shape'],'state'=>(string)$r['state'],'status'=>(string)$r['status'],
         'sectionPublicId'=>$r['section_public_id'],'sectionName'=>$r['section_name'],'assignedUserId'=>$r['assigned_user_id']!==null?(int)$r['assigned_user_id']:null,'assignedUserName'=>$r['assigned_user_name'],
         'activeCheckId'=>$r['active_check_id']!==null?(int)$r['active_check_id']:null,'checkPublicId'=>$r['check_public_id'],'checkNumber'=>$r['check_number'],'guestCount'=>$r['guest_count']!==null?(int)$r['guest_count']:null,'openedAt'=>$r['opened_at'],
-        'asset'=>['id'=>$r['asset_public_id'],'assetTag'=>$r['asset_tag'],'assetType'=>$r['asset_type'],'operationalStatus'=>$r['asset_operational_status'],'conditionStatus'=>$r['asset_condition_status'],'purchasePrice'=>$r['purchase_price']!==null?(float)$r['purchase_price']:null,'replacementCost'=>$r['replacement_cost']!==null?(float)$r['replacement_cost']:null,'widthInches'=>$r['width_inches']!==null?(float)$r['width_inches']:null,'depthInches'=>$r['depth_inches']!==null?(float)$r['depth_inches']:null,'heightInches'=>$r['height_inches']!==null?(float)$r['height_inches']:null,'floorPlanId'=>$r['floor_plan_public_id'],'floorPlanName'=>$r['floor_plan_name'],'xFt'=>$r['floor_plan_x_ft']!==null?(float)$r['floor_plan_x_ft']:null,'yFt'=>$r['floor_plan_y_ft']!==null?(float)$r['floor_plan_y_ft']:null,'rotationDeg'=>$r['floor_plan_rotation_deg']!==null?(float)$r['floor_plan_rotation_deg']:0.0,'locked'=>(bool)($r['floor_plan_locked']??0)],
+        'asset'=>['id'=>$r['asset_public_id'],'assetTag'=>$r['asset_tag'],'assetType'=>$r['asset_type'],'operationalStatus'=>$r['asset_operational_status'],'conditionStatus'=>$r['asset_condition_status'],'purchasePrice'=>$r['purchase_price']!==null?(float)$r['purchase_price']:null,'replacementCost'=>$r['replacement_cost']!==null?(float)$r['replacement_cost']:null,'widthInches'=>$r['width_inches']!==null?(float)$r['width_inches']:null,'depthInches'=>$r['depth_inches']!==null?(float)$r['depth_inches']:null,'heightInches'=>$r['height_inches']!==null?(float)$r['height_inches']:null,'floorPlanId'=>$r['asset_floor_plan_public_id'],'floorPlanName'=>$r['floor_plan_name'],'xFt'=>$r['floor_plan_x_ft']!==null?(float)$r['floor_plan_x_ft']:null,'yFt'=>$r['floor_plan_y_ft']!==null?(float)$r['floor_plan_y_ft']:null,'rotationDeg'=>$r['floor_plan_rotation_deg']!==null?(float)$r['floor_plan_rotation_deg']:0.0,'locked'=>(bool)($r['floor_plan_locked']??0)],
         'managedAsset'=>$r['equipment_asset_id']!==null,'physicalReady'=>$assetReady,'reservableNow'=>$assetReady&&$r['active_check_id']===null&&!in_array((string)$r['state'],['out_of_service'],true),
         'projection'=>['xPercent'=>(float)$r['x_percent'],'yPercent'=>(float)$r['y_percent'],'widthPercent'=>(float)$r['width_percent'],'heightPercent'=>(float)$r['height_percent']],
     ];}
@@ -67,7 +77,9 @@ function host_table_rows(PDO $pdo,int $org,int $locationId,bool $activeOnly=true
 
 function host_table_row(PDO $pdo,int $org,int $locationId,string $publicId,bool $forUpdate=false): array
 {
-    $q=$pdo->prepare("SELECT t.*,a.public_id asset_public_id,a.operational_status asset_operational_status,a.condition_status asset_condition_status,a.archived_at asset_archived_at FROM service_tables t LEFT JOIN equipment_assets a ON a.id=t.equipment_asset_id AND a.organization_id=t.organization_id WHERE t.organization_id=? AND t.location_id=? AND t.public_id=? LIMIT 1".($forUpdate?' FOR UPDATE':''));$q->execute([$org,$locationId,$publicId]);$r=$q->fetch();if(!$r)throw new InvalidArgumentException('Service table was not found.');return $r;
+    $q=$pdo->prepare("SELECT t.*,a.public_id asset_public_id,a.operational_status asset_operational_status,a.condition_status asset_condition_status,a.archived_at asset_archived_at FROM service_tables t LEFT JOIN equipment_assets a ON a.id=t.equipment_asset_id AND a.organization_id=t.organization_id WHERE t.organization_id=? AND t.location_id=? AND t.public_id=? LIMIT 1".($forUpdate?' FOR UPDATE':''));$q->execute([$org,$locationId,$publicId]);$r=$q->fetch();if(!$r)throw new InvalidArgumentException('Service table was not found.');
+    if(table_service_floor_table_is_retired($pdo,$org,$locationId,$r))$r['status']='retired';
+    return $r;
 }
 
 function host_sync_table_asset(PDO $pdo,int $org,int $locationId,string $tablePublicId,int $userId): array

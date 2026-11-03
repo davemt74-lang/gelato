@@ -45,6 +45,7 @@ function service_ops_table_row(PDO $pdo,int $org,int $locationId,string $publicI
 function service_ops_assert_table_operable(PDO $pdo,int $org,int $locationId,string $publicId,bool $forUpdate=false): array
 {
     $row=service_ops_table_row($pdo,$org,$locationId,$publicId,$forUpdate);
+    table_service_assert_current_floor_table($pdo,$org,$locationId,$row);
     if((string)$row['status']!=='active')throw new InvalidArgumentException((string)$row['name'].' is inactive.');
     if(empty($row['equipment_asset_id']))throw new InvalidArgumentException((string)$row['name'].' is not linked to a managed physical table asset. Sync it in Host Stand first.');
     if(!empty($row['asset_archived_at'])||(string)$row['asset_operational_status']!=='active'||(string)$row['asset_condition_status']==='poor'||(string)$row['state']==='out_of_service')throw new InvalidArgumentException((string)$row['name'].' is not physically available for service.');

@@ -14,6 +14,7 @@ require_once __DIR__.'/../includes/service-seatability.php';
 require_once __DIR__.'/../includes/service-reservation-protection.php';
 require_once __DIR__.'/../includes/table-cleaning-lifecycle.php';
 require_once __DIR__.'/../includes/table-turn-readiness.php';
+require_once __DIR__.'/../includes/floor-plan-access.php';
 
 $user=app_require_auth();$pdo=app_pdo();$org=(int)$user['organization_id'];$uid=(int)$user['id'];$membership=(int)$user['membership_id'];
 $rawHostView=app_has_permission('host.view',$user);$canUse=app_has_permission('host.use',$user);$canManage=app_has_permission('host.manage',$user);
@@ -39,6 +40,24 @@ function host_api_dashboard(PDO $pdo,int $org,int $locationId,string $date,int $
     return table_turn_readiness_enrich_dashboard($pdo,$org,$locationId,$date,$dashboard);
 }
 
+function host_api_can_place_on_plan(?array $scope,array $planLocations,int $locationId): bool
+{
+    return $scope===null||(in_array($locationId,$planLocations,true)&&floor_plan_can_edit($scope,$planLocations));
+}
+
+function host_api_assert_current_asset_plan(PDO $pdo,int $org,int $locationId,string $tablePublic,?array $scope,array $locationMap): void
+{
+    if($scope===null)return;
+    $q=$pdo->prepare("SELECT COALESCE(a.floor_plan_public_id,'') FROM service_tables t
+        LEFT JOIN equipment_assets a ON a.id=t.equipment_asset_id AND a.organization_id=t.organization_id
+        WHERE t.organization_id=? AND t.location_id=? AND t.public_id=? LIMIT 1 FOR UPDATE");
+    $q->execute([$org,$locationId,$tablePublic]);
+    $plan=$q->fetchColumn();
+    if($plan===false)throw new InvalidArgumentException('Service table was not found.');
+    if($plan!==''&&!floor_plan_can_edit($scope,$locationMap[$plan]??[]))
+        throw new DomainException('Host Stand management permission is required for every location the current asset plan serves.');
+}
+
 try{
     if($_SERVER['REQUEST_METHOD']==='GET'){
         $locationId=host_api_location($pdo,$org,$membership);$date=host_api_date($pdo,$org,$locationId,(string)($_GET['date']??service_ops_business_date($pdo,$org,$locationId)));host_api_reconcile($pdo,$org,$locationId,$uid);$payload=['ok'=>true,'locations'=>pos_locations($pdo,$org),'date'=>$date,'permissions'=>['use'=>$canUse,'manage'=>$canManage],'dashboard'=>host_api_dashboard($pdo,$org,$locationId,$date,$uid)];
@@ -47,15 +66,46 @@ try{
         app_json_response($payload);
     }
     if($_SERVER['REQUEST_METHOD']!=='POST'){header('Allow: GET, POST');app_json_response(['ok'=>false,'message'=>'Method not allowed.'],405);}
-    $input=app_json_input();app_verify_request_csrf($input);$action=trim((string)($input['action']??''));$locationId=host_api_location($pdo,$org,$membership,$input);$date=host_api_date($pdo,$org,$locationId,(string)($input['date']??service_ops_business_date($pdo,$org,$locationId)));host_api_reconcile($pdo,$org,$locationId,$uid);
+    $input=app_json_input();app_verify_request_csrf($input);$action=trim((string)($input['action']??''));$locationId=host_api_location($pdo,$org,$membership,$input);$date=host_api_date($pdo,$org,$locationId,(string)($input['date']??service_ops_business_date($pdo,$org,$locationId)));
+    $geometryAction=in_array($action,['asset.sync_all','table.create','asset.update','table.place'],true);
+    $geometryScope=$geometryAction?operational_location_scope($pdo,$user,'host.manage'):null;
+    if($geometryAction&&$geometryScope!==null&&!in_array($locationId,$geometryScope,true))
+        throw new DomainException('Host Stand management is not assigned at this restaurant location.');
+    host_api_reconcile($pdo,$org,$locationId,$uid);
     if(in_array($action,['asset.sync_all','table.create','asset.update','table.place','combination.save','turn_policy.save'],true)){
         if(!$canManage)app_json_response(['ok'=>false,'message'=>'Host Stand management permission required.'],403);
         if($action==='turn_policy.save'){$policy=table_turn_policy_save($pdo,$org,$locationId,$input,$uid);app_audit($pdo,$org,$uid,'host.table_turn_policy_saved','location',(string)$locationId,null,$policy);app_json_response(['ok'=>true,'policy'=>$policy,'dashboard'=>host_api_dashboard($pdo,$org,$locationId,$date,$uid)]);}
-        if($action==='asset.sync_all'){$count=service_ops_sync_all_table_assets($pdo,$org,$locationId,$uid);app_audit($pdo,$org,$uid,'host.table_assets_synced','location',(string)$locationId,null,['created'=>$count]);app_json_response(['ok'=>true,'created'=>$count,'dashboard'=>host_api_dashboard($pdo,$org,$locationId,$date,$uid)]);}
-        if($action==='table.create'){$table=service_ops_managed_table_create_safe($pdo,$org,$locationId,$input,$uid);app_audit($pdo,$org,$uid,'host.managed_table_created','service_table',(string)$table['publicId'],null,['assetId'=>$table['asset']['id'],'capacity'=>$table['capacity']]);app_json_response(['ok'=>true,'table'=>$table,'dashboard'=>host_api_dashboard($pdo,$org,$locationId,$date,$uid)],201);}
         $tablePublic=trim((string)($input['tablePublicId']??''));
-        if($action==='asset.update'){$table=host_update_table_asset($pdo,$org,$locationId,$tablePublic,$input,$uid);app_audit($pdo,$org,$uid,'host.table_asset_updated','service_table',$tablePublic,null,['operationalStatus'=>$table['asset']['operationalStatus'],'conditionStatus'=>$table['asset']['conditionStatus']]);app_json_response(['ok'=>true,'table'=>$table,'dashboard'=>host_api_dashboard($pdo,$org,$locationId,$date,$uid)]);}
-        if($action==='table.place'){$table=service_ops_place_table($pdo,$org,$locationId,$tablePublic,$input,$uid);app_audit($pdo,$org,$uid,'host.table_placed','service_table',$tablePublic,null,['floorPlanId'=>$table['asset']['floorPlanId'],'xFt'=>$table['asset']['xFt'],'yFt'=>$table['asset']['yFt']]);app_json_response(['ok'=>true,'table'=>$table,'dashboard'=>host_api_dashboard($pdo,$org,$locationId,$date,$uid)]);}
+        if($geometryAction){
+            $result=host_transaction($pdo,function()use($pdo,$org,$locationId,$uid,$input,$action,$tablePublic,$geometryScope):array{
+                pos_floor_plan_lock_publication($pdo,$org);
+                $locationMap=$geometryScope===null?[]:floor_plan_location_map($pdo,$org);
+                if($action==='asset.sync_all'){
+                    $plan=pos_floor_plan_selected_id($pdo,$org,$locationId);
+                    $placement=$plan!==null&&host_api_can_place_on_plan($geometryScope,$locationMap[$plan]??[],$locationId)?$plan:'';
+                    $count=service_ops_sync_all_table_assets($pdo,$org,$locationId,$uid,$placement);
+                    app_audit($pdo,$org,$uid,'host.table_assets_synced','location',(string)$locationId,null,['created'=>$count]);
+                    return ['created'=>$count];
+                }
+                if($action!=='table.create')host_api_assert_current_asset_plan($pdo,$org,$locationId,$tablePublic,$geometryScope,$locationMap);
+                $plan=($action==='table.create'||($action==='table.place'&&empty($input['unplace'])))
+                    ?trim((string)($input['floorPlanId']??'')):'';
+                if($plan!==''&&!host_api_can_place_on_plan($geometryScope,$locationMap[$plan]??[],$locationId))
+                    throw new DomainException('Host Stand management is required for this location and every location the destination plan serves.');
+                if($action==='table.create'){
+                    $table=service_ops_managed_table_create_safe($pdo,$org,$locationId,$input,$uid);
+                    app_audit($pdo,$org,$uid,'host.managed_table_created','service_table',(string)$table['publicId'],null,['assetId'=>$table['asset']['id'],'capacity'=>$table['capacity']]);
+                }elseif($action==='asset.update'){
+                    $table=host_update_table_asset($pdo,$org,$locationId,$tablePublic,$input,$uid);
+                    app_audit($pdo,$org,$uid,'host.table_asset_updated','service_table',$tablePublic,null,['operationalStatus'=>$table['asset']['operationalStatus'],'conditionStatus'=>$table['asset']['conditionStatus']]);
+                }else{
+                    $table=service_ops_place_table($pdo,$org,$locationId,$tablePublic,$input,$uid);
+                    app_audit($pdo,$org,$uid,'host.table_placed','service_table',$tablePublic,null,['floorPlanId'=>$table['asset']['floorPlanId'],'xFt'=>$table['asset']['xFt'],'yFt'=>$table['asset']['yFt']]);
+                }
+                return ['table'=>$table];
+            });
+            app_json_response(['ok'=>true]+$result+['dashboard'=>host_api_dashboard($pdo,$org,$locationId,$date,$uid)],$action==='table.create'?201:200);
+        }
         if($action==='combination.save'){$combo=service_ops_combination_save($pdo,$org,$locationId,$input,$uid);app_audit($pdo,$org,$uid,'host.table_combination_saved','table_combination',(string)$combo['publicId'],null,['tables'=>array_column($combo['tables'],'publicId'),'capacity'=>$combo['capacity']]);app_json_response(['ok'=>true,'combination'=>$combo,'dashboard'=>host_api_dashboard($pdo,$org,$locationId,$date,$uid)]);}
     }
     if(!$canUse)app_json_response(['ok'=>false,'message'=>'Host Stand operating permission required.'],403);
@@ -79,4 +129,4 @@ try{
     if($action==='reservation.assign'){$reservation=service_reservation_protection_reservation_assign($pdo,$org,$public,(array)($input['tablePublicIds']??[]),$uid);app_audit($pdo,$org,$uid,'host.reservation_tables','guest_reservation',$public,null,['tables'=>array_column($reservation['tables'],'publicId')]);app_json_response(['ok'=>true,'reservation'=>$reservation,'dashboard'=>host_api_dashboard($pdo,$org,$locationId,$date,$uid)]);}
     if($action==='reservation.seat'){$result=service_reservation_protection_host_seat($pdo,$org,$public,isset($input['serverUserId'])&&$input['serverUserId']!==''?(int)$input['serverUserId']:null,$uid);app_audit($pdo,$org,$uid,'host.reservation_seated','guest_reservation',$public,null,['checkPublicId'=>$result['check']['publicId'],'tables'=>array_column($result['reservation']['tables'],'publicId')]);app_json_response(['ok'=>true]+$result+['dashboard'=>host_api_dashboard($pdo,$org,$locationId,$date,$uid)]);}
     throw new InvalidArgumentException('Unsupported Host Stand action.');
-}catch(InvalidArgumentException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);}catch(Throwable $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],500);}
+}catch(DomainException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],403);}catch(InvalidArgumentException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);}catch(Throwable $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],500);}

@@ -26,7 +26,7 @@ fpv2_assert(!str_contains($ops,"$('backBtn').onclick = () => { location.href = '
 fpv2_assert(str_contains($shell,'floor-planner-ops-legacy.php'),'V2 shell must wrap the internal canonical operational planner.');
 fpv2_assert(str_contains($shell,'floor-planner-v2.js?v=20260914-3'),'V2 shell must load the current interaction layer.');
 fpv2_assert(str_contains($shell,'. $needle'),'V2 shell must preserve the canonical planner script between its preloader and post-runtime hardening.');
-fpv2_assert(str_contains($shell,'floor-planner-v2-runtime.js?v=20260914-3'),'V2 shell must load current post-runtime hardening after the canonical planner.');
+fpv2_assert(str_contains($shell,'floor-planner-v2-runtime.js?v=20261103-floor-revisions'),'V2 shell must load current post-runtime hardening after the canonical planner.');
 fpv2_assert(str_contains($shell,'floor-planner-v2-enhancements.js?v=20260914-1'),'V2 shell must load the equipment/clipboard enhancement layer.');
 fpv2_assert(str_contains($shell,'floor-planner-v2-fixes.js?v=20260914-1'),'V2 shell must load the counter/equipment-create corrective layer.');
 fpv2_assert(!str_contains($shell,'Shift-click / drag-select = group move'),'V2 header must not include tutorial copy.');

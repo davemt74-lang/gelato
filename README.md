@@ -41,6 +41,10 @@ The application shell may use generic **Restaurant Workspace** wording, while re
 
 The Floor Planner and Equipment Catalog permissions appear automatically in **Account Types & Permissions** after their migrations are imported. Super Admin remains unrestricted. Non-owner roles need `equipment.view` plus `agent.equipment_skills` before the authenticated agent may retrieve equipment knowledge on their behalf.
 
+Location-scoped floor-plan viewers can open plans that serve an authorized location. Editors need `floorplans.edit` at every location the plan serves. Creating or editing an unassigned template requires a restaurant-wide grant. POS managers can assign a plan they can already view to a location they manage.
+
+Floor Planner saves and archives use the saved revision the editor loaded. When another editor saves first, the planner keeps the unsaved draft visible and offers an explicit reload. Saving or retiring an in-use layout updates its POS service points while preserving open checks.
+
 ## Canonical floor-plan equipment model
 
 The Equipment Catalog is the source of truth for equipment. The floor plan no longer creates a second editable copy of an oven, mixer, freezer, gelato case, or other serviceable asset.
@@ -48,7 +52,7 @@ The Equipment Catalog is the source of truth for equipment. The floor plan no lo
 - Structural objects such as walls, aisles, tables, chairs, host stands, bars, and zones are stored in `floor_plans.plan_json`.
 - Serviceable equipment is stored once in `equipment_assets` and placed on a plan using `floor_plan_public_id`, X/Y coordinates in feet, rotation, Z order, and a lock flag.
 - Equipment footprint dimensions shown on the plan come from the same `width_inches` and `depth_inches` used by the Equipment Catalog. Resizing live equipment from the planner updates the catalog record instead of creating plan-only dimensions.
-- Moving, rotating, locking, or removing live equipment uses `api/equipment-placement.php`, which enforces organization scope, CSRF protection, Floor Planner permissions, and database-level placement guards.
+- Moving, rotating, locking, or removing live equipment uses `api/equipment-placement.php`, which enforces the source and destination plan scopes, CSRF protection, and database-level placement guards.
 - The general Equipment Catalog remains responsible for identity, lifecycle, dimensions, utilities, maintenance, contacts, and service history. It cannot silently overwrite canonical floor placement fields.
 - The legacy `floor-planner.php` route redirects to `floor-planner-ops.php` so all users reach the canonical operational planner.
 - Old equipment blocks found in historical plan JSON are displayed as legacy ghosts until the user replaces them with real Equipment Catalog assets and saves the canonical layout.

@@ -36,13 +36,15 @@ function service_ops_place_table(PDO $pdo,int $org,int $locationId,string $table
     });
 }
 
-function service_ops_sync_table_asset(PDO $pdo,int $org,int $locationId,string $tablePublicId,int $userId): array
+function service_ops_sync_table_asset(PDO $pdo,int $org,int $locationId,string $tablePublicId,int $userId,?string $floorPlanPublicId=null): array
 {
-    return host_transaction($pdo,function()use($pdo,$org,$locationId,$tablePublicId,$userId){
+    return host_transaction($pdo,function()use($pdo,$org,$locationId,$tablePublicId,$userId,$floorPlanPublicId){
         $legacy=service_ops_table_row($pdo,$org,$locationId,$tablePublicId,true);
         $row=host_sync_table_asset($pdo,$org,$locationId,$tablePublicId,$userId);
         if(!empty($row['asset']['floorPlanId']))return $row;
-        $plans=host_floor_plans($pdo,$org);if(!$plans)return $row;$plan=$plans[0];
+        $floorPlanPublicId??=host_floor_plans($pdo,$org)[0]['publicId']??'';
+        if($floorPlanPublicId==='')return $row;
+        $plan=service_ops_plan($pdo,$org,$floorPlanPublicId);
         $width=(float)($row['asset']['widthInches']??36);$depth=(float)($row['asset']['depthInches']??36);$foot=service_ops_footprint($width,$depth,0);
         $x=((float)$legacy['x_percent']/100.0)*(float)$plan['widthFt'];$y=((float)$legacy['y_percent']/100.0)*(float)$plan['depthFt'];
         $x=max($foot['halfX'],min((float)$plan['widthFt']-$foot['halfX'],$x));$y=max($foot['halfY'],min((float)$plan['depthFt']-$foot['halfY'],$y));
@@ -50,10 +52,10 @@ function service_ops_sync_table_asset(PDO $pdo,int $org,int $locationId,string $
     });
 }
 
-function service_ops_sync_all_table_assets(PDO $pdo,int $org,int $locationId,int $userId): int
+function service_ops_sync_all_table_assets(PDO $pdo,int $org,int $locationId,int $userId,?string $floorPlanPublicId=null): int
 {
     $q=$pdo->prepare("SELECT public_id FROM service_tables WHERE organization_id=? AND location_id=? AND status='active' AND equipment_asset_id IS NULL ORDER BY id");$q->execute([$org,$locationId]);$ids=$q->fetchAll(PDO::FETCH_COLUMN);
-    foreach($ids as $id)service_ops_sync_table_asset($pdo,$org,$locationId,(string)$id,$userId);
+    foreach($ids as $id)service_ops_sync_table_asset($pdo,$org,$locationId,(string)$id,$userId,$floorPlanPublicId);
     return count($ids);
 }
 

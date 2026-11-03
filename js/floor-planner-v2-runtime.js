@@ -2,11 +2,11 @@
   'use strict';
 
   const cfg = window.FLOOR_PLANNER_CONFIG || {};
-  const CAN_EDIT = Boolean(cfg.canEdit);
   let dirty = false;
   let armed = false;
   let hasEdited = false;
   let mutationTimer = 0;
+  cfg.hasPendingChanges = () => dirty;
 
   function init() {
     const stage = document.getElementById('stage');
@@ -41,7 +41,7 @@
     // keeps structures restored by Undo fully movable without rebinding private
     // functions from the canonical planner IIFE.
     stage.addEventListener('pointerdown', event => {
-      if (!CAN_EDIT || event.button !== 0) return;
+      if (!cfg.canEdit || event.button !== 0) return;
       const structure = event.target instanceof Element ? event.target.closest('#stage .structure') : null;
       if (!structure) return;
 

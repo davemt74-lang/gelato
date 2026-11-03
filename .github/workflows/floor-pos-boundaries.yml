@@ -1,0 +1,137 @@
+name: Floor Plan Publication and POS Boundaries
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/floor-pos-boundaries.yml'
+      - 'api/equipment-placement.php'
+      - 'api/floor-plans.php'
+      - 'api/host-stand.php'
+      - 'api/pos.php'
+      - 'api/table-service.php'
+      - 'database/*floor*.sql'
+      - 'floor-plan-api.php'
+      - 'floor-planner*.php'
+      - 'includes/floor-plan-*.php'
+      - 'includes/host-stand-core.php'
+      - 'includes/pos-floor-plan.php'
+      - 'includes/service-ops-floor.php'
+      - 'includes/service-ops-hardening.php'
+      - 'includes/table-service-*.php'
+      - 'js/floor-planner-ops.js'
+      - 'js/floor-planner-v2-runtime.js'
+      - 'js/pos.js'
+      - 'js/pos-runtime.js'
+      - 'js/pos-agent-context.js'
+      - 'pos.php'
+      - 'tests/floor-pos-boundary-*'
+      - 'tests/floor-planner-editor-browser.cjs'
+      - 'tests/pos-location-race-browser.cjs'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/floor-pos-boundaries.yml'
+      - 'api/equipment-placement.php'
+      - 'api/floor-plans.php'
+      - 'api/host-stand.php'
+      - 'api/pos.php'
+      - 'api/table-service.php'
+      - 'database/*floor*.sql'
+      - 'floor-plan-api.php'
+      - 'floor-planner*.php'
+      - 'includes/floor-plan-*.php'
+      - 'includes/host-stand-core.php'
+      - 'includes/pos-floor-plan.php'
+      - 'includes/service-ops-floor.php'
+      - 'includes/service-ops-hardening.php'
+      - 'includes/table-service-*.php'
+      - 'js/floor-planner-ops.js'
+      - 'js/floor-planner-v2-runtime.js'
+      - 'js/pos.js'
+      - 'js/pos-runtime.js'
+      - 'js/pos-agent-context.js'
+      - 'pos.php'
+      - 'tests/floor-pos-boundary-*'
+      - 'tests/floor-planner-editor-browser.cjs'
+      - 'tests/pos-location-race-browser.cjs'
+
+permissions:
+  contents: read
+
+jobs:
+  floor-boundaries:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Create an isolated fixture database
+        run: |
+          export MARIADB_ROOT_PASSWORD="$(openssl rand -hex 24)"
+          export MARIADB_PASSWORD="$(openssl rand -hex 24)"
+          echo "::add-mask::$MARIADB_ROOT_PASSWORD"
+          echo "::add-mask::$MARIADB_PASSWORD"
+          docker run -d --name gelato-floor-ci -p 127.0.0.1::3306 \
+            --env MARIADB_ROOT_PASSWORD --env MARIADB_PASSWORD \
+            --env MARIADB_DATABASE=gelato_floor_ci --env MARIADB_USER=gelato_floor_ci mariadb:10.11
+          export MYSQL_PWD="$MARIADB_PASSWORD"
+          db() {
+            docker exec -i --env MYSQL_PWD gelato-floor-ci mariadb \
+              --protocol=tcp --host=127.0.0.1 --user=gelato_floor_ci gelato_floor_ci "$@"
+          }
+          for attempt in $(seq 1 60); do
+            if db -e 'SELECT 1' >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          db < database/install.sql
+          port="$(docker port gelato-floor-ci 3306/tcp | sed -n 's/^127\.0\.0\.1://p')"
+          [[ "$port" =~ ^[0-9]+$ ]]
+          {
+            echo "GELATO_FLOOR_CI_DB_PORT=$port"
+            echo "GELATO_FLOOR_CI_DB_PASSWORD=$MARIADB_PASSWORD"
+          } >> "$GITHUB_ENV"
+      - name: Apply application migrations
+        run: |
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Floor CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix'],
+            'database'=>['host'=>'127.0.0.1','port'=>(int)getenv('GELATO_FLOOR_CI_DB_PORT'),
+              'name'=>'gelato_floor_ci','username'=>'gelato_floor_ci',
+              'password'=>getenv('GELATO_FLOOR_CI_DB_PASSWORD'),'charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_floor_ci','cookie_secure'=>false],
+            'storage'=>['private_root'=>getenv('RUNNER_TEMP').'/gelato-floor-private'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $upgrade=new UpgradeService(app_pdo(),__DIR__);
+          $upgrade->ensureTrackingTables();
+          $upgrade->bootstrapLegacyHistory(null);
+          $upgrade->applyPending(null);
+          if($upgrade->pendingMigrations())exit(1);
+          PHP
+      - name: Install the pinned Chromium runtime
+        run: |
+          npm install --prefix /tmp/gelato-floor-browser --no-audit --no-fund playwright@1.62.1
+          node /tmp/gelato-floor-browser/node_modules/playwright/cli.js install --with-deps chromium
+      - name: Exercise authenticated floor publication and the shipped editor
+        env:
+          GELATO_TEST_FLOOR_EDITOR_BROWSER: '1'
+          NODE_PATH: /tmp/gelato-floor-browser/node_modules
+        run: node tests/floor-pos-boundary-http.cjs
+      - name: Exercise the shipped POS location switch
+        env:
+          NODE_PATH: /tmp/gelato-floor-browser/node_modules
+        run: node tests/pos-location-race-browser.cjs
+      - name: Remove the fixture database
+        if: always()
+        run: docker rm -f gelato-floor-ci >/dev/null 2>&1 || true

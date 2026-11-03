@@ -6,6 +6,7 @@ require_once __DIR__.'/../includes/pos-core.php';
 require_once __DIR__.'/../includes/customer-crm-core.php';
 require_once __DIR__.'/../includes/kds-core.php';
 require_once __DIR__.'/../includes/pos-floor-plan.php';
+require_once __DIR__.'/../includes/floor-plan-access.php';
 require_once __DIR__.'/../includes/online-order-lifecycle.php';
 
 $user=app_require_auth();
@@ -89,9 +90,20 @@ function pos_api_permissions(PDO $pdo,array $user,int $locationId,bool $crmAvail
     ];
 }
 
-function pos_api_floor(PDO $pdo,int $org,int $locationId,bool $canFloorView): ?array
+function pos_api_visible_floor_plans(PDO $pdo,array $user,array $floor): array
 {
-    return $canFloorView?pos_floor_plan_bootstrap($pdo,$org,$locationId):null;
+    $scope=operational_location_scope($pdo,$user,'floorplans.view');
+    if($scope!==null){
+        $map=floor_plan_location_map($pdo,(int)$user['organization_id']);
+        $floor['plans']=array_values(array_filter($floor['plans'],static fn(array $plan):bool=>
+            floor_plan_can_view($scope,$map[$plan['publicId']]??[])));
+    }
+    return $floor;
+}
+
+function pos_api_floor(PDO $pdo,int $org,int $locationId,bool $canFloorView,array $user): ?array
+{
+    return $canFloorView?pos_api_visible_floor_plans($pdo,$user,pos_floor_plan_bootstrap($pdo,$org,$locationId)):null;
 }
 
 try{
@@ -113,7 +125,7 @@ try{
             'openChecks'=>pos_open_checks($pdo,$org,$locationId),
             'recentChecks'=>pos_recent_checks($pdo,$org,$locationId),
             'check'=>$check,
-            'floorPlan'=>pos_api_floor($pdo,$org,$locationId,$permissions['floorView']),
+            'floorPlan'=>pos_api_floor($pdo,$org,$locationId,$permissions['floorView'],$user),
             'permissions'=>$permissions,
         ]);
     }
@@ -138,7 +150,7 @@ try{
                 app_audit($pdo,$org,$uid,'pos.check_created','pos_check',$check['publicId'],null,['checkNumber'=>$check['checkNumber'],'locationId'=>$locationId,'serviceMode'=>$check['serviceMode'],'guestCount'=>$check['guestCount']]);
                 return $check;
             });
-            app_json_response(['ok'=>true,'check'=>$check,'openChecks'=>pos_open_checks($pdo,$org,$locationId),'floorPlan'=>pos_api_floor($pdo,$org,$locationId,$permissions['floorView'])],201);
+            app_json_response(['ok'=>true,'check'=>$check,'openChecks'=>pos_open_checks($pdo,$org,$locationId),'floorPlan'=>pos_api_floor($pdo,$org,$locationId,$permissions['floorView'],$user)],201);
         }
 
         if($action==='table.seat'){
@@ -151,17 +163,24 @@ try{
                 app_audit($pdo,$org,$uid,'pos.table_seated','pos_check',(string)$check['publicId'],null,['locationId'=>$locationId,'tablePublicId'=>$tablePublicId,'guestCount'=>(int)($input['guestCount']??1)]);
                 return $check;
             });
-            app_json_response(['ok'=>true,'check'=>$check,'openChecks'=>pos_open_checks($pdo,$org,$locationId),'floorPlan'=>pos_api_floor($pdo,$org,$locationId,$permissions['floorView'])],201);
+            app_json_response(['ok'=>true,'check'=>$check,'openChecks'=>pos_open_checks($pdo,$org,$locationId),'floorPlan'=>pos_api_floor($pdo,$org,$locationId,$permissions['floorView'],$user)],201);
         }
 
         if($action==='floor.select'){
             if(!$permissions['floorManage'])app_json_response(['ok'=>false,'message'=>'POS, Floor Plan, and Table Service management permissions are required at this location.'],403);
             $plan=trim((string)($input['floorPlanPublicId']??''));
-            operational_db_wrap($pdo,function()use($pdo,$org,$locationId,$plan,$uid):void{
+            operational_db_wrap($pdo,function()use($pdo,$org,$locationId,$plan,$uid,$user):void{
+                pos_floor_plan_lock_publication($pdo,$org);
+                if($plan!==''){
+                    $plan=(string)pos_floor_plan_row($pdo,$org,$plan)['public_id'];
+                    $viewScope=operational_location_scope($pdo,$user,'floorplans.view');
+                    if($viewScope!==null&&!floor_plan_can_view($viewScope,floor_plan_location_map($pdo,$org)[$plan]??[]))
+                        throw new DomainException('Floor-plan access is not assigned at a location this plan already serves.');
+                }
                 pos_floor_plan_select($pdo,$org,$locationId,$plan!==''?$plan:null,$uid);
                 app_audit($pdo,$org,$uid,'pos.floor_plan_selected','pos_floor_plan_settings',(string)$locationId,null,['floorPlanPublicId'=>$plan!==''?$plan:null]);
             });
-            app_json_response(['ok'=>true,'floorPlan'=>pos_floor_plan_bootstrap($pdo,$org,$locationId)]);
+            app_json_response(['ok'=>true,'floorPlan'=>pos_api_visible_floor_plans($pdo,$user,pos_floor_plan_bootstrap($pdo,$org,$locationId))]);
         }
 
         if($action==='floor.sync'){
@@ -171,6 +190,7 @@ try{
                 app_audit($pdo,$org,$uid,'pos.floor_plan_synced','floor_plan',(string)$result['floorPlanPublicId'],null,['locationId'=>$locationId,'componentTables'=>$result['componentTables'],'created'=>$result['created'],'updated'=>$result['updated'],'orphaned'=>$result['orphaned']]);
                 return $result;
             });
+            $result['bootstrap']=pos_api_visible_floor_plans($pdo,$user,$result['bootstrap']);
             app_json_response(['ok'=>true,'sync'=>$result,'floorPlan'=>$result['bootstrap']]);
         }
 
@@ -259,7 +279,7 @@ try{
             app_audit($pdo,$org,$uid,'pos.tender_recorded','pos_check',$public,null,['tenderType'=>(string)($input['tenderType']??''),'amount'=>pos_money((float)($input['amount']??0)),'tipAmount'=>pos_money((float)($input['tipAmount']??0)),'checkStatus'=>$check['status']]);
             return $check;
         });
-        $floor=pos_api_floor($pdo,$org,(int)$check['locationId'],$permissions['floorView']);
+        $floor=pos_api_floor($pdo,$org,(int)$check['locationId'],$permissions['floorView'],$user);
         app_json_response(['ok'=>true,'check'=>$check,'openChecks'=>pos_open_checks($pdo,$org,(int)$check['locationId']),'recentChecks'=>pos_recent_checks($pdo,$org,(int)$check['locationId']),'floorPlan'=>$floor],201);
     }
 
@@ -291,7 +311,7 @@ try{
             app_audit($pdo,$org,$uid,'pos.check_cancelled','pos_check',$public,null,['reason'=>mb_substr(trim($reason),0,500,'UTF-8')]);
             return $check;
         });
-        app_json_response(['ok'=>true,'check'=>$check,'openChecks'=>pos_open_checks($pdo,$org,(int)$check['locationId']),'floorPlan'=>pos_api_floor($pdo,$org,(int)$check['locationId'],$permissions['floorView'])]);
+        app_json_response(['ok'=>true,'check'=>$check,'openChecks'=>pos_open_checks($pdo,$org,(int)$check['locationId']),'floorPlan'=>pos_api_floor($pdo,$org,(int)$check['locationId'],$permissions['floorView'],$user)]);
     }
 
     app_json_response(['ok'=>false,'message'=>'Unsupported POS action.'],422);

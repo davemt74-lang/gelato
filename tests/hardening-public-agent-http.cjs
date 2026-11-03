@@ -174,9 +174,14 @@ function rateLimited(response,reason){
     // calls. This fails if the controller holds PHP's session lock on transport.
     const primed=await ask();cookie=primed.headers['set-cookie']?.[0]?.split(';')[0];check(Boolean(cookie),'Concurrency uses an actual shared session.');
     mode='hold';const concurrentStart=calls.length;
-    const first=ask({headers:{Cookie:cookie}}),second=ask({headers:{Cookie:cookie}});
-    first.catch(()=>{});second.catch(()=>{}); // Keep failure cleanup from producing orphaned rejections.
-    await waitFor(()=>calls.length===concurrentStart+2,'Both same-session requests must reach the stub concurrently.');
+    const first=ask({headers:{Cookie:cookie}});
+    first.catch(()=>{}); // Keep failure cleanup from producing orphaned rejections.
+    // A PHP CLI worker can accept both sockets before dispatching the first.
+    // Open the second only once the first worker is blocked at the provider.
+    await waitFor(()=>held.length===1,'The first same-session request must be held at the stub.');
+    const second=ask({headers:{Cookie:cookie}});
+    second.catch(()=>{});
+    await waitFor(()=>held.length===2,'Both same-session requests must reach the stub concurrently.');
     equal(fixture('snapshot').leases.length,2,'Both held real HTTP requests own durable independent provider leases.');
     const busy=await ask({headers:{Cookie:cookie}});rateLimited(busy,'concurrency');
     equal(calls.length,concurrentStart+2,'A busy response is immediate without opening a third provider request.');

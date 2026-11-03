@@ -582,7 +582,7 @@
     {
       "path": "api/equipment-placement.php",
       "feature": "equipment",
-      "sourceBlob": "e15bec36f9cba94e136f1a73bcb310112b1ef20d",
+      "sourceBlob": "fae997bc711f8b60f12e77def5e83af959c3e982",
       "discoveredActions": [
         "lock",
         "move",
@@ -629,7 +629,7 @@
     {
       "path": "api/floor-plans.php",
       "feature": "equipment",
-      "sourceBlob": "0928985a59e0391e15090632d14d373a927181ce",
+      "sourceBlob": "5cb576064573b4fa9b67db21791d548cbe270416",
       "discoveredActions": [
         "archive"
       ],
@@ -1361,7 +1361,7 @@
     {
       "path": "api/host-stand.php",
       "feature": "front_of_house",
-      "sourceBlob": "88858ef4c09530fff714e3842abd77646f0ee0b2",
+      "sourceBlob": "4c0c3f1923e021e961cf93ce2fb9ee7c4b3e2810",
       "discoveredActions": [
         "asset.sync_all",
         "asset.update",
@@ -1761,7 +1761,7 @@
     {
       "path": "api/pos.php",
       "feature": "pos",
-      "sourceBlob": "d97a256e1939658bdc98413d50b42b56ee263f83",
+      "sourceBlob": "2211f8b57907e889c6961af8db7c926cd845ef22",
       "discoveredActions": [
         "check.cancel",
         "check.create",

@@ -4,6 +4,7 @@ declare(strict_types=1);
 require __DIR__ . '/../includes/bootstrap.php';
 require __DIR__ . '/../includes/equipment-brain.php';
 require __DIR__ . '/../includes/floor-equipment-brain.php';
+require_once __DIR__ . '/../includes/floor-plan-access.php';
 
 $user = app_require_auth();
 $pdo = app_pdo();
@@ -129,16 +130,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     placement_require($user, 'equipment.view');
     $planId = placement_clean_id($_GET['plan'] ?? '');
     if ($planId === '') app_json_response(['ok'=>false,'message'=>'A floor plan id is required.'],422);
-    $plan = placement_plan($pdo, $organizationId, $planId);
-    if (!$plan) app_json_response(['ok'=>false,'message'=>'Floor plan not found.'],404);
-    $assets = placement_assets($pdo, $organizationId);
-    $placed = array_values(array_filter($assets, static fn(array $asset): bool => $asset['floorPlanId'] === $planId));
-    $unplaced = array_values(array_filter($assets, static fn(array $asset): bool => $asset['floorPlanId'] === ''));
-    $otherPlans = array_values(array_filter($assets, static fn(array $asset): bool => $asset['floorPlanId'] !== '' && $asset['floorPlanId'] !== $planId));
-    app_json_response(['ok'=>true,'plan'=>[
-        'id'=>(string)$plan['public_id'],'name'=>(string)$plan['name'],'widthFt'=>(float)$plan['width_ft'],'depthFt'=>(float)$plan['depth_ft'],
-        'scale'=>(float)$plan['scale_px_per_ft'],'version'=>(int)$plan['version'],'isDefault'=>(bool)$plan['is_default'],'updatedAt'=>(string)$plan['updated_at'],
-    ],'placed'=>$placed,'unplaced'=>$unplaced,'otherPlans'=>$otherPlans]);
+    $response = floor_plan_read_snapshot($pdo, static function () use ($pdo, $organizationId, $user, $planId): ?array {
+        $plan = placement_plan($pdo, $organizationId, $planId);
+        $scope = operational_location_scope($pdo, $user, 'floorplans.view');
+        $locationMap = $scope === null ? [] : floor_plan_location_map($pdo, $organizationId);
+        if (!$plan || !floor_plan_can_view($scope, $locationMap[$plan['public_id']] ?? [])) return null;
+        $planId = (string)$plan['public_id'];
+        $assets = placement_assets($pdo, $organizationId);
+        $placed = array_values(array_filter($assets, static fn(array $asset): bool => $asset['floorPlanId'] === $planId));
+        $unplaced = array_values(array_filter($assets, static fn(array $asset): bool => $asset['floorPlanId'] === ''));
+        $otherPlans = array_values(array_filter($assets, static fn(array $asset): bool =>
+            $asset['floorPlanId'] !== '' && $asset['floorPlanId'] !== $planId
+            && floor_plan_can_view($scope, $locationMap[$asset['floorPlanId']] ?? [])));
+        return ['ok'=>true,'plan'=>[
+            'id'=>(string)$plan['public_id'],'name'=>(string)$plan['name'],'widthFt'=>(float)$plan['width_ft'],'depthFt'=>(float)$plan['depth_ft'],
+            'scale'=>(float)$plan['scale_px_per_ft'],'version'=>(int)$plan['version'],'isDefault'=>(bool)$plan['is_default'],'updatedAt'=>(string)$plan['updated_at'],
+        ],'placed'=>$placed,'unplaced'=>$unplaced,'otherPlans'=>$otherPlans];
+    });
+    if ($response === null) app_json_response(['ok'=>false,'message'=>'Floor plan not found.'],404);
+    app_json_response($response);
 }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -153,17 +163,29 @@ app_verify_request_csrf($input);
 $action = trim((string)($input['action'] ?? ''));
 $assetPublicId = placement_clean_id($input['assetId'] ?? '');
 if ($assetPublicId === '') app_json_response(['ok'=>false,'message'=>'An equipment asset id is required.'],422);
+if ($action === 'resize') placement_require($user, 'equipment.edit');
 
 try {
     $pdo->beginTransaction();
+    pos_floor_plan_lock_publication($pdo, $organizationId);
+    $scope = operational_location_scope($pdo, $user, 'floorplans.edit');
+    $locationMap = $scope === null ? [] : floor_plan_location_map($pdo, $organizationId);
     placement_write_guard($pdo, true);
     $asset = placement_asset_row($pdo, $organizationId, $assetPublicId, true);
     if (!$asset) throw new DomainException('Equipment asset not found.');
+    $previousPlan = (string)($asset['floor_plan_public_id'] ?? '');
+    if ($previousPlan !== '' && !floor_plan_can_edit($scope, $locationMap[$previousPlan] ?? [])) {
+        throw new DomainException('Editing this equipment placement requires permission for every location the plan serves.', 403);
+    }
 
     if ($action === 'place' || $action === 'move') {
         $planId = placement_clean_id($input['planId'] ?? '');
         $plan = $planId !== '' ? placement_plan($pdo, $organizationId, $planId) : null;
         if (!$plan) throw new DomainException('Floor plan not found.');
+        $planId = (string)$plan['public_id'];
+        if (!floor_plan_can_edit($scope, $locationMap[$planId] ?? [])) {
+            throw new DomainException('Editing this equipment placement requires permission for every location the plan serves.', 403);
+        }
         $xFt = placement_number($input['xFt'] ?? null, 'X position', 0, (float)$plan['width_ft']);
         $yFt = placement_number($input['yFt'] ?? null, 'Y position', 0, (float)$plan['depth_ft']);
         $rotation = placement_rotation($input['rotationDeg'] ?? 0);
@@ -189,7 +211,6 @@ try {
         $auditAction='floorplan.equipment_unplaced';
         $auditNew=['assetId'=>$assetPublicId];
     } elseif ($action === 'resize') {
-        placement_require($user, 'equipment.edit');
         $width=placement_number($input['widthInches']??null,'Equipment width',1,1200);
         $depth=placement_number($input['depthInches']??null,'Equipment depth',1,1200);
         $statement=$pdo->prepare("UPDATE equipment_assets SET width_inches=?, depth_inches=?, updated_by=?, updated_at=NOW(6) WHERE id=? AND organization_id=?");
@@ -216,7 +237,7 @@ try {
 } catch (Throwable $error) {
     if ($pdo->inTransaction()) $pdo->rollBack();
     try { placement_write_guard($pdo, false); } catch (Throwable) {}
-    $status=$error instanceof DomainException?404:($error instanceof InvalidArgumentException?422:500);
+    $status=$error instanceof DomainException?($error->getCode()===403?403:404):($error instanceof InvalidArgumentException?422:500);
     app_json_response(['ok'=>false,'message'=>$status===500?'The equipment placement could not be saved.':$error->getMessage()],$status);
 }
 
