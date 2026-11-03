@@ -2,7 +2,6 @@
   'use strict';
 
   const cfg = window.FLOOR_PLANNER_CONFIG || {};
-  const CAN_EDIT = Boolean(cfg.canEdit);
   const CAN_EQUIPMENT = Boolean(cfg.canEquipment);
   const CAN_EQUIPMENT_EDIT = Boolean(cfg.canEquipmentEdit);
   const CAN_AGENT = Boolean(cfg.canAgent);
@@ -13,6 +12,11 @@
 
   let plans = [];
   let activePlanId = '';
+  let activePlanVersion = null;
+  let canCreatePlan = false;
+  let canEditPlan = false;
+  let planBusy = false;
+  let planConflict = false;
   let planW = 50;
   let planH = 34;
   let scale = 24;
@@ -85,7 +89,12 @@
     let data;
     try { data = await response.json(); }
     catch { throw new Error(`Invalid server response (${response.status}).`); }
-    if (!response.ok || data.ok === false) throw new Error(data.message || `Request failed (${response.status}).`);
+    if (!response.ok || data.ok === false) {
+      const error = new Error(data.message || `Request failed (${response.status}).`);
+      error.code = data.code;
+      error.currentVersion = data.currentVersion;
+      throw error;
+    }
     return data;
   }
 
@@ -164,7 +173,7 @@
 
   function bindStructure(el) {
     el.addEventListener('pointerdown', event => {
-      if (!CAN_EDIT || event.button !== 0 || event.target.classList.contains('resize')) return;
+      if (!cfg.canEdit || event.button !== 0 || event.target.classList.contains('resize')) return;
       selectObject(el, 'structure');
       const startX = event.clientX, startY = event.clientY;
       const left = parseFloat(el.style.left), top = parseFloat(el.style.top);
@@ -186,7 +195,7 @@
 
     const handle = el.querySelector('.resize');
     handle.addEventListener('pointerdown', event => {
-      if (!CAN_EDIT) return;
+      if (!cfg.canEdit) return;
       event.stopPropagation();
       selectObject(el, 'structure');
       const startX = event.clientX, startY = event.clientY;
@@ -242,7 +251,7 @@
     el.addEventListener('dblclick', () => openAsset(assetById(el.dataset.assetId)));
     el.addEventListener('pointerdown', event => {
       const asset = assetById(el.dataset.assetId);
-      if (!CAN_EDIT || asset?.locked || event.button !== 0 || event.target.classList.contains('resize')) return;
+      if (!cfg.canEdit || asset?.locked || event.button !== 0 || event.target.classList.contains('resize')) return;
       selectObject(el, 'equipment');
       const startX = event.clientX, startY = event.clientY;
       const left = parseFloat(el.style.left), top = parseFloat(el.style.top);
@@ -389,15 +398,14 @@
   async function refreshPlanList(autoLoad = false) {
     const data = await api('api/floor-plans.php', {method:'GET'});
     plans = data.plans || [];
+    canCreatePlan = data.canCreate === true;
     $('planSelect').innerHTML = '<option value="">Choose saved plan…</option>' + plans.map(plan => `<option value="${esc(plan.id)}">${esc(plan.name)} · v${plan.version}</option>`).join('');
     if (activePlanId && plans.some(plan => plan.id === activePlanId)) $('planSelect').value = activePlanId;
     if (!autoLoad) return;
     const requested = new URLSearchParams(location.search).get('plan');
-    if (!activePlanId && requested && plans.some(plan => plan.id === requested)) activePlanId = requested;
-    if (!activePlanId && plans.length) activePlanId = (plans.find(plan => plan.isDefault) || plans[0]).id;
-    if (activePlanId) {
-      $('planSelect').value = activePlanId;
-      await loadPlan(activePlanId);
+    const target = plans.find(plan => plan.id === requested) || plans.find(plan => plan.isDefault) || plans[0];
+    if (target) {
+      await loadPlan(target.id);
     } else {
       newBlankPlan(false);
     }
@@ -407,6 +415,10 @@
     const data = await api('api/floor-plans.php?id=' + encodeURIComponent(id), {method:'GET'});
     const plan = data.plan;
     activePlanId = plan.id;
+    activePlanVersion = plan.version;
+    canEditPlan = plan.canEdit === true;
+    planConflict = false;
+    $('planSelect').value = activePlanId;
     $('planName').value = plan.name;
     planW = Number(plan.data?.planWft ?? plan.widthFt ?? 50);
     planH = Number(plan.data?.planHft ?? plan.depthFt ?? 34);
@@ -450,7 +462,7 @@
     if (!CAN_EQUIPMENT || !$('assetSearch')) return;
     const query = $('assetSearch').value.trim().toLowerCase();
     const matches = asset => !query || [asset.name,asset.assetType,asset.brand,asset.model,asset.locationName].join(' ').toLowerCase().includes(query);
-    const card = (asset, placed) => `<div class="asset-card" draggable="${!placed && CAN_EDIT ? 'true' : 'false'}" data-asset-card="${esc(asset.id)}"><div class="meta"><strong>${esc(asset.name)}</strong><span class="pill ${asset.operationalStatus === 'out_of_service' ? 'bad' : asset.operationalStatus === 'maintenance' ? 'warn' : ''}">${esc(String(asset.operationalStatus || '').replaceAll('_',' '))}</span></div><span>${esc([asset.assetType,asset.brand,asset.model].filter(Boolean).join(' · '))}</span>${placed ? `<span>${Number(asset.xFt || 0).toFixed(1)}′ × ${Number(asset.yFt || 0).toFixed(1)}′</span>` : '<span>Drag onto plan</span>'}</div>`;
+    const card = (asset, placed) => `<div class="asset-card" draggable="${!placed && cfg.canEdit ? 'true' : 'false'}" data-asset-card="${esc(asset.id)}"><div class="meta"><strong>${esc(asset.name)}</strong><span class="pill ${asset.operationalStatus === 'out_of_service' ? 'bad' : asset.operationalStatus === 'maintenance' ? 'warn' : ''}">${esc(String(asset.operationalStatus || '').replaceAll('_',' '))}</span></div><span>${esc([asset.assetType,asset.brand,asset.model].filter(Boolean).join(' · '))}</span>${placed ? `<span>${Number(asset.xFt || 0).toFixed(1)}′ × ${Number(asset.yFt || 0).toFixed(1)}′</span>` : '<span>Drag onto plan</span>'}</div>`;
     const placed = equipment.filter(asset => asset.floorPlanId === activePlanId && matches(asset));
     const unplaced = equipment.filter(asset => !asset.floorPlanId && matches(asset));
     $('unplacedAssets').innerHTML = unplaced.length ? unplaced.map(asset => card(asset, false)).join('') : '<div class="empty">No unplaced equipment matches.</div>';
@@ -499,8 +511,46 @@
     location.href = 'equipment-detail.php?id=' + encodeURIComponent(asset.id) + '&return=' + encodeURIComponent('floor-planner-ops.php?plan=' + activePlanId);
   }
 
+  function hasPendingPlanChanges() {
+    return dirty || cfg.hasPendingChanges?.() === true;
+  }
+
+  function updatePlanControls() {
+    cfg.canEdit = !planBusy && (activePlanId ? canEditPlan : canCreatePlan);
+    $('planSelect').disabled = planBusy;
+    $('newPlanBtn').disabled = planBusy || !canCreatePlan;
+    $('savePlanBtn').disabled = !cfg.canEdit || planConflict;
+    $('archivePlanBtn').disabled = !cfg.canEdit || !activePlanId || planConflict;
+    $('reloadPlanBtn').disabled = planBusy;
+    $('planConflict').hidden = !planConflict;
+    $('planAccessNote').hidden = planBusy || (activePlanId ? canEditPlan : canCreatePlan);
+    for (const id of ['planName','planW','planH','scale','sLabel','sW','sH','sSeats','sSeatZone',...Object.keys(revenueDefaults)]) {
+      $(id).disabled = !cfg.canEdit;
+    }
+  }
+
+  async function runPlanOperation(work) {
+    if (planBusy) return;
+    planBusy = true;
+    updatePlanControls();
+    try {
+      await work();
+    } catch (error) {
+      if (error.code === 'floor_plan_version_conflict') {
+        planConflict = true;
+        $('planConflictMessage').textContent = `A newer layout (v${error.currentVersion}) is saved. Your editor changes are still here. Reload the saved layout when you are ready to discard this draft.`;
+      }
+      $('planSelect').value = activePlanId;
+      setStatus(error.message, true);
+    } finally {
+      planBusy = false;
+      updatePlanControls();
+      renderCatalog();
+    }
+  }
+
   async function savePlan() {
-    if (!CAN_EDIT) return;
+    if (!cfg.canEdit || planConflict) return;
     const name = $('planName').value.trim();
     if (!name) return setStatus('Plan name is required.', true);
     if (legacyItems.length && !confirm(`This layout still contains ${legacyItems.length} legacy equipment block(s). Saving now removes those old plan-only blocks. Continue only after you have recreated any equipment you still need in the Equipment Catalog.`)) return;
@@ -516,9 +566,13 @@
       items:structureItems(),
       canonicalEquipment:true,
     };
-    try {
-      const response = await api('api/floor-plans.php', {method:'POST', body:{action:'save', plan:{id:activePlanId, name, data}}});
+    await runPlanOperation(async () => {
+      const plan = {id:activePlanId, name, data};
+      if (activePlanId) plan.version = activePlanVersion;
+      const response = await api('api/floor-plans.php', {method:'POST', body:{action:'save', plan}});
       activePlanId = response.plan.id;
+      activePlanVersion = response.plan.version;
+      canEditPlan = response.plan.canEdit === true;
       legacyItems = [];
       dirty = false;
       await refreshPlanList(false);
@@ -526,23 +580,18 @@
       history.replaceState(null, '', '?plan=' + encodeURIComponent(activePlanId));
       setStatus(`Layout saved · v${response.plan.version}`);
       recalc();
-    } catch (error) {
-      setStatus(error.message, true);
-    }
+    });
   }
 
   async function archivePlan() {
-    if (!CAN_EDIT || !activePlanId) return;
-    if (!confirm('Archive this saved floor plan? Equipment must be moved or unplaced first.')) return;
-    try {
-      await api('api/floor-plans.php', {method:'POST', body:{action:'archive', id:activePlanId}});
-      activePlanId = '';
-      await refreshPlanList(false);
+    if (!cfg.canEdit || !activePlanId || planConflict) return;
+    if (!confirm('Archive this floor plan? It will stop taking new parties. Open checks can still be settled. Equipment must be moved or unplaced first.')) return;
+    await runPlanOperation(async () => {
+      await api('api/floor-plans.php', {method:'POST', body:{action:'archive', id:activePlanId, version:activePlanVersion}});
       newBlankPlan(false);
+      await refreshPlanList(false);
       setStatus('Floor plan archived');
-    } catch (error) {
-      setStatus(error.message, true);
-    }
+    });
   }
 
   function seedStarterLayout() {
@@ -560,8 +609,12 @@
   }
 
   function newBlankPlan(confirmFirst = true) {
-    if (confirmFirst && dirty && !confirm('Discard unsaved structural layout and revenue changes?')) return;
+    if (confirmFirst && (!canCreatePlan || planBusy)) return;
+    if (confirmFirst && hasPendingPlanChanges() && !confirm('Discard unsaved structural layout and revenue changes?')) return;
     activePlanId = '';
+    activePlanVersion = null;
+    canEditPlan = false;
+    planConflict = false;
     $('planName').value = 'New Pizzeria Layout';
     $('planSelect').value = '';
     planW = 50; planH = 34; scale = 24;
@@ -572,15 +625,16 @@
     equipment = [];
     legacyItems = [];
     renderCatalog();
-    seedStarterLayout();
-    dirty = true;
+    if (canCreatePlan) seedStarterLayout();
+    dirty = canCreatePlan;
     recalc();
     history.replaceState(null, '', location.pathname);
-    setStatus('New unsaved plan');
+    setStatus(canCreatePlan ? 'New unsaved plan' : 'Choose a saved plan');
+    updatePlanControls();
   }
 
   function applyStructureInspector() {
-    if (selectedKind !== 'structure' || !selected || !CAN_EDIT) return;
+    if (selectedKind !== 'structure' || !selected || !cfg.canEdit) return;
     selected.querySelector('.label').textContent = $('sLabel').value;
     selected.style.width = Math.max(scale / 2, (Number($('sW').value) || .5) * scale) + 'px';
     selected.style.height = Math.max(scale / 2, (Number($('sH').value) || .5) * scale) + 'px';
@@ -681,11 +735,23 @@
     $('newPlanBtn').onclick = () => newBlankPlan();
     $('savePlanBtn').onclick = savePlan;
     $('archivePlanBtn').onclick = archivePlan;
-    $('planSelect').onchange = event => { if (event.target.value) loadPlan(event.target.value); };
+    $('reloadPlanBtn').onclick = () => {
+      if (activePlanId && confirm('Discard the current editor changes and load the latest saved layout?')) {
+        void runPlanOperation(() => loadPlan(activePlanId));
+      }
+    };
+    $('planSelect').onchange = event => {
+      const id = event.target.value;
+      event.target.value = activePlanId;
+      if (id && id !== activePlanId && (!hasPendingPlanChanges() || confirm('Discard unsaved layout changes and open the selected plan?'))) {
+        void runPlanOperation(() => loadPlan(id));
+      }
+    };
+    $('planName').oninput = () => { dirty = true; };
     $('zoom').oninput = event => { zoom = Number(event.target.value) / 100; updateCanvas(); };
 
     $('applyScaleBtn').onclick = () => {
-      if (!CAN_EDIT) return;
+      if (!cfg.canEdit) return;
       const oldScale = scale;
       planW = Math.max(10, Number($('planW').value) || 50);
       planH = Math.max(10, Number($('planH').value) || 34);
@@ -713,11 +779,11 @@
 
     document.querySelectorAll('[data-structure]').forEach(palette => {
       palette.addEventListener('dragstart', event => {
-        if (!CAN_EDIT) return event.preventDefault();
+        if (!cfg.canEdit) return event.preventDefault();
         event.dataTransfer.setData('application/x-structure', palette.dataset.structure);
       });
       palette.addEventListener('click', () => {
-        if (!CAN_EDIT) return;
+        if (!cfg.canEdit) return;
         const el = makeStructure(palette.dataset.structure, 60, 60);
         selectObject(el, 'structure');
         dirty = true;
@@ -725,9 +791,9 @@
       });
     });
 
-    stage.addEventListener('dragover', event => { if (CAN_EDIT) event.preventDefault(); });
+    stage.addEventListener('dragover', event => { if (cfg.canEdit) event.preventDefault(); });
     stage.addEventListener('drop', event => {
-      if (!CAN_EDIT) return;
+      if (!cfg.canEdit) return;
       event.preventDefault();
       const bounds = stage.getBoundingClientRect();
       const x = (event.clientX - bounds.left) / zoom;
@@ -749,7 +815,7 @@
     $('assetSearch')?.addEventListener('input', renderCatalog);
 
     $('deleteBtn').onclick = async () => {
-      if (!selected || !CAN_EDIT) return;
+      if (!selected || !cfg.canEdit) return;
       if (selectedKind === 'structure') {
         selected.remove(); selectObject(null, ''); dirty = true; recalc(); return;
       }
@@ -767,7 +833,7 @@
     };
 
     $('rotateBtn').onclick = async () => {
-      if (!selected || !CAN_EDIT) return;
+      if (!selected || !cfg.canEdit) return;
       if (selectedKind === 'structure') {
         const rotation = ((Number(selected.dataset.rotation) || 0) + 90) % 360;
         selected.dataset.rotation = rotation;
@@ -791,7 +857,7 @@
     };
 
     $('frontBtn').onclick = async () => {
-      if (!selected || !CAN_EDIT) return;
+      if (!selected || !cfg.canEdit) return;
       if (selectedKind === 'structure') { selected.style.zIndex = ++zCounter; dirty = true; return; }
       const asset = assetById(selected.dataset.assetId);
       if (!asset || asset.locked) return;
@@ -802,7 +868,7 @@
     };
 
     $('duplicateBtn').onclick = () => {
-      if (!selected || selectedKind !== 'structure' || !CAN_EDIT) return;
+      if (!selected || selectedKind !== 'structure' || !cfg.canEdit) return;
       const data = structuralData(selected);
       data.id = '';
       data.xPx += scale;
@@ -815,7 +881,7 @@
 
     $('openAssetBtn').onclick = () => selectedKind === 'equipment' && openAsset(assetById(selected.dataset.assetId));
     $('lockAssetBtn').onclick = async () => {
-      if (selectedKind !== 'equipment' || !selected || !CAN_EDIT) return;
+      if (selectedKind !== 'equipment' || !selected || !cfg.canEdit) return;
       const asset = assetById(selected.dataset.assetId);
       try {
         const data = await api('api/equipment-placement.php', {method:'POST', body:{action:'lock',assetId:asset.id,locked:!asset.locked}});
@@ -862,5 +928,5 @@
   bind();
   loadRevenue({revenue:revenueDefaults});
   updateCanvas();
-  refreshPlanList(true).catch(error => setStatus(error.message, true));
+  void runPlanOperation(() => refreshPlanList(true));
 })();

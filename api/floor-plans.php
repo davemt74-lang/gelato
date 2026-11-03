@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require __DIR__ . '/../includes/bootstrap.php';
+require_once __DIR__ . '/../includes/floor-plan-access.php';
 
 $user = app_require_auth();
 $pdo = app_pdo();
@@ -32,7 +33,7 @@ function floor_plan_equipment_ready(PDO $pdo): bool
     }
 }
 
-function floor_plan_summary(array $row): array
+function floor_plan_summary(array $row, bool $canEdit): array
 {
     return [
         'id' => (string)$row['public_id'],
@@ -41,15 +42,16 @@ function floor_plan_summary(array $row): array
         'depthFt' => (float)$row['depth_ft'],
         'scale' => (float)$row['scale_px_per_ft'],
         'version' => (int)$row['version'],
+        'canEdit' => $canEdit,
         'isDefault' => (bool)$row['is_default'],
         'createdAt' => (string)$row['created_at'],
         'updatedAt' => (string)$row['updated_at'],
     ];
 }
 
-function floor_plan_payload(array $row): array
+function floor_plan_payload(array $row, bool $canEdit): array
 {
-    $payload = floor_plan_summary($row);
+    $payload = floor_plan_summary($row, $canEdit);
     $decoded = json_decode((string)$row['plan_json'], true);
     $payload['data'] = is_array($decoded) ? $decoded : [];
     return $payload;
@@ -107,6 +109,52 @@ function floor_plan_equipment_bounds_conflicts(PDO $pdo, int $organizationId, st
     return $conflicts;
 }
 
+final class FloorPlanRequestError extends RuntimeException
+{
+    public function __construct(string $message, int $status, public readonly array $details = [])
+    {
+        parent::__construct($message, $status);
+    }
+}
+
+function floor_plan_lock_editable(PDO $pdo, int $organizationId, string $publicId, ?array $editScope, mixed $version): array
+{
+    $query = $pdo->prepare('SELECT id, public_id, version FROM floor_plans WHERE organization_id=? AND public_id=? AND archived_at IS NULL FOR UPDATE');
+    $query->execute([$organizationId, $publicId]);
+    $plan = $query->fetch();
+    if (!$plan) throw new FloorPlanRequestError('Floor plan not found.', 404);
+    if ($editScope !== null && !floor_plan_can_edit($editScope, floor_plan_location_map($pdo, $organizationId)[$plan['public_id']] ?? [])) {
+        throw new FloorPlanRequestError('Editing this plan requires permission for every location it serves. Shared templates require organization-wide floor-plan edit access.', 403);
+    }
+    if (!is_int($version) || $version < 1) {
+        throw new FloorPlanRequestError('A valid floor plan version is required. Reload the saved plan before making changes.', 422);
+    }
+    $currentVersion = (int)$plan['version'];
+    if ($version !== $currentVersion) {
+        throw new FloorPlanRequestError('This floor plan changed since you loaded it.', 409, [
+            'code' => 'floor_plan_version_conflict',
+            'currentVersion' => $currentVersion,
+        ]);
+    }
+    return $plan;
+}
+
+function floor_plan_write(PDO $pdo, int $organizationId, callable $write): array
+{
+    try {
+        return operational_db_wrap($pdo, static function () use ($pdo, $organizationId, $write): array {
+            pos_floor_plan_lock_publication($pdo, $organizationId);
+            return $write();
+        });
+    } catch (FloorPlanRequestError $error) {
+        app_json_response(['ok' => false, 'message' => $error->getMessage()] + $error->details, $error->getCode());
+    } catch (InvalidArgumentException $error) {
+        app_json_response(['ok' => false, 'message' => $error->getMessage()], 422);
+    } catch (Throwable $error) {
+        app_json_response(['ok' => false, 'message' => operational_safe_error($error, 'The floor plan change could not be saved.')], 500);
+    }
+}
+
 if (!floor_plan_table_ready($pdo)) {
     app_json_response([
         'ok' => false,
@@ -119,26 +167,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         app_json_response(['ok' => false, 'message' => 'You do not have permission to view floor plans.'], 403);
     }
     $publicId = preg_replace('/[^a-zA-Z0-9_-]/', '', (string)($_GET['id'] ?? ''));
-    if ($publicId !== '') {
-        $statement = $pdo->prepare(
-            'SELECT * FROM floor_plans WHERE organization_id = ? AND public_id = ? AND archived_at IS NULL LIMIT 1'
-        );
-        $statement->execute([$organizationId, $publicId]);
-        $row = $statement->fetch();
-        if (!$row) {
-            app_json_response(['ok' => false, 'message' => 'Floor plan not found.'], 404);
+    $response = floor_plan_read_snapshot($pdo, static function () use ($pdo, $user, $organizationId, $publicId): ?array {
+        $viewScope = operational_location_scope($pdo, $user, 'floorplans.view');
+        $editScope = operational_location_scope($pdo, $user, 'floorplans.edit');
+        $locationMap = $viewScope === null && $editScope === null ? [] : floor_plan_location_map($pdo, $organizationId);
+        if ($publicId !== '') {
+            $statement = $pdo->prepare(
+                'SELECT * FROM floor_plans WHERE organization_id = ? AND public_id = ? AND archived_at IS NULL LIMIT 1'
+            );
+            $statement->execute([$organizationId, $publicId]);
+            $row = $statement->fetch();
+            $locations = $locationMap[$row['public_id'] ?? ''] ?? [];
+            if (!$row || !floor_plan_can_view($viewScope, $locations)) return null;
+            return ['ok' => true, 'plan' => floor_plan_payload($row, floor_plan_can_edit($editScope, $locations))];
         }
-        app_json_response(['ok' => true, 'plan' => floor_plan_payload($row)]);
-    }
 
-    $statement = $pdo->prepare(
-        'SELECT public_id, name, width_ft, depth_ft, scale_px_per_ft, version, is_default, created_at, updated_at
-         FROM floor_plans
-         WHERE organization_id = ? AND archived_at IS NULL
-         ORDER BY is_default DESC, updated_at DESC, id DESC'
-    );
-    $statement->execute([$organizationId]);
-    app_json_response(['ok' => true, 'plans' => array_map('floor_plan_summary', $statement->fetchAll())]);
+        $statement = $pdo->prepare(
+            'SELECT public_id, name, width_ft, depth_ft, scale_px_per_ft, version, is_default, created_at, updated_at
+             FROM floor_plans
+             WHERE organization_id = ? AND archived_at IS NULL
+             ORDER BY is_default DESC, updated_at DESC, id DESC'
+        );
+        $statement->execute([$organizationId]);
+        $plans = [];
+        foreach ($statement->fetchAll() as $row) {
+            $locations = $locationMap[$row['public_id']] ?? [];
+            if (floor_plan_can_view($viewScope, $locations)) {
+                $plans[] = floor_plan_summary($row, floor_plan_can_edit($editScope, $locations));
+            }
+        }
+        return ['ok' => true, 'plans' => $plans, 'canCreate' => $editScope === null];
+    });
+    if ($response === null) app_json_response(['ok' => false, 'message' => 'Floor plan not found.'], 404);
+    app_json_response($response);
 }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -153,31 +214,32 @@ if (!app_has_permission('floorplans.edit', $user)) {
 $input = app_json_input();
 app_verify_request_csrf($input);
 $action = (string)($input['action'] ?? 'save');
+$editScope = operational_location_scope($pdo, $user, 'floorplans.edit');
 
 if ($action === 'archive') {
     $publicId = preg_replace('/[^a-zA-Z0-9_-]/', '', (string)($input['id'] ?? ''));
     if ($publicId === '') {
         app_json_response(['ok' => false, 'message' => 'A floor plan id is required.'], 422);
     }
-    $linked = floor_plan_linked_equipment($pdo, $organizationId, $publicId);
-    if ($linked) {
-        $names = array_slice(array_column($linked, 'name'), 0, 5);
-        app_json_response([
-            'ok'=>false,
-            'message'=>'Move or unplace the linked equipment before archiving this floor plan: ' . implode(', ', $names) . (count($linked) > 5 ? '…' : ''),
-            'linkedEquipment'=>count($linked),
-        ], 409);
-    }
-    $statement = $pdo->prepare(
-        'UPDATE floor_plans SET archived_at = NOW(6), updated_by = ?, updated_at = NOW(6)
-         WHERE organization_id = ? AND public_id = ? AND archived_at IS NULL'
-    );
-    $statement->execute([$userId, $organizationId, $publicId]);
-    if ($statement->rowCount() < 1) {
-        app_json_response(['ok' => false, 'message' => 'Floor plan not found.'], 404);
-    }
-    app_audit($pdo, $organizationId, $userId, 'floorplan.archived', 'floor_plan', $publicId, null, ['archived' => true]);
-    app_json_response(['ok' => true, 'message' => 'Floor plan archived.']);
+    $response = floor_plan_write($pdo, $organizationId, static function () use ($pdo, $organizationId, $userId, $publicId, $editScope, $input): array {
+        $existing = floor_plan_lock_editable($pdo, $organizationId, $publicId, $editScope, $input['version'] ?? null);
+        $publicId = (string)$existing['public_id'];
+        $linked = floor_plan_linked_equipment($pdo, $organizationId, $publicId);
+        if ($linked) {
+            $names = array_slice(array_column($linked, 'name'), 0, 5);
+            throw new FloorPlanRequestError(
+                'Move or unplace the linked equipment before archiving this floor plan: ' . implode(', ', $names) . (count($linked) > 5 ? '…' : ''),
+                409,
+                ['linkedEquipment' => count($linked)]
+            );
+        }
+        $statement = $pdo->prepare('UPDATE floor_plans SET archived_at=NOW(6), updated_by=?, updated_at=NOW(6) WHERE id=? AND organization_id=?');
+        $statement->execute([$userId, (int)$existing['id'], $organizationId]);
+        pos_floor_plan_after_archive($pdo, $organizationId, $publicId, $userId);
+        app_audit($pdo, $organizationId, $userId, 'floorplan.archived', 'floor_plan', $publicId, null, ['archived' => true]);
+        return ['ok' => true, 'message' => 'Floor plan archived.'];
+    });
+    app_json_response($response);
 }
 
 if ($action !== 'save') {
@@ -216,21 +278,15 @@ $publicId = preg_replace('/[^a-zA-Z0-9_-]/', '', (string)($plan['id'] ?? ''));
 $isNew = $publicId === '';
 if ($isNew) {
     $publicId = 'floorplan-' . bin2hex(random_bytes(10));
-} else {
-    $conflicts = floor_plan_equipment_bounds_conflicts($pdo, $organizationId, $publicId, $widthFt, $depthFt);
-    if ($conflicts) {
-        $names = array_slice(array_column($conflicts, 'name'), 0, 5);
-        app_json_response([
-            'ok'=>false,
-            'message'=>'The new plan dimensions would place equipment outside the floor-plan boundary: ' . implode(', ', $names) . (count($conflicts) > 5 ? '…' : ''),
-            'equipmentConflicts'=>count($conflicts),
-        ], 409);
-    }
 }
 
-$pdo->beginTransaction();
-try {
+$saved = floor_plan_write($pdo, $organizationId, static function () use (
+    $pdo, $organizationId, $userId, $publicId, $isNew, $editScope, $plan, $name, $encoded, $widthFt, $depthFt, $scale, $items
+): array {
     if ($isNew) {
+        if ($editScope !== null) {
+            throw new FloorPlanRequestError('Creating a shared floor plan requires organization-wide floor-plan edit access.', 403);
+        }
         $defaultStatement = $pdo->prepare('SELECT COUNT(*) FROM floor_plans WHERE organization_id = ? AND archived_at IS NULL');
         $defaultStatement->execute([$organizationId]);
         $isDefault = (int)$defaultStatement->fetchColumn() === 0 ? 1 : 0;
@@ -242,11 +298,16 @@ try {
         $statement->execute([$organizationId, $publicId, $name, $encoded, $widthFt, $depthFt, $scale, $isDefault, $userId, $userId]);
         $auditAction = 'floorplan.created';
     } else {
-        $lock = $pdo->prepare('SELECT id, version FROM floor_plans WHERE organization_id = ? AND public_id = ? AND archived_at IS NULL FOR UPDATE');
-        $lock->execute([$organizationId, $publicId]);
-        $existing = $lock->fetch();
-        if (!$existing) {
-            throw new InvalidArgumentException('Floor plan not found.');
+        $existing = floor_plan_lock_editable($pdo, $organizationId, $publicId, $editScope, $plan['version'] ?? null);
+        $publicId = (string)$existing['public_id'];
+        $conflicts = floor_plan_equipment_bounds_conflicts($pdo, $organizationId, $publicId, $widthFt, $depthFt);
+        if ($conflicts) {
+            $names = array_slice(array_column($conflicts, 'name'), 0, 5);
+            throw new FloorPlanRequestError(
+                'The new plan dimensions would place equipment outside the floor-plan boundary: ' . implode(', ', $names) . (count($conflicts) > 5 ? '…' : ''),
+                409,
+                ['equipmentConflicts' => count($conflicts)]
+            );
         }
         $statement = $pdo->prepare(
             'UPDATE floor_plans
@@ -254,9 +315,13 @@ try {
              WHERE id = ? AND organization_id = ?'
         );
         $statement->execute([$name, $encoded, $widthFt, $depthFt, $scale, $userId, (int)$existing['id'], $organizationId]);
+        if ($editScope !== null && !floor_plan_can_edit($editScope, floor_plan_location_map($pdo, $organizationId)[$publicId] ?? [])) {
+            throw new FloorPlanRequestError('Saving this plan would affect a location outside your floor-plan edit access.', 403);
+        }
         $auditAction = 'floorplan.updated';
     }
 
+    pos_floor_plan_after_save($pdo, $organizationId, $publicId, $userId);
     $fetch = $pdo->prepare('SELECT * FROM floor_plans WHERE organization_id = ? AND public_id = ? AND archived_at IS NULL LIMIT 1');
     $fetch->execute([$organizationId, $publicId]);
     $row = $fetch->fetch();
@@ -270,13 +335,7 @@ try {
         'depth_ft' => $depthFt,
         'component_count' => count($items),
     ]);
-    $pdo->commit();
-} catch (Throwable $error) {
-    if ($pdo->inTransaction()) {
-        $pdo->rollBack();
-    }
-    $status = $error instanceof InvalidArgumentException ? 404 : 500;
-    app_json_response(['ok' => false, 'message' => $error instanceof InvalidArgumentException ? $error->getMessage() : 'The floor plan could not be saved.'], $status);
-}
+    return floor_plan_payload($row, true);
+});
 
-app_json_response(['ok' => true, 'message' => 'Floor plan saved.', 'plan' => floor_plan_payload($row)]);
+app_json_response(['ok' => true, 'message' => 'Floor plan saved.', 'plan' => $saved]);
