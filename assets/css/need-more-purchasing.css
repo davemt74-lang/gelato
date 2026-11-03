@@ -1,0 +1,64 @@
+.board-head{display:flex;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap;padding-top:32px}
+.board-head h1{font-size:clamp(30px,5vw,48px);letter-spacing:-.04em;margin:8px 0}
+.board-head .eyebrow.dark,.vendor-workspace .eyebrow.dark{color:#526b57}
+.board-head p{max-width:700px;line-height:1.6;color:#526959;font-size:14px}
+.board-head label{font-size:12px;font-weight:700;display:flex;flex-direction:column;gap:8px}
+.board-date{padding:11px;border:1px solid #c6d8c8;border-radius:10px;color:#183a2a;background:#fff}
+.board-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:26px 0}
+.board-metric{padding:20px;border-radius:15px;background:#e7efe6;border:1px solid #d2e2d1}
+.board-metric strong{display:block;font-size:30px}
+.board-metric span{font-size:12px;font-weight:700;color:#45624c}
+.board-list{display:grid;gap:16px;margin:20px 0 28px}
+.board-card{background:white;border:1px solid #d8e4d9;border-radius:16px;padding:22px;min-width:0}
+.board-top{display:flex;align-items:start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.board-top h2{margin:5px 0;font-size:23px;overflow-wrap:anywhere}
+.board-chip{display:inline-flex;background:#e8f1e7;color:#25543b;border-radius:8px;padding:6px 10px;font-size:11px;font-weight:800;line-height:1.4}
+.board-evidence{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:17px}
+.board-evidence section{padding:15px;border-radius:12px;background:#f5f8f3;min-width:0}
+.board-evidence h3{font-size:12px;margin:0 0 10px;color:#45644b}
+.board-evidence ul{padding-left:18px;margin:8px 0}
+.board-evidence li{font-size:13px;line-height:1.5;margin:6px 0;overflow-wrap:anywhere}
+.board-evidence p{font-size:13px;line-height:1.5;margin:7px 0}
+.board-muted{font-size:12px;color:#5c7364;line-height:1.6;overflow-wrap:anywhere}
+.board-actions{display:flex;gap:10px;flex-wrap:wrap;margin:17px 0}
+.board-actions a,.board-button{display:inline-flex;align-items:center;justify-content:center;padding:11px 14px;min-height:42px;background:#245c43;color:#fff;text-decoration:none;border:1px solid transparent;border-radius:9px;font-weight:800;font-size:12px;line-height:1.4;text-align:center;cursor:pointer}
+.board-actions a.secondary,.board-button.secondary{background:#edf3e9;color:#284d35;border-color:#ccddca}
+.board-button:not(:disabled):hover{filter:brightness(.95)}
+.board-button:disabled{opacity:.5;cursor:not-allowed}
+.board-button[hidden],.vendor-workspace[hidden],.vendor-confirm[hidden]{display:none}
+#board-alert:not(:empty),#vendor-status:not(:empty){margin:15px 0;padding:12px 15px;border-radius:10px;background:#e4f1e4;font-size:13px;line-height:1.6}
+.board-error:not(:empty){padding:13px 15px;margin:14px 0;border:1px solid #e5c2ad;border-radius:10px;background:#fff3e9;color:#844620;font-size:13px;line-height:1.6}
+.vendor-workspace{margin:30px 0;border:1px solid #c5d9c5;border-radius:18px;background:#edf3e9;padding:24px;scroll-margin-top:20px;min-width:0}
+.vendor-workspace>p{line-height:1.6}
+.vendor-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,270px),1fr));gap:14px;margin:19px 0;align-items:start}
+.vendor-option{background:#fff;border:1px solid #d1dfcf;border-radius:13px;padding:18px;min-width:0}
+.vendor-option.selected{border-color:#2b7849;box-shadow:0 0 0 2px #2b78492b}
+.vendor-choice{display:flex;align-items:start;gap:10px;cursor:pointer;overflow-wrap:anywhere}
+.vendor-choice input{width:18px;height:18px;flex-shrink:0;accent-color:#2d7149;margin:2px 0}
+.vendor-choice strong{display:block;font-size:15px;color:#254d33;line-height:1.4}
+.vendor-choice .board-chip{margin-top:7px}
+.vendor-metrics,.draft-metrics{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px 15px;margin:17px 0}
+.vendor-metrics div,.draft-metrics div{min-width:0}
+.vendor-metrics dt,.draft-metrics dt{font-size:11px;color:#637b68;margin-bottom:4px;line-height:1.5}
+.vendor-metrics dd,.draft-metrics dd{font-size:13px;font-weight:700;margin:0;color:#25432e;line-height:1.5;overflow-wrap:anywhere}
+.vendor-total{background:#eff5eb;border-radius:9px;padding:12px;margin:12px 0}
+.vendor-total span{font-size:11px;color:#526b57;display:block}
+.vendor-total strong{font-size:24px;display:block;color:#245535;margin-top:3px}
+.vendor-warning{padding:11px 12px;border-radius:8px;background:#fff6e4;color:#775321;font-size:12px;line-height:1.6;margin:11px 0;overflow-wrap:anywhere}
+.vendor-warning ul{padding-left:17px;margin:0}
+.vendor-warning li+li{margin-top:5px}
+.vendor-history{border-top:1px solid #e0e9db;padding-top:12px;margin-top:15px}
+.vendor-history summary{font-size:12px;font-weight:700;cursor:pointer;color:#42694a;line-height:1.5}
+.vendor-history ol{padding-left:17px;margin-bottom:0}
+.vendor-history li{font-size:12px;line-height:1.6;margin-bottom:9px;overflow-wrap:anywhere}
+.vendor-history small{display:block;color:#637b68;font-size:11px}
+.vendor-confirm{padding:21px;border-radius:12px;border:1px solid #a9c8ab;background:#fff;margin:20px 0;min-width:0;scroll-margin-top:20px}
+.vendor-confirm h3{margin:0 0 13px;color:#245535;font-size:19px}
+.vendor-confirm p{font-size:13px;line-height:1.6}
+.vendor-open-orders{padding:15px;border:1px solid #e2cea2;border-radius:11px;background:#fff7e7;margin:17px 0}
+.vendor-open-orders h3{font-size:14px;margin:0 0 8px;color:#775321}
+.vendor-open-orders ul{padding-left:18px;margin-bottom:4px}
+.vendor-open-orders li{font-size:12px;line-height:1.7;overflow-wrap:anywhere}
+.board-footer{margin-top:28px}
+@media(max-width:960px){.board-evidence{grid-template-columns:1fr}.board-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.vendor-workspace{padding:20px}}
+@media(max-width:640px){.board-card{padding:16px}.board-head{padding-top:25px}.board-head label{width:100%}.board-metric{padding:16px}.board-metric strong{font-size:25px}.vendor-workspace{padding:15px}.vendor-option{padding:16px}.vendor-confirm{padding:16px}.board-actions .board-button{flex:1 1 100%}.board-actions a{flex:1}.board-top>.board-button{width:100%}.vendor-options{grid-template-columns:minmax(0,1fr)}.masthead .brand{letter-spacing:.08em}.masthead{gap:10px}}

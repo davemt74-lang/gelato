@@ -429,13 +429,15 @@
     {
       "path": "api/daily-prep.php",
       "feature": "prep_inventory",
-      "sourceBlob": "4bbca7b79088075ace66844d6b81b272064ef0fe",
+      "sourceBlob": "e82de30280f8492a5be60931465b7b9c8e44255a",
       "discoveredActions": [
         "add",
         "generate_menu",
         "history",
         "po_draft_create",
         "po_draft_preview",
+        "po_vendor_options",
+        "po_vendor_prefer",
         "purchasing_board",
         "receipts",
         "reconcile_receipt",

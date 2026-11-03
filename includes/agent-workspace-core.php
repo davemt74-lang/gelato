@@ -154,7 +154,12 @@ function gaw_route(array $user,string $message,string $threadId=''): array
         ?pqa_context_get((int)($user['organization_id']??0),(int)($user['id']??0),$threadId):null;
     $contextAction=$quicklistContext
         &&preg_match('/\b(?:mark|check|complete|finish|reopen|undo|start|pause|resume|stop|set|change|remove|delete|notify)\b.{0,90}\b(?:that|this|first|second|third|fourth|fifth|\d{1,2}(?:st|nd|rd|th)?)\b.{0,50}\b(?:item|task|timer|batch|one)\b/u',$text)===1;
-    if($dailyPrepAccess&&($dailyPrepExplicit||$contextAction||$dailyPrepStockInsights))
+    $vendorContext=$threadId!==''&&function_exists('pqa_vendor_context_get')
+        ?pqa_vendor_context_get((int)($user['organization_id']??0),(int)($user['id']??0),$threadId):null;
+    $vendorFollowup=$vendorContext&&app_has_permission('purchasing.view',$user)
+        &&preg_match('/\b(?:compare|show|create|draft|prefer|preferred|set|use|choose|select)\b/u',$text)===1
+        &&preg_match('/\b(?:vendor|supplier|option|purchase order|draft|preferred|first|second|third|number\s+\d{1,2})\b/u',$text)===1;
+    if($dailyPrepAccess&&($dailyPrepExplicit||$contextAction||$dailyPrepStockInsights||$vendorFollowup))
         return ['route'=>null,'domain'=>'daily_prep_model_tools','nodeMode'=>'conversation'];
 
     // A previously read prep list provides scoped context for short follow-ups.

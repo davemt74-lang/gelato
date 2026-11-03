@@ -62,7 +62,7 @@ function fm8d18j11_read(array $args,array $actor,array $context): array
             if($parts)$message.=' Active numeric Need More quantities: '.implode('; ',$parts).'.';
         }
         // 3K2H: authorized manager purchasing context, read from canonical ledgers.
-        if(fm8d18j11_can_receipts($actor)){
+        if(fm8d18j11_can_receipts($actor)&&dqpo_can_compare($actor)){
             require_once __DIR__.'/daily-quicklist-purchasing-board.php';
             try{
                 $board=daily_quicklist_purchasing_board($pdo,$org,$date);
@@ -116,6 +116,57 @@ function fm8d18j11_can_receipts(array $actor): bool
 {
     return fm8d18j11_can($actor)&&daily_quicklist_receipt_permission($actor);
 }
+function fm8d18j11_can_vendors(array $actor): bool
+{
+    return fm8d18j11_can($actor)&&dqpo_can_compare($actor);
+}
+/** Read saved supplier terms and bind displayed option numbers to this conversation. */
+function fm8d18j11_vendor_read(array $args,array $actor,array $context): array
+{
+    if(!fm8d18j11_can_vendors($actor))
+        throw new DomainException('Need More manager, Inventory View, Purchasing View and Prep Agent permissions are required.');
+    $name=trim((string)($args['name']??''));
+    if($name===''||mb_strlen($name,'UTF-8')>220)throw new InvalidArgumentException('Name one exact Need More item.');
+    $pdo=app_pdo();fm8d18j11_voice_guard($pdo,$actor,$context);
+    $org=(int)$actor['organization_id'];$uid=(int)$actor['id'];$date=fm8d18j11_date($args);
+    $threadId=(string)($context['threadId']??'');
+    $row=pqa_resolve_item($pdo,$org,$date,'inventory',$name);
+    $comparison=dqpo_comparison($pdo,$org,(string)$row['id']);
+    $opened=session_status()!==PHP_SESSION_ACTIVE;
+    if($opened&&!session_start())throw new RuntimeException('Could not start supplier selection session.');
+    try{
+        pqa_vendor_context_save($org,$uid,$threadId,$comparison);
+        pqa_context_save($org,$uid,$date,daily_quicklist_items($pdo,$org,$date),$threadId);
+        pqa_context_focus($org,$uid,$threadId,'inventory',(string)$row['id']);
+    }finally{if($opened&&session_status()===PHP_SESSION_ACTIVE)session_write_close();}
+    $parts=[];$options=[];
+    foreach(array_slice($comparison['options'],0,20) as $index=>$option){
+        $price=$option['unitPrice']===null?'unit price unavailable':'$'.number_format((float)$option['unitPrice'],4).' per '.$comparison['unit'];
+        $subtotal=$option['estimatedSubtotal']===null?'subtotal not priced':'estimated subtotal $'.number_format((float)$option['estimatedSubtotal'],2);
+        $pack=$option['packSize']===null?'pack size not configured':daily_quicklist_format_quantity((float)$option['packSize']).' '.$option['packUnit'].' per pack';
+        $quantity=$option['packs']===null?'purchase quantity not available':daily_quicklist_format_quantity((float)$option['packs']).' packs';
+        $parts[]=($index+1).'. '.$option['vendor'].(!empty($option['preferred'])?' (preferred)':'').': '.
+            $pack.'; '.$price.'; '.
+            ($option['eligible']?$quantity.', '.$subtotal:
+                'not eligible: '.implode(' ',(array)$option['blockers'])).
+            (!empty($option['warnings'])?'; '.implode(' ',(array)$option['warnings']):'');
+        // Names and numbered evidence are exposed; the model does not choose raw database IDs.
+        unset($option['vendorItemId'],$option['vendorId']);
+        $options[]=['number'=>$index+1]+$option;
+    }
+    $answer='Saved supplier options for '.$comparison['name'].', outstanding '.
+        ($comparison['remainingQuantity']===null?'quantity not set':daily_quicklist_format_quantity((float)$comparison['remainingQuantity']).' '.$comparison['unit']).': '.
+        ($parts?implode(' ', $parts):'No active saved supplier mappings.').
+        (!empty($comparison['blockers'])?' Draft blockers: '.implode(' ',(array)$comparison['blockers']):'').
+        ' Prices are saved catalog/history evidence; pack totals include rounding. No order or supplier preference changed. '.
+        'A selected supplier draft or preferred-supplier change requires a separate Confirm; orders are never submitted by this tool.';
+    if(count($comparison['options'])>20)$answer.=' Showing the first 20 options; open Need More / Purchasing for all suppliers.';
+    return ['ok'=>true,'data'=>['answer'=>$answer,'name'=>$comparison['name'],
+        'remainingQuantity'=>$comparison['remainingQuantity'],'unit'=>$comparison['unit'],
+        'options'=>$options,'openOrders'=>$comparison['openOrders'],'canDraft'=>$comparison['canDraft']&&dqpo_can_draft($actor),
+        'blockers'=>$comparison['blockers'],'source'=>'Gelato saved supplier catalog, price history and canonical open purchase orders',
+        'proof'=>['url'=>'need-more-purchasing.php']]];
+}
 function fm8d18j11_receipts_read(array $args,array $actor,array $context): array
 {
     if(!fm8d18j11_can_receipts($actor))throw new DomainException('Inventory View and Prep management permissions are required.');
@@ -152,6 +203,7 @@ function fm8d18j11_allowed_actions(array $actor): array
     if(daily_quicklist_can_manage($actor))
         array_push($actions,'set_status','set_manager_note','set_requested_amount','notify_managers');
     if(fm8d18j11_can_receipts($actor))array_push($actions,'link_confirmed_receipt','set_requested_stock_quantity');
+    if(fm8d18j11_can($actor)&&dqpo_can_draft($actor))array_push($actions,'create_purchase_draft','set_preferred_vendor');
     return $actions;
 }
 function fm8d18j11_action_fields(array $args,array $actor): array
@@ -221,6 +273,11 @@ function fm8d18j11_action_fields(array $args,array $actor): array
             ||abs((float)$args['quantity']-round((float)$args['quantity'],3))>0.0000001))
             $missing[]='quantity';
     }
+    if(in_array($action,['create_purchase_draft','set_preferred_vendor'],true)){
+        if($list!=='inventory')$missing[]='list';
+        if(!is_int($args['vendor_number']??null)||$args['vendor_number']<1||$args['vendor_number']>20)
+            $missing[]='vendor_number';
+    }
     if($action==='add_need_more'&&isset($args['note'])
         &&(!is_string($args['note'])||mb_strlen($args['note'],'UTF-8')>120))$missing[]='note';
     return array_values(array_unique($missing));
@@ -276,6 +333,10 @@ function fm8d18j11_propose(array $args,array $actor,array $context): array
                 $intent=['op'=>'reconcile_receipt','kind'=>'inventory','target'=>$row['title'],
                     'resolvedItemId'=>$row['id'],'receiptTransactionId'=>$receiptId];
                 if(array_key_exists('quantity',$args))$intent['allocatedQuantity']=(float)$args['quantity'];
+            }elseif(in_array($action,['create_purchase_draft','set_preferred_vendor'],true)){
+                $selection=pqa_vendor_context_resolve($org,$uid,$threadId,(string)$row['id'],(int)$args['vendor_number']);
+                $intent=['op'=>$action,'kind'=>'inventory','target'=>$row['title'],
+                    'resolvedItemId'=>$row['id']]+$selection;
             }else $intent=fm8d18j11_intent($args,$row);
             $result=pqa_propose($pdo,$org,$uid,$actor,$intent,$date);
             if(!pqa_context_get($org,$uid,$threadId))
@@ -292,7 +353,7 @@ function fm8d18j11_propose(array $args,array $actor,array $context): array
             'source'=>'Gelato official Prep Agent (native model-selected skill)',
             'requiresConfirmation'=>($result['data']['requiresConfirmation']??false)===true,
             'proposal'=>$result['data']['proposal']??null,
-            'proof'=>['url'=>'daily-prep.php'],
+            'proof'=>['url'=>in_array($action,['create_purchase_draft','set_preferred_vendor'],true)?'need-more-purchasing.php':'daily-prep.php'],
         ]];
     }finally{if($opened&&session_status()===PHP_SESSION_ACTIVE)session_write_close();}
 }
@@ -315,7 +376,7 @@ function fm8d18j11_catalogue(array $actor,array $context=[]): array
             'execute'=>static fn(array $a,array $user):array=>fm8d18j11_read($a,$user,$context),
         ],
         'propose_daily_prep_action'=>[
-            'description'=>'ONLY when the employee explicitly asks to change Daily Prep or Need More. Choose one item by exact name, ordinal from a previously displayed numbered list, or focused "that item" after a prior selection. The model NEVER supplies item IDs. Use reference_mode none only for generate_menu or adding a named Need More request. For recipe targets use saved yield. Manager status, internal notes, requested Need More amounts, and notices require management permission. The note field carries the exact requested amount for set_requested_amount. For set_requested_stock_quantity, use an explicit numeric target in the stock item’s saved base unit (not a free-form note). For link_confirmed_receipt, first call get_need_more_receipts for the same named item, then use receipt_number from that numbered, expiring, session-bound list. This allocates an EXISTING physical receipt toward the saved numeric target, possibly leaving an outstanding balance; legacy unquantified requests close with one full receipt. The optional quantity is the explicitly requested allocation in canonical units. It NEVER receives stock twice. Every change stages an expiring Prep Agent proposal for separate Confirm with fresh checks. No stock adjustments or master recipe edits. Unverified voice cannot use it.',
+            'description'=>'ONLY when the employee explicitly asks to change Daily Prep or Need More. Choose one item by exact name, ordinal from a previously displayed numbered list, or focused "that item" after a prior selection. The model NEVER supplies item IDs. Use reference_mode none only for generate_menu or adding a named Need More request. For recipe targets use saved yield. Manager status, internal notes, requested Need More amounts, and notices require management permission. The note field carries the exact requested amount for set_requested_amount. For set_requested_stock_quantity, use an explicit numeric target in the stock item’s saved base unit (not a free-form note). For link_confirmed_receipt, first call get_need_more_receipts for the same named item, then use receipt_number from that numbered, expiring, session-bound list. This allocates an EXISTING physical receipt toward the saved numeric target, possibly leaving an outstanding balance; legacy unquantified requests close with one full receipt. The optional quantity is the explicitly requested allocation in canonical units. It NEVER receives stock twice. For create_purchase_draft or set_preferred_vendor, first display get_need_more_vendor_options and use the exact selected vendor_number from the same conversation. The server rechecks the displayed terms and stages either a draft-only order or supplier preference update. Never substitute suppliers, invent pack sizes/prices, submit an order or contact a vendor. Every change stages an expiring Prep Agent proposal for separate Confirm with fresh checks. No stock adjustments or master recipe edits. Unverified voice cannot use it.',
             'parameters'=>['type'=>'object','properties'=>[
                 'action'=>['type'=>'string','enum'=>$actions],
                 'list'=>['type'=>'string','enum'=>['prep','inventory'],
@@ -326,6 +387,8 @@ function fm8d18j11_catalogue(array $actor,array $context=[]): array
                     'description'=>'1-based number from a previously displayed list in the same conversation'],
                 'receipt_number'=>['type'=>'integer','minimum'=>1,'maximum'=>20,
                     'description'=>'Number from a previous get_need_more_receipts result in this same user conversation; never a database transaction ID'],
+                'vendor_number'=>['type'=>'integer','minimum'=>1,'maximum'=>20,
+                    'description'=>'Number explicitly selected from get_need_more_vendor_options in this same user conversation; never a raw vendor/mapping ID'],
                 'date'=>['type'=>'string','description'=>'Optional restaurant-local YYYY-MM-DD; omit for today'],
                 'quantity'=>['type'=>'number','exclusiveMinimum'=>0,'maximum'=>1000000,
                     'description'=>'Explicit recipe batch target for set_batch_target (max 10000), numeric Need More target for set_requested_stock_quantity, or optional partial receipt allocation for link_confirmed_receipt. Never infer numbers from free-form notes.'],
@@ -334,7 +397,7 @@ function fm8d18j11_catalogue(array $actor,array $context=[]): array
                 'note'=>['type'=>'string','maxLength'=>2000,
                     'description'=>'Explicit manager note, Need More quantity request, or new requested amount; never invent a unit or quantity'],
             ],'required'=>['action','list','reference_mode'],'additionalProperties'=>false],
-            'allowedArguments'=>['action','list','reference_mode','name','ordinal','receipt_number','date','quantity','unit','status','note'],
+            'allowedArguments'=>['action','list','reference_mode','name','ordinal','receipt_number','vendor_number','date','quantity','unit','status','note'],
             'impact'=>'read',
             'authorize'=>static fn(array $user,array $a):bool=>fm8d18j11_can($user)
                 &&fm8d18j11_action_fields($a,$user)===[],
@@ -373,6 +436,24 @@ function fm8d18j11_catalogue(array $actor,array $context=[]): array
                 return $invalid;
             },
             'execute'=>static fn(array $a,array $user):array=>fm8d18j11_receipts_read($a,$user,$context),
+        ];
+    }
+    if(fm8d18j11_can_vendors($actor)){
+        $tools['get_need_more_vendor_options']=[
+            'description'=>'Read saved supplier choices for one exact active Need More item, showing comparable unit prices, required pack totals/overage, preferred supplier, recorded price history, minimum-order warnings and open-order blockers. Uses saved stock units only; unavailable prices or incompatible units are explicit. Stores a 15-minute user/tenant/conversation/item-bound numbered supplier selection. No purchase order, inventory or preference is changed. A manager may separately propose a draft or preference update using a displayed vendor_number.',
+            'parameters'=>['type'=>'object','properties'=>[
+                'name'=>['type'=>'string','description'=>'Exact existing Need More item name'],
+                'date'=>['type'=>'string','description'=>'Optional YYYY-MM-DD; defaults to restaurant-local today'],
+            ],'required'=>['name'],'additionalProperties'=>false],
+            'allowedArguments'=>['name','date'],'impact'=>'read',
+            'authorize'=>static fn(array $user,array $a):bool=>fm8d18j11_can_vendors($user),
+            'validate'=>static function(array $a,array $user):array{
+                $invalid=[];
+                if(!is_string($a['name']??null)||trim((string)$a['name'])===''||mb_strlen((string)$a['name'],'UTF-8')>220)$invalid[]='name';
+                try{fm8d18j11_date($a);}catch(InvalidArgumentException){$invalid[]='date';}
+                return $invalid;
+            },
+            'execute'=>static fn(array $a,array $user):array=>fm8d18j11_vendor_read($a,$user,$context),
         ];
     }
     return $tools;
