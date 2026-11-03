@@ -22,7 +22,8 @@ try{
         if($action==='receipts'){
             if(!daily_quicklist_receipt_permission($user))
                 app_json_response(['ok'=>false,'message'=>'Inventory View and manager permissions required.'],403);
-            app_json_response(['ok'=>true,'receipts'=>daily_quicklist_receipt_candidates($pdo,$org,(string)($_GET['id']??''))]);
+            app_json_response(['ok'=>true,'receipts'=>daily_quicklist_receipt_candidates($pdo,$org,(string)($_GET['id']??'')),
+                'progress'=>daily_quicklist_receipt_progress($pdo,$org,(string)($_GET['id']??''))]);
         }
         if($action!=='bootstrap')throw new InvalidArgumentException('Unknown list action.');
         $date=daily_quicklist_date($_GET['date']??date('Y-m-d'));
@@ -50,9 +51,14 @@ try{
             app_json_response(['ok'=>false,'message'=>'Inventory View and manager permissions required.'],403);
         $raw=$input['transactionId']??null;
         if(!is_int($raw)||$raw<1)throw new InvalidArgumentException('Choose a valid saved receipt.');
-        $result=daily_quicklist_reconcile_receipt($pdo,$org,$actor,$user,(string)($input['id']??''),$raw);
+        $allocated=$input['allocatedQuantity']??null;
+        if($allocated!==null&&(!is_int($allocated)&&!is_float($allocated)
+            ||!is_finite((float)$allocated)||$allocated<=0))
+            throw new InvalidArgumentException('Choose a positive amount from this recorded receipt.');
+        $result=daily_quicklist_reconcile_receipt($pdo,$org,$actor,$user,
+            (string)($input['id']??''),$raw,null,$allocated===null?null:(float)$allocated);
         app_audit($pdo,$org,$actor,'daily_quicklist.receipt_reconciled','daily_quicklist_item',$result['id'],null,
-            ['transactionId'=>$raw]);
+            ['transactionId'=>$raw,'allocatedQuantity'=>$result['receipt']['quantity']??null]);
         app_json_response(['ok'=>true]+$result);
     }
     if($action==='generate_menu'){
@@ -75,6 +81,9 @@ try{
             ['type'=>(string)($input['type']??'')]);
         app_json_response(['ok'=>true,'id'=>$id]);
     }
+    if($action==='update'&&array_key_exists('requestedStockQuantity',$input)
+        &&!daily_quicklist_receipt_permission($user))
+        app_json_response(['ok'=>false,'message'=>'Inventory View and manager permissions required for a numeric stock target.'],403);
     if(in_array($action,['toggle','timer','archive','update','notify','set_target'],true)){
         $result=daily_quicklist_mutate($pdo,$org,$actor,$action,$input,$manager,$canRecipe);
         app_audit($pdo,$org,$actor,'daily_quicklist.'.$action,'daily_quicklist_item',$result['id'],null,

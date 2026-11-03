@@ -684,4 +684,110 @@ $allHistory=daily_quicklist_history($pdo,$org,$needIdAgain);
 dq_assert(($allHistory[0]['details']['inventoryTransactionId']??null)===$receiptTxn,
     'immutable transaction evidence remains available in admin history');
 
+// Section 3K2G: a numeric Need More target is intentionally separate from
+// ambiguous free-form notes; actual recorded receipts can be allocated in parts.
+dq_assert(daily_quicklist_receipts_ready($pdo),'partial-receipt migration is installed');
+$partialProgress=daily_quicklist_receipt_progress($pdo,$org,$newRequest);
+dq_assert($partialProgress['requestedQuantity']===null
+    &&$partialProgress['receivedQuantity']===0.0
+    &&$partialProgress['unit']==='kg','legacy Need More has no invented numeric target');
+$managerPartialCatalogue=fm8d18j11_catalogue($managerAgent,$chatContext);
+dq_assert(in_array('set_requested_stock_quantity',
+        $managerPartialCatalogue['propose_daily_prep_action']['parameters']['properties']['action']['enum'],true)
+    &&!in_array('set_requested_stock_quantity',
+        $nativeCatalogue['propose_daily_prep_action']['parameters']['properties']['action']['enum'],true),
+    'official model-selected numeric quantity tool is manager/Inventory View only');
+dq_assert(fm8d18j11_action_fields(['action'=>'set_requested_stock_quantity','list'=>'inventory',
+    'reference_mode'=>'name','name'=>'Flour','quantity'=>5.0,'unit'=>'kg'],$managerAgent)===[],
+    'native model validates numeric target in saved stock unit');
+try{fm8d18j11_propose(['action'=>'set_requested_stock_quantity','list'=>'inventory',
+    'reference_mode'=>'name','name'=>'Flour','quantity'=>5.0,'date'=>$agentDay],
+    $staffAgent,$chatContext);
+    throw new RuntimeException('staff proposed manager-only numeric stock target');}catch(InvalidArgumentException){}
+try{fm8d18j11_propose(['action'=>'set_requested_stock_quantity','list'=>'inventory',
+    'reference_mode'=>'name','name'=>'Flour','quantity'=>5.0,'unit'=>'boxes','date'=>$agentDay],
+    $managerAgent,$chatContext);
+    throw new RuntimeException('model invented stock unit');}catch(InvalidArgumentException){}
+$proposedTarget=fm8d18j11_propose(['action'=>'set_requested_stock_quantity','list'=>'inventory',
+    'reference_mode'=>'name','name'=>'Flour','quantity'=>5.0,'unit'=>'kg','date'=>$agentDay],
+    $managerAgent,$chatContext);
+dq_assert(($proposedTarget['data']['requiresConfirmation']??false)===true,
+    'numeric target is not saved before explicit Confirm');
+$pendingTarget=daily_quicklist_receipt_progress($pdo,$org,$newRequest);
+dq_assert($pendingTarget['requestedQuantity']===null,'proposal cannot mutate target by itself');
+$confirmedTarget=prep_agent_handle($pdo,$managerAgent,['message'=>'Confirm']);
+dq_assert($confirmedTarget['skill']==='prep.action_confirmed',
+    'typed/authorized voice confirmation uses existing Prep Agent action gate');
+$partialProgress=daily_quicklist_receipt_progress($pdo,$org,$newRequest);
+dq_assert($partialProgress['requestedQuantity']===5.0
+    &&$partialProgress['remainingQuantity']===5.0,'confirmed target is canonical and initially outstanding');
+$partialItem=current(array_values(array_filter(daily_quicklist_items($pdo,$org,$agentDay),
+    static fn(array $x):bool=>$x['id']===$newRequest)));
+dq_assert($partialItem['requestedStockQuantity']===5.0,'UI exposes numeric target without rewriting free-form note');
+try{daily_quicklist_mutate($pdo,$org,$manager,'update',
+    ['id'=>$newRequest,'status'=>'received'],true);
+    throw new RuntimeException('manager closed unfulfilled numeric request');}catch(InvalidArgumentException){}
+$firstStock=operations_inventory_adjust($pdo,$org,$stockId,2.0,'receive',$actor,'First physical partial delivery');
+$firstTxn=(int)$firstStock['last_transaction_id'];
+$beforeAlloc=(int)$pdo->query('SELECT COUNT(*) FROM inventory_transactions WHERE organization_id='.$org)->fetchColumn();
+$firstLink=daily_quicklist_reconcile_receipt($pdo,$org,$manager,$managerAgent,$newRequest,$firstTxn);
+dq_assert($firstLink['status']==='ordered'
+    &&$firstLink['receipt']['remainingQuantity']===3.0
+    &&$firstLink['receipt']['quantity']===2.0,
+    'first recorded physical receipt leaves 3 kg outstanding');
+$partialProgress=daily_quicklist_receipt_progress($pdo,$org,$newRequest);
+dq_assert($partialProgress['receivedQuantity']===2.0
+    &&$partialProgress['remainingQuantity']===3.0,'outstanding total is derived from immutable receipt allocations');
+try{daily_quicklist_mutate($pdo,$org,$manager,'update',
+    ['id'=>$newRequest,'requestedStockQuantity'=>1.0],true);
+    throw new RuntimeException('manager lowered target below allocated evidence');}catch(InvalidArgumentException){}
+try{daily_quicklist_mutate($pdo,$org,$manager,'update',
+    ['id'=>$newRequest,'status'=>'received'],true);
+    throw new RuntimeException('manager bypassed partial outstanding state');}catch(InvalidArgumentException){}
+dq_assert((int)$pdo->query('SELECT COUNT(*) FROM inventory_transactions WHERE organization_id='.$org)->fetchColumn()
+    ===$beforeAlloc,'partial reconciliation never adds a physical inventory transaction');
+$secondStock=operations_inventory_adjust($pdo,$org,$stockId,4.0,'receive',$actor,'Second physical partial delivery');
+$secondTxn=(int)$secondStock['last_transaction_id'];
+$afterActualReceiving=(float)$secondStock['on_hand_quantity'];
+$beforeFinalAlloc=(int)$pdo->query('SELECT COUNT(*) FROM inventory_transactions WHERE organization_id='.$org)->fetchColumn();
+$readSecond=fm8d18j11_receipts_read(['name'=>'Flour','date'=>$agentDay],$managerAgent,$chatContext);
+dq_assert(str_contains($readSecond['data']['answer'],'still outstanding: 3 kg')
+    &&str_contains($readSecond['data']['answer'],'1. 4 kg received'),
+    'official Agent/Brain/Chat read reports genuine stock receipt and remaining quantity');
+$proposalFinal=fm8d18j11_propose(['action'=>'link_confirmed_receipt','list'=>'inventory',
+    'reference_mode'=>'name','name'=>'Flour','receipt_number'=>1,'quantity'=>3.0,'date'=>$agentDay],
+    $managerAgent,$chatContext);
+dq_assert(($proposalFinal['data']['requiresConfirmation']??false)===true,
+    'partial receipt allocation is confirmation-only');
+$beforeFinal=daily_quicklist_receipt_progress($pdo,$org,$newRequest);
+dq_assert($beforeFinal['remainingQuantity']===3.0,'proposal has not allocated any stock');
+$finalConfirmed=prep_agent_handle($pdo,$managerAgent,['message'=>'Confirm']);
+dq_assert($finalConfirmed['skill']==='prep.action_confirmed',
+    'manager confirms partial quantity from numbered immutable ledger receipt');
+$finalProgress=daily_quicklist_receipt_progress($pdo,$org,$newRequest);
+dq_assert($finalProgress['receivedQuantity']===5.0&&$finalProgress['remainingQuantity']===0.0,
+    '2 kg plus 3 kg allocated from separate receipts meets 5 kg target');
+$links=daily_quicklist_receipt_links($pdo,$org);
+dq_assert(count($links[$newRequest]['receipts']??[])===2
+    &&$links[$newRequest]['quantity']===5.0
+    &&$links[$newRequest]['requestedQuantity']===5.0,
+    'UI exposes two receipt lines with cumulative and remaining progress');
+$finalRows=daily_quicklist_items($pdo,$org,$agentDay);
+$finalNeed=current(array_values(array_filter($finalRows,static fn(array $x):bool=>$x['id']===$newRequest)));
+dq_assert($finalNeed['status']==='received','only final allocation closes Need More');
+$afterFinalCount=(int)$pdo->query('SELECT COUNT(*) FROM inventory_transactions WHERE organization_id='.$org)->fetchColumn();
+$afterFinalStock=(float)$pdo->query("SELECT on_hand_quantity FROM inventory_items WHERE public_id='stock-daily-test'")->fetchColumn();
+dq_assert($beforeFinalAlloc===$afterFinalCount&&$afterFinalStock===$afterActualReceiving,
+    'two allocations never double-receive the real 6 kg from Operations');
+$afterShortage=daily_quicklist_add($pdo,$org,$actor,
+    ['type'=>'inventory','title'=>'Flour','inventoryId'=>$stockId],false);
+try{daily_quicklist_reconcile_receipt($pdo,$org,$manager,$managerAgent,$afterShortage,$secondTxn);
+    throw new RuntimeException('same recorded receipt allocated twice');}catch(InvalidArgumentException){}
+try{daily_quicklist_reconcile_receipt($pdo,$other,$manager,$managerAgent,$afterShortage,$firstTxn);
+    throw new RuntimeException('tenant boundary crossed for partial receipt');}catch(InvalidArgumentException|DomainException){}
+dq_assert(daily_quicklist_history($pdo,$org,$newRequest)[0]['event']==='receipt_reconciled',
+    'final allocation remains in append-only history with original receipt evidence');
+dq_assert((daily_quicklist_receipt_links($pdo,$org)[$needIdAgain]['quantity']??null)===2.0,
+    'old one-to-one receipt is backfilled at its full original quantity');
+
 echo "daily-prep-quicklist contract passed\n";

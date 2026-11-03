@@ -44,3 +44,13 @@
 - Native tool selection is real, but a model may still ask for missing context, abstain or choose the wrong intent; the server never executes an unsafe selection. Run end-to-end acceptance prompts in Gelato chat with actual data, including ambiguous names and concurrent edits.
 - Need More "received" never adjusts inventory on-hand. Recipe targets are display-only and never modify saved recipes. Recording a real inventory receipt remains the separate authorized inventory workflow.
 - CI verifies provider schema/selection, proposal safety, role restrictions, stale snapshots and voice gating. It does **not** certify real voice identification quality, acoustic overlap, or employees' deployed browser acceptance.
+
+
+### Section 3K2G — Partial recorded receipts and outstanding Need More
+
+- The requested stock quantity is an optional, explicit numeric value in the **linked inventory item's saved base unit**. Legacy \`quantityNote\` remains free-form and is never parsed as a quantity. Only managers with Inventory View can manage numeric targets.
+- Existing recorded positive \`receive\` transactions may be linked once each. The reconciliation record stores the **allocated** portion of that immutable receipt. One Need More request may collect several distinct receipts, but a transaction cannot be assigned to a second request.
+- The target, cumulative allocations, and remaining quantity appear in Daily Prep. Partial links leave the request outstanding (ordered); the final allocation closes it. A numeric target cannot be lowered below already allocated amounts, and manual Received status is rejected while quantity remains outstanding.
+- Stock and the inventory transaction ledger are never updated during receipt allocation. Operations remains the only source of actual physical receiving. Existing Section 3K2F full-receipt links are backfilled with their original receipt quantity by the migration.
+- The official Food Monster model-selected tools expose numeric stock-target proposals, current receipt progress, numbered existing receipt options, and optional partial allocation. Typed and verified-voice actions use the same Prep Agent pending Confirm workflow, expiring selection context, fingerprint and fresh permissions. Unverified voice never obtains private receipt data or changes.
+- Deploy with \`upgrade.php\` before enabling partial reconciliation, verify MariaDB contracts, and acceptance-test manager ACL, receipt uniqueness, race/replay rejection, unit consistency, and outstanding-quantity rendering on the actual restaurant installation.

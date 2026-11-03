@@ -222,6 +222,7 @@ function daily_quicklist_item_public(array $row): array
         'id'=>(string)$row['public_id'],'type'=>(string)$row['list_type'],'date'=>$row['list_date'],
         'title'=>(string)$row['title'],'status'=>(string)$row['status'],
         'quantityNote'=>(string)($row['quantity_note']??''),
+        'requestedStockQuantity'=>($row['requested_stock_quantity']??null)===null?null:(float)$row['requested_stock_quantity'],
         'recipeId'=>$row['recipe_public_id']?:null,
         'targetYieldQuantity'=>$row['target_yield_quantity']===null?null:(float)$row['target_yield_quantity'],
         'targetYieldUnit'=>$row['target_yield_unit']?:null,
@@ -534,6 +535,47 @@ function daily_quicklist_mutate(PDO $pdo,int $org,int $actor,string $action,arra
                     throw new InvalidArgumentException('Need More requested amounts must be 120 characters or less.');
                 $quantityNote=trim($input['quantityNote']);
             }
+            // A numeric request is always measured in its linked stock item's base unit.
+            // Keep legacy free-form notes as notes; do not parse them into quantities.
+            $previous['requestedStockQuantity']=($row['requested_stock_quantity']??null)===null
+                ?null:(float)$row['requested_stock_quantity'];
+            $requestedStockQuantity=($row['requested_stock_quantity']??null)===null
+                ?null:(float)$row['requested_stock_quantity'];
+            if(array_key_exists('requestedStockQuantity',$input)){
+                if($row['list_type']!=='inventory'||!$row['source_inventory_public_id'])
+                    throw new InvalidArgumentException('Link an actual inventory stock item before setting a numeric requested quantity.');
+                $q=$pdo->prepare('SELECT base_unit FROM inventory_items WHERE organization_id=?
+                    AND public_id=? AND archived_at IS NULL LIMIT 1');
+                $q->execute([$org,(string)$row['source_inventory_public_id']]);
+                if($q->fetchColumn()===false)
+                    throw new InvalidArgumentException('The linked inventory stock item is no longer active.');
+                if(!function_exists('daily_quicklist_receipts_ready')||!daily_quicklist_receipts_ready($pdo))
+                    throw new InvalidArgumentException('Run upgrade.php before setting a stock quantity.');
+                $raw=$input['requestedStockQuantity'];
+                if($raw===null||$raw==='')$requestedStockQuantity=null;
+                elseif(!(is_int($raw)||is_float($raw)||is_string($raw))
+                    ||!is_numeric($raw)||!is_finite((float)$raw)
+                    ||(float)$raw<0.001||(float)$raw>1000000
+                    ||abs((float)$raw-round((float)$raw,3))>0.0000001)
+                    throw new InvalidArgumentException('Requested stock quantity must be between 0.001 and 1,000,000 with up to three decimals.');
+                else $requestedStockQuantity=round((float)$raw,3);
+                $q=$pdo->prepare('SELECT COALESCE(SUM(allocated_quantity),0)
+                    FROM daily_quicklist_receipts WHERE organization_id=? AND item_id=?');
+                $q->execute([$org,(int)$row['id']]);$allocated=(float)$q->fetchColumn();
+                if($allocated>0&&($requestedStockQuantity===null||$requestedStockQuantity<$allocated-0.0000001))
+                    throw new InvalidArgumentException('The requested quantity cannot be less than recorded receipt allocations.');
+                if($requestedStockQuantity!==null&&$allocated>0
+                    &&abs($requestedStockQuantity-$allocated)<0.0000001)$newStatus='received';
+                $pdo->prepare('UPDATE daily_quicklist_items SET requested_stock_quantity=? WHERE id=?')
+                    ->execute([$requestedStockQuantity,(int)$row['id']]);
+            }
+            if($row['list_type']==='inventory'&&$requestedStockQuantity!==null&&$newStatus==='received'){
+                $q=$pdo->prepare('SELECT COALESCE(SUM(allocated_quantity),0)
+                    FROM daily_quicklist_receipts WHERE organization_id=? AND item_id=?');
+                $q->execute([$org,(int)$row['id']]);
+                if((float)$q->fetchColumn()<$requestedStockQuantity-0.0000001)
+                    throw new InvalidArgumentException('Cannot mark received while a numeric Need More quantity remains outstanding.');
+            }
             if($newStatus==='done'||$newStatus==='received'){$elapsed+=$running;$started=null;}
             $pdo->prepare('UPDATE daily_quicklist_items SET admin_note=?,quantity_note=?,updated_by=? WHERE id=?')
                 ->execute([$note?:null,$quantityNote?:null,$actor,$row['id']]);
@@ -547,7 +589,7 @@ function daily_quicklist_mutate(PDO $pdo,int $org,int $actor,string $action,arra
             $pdo->prepare('UPDATE daily_quicklist_items SET status=?,elapsed_seconds=?,timer_started_at=?,updated_by=? WHERE id=?')
                 ->execute([$newStatus,$elapsed,$started,$actor,$row['id']]);
         }
-        daily_quicklist_event($pdo,$org,(int)$row['id'],$actor,$event,['before'=>$previous+['quantityNote'=>(string)($row['quantity_note']??'')],'after'=>['status'=>$newStatus,'elapsedSeconds'=>$elapsed,'running'=>$started!==null,'adminNote'=>$action==='update'?$note:null,'quantityNote'=>$action==='update'?$quantityNote:null,'targetYieldQuantity'=>$action==='set_target'?$quantity:null,'targetYieldUnit'=>$action==='set_target'?$unit:null]]);
+        daily_quicklist_event($pdo,$org,(int)$row['id'],$actor,$event,['before'=>$previous+['quantityNote'=>(string)($row['quantity_note']??'')],'after'=>['status'=>$newStatus,'elapsedSeconds'=>$elapsed,'running'=>$started!==null,'adminNote'=>$action==='update'?$note:null,'quantityNote'=>$action==='update'?$quantityNote:null,'requestedStockQuantity'=>$action==='update'?$requestedStockQuantity:null,'targetYieldQuantity'=>$action==='set_target'?$quantity:null,'targetYieldUnit'=>$action==='set_target'?$unit:null]]);
         if($row['list_type']==='inventory'&&$action==='update'&&$row['status']!==$newStatus){
             daily_quicklist_notify_managers($pdo,$org,$actor,'Inventory update: '.$row['title'],$row['title'].' is now '.$newStatus.'.');
         }

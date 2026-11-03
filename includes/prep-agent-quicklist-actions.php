@@ -209,7 +209,7 @@ function pqa_resolve_item(PDO $pdo,int $org,string $date,string $kind,string $ta
 function pqa_item_fingerprint(array $row): string
 {
     $evidence=[];
-    foreach(['id','type','date','status','recipeId','targetYieldQuantity','targetYieldUnit','timerRunning','adminNote','quantityNote','updatedAt'] as $field)
+    foreach(['id','type','date','status','recipeId','targetYieldQuantity','targetYieldUnit','timerRunning','adminNote','quantityNote','requestedStockQuantity','updatedAt'] as $field)
         $evidence[$field]=$row[$field]??null;
     return hash('sha256',json_encode($evidence,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR));
 }
@@ -221,6 +221,9 @@ function pqa_require_action_permissions(array $user,array $intent): void
     if(!daily_quicklist_can_view($user))throw new PrepAgentPermissionException('Daily Prep staff access is required.');
     if(in_array($intent['op'],['update','notify','reconcile_receipt'],true)&&!daily_quicklist_can_manage($user))
         throw new PrepAgentPermissionException('Only managers can change checklist statuses, manager notes, or notifications.');
+    if($intent['op']==='update'&&array_key_exists('requestedStockQuantity',$intent)
+        &&!daily_quicklist_receipt_permission($user))
+        throw new PrepAgentPermissionException('Manager and Inventory View permissions are required for numeric Need More targets.');
     if($intent['op']==='reconcile_receipt'&&!daily_quicklist_receipt_permission($user))
         throw new PrepAgentPermissionException('Manager and Inventory View permissions are required to reconcile receipts.');
     if($intent['op']==='set_target')
@@ -304,12 +307,32 @@ function pqa_propose(PDO $pdo,int $org,int $uid,array $user,array $intent,string
                 &&($kind!=='inventory'||!is_string($intent['quantityNote'])
                     ||mb_strlen(trim($intent['quantityNote']),'UTF-8')>120))
                 throw new InvalidArgumentException('Need More requested amount must be 120 characters or less.');
-            if($status===$row['status']&&$note===$row['adminNote']&&$quantityNote===$row['quantityNote'])
+            $stockQty=$row['requestedStockQuantity'];
+            $stockUnit='';
+            if(array_key_exists('requestedStockQuantity',$intent)){
+                if($kind!=='inventory'||!$row['inventoryId'])
+                    throw new InvalidArgumentException('Numeric Need More quantities require a linked inventory item.');
+                $stock=array_values(array_filter(daily_quicklist_inventory($pdo,$org),
+                    static fn(array $x):bool=>$x['id']===$row['inventoryId']));
+                if(count($stock)!==1)throw new InvalidArgumentException('The saved stock item is unavailable.');
+                $stockUnit=(string)$stock[0]['unit'];
+                if(isset($intent['unit'])&&$intent['unit']!==''&&strcasecmp((string)$intent['unit'],$stockUnit)!==0)
+                    throw new InvalidArgumentException('Use the saved inventory stock unit: '.$stockUnit.'.');
+                $stockQty=(float)$intent['requestedStockQuantity'];
+                if(!is_finite($stockQty)||$stockQty<0.001||$stockQty>1000000
+                    ||abs($stockQty-round($stockQty,3))>0.0000001)
+                    throw new InvalidArgumentException('The requested stock quantity is outside the allowed range.');
+                $payload['stockUnit']=$stockUnit;
+            }
+            if($status===$row['status']&&$note===$row['adminNote']&&$quantityNote===$row['quantityNote']
+                &&$stockQty===$row['requestedStockQuantity'])
                 return ['ok'=>true,'skill'=>'prep.daily_no_change','answer'=>'That status and note are already current. No change was made.',
                     'data'=>['proof'=>['url'=>'daily-prep.php']],'sources'=>[$row['id']]];
             $description='Update '.$title.($status!==$row['status']?' status to '.str_replace('_',' ',$status):'').
                 ($note!==$row['adminNote']?' with manager note "'.$note.'"':'').
-                ($quantityNote!==$row['quantityNote']?' with requested amount "'.$quantityNote.'"':'');
+                ($quantityNote!==$row['quantityNote']?' with requested amount "'.$quantityNote.'"':'').
+                ($stockQty!==$row['requestedStockQuantity']?' with numeric stock target '.
+                    daily_quicklist_format_quantity((float)$stockQty).' '.$stockUnit:'');
         }elseif($op==='reconcile_receipt'){
             if($kind!=='inventory'||$row['status']==='received')
                 throw new InvalidArgumentException('Only outstanding Need More requests can be reconciled.');
@@ -318,9 +341,24 @@ function pqa_propose(PDO $pdo,int $org,int $uid,array $user,array $intent,string
             $found=null;
             foreach($candidates as $candidate)if((int)$candidate['id']===$receiptId){$found=$candidate;break;}
             if(!$found)throw new InvalidArgumentException('The selected inventory receipt is no longer eligible. Show receipts again.');
+            $progress=daily_quicklist_receipt_progress($pdo,$org,(string)$row['id']);
+            $allocation=array_key_exists('allocatedQuantity',$intent)
+                ?(float)$intent['allocatedQuantity']:(float)$found['suggestedAllocation'];
+            if(!is_finite($allocation)||$allocation<0.001
+                ||abs($allocation-round($allocation,3))>0.0000001
+                ||$allocation>(float)$found['quantity']+0.0000001
+                ||($progress['remainingQuantity']!==null
+                    &&$allocation>$progress['remainingQuantity']+0.0000001)
+                ||($progress['requestedQuantity']===null
+                    &&abs($allocation-(float)$found['quantity'])>0.0000001))
+                throw new InvalidArgumentException('Choose a valid allocation from the confirmed receipt in the saved stock unit.');
             $payload['receiptTransactionId']=$receiptId;
-            $description='Link the existing '.daily_quicklist_format_quantity($found['quantity']).' '.$found['unit'].
-                ' receipt from '.$found['when'].' and mark '.$title.' received (no stock adjustment)';
+            $payload['receiptAllocation']=$allocation;
+            $description='Allocate '.daily_quicklist_format_quantity($allocation).' '.$found['unit'].
+                ' from an existing '.daily_quicklist_format_quantity($found['quantity']).' '.$found['unit'].
+                ' receipt on '.$found['when'].' toward '.$title.' (no stock adjustment)'.
+                ($progress['remainingQuantity']===null?'; this legacy request will close':
+                    '; remaining after link '.daily_quicklist_format_quantity(max(0,$progress['remainingQuantity']-$allocation)).' '.$found['unit']);
         }elseif($op==='notify')$description='Notify managers to check '.$title;
         elseif($op==='archive')$description='Remove '.$title.' from '.($kind==='prep'?'Daily Prep':'Need More').' (retain audit history)';
         else throw new InvalidArgumentException('Unsupported Daily Prep action.');
@@ -388,10 +426,19 @@ function pqa_execute(PDO $pdo,int $org,int $uid,array $user,array $payload): arr
             $input['status']=$intent['status']??$row['status'];
             $input['adminNote']=$intent['note']??$row['adminNote'];
             if(array_key_exists('quantityNote',$intent))$input['quantityNote']=$intent['quantityNote'];
+            if(array_key_exists('requestedStockQuantity',$intent)){
+                $q=$pdo->prepare('SELECT base_unit FROM inventory_items
+                    WHERE organization_id=? AND public_id=? AND archived_at IS NULL LIMIT 1');
+                $q->execute([$org,(string)$row['inventoryId']]);
+                if($q->fetchColumn()!==(string)($payload['stockUnit']??''))
+                    throw new InvalidArgumentException('The saved inventory unit changed. Review the target again.');
+                $input['requestedStockQuantity']=$intent['requestedStockQuantity'];
+            }
         }
         $result=$op==='reconcile_receipt'
             ?daily_quicklist_reconcile_receipt($pdo,$org,$uid,$user,$id,
-                (int)($payload['receiptTransactionId']??0),(string)$payload['fingerprint'])
+                (int)($payload['receiptTransactionId']??0),(string)$payload['fingerprint'],
+                (float)($payload['receiptAllocation']??0))
             :daily_quicklist_mutate($pdo,$org,$uid,$op,$input,daily_quicklist_can_manage($user),
                 app_has_permission('recipes.view',$user));
     }

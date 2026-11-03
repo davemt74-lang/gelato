@@ -43,11 +43,14 @@ function recipeDetails(item){
  var label=recipe&&recipe.yieldQuantity!=null?' · target '+html(item.targetYieldQuantity==null?recipe.yieldQuantity:item.targetYieldQuantity)+' '+html(recipe.yieldUnit||''):'';
  return '<details class="recipe-details"><summary>📖 Recipe · '+html(recipe?recipe.name:'View linked recipe')+label+'</summary>'+recipeHtml(recipe,scale,item)+'</details>';
 }
+function stockUnit(item){var row=(state.data.inventory||[]).find(function(x){return x.id===item.inventoryId;});return row?row.unit:'';}
+function quantityText(n){return String(Number(Number(n).toFixed(3)));}
 function managerControls(item){
  if(!state.data.manager)return '';
  var statuses=item.type==='prep'?['todo','in_progress','paused','done']:['need_more','ordered','received'];
  return '<div class="manager-bar"><span class="muted">ADMIN</span><select class="manager-status" aria-label="Admin status">'+statuses.map(function(s){return '<option value="'+s+'"'+(item.status===s?' selected':'')+'>'+statusLabel(s)+'</option>';}).join('')+'</select>'+
- (item.type==='inventory'?'<input class="manager-quantity" aria-label="Requested amount" placeholder="Requested amount…" maxlength="120" value="'+html(item.quantityNote||'')+'">':'')+
+ (item.type==='inventory'?'<input class="manager-quantity" aria-label="Requested amount note" placeholder="Free-form note…" maxlength="120" value="'+html(item.quantityNote||'')+'">':'')+
+ (item.type==='inventory'&&item.inventoryId&&state.data.canInventory?'<label class="stock-target"><span>Numeric target</span><input class="manager-stock-target" type="number" min="0.001" max="1000000" step="0.001" aria-label="Requested stock quantity" placeholder="Quantity" value="'+html(item.requestedStockQuantity==null?'':item.requestedStockQuantity)+'"><span>'+html(stockUnit(item))+'</span></label>':'')+
  '<input class="manager-note" aria-label="Admin note" placeholder="Internal status note…" maxlength="2000" value="'+html(item.adminNote)+'">'+
  '<button class="small-btn" type="button" data-action="manager-save">Save changes</button>'+
  (item.type==='inventory'&&item.inventoryId&&item.status!=='received'&&state.data.canInventory?'<button class="small-btn" type="button" data-action="receipt-options">Link recorded receipt</button>':'')+
@@ -102,8 +105,12 @@ function renderInventory(){
  $('need-caption').textContent=items.length+' listed · '+outstanding+' outstanding';
  $('need-list').innerHTML=items.length?items.map(function(item){
   var evidence=(state.data.receiptLinks||{})[item.id];
-  var receipt=evidence?'<span>✓ Reconciled with recorded receipt: '+html(evidence.quantity)+' '+html(evidence.unit)+' · '+html(evidence.when)+'</span>':'';
-  return '<article class="task" data-id="'+html(item.id)+'"><div class="task-main"><span class="status-tag '+html(item.status)+'">'+statusLabel(item.status)+'</span><div class="task-body"><div class="task-title">'+html(item.title)+'</div><div class="task-sub">'+(item.quantityNote?'<span>Requested: '+html(item.quantityNote)+'</span>':'')+(item.adminNote?'<span>Manager note: '+html(item.adminNote)+'</span>':'')+receipt+'</div></div><button class="small-btn danger" data-action="archive">Remove</button></div>'+
+  var target=item.requestedStockQuantity==null?null:Number(item.requestedStockQuantity);
+  var received=evidence?Number(evidence.quantity):0;
+  var remaining=target==null?null:Math.max(0,Number((target-received).toFixed(3)));
+  var qtyProgress=target==null?'':'<span class="stock-progress">Target '+html(quantityText(target))+' '+html(stockUnit(item))+' · received '+html(quantityText(received))+' · remaining <strong>'+html(quantityText(remaining))+'</strong></span>';
+  var receipt=evidence?'<span>✓ Recorded receipts allocated: '+html(quantityText(evidence.quantity))+' '+html(evidence.unit)+' · '+html((evidence.receipts||[]).length)+' receipt(s)</span>':'';
+  return '<article class="task" data-id="'+html(item.id)+'"><div class="task-main"><span class="status-tag '+html(item.status)+'">'+statusLabel(item.status)+'</span><div class="task-body"><div class="task-title">'+html(item.title)+'</div><div class="task-sub">'+(item.quantityNote?'<span>Requested: '+html(item.quantityNote)+'</span>':'')+qtyProgress+(item.adminNote?'<span>Manager note: '+html(item.adminNote)+'</span>':'')+receipt+'</div></div><button class="small-btn danger" data-action="archive">Remove</button></div>'+
   managerControls(item)+'</article>';
  }).join(''):'<div class="empty">Nothing in Need More. Tap an inventory item or add something above.</div>';
  var alerts=(state.data.stockAlerts||[]);
@@ -147,20 +154,37 @@ document.addEventListener('click',function(e){
  if(action==='manager-save'){
   var body={id:id,status:card.querySelector('.manager-status').value,adminNote:card.querySelector('.manager-note').value};
   var requested=card.querySelector('.manager-quantity');if(requested)body.quantityNote=requested.value;
+  var targetField=card.querySelector('.manager-stock-target');
+  if(targetField){
+   if(targetField.value.trim()!==''&&(!targetField.checkValidity()||!Number.isFinite(Number(targetField.value)))){
+    notify('Use a positive numeric target in the saved stock unit.',true);return;
+   }
+   var existing=(state.data.items||[]).find(function(x){return x.id===id;});
+   if(targetField.value.trim()!=='')body.requestedStockQuantity=Number(targetField.value);
+   else if(existing&&existing.requestedStockQuantity!=null)body.requestedStockQuantity=null;
+  }
   act('update',body);
  }
  if(action==='receipt-options'){
   json('api/daily-prep.php?action=receipts&id='+encodeURIComponent(id)).then(function(d){
    var slot=card.querySelector('.receipt-slot');
    slot.className='receipt-slot receipt-options';
-   slot.innerHTML='<strong>Existing inventory receipts</strong><p>Linking one marks Need More received. It does not receive stock again.</p>'+
-    (d.receipts.length?d.receipts.map(function(x){return '<button type="button" class="small-btn" data-action="reconcile-apply" data-receipt-id="'+html(x.id)+'">'+html(x.quantity)+' '+html(x.unit)+' received '+html(x.when)+'</button>';}).join(''):'<span>No eligible recorded receipts since this request was added. Receive stock through Operations first.</span>');
+   var progress=d.progress||{};
+   var hint=progress.remainingQuantity==null?'No numeric target set: a recorded receipt will close this legacy request. Set a numeric target first to track partial receipts.':'Requested '+html(progress.requestedQuantity)+' '+html(progress.unit)+' · received '+html(progress.receivedQuantity)+' · remaining '+html(progress.remainingQuantity)+' '+html(progress.unit)+'.';
+   slot.innerHTML='<strong>Existing inventory receipts</strong><p>'+hint+' Each recorded receipt can be linked once. Stock is never received a second time.</p>'+
+    (d.receipts.length?d.receipts.map(function(x){return '<div class="receipt-choice"><span>Recorded '+html(quantityText(x.quantity))+' '+html(x.unit)+' · '+html(x.when)+'</span><label>Allocate <input type="number" class="receipt-allocation" min="0.001" step="0.001" max="'+html(x.suggestedAllocation)+'" value="'+html(quantityText(x.suggestedAllocation))+'" aria-label="Quantity to allocate from recorded receipt"> '+html(x.unit)+'</label><button type="button" class="small-btn" data-action="reconcile-apply" data-receipt-id="'+html(x.id)+'">Confirm link</button></div>';}).join(''):'<span>No eligible recorded receipts since this request was added. Receive stock through Operations first.</span>');
   }).catch(function(err){notify(err.message,true);});
  }
  if(action==='reconcile-apply'){
   var transactionId=Number(button.dataset.receiptId);
-  if(Number.isSafeInteger(transactionId)&&transactionId>0&&confirm('Link this EXISTING inventory receipt and mark Need More received? This does not change stock counts.'))
-   act('reconcile_receipt',{id:id,transactionId:transactionId});
+  var field=button.closest('.receipt-choice').querySelector('.receipt-allocation');
+  var allocatedQuantity=Number(field&&field.value);
+  if(!field||!field.checkValidity()||!Number.isFinite(allocatedQuantity)||allocatedQuantity<0.001){
+   notify('Enter a valid positive allocation, up to the outstanding amount.',true);return;
+  }
+  if(Number.isSafeInteger(transactionId)&&transactionId>0
+     &&confirm('Allocate '+quantityText(allocatedQuantity)+' from this ALREADY RECORDED inventory receipt? This never changes stock and may leave an outstanding quantity.'))
+   act('reconcile_receipt',{id:id,transactionId:transactionId,allocatedQuantity:allocatedQuantity});
  }
  if(action==='notify')act('notify',{id:id});
  if(action==='history'){json('api/daily-prep.php?action=history&id='+encodeURIComponent(id)).then(function(d){var slot=card.querySelector('.history-slot');slot.className='history';slot.innerHTML=d.events.length?d.events.map(function(ev){return '<div>'+html(ev.when)+' · <strong>'+html(ev.event)+'</strong> · '+html(ev.by)+'</div>';}).join(''):'No changes logged.';}).catch(function(err){notify(err.message,true);});}
