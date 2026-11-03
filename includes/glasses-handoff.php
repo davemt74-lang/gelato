@@ -75,6 +75,7 @@ function glasses_handoff_review_identity(PDO $pdo,array $session,array $validati
 function glasses_handoff_prepare(PDO $pdo,array $device,string $sessionPublicId,string $validationPublicId,string $snapshotHash): array
 {
     return glasses_transaction($pdo,function()use($pdo,$device,$sessionPublicId,$validationPublicId,$snapshotHash):array{
+        glasses_require_accountable_user($pdo,$device);
         $session=glasses_build_lock_current_session($pdo,$device,$sessionPublicId,true);
         glasses_handoff_actor_user($pdo,$device);
         $validation=glasses_validation_evaluate($pdo,$device,$sessionPublicId,true);
@@ -92,6 +93,8 @@ function glasses_handoff_to_expo(PDO $pdo,array $device,string $sessionPublicId,
     $org=(int)$device['organization_id'];
 
     return glasses_transaction($pdo,function()use($pdo,$device,$org,$sessionPublicId,$browserReview,$browserUserId):array{
+        // Preserve the pairing error before build lookup. Recheck under lock after the kitchen item.
+        glasses_require_accountable_user($pdo,$device);
         $session=glasses_build_session_row($pdo,$org,$sessionPublicId,false);
 
         if((int)$session['device_id']!==(int)$device['id'])
