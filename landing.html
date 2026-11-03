@@ -45,6 +45,7 @@
   (async()=>{let jobs=await window.RestaurantPublicJobs.load();const target=document.getElementById('landingJobs');target.innerHTML=jobs.length?jobs.slice(0,4).map(job=>`<article class="job-card"><div class="job-meta"><span class="job-chip">${esc(job.department)}</span><span class="job-chip">${esc(job.employmentType)}</span></div><h2>${esc(job.title)}</h2><p>${esc(job.summary)}</p><footer><span>${esc(job.location)}</span><a class="button" href="job.php?id=${encodeURIComponent(job.id)}">View job</a></footer></article>`).join(''):'<div class="job-empty">No jobs are currently published.</div>';})();
 })();
 </script>
+<script src="js/public-brand-render.js?v=hardening-a1"></script>
 <script>
 (async () => {
   try {
@@ -56,17 +57,17 @@
     document.documentElement.style.setProperty('--brand-secondary', brand.secondary || '#ff835f');
     document.documentElement.style.setProperty('--brand-dark', brand.dark || '#171b1a');
     const logo = document.getElementById('publicLogo');
-    if (brand.logoUrl) logo.innerHTML = `<img src="${brand.logoUrl}" alt="${brand.restaurantName || 'Restaurant'} logo">`;
-    else logo.textContent = brand.logoText || 'FR';
+    window.GelatoPublicBrand.renderLogo(logo, brand, 'Restaurant', 'FR');
     document.getElementById('publicBrand').textContent = brand.restaurantName || 'Restaurant';
     document.getElementById('publicTagline').textContent = brand.description || 'Careers and training';
     document.getElementById('footerBrand').textContent = brand.restaurantName || 'Restaurant';
     document.getElementById('footerContact').textContent = [brand.email, brand.phone, brand.address].filter(Boolean).join(' · ');
     document.title = `${brand.restaurantName || 'Restaurant'} Careers`;
     const hero = document.querySelector('.public-hero');
-    if (hero && brand.coverUrl) {
+    const coverUrl = window.GelatoPublicBrand.imageUrl(brand.coverUrl);
+    if (hero && coverUrl) {
       hero.classList.add('has-cover-image');
-      hero.style.backgroundImage = `linear-gradient(110deg, rgba(23,27,26,.92), rgba(23,27,26,.54)), url("${brand.coverUrl.replaceAll('"','%22')}")`;
+      hero.style.backgroundImage = `linear-gradient(110deg, rgba(23,27,26,.92), rgba(23,27,26,.54)), url("${coverUrl.replaceAll('"','%22')}")`;
     }
   } catch {}
 })();

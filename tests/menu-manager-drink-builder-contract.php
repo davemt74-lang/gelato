@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/customer-account-core.php';
+require_once __DIR__.'/customer-account-fixtures.php';
 require_once __DIR__.'/../includes/location-core.php';
 require_once __DIR__.'/../includes/menu-drink-core.php';
 require_once __DIR__.'/../includes/menu-order-integration.php';
@@ -18,7 +19,7 @@ $org=(int)$pdo->lastInsertId();
 $location=location_save($pdo,$org,null,['name'=>'Drink Builder Store','public_slug'=>'drink-'.$slug,'city'=>'Phoenix','state'=>'AZ','country_code'=>'US','timezone'=>'America/Phoenix','dine_in_enabled'=>true,'pickup_enabled'=>true,'delivery_enabled'=>false,'online_ordering_enabled'=>true,'pickup_lead_minutes'=>10]);
 $locationId=(int)$location['id'];
 $email=$slug.'@example.test';$password='DrinkBuilder-CI!42';
-$registration=customer_account_register($pdo,$org,['firstName'=>'Drink','lastName'=>'Builder','email'=>$email,'phone'=>'6025550199','password'=>$password,'passwordConfirm'=>$password]);
+$registration=test_customer_account_verified($pdo,$org,['firstName'=>'Drink','lastName'=>'Builder','email'=>$email,'phone'=>'6025550199','password'=>$password,'passwordConfirm'=>$password]);
 $userId=(int)$registration['userId'];
 $customerId=(int)drink_one($pdo,'SELECT id FROM crm_customers WHERE organization_id=? AND user_id=?',[$org,$userId]);
 drink_assert($customerId>0,'Drink builder customer must exist in CRM.');

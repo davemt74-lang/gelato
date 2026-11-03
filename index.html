@@ -395,10 +395,11 @@
 <script>
 (() => {
   'use strict';
+  const privateStorage=window.GelatoPrivateState?.storage || {getItem:()=>null,setItem:()=>{},removeItem:()=>{}};
   const storage={
-    get(key,fallback=null){try{const value=window.localStorage.getItem(key);return value===null?fallback:value;}catch{return fallback;}},
-    set(key,value){try{window.localStorage.setItem(key,value);}catch{}},
-    remove(key){try{window.localStorage.removeItem(key);}catch{}}
+    get(key,fallback=null){try{const value=privateStorage.getItem(key);return value===null?fallback:value;}catch{return fallback;}},
+    set(key,value){try{privateStorage.setItem(key,value);}catch{}},
+    remove(key){try{privateStorage.removeItem(key);}catch{}}
   };
   const readJson=(key,fallback)=>{try{return JSON.parse(storage.get(key,JSON.stringify(fallback)));}catch{return fallback;}};
   const sections = window.MENU_SECTIONS || [];

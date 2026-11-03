@@ -1,7 +1,8 @@
 <?php
 declare(strict_types=1);
 
-const RESTAURANT_APP_ROOT = __DIR__ . '/..';
+define('RESTAURANT_APP_ROOT', dirname(__DIR__));
+require_once __DIR__ . '/auth-session.php';
 
 function app_config_path(): string
 {
@@ -165,14 +166,15 @@ function app_owner_exists(PDO $pdo): bool
     return (int)$pdo->query($sql)->fetchColumn() > 0;
 }
 
-function app_current_user(): ?array
+function app_current_user(bool $refresh = false): ?array
 {
     static $loaded = false;
     static $user = null;
-    if ($loaded) {
+    if ($loaded && !$refresh) {
         return $user;
     }
     $loaded = true;
+    $user = null;
 
     app_boot_session();
     $userId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
@@ -182,7 +184,7 @@ function app_current_user(): ?array
     }
 
     $sql = "SELECT u.id, u.email, u.first_name, u.last_name, u.display_name, u.phone,
-                   u.status, u.last_login_at, u.created_at,
+                   u.status, u.last_login_at, u.created_at, u.email_verified_at, u.password_hash, u.password_changed_at,
                    om.id AS membership_id, om.organization_id, om.job_title,
                    o.name AS organization_name,
                    r.id AS role_id, r.name AS role_name, r.slug AS role_slug,
@@ -200,10 +202,12 @@ function app_current_user(): ?array
     $statement = app_pdo()->prepare($sql);
     $statement->execute(['organization_id' => $organizationId, 'user_id' => $userId]);
     $row = $statement->fetch();
-    if (!$row) {
-        unset($_SESSION['user_id'], $_SESSION['organization_id']);
+    if (!$row || !app_session_is_current($_SESSION, $row, app_config()['security'] ?? [], time())) {
+        app_session_forget_user();
         return null;
     }
+    $_SESSION['last_activity_at'] = time();
+    unset($row['password_hash'], $row['password_changed_at']);
 
     $permissionStatement = app_pdo()->prepare(
         "SELECT DISTINCT p.permission_key
@@ -473,26 +477,8 @@ function app_secret_key(): string
     if (is_string($key)) {
         return $key;
     }
-    if (!function_exists('sodium_crypto_secretbox')) {
-        throw new RuntimeException('The PHP Sodium extension is required to store API keys securely.');
-    }
-    $directory = app_storage_path('keys');
-    $path = $directory . '/application.key';
-    if (!is_dir($directory) && !mkdir($directory, 0700, true) && !is_dir($directory)) {
-        throw new RuntimeException('The application could not create storage/keys.');
-    }
-    if (!is_file($path)) {
-        $generated = random_bytes(SODIUM_CRYPTO_SECRETBOX_KEYBYTES);
-        if (file_put_contents($path, base64_encode($generated), LOCK_EX) === false) {
-            throw new RuntimeException('The application encryption key could not be created.');
-        }
-        @chmod($path, 0600);
-    }
-    $decoded = base64_decode(trim((string)file_get_contents($path)), true);
-    if (!is_string($decoded) || strlen($decoded) !== SODIUM_CRYPTO_SECRETBOX_KEYBYTES) {
-        throw new RuntimeException('The application encryption key is invalid.');
-    }
-    $key = $decoded;
+    require_once __DIR__ . '/secret-key.php';
+    $key = app_secret_key_from_file(app_storage_path('keys'));
     return $key;
 }
 

@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__.'/includes/bootstrap.php';
 require_once __DIR__.'/includes/admin-shell-core.php';
+require_once __DIR__.'/includes/private-storage.php';
 $user=app_require_auth();
 if ((int)($user['is_owner_role']??0)!==1) {http_response_code(403);exit('Owner / Super Admin access required.');}
 header('Cache-Control: no-store, private, max-age=0');
@@ -37,6 +38,12 @@ $permissions=[
  'Vision Lab page'=>admin_route_access_allowed($user,'glasses-vision-lab.php')];
 $nav=admin_shell_filtered_navigation($user);
 $navCount=array_sum(array_map(static fn(array $group):int=>count($group['items']),$nav));
+$privateStorage=['ok'=>false,'message'=>'Private storage is not configured.'];
+try {
+ $privateRoot=app_private_storage_root(false);
+ $privateStorage=['ok'=>true,'message'=>$privateRoot];
+} catch(Throwable $e) {$privateStorage['message']=$e->getMessage();}
+$storageGuard=is_file(__DIR__.'/storage/.htaccess');
 $esc=static fn(string $s):string=>app_escape($s);
 ?>
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Gelato Deployment Check</title><style>
@@ -52,5 +59,6 @@ body{font:15px/1.55 system-ui,sans-serif;background:#f4f5f3;color:#1b2520;margin
 <h2>Application files</h2><table><thead><tr><th>Module</th><th>File</th><th>Found</th></tr></thead><tbody>
 <?php foreach($files as $item): ?><tr><td><?= $esc($item['label']) ?></td><td><?= $esc($item['path']) ?></td><td class="<?= $item['exists']?'ok':'bad' ?>"><?= $item['exists']?'YES':'MISSING' ?></td></tr><?php endforeach; ?></tbody></table>
 <h2>Database schema</h2><div class="grid"><?php foreach($tables as $table=>$installed): ?><div class="cell"><small><?= $esc((string)$table) ?></small><strong class="<?= $installed?'ok':'bad' ?>"><?= $installed?'Present':'Missing / unavailable' ?></strong></div><?php endforeach; ?></div>
+<h2>Private file storage</h2><div class="grid"><div class="cell"><small>Upload path outside the website</small><strong class="<?= $privateStorage['ok']?'ok':'bad' ?>"><?= $esc($privateStorage['message']) ?></strong></div><div class="cell"><small>Runtime storage guard file</small><strong class="<?= $storageGuard?'ok':'bad' ?>"><?= $storageGuard?'Present':'Missing: reinstall the complete deployment package' ?></strong></div></div><p>Purchasing documents and task proofs use private storage. Existing protected files move on authorized access. Keep the existing storage/keys/application.key when installing updates.</p>
 <h2>Live route authorization</h2><div class="grid"><?php foreach($permissions as $label=>$granted): ?><div class="cell"><small><?= $esc((string)$label) ?></small><strong class="<?= $granted?'ok':'bad' ?>"><?= $granted?'ALLOWED':'DENIED' ?></strong></div><?php endforeach; ?></div>
 <p><a href="admin.php">Admin</a> · <a href="workspace.php">Workspace</a> · <a href="floor-planner-v2.php">Floor Planner</a></p></main></body></html>

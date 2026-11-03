@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/customer-account-core.php';
+require_once __DIR__.'/customer-account-fixtures.php';
 require_once __DIR__.'/../includes/online-order-core.php';
 require_once __DIR__.'/../includes/online-order-lifecycle.php';
 require_once __DIR__.'/../includes/pickup-fulfillment-core.php';
@@ -48,7 +49,7 @@ $salad=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO menu_item_prices (menu_item_id,option_name,size_code,amount,currency,sort_order) VALUES (?,'Regular','REG',10.00,'USD',1)")->execute([$salad]);
 $saladPrice=(int)$pdo->lastInsertId();
 
-$registration=customer_account_register($pdo,$org,[
+$registration=test_customer_account_verified($pdo,$org,[
     'firstName'=>'Pickup','lastName'=>'Customer','email'=>$slug.'@example.test','phone'=>'6025550188','password'=>'Pickup-CI!42','passwordConfirm'=>'Pickup-CI!42',
 ]);
 $userId=(int)$registration['userId'];

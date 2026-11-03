@@ -265,10 +265,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $pdo instanceof PDO && $schemaInsta
             ]);
 
             $pdo->commit();
-            session_regenerate_id(true);
-            $_SESSION['user_id'] = $userId;
-            $_SESSION['organization_id'] = $organizationId;
-            $_SESSION['authenticated_at'] = time();
+            app_session_start_user($pdo, $organizationId, $userId, 'first_owner');
             $success = true;
             app_redirect('index.php?setup=complete');
         } catch (Throwable $exception) {

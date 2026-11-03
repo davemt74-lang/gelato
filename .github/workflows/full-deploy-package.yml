@@ -5,6 +5,11 @@ on:
     branches: [main]
   pull_request:
     paths:
+      - '.htaccess'
+      - 'storage/.htaccess'
+      - 'includes/private-storage.php'
+      - 'includes/secret-key.php'
+      - 'tests/private-storage-package.test.py'
       - 'workspace.php'
       - 'index.html'
       - 'css/training-workspace-chat.css'
@@ -195,6 +200,11 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Install HTTP protection test dependency
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq apache2
+
       - name: Build full deploy ZIP
         shell: bash
         run: |
@@ -208,7 +218,11 @@ jobs:
             --exclude 'config.php' \
             --exclude '.env' \
             --exclude 'uploads/' \
-            --exclude 'storage/'
+            --include '/storage/' \
+            --include '/storage/.htaccess' \
+            --exclude '/storage/***' \
+            --exclude '/includes/gelato-private-storage/' \
+            --exclude '/gelato-private-storage/'
 
           # Bundle the pinned pretrained hand detector in the deploy ZIP.
           vendor_dir="$deploy_root/assets/vendor/mediapipe"
@@ -236,11 +250,17 @@ jobs:
 
           1. Extract this ZIP into the application root and overwrite included files.
           2. Preserve the live config.php and any environment-specific .env file.
-          3. Preserve existing uploads/ and storage/ content.
+          3. Preserve existing uploads/ and storage/ content, especially storage/keys/application.key.
+             The included storage/.htaccess only installs the private-path denial rule.
           4. Sign in as an owner/admin and run upgrade.php once.
-          5. Hard-refresh the browser after upgrade.
-          6. Verify POS, KDS, Vision Lab, AIR3/AR glasses runtime, workspace/agent surfaces, and admin pages.
-          7. DEPLOY_SHA.txt identifies the exact Git commit packaged by CI.
+          5. Open deployment-check.php and verify private storage is outside the website.
+             For subdirectory hosting, set storage.private_root in config.php to an absolute
+             path outside public_html (example: /home/ACCOUNT/gelato-private/RESTAURANT).
+             The optional storage.public_root identifies the webroot for CLI workers.
+             Legacy task proofs and purchasing documents move on authorized access.
+          6. Hard-refresh the browser after upgrade.
+          7. Verify POS, KDS, Vision Lab, AIR3/AR glasses runtime, workspace/agent surfaces, and admin pages.
+          8. DEPLOY_SHA.txt identifies the exact Git commit packaged by CI.
 
           This FULL package intentionally includes repository tests, docs, workflow definitions,
           preview/reference assets, and all other tracked project files except live config/state.
@@ -250,7 +270,8 @@ jobs:
           test ! -e "$deploy_root/config.php"
           test ! -e "$deploy_root/.env"
           test ! -e "$deploy_root/uploads"
-          test ! -e "$deploy_root/storage"
+          test -s "$deploy_root/storage/.htaccess"
+          test "$(find "$deploy_root/storage" -type f | wc -l)" -eq 1
 
           required=(
             index.php
@@ -267,6 +288,9 @@ jobs:
             tests/training-chat-voice-contract.php
             tests/training-workspace-voice.test.js
             .htaccess
+            storage/.htaccess
+            includes/private-storage.php
+            includes/secret-key.php
             workspace.php
             admin.php
             floor-planner-v2.php
@@ -536,10 +560,7 @@ jobs:
           (cd "$deploy_root" && zip -q -r "$GITHUB_WORKSPACE/gelato-full-deploy.zip" .)
           unzip -t "$GITHUB_WORKSPACE/gelato-full-deploy.zip"
 
-          if zipinfo -1 "$GITHUB_WORKSPACE/gelato-full-deploy.zip" | grep -Eq '^(config\.php$|\.env$|uploads/|storage/)'; then
-            echo 'Forbidden live path found in full deploy ZIP.'
-            exit 1
-          fi
+          python3 tests/private-storage-package.test.py --archive "$GITHUB_WORKSPACE/gelato-full-deploy.zip" --http
 
           sha256sum "$GITHUB_WORKSPACE/gelato-full-deploy.zip" | tee "$GITHUB_WORKSPACE/gelato-full-deploy.sha256"
 

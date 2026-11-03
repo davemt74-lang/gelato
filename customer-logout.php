@@ -18,5 +18,5 @@ if(ini_get('session.use_cookies')){
     setcookie(session_name(),'',time()-42000,$params['path'],$params['domain']??'',(bool)$params['secure'],(bool)$params['httponly']);
 }
 session_destroy();
-header('Location: customer-login.php',true,303);
-exit;
+require_once __DIR__ . '/includes/browser-logout.php';
+app_render_browser_logout('customer-login.php');

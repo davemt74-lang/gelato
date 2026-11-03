@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/customer-account-core.php';
+require_once __DIR__.'/customer-account-fixtures.php';
 require_once __DIR__.'/../includes/location-core.php';
 require_once __DIR__.'/../includes/menu-manager-core.php';
 require_once __DIR__.'/../includes/menu-order-integration.php';
@@ -21,7 +22,7 @@ $secondary=location_save($pdo,$org,null,['name'=>'Food Builder Secondary','publi
 $locationId=(int)$primary['id'];$secondaryId=(int)$secondary['id'];
 
 $email=$slug.'@example.test';$password='FoodBuilder-CI!42';
-$registration=customer_account_register($pdo,$org,['firstName'=>'Food','lastName'=>'Builder','email'=>$email,'phone'=>'6025550188','password'=>$password,'passwordConfirm'=>$password]);
+$registration=test_customer_account_verified($pdo,$org,['firstName'=>'Food','lastName'=>'Builder','email'=>$email,'phone'=>'6025550188','password'=>$password,'passwordConfirm'=>$password]);
 $userId=(int)$registration['userId'];$customerId=(int)food_one($pdo,'SELECT id FROM crm_customers WHERE organization_id=? AND user_id=?',[$org,$userId]);
 food_assert($customerId>0,'Food builder test user must have a CRM customer.');
 pos_settings_save($pdo,$org,$locationId,['taxRate'=>0,'serviceChargeRate'=>0,'defaultServiceMode'=>'pickup'],$userId);

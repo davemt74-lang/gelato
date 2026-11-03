@@ -221,6 +221,7 @@ function online_order_submit_pickup(PDO $pdo,int $organizationId,array $account,
 {
     if(!online_order_ready($pdo)) throw new RuntimeException('Online ordering is not installed. Run Upgrade first.');
     if(!app_has_permission('online_ordering.use',$account)) throw new RuntimeException('Online ordering permission is required.');
+    customer_account_assert_order_identity($pdo,$organizationId,$account);
     $userId=(int)($account['id']??0);
     $customerId=(int)($account['customer_id']??0);
     if($userId<1||$customerId<1) throw new RuntimeException('Your customer account is not linked to the restaurant CRM.');
@@ -279,6 +280,7 @@ function online_order_submit_pickup(PDO $pdo,int $organizationId,array $account,
 
 function online_order_customer_orders(PDO $pdo,int $organizationId,int $customerId,int $limit=25): array
 {
+    if(!customer_account_verified_identity($pdo,$organizationId,0,$customerId)) throw new CustomerAccountVerificationRequired('Verify your email before viewing customer orders.');
     $limit=max(1,min(100,$limit));
     $hasKds=kds_ready($pdo);
     $kdsJoin=$hasKds?' LEFT JOIN kds_order_items k ON k.organization_id=oo.organization_id AND k.check_id=oo.pos_check_id ':'';

@@ -15,6 +15,8 @@ function makeAgent(permissions, persistedSession = new Map(), actorId = 'ci-mana
     RestaurantAuth: {
       has: key => permissions.includes(key),
       current: () => ({ id: actorId, displayName: 'CI Manager' }),
+      read: (key, fallback) => persistedSession.has(actorId+':'+key) ? JSON.parse(persistedSession.get(actorId+':'+key)) : fallback,
+      write: (key, value) => persistedSession.set(actorId+':'+key, JSON.stringify(value)),
     },
   };
   const document = {

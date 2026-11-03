@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/customer-account-core.php';
+require_once __DIR__.'/customer-account-fixtures.php';
 require_once __DIR__.'/../includes/customer-inbox-core.php';
 require_once __DIR__.'/../includes/online-order-core.php';
 require_once __DIR__.'/../includes/online-order-lifecycle.php';
@@ -32,7 +33,7 @@ $pdo->prepare("INSERT INTO menu_items (organization_id,section_id,name,slug,is_a
 $pdo->prepare("INSERT INTO menu_item_prices (menu_item_id,option_name,size_code,amount,currency,sort_order) VALUES (?,'Regular','REG',10.00,'USD',1)")->execute([$salad]);$saladPrice=(int)$pdo->lastInsertId();
 
 $email=$slug.'@example.test';$password='Recovery-CI!42';
-$registration=customer_account_register($pdo,$org,['firstName'=>'Recovery','lastName'=>'Customer','email'=>$email,'phone'=>'6025550188','password'=>$password,'passwordConfirm'=>$password]);$userId=(int)$registration['userId'];
+$registration=test_customer_account_verified($pdo,$org,['firstName'=>'Recovery','lastName'=>'Customer','email'=>$email,'phone'=>'6025550188','password'=>$password,'passwordConfirm'=>$password]);$userId=(int)$registration['userId'];
 $customerId=(int)orc_one($pdo,'SELECT id FROM crm_customers WHERE organization_id=? AND user_id=?',[$org,$userId]);
 pos_settings_save($pdo,$org,$locationId,['taxRate'=>0.085,'serviceChargeRate'=>0,'defaultServiceMode'=>'pickup'],$userId);
 $station=kds_station_save($pdo,$org,$locationId,['name'=>'Recovery Line','slug'=>'recovery-line','targetSeconds'=>300,'sortOrder'=>1],$userId);

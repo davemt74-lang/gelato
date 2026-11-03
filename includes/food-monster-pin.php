@@ -55,7 +55,7 @@ function fmpin_signin(PDO $pdo,string $email,string $pin):array{
  if(!$device)throw new RuntimeException('This browser is not registered as a trusted terminal. Use password sign-in.');
  if($device['locked_until']&&strtotime((string)$device['locked_until'])>time())throw new RuntimeException('This terminal is temporarily locked due to repeated failed PINs.');
  if(!preg_match('/^[0-9]{6}$/D',$pin))throw new RuntimeException($generic);
- $q=$pdo->prepare("SELECT u.id,u.status,u.archived_at,u.locked_until,c.pin_hash,c.failures,c.locked_until pin_locked FROM users u JOIN organization_memberships om ON om.user_id=u.id AND om.organization_id=? AND om.status='active' JOIN fm_pin_device_accounts e ON e.user_id=u.id AND e.organization_id=om.organization_id AND e.device_id=? JOIN fm_pin_credentials c ON c.user_id=u.id AND c.organization_id=om.organization_id WHERE u.email=? LIMIT 1");
+ $q=$pdo->prepare("SELECT u.id,u.status,u.archived_at,u.locked_until,u.password_hash,c.pin_hash,c.failures,c.locked_until pin_locked FROM users u JOIN organization_memberships om ON om.user_id=u.id AND om.organization_id=? AND om.status='active' JOIN fm_pin_device_accounts e ON e.user_id=u.id AND e.organization_id=om.organization_id AND e.device_id=? JOIN fm_pin_credentials c ON c.user_id=u.id AND c.organization_id=om.organization_id WHERE u.email=? LIMIT 1");
  $q->execute([(int)$device['organization_id'],(int)$device['id'],strtolower(trim($email))]);$row=$q->fetch(PDO::FETCH_ASSOC);
  $active=false;
  if($row){
@@ -75,7 +75,7 @@ function fmpin_signin(PDO $pdo,string $email,string $pin):array{
  $pdo->prepare('UPDATE fm_pin_devices SET failures=0,locked_until=NULL WHERE id=?')->execute([(int)$device['id']]);
  $pdo->prepare('UPDATE fm_pin_credentials SET failures=0,locked_until=NULL WHERE organization_id=? AND user_id=?')->execute([$org,$uid]);
  $pdo->prepare('UPDATE users SET last_login_at=NOW(6) WHERE id=?')->execute([$uid]);
- session_regenerate_id(true);$_SESSION=['user_id'=>$uid,'organization_id'=>$org,'authenticated_at'=>time(),'auth_method'=>'trusted_terminal_pin'];
+ app_session_start_user($pdo,$org,$uid,'trusted_terminal_pin',(string)$row['password_hash']);
  app_audit($pdo,$org,$uid,'authentication.pin_login','user',(string)$uid,null,['terminalId'=>$device['id']]);
  return ['ok'=>true,'redirect'=>'workspace.php'];
 }

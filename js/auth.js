@@ -17,18 +17,57 @@
     {id:'role-employee',name:'Employee',slug:'employee',description:'Completes assigned training and reviews personal progress.',system:true,owner:false,permissions:['dashboard.view','agent.employee_view','training.self_view','settings.self_edit']}
   ];
   const defaultUsers=[];
-  const read=(key,fallback)=>{try{return JSON.parse(localStorage.getItem(key)||JSON.stringify(fallback));}catch{return fallback;}};
-  const write=(key,value)=>localStorage.setItem(key,JSON.stringify(value));
+  const serverMode = window.RESTAURANT_SERVER_SESSION === true;
+  const bootstrap = serverMode ? window.RESTAURANT_WORKSPACE_BOOTSTRAP : null;
+  const clone = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+  const serverData = new Map();
+  let serverCurrent = bootstrap?.currentUser ? clone(bootstrap.currentUser) : null;
+  if (serverMode) {
+    serverData.set(keys.users, clone(bootstrap?.users || []));
+    serverData.set(keys.roles, clone(bootstrap?.roles || []));
+    serverData.set(keys.permissions, clone(bootstrap?.permissions || []));
+    serverData.set(keys.session, clone(bootstrap?.session || null));
+    serverData.set('restaurant-jobs-v1', clone(bootstrap?.jobs || []));
+    permissionCatalog.splice(0, permissionCatalog.length, ...(bootstrap?.permissions || []));
+  }
+  const read=(key,fallback)=>{
+    if(serverMode){
+      if(serverData.has(key))return clone(serverData.get(key));
+      try{return JSON.parse(window.GelatoPrivateState?.storage.getItem(key) ?? JSON.stringify(fallback));}catch{return fallback;}
+    }
+    try{return JSON.parse(localStorage.getItem(key)||JSON.stringify(fallback));}catch{return fallback;}
+  };
+  const write=(key,value)=>{
+    if(serverMode){
+      if(serverData.has(key))serverData.set(key,clone(value));
+      else window.GelatoPrivateState?.storage.setItem(key,JSON.stringify(value));
+      return;
+    }
+    localStorage.setItem(key,JSON.stringify(value));
+  };
   function seed(){
+    if(serverMode)return;
     const storedPermissions=read(keys.permissions,[]),permissionMap=new Map(storedPermissions.map(item=>[item.key,item]));permissionCatalog.forEach(item=>permissionMap.set(item.key,{...permissionMap.get(item.key),...item}));write(keys.permissions,[...permissionMap.values()]);
     const storedRoles=read(keys.roles,[]);if(!storedRoles.length)write(keys.roles,defaultRoles);else{const manager=storedRoles.find(role=>role.slug==='manager');if(manager){manager.permissions=[...new Set([...(manager.permissions||[]),'jobs.view','jobs.create','jobs.edit','jobs.publish'])]}write(keys.roles,storedRoles)}
     if(!localStorage.getItem(keys.users))write(keys.users,defaultUsers);
   }
   function users(){seed();return read(keys.users,defaultUsers)}
-  function roles(){seed();return read(keys.roles,defaultRoles)}
-  function current(){seed();const session=read(keys.session,null);if(!session)return null;const user=users().find(item=>item.id===session.userId&&item.status==='active');if(!user)return null;return {...user,role:roles().find(role=>role.id===user.roleId)||null};}
-  function login(email,password){seed();const list=users();const user=list.find(item=>item.email.toLowerCase()===String(email).trim().toLowerCase());if(!user||user.password!==password)return {ok:false,message:'Use the secure database login at login.php.'};if(user.status!=='active')return {ok:false,message:`This account is ${user.status}. Contact the store owner.`};user.lastLogin=new Date().toISOString();write(keys.users,list);write(keys.session,{userId:user.id,createdAt:new Date().toISOString()});return {ok:true,user:{...user,role:roles().find(role=>role.id===user.roleId)}};}
-  function logout(){localStorage.removeItem(keys.session)}
+  function roles(){seed();return read(keys.roles,serverMode?[]:defaultRoles)}
+  function current(){
+    if(serverMode)return clone(serverCurrent);
+    seed();const session=read(keys.session,null);if(!session)return null;const user=users().find(item=>item.id===session.userId&&item.status==='active');if(!user)return null;return {...user,role:roles().find(role=>role.id===user.roleId)||null};
+  }
+  function login(email,password){
+    if(serverMode)return {ok:false,message:'Use the secure database login at login.php.'};
+    seed();const list=users();const user=list.find(item=>item.email.toLowerCase()===String(email).trim().toLowerCase());if(!user||user.password!==password)return {ok:false,message:'Use the secure database login at login.php.'};if(user.status!=='active')return {ok:false,message:`This account is ${user.status}. Contact the store owner.`};user.lastLogin=new Date().toISOString();write(keys.users,list);write(keys.session,{userId:user.id,createdAt:new Date().toISOString()});return {ok:true,user:{...user,role:roles().find(role=>role.id===user.roleId)}};
+  }
+  function clearCurrent(){serverCurrent=null;serverData.clear();window.RESTAURANT_WORKSPACE_BOOTSTRAP=null;}
+  function logout(){
+    clearCurrent();
+    if(window.GelatoPrivateState)window.GelatoPrivateState.clear();
+    else{try{Object.values(keys).forEach(key=>localStorage.removeItem(key));}catch{}}
+  }
+  window.addEventListener('gelato:private-state-cleared',clearCurrent);
   function has(permission,user=current()){if(!user||!user.role)return false;return user.role.permissions.includes('*')||user.role.permissions.includes(permission)}
   function saveUsers(value){write(keys.users,value)}
   function saveRoles(value){write(keys.roles,value)}

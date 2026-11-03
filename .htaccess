@@ -1,7 +1,12 @@
 # PHP is the application entry; legacy static admin shell cannot load permissions.
 DirectoryIndex index.php index.html
+# Private runtime data must remain denied even when its directory is created later.
+<If "%{REQUEST_URI} =~ m#(?i)/(?:storage|gelato-private-storage)(?:/|$)#">
+  Require all denied
+</If>
 <IfModule mod_rewrite.c>
   RewriteEngine On
+  RewriteRule ^(?:storage|gelato-private-storage|includes/gelato-private-storage)(?:/|$) - [F,L,NC]
   RewriteRule ^index\.html$ workspace.php [R=302,L,QSA]
 </IfModule>
 <IfModule mod_headers.c>

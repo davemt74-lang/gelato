@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/customer-account-core.php';
+require_once __DIR__.'/customer-account-fixtures.php';
 require_once __DIR__.'/../includes/customer-inbox-core.php';
 require_once __DIR__.'/../includes/online-order-core.php';
 require_once __DIR__.'/../includes/online-order-lifecycle.php';
@@ -56,7 +57,7 @@ $saladPrice=(int)$pdo->lastInsertId();
 
 $email=$slug.'@example.test';
 $password='Lifecycle-CI!42';
-$registration=customer_account_register($pdo,$org,[
+$registration=test_customer_account_verified($pdo,$org,[
     'firstName'=>'Lifecycle','lastName'=>'Customer','email'=>$email,'phone'=>'6025550177','password'=>$password,'passwordConfirm'=>$password,
 ]);
 $userId=(int)$registration['userId'];

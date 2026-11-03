@@ -48,7 +48,7 @@ jobs:
           grep -q "vendor_price_history" database/20260914_zz_purchasing_receiving_vendor.sql
           grep -q "purchasing.agent" database/20260914_zz_purchasing_receiving_vendor.sql
           grep -q "CREATE TABLE IF NOT EXISTS purchasing_documents" database/20260914_zzz_purchasing_documents.sql
-          grep -q "gelato-private-storage" api/purchasing-document.php
+          grep -q "app_private_storage_write" api/purchasing-document.php
           grep -q "local_private" api/purchasing-document.php
           grep -q "application/pdf" api/purchasing-document.php
           grep -q "realpath(dirname(RESTAURANT_APP_ROOT)" api/purchasing-document-view.php
