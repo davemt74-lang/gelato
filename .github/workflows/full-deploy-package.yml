@@ -8,6 +8,8 @@ on:
       - '.htaccess'
       - 'storage/.htaccess'
       - 'scripts/food-monster-provision.php'
+      - 'scripts/sign-hosted-release.php'
+      - 'food-monster-hosted-health.php'
       - 'GELATO_VERSION.txt'
       - '.github/workflows/full-deploy-package.yml'
       - 'includes/private-storage.php'
@@ -584,12 +586,24 @@ jobs:
           unzip -tq gelato-hosted.zip
           unzip -Z1 gelato-hosted.zip > gelato-hosted-files.txt
           grep -Fx 'scripts/food-monster-provision.php' gelato-hosted-files.txt
+          grep -Fx 'food-monster-hosted-health.php' gelato-hosted-files.txt
           grep -Fx 'GELATO_VERSION.txt' gelato-hosted-files.txt
           if grep -Eq '(^|/)(config\.php|\.env|\.git|storage|uploads|gelato-private-storage)(/|$)' gelato-hosted-files.txt; then
             echo 'Hosted ZIP contains a runtime path.'
             exit 1
           fi
           sha256sum gelato-hosted.zip > gelato-hosted.sha256
+
+      - name: Sign hosted release from main
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GELATO_HOSTED_SIGNING_KEY: ${{ secrets.GELATO_HOSTED_SIGNING_KEY }}
+        run: |
+          if [ -n "$GELATO_HOSTED_SIGNING_KEY" ]; then
+            php scripts/sign-hosted-release.php gelato-hosted.zip > gelato-hosted.sig
+          else
+            echo 'Hosted ZIP requires offline signing before it can be provisioned.'
+          fi
 
       - name: Upload Food Monster hosted ZIP
         uses: actions/upload-artifact@v4
@@ -598,5 +612,6 @@ jobs:
           path: |
             gelato-hosted.zip
             gelato-hosted.sha256
+            gelato-hosted.sig
           if-no-files-found: error
           retention-days: 14

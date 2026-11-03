@@ -6,6 +6,7 @@ on:
       - 'setup-first-user.php'
       - 'includes/first-owner-setup.php'
       - 'scripts/food-monster-provision.php'
+      - 'food-monster-hosted-health.php'
       - 'tests/hosted-owner-provision.php'
       - '.github/workflows/hosted-owner-provision.yml'
       - 'GELATO_VERSION.txt'
@@ -15,6 +16,7 @@ on:
       - 'setup-first-user.php'
       - 'includes/first-owner-setup.php'
       - 'scripts/food-monster-provision.php'
+      - 'food-monster-hosted-health.php'
       - 'tests/hosted-owner-provision.php'
       - '.github/workflows/hosted-owner-provision.yml'
       - 'GELATO_VERSION.txt'
@@ -48,10 +50,11 @@ jobs:
             'app' => ['url' => 'https://fixture.foodmonster.xyz', 'timezone' => 'America/Phoenix'],
             'database' => ['host' => '127.0.0.1', 'name' => 'gelato_hosted_ci', 'username' => 'root', 'password' => 'root'],
             'storage' => ['private_root' => getenv('GELATO_FIXTURE_PRIVATE')],
-            'food_monster_hosted' => ['installation_id' => str_repeat('1',32)],
+            'food_monster_hosted' => ['installation_id' => str_repeat('1',32), 'health_hash' => hash('sha256', str_repeat('3',64))],
           ];
           PHP
           php -l setup-first-user.php
           php -l includes/first-owner-setup.php
           php -l scripts/food-monster-provision.php
+          php -l food-monster-hosted-health.php
           php tests/hosted-owner-provision.php
