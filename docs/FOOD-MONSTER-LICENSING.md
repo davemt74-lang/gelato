@@ -9,3 +9,5 @@
 `GELATO_VERSION.txt` is the public version for the first licensed build and future licensed release packages. The deployment artifact's existing `DEPLOY_SHA.txt` continues to identify the exact packaged commit. Increase the release version when preparing the next licensed build and publish that same version in the central registry.
 
 The central automatic-update setting records a preference. The current integration provides owner-approved downloads, deployment reporting, and status checks. A central outage or loss of update entitlement leaves the restaurant application available.
+
+For new Food Monster Cloud installations, use the `gelato-hosted.zip` from **Full Deploy Package**. Its private provisioning command seeds the Gelato schema and first Super Admin from the customer’s Food Monster setup, and writes the scoped license connection to private storage. Managed installations close the public first-user route. Self-hosted deployments still use Gelato's usual installation workflow.

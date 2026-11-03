@@ -7,6 +7,9 @@ on:
     paths:
       - '.htaccess'
       - 'storage/.htaccess'
+      - 'scripts/food-monster-provision.php'
+      - 'GELATO_VERSION.txt'
+      - '.github/workflows/full-deploy-package.yml'
       - 'includes/private-storage.php'
       - 'includes/secret-key.php'
       - 'tests/private-storage-package.test.py'
@@ -571,5 +574,29 @@ jobs:
           path: |
             gelato-full-deploy.zip
             gelato-full-deploy.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Build Food Monster hosted ZIP
+        run: |
+          cp gelato-full-deploy.zip gelato-hosted.zip
+          zip -qd gelato-hosted.zip 'storage/' 'storage/*'
+          unzip -tq gelato-hosted.zip
+          unzip -Z1 gelato-hosted.zip > gelato-hosted-files.txt
+          grep -Fx 'scripts/food-monster-provision.php' gelato-hosted-files.txt
+          grep -Fx 'GELATO_VERSION.txt' gelato-hosted-files.txt
+          if grep -Eq '(^|/)(config\.php|\.env|\.git|storage|uploads|gelato-private-storage)(/|$)' gelato-hosted-files.txt; then
+            echo 'Hosted ZIP contains a runtime path.'
+            exit 1
+          fi
+          sha256sum gelato-hosted.zip > gelato-hosted.sha256
+
+      - name: Upload Food Monster hosted ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: gelato-hosted
+          path: |
+            gelato-hosted.zip
+            gelato-hosted.sha256
           if-no-files-found: error
           retention-days: 14

@@ -1,0 +1,57 @@
+name: Food Monster Hosted Owner Provisioning
+
+on:
+  pull_request:
+    paths:
+      - 'setup-first-user.php'
+      - 'includes/first-owner-setup.php'
+      - 'scripts/food-monster-provision.php'
+      - 'tests/hosted-owner-provision.php'
+      - '.github/workflows/hosted-owner-provision.yml'
+      - 'GELATO_VERSION.txt'
+  push:
+    branches: [main]
+    paths:
+      - 'setup-first-user.php'
+      - 'includes/first-owner-setup.php'
+      - 'scripts/food-monster-provision.php'
+      - 'tests/hosted-owner-provision.php'
+      - '.github/workflows/hosted-owner-provision.yml'
+      - 'GELATO_VERSION.txt'
+
+permissions:
+  contents: read
+
+jobs:
+  hosted-owner:
+    runs-on: ubuntu-24.04
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_hosted_ci
+        ports: ['3306:3306']
+        options: --health-cmd="healthcheck.sh --connect --innodb_initialized" --health-interval=5s --health-timeout=5s --health-retries=15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, pdo_mysql, curl, sodium
+      - name: Verify a fresh tenant and idempotent retry
+        run: |
+          export GELATO_FIXTURE_PRIVATE="$RUNNER_TEMP/gelato-hosted-private"
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app' => ['url' => 'https://fixture.foodmonster.xyz', 'timezone' => 'America/Phoenix'],
+            'database' => ['host' => '127.0.0.1', 'name' => 'gelato_hosted_ci', 'username' => 'root', 'password' => 'root'],
+            'storage' => ['private_root' => getenv('GELATO_FIXTURE_PRIVATE')],
+            'food_monster_hosted' => ['installation_id' => str_repeat('1',32)],
+          ];
+          PHP
+          php -l setup-first-user.php
+          php -l includes/first-owner-setup.php
+          php -l scripts/food-monster-provision.php
+          php tests/hosted-owner-provision.php
