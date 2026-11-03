@@ -58,36 +58,70 @@ function glasses_handoff_actor_user(PDO $pdo,array $device): int
     return glasses_require_accountable_user($pdo,$device,$pdo->inTransaction());
 }
 
-function glasses_handoff_to_expo(PDO $pdo,array $device,string $sessionPublicId): array
+/** Bind browser approval to the evidence and kitchen state held by this transaction. */
+function glasses_handoff_review_identity(PDO $pdo,array $session,array $validation): array
+{
+    $events=$pdo->prepare('SELECT id FROM glasses_build_events WHERE organization_id=? AND build_session_id=? ORDER BY id DESC LIMIT 1 FOR UPDATE');
+    $events->execute([(int)$session['organization_id'],(int)$session['id']]);
+    return [
+        'validationPublicId'=>(string)$validation['publicId'],
+        'validationSnapshotHash'=>(string)$validation['snapshotHash'],
+        'validationRevision'=>(int)$validation['revision'],
+        'buildEventId'=>(int)$events->fetchColumn(),
+        'kdsRevision'=>(int)$session['kds_revision'],
+    ];
+}
+
+function glasses_handoff_prepare(PDO $pdo,array $device,string $sessionPublicId,string $validationPublicId,string $snapshotHash): array
+{
+    return glasses_transaction($pdo,function()use($pdo,$device,$sessionPublicId,$validationPublicId,$snapshotHash):array{
+        glasses_require_accountable_user($pdo,$device);
+        $session=glasses_build_lock_current_session($pdo,$device,$sessionPublicId,true);
+        glasses_handoff_actor_user($pdo,$device);
+        $validation=glasses_validation_evaluate($pdo,$device,$sessionPublicId,true);
+        if($validation['status']!=='ready_for_finishing'||$validation['nextStage']!=='expo_finishing')
+            throw new InvalidArgumentException('Product validation is not ready for Expo / Finishing.');
+        if(!hash_equals($validation['publicId'],$validationPublicId)||!hash_equals($validation['snapshotHash'],$snapshotHash))
+            throw new InvalidArgumentException('Product validation changed. Review the current build before sending it to Expo.');
+        return glasses_handoff_review_identity($pdo,$session,$validation);
+    });
+}
+
+function glasses_handoff_to_expo(PDO $pdo,array $device,string $sessionPublicId,?array $browserReview=null,?int $browserUserId=null): array
 {
     if(!glasses_handoff_ready($pdo))throw new RuntimeException('Glasses Expo handoff migration is not installed.');
     $org=(int)$device['organization_id'];
 
-    return glasses_transaction($pdo,function()use($pdo,$device,$org,$sessionPublicId):array{
-        $actorUserId=glasses_handoff_actor_user($pdo,$device);
-        $session=glasses_build_session_row($pdo,$org,$sessionPublicId,true);
+    return glasses_transaction($pdo,function()use($pdo,$device,$org,$sessionPublicId,$browserReview,$browserUserId):array{
+        // Preserve the pairing error before build lookup. Recheck under lock after the kitchen item.
+        glasses_require_accountable_user($pdo,$device);
+        $session=glasses_build_session_row($pdo,$org,$sessionPublicId,false);
 
         if((int)$session['device_id']!==(int)$device['id'])
             throw new InvalidArgumentException('Build session is active on another glasses device.');
 
+        // Serialize on the kitchen item before looking for an existing receipt.
+        // This matches the lock order used by build mutations.
+        kds_item($pdo,$org,(string)$session['kds_public_id'],true);
         $existing=glasses_handoff_row_by_session($pdo,$org,(int)$session['id'],true);
-        if($existing)return glasses_handoff_public($existing);
-
-        if((string)$session['status']!=='active')
-            throw new InvalidArgumentException('Build session is not active.');
-
-        if((string)($device['status']??'')!=='active'||!empty($device['revoked_at']))
-            throw new InvalidArgumentException('Glasses device is not active.');
-
-        if((int)$session['location_id']!==(int)$device['location_id'])
-            throw new InvalidArgumentException('Build session is assigned to a different location.');
-        if((int)($session['station_id']??0)!==(int)($device['station_id']??0))
-            throw new InvalidArgumentException('Build session is assigned to a different kitchen station.');
+        if($existing){
+            glasses_handoff_actor_user($pdo,$device);
+            if($browserReview!==null&&(
+                $browserReview['validationPublicId']!==(string)$existing['validation_public_id']||
+                $browserReview['validationSnapshotHash']!==(string)$existing['validation_snapshot_hash']
+            ))throw new InvalidArgumentException('The completed Expo handoff belongs to a different reviewed snapshot.');
+            return glasses_handoff_public($existing);
+        }
+        $session=glasses_build_lock_current_session($pdo,$device,$sessionPublicId,true);
+        $deviceOwnerId=glasses_handoff_actor_user($pdo,$device);
+        $actorUserId=$browserUserId??$deviceOwnerId;
 
         // Re-evaluate inside the same transaction so evidence cannot change between validation and KDS handoff.
-        $validation=glasses_validation_evaluate($pdo,$device,$sessionPublicId);
+        $validation=glasses_validation_evaluate($pdo,$device,$sessionPublicId,true);
         if((string)$validation['status']!=='ready_for_finishing'||(string)($validation['nextStage']??'')!=='expo_finishing')
             throw new InvalidArgumentException('Product validation is not ready for Expo / Finishing.');
+        if($browserReview!==null&&$browserReview!==glasses_handoff_review_identity($pdo,$session,$validation))
+            throw new InvalidArgumentException('The kitchen item or reviewed evidence changed. Review it again before sending it to Expo.');
 
         $validationRow=glasses_validation_row($pdo,$org,(string)$validation['publicId'],true);
         if(!hash_equals((string)$validationRow['snapshot_hash'],(string)$validation['snapshotHash']))

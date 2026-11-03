@@ -12,13 +12,13 @@ function glasses_work_table_exists(PDO $pdo,string $table): bool
     return (int)$q->fetchColumn()===1;
 }
 
-function glasses_work_modifiers(PDO $pdo,int $org,int $posCheckItemId): array
+function glasses_work_modifiers(PDO $pdo,int $org,int $posCheckItemId,bool $forUpdate=false): array
 {
     if(!glasses_work_table_exists($pdo,'pos_check_item_modifiers'))return [];
     $q=$pdo->prepare("SELECT modifier_group_name_snapshot,modifier_name_snapshot,quantity,unit_amount,total_amount
         FROM pos_check_item_modifiers
         WHERE organization_id=? AND pos_check_item_id=?
-        ORDER BY id");
+        ORDER BY id".($forUpdate?' FOR UPDATE':''));
     $q->execute([$org,$posCheckItemId]);
     return array_map(static fn(array $r):array=>[
         'group'=>(string)$r['modifier_group_name_snapshot'],
@@ -80,6 +80,7 @@ function glasses_work_item(PDO $pdo,int $org,array $row): array
     $name=(string)$row['item_name_snapshot'];
     return [
         'kdsItemPublicId'=>(string)$row['public_id'],
+        'kdsRevision'=>(int)($row['revision']??0),
         'status'=>(string)$row['status'],
         'station'=>[
             'publicId'=>$row['station_public_id'],
@@ -106,6 +107,7 @@ function glasses_work_item(PDO $pdo,int $org,array $row): array
         ],
         'posLine'=>[
             'id'=>(int)$row['pos_check_item_id'],
+            'updatedAt'=>(string)($row['pos_item_updated_at']??''),
             'menuItemId'=>$menuItemId,
             'name'=>$name,
             'optionName'=>(string)($row['option_name_snapshot']??''),
@@ -127,7 +129,7 @@ function glasses_work_focus_index(array $items): ?int
     return 0;
 }
 
-function glasses_current_work(PDO $pdo,array $device): array
+function glasses_current_work(PDO $pdo,array $device,bool $recordHeartbeat=true): array
 {
     if((string)($device['status']??'')!=='active'||!empty($device['revoked_at']))
         throw new InvalidArgumentException('Glasses device is not active.');
@@ -155,14 +157,17 @@ function glasses_current_work(PDO $pdo,array $device): array
     $focus=$focusIndex!==null?$items[$focusIndex]:null;
     $revisionMaterial=[];
     foreach($items as $item)$revisionMaterial[]=[
-        $item['kdsItemPublicId'],$item['status'],
-        $item['posLine']['id'],$item['posLine']['specialInstructions'],$item['posLine']['modifiers']
+        $item['kdsItemPublicId'],$item['status'],$item['kdsRevision'],$item['station']['publicId'],
+        $item['posLine']['id'],$item['posLine']['updatedAt'],$item['posLine']['quantity'],$item['posLine']['optionName'],
+        $item['posLine']['specialInstructions'],$item['posLine']['modifiers']
     ];
-    $pdo->prepare("UPDATE glasses_devices SET last_seen_at=NOW(6),updated_at=NOW(6) WHERE organization_id=? AND id=? AND status='active'")
-        ->execute([$org,(int)$device['id']]);
+    if($recordHeartbeat){
+        $pdo->prepare("UPDATE glasses_devices SET last_seen_at=NOW(6),updated_at=NOW(6) WHERE organization_id=? AND id=? AND status='active'")
+            ->execute([$org,(int)$device['id']]);
+    }
 
     return [
-        'device'=>glasses_device_public(glasses_device_row($pdo,$org,(string)$device['public_id'],false)),
+        'device'=>glasses_device_public($recordHeartbeat?glasses_device_row($pdo,$org,(string)$device['public_id'],false):$device),
         'assignmentRequired'=>false,
         'location'=>$board['location'],
         'station'=>[

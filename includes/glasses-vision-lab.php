@@ -50,13 +50,33 @@ function glasses_vision_lab_mission(PDO $pdo,int $org,string $publicId): array {
     return ['publicId'=>$r['public_id'],'title'=>$r['title'],'description'=>$r['description'],'status'=>$r['status'],'sourceType'=>$r['source_type'],'sourceReference'=>$r['source_reference'],'locationName'=>$r['location_name'],'stationName'=>$r['station_name'],'assignedUserId'=>$r['assigned_user_id']!==null?(int)$r['assigned_user_id']:null,'assignedUserName'=>$r['assigned_user_name'],'assignedDevicePublicId'=>$r['assigned_device_public_id'],'assignedDeviceName'=>$r['assigned_device_name'],'targetSamples'=>(int)$r['target_samples'],'targetPositive'=>(int)$r['target_positive'],'targetNegative'=>(int)$r['target_negative'],'targetHardExamples'=>(int)$r['target_hard_examples'],'sampleCount'=>(int)$r['sample_count'],'approvedCount'=>(int)$r['approved_count'],'dueAt'=>$r['due_at']];
 }
 function glasses_vision_lab_missions(PDO $pdo,int $org): array {$q=$pdo->prepare("SELECT public_id FROM glasses_vision_training_missions WHERE organization_id=? ORDER BY FIELD(status,'active','draft','completed','cancelled'),created_at DESC LIMIT 100");$q->execute([$org]);return array_map(fn($id)=>glasses_vision_lab_mission($pdo,$org,(string)$id),$q->fetchAll(PDO::FETCH_COLUMN));}
+function glasses_vision_lab_synthetic_observation_sql(string $alias='o'): string {
+    if(!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/D',$alias))throw new InvalidArgumentException('Invalid observation query alias.');
+    // Only the browser's fabricated detection buttons used this source and key prefix.
+    // Camera-targeted and automatic observations have their own provenance.
+    return "(COALESCE(LOWER(TRIM(JSON_UNQUOTE(JSON_EXTRACT($alias.metadata_json,'$.source')))),'')='web_glasses_simulator'
+      OR COALESCE(JSON_TYPE(JSON_EXTRACT($alias.metadata_json,'$.synthetic'))='BOOLEAN'
+        AND JSON_UNQUOTE(JSON_EXTRACT($alias.metadata_json,'$.synthetic'))='true',FALSE)
+      OR COALESCE($alias.observation_key LIKE 'websim-%',FALSE))";
+}
 function glasses_vision_lab_queue_observation(PDO $pdo,int $org,string $observationKey,?string $missionPublic,int $actor): array {
-    $q=$pdo->prepare("SELECT o.id,o.build_session_id,o.component_key,o.created_at,s.device_id FROM glasses_build_observations o JOIN glasses_build_sessions s ON s.id=o.build_session_id WHERE o.organization_id=? AND o.observation_key=? LIMIT 1");$q->execute([$org,$observationKey]);$o=$q->fetch();if(!$o)throw new InvalidArgumentException('Vision observation was not found.');
+    $q=$pdo->prepare("SELECT id FROM glasses_build_observations WHERE organization_id=? AND observation_key=? LIMIT 2");
+    $q->execute([$org,$observationKey]);$ids=$q->fetchAll(PDO::FETCH_COLUMN);
+    if(!$ids)throw new InvalidArgumentException('Vision observation was not found.');
+    if(count($ids)>1)throw new InvalidArgumentException('Vision observation key matches more than one build. Use corrected evidence import to select the exact observation.');
+    return glasses_vision_lab_queue_observation_by_id($pdo,$org,(int)$ids[0],$missionPublic,$actor);
+}
+function glasses_vision_lab_queue_observation_by_id(PDO $pdo,int $org,int $observationId,?string $missionPublic,int $actor): array {
+    $synthetic=glasses_vision_lab_synthetic_observation_sql();
+    $q=$pdo->prepare("SELECT o.id,o.observation_key,o.component_key,o.created_at,s.device_id,s.public_id build_public_id,$synthetic AS is_synthetic FROM glasses_build_observations o JOIN glasses_build_sessions s ON s.id=o.build_session_id AND s.organization_id=o.organization_id WHERE o.organization_id=? AND o.id=?");
+    $q->execute([$org,$observationId]);$o=$q->fetch();if(!$o)throw new InvalidArgumentException('Vision observation was not found.');
+    if((bool)$o['is_synthetic'])throw new InvalidArgumentException('Simulated browser observations cannot be queued as production evidence.');
+    $observationKey=(string)$o['observation_key'];
     $missionId=null;if($missionPublic){$mq=$pdo->prepare("SELECT id FROM glasses_vision_training_missions WHERE organization_id=? AND public_id=? LIMIT 1");$mq->execute([$org,$missionPublic]);$missionId=(int)$mq->fetchColumn()?:null;}
     $aq=$pdo->prepare("SELECT id,user_id FROM glasses_user_device_assignments WHERE organization_id=? AND device_id=? AND assigned_at<=? AND (released_at IS NULL OR released_at>?) ORDER BY assigned_at DESC,id DESC LIMIT 1");$aq->execute([$org,(int)$o['device_id'],$o['created_at'],$o['created_at']]);$a=$aq->fetch();
     $public=glasses_public_id('vision-sample');
     $pdo->prepare("INSERT INTO glasses_vision_training_samples (organization_id,public_id,mission_id,observation_id,source_type,source_reference,wearer_assignment_id,operator_user_id,review_status,canonical_label,created_by,provenance_json) VALUES (?,?,?,?,?,?,?,?, 'pending',?,?,?) ON DUPLICATE KEY UPDATE mission_id=COALESCE(VALUES(mission_id),mission_id)")
-      ->execute([$org,$public,$missionId,(int)$o['id'],'production_observation',$observationKey,$a?(int)$a['id']:null,$a?(int)$a['user_id']:null,(string)$o['component_key'],$actor,json_encode(['observationKey'=>$observationKey],JSON_UNESCAPED_SLASHES)]);
+      ->execute([$org,$public,$missionId,(int)$o['id'],'production_observation',$observationKey,$a?(int)$a['id']:null,$a?(int)$a['user_id']:null,(string)$o['component_key'],$actor,json_encode(['observationKey'=>$observationKey,'buildSessionPublicId'=>$o['build_public_id']],JSON_UNESCAPED_SLASHES)]);
     $q=$pdo->prepare("SELECT public_id FROM glasses_vision_training_samples WHERE organization_id=? AND observation_id=? LIMIT 1");$q->execute([$org,(int)$o['id']]);return glasses_vision_lab_sample($pdo,$org,(string)$q->fetchColumn());
 }
 function glasses_vision_lab_sample(PDO $pdo,int $org,string $publicId): array {
@@ -82,7 +102,9 @@ function glasses_vision_lab_datasets(PDO $pdo,int $org): array {$q=$pdo->prepare
 function glasses_vision_lab_add_dataset_sample(PDO $pdo,int $org,string $datasetPublic,string $samplePublic,string $split): array {
     if(!in_array($split,['train','val','test'],true))throw new InvalidArgumentException('Dataset split must be train, val or test.');
     $dq=$pdo->prepare("SELECT * FROM glasses_vision_dataset_versions WHERE organization_id=? AND public_id=? LIMIT 1");$dq->execute([$org,$datasetPublic]);$d=$dq->fetch();if(!$d)throw new InvalidArgumentException('Vision dataset was not found.');if($d['status']!=='draft')throw new InvalidArgumentException('Frozen datasets are immutable.');
-    $sq=$pdo->prepare("SELECT * FROM glasses_vision_training_samples WHERE organization_id=? AND public_id=? LIMIT 1");$sq->execute([$org,$samplePublic]);$s=$sq->fetch();if(!$s)throw new InvalidArgumentException('Vision sample was not found.');if($s['review_status']!=='approved')throw new InvalidArgumentException('Only approved samples may enter a dataset.');
+    $synthetic=glasses_vision_lab_synthetic_observation_sql();
+    $sq=$pdo->prepare("SELECT s.*,$synthetic AS is_synthetic FROM glasses_vision_training_samples s LEFT JOIN glasses_build_observations o ON o.id=s.observation_id AND o.organization_id=s.organization_id WHERE s.organization_id=? AND s.public_id=? LIMIT 1");$sq->execute([$org,$samplePublic]);$s=$sq->fetch();if(!$s)throw new InvalidArgumentException('Vision sample was not found.');if($s['review_status']!=='approved')throw new InvalidArgumentException('Only approved samples may enter a dataset.');
+    if((bool)$s['is_synthetic'])throw new InvalidArgumentException('Simulated browser observations cannot enter a production dataset.');
     $sourceHash=hash('sha256',implode('|',[$s['public_id'],$s['canonical_label'],$s['review_outcome'],$s['updated_at']]));
     $pdo->prepare("INSERT IGNORE INTO glasses_vision_dataset_items (organization_id,dataset_id,sample_id,split_name,class_label,source_hash) VALUES (?,?,?,?,?,?)")->execute([$org,(int)$d['id'],(int)$s['id'],$split,$s['canonical_label'],$sourceHash]);return glasses_vision_lab_dataset($pdo,$org,$datasetPublic);
 }
@@ -93,6 +115,9 @@ function glasses_vision_lab_freeze_dataset(PDO $pdo,int $org,string $publicId,in
     if(function_exists('glasses_v11_dataset_freeze_guard'))glasses_v11_dataset_freeze_guard($pdo,$org,$publicId);
     return glasses_transaction($pdo,function()use($pdo,$org,$publicId,$actor):array{
         $q=$pdo->prepare("SELECT * FROM glasses_vision_dataset_versions WHERE organization_id=? AND public_id=? LIMIT 1 FOR UPDATE");$q->execute([$org,$publicId]);$d=$q->fetch();if(!$d)throw new InvalidArgumentException('Vision dataset was not found.');if($d['status']==='frozen')return glasses_vision_lab_dataset($pdo,$org,$publicId);
+        $synthetic=glasses_vision_lab_synthetic_observation_sql();
+        $q=$pdo->prepare("SELECT 1 FROM glasses_vision_dataset_items i JOIN glasses_vision_training_samples s ON s.id=i.sample_id AND s.organization_id=i.organization_id JOIN glasses_build_observations o ON o.id=s.observation_id AND o.organization_id=s.organization_id WHERE i.organization_id=? AND i.dataset_id=? AND $synthetic LIMIT 1");
+        $q->execute([$org,(int)$d['id']]);if($q->fetchColumn())throw new InvalidArgumentException('Dataset contains a simulated browser observation. Use a draft with verified evidence before freezing.');
         $iq=$pdo->prepare("SELECT i.split_name,i.class_label,i.source_hash,s.public_id sample_public_id,s.source_type,s.source_reference,s.operator_user_id,s.annotator_user_id,s.reviewer_user_id,s.adjudicator_user_id FROM glasses_vision_dataset_items i JOIN glasses_vision_training_samples s ON s.id=i.sample_id WHERE i.organization_id=? AND i.dataset_id=? ORDER BY s.public_id");$iq->execute([$org,(int)$d['id']]);$items=$iq->fetchAll();if(!$items)throw new InvalidArgumentException('Dataset must contain at least one approved sample.');
         $classes=[];$splits=['train'=>0,'val'=>0,'test'=>0];$users=[];foreach($items as $i){if($i['class_label']!==null)$classes[(string)$i['class_label']]=true;$splits[$i['split_name']]++;foreach(['operator_user_id','annotator_user_id','reviewer_user_id','adjudicator_user_id'] as $k)if($i[$k]!==null)$users[(int)$i[$k]]=true;}
         $mediaManifest=function_exists('glasses_vision_training_media_export_manifest')?glasses_vision_training_media_export_manifest($pdo,$org,$publicId):null;
@@ -104,10 +129,9 @@ function glasses_vision_lab_freeze_dataset(PDO $pdo,int $org,string $publicId,in
     });
 }
 function glasses_vision_lab_import_corrected(PDO $pdo,int $org,?string $missionPublic,int $actor,int $limit=500): array {
-    $limit=max(1,min(5000,$limit));$missionId=null;
-    if($missionPublic){$mq=$pdo->prepare("SELECT id FROM glasses_vision_training_missions WHERE organization_id=? AND public_id=? LIMIT 1");$mq->execute([$org,$missionPublic]);$missionId=(int)$mq->fetchColumn()?:null;}
-    $q=$pdo->prepare("SELECT o.observation_key FROM glasses_build_observations o JOIN glasses_observation_corrections c ON c.observation_id=o.id AND c.organization_id=o.organization_id LEFT JOIN glasses_vision_training_samples s ON s.organization_id=o.organization_id AND s.observation_id=o.id WHERE o.organization_id=? AND s.id IS NULL GROUP BY o.id,o.observation_key ORDER BY MAX(c.id) DESC LIMIT ".$limit);
-    $q->execute([$org]);$count=0;foreach($q->fetchAll(PDO::FETCH_COLUMN) as $key){glasses_vision_lab_queue_observation($pdo,$org,(string)$key,$missionPublic,$actor);$count++;}
+    $limit=max(1,min(5000,$limit));$synthetic=glasses_vision_lab_synthetic_observation_sql();
+    $q=$pdo->prepare("SELECT o.id FROM glasses_build_observations o JOIN glasses_observation_corrections c ON c.observation_id=o.id AND c.organization_id=o.organization_id LEFT JOIN glasses_vision_training_samples s ON s.organization_id=o.organization_id AND s.observation_id=o.id WHERE o.organization_id=? AND s.id IS NULL AND NOT $synthetic GROUP BY o.id ORDER BY MAX(c.id) DESC LIMIT ".$limit);
+    $q->execute([$org]);$count=0;foreach($q->fetchAll(PDO::FETCH_COLUMN) as $id){glasses_vision_lab_queue_observation_by_id($pdo,$org,(int)$id,$missionPublic,$actor);$count++;}
     return ['imported'=>$count,'missionPublicId'=>$missionPublic];
 }
 function glasses_vision_lab_dataset_coverage(PDO $pdo,int $org,string $publicId): array {

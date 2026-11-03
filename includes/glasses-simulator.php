@@ -150,12 +150,75 @@ function glasses_simulator_device(PDO $pdo,array $user,string $publicId,bool $wr
 
 function glasses_simulator_build_payload(PDO $pdo,array $device,string $sessionPublicId): array
 {
-    $org=(int)$device['organization_id'];
-    $session=glasses_build_session_row($pdo,$org,$sessionPublicId,false);
-    glasses_build_assert_device_session($device,$session);
-    return glasses_build_payload($pdo,$org,$sessionPublicId);
+    return glasses_transaction($pdo,function()use($pdo,$device,$sessionPublicId):array{
+        glasses_build_lock_current_session($pdo,$device,$sessionPublicId);
+        return glasses_build_payload($pdo,(int)$device['organization_id'],$sessionPublicId,true);
+    });
 }
 
+/** The browser can submit governed detector output or a manual review cue. */
+function glasses_simulator_observe(PDO $pdo,array $device,array $user,string $session,array $in): array
+{
+    $metadata=is_array($in['metadata']??null)?$in['metadata']:[];
+    $source=$metadata['source']??null;
+    if($source==='web_glasses_simulator_camera'&&($metadata['manualTarget']??null)===true
+        &&($metadata['automatic']??null)!==true&&($in['observationAction']??'added')==='added'){
+        $in['confidence']=min(0.74,(float)($in['confidence']??0));
+        $in['metadata']=[
+            'source'=>$source,'manualTarget'=>true,
+            'evidenceKind'=>'manual_camera_review','operatorUserId'=>(int)$user['id'],
+        ];
+        return glasses_build_observe($pdo,$device,$session,$in);
+    }
+    if($source!=='web_glasses_simulator_auto_vision'||($metadata['automatic']??null)!==true)
+        throw new InvalidArgumentException('Scripted detections are available only in Mock mode. Use governed vision or review the ingredient manually.');
+    return glasses_transaction($pdo,function()use($pdo,$device,$user,$session,$in):array{
+        $build=glasses_build_lock_current_session($pdo,$device,$session);
+        $context=json_decode((string)$build['context_json'],true,512,JSON_THROW_ON_ERROR);
+        if(abs((float)($context['quantity']??0)-1.0)>0.0001)
+            throw new InvalidArgumentException('Review the full ingredient quantities manually for this multi-unit order.');
+        glasses_assembly_auto_observation_validate($pdo,$device,$user,$session,$in);
+        $in['metadata']['evidenceKind']='governed_browser';
+        $in['metadata']['operatorUserId']=(int)$user['id'];
+        return glasses_build_observe($pdo,$device,$session,$in);
+    });
+}
+
+function glasses_simulator_handoff_scope(array $device,array $user,string $session,string $runtime): array
+{
+    return [
+        'organizationId'=>(int)$device['organization_id'],'actorId'=>(int)$user['id'],
+        'deviceId'=>(int)$device['id'],'runtimePublicId'=>$runtime,'buildSessionPublicId'=>$session,
+    ];
+}
+
+function glasses_simulator_prepare_handoff(PDO $pdo,array $device,array $user,string $session,string $runtime,array $in): array
+{
+    $validationId=trim((string)($in['validationPublicId']??''));
+    $snapshotHash=(string)($in['validationSnapshotHash']??'');
+    if($validationId===''||!preg_match('/^[a-f0-9]{64}$/D',$snapshotHash))
+        throw new InvalidArgumentException('Review the current product validation before preparing an Expo handoff.');
+    $review=glasses_handoff_prepare($pdo,$device,$session,$validationId,$snapshotHash);
+    $now=time();
+    $receipts=array_filter($_SESSION['glasses_expo_reviews']??[],static fn(array $receipt):bool=>$receipt['expires']>$now);
+    $token=bin2hex(random_bytes(32));
+    $receipts[hash('sha256',$token)]=[
+        'scope'=>glasses_simulator_handoff_scope($device,$user,$session,$runtime),
+        'review'=>$review,'expires'=>$now+120,
+    ];
+    $_SESSION['glasses_expo_reviews']=array_slice($receipts,-16,null,true);
+    return ['token'=>$token,'validationPublicId'=>$validationId,'validationSnapshotHash'=>$snapshotHash];
+}
+
+function glasses_simulator_confirm_handoff(PDO $pdo,array $device,array $user,string $session,string $runtime,string $token): array
+{
+    $receipt=preg_match('/^[a-f0-9]{64}$/D',$token)
+        ?($_SESSION['glasses_expo_reviews'][hash('sha256',$token)]??null):null;
+    if(!is_array($receipt)||$receipt['expires']<=time()||$receipt['scope']!==glasses_simulator_handoff_scope($device,$user,$session,$runtime))
+        throw new InvalidArgumentException('Review and confirm this Expo handoff in the current session.');
+    // The database receipt keeps an exact retry safe after a lost response.
+    return glasses_handoff_to_expo($pdo,$device,$session,$receipt['review'],(int)$user['id']);
+}
 
 /** KDS controls are separate from physical glasses builds. A virtual display
  * may update only scoped, authenticated kitchen state, never fabricate vision evidence. */
@@ -332,7 +395,7 @@ function glasses_simulator_dispatch(PDO $pdo,array $user,array $in): array
     $action=trim((string)($in['action']??''));
     $write=in_array($action,[
         'build.start','build.observe','build.confirm','build.resolve_unexpected',
-        'validation.evaluate','handoff.expo','vision.shadow_report','vision.shadow_complete'
+        'validation.evaluate','handoff.prepare','handoff.expo','vision.shadow_report','vision.shadow_complete'
     ],true);
     $device=glasses_simulator_device($pdo,$user,(string)($in['devicePublicId']??''),$write);
     // Runtime IDs are device-bound and never grant the selected employee's privileges.
@@ -436,13 +499,12 @@ function glasses_simulator_dispatch(PDO $pdo,array $user,array $in): array
         return ['shadow'=>glasses_vision_shadow_complete($pdo,$device,$session,$run)];
     }
     if($action==='build.observe'){
-        glasses_assembly_auto_observation_validate($pdo,$device,$user,$session,$in);
-        return ['buildSession'=>glasses_build_observe($pdo,$device,$session,$in)];
+        return ['buildSession'=>glasses_simulator_observe($pdo,$device,$user,$session,$in)];
     }
     if($action==='build.confirm'){
         $key=trim((string)($in['componentKey']??''));
         if($key==='')throw new InvalidArgumentException('Build component is required.');
-        return ['buildSession'=>glasses_build_confirm($pdo,$device,$session,$key)];
+        return ['buildSession'=>glasses_build_confirm($pdo,$device,$session,$key,(int)$user['id'])];
     }
     if($action==='build.resolve_unexpected'){
         $key=trim((string)($in['componentKey']??''));
@@ -455,8 +517,11 @@ function glasses_simulator_dispatch(PDO $pdo,array $user,array $in): array
     if($action==='validation.evaluate'){
         return ['validation'=>glasses_validation_evaluate($pdo,$device,$session)];
     }
+    if($action==='handoff.prepare'){
+        return ['handoffConfirmation'=>glasses_simulator_prepare_handoff($pdo,$device,$user,$session,$runtimePublicId,$in)];
+    }
     if($action==='handoff.expo'){
-        return ['handoff'=>glasses_handoff_to_expo($pdo,$device,$session)];
+        return ['handoff'=>glasses_simulator_confirm_handoff($pdo,$device,$user,$session,$runtimePublicId,(string)($in['confirmationToken']??''))];
     }
 
     throw new InvalidArgumentException('Unsupported simulator action.');

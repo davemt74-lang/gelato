@@ -54,4 +54,61 @@ al_assert(str_contains($api,"active_learning.scan")&&str_contains($api,"active_l
 al_assert(str_contains($js,'data-al-mission')&&str_contains($js,'data-al-dismiss'),'UI must expose candidate acceptance and dismissal.');
 al_assert(!str_contains($api,'glasses_build_observe')&&!str_contains($api,'kds_transition'),'Active learning API must not mutate production build or KDS truth.');
 $approved=(int)$pdo->query("SELECT COUNT(*) FROM glasses_vision_training_samples WHERE organization_id={$org} AND review_status='approved'")->fetchColumn();al_assert($approved===0,'Active learning automation must never silently promote evidence to ground truth.');
+
+// Historic browser observations were persisted before the simulator source boundary.
+$buildId=$pdo->prepare('SELECT id FROM glasses_build_sessions WHERE organization_id=? AND public_id=?');
+$buildId->execute([$org,$sessionPublic]);$firstBuildId=(int)$buildId->fetchColumn();
+$check=pos_create_check($pdo,$org,$loc,['serviceMode'=>'dine_in','tableName'=>'Lab second','guestCount'=>1],$admin);$check=pos_add_item($pdo,$org,(string)$check['publicId'],$price,1,'',$admin);
+$line=(int)$check['items'][0]['id'];kds_send_check($pdo,$org,(string)$check['publicId'],$admin,false);
+$q=$pdo->prepare('SELECT public_id FROM kds_order_items WHERE organization_id=? AND pos_check_item_id=?');$q->execute([$org,$line]);
+$secondSession=(string)glasses_build_start($pdo,$device,(string)$q->fetchColumn(),null)['publicId'];
+$buildId->execute([$org,$secondSession]);$secondBuildId=(int)$buildId->fetchColumn();
+
+$insertObservation=$pdo->prepare("INSERT INTO glasses_build_observations (organization_id,build_session_id,observation_key,component_key,action,quantity,confidence,metadata_json) VALUES (?,?,?,?,'added',1,0.55,?)");
+$seedObservation=static function(int $build,string $key,?array $metadata)use($pdo,$insertObservation,$org,$component):int {
+    $insertObservation->execute([$org,$build,$key,$component,$metadata===null?null:json_encode($metadata,JSON_THROW_ON_ERROR)]);
+    return (int)$pdo->lastInsertId();
+};
+$correct=static function(string $session,string $key,string $suffix)use($pdo,$device,$component):void {
+    glasses_build_correct_observation($pdo,$device,$session,['correctionKey'=>'v01-'.$suffix,'observationKey'=>$key,'resolution'=>'replace','targetComponentKey'=>$component,'correctedQuantity'=>1,'hasCorrectedQuantity'=>true,'reason'=>'Review fixture.']);
+};
+$cameraId=$seedObservation($firstBuildId,'repeated-observation-key',['source'=>'web_glasses_simulator_camera','manualTarget'=>true]);
+$automaticId=$seedObservation($secondBuildId,'repeated-observation-key',['source'=>'web_glasses_simulator_auto_vision','automatic'=>true]);
+$correct($sessionPublic,'repeated-observation-key','camera');$correct($secondSession,'repeated-observation-key','automatic');
+$historicalId=$seedObservation($firstBuildId,'historical-button-detect',['source'=>'web_glasses_simulator']);
+$correct($sessionPublic,'historical-button-detect','synthetic');
+$legacyKeyId=$seedObservation($firstBuildId,'websim-unexpected-legacy',null);
+$explicitId=$seedObservation($firstBuildId,'marked-synthetic',['source'=>'fixture','synthetic'=>true]);
+
+foreach(['historical-button-detect','websim-unexpected-legacy','marked-synthetic'] as $key){
+    $blocked=false;try{glasses_vision_lab_queue_observation($pdo,$org,$key,null,$admin);}catch(InvalidArgumentException $e){$blocked=stripos($e->getMessage(),'simulated browser')!==false;}
+    al_assert($blocked,'Simulated browser evidence cannot enter the production review queue: '.$key);
+}
+$blocked=false;try{glasses_vision_lab_queue_observation($pdo,$org,'repeated-observation-key',null,$admin);}catch(InvalidArgumentException $e){$blocked=str_contains($e->getMessage(),'more than one build');}
+al_assert($blocked,'A key shared by two builds cannot silently select an observation.');
+$sampleFor=$pdo->prepare('SELECT public_id FROM glasses_vision_training_samples WHERE organization_id=? AND observation_id=?');
+$sampleForId=static function(int $id)use($sampleFor,$org){$sampleFor->execute([$org,$id]);return $sampleFor->fetchColumn();};
+$import=glasses_vision_lab_import_corrected($pdo,$org,null,$admin,1);
+al_assert($import['imported']===1&&$sampleForId($automaticId)&&!$sampleForId($cameraId)&&!$sampleForId($historicalId),'Corrected import skips synthetic evidence before applying its limit and keeps the exact build-bound row.');
+$import=glasses_vision_lab_import_corrected($pdo,$org,null,$admin,10);
+al_assert($import['imported']===1&&$sampleForId($cameraId),'A correction from a second build with the same key must import separately.');
+$sampleProvenance=$pdo->prepare("SELECT JSON_UNQUOTE(JSON_EXTRACT(provenance_json,'$.buildSessionPublicId')) FROM glasses_vision_training_samples WHERE organization_id=? AND observation_id=?");
+$sampleProvenance->execute([$org,$cameraId]);al_assert($sampleProvenance->fetchColumn()===$sessionPublic,'Imported samples retain their exact build in recorded provenance.');
+$scan=glasses_vision_active_learning_scan($pdo,$org,$admin,'manual');
+al_assert($scan['sourceCounts']['correction']===2&&$scan['sourceCounts']['low_confidence']===2,'Active learning preserves both eligible builds and excludes fabricated evidence before creating candidates.');
+$candidateCheck=$pdo->prepare("SELECT c.observation_id,s.observation_id queued_observation_id FROM glasses_vision_active_learning_candidates c JOIN glasses_vision_training_samples s ON s.id=c.queued_sample_id WHERE c.organization_id=? AND c.observation_id IN (?,?)");
+$candidateCheck->execute([$org,$cameraId,$automaticId]);$candidateRows=$candidateCheck->fetchAll();
+al_assert(count($candidateRows)===4,'Both real observations must have a correction and confidence candidate.');
+foreach($candidateRows as $candidateRow)al_assert((int)$candidateRow['observation_id']===(int)$candidateRow['queued_observation_id'],'Each candidate must link to evidence from its own build.');
+al_assert(!$sampleForId($historicalId)&&!$sampleForId($legacyKeyId)&&!$sampleForId($explicitId),'Automated intake must not create a sample for synthetic observations.');
+
+$historicalSample=glasses_public_id('vision-sample');
+$pdo->prepare("INSERT INTO glasses_vision_training_samples (organization_id,public_id,observation_id,source_type,source_reference,review_status,canonical_label,created_by) VALUES (?,?,?,'production_observation','historical-button-detect','approved',?,?)")->execute([$org,$historicalSample,$historicalId,$component,$admin]);
+$historicalSampleId=(int)$pdo->lastInsertId();
+$draft=glasses_vision_lab_create_dataset($pdo,$org,['name'=>'Historic draft','versionLabel'=>'v01'],$admin);
+$blocked=false;try{glasses_vision_lab_add_dataset_sample($pdo,$org,$draft['publicId'],$historicalSample,'train');}catch(InvalidArgumentException $e){$blocked=str_contains($e->getMessage(),'Simulated browser');}
+al_assert($blocked,'An already-approved historical synthetic sample cannot enter a draft.');
+$pdo->prepare("INSERT INTO glasses_vision_dataset_items (organization_id,dataset_id,sample_id,split_name,class_label,source_hash) SELECT organization_id,id,?,'train',?,? FROM glasses_vision_dataset_versions WHERE organization_id=? AND public_id=?")->execute([$historicalSampleId,$component,str_repeat('0',64),$org,$draft['publicId']]);
+$blocked=false;try{glasses_vision_lab_freeze_dataset($pdo,$org,$draft['publicId'],$admin);}catch(InvalidArgumentException $e){$blocked=str_contains($e->getMessage(),'simulated browser');}
+al_assert($blocked&&glasses_vision_lab_dataset($pdo,$org,$draft['publicId'])['status']==='draft','A historical draft containing fabricated evidence cannot be frozen.');
 echo "vision-lab-v3-active-learning-ok\n";

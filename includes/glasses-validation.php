@@ -38,8 +38,8 @@ function glasses_validation_component_check(array $component): array
     $status=(string)$component['status'];
     $expected=(float)$component['expected_quantity'];
     $detected=(float)$component['detected_quantity'];
-    $optional=!empty($component['is_optional']);
-    $passed=$optional||$status==='confirmed'||$status==='ignored';
+    $optional=!empty($component['is_optional'])||glasses_build_component_advisory($component);
+    $passed=$optional||($status==='confirmed'&&$detected+0.0001>=$expected)||($status==='ignored'&&$expected<=0.0);
     return [
         'componentKey'=>(string)$component['component_key'],
         'displayName'=>(string)$component['display_name'],
@@ -55,7 +55,7 @@ function glasses_validation_component_check(array $component): array
 
 function glasses_validation_snapshot(PDO $pdo,int $org,array $session): array
 {
-    $components=glasses_build_components($pdo,$org,(int)$session['id'],false);
+    $components=glasses_build_components($pdo,$org,(int)$session['id'],$pdo->inTransaction());
     $checks=[];$blockers=[];$required=0;$passed=0;
     foreach($components as $component){
         $check=glasses_validation_component_check($component);
@@ -90,7 +90,7 @@ function glasses_validation_snapshot(PDO $pdo,int $org,array $session): array
         if(!$exists)$blockers[]=['type'=>'unexpected','componentKey'=>(string)$component['component_key'],'message'=>'Unexpected component detected: '.(string)$component['display_name']];
     }
 
-    $verifyCount=count(array_filter($components,static fn(array $c):bool=>(string)$c['status']==='verify'));
+    $verifyCount=count(array_filter($components,static fn(array $c):bool=>(string)$c['status']==='verify'&&!glasses_build_component_advisory($c)));
     $unexpectedCount=count($unexpected);
     $missingCount=count(array_filter($blockers,static fn(array $b):bool=>($b['type']??'')==='missing'));
     $allAccounted=$required>0&&$passed===$required&&$verifyCount===0&&$unexpectedCount===0&&$missingCount===0;
@@ -150,13 +150,12 @@ function glasses_validation_event(PDO $pdo,int $org,int $validationId,int $sessi
         ->execute([$org,$validationId,$sessionId,$type,$from,$to,glasses_json_object($payload),$deviceId]);
 }
 
-function glasses_validation_evaluate(PDO $pdo,array $device,string $sessionPublicId): array
+function glasses_validation_evaluate(PDO $pdo,array $device,string $sessionPublicId,bool $allowReady=false): array
 {
     if(!glasses_validation_ready($pdo))throw new RuntimeException('Glasses product-validation migration is not installed.');
     $org=(int)$device['organization_id'];
-    return glasses_transaction($pdo,function()use($pdo,$device,$org,$sessionPublicId):array{
-        $session=glasses_build_session_row($pdo,$org,$sessionPublicId,true);
-        glasses_build_assert_device_session($device,$session);
+    return glasses_transaction($pdo,function()use($pdo,$device,$org,$sessionPublicId,$allowReady):array{
+        $session=glasses_build_lock_current_session($pdo,$device,$sessionPublicId,$allowReady);
         $snapshot=glasses_validation_snapshot($pdo,$org,$session);
         $hash=hash('sha256',json_encode($snapshot,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR));
         $existing=glasses_validation_for_session_row($pdo,$org,(int)$session['id'],true);
@@ -178,7 +177,7 @@ function glasses_validation_evaluate(PDO $pdo,array $device,string $sessionPubli
                     FROM glasses_product_validations v
                     JOIN glasses_build_sessions s ON s.id=v.build_session_id AND s.organization_id=v.organization_id
                     JOIN kds_order_items k ON k.id=s.kds_order_item_id AND k.organization_id=s.organization_id
-                    WHERE v.organization_id=? AND v.id=? LIMIT 1");
+                    WHERE v.organization_id=? AND v.id=? LIMIT 1 FOR UPDATE");
                 $q->execute([$org,$id]);return glasses_validation_public($q->fetch());
             }
             $from=(string)$existing['status'];
@@ -189,7 +188,7 @@ function glasses_validation_evaluate(PDO $pdo,array $device,string $sessionPubli
             ],(int)$device['id']);
         }
 
-        $row=glasses_validation_row($pdo,$org,$public,false);
+        $row=glasses_validation_row($pdo,$org,$public,true);
         return glasses_validation_public($row);
     });
 }

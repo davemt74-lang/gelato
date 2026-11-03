@@ -3,7 +3,9 @@ const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/st
 const js=fs.readFileSync('assets/js/glasses-web-simulator.js','utf8');
 const start=js.indexOf('const KITCHEN_COMMANDS='),end=js.indexOf('window.GelatoGlassesNavigation=',start);
 assert.ok(start>=0&&end>start,'kitchen action model missing');
-const code=js.slice(start,end);
+const scope=js.match(/^let buildGeneration=.*;$/m);
+assert.ok(scope,'shared simulator build and display scope missing');
+const code=scope[0]+'\n'+js.slice(start,end);
 const item=(id,status)=>({kdsItemPublicId:id,status,ticket:{checkPublicId:'check-100',checkNumber:'100'},posLine:{name:'Pizza '+id}});
 const a=item('item-a','queued'),b=item('item-b','queued');
 const state={mode:'live',device:{publicId:'preview:2:all',virtualPreview:true,kitchenWritable:true,stationPublicId:null},
