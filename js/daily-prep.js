@@ -50,8 +50,9 @@ function managerControls(item){
  (item.type==='inventory'?'<input class="manager-quantity" aria-label="Requested amount" placeholder="Requested amount…" maxlength="120" value="'+html(item.quantityNote||'')+'">':'')+
  '<input class="manager-note" aria-label="Admin note" placeholder="Internal status note…" maxlength="2000" value="'+html(item.adminNote)+'">'+
  '<button class="small-btn" type="button" data-action="manager-save">Save changes</button>'+
+ (item.type==='inventory'&&item.inventoryId&&item.status!=='received'&&state.data.canInventory?'<button class="small-btn" type="button" data-action="receipt-options">Link recorded receipt</button>':'')+
  '<button class="small-btn" type="button" data-action="history">History</button>'+
- '<button class="small-btn" type="button" data-action="notify">Notify</button></div><div class="history-slot"></div>';
+ '<button class="small-btn" type="button" data-action="notify">Notify</button></div><div class="receipt-slot"></div><div class="history-slot"></div>';
 }
 function renderPrep(){
  var list=(state.data.items||[]).filter(function(i){return i.type==='prep';});
@@ -100,7 +101,9 @@ function renderInventory(){
  $('need-count').textContent=outstanding;$('inventory-tab-count').textContent=outstanding;
  $('need-caption').textContent=items.length+' listed · '+outstanding+' outstanding';
  $('need-list').innerHTML=items.length?items.map(function(item){
-  return '<article class="task" data-id="'+html(item.id)+'"><div class="task-main"><span class="status-tag '+html(item.status)+'">'+statusLabel(item.status)+'</span><div class="task-body"><div class="task-title">'+html(item.title)+'</div><div class="task-sub">'+(item.quantityNote?'<span>Requested: '+html(item.quantityNote)+'</span>':'')+(item.adminNote?'<span>Manager note: '+html(item.adminNote)+'</span>':'')+'</div></div><button class="small-btn danger" data-action="archive">Remove</button></div>'+
+  var evidence=(state.data.receiptLinks||{})[item.id];
+  var receipt=evidence?'<span>✓ Reconciled with recorded receipt: '+html(evidence.quantity)+' '+html(evidence.unit)+' · '+html(evidence.when)+'</span>':'';
+  return '<article class="task" data-id="'+html(item.id)+'"><div class="task-main"><span class="status-tag '+html(item.status)+'">'+statusLabel(item.status)+'</span><div class="task-body"><div class="task-title">'+html(item.title)+'</div><div class="task-sub">'+(item.quantityNote?'<span>Requested: '+html(item.quantityNote)+'</span>':'')+(item.adminNote?'<span>Manager note: '+html(item.adminNote)+'</span>':'')+receipt+'</div></div><button class="small-btn danger" data-action="archive">Remove</button></div>'+
   managerControls(item)+'</article>';
  }).join(''):'<div class="empty">Nothing in Need More. Tap an inventory item or add something above.</div>';
  var alerts=(state.data.stockAlerts||[]);
@@ -145,6 +148,19 @@ document.addEventListener('click',function(e){
   var body={id:id,status:card.querySelector('.manager-status').value,adminNote:card.querySelector('.manager-note').value};
   var requested=card.querySelector('.manager-quantity');if(requested)body.quantityNote=requested.value;
   act('update',body);
+ }
+ if(action==='receipt-options'){
+  json('api/daily-prep.php?action=receipts&id='+encodeURIComponent(id)).then(function(d){
+   var slot=card.querySelector('.receipt-slot');
+   slot.className='receipt-slot receipt-options';
+   slot.innerHTML='<strong>Existing inventory receipts</strong><p>Linking one marks Need More received. It does not receive stock again.</p>'+
+    (d.receipts.length?d.receipts.map(function(x){return '<button type="button" class="small-btn" data-action="reconcile-apply" data-receipt-id="'+html(x.id)+'">'+html(x.quantity)+' '+html(x.unit)+' received '+html(x.when)+'</button>';}).join(''):'<span>No eligible recorded receipts since this request was added. Receive stock through Operations first.</span>');
+  }).catch(function(err){notify(err.message,true);});
+ }
+ if(action==='reconcile-apply'){
+  var transactionId=Number(button.dataset.receiptId);
+  if(Number.isSafeInteger(transactionId)&&transactionId>0&&confirm('Link this EXISTING inventory receipt and mark Need More received? This does not change stock counts.'))
+   act('reconcile_receipt',{id:id,transactionId:transactionId});
  }
  if(action==='notify')act('notify',{id:id});
  if(action==='history'){json('api/daily-prep.php?action=history&id='+encodeURIComponent(id)).then(function(d){var slot=card.querySelector('.history-slot');slot.className='history';slot.innerHTML=d.events.length?d.events.map(function(ev){return '<div>'+html(ev.when)+' · <strong>'+html(ev.event)+'</strong> · '+html(ev.by)+'</div>';}).join(''):'No changes logged.';}).catch(function(err){notify(err.message,true);});}

@@ -12,6 +12,8 @@ on:
       - 'operations.php'
       - 'database/20261224_daily_prep_quicklist.sql'
       - 'database/20261225_daily_prep_recipe_targets.sql'
+      - 'database/20261226_daily_prep_receipt_reconciliation.sql'
+      - 'includes/daily-quicklist-receipts.php'
       - 'tests/daily-prep-quicklist-contract.php'
       - 'api/prep-intelligence.php'
       - 'api/prep-intelligence-agent.php'
@@ -45,6 +47,8 @@ on:
       - 'operations.php'
       - 'database/20261224_daily_prep_quicklist.sql'
       - 'database/20261225_daily_prep_recipe_targets.sql'
+      - 'database/20261226_daily_prep_receipt_reconciliation.sql'
+      - 'includes/daily-quicklist-receipts.php'
       - 'tests/daily-prep-quicklist-contract.php'
       - 'api/prep-intelligence.php'
       - 'api/prep-intelligence-agent.php'
@@ -91,6 +95,7 @@ jobs:
           php -l daily-prep.php
           php -l api/daily-prep.php
           php -l includes/daily-quicklist-core.php
+          php -l includes/daily-quicklist-receipts.php
           php -l tests/daily-prep-quicklist-contract.php
           php -l prep-intelligence.php
           php -l api/prep-intelligence.php
@@ -139,6 +144,8 @@ jobs:
           grep -q 'propose_daily_prep_action' includes/food-monster-b8d18-daily-prep-model-tools.php
           grep -q 'fm8d18j11_catalogue' includes/food-monster-b8d3-tool-runtime.php
           grep -q 'expectedFingerprint' includes/daily-quicklist-core.php
+          grep -q 'uq_quicklist_receipt_transaction' database/20261226_daily_prep_receipt_reconciliation.sql
+          grep -q 'get_need_more_receipts' includes/food-monster-b8d18-daily-prep-model-tools.php
           grep -q 'daily_prep' includes/food-monster-skill-registry.php
           grep -q 'generate_menu' api/daily-prep.php
       - name: Install and upgrade schema

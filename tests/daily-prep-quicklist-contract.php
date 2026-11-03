@@ -593,4 +593,95 @@ dq_assert($newAmount['quantityNote']==='3 cases'
 $postAmount=$pdo->query("SELECT on_hand_quantity FROM inventory_items WHERE public_id='stock-daily-test'")->fetchColumn();
 dq_assert((float)$postAmount===(float)$preAmount,'Need More amount never alters actual stock ledger');
 
+// Section 3K2F: reconcile an ALREADY-RECORDED inventory receipt once, without
+// receiving it twice. Model numbers are bound to the manager's chat session.
+dq_assert(daily_quicklist_receipts_ready($pdo),'upgrade installs the receipt link table');
+$managerReceipts=fm8d18j11_catalogue($managerAgent,$chatContext);
+dq_assert(isset($managerReceipts['get_need_more_receipts'])
+    &&in_array('link_confirmed_receipt',
+        $managerReceipts['propose_daily_prep_action']['parameters']['properties']['action']['enum'],true),
+    'manager has registered native recorded-receipt read and proposal tools');
+dq_assert(!isset($nativeCatalogue['get_need_more_receipts'])
+    &&!in_array('link_confirmed_receipt',
+        $nativeCatalogue['propose_daily_prep_action']['parameters']['properties']['action']['enum'],true),
+    'staff cannot discover manager-only receipt actions');
+try{fm8d18j11_receipts_read(['name'=>'Flour','date'=>$agentDay],$staffAgent,$chatContext);
+    throw new RuntimeException('staff read private recorded receipts');}catch(DomainException){}
+try{fm8d18j11_receipts_read(['name'=>'Flour','date'=>$agentDay],$managerAgent,
+        ['channel'=>'voice','privateVoiceApproved'=>false]);
+    throw new RuntimeException('unverified room voice read inventory receipts');}catch(DomainException){}
+try{fm8d18j11_propose(['action'=>'link_confirmed_receipt','list'=>'inventory',
+        'reference_mode'=>'name','name'=>'Flour','receipt_number'=>1,'date'=>$agentDay],
+        $managerAgent,$chatContext);
+    throw new RuntimeException('receipt proposal allowed without a prior numbered read');}
+catch(InvalidArgumentException){}
+$received=operations_inventory_adjust($pdo,$org,$stockId,2.0,'receive',$actor,'CI recorded physical receipt');
+$receiptTxn=(int)$received['last_transaction_id'];
+$afterPhysicalReceipt=(float)$received['on_hand_quantity'];
+$txnCountBefore=(int)$pdo->query('SELECT COUNT(*) FROM inventory_transactions WHERE organization_id='.$org)->fetchColumn();
+$candidates=daily_quicklist_receipt_candidates($pdo,$org,$needIdAgain);
+dq_assert(count($candidates)===1&&$candidates[0]['id']===$receiptTxn
+    &&$candidates[0]['quantity']===2.0&&$candidates[0]['unit']==='kg',
+    'eligible receipt is exact saved tenant inventory ledger evidence');
+try{daily_quicklist_receipt_candidates($pdo,$other,$needIdAgain);
+    throw new RuntimeException('foreign organization enumerated stock receipts');}catch(InvalidArgumentException){}
+$readReceipts=fm8d18j11_receipts_read(['name'=>'Flour','date'=>$agentDay],$managerAgent,$chatContext);
+dq_assert(str_contains($readReceipts['data']['answer'],'1. 2 kg received')
+    &&!str_contains($readReceipts['data']['answer'],(string)$receiptTxn.' transaction ID'),
+    'model reads numbered receipt evidence, not raw transaction IDs');
+$unrelatedThread='agent-'.str_repeat('d',20);
+try{pqa_receipt_context_resolve($org,$manager,$unrelatedThread,$needIdAgain,1);
+    throw new RuntimeException('receipt selection leaked across conversations');}catch(InvalidArgumentException){}
+try{pqa_receipt_context_resolve($other,$manager,$chatThread,$needIdAgain,1);
+    throw new RuntimeException('receipt selection leaked to another tenant');}catch(InvalidArgumentException){}
+dq_assert(fm8d18j11_action_fields(['action'=>'link_confirmed_receipt','list'=>'inventory',
+    'reference_mode'=>'name','name'=>'Flour','receipt_number'=>21],$managerAgent)===['receipt_number'],
+    'unknown receipt ordinal rejected before proposal');
+$proposalReceipt=fm8d18j11_propose(['action'=>'link_confirmed_receipt','list'=>'inventory',
+    'reference_mode'=>'name','name'=>'Flour','receipt_number'=>1,'date'=>$agentDay],
+    $managerAgent,$chatContext);
+dq_assert(($proposalReceipt['data']['requiresConfirmation']??false)===true,
+    'linking recorded stock receipt stages a separate confirmation');
+$rowsBeforeLink=daily_quicklist_items($pdo,$org,$agentDay);
+$needBeforeLink=current(array_values(array_filter($rowsBeforeLink,static fn(array $r):bool=>$r['id']===$needIdAgain)));
+dq_assert($needBeforeLink['status']==='ordered'&&daily_quicklist_receipt_links($pdo,$org)===[],
+    'unconfirmed receipt never resolves Need More');
+daily_quicklist_mutate($pdo,$org,$manager,'update',
+    ['id'=>$needIdAgain,'status'=>'ordered','quantityNote'=>'4 cases'],true);
+try{prep_agent_handle($pdo,$managerAgent,['message'=>'Confirm']);
+    throw new RuntimeException('stale receipt link proposal was applied');}catch(InvalidArgumentException){}
+dq_assert(!gac_pending_get('prep',$org,$manager),'stale receipt proposal was consumed');
+$readReceipts=fm8d18j11_receipts_read(['name'=>'Flour','date'=>$agentDay],$managerAgent,$chatContext);
+$proposed=fm8d18j11_propose(['action'=>'link_confirmed_receipt','list'=>'inventory',
+    'reference_mode'=>'name','name'=>'Flour','receipt_number'=>1,'date'=>$agentDay],
+    $managerAgent,$chatContext);
+$completeReceipt=prep_agent_handle($pdo,$managerAgent,['message'=>'Confirm']);
+dq_assert($completeReceipt['skill']==='prep.action_confirmed','agent confirmation resolved Need More');
+$receiptLinks=daily_quicklist_receipt_links($pdo,$org);
+dq_assert(($receiptLinks[$needIdAgain]['receiptId']??null)===$receiptTxn,
+    'one immutable receipt link saved for the exact Need More request');
+$linkedRows=daily_quicklist_items($pdo,$org,$agentDay);
+$linkedNeed=current(array_values(array_filter($linkedRows,static fn(array $r):bool=>$r['id']===$needIdAgain)));
+dq_assert($linkedNeed['status']==='received'
+    &&daily_quicklist_history($pdo,$org,$needIdAgain)[0]['event']==='receipt_reconciled',
+    'receipt reconciliation changed only the Need More status and appended evidence');
+$stockAfterLink=(float)$pdo->query("SELECT on_hand_quantity FROM inventory_items WHERE public_id='stock-daily-test'")->fetchColumn();
+$txnCountAfter=(int)$pdo->query('SELECT COUNT(*) FROM inventory_transactions WHERE organization_id='.$org)->fetchColumn();
+dq_assert($stockAfterLink===$afterPhysicalReceipt&&$txnCountAfter===$txnCountBefore,
+    'reconciliation never receives stock twice or appends an inventory transaction');
+try{daily_quicklist_mutate($pdo,$org,$manager,'update',
+        ['id'=>$needIdAgain,'status'=>'need_more'],true);
+    throw new RuntimeException('reconciled request was reopened');}catch(InvalidArgumentException){}
+$newRequest=daily_quicklist_add($pdo,$org,$actor,
+    ['type'=>'inventory','title'=>'Flour','inventoryId'=>$stockId],false);
+dq_assert(daily_quicklist_receipt_candidates($pdo,$org,$newRequest)===[],
+    'already-linked inventory receipt cannot satisfy a new shortage');
+try{daily_quicklist_reconcile_receipt($pdo,$org,$manager,$managerAgent,$newRequest,$receiptTxn);
+    throw new RuntimeException('same receipt linked to another shortage');}catch(InvalidArgumentException){}
+try{daily_quicklist_reconcile_receipt($pdo,$other,$manager,$managerAgent,$newRequest,$receiptTxn);
+    throw new RuntimeException('receipt crossed organization boundary');}catch(InvalidArgumentException|DomainException){}
+$allHistory=daily_quicklist_history($pdo,$org,$needIdAgain);
+dq_assert(($allHistory[0]['details']['inventoryTransactionId']??null)===$receiptTxn,
+    'immutable transaction evidence remains available in admin history');
+
 echo "daily-prep-quicklist contract passed\n";
