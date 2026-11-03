@@ -61,6 +61,22 @@ function fm8d18j11_read(array $args,array $actor,array $context): array
             }
             if($parts)$message.=' Active numeric Need More quantities: '.implode('; ',$parts).'.';
         }
+        // 3K2H: authorized manager purchasing context, read from canonical ledgers.
+        if(fm8d18j11_can_receipts($actor)){
+            require_once __DIR__.'/daily-quicklist-purchasing-board.php';
+            try{
+                $board=daily_quicklist_purchasing_board($pdo,$org,$date);
+                $summary=[];
+                foreach(array_slice($board['requests'],0,8) as $need){
+                    $summary[]=$need['title'].': '.count($need['openOrders']).' open PO line(s), '.
+                        count($need['recentDeliveries']).' recent vendor delivery line(s)';
+                }
+                if($summary)$message.=' Purchasing context (inventory-item associations, not receipt allocations): '.
+                    implode('; ',$summary).'. Use the Purchasing Dashboard for details.';
+            }catch(RuntimeException $e){
+                // The checklist remains available when Purchasing is not installed.
+            }
+        }
         return ['ok'=>true,'data'=>[
             'answer'=>$message,'source'=>'Gelato official Daily Prep/Need More records',
             'proof'=>['url'=>'daily-prep.php'],
