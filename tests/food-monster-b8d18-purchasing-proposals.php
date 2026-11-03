@@ -87,6 +87,7 @@ b18c_check(($answer['data']['requiresConfirmation']??false)===true,'status stagi
 b18c_check(str_contains($answer['data']['answer'],'Super Admin'),'high impact owner approval clearly disclosed');
 $pending=fm8d18p_pending_get(7,101);
 b18c_check(($pending['type']??'')==='submit_po'&&($pending['payload']['purchaseOrderId']??'')==='po-1','uses existing Purchasing Agent pending contract');
+b18c_check($pending===($_SESSION['purchasing_agent_pending']['7:101']??null),'adapter writes the specialist owner-scoped pending-session contract');
 b18c_check(($pending['payload']['expected']['status']??'')==='draft','stale PO status saved for confirmation');
 b18c_check($db->query("SELECT status FROM purchase_orders WHERE public_id='po-1'")->fetchColumn()==='draft','submit proposal writes no PO changes');
 b18c_invalid(static fn()=>$receipt(['order_number'=>'PO-7-OPEN','all_items_received_in_full'=>true],$actor),'already a pending restaurant action');
@@ -106,7 +107,8 @@ b18c_check(str_contains($runtime,"'propose_purchase_order_draft','propose_purcha
 $engine=(string)file_get_contents(dirname(__DIR__).'/includes/purchasing-agent-core.php');
 b18c_check(str_contains($engine,'fm9g_authorize_purchase($user,$proposal)'),'Super Admin grant remains authoritative');
 b18c_check(str_contains($engine,'pac_guard_order($po,(array)$payload[\'expected\'])'),'existing stale-order guard remains authoritative');
-b18c_check(str_contains($engine,"'purchasing_agent_pending'"),'adapter writes the specialist pending-session contract');
+b18c_check(str_contains($engine,"gac_pending_get('purchasing',\$org,\$uid)")
+    &&str_contains($engine,"gac_pending_store('purchasing',\$org,\$uid,\$type,\$payload,\$summary)"),'specialist reads and writes the shared purchasing confirmation contract');
 b18c_check(!str_contains((string)file_get_contents(dirname(__DIR__).'/includes/food-monster-b8d18-purchasing-proposals.php'),"require_once __DIR__.'/purchasing-agent-core.php'"),'avoids Prep/Purchasing pac_require naming collision');
 session_write_close();
 echo "B8D18C model-selected Purchasing proposals: $checks assertions passed\n";
