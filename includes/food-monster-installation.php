@@ -37,7 +37,7 @@ function fmi_read_connection(string $file): ?array
     if ($path === null) {
         return null;
     }
-    $value = json_decode((string)file_get_contents($path, false, null, 2049), true, 8, JSON_THROW_ON_ERROR);
+    $value = json_decode((string)file_get_contents($path, false, null, 0, 2049), true, 8, JSON_THROW_ON_ERROR);
     if (!is_array($value)
         || !preg_match('/^[a-f0-9]{32}$/D', (string)($value['installation_id'] ?? ''))
         || !preg_match('/^[a-f0-9]{32}$/D', (string)($value['instance_id'] ?? ''))
@@ -102,7 +102,14 @@ function fmi_activate(array $user, string $installationId, string $key): array
         ];
         // Keep a stable instance ID even if central activation succeeds and its response is lost.
         fmi_save_connection($directory, 'pending.json', $connection);
-        $status = fmi_request($connection, 'activate');
+        try {
+            $status = fmi_request($connection, 'activate');
+        } catch (FoodMonsterInstallationError $error) {
+            if (in_array($error->getCode(), [401, 403, 409, 422], true)) {
+                @unlink($directory . '/pending.json');
+            }
+            throw $error;
+        }
         fmi_save_connection($directory, 'connection.json', $connection);
         @unlink($directory . '/pending.json');
         return $status;
@@ -130,7 +137,7 @@ function fmi_request(array $connection, string $action, array $fields = [], ?cal
             'attempt_not_found', 'attempt_finished' => 'This update attempt has already finished or belongs to a different connection.',
             'version_mismatch' => 'The deployed Gelato version does not match the approved update.',
             default => 'Food Monster licensing could not be verified right now.',
-        });
+        }, $code);
     }
     $data = $decoded['data'] ?? null;
     if (!is_array($data) || ($data['installation_id'] ?? null) !== $connection['installation_id']

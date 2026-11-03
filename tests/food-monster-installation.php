@@ -1,9 +1,15 @@
 <?php
 declare(strict_types=1);
 
+define('RESTAURANT_APP_ROOT', dirname(__DIR__));
+define('TEST_PRIVATE_ROOT', sys_get_temp_dir() . '/gelato-license-' . bin2hex(random_bytes(8)));
+
 function app_config(): array
 {
-    return ['app' => ['url' => 'https://restaurant.example.test/gelato']];
+    return [
+        'app' => ['url' => 'https://restaurant.example.test/gelato'],
+        'storage' => ['private_root' => TEST_PRIVATE_ROOT, 'public_root' => RESTAURANT_APP_ROOT],
+    ];
 }
 
 require __DIR__ . '/../includes/food-monster-installation-tools.php';
@@ -39,6 +45,18 @@ foreach (['http://restaurant.example.test', 'https://127.0.0.1', 'https://user@r
 $id = str_repeat('a', 32);
 $key = 'fm1_' . str_repeat('c', 64);
 $connection = ['installation_id' => $id, 'instance_id' => str_repeat('b', 32), 'key' => $key];
+$directory = app_private_storage_directory(app_private_storage_root(), 'food-monster/connection.json');
+$stored = ['organization_id' => 4] + $connection;
+try {
+    fmi_save_connection($directory, 'connection.json', $stored);
+    check_installation(fmi_read_connection('connection.json') === $stored, 'Reads the saved private connection.');
+    check_installation((fileperms($directory . '/connection.json') & 0777) === 0600, 'Saved credential has restrictive permissions.');
+    check_installation(fmi_status(['organization_id' => 99] + $owner)['connection'] === 'unconfigured', 'A different organization cannot read the saved connection.');
+} finally {
+    unlink($directory . '/connection.json');
+    rmdir($directory);
+    rmdir(TEST_PRIVATE_ROOT);
+}
 $status = [
     'installation_id' => $id, 'domain' => 'restaurant.example.test', 'license_state' => 'active',
     'expires_at' => 1900000000, 'auto_update' => 'stable', 'available_release' => [
