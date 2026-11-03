@@ -15,6 +15,8 @@ on:
       - 'database/20261226_daily_prep_receipt_reconciliation.sql'
       - 'database/20261227_daily_prep_partial_receipts.sql'
       - 'includes/daily-quicklist-receipts.php'
+      - 'includes/daily-quicklist-purchase-drafts.php'
+      - 'need-more-purchasing.php'
       - 'tests/daily-prep-quicklist-contract.php'
       - 'api/prep-intelligence.php'
       - 'api/prep-intelligence-agent.php'
@@ -51,6 +53,8 @@ on:
       - 'database/20261226_daily_prep_receipt_reconciliation.sql'
       - 'database/20261227_daily_prep_partial_receipts.sql'
       - 'includes/daily-quicklist-receipts.php'
+      - 'includes/daily-quicklist-purchase-drafts.php'
+      - 'need-more-purchasing.php'
       - 'tests/daily-prep-quicklist-contract.php'
       - 'api/prep-intelligence.php'
       - 'api/prep-intelligence-agent.php'
@@ -97,6 +101,8 @@ jobs:
           php -l daily-prep.php
           php -l api/daily-prep.php
           php -l includes/daily-quicklist-core.php
+          php -l includes/daily-quicklist-purchase-drafts.php
+          php -l need-more-purchasing.php
           php -l includes/daily-quicklist-receipts.php
           php -l tests/daily-prep-quicklist-contract.php
           php -l prep-intelligence.php
