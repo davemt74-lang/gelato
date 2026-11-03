@@ -37,7 +37,7 @@ function daily_quicklist_receipt_progress(PDO $pdo,int $org,string $publicId): a
     $q->execute([$org,(int)$item['id']]);$received=(float)$q->fetchColumn();
     $target=$item['requested_stock_quantity']===null?null:(float)$item['requested_stock_quantity'];
     return ['requestedQuantity'=>$target,'receivedQuantity'=>$received,
-        'remainingQuantity'=>$target===null?null:max(0,round($target-$received,3)),
+        'remainingQuantity'=>$target===null?null:max(0.0,round($target-$received,3)),
         'unit'=>(string)$item['base_unit']];
 }
 /** Exact saved inventory link, actual positive receive ledger, same canonical unit. */
@@ -104,7 +104,7 @@ function daily_quicklist_receipt_links(PDO $pdo,int $org): array
     foreach($out as &$item){
         $item['quantity']=round($item['quantity'],3);
         $item['remainingQuantity']=$item['requestedQuantity']===null?null:
-            max(0,round($item['requestedQuantity']-$item['quantity'],3));
+            max(0.0,round($item['requestedQuantity']-$item['quantity'],3));
     }
     unset($item);
     return $out;
@@ -174,7 +174,7 @@ function daily_quicklist_reconcile_receipt(PDO $pdo,int $org,int $uid,array $use
             'recordedReceiptQuantity'=>$available,'unit'=>(string)$receipt['unit'],
             'receiptAt'=>(string)$receipt['created_at'],
             'requestedQuantity'=>$target,'beforeReceived'=>$prior,'afterReceived'=>$after,
-            'remainingQuantity'=>$target===null?null:max(0,round($target-$after,3)),
+            'remainingQuantity'=>$target===null?null:max(0.0,round($target-$after,3)),
             'beforeStatus'=>(string)$row['status'],'afterStatus'=>$afterStatus];
         $event=$afterStatus==='received'?'receipt_reconciled':'receipt_partially_reconciled';
         daily_quicklist_event($pdo,$org,(int)$row['id'],$uid,$event,$evidence);
@@ -182,7 +182,7 @@ function daily_quicklist_reconcile_receipt(PDO $pdo,int $org,int $uid,array $use
             ($afterStatus==='received'?'Need More reconciled: ':'Need More partially received: ').$row['title'],
             $row['title'].' has '.daily_quicklist_format_quantity($after).' '.
             $receipt['unit'].' allocated from already recorded inventory receipts.'.
-            ($target===null?'':' '.daily_quicklist_format_quantity(max(0,$target-$after)).' '.$receipt['unit'].' remaining.'));
+            ($target===null?'':' '.daily_quicklist_format_quantity(max(0.0,$target-$after)).' '.$receipt['unit'].' remaining.'));
         $pdo->commit();
         return ['id'=>$publicId,'status'=>$afterStatus,'receipt'=>$evidence];
     }catch(Throwable $error){
