@@ -10,6 +10,8 @@ namespace Gelato.Ar.Core
         private readonly IGlassesPlatform _platform;
         private readonly IGelatoGateway _gateway;
         private readonly IDeviceTokenStore _tokenStore;
+        private readonly object _deviceCredentialGate = new object();
+        private CancellationTokenSource _deviceCredentialLifetime = new CancellationTokenSource();
         private string? _deviceToken;
         private long _deviceCredentialVersion;
 
@@ -43,17 +45,8 @@ namespace Gelato.Ar.Core
             await GuardAsync(async () =>
             {
                 await _platform.InitializeAsync(cancellationToken).ConfigureAwait(false);
-                _deviceToken = _tokenStore.Load();
-                if (string.IsNullOrWhiteSpace(_deviceToken))
-                {
-                    Interlocked.Increment(ref _deviceCredentialVersion);
-                    State = WorkflowState.Unpaired;
-                    return;
-                }
-
-                _gateway.SetDeviceToken(_deviceToken);
-                Interlocked.Increment(ref _deviceCredentialVersion);
-                State = WorkflowState.Idle;
+                SetDeviceCredential(_tokenStore.Load());
+                State = IsPaired ? WorkflowState.Idle : WorkflowState.Unpaired;
             }).ConfigureAwait(false);
         }
 
@@ -68,14 +61,61 @@ namespace Gelato.Ar.Core
                 var result = await _gateway.PairAsync(pairingCode.Trim(), device, cancellationToken).ConfigureAwait(false);
                 if (string.IsNullOrWhiteSpace(result.DeviceToken)) throw new InvalidOperationException("Gelato did not return a device token.");
 
-                _deviceToken = result.DeviceToken;
-                _gateway.SetDeviceToken(_deviceToken);
-                // Publish only after the gateway token has changed. Unity may
-                // observe this generation while this continuation runs elsewhere.
-                Interlocked.Increment(ref _deviceCredentialVersion);
-                _tokenStore.Save(_deviceToken);
+                SetDeviceCredential(result.DeviceToken);
+                _tokenStore.Save(result.DeviceToken);
                 State = WorkflowState.Idle;
             }).ConfigureAwait(false);
+        }
+
+        public CancellationTokenSource LinkDeviceOperation(CancellationToken lifetime, out long credentialVersion)
+        {
+            lock (_deviceCredentialGate)
+            {
+                credentialVersion = DeviceCredentialVersion;
+                return CancellationTokenSource.CreateLinkedTokenSource(lifetime, _deviceCredentialLifetime.Token);
+            }
+        }
+
+        private void SetDeviceCredential(string? token)
+        {
+            lock (_deviceCredentialGate)
+            {
+                // Stop previous work before making the new bearer available to it.
+                _deviceCredentialLifetime.Cancel();
+                _deviceCredentialLifetime.Dispose();
+                _deviceCredentialLifetime = new CancellationTokenSource();
+                _deviceToken = token;
+                _gateway.SetDeviceToken(token ?? string.Empty);
+                CurrentWork = null;
+                ResetBuild();
+                ReviewFeedback = null;
+                Interlocked.Increment(ref _deviceCredentialVersion);
+            }
+        }
+
+        private void ResetBuild()
+        {
+            BuildSession = null;
+            StationCalibration = null;
+            VisionLabelProfile = null;
+            VisionModelAssignment = null;
+            LastCalibrationError = null;
+            LastVisionProfileError = null;
+            LastVisionModelError = null;
+            LastSubmittedObservationKey = null;
+            Validation = null;
+            Handoff = null;
+        }
+
+        private T PublishDeviceConfiguration<T>(long credentialVersion, CancellationToken token, Func<T> publish)
+        {
+            lock (_deviceCredentialGate)
+            {
+                token.ThrowIfCancellationRequested();
+                if (credentialVersion != DeviceCredentialVersion)
+                    throw new OperationCanceledException("The device credential changed.");
+                return publish();
+            }
         }
 
         public Task HeartbeatAsync(CancellationToken cancellationToken = default)
@@ -96,15 +136,7 @@ namespace Gelato.Ar.Core
             return await GuardAsync(async () =>
             {
                 CurrentWork = await _gateway.GetCurrentWorkAsync(cancellationToken).ConfigureAwait(false);
-                StationCalibration = null;
-                VisionLabelProfile = null;
-                VisionModelAssignment = null;
-                LastVisionProfileError = null;
-                LastVisionModelError = null;
-                BuildSession = null;
-                LastSubmittedObservationKey = null;
-                Validation = null;
-                Handoff = null;
+                ResetBuild();
 
                 State = CurrentWork.FocusItem != null && !CurrentWork.AssignmentRequired
                     ? WorkflowState.WorkReady
@@ -121,11 +153,15 @@ namespace Gelato.Ar.Core
             if (frame.Width <= 0 || frame.Height <= 0 || string.IsNullOrWhiteSpace(frame.PixelFormat))
                 throw new InvalidOperationException("A valid camera frame is required to load station calibration.");
 
+            var credentialVersion = DeviceCredentialVersion;
             try
             {
-                LastCalibrationError = null;
-                StationCalibration = await _gateway.GetStationCalibrationAsync(frame, cancellationToken).ConfigureAwait(false);
-                return StationCalibration;
+                var calibration = await _gateway.GetStationCalibrationAsync(frame, cancellationToken).ConfigureAwait(false);
+                return PublishDeviceConfiguration(credentialVersion, cancellationToken, () =>
+                {
+                    LastCalibrationError = null;
+                    return StationCalibration = calibration;
+                });
             }
             catch (OperationCanceledException)
             {
@@ -133,9 +169,11 @@ namespace Gelato.Ar.Core
             }
             catch (Exception ex)
             {
-                StationCalibration = null;
-                LastCalibrationError = ex.Message;
-                return null;
+                return PublishDeviceConfiguration(credentialVersion, cancellationToken, () =>
+                {
+                    LastCalibrationError = ex.Message;
+                    return StationCalibration = null;
+                });
             }
         }
 
@@ -147,15 +185,19 @@ namespace Gelato.Ar.Core
             if (string.IsNullOrWhiteSpace(detectorName))
                 throw new ArgumentException("Vision detector name is required.", nameof(detectorName));
 
+            var credentialVersion = DeviceCredentialVersion;
             try
             {
-                LastVisionProfileError = null;
-                VisionLabelProfile = await _gateway.GetVisionLabelProfileAsync(
+                var profile = await _gateway.GetVisionLabelProfileAsync(
                     BuildSession!.PublicId,
                     detectorName.Trim(),
                     cancellationToken
                 ).ConfigureAwait(false);
-                return VisionLabelProfile;
+                return PublishDeviceConfiguration(credentialVersion, cancellationToken, () =>
+                {
+                    LastVisionProfileError = null;
+                    return VisionLabelProfile = profile;
+                });
             }
             catch (OperationCanceledException)
             {
@@ -163,9 +205,11 @@ namespace Gelato.Ar.Core
             }
             catch (Exception ex)
             {
-                VisionLabelProfile = null;
-                LastVisionProfileError = ex.Message;
-                return null;
+                return PublishDeviceConfiguration(credentialVersion, cancellationToken, () =>
+                {
+                    LastVisionProfileError = ex.Message;
+                    return VisionLabelProfile = null;
+                });
             }
         }
 
@@ -177,15 +221,19 @@ namespace Gelato.Ar.Core
             if (string.IsNullOrWhiteSpace(detectorName))
                 throw new ArgumentException("Vision detector name is required.", nameof(detectorName));
 
+            var credentialVersion = DeviceCredentialVersion;
             try
             {
-                LastVisionModelError = null;
-                VisionModelAssignment = await _gateway.GetVisionModelAssignmentAsync(
+                var assignment = await _gateway.GetVisionModelAssignmentAsync(
                     BuildSession!.PublicId,
                     detectorName.Trim(),
                     cancellationToken
                 ).ConfigureAwait(false);
-                return VisionModelAssignment;
+                return PublishDeviceConfiguration(credentialVersion, cancellationToken, () =>
+                {
+                    LastVisionModelError = null;
+                    return VisionModelAssignment = assignment;
+                });
             }
             catch (OperationCanceledException)
             {
@@ -193,9 +241,11 @@ namespace Gelato.Ar.Core
             }
             catch (Exception ex)
             {
-                VisionModelAssignment = null;
-                LastVisionModelError = ex.Message;
-                return null;
+                return PublishDeviceConfiguration(credentialVersion, cancellationToken, () =>
+                {
+                    LastVisionModelError = ex.Message;
+                    return VisionModelAssignment = null;
+                });
             }
         }
 

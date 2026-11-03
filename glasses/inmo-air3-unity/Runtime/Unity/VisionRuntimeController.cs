@@ -144,8 +144,7 @@ namespace Gelato.Ar.Unity
 
             var build = coordinator.BuildSession;
             if (build == null || !string.Equals(build.Status, "active", StringComparison.Ordinal)) return;
-            var credentialVersion = coordinator.DeviceCredentialVersion;
-            var processingCancellation = CancellationTokenSource.CreateLinkedTokenSource(lifetimeToken);
+            var processingCancellation = coordinator.LinkDeviceOperation(lifetimeToken, out var credentialVersion);
             _processingCancellation = processingCancellation;
             var token = processingCancellation.Token;
             _processing = true;
@@ -398,9 +397,9 @@ namespace Gelato.Ar.Unity
                 _activeSession = string.Empty;
             }
             if (!coordinator.IsPaired || !_heartbeatTask.IsCompleted || Time.unscaledTime < _nextHeartbeatAt) return;
-            var cancellation = CancellationTokenSource.CreateLinkedTokenSource(token);
+            var cancellation = coordinator.LinkDeviceOperation(token, out var credentialVersion);
             _heartbeatCancellation = cancellation;
-            _heartbeatTask = ProbeHeartbeatAsync(coordinator, coordinator.DeviceCredentialVersion, cancellation);
+            _heartbeatTask = ProbeHeartbeatAsync(coordinator, credentialVersion, cancellation);
         }
 
         private async Task ProbeHeartbeatAsync(ArWorkflowCoordinator coordinator, long credentialVersion,

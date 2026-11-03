@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Gelato.Ar.Core;
@@ -56,6 +57,7 @@ internal static class Program
         await SceneShutdownCancelsProcessingAsync();
         await CredentialReplacementInvalidatesHeartbeatAsync();
         await CredentialReplacementCancelsOldWorkAsync();
+        await CredentialReplacementRejectsLateModelDownloadAsync();
         Assert(Debug.Errors.Count == 0, "Actual controller must not hide unexpected adapter exceptions: " + string.Join(" | ", Debug.Errors));
     }
 
@@ -330,14 +332,47 @@ internal static class Program
         await UntilAsync(() => !raced.Processing);
         Assert(!UnityWebRequest.Requests.Any(r => r.Action == DeviceApiActions.VisionModelReport || r.method == "GET"),
             "An assignment completed under an obsolete credential must not report or enter model activation.");
+        Assert(raced.Coordinator.VisionModelAssignment == null && raced.Coordinator.BuildSession == null,
+            "Replacement must clear the old build and must not publish the obsolete assignment.");
         Assert(raced.Detector.Calls == 0, "An obsolete configuration continuation cannot produce observations.");
     }
 
-    private static void CompleteModelAssignment(UnityWebRequest request) => request.Complete(
+    private static async Task CredentialReplacementRejectsLateModelDownloadAsync()
+    {
+        await using var fixture = await Fixture.CreateAsync();
+        var artifact = new byte[] { 1, 2, 3 };
+        var sha = Convert.ToHexString(SHA256.HashData(artifact)).ToLowerInvariant();
+        var host = new ModelHost();
+        SetField(fixture.Controller, "modelRuntimeHost", host);
+        SetField(fixture.Controller, "_modelActivationService", new VisionModelActivationService(
+            new UnityVisionModelArtifactFetcher(TimeSpan.FromSeconds(2)), host,
+            (report, token) => fixture.Coordinator.ReportVisionModelAsync(report, token)));
+        fixture.ModelAssignment = request => CompleteModelAssignment(request, sha);
+        fixture.Update();
+        await UntilAsync(() => UnityWebRequest.Requests.Any(r => r.method == "GET"));
+        var download = UnityWebRequest.Requests.Single(r => r.method == "GET");
+        var reportsBeforePairing = UnityWebRequest.Requests.Count(r => r.Action == DeviceApiActions.VisionModelReport);
+
+        await fixture.Coordinator.PairAsync("654321", new DeviceDescriptor());
+        download.Complete(artifact);
+        // No Update occurs between the replacement and the completed download.
+        await UntilAsync(() => !fixture.Processing);
+        AssertAbortedAndDisposed(download);
+        Assert(host.PrepareCalls == 0 && host.ActivationCalls == 0,
+            "Valid bytes from the previous pairing must never be prepared or activated.");
+        Assert(UnityWebRequest.Requests.Count(r => r.Action == DeviceApiActions.VisionModelReport) == reportsBeforePairing,
+            "An obsolete download must not generate model reports under the replacement bearer.");
+        Assert(host.CaptureActive().PackagePublicId == "known-good", "Credential changes preserve the current known-good runtime.");
+    }
+
+    private static void CompleteModelAssignment(UnityWebRequest request) =>
+        CompleteModelAssignment(request, new string('0', 64));
+
+    private static void CompleteModelAssignment(UnityWebRequest request, string sha) => request.Complete(
         "{\"ok\":true,\"modelAssignment\":{\"action\":\"apply\",\"assignmentKey\":\"assignment-1\",\"detectorName\":\"adapter-test\","
         + "\"compatibility\":{\"compatible\":true},\"rollout\":{\"publicId\":\"rollout-1\"},\"package\":{\"publicId\":\"package-2\","
         + "\"detectorName\":\"adapter-test\",\"runtimeType\":\"fixture-runtime\",\"platform\":\"fixture\",\"artifactUrl\":\"https://fixture.invalid/model.bin\","
-        + "\"artifactSha256\":\"" + new string('0', 64) + "\"}}}");
+        + "\"artifactSha256\":\"" + sha + "\"}}}");
 
     private static void CompleteProfile(UnityWebRequest request) => request.Complete(
         "{\"ok\":true,\"visionProfile\":{\"schema\":\"gelato.vision-profile.v1\",\"detectorName\":\"adapter-test\",\"buildSessionPublicId\":\"build-1\",\"profileHash\":\"fixture\",\"mappings\":[],\"blockedLabels\":[]}}");

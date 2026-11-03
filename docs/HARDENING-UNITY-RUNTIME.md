@@ -58,7 +58,7 @@ The adapter contracts exercise:
 - Gateway timeout, caller cancellation, pre-cancelled requests, handler disposal, and a subsequent successful request.
 - Model download timeout, cancellation, progress byte limit, empty/error responses, successful bytes, and HTTPS validation.
 - Actual controller/service/model-fetcher integration during a stalled model download: release of `_processing`, no preparation or activation of incomplete bytes, and continued use of the existing detector.
-- Actual controller configuration timeout, retry and processing recovery, scene shutdown, reconstruction, and credential replacement including a late obsolete response, a cancelled old profile request, and an old assignment that completes before the next `Update`.
+- Actual controller configuration timeout, retry and processing recovery, scene shutdown, reconstruction, and credential replacement. The replacement cancels the prior heartbeat and automated vision work before publishing its bearer. The tests deliver an obsolete assignment and valid model bytes before the next `Update`, then verify the old response cannot publish configuration, prepare or activate a model, or send a model report under the replacement bearer.
 
 The source-only environment used for this change did not include `dotnet` or Unity. Local review and diff checks are not substitutes for compilation. The Release E CI job is the required executor for these two .NET commands and the behavioral baseline proof; consult its actual result before reporting them as passed.
 

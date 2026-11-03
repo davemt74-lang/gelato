@@ -462,7 +462,8 @@ namespace Gelato.Ar.Unity
         private async Task<T> PostOnUnityContextAsync<T>(object payload, bool authenticated, CancellationToken cancellationToken) where T : class
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (authenticated && string.IsNullOrWhiteSpace(_deviceToken))
+            var deviceToken = _deviceToken;
+            if (authenticated && string.IsNullOrWhiteSpace(deviceToken))
                 throw new InvalidOperationException("Gelato device token is not configured.");
 
             var json = JsonUtility.ToJson(payload);
@@ -474,7 +475,7 @@ namespace Gelato.Ar.Unity
                 request.downloadHandler = new DownloadHandlerBuffer();
                 request.SetRequestHeader("Content-Type", "application/json");
                 request.SetRequestHeader("Accept", "application/json");
-                if (authenticated) request.SetRequestHeader("Authorization", "Bearer " + _deviceToken);
+                if (authenticated) request.SetRequestHeader("Authorization", "Bearer " + deviceToken);
 
                 await UnityRequestDeadline.SendAsync(request,
                     TimeSpan.FromSeconds(Math.Max(0.1f, Math.Min(120f, requestTimeoutSeconds))), cancellationToken);

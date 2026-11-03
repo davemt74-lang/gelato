@@ -2,7 +2,7 @@
 
 ## Scope and evidence
 
-The original audit reviewed commit `5d2f332e630dd3efda07fd36224a05fe2420726b` and recorded 31 findings. Releases A–D validated 28 of them. Release E implements the remaining three; closure of those rows requires the final Release E workflow, merge and package checks recorded in its pull request. This ledger tracks the original finding set, not an assertion that all future defects or feature work have been eliminated.
+The original audit reviewed commit `5d2f332e630dd3efda07fd36224a05fe2420726b` and recorded 31 findings. Releases A–D validated 28 of them. Release E completes the remediation for all **31/31 original findings** once the workflow, merge and package checks are recorded in [PR #521](https://github.com/davemt74-lang/gelato/pull/521). This ledger tracks the original finding set. The feature and optimization backlog is tracked separately below.
 
 | Release | Original findings | Source and evidence |
 | --- | ---: | --- |
@@ -10,7 +10,7 @@ The original audit reviewed commit `5d2f332e630dd3efda07fd36224a05fe2420726b` an
 | B | 7 | [Durable operations](HARDENING-RELEASE-B.md), [PR #518](https://github.com/davemt74-lang/gelato/pull/518) |
 | C | 3 | [Food Monster and device ownership](HARDENING-RELEASE-C.md), [PR #519](https://github.com/davemt74-lang/gelato/pull/519) |
 | D | 7 | [Data integrity and retention](HARDENING-RELEASE-D.md), [PR #520](https://github.com/davemt74-lang/gelato/pull/520) |
-| E | 3 | [Runtime boundaries](HARDENING-RELEASE-E.md), final validation in the Release E pull request |
+| E | 3 | [Runtime boundaries](HARDENING-RELEASE-E.md), [PR #521](https://github.com/davemt74-lang/gelato/pull/521) |
 
 ## Original findings
 
