@@ -14,7 +14,7 @@ app_verify_request_csrf($input);
 
 try{
     app_json_response(prep_agent_handle($pdo,$user,$input));
-}catch(PrepAgentPermissionException $error){
+}catch(GacConfirmationConflict $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],409);}catch(PrepAgentPermissionException $error){
     app_json_response(['ok'=>false,'message'=>$error->getMessage()],403);
 }catch(Throwable $error){
     app_json_response(['ok'=>false,'message'=>$error->getMessage()],422);

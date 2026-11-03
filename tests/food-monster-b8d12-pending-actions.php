@@ -1,5 +1,7 @@
 <?php
 declare(strict_types=1);
+if(PHP_SAPI!=='cli'){http_response_code(404);exit;}
+require_once __DIR__.'/hardening-agent-confirmation-test-support.php';
 /** FM-B8D12: model-selected continuation of a verified pending Agent action. */
 if(!function_exists('mb_substr')){function mb_substr(string $s,int $o,?int $l=null,?string $e=null):string{return substr($s,$o,$l);}}
 if(!function_exists('mb_strlen')){function mb_strlen(string $s,?string $e=null):int{return strlen($s);}}
@@ -18,13 +20,15 @@ $actor=['id'=>19,'organization_id'=>31,'display_name'=>'Restaurant Manager',
     'permissions'=>['crm.view'],'role_slug'=>'manager'];
 $ctx=['threadId'=>'agent-'.str_repeat('a',20),'messageId'=>'msg-'.str_repeat('b',20)];
 $key='31:19';
+$pdo=new PDO('sqlite::memory:');
+if(session_status()!==PHP_SESSION_ACTIVE)session_start();
 $_SESSION=[];
 b8d12_check(fm8d12_pending_catalogue($actor,$ctx)===[],
     'no pending means no confirmation tool');
-$_SESSION['agent_node_pending']['crm'][$key]=[
-    'id'=>'gap-a1b2c3d4e5f6a7b8','node'=>'crm','type'=>'customer_follow_up',
-    'organizationId'=>31,'userId'=>19,'created'=>time()-4,
-    'expires'=>time()+240,'summary'=>'Proposed customer follow-up'];
+hac_test_context($pdo,$actor,['threadId'=>$ctx['threadId'],'sourceMessageId'=>$ctx['messageId']]);
+$proposal=gac_pending_store('crm',31,19,'customer_follow_up',[],'Proposed customer follow-up');
+$ctx=array_replace($ctx,hac_test_evidence(hac_test_bind($pdo,$actor,$proposal)));
+
 $cat=fm8d12_pending_catalogue($actor,$ctx);
 b8d12_check(isset($cat['continue_pending_restaurant_action'])
     &&$cat['continue_pending_restaurant_action']['impact']==='read',
@@ -54,7 +58,7 @@ b8d12_check(fm8d12_pending_catalogue($actor,$ctx)===[],
     'expired proposal cannot execute');
 $_SESSION['agent_node_pending']['crm'][$key]=$bad;
 $cat=fm8d12_pending_catalogue($actor,$ctx);
-$pdo=new PDO('sqlite::memory:');$audits=[];
+$audits=[];
 $audit=static function(array $event)use(&$audits):void{$audits[]=$event;};
 $transport=static fn()=>['output'=>[['type'=>'function_call',
     'name'=>'continue_pending_restaurant_action',
@@ -113,7 +117,7 @@ b8d12_check(str_contains($client,'delegation.continuation===true')
     &&str_contains($client,'message:delegatedMessage'),
     'client sends only the server-approved canonical pending decision');
 b8d12_check(str_contains($client,"serverMessage!==String(submitted?.message?.id||'')")
-    &&str_contains($client,"serverThread!==S.thread"),
+    &&str_contains($client,"serverThread!==turnThread"),
     'pending delegation remains bound to authenticated chat turn');
 $runtime=(string)file_get_contents(dirname(__DIR__).'/includes/food-monster-b8d3-tool-runtime.php');
 b8d12_check(str_contains($runtime,'fm8d12_pending_catalogue($principal,$context)')

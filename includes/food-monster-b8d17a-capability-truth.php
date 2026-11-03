@@ -7,6 +7,7 @@ declare(strict_types=1);
  * an alternate authorization path. Every later call rechecks its own policy.
  */
 require_once __DIR__.'/food-monster-skill-registry.php';
+require_once __DIR__.'/food-monster-observation-contracts.php';
 
 function fm8d17a_candidates():array
 {
@@ -205,4 +206,49 @@ function fm8d17a_summary(array $report):string
         '. These are registry capabilities, not proof of successful execution. '.
         'Tools named propose_ only stage actions for separate confirmation. '.
         'The chat prompt picker does not run tools, and source-inventory skill contracts are not execution grants.';
+}
+
+/**
+ * The full diagnostic snapshot belongs to the authenticated capability UI.
+ * Chat/checkpoints retain its counts and a bounded registry sample, not a
+ * duplicate of every descriptor and all 73 proposed source contracts.
+ */
+function fm8d17a_observation(array $report): array
+{
+    $native=array_column((array)$report['nativeTools'],'id');
+    $domains=(array)$report['delegatedAgents'];
+    $shown=array_slice($native,0,40);
+    $delegated=array_slice($domains,0,20);
+    do{
+        $answer='Registered Gelato tools for this account ('.count($shown).' of '.count($native).' shown): '.
+            ($shown?implode(', ',$shown):'none shown').'. Available specialist handoffs ('.count($delegated).
+            ' of '.count($domains).' shown): '.($delegated?implode(', ',array_column($delegated,'label')):'none').'. '.
+            'These are registry capabilities, not proof of successful execution. Tools named propose_ only stage actions for separate confirmation. '.
+            'The chat prompt picker does not run tools; source-inventory contracts are not execution grants. '.
+            (($report['inventoryVisibility']??'')==='owner_only'
+                ?'Owner source inventory: '.(int)($report['counts']['plannedNotExecutable']??0).' proposed contracts; their detailed descriptions are omitted here. '
+                :'Source inventory is withheld for this account. ').
+            'Open Agent Brain and choose Capability truth for the full authorized catalogue and readiness details.';
+        if(strlen(json_encode($answer,JSON_THROW_ON_ERROR))<=3000)break;
+        if($shown)array_pop($shown);
+        elseif($delegated)array_pop($delegated);
+        else throw new RuntimeException('Capability summary exceeds its contract.');
+    }while(true);
+    $data=[
+        'answer'=>$answer,'source'=>'Gelato permission-scoped registered tools and agent handoffs',
+        'nativeTools'=>$shown,'agentDomains'=>array_column($delegated,'id'),
+        'capabilityTruth'=>[
+            'schemaVersion'=>$report['schemaVersion'],'counts'=>$report['counts'],
+            'claim'=>$report['claim'],'inventoryVisibility'=>$report['inventoryVisibility'],
+            'inventoryStatus'=>$report['inventoryStatus'],'readiness'=>$report['readiness'],
+            'executionVerified'=>false,'permissionRecheckedOnUse'=>true,
+        ],
+        'returnedCounts'=>['nativeTools'=>count($shown),'agentDomains'=>count($delegated),'planned'=>0],
+        'detailsOmitted'=>true,'truncated'=>count($shown)<count($native)||count($delegated)<count($domains)
+            ||(int)($report['counts']['plannedNotExecutable']??0)>0,
+        'proof'=>['url'=>'agent-canvas.php'],
+    ];
+    if(!fm8do_fits('list_my_gelato_capabilities',$data))
+        throw new RuntimeException('Capability observation exceeds its contract.');
+    return $data;
 }

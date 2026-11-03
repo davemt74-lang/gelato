@@ -1,5 +1,7 @@
 <?php
 declare(strict_types=1);
+if(PHP_SAPI!=='cli'){http_response_code(404);exit;}
+require_once __DIR__.'/hardening-agent-confirmation-test-support.php';
 require_once dirname(__DIR__).'/includes/bootstrap.php';
 require_once dirname(__DIR__).'/includes/food-monster-llm.php';
 require_once dirname(__DIR__).'/includes/food-monster-b8d3-tool-runtime.php';
@@ -63,6 +65,7 @@ $availability=$registry['check_staff_availability']['execute']($range,$manager);
 b8d4_assert(str_contains($availability['data']['answer'],'no shift overlap'),
     'recorded availability checked');
 $original=(int)$pdo->query("SELECT COUNT(*) FROM schedule_shifts WHERE organization_id=".$org)->fetchColumn();
+hac_test_context($pdo,$manager);
 $proposal=$proposalTool['execute']($range,$manager);
 b8d4_assert(str_contains($proposal['data']['answer'],'Reply Confirm'),
     'model-selected shift only stages a proposal');
@@ -73,6 +76,8 @@ b8d4_assert(is_array($pending)&&($pending['type']??'')==='shift_create','server 
 $blocked=fm8d4_confirm_pending($pdo,$manager,[['role'=>'user','content'=>'What would confirmation do?']],
     static fn():array=>$manager);
 b8d4_assert($blocked===null,'discussion about confirmation cannot execute');
+$review=hac_test_review($pdo,$manager,'scheduling');
+gac_request_context($review,$pdo,$manager);
 $revoked=array_replace($manager,['permissions'=>[]]);
 $denied=fm8d4_confirm_pending($pdo,$manager,[['role'=>'user','content'=>'Confirm']],
     static fn():array=>$revoked);
@@ -135,6 +140,7 @@ $future=(new DateTimeImmutable('today',new DateTimeZone('America/Phoenix')))->mo
 $first=$future->format('Y-m-d');$last=$future->modify('+1 day')->format('Y-m-d');
 $timeOffTool=fm8d18g_catalogue($manager)['propose_my_time_off_request'];
 $before=(int)$pdo->query('SELECT COUNT(*) FROM staff_availability_exceptions WHERE organization_id='.$org)->fetchColumn();
+hac_test_context($pdo,$manager);
 $timeOff=$timeOffTool['execute'](['start_date'=>$first,'end_date'=>$last,'note'=>'Personal scheduling test'],$manager);
 b8d4_assert(($timeOff['data']['requiresConfirmation']??false)===true,
     'model-selected personal time off stages a confirmation');
@@ -148,7 +154,7 @@ try{sac_execute_pending($pdo,$org,$managerId,array_replace($manager,['permission
 }catch(SchedulingAgentPermissionException){b8d4_assert(true,'fresh permissions required at confirm');}
 b8d4_assert((int)$pdo->query('SELECT COUNT(*) FROM staff_availability_exceptions WHERE organization_id='.$org)->fetchColumn()===$before,
     'failed confirmation never creates a request');
-$timeOffConfirmed=scheduling_agent_handle($pdo,$manager,['message'=>'Confirm']);
+$timeOffConfirmed=scheduling_agent_handle($pdo,$manager,hac_test_input($pdo,$manager,'scheduling',['message'=>'Confirm']));
 b8d4_assert(($timeOffConfirmed['data']['status']??'')==='pending'&&($timeOffConfirmed['data']['days']??0)===2,
     'canonical confirmation creates precisely two pending dates');
 $check=$pdo->prepare('SELECT exception_date,status,reviewed_by FROM staff_availability_exceptions WHERE organization_id=? AND user_id=? ORDER BY exception_date');

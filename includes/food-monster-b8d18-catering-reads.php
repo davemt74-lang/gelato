@@ -51,7 +51,7 @@ function fm8d18j7a_search(array $args,array $actor):array
     if($truncated)$answer.=' More matches exist; narrow the query.';
     if(count($matches)>1)$answer.=' Select one exact public ID before an event-specific action.';
     return ['ok'=>true,'data'=>[
-        'answer'=>mb_substr($answer,0,1500,'UTF-8'),
+        'answer'=>$answer,
         'source'=>'Gelato Catering Operations (authenticated event lookup)',
         'readOnly'=>true,'matches'=>$matches,'truncated'=>$truncated,
     ]];
@@ -115,11 +115,11 @@ function fm8d18j7a_read(array $args,array $actor):array
         ($lines?implode('; ',$lines):'No recorded entries.').
         ($more?' More records exist; only the first ten are shown.':'');
     return ['ok'=>true,'data'=>[
-        'answer'=>mb_substr($answer,0,1700,'UTF-8'),
+        'answer'=>$answer,
         'source'=>'Gelato Catering Operations (authenticated exact event)',
         'readOnly'=>true,'operationPublicId'=>$public,'title'=>(string)$operation['title'],
         'status'=>(string)$operation['status'],'section'=>$section,'records'=>$rows,
-        'truncated'=>$more||mb_strlen($answer,'UTF-8')>1700,
+        'truncated'=>$more,
     ]];
 }
 function fm8d18j7a_catalogue(array $actor,array $context=[]):array

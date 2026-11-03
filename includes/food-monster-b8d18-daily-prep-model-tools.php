@@ -8,6 +8,7 @@ declare(strict_types=1);
  */
 require_once __DIR__.'/prep-agent-core.php';
 require_once __DIR__.'/food-monster-b8d18-prep-list-proposals.php';
+require_once __DIR__.'/food-monster-observation-contracts.php';
 
 function fm8d18j11_can(array $actor): bool
 {
@@ -31,6 +32,32 @@ function fm8d18j11_date(array $args): string
     if($date==='')$date=(new DateTimeImmutable('now',new DateTimeZone('America/Phoenix')))->format('Y-m-d');
     return daily_quicklist_date($date);
 }
+
+/** Build an exact, whole-row numbered checklist before saving its context. */
+function fm8d18j11_checklist_data(string $date,array $rows,array $shown,array $contextLines=[]): array
+{
+    $totals=['prep'=>0,'inventory'=>0];$lists=['prep'=>[],'inventory'=>[]];$done=0;
+    foreach($rows as $row){
+        $kind=(string)$row['type'];
+        if(!isset($totals[$kind])||$kind==='inventory'&&$row['status']==='received')continue;
+        if($kind==='prep'&&$row['date']!==$date)continue;
+        ++$totals[$kind];
+        if($kind==='prep'&&$row['status']==='done')++$done;
+    }
+    foreach($shown as $row)$lists[$row['type']][]=$row;
+    $lines=['Daily Prep for '.$date.': '.$done.' of '.$totals['prep'].' prep items done.'];
+    foreach(['prep'=>'Daily Prep','inventory'=>'Need More'] as $kind=>$label){
+        $parts=[];
+        foreach($lists[$kind] as $i=>$row)$parts[]=($i+1).'. '.$row['title'].' ('.str_replace('_',' ',$row['status']).')';
+        $lines[]=$label.' (showing '.count($parts).' of '.$totals[$kind].'): '.($parts?implode('; ',$parts):'no items shown').'.';
+    }
+    if($contextLines)$lines[]=implode(' ',$contextLines);
+    $lines[]='Choose a displayed number or name the item. Any changes require a separate Confirm. Open Daily Prep for all items, recipes, timers and quantity details; open the Purchasing Dashboard for order details.';
+    return ['answer'=>implode(' ',$lines),'source'=>'Gelato official Daily Prep/Need More records',
+        'proof'=>['url'=>'daily-prep.php'],'date'=>$date,'prepCount'=>$totals['prep'],'needMoreCount'=>$totals['inventory'],
+        'returnedCounts'=>['prep'=>count($lists['prep']),'inventory'=>count($lists['inventory'])],
+        'truncated'=>count($lists['prep'])<$totals['prep']||count($lists['inventory'])<$totals['inventory']];
+}
 function fm8d18j11_read(array $args,array $actor,array $context): array
 {
     if(!fm8d18j11_can($actor))throw new DomainException('Daily Prep Agent permission is required.');
@@ -41,13 +68,18 @@ function fm8d18j11_read(array $args,array $actor,array $context): array
     if($opened&&!session_start())throw new RuntimeException('Could not open secure Daily Prep Agent context.');
     try{
         $rows=daily_quicklist_items($pdo,$org,$date);
-        $selection=pqa_context_save($org,$uid,$date,$rows,(string)($context['threadId']??''));
-        $prep=array_values(array_filter($rows,static fn(array $r):bool=>$r['type']==='prep'));
-        $done=count(array_filter($prep,static fn(array $r):bool=>$r['status']==='done'));
-        $message='Daily Prep for '.$date.': '.$done.' of '.count($prep).' prep items done. '.
-            pqa_numbered_brief($selection).
-            ' You can say "mark the second prep item done" or name the item. '.
-            'Any changes require a separate Confirm. Open Daily Prep to view recipes and timers.';
+        $shown=[];$counts=['prep'=>0,'inventory'=>0];$full=[];
+        $data=fm8d18j11_checklist_data($date,$rows,$shown);
+        foreach($rows as $row){
+            $kind=(string)$row['type'];
+            if(!isset($counts[$kind])||isset($full[$kind])||$counts[$kind]>=20
+                ||$kind==='inventory'&&$row['status']==='received'
+                ||$kind==='prep'&&$row['date']!==$date)continue;
+            $candidate=fm8d18j11_checklist_data($date,$rows,[...$shown,$row]);
+            if(!fm8do_fits('get_daily_prep_checklist',$candidate)){$full[$kind]=true;continue;}
+            $shown[]=$row;++$counts[$kind];$data=$candidate;
+        }
+        $contextLines=[];
         if(fm8d18j11_can_receipts($actor)&&daily_quicklist_receipts_ready($pdo)){
             $parts=[];
             foreach($rows as $row){
@@ -59,7 +91,11 @@ function fm8d18j11_read(array $args,array $actor,array $context): array
                     ' recorded, '.daily_quicklist_format_quantity($progress['remainingQuantity']).' remaining';
                 if(count($parts)>=10)break;
             }
-            if($parts)$message.=' Active numeric Need More quantities: '.implode('; ',$parts).'.';
+            if($parts){
+                $line='Active numeric Need More quantities (up to 10): '.implode('; ',$parts).'.';
+                $candidate=fm8d18j11_checklist_data($date,$rows,$shown,[$line]);
+                if(fm8do_fits('get_daily_prep_checklist',$candidate)){$contextLines[]=$line;$data=$candidate;}
+            }
         }
         // 3K2H: authorized manager purchasing context, read from canonical ledgers.
         if(fm8d18j11_can_receipts($actor)&&dqpo_can_compare($actor)){
@@ -71,19 +107,36 @@ function fm8d18j11_read(array $args,array $actor,array $context): array
                     $summary[]=$need['title'].': '.count($need['openOrders']).' open PO line(s), '.
                         count($need['recentDeliveries']).' recent vendor delivery line(s)';
                 }
-                if($summary)$message.=' Purchasing context (inventory-item associations, not receipt allocations): '.
-                    implode('; ',$summary).'. Use the Purchasing Dashboard for details.';
+                if($summary){
+                    $line='Purchasing context (up to 8 inventory-item associations, not receipt allocations): '.implode('; ',$summary).'.';
+                    $candidate=fm8d18j11_checklist_data($date,$rows,$shown,[...$contextLines,$line]);
+                    if(fm8do_fits('get_daily_prep_checklist',$candidate))$data=$candidate;
+                }
             }catch(RuntimeException $e){
                 // The checklist remains available when Purchasing is not installed.
             }
         }
-        return ['ok'=>true,'data'=>[
-            'answer'=>$message,'source'=>'Gelato official Daily Prep/Need More records',
-            'proof'=>['url'=>'daily-prep.php'],
-            'date'=>$date,'prepCount'=>count($prep),
-            'needMoreCount'=>count($selection['lists']['inventory']),
-        ]];
+        // Only displayed complete rows can subsequently resolve by ordinal.
+        pqa_context_save($org,$uid,$date,$shown,(string)($context['threadId']??''));
+        return ['ok'=>true,'data'=>$data];
     }finally{if($opened&&session_status()===PHP_SESSION_ACTIVE)session_write_close();}
+}
+/** Whole alert rows and the prose describing them share one byte budget. */
+function fm8d18j11_stock_data(string $date,int $total,array $alerts,int $retrieved=0): array
+{
+    $parts=[];
+    foreach($alerts as $row){
+        $parts[]=$row['name'].' (on hand '.daily_quicklist_format_quantity($row['onHand']).
+            ' '.$row['unit'].', reorder point '.daily_quicklist_format_quantity($row['reorderPoint']).
+            ', '.($row['alreadyRequested']?'already on Need More':'not on Need More').')'.
+            ($row['prepRecipes']?' · active prep recipe links (up to 5): '.implode(', ',$row['prepRecipes']):'');
+    }
+    $answer=$total>0?'Items at or below their saved reorder point: showing '.count($alerts).' of '.$total.'. '.implode('; ',$parts).'.'
+        :'No inventory items are at or below a configured reorder point in the available stock snapshot.';
+    $answer.=' Open Daily Prep / Inventory for complete item details. These are reorder-point indicators, not calculated recipe shortages or purchase quantities. No stock or Need More request changed.';
+    return ['answer'=>$answer,'source'=>'Gelato saved inventory reorder points and authorized active Daily Prep recipes',
+        'date'=>$date,'alerts'=>$alerts,'totalCount'=>$total,'retrievedCount'=>$retrieved,'returnedCount'=>count($alerts),
+        'truncated'=>count($alerts)<$total,'proof'=>['url'=>'daily-prep.php']];
 }
 /** Reorder-point signals and exact recipe-name links, never a stock forecast. */
 function fm8d18j11_stock_read(array $args,array $actor,array $context): array
@@ -96,21 +149,27 @@ function fm8d18j11_stock_read(array $args,array $actor,array $context): array
     $org=(int)$actor['organization_id'];$date=fm8d18j11_date($args);
     $items=daily_quicklist_items($pdo,$org,$date);
     $recipes=app_has_permission('recipes.view',$actor)?daily_quicklist_recipes($pdo,$org):[];
-    $alerts=daily_quicklist_stock_alerts(daily_quicklist_inventory($pdo,$org),$recipes,$items);
-    $parts=[];
+    if(!restaurant_brain_table_ready($pdo,'inventory_items'))throw new RuntimeException('Inventory is not installed.');
+    // The general stock picker is limited to the first 400 items. Filter in
+    // SQL first and count all matches so larger inventories remain truthful.
+    $where="organization_id=? AND archived_at IS NULL AND status='active'
+        AND reorder_point IS NOT NULL AND reorder_point>=0 AND on_hand_quantity<=reorder_point";
+    // The uncorrelated count and row prefix use one InnoDB read snapshot.
+    $q=$pdo->prepare('SELECT public_id,name,base_unit,on_hand_quantity,reorder_point,
+        (SELECT COUNT(*) FROM inventory_items WHERE '.$where.') AS matching_count
+        FROM inventory_items WHERE '.$where.' ORDER BY name,id LIMIT 400');
+    $q->execute([$org,$org]);$records=$q->fetchAll(PDO::FETCH_ASSOC);
+    $total=(int)($records[0]['matching_count']??0);
+    $stock=array_map(static fn(array $r):array=>['id'=>(string)$r['public_id'],'name'=>(string)$r['name'],
+        'unit'=>(string)$r['base_unit'],'onHand'=>(float)$r['on_hand_quantity'],'reorderPoint'=>(float)$r['reorder_point']],$records);
+    $alerts=daily_quicklist_stock_alerts($stock,$recipes,$items);
+    $shown=[];$data=fm8d18j11_stock_data($date,$total,[],count($records));
     foreach(array_slice($alerts,0,12) as $row){
-        $parts[]=$row['name'].' (on hand '.daily_quicklist_format_quantity($row['onHand']).
-            ' '.$row['unit'].', reorder point '.daily_quicklist_format_quantity($row['reorderPoint']).
-            ', '.($row['alreadyRequested']?'already on Need More':'not on Need More').')'.
-            ($row['prepRecipes']?' · used by active prep recipe(s): '.implode(', ',$row['prepRecipes']):'');
+        $candidate=fm8d18j11_stock_data($date,$total,[...$shown,$row],count($records));
+        if(!fm8do_fits('get_need_more_stock_insights',$candidate))break;
+        $shown[]=$row;$data=$candidate;
     }
-    $answer=$alerts?'Items at or below their saved reorder point: '.implode('; ',$parts).'.'
-        :'No inventory items are at or below a configured reorder point in the available stock snapshot.';
-    if(count($alerts)>12)$answer.=' Showing the first 12 of '.count($alerts).'; open Inventory for the complete list.';
-    $answer.=' These are reorder-point indicators, not calculated recipe shortages or purchase quantities. No stock or Need More request changed.';
-    return ['ok'=>true,'data'=>['answer'=>$answer,
-        'source'=>'Gelato saved inventory reorder points and authorized active Daily Prep recipes',
-        'date'=>$date,'alerts'=>$alerts,'proof'=>['url'=>'daily-prep.php']]];
+    return ['ok'=>true,'data'=>$data];
 }
 function fm8d18j11_can_receipts(array $actor): bool
 {
@@ -120,7 +179,58 @@ function fm8d18j11_can_vendors(array $actor): bool
 {
     return fm8d18j11_can($actor)&&dqpo_can_compare($actor);
 }
-/** Read saved supplier terms and bind displayed option numbers to this conversation. */
+/** Bound repeated history evidence separately from the selectable terms. */
+function fm8d18j11_public_vendor_option(array $option,int $number): array
+{
+    unset($option['vendorItemId'],$option['vendorId'],$option['vendorSku']);
+    $history=(array)$option['priceHistory'];
+    $option['priceHistory']=array_slice($history,0,2);
+    $option['priceHistoryRetrievedCount']=count($history);
+    $option['priceHistoryTruncated']=count($history)>2;
+    return ['number'=>$number]+$option;
+}
+function fm8d18j11_vendor_data(array $comparison,array $options,array $openOrders,bool $canDraft): array
+{
+    $parts=[];$historyTruncated=false;
+    foreach($options as $option){
+        $price=$option['unitPrice']===null?'unit price unavailable':'$'.number_format((float)$option['unitPrice'],4).' per '.$comparison['unit'];
+        $subtotal=$option['estimatedSubtotal']===null?'subtotal not priced':'estimated subtotal $'.number_format((float)$option['estimatedSubtotal'],2);
+        $pack=$option['packSize']===null?'pack size not configured':daily_quicklist_format_quantity((float)$option['packSize']).' '.$option['packUnit'].' per pack';
+        $quantity=$option['packs']===null?'purchase quantity not available':daily_quicklist_format_quantity((float)$option['packs']).' packs';
+        $line=$option['number'].'. '.$option['vendor'].(!empty($option['preferred'])?' (preferred)':'').': '.
+            $pack.'; '.$price.'; '.($option['eligible']?$quantity.', '.$subtotal:'not eligible: '.implode(' ',(array)$option['blockers']));
+        if($option['overageQuantity']!==null)$line.='; overage '.daily_quicklist_format_quantity((float)$option['overageQuantity']).' '.$comparison['unit'];
+        if(!empty($option['warnings']))$line.='; '.implode(' ',(array)$option['warnings']);
+        $history=[];
+        foreach($option['priceHistory'] as $entry)$history[]='$'.number_format((float)$entry['pricePerPack'],2).
+            '/pack of '.($entry['packSize']===null?'unknown size':daily_quicklist_format_quantity((float)$entry['packSize']).' '.$entry['unit']).
+            ' on '.substr((string)$entry['recordedAt'],0,10);
+        if($history)$line.='; recent recorded prices ('.count($history).' of '.$option['priceHistoryRetrievedCount'].' retrieved): '.implode(', ',$history);
+        $historyTruncated=$historyTruncated||$option['priceHistoryTruncated'];
+        $parts[]=$line;
+    }
+    $total=count($comparison['options']);$openTotal=count($comparison['openOrders']);
+    $moreOptions=!empty($comparison['optionsTruncated']);$moreOrders=!empty($comparison['openOrdersTruncated']);
+    $answer='Saved supplier options for '.$comparison['name'].', outstanding '.
+        ($comparison['remainingQuantity']===null?'quantity not set':daily_quicklist_format_quantity((float)$comparison['remainingQuantity']).' '.$comparison['unit']).'. '.
+        'Showing '.count($options).' of '.($moreOptions?'at least '.($total+1):$total).' suppliers. '.
+        ($parts?implode("\n",$parts):($total?'Supplier details exceed this chat view; open Need More Purchasing.':'No active saved supplier mappings.')).
+        ' Open order lines: '.($moreOrders?'at least '.($openTotal+1):$openTotal).'.'.
+        (!empty($comparison['blockers'])?' Draft blockers: '.implode(' ',(array)$comparison['blockers']):'').
+        ' Prices are saved catalog/history evidence; at most two of the five most recent history entries per supplier are shown. '.
+        'Open Need More Purchasing for all suppliers, price history and open orders. No order or supplier preference changed. '.
+        'A displayed supplier selection requires a separate Confirm to draft or change preference; orders are never submitted by this tool.';
+    return ['answer'=>$answer,'name'=>$comparison['name'],'remainingQuantity'=>$comparison['remainingQuantity'],'unit'=>$comparison['unit'],
+        'options'=>$options,'optionCount'=>$total,'optionCountExact'=>!$moreOptions,'returnedOptionCount'=>count($options),
+        'optionsTruncated'=>$moreOptions||count($options)<$total,
+        'openOrders'=>$openOrders,'openOrderCount'=>$openTotal,'openOrderCountExact'=>!$moreOrders,
+        'openOrdersTruncated'=>$moreOrders||count($openOrders)<$openTotal,
+        'canDraft'=>$canDraft,'blockers'=>$comparison['blockers'],
+        'truncated'=>$historyTruncated||$moreOptions||count($options)<$total||$moreOrders||count($openOrders)<$openTotal,
+        'source'=>'Gelato saved supplier catalog, price history and canonical open purchase orders',
+        'proof'=>['url'=>'need-more-purchasing.php']];
+}
+/** Read saved supplier terms and bind exactly the displayed subset. */
 function fm8d18j11_vendor_read(array $args,array $actor,array $context): array
 {
     if(!fm8d18j11_can_vendors($actor))
@@ -132,40 +242,49 @@ function fm8d18j11_vendor_read(array $args,array $actor,array $context): array
     $threadId=(string)($context['threadId']??'');
     $row=pqa_resolve_item($pdo,$org,$date,'inventory',$name);
     $comparison=dqpo_comparison($pdo,$org,(string)$row['id']);
+    $openOrders=array_slice($comparison['openOrders'],0,3);$options=[];
+    $canDraft=$comparison['canDraft']&&dqpo_can_draft($actor);
+    $data=fm8d18j11_vendor_data($comparison,[],$openOrders,$canDraft);
+    // Keep global blockers even if a source name or order detail is unusually
+    // long; only the optional complete order rows may be omitted.
+    while(!fm8do_fits('get_need_more_vendor_options',$data)&&$openOrders){
+        array_pop($openOrders);$data=fm8d18j11_vendor_data($comparison,[],$openOrders,$canDraft);
+    }
+    if(!fm8do_fits('get_need_more_vendor_options',$data))throw new RuntimeException('Supplier summary exceeds its contract.');
+    foreach(array_slice($comparison['options'],0,20) as $index=>$option){
+        $public=fm8d18j11_public_vendor_option($option,$index+1);
+        $candidate=fm8d18j11_vendor_data($comparison,[...$options,$public],$openOrders,$canDraft);
+        if(!fm8do_fits('get_need_more_vendor_options',$candidate))break;
+        $options[]=$public;$data=$candidate;
+    }
     $opened=session_status()!==PHP_SESSION_ACTIVE;
     if($opened&&!session_start())throw new RuntimeException('Could not start supplier selection session.');
     try{
-        pqa_vendor_context_save($org,$uid,$threadId,$comparison);
+        // Keep the original complete comparison hash for fresh checks. Only
+        // the visible prefix supplies selectable numbers; never renumber it.
+        $displayed=$comparison;$displayed['options']=array_slice($comparison['options'],0,count($options));
+        pqa_vendor_context_save($org,$uid,$threadId,$displayed);
         pqa_context_save($org,$uid,$date,daily_quicklist_items($pdo,$org,$date),$threadId);
         pqa_context_focus($org,$uid,$threadId,'inventory',(string)$row['id']);
     }finally{if($opened&&session_status()===PHP_SESSION_ACTIVE)session_write_close();}
-    $parts=[];$options=[];
-    foreach(array_slice($comparison['options'],0,20) as $index=>$option){
-        $price=$option['unitPrice']===null?'unit price unavailable':'$'.number_format((float)$option['unitPrice'],4).' per '.$comparison['unit'];
-        $subtotal=$option['estimatedSubtotal']===null?'subtotal not priced':'estimated subtotal $'.number_format((float)$option['estimatedSubtotal'],2);
-        $pack=$option['packSize']===null?'pack size not configured':daily_quicklist_format_quantity((float)$option['packSize']).' '.$option['packUnit'].' per pack';
-        $quantity=$option['packs']===null?'purchase quantity not available':daily_quicklist_format_quantity((float)$option['packs']).' packs';
-        $parts[]=($index+1).'. '.$option['vendor'].(!empty($option['preferred'])?' (preferred)':'').': '.
-            $pack.'; '.$price.'; '.
-            ($option['eligible']?$quantity.', '.$subtotal:
-                'not eligible: '.implode(' ',(array)$option['blockers'])).
-            (!empty($option['warnings'])?'; '.implode(' ',(array)$option['warnings']):'');
-        // Names and numbered evidence are exposed; the model does not choose raw database IDs.
-        unset($option['vendorItemId'],$option['vendorId']);
-        $options[]=['number'=>$index+1]+$option;
-    }
-    $answer='Saved supplier options for '.$comparison['name'].', outstanding '.
-        ($comparison['remainingQuantity']===null?'quantity not set':daily_quicklist_format_quantity((float)$comparison['remainingQuantity']).' '.$comparison['unit']).': '.
-        ($parts?implode(' ', $parts):'No active saved supplier mappings.').
-        (!empty($comparison['blockers'])?' Draft blockers: '.implode(' ',(array)$comparison['blockers']):'').
-        ' Prices are saved catalog/history evidence; pack totals include rounding. No order or supplier preference changed. '.
-        'A selected supplier draft or preferred-supplier change requires a separate Confirm; orders are never submitted by this tool.';
-    if(count($comparison['options'])>20)$answer.=' Showing the first 20 options; open Need More / Purchasing for all suppliers.';
-    return ['ok'=>true,'data'=>['answer'=>$answer,'name'=>$comparison['name'],
-        'remainingQuantity'=>$comparison['remainingQuantity'],'unit'=>$comparison['unit'],
-        'options'=>$options,'openOrders'=>$comparison['openOrders'],'canDraft'=>$comparison['canDraft']&&dqpo_can_draft($actor),
-        'blockers'=>$comparison['blockers'],'source'=>'Gelato saved supplier catalog, price history and canonical open purchase orders',
-        'proof'=>['url'=>'need-more-purchasing.php']]];
+    return ['ok'=>true,'data'=>$data];
+}
+function fm8d18j11_receipts_data(string $name,array $progress,int $retrieved,array $shown): array
+{
+    $parts=[];
+    foreach($shown as $n=>$receipt)$parts[]=($n+1).'. '.
+        daily_quicklist_format_quantity($receipt['quantity']).' '.$receipt['unit'].' received '.$receipt['when'];
+    $answer=$retrieved?'Eligible ALREADY RECORDED stock receipts for '.$name.' (showing '.count($shown).' of '.$retrieved.' recent candidates): '.implode('; ',$parts).'.'
+        :'No eligible confirmed inventory receipt was found in the recent receipt lookup. Receive stock through Operations first, or inspect older receipts in Inventory.';
+    if($progress['requestedQuantity']!==null)
+        $answer.=' Numeric Need More target: '.daily_quicklist_format_quantity($progress['requestedQuantity']).' '.$progress['unit'].
+            '; already allocated: '.daily_quicklist_format_quantity($progress['receivedQuantity']).' '.$progress['unit'].
+            '; still outstanding: '.daily_quicklist_format_quantity($progress['remainingQuantity']).' '.$progress['unit'].'.';
+    else $answer.=' No numeric stock target is saved; linking one full receipt will close this legacy request.';
+    $answer.=' This lookup considers up to 30 recent ledger rows and 20 eligible candidates. Open Daily Prep / Inventory for receipt details. Linking a displayed receipt requires a separate Confirm; it never adjusts stock again.';
+    return ['answer'=>$answer,'count'=>count($shown),'retrievedCount'=>$retrieved,
+        'truncated'=>count($shown)<$retrieved,'lookupBounded'=>true,
+        'source'=>'Gelato immutable inventory receipt ledger and Need More','proof'=>['url'=>'daily-prep.php']];
 }
 function fm8d18j11_receipts_read(array $args,array $actor,array $context): array
 {
@@ -177,24 +296,18 @@ function fm8d18j11_receipts_read(array $args,array $actor,array $context): array
     $row=pqa_resolve_item($pdo,$org,$date,'inventory',$name);
     $candidates=daily_quicklist_receipt_candidates($pdo,$org,(string)$row['id']);
     $progress=daily_quicklist_receipt_progress($pdo,$org,(string)$row['id']);
+    $shown=[];$data=fm8d18j11_receipts_data((string)$row['title'],$progress,count($candidates),[]);
+    foreach($candidates as $receipt){
+        $candidate=fm8d18j11_receipts_data((string)$row['title'],$progress,count($candidates),[...$shown,$receipt]);
+        if(!fm8do_fits('get_need_more_receipts',$candidate))break;
+        $shown[]=$receipt;$data=$candidate;
+    }
+    if(!fm8do_fits('get_need_more_receipts',$data))throw new RuntimeException('Receipt summary exceeds its contract.');
     $opened=session_status()!==PHP_SESSION_ACTIVE;
     if($opened&&!session_start())throw new RuntimeException('Could not start receipt selection session.');
-    try{pqa_receipt_context_save($org,$uid,(string)($context['threadId']??''),(string)$row['id'],$candidates);}
+    try{pqa_receipt_context_save($org,$uid,(string)($context['threadId']??''),(string)$row['id'],$shown);}
     finally{if($opened&&session_status()===PHP_SESSION_ACTIVE)session_write_close();}
-    $parts=[];
-    foreach($candidates as $n=>$receipt)$parts[]=($n+1).'. '.
-        daily_quicklist_format_quantity($receipt['quantity']).' '.$receipt['unit'].' received '.$receipt['when'];
-    $answer=$candidates?'Eligible ALREADY RECORDED stock receipts for '.$row['title'].': '.implode('; ',$parts).'.'
-        :'No eligible confirmed inventory receipt was recorded after this Need More request. Receive stock through Operations first.';
-    if($progress['requestedQuantity']!==null)
-        $answer.=' Numeric Need More target: '.daily_quicklist_format_quantity($progress['requestedQuantity']).' '.$progress['unit'].
-            '; already allocated: '.daily_quicklist_format_quantity($progress['receivedQuantity']).' '.$progress['unit'].
-            '; still outstanding: '.daily_quicklist_format_quantity($progress['remainingQuantity']).' '.$progress['unit'].'.';
-    else $answer.=' No numeric stock target is saved; linking one full receipt will close this legacy request.';
-    $answer.=' Linking one requires a separate Confirm. It marks Need More received but never adjusts stock again.';
-    return ['ok'=>true,'data'=>['answer'=>$answer,'count'=>count($candidates),
-        'source'=>'Gelato immutable inventory receipt ledger and Need More',
-        'proof'=>['url'=>'daily-prep.php']]];
+    return ['ok'=>true,'data'=>$data];
 }
 function fm8d18j11_allowed_actions(array $actor): array
 {

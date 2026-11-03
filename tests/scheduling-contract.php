@@ -1,5 +1,9 @@
 <?php
 declare(strict_types=1);
+if(PHP_SAPI!=='cli'){http_response_code(404);exit;}
+// This suite includes confirmed Agent actions after its scheduling readbacks.
+// Buffer before any output so those actions can persist and reopen the real session.
+require_once __DIR__.'/hardening-agent-confirmation-test-support.php';
 require __DIR__.'/../includes/bootstrap.php';
 require __DIR__.'/../includes/scheduling-core.php';
 

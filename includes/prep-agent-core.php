@@ -406,6 +406,7 @@ function pac_my_prep(PDO $pdo,int $org,int $uid,string $text): array
 
 function prep_agent_handle(PDO $pdo,array $user,array $input): array
 {
+    gac_request_context($input,$pdo,$user);
     $org=(int)$user['organization_id'];
     $uid=(int)$user['id'];
     pac_require($user,'prep.intelligence.view','Prep Intelligence view permission is required.');
@@ -418,14 +419,15 @@ function prep_agent_handle(PDO $pdo,array $user,array $input): array
     $pending=gac_pending_get('prep',$org,$uid);
 
     if(gac_is_confirm($message)){
-        if(!$pending)throw new InvalidArgumentException('There is no pending Prep Agent action to confirm.');
-        try{$result=pac_execute($pdo,$org,$uid,$user,$pending,$canForecast);}catch(Throwable $error){gac_pending_clear('prep',$org,$uid);throw $error;}
-        gac_pending_clear('prep',$org,$uid);
+        $pending=gac_pending_claim('prep',$org,$uid,$input);
+        try{$result=pac_execute($pdo,$org,$uid,$user,$pending,$canForecast);}catch(Throwable $error){gac_pending_clear('prep',$org,$uid,(string)$pending['id']);throw $error;}
+        gac_pending_clear('prep',$org,$uid,(string)$pending['id']);
         app_audit($pdo,$org,$uid,'prep.agent_action_confirmed','prep_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);
         return $result;
     }
-    if(gac_is_cancel($message)&&$pending){
-        gac_pending_clear('prep',$org,$uid);
+    if(gac_is_cancel($message)){
+        $pending=gac_pending_claim('prep',$org,$uid,$input);
+        gac_pending_clear('prep',$org,$uid,(string)$pending['id']);
         app_audit($pdo,$org,$uid,'prep.agent_action_discarded','prep_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);
         return ['ok'=>true,'skill'=>'prep.action_cancelled','answer'=>'Cancelled. I did not change the prep plan.','data'=>['cancelledProposal'=>$pending['id']],'sources'=>['Prep + Inventory Intelligence']];
     }

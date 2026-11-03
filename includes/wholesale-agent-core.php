@@ -200,6 +200,7 @@ function waa_execute_pending(PDO $pdo,int $org,int $uid,array $user,array $propo
 
 function wholesale_agent_handle(PDO $pdo,array $user,array $input): array
 {
+    gac_request_context($input,$pdo,$user);
     $org=(int)$user['organization_id'];$uid=(int)$user['id'];
     waa_require($user,'wholesale.view','Wholesale view permission is required.');
     waa_require($user,'wholesale.agent','Wholesale Agent permission is required.');
@@ -210,14 +211,15 @@ function wholesale_agent_handle(PDO $pdo,array $user,array $input): array
     $pending=gac_pending_get('wholesale',$org,$uid);
 
     if(gac_is_confirm($message)){
-        if(!$pending)throw new InvalidArgumentException('There is no pending Wholesale Agent action to confirm.');
-        try{$result=waa_execute_pending($pdo,$org,$uid,$user,$pending);}catch(Throwable $e){gac_pending_clear('wholesale',$org,$uid);throw $e;}
-        gac_pending_clear('wholesale',$org,$uid);
+        $pending=gac_pending_claim('wholesale',$org,$uid,$input);
+        try{$result=waa_execute_pending($pdo,$org,$uid,$user,$pending);}catch(Throwable $e){gac_pending_clear('wholesale',$org,$uid,(string)$pending['id']);throw $e;}
+        gac_pending_clear('wholesale',$org,$uid,(string)$pending['id']);
         app_audit($pdo,$org,$uid,'wholesale.agent_action_confirmed','wholesale_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);
         return ['ok'=>true]+$result;
     }
-    if(gac_is_cancel($message)&&$pending){
-        gac_pending_clear('wholesale',$org,$uid);
+    if(gac_is_cancel($message)){
+        $pending=gac_pending_claim('wholesale',$org,$uid,$input);
+        gac_pending_clear('wholesale',$org,$uid,(string)$pending['id']);
         app_audit($pdo,$org,$uid,'wholesale.agent_action_discarded','wholesale_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);
         return ['ok'=>true,'skill'=>'wholesale.action_cancelled','answer'=>'Cancelled. I did not change Wholesale fulfillment or inventory.','data'=>['cancelledProposal'=>$pending['id']],'sources'=>['Wholesale Fulfillment']];
     }

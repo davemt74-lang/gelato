@@ -53,7 +53,7 @@ function fm8d18j5b_read(array $args,array $actor):array
         }
     }elseif($section==='notes'){
         $rows=array_map(static fn(array $r):array=>[
-            'note'=>mb_substr((string)$r['noteBody'],0,300,'UTF-8'),
+            'note'=>(string)$r['noteBody'],
             'createdAt'=>$r['createdAt'],'createdBy'=>$r['createdBy'],
         ],array_slice(crm_notes($pdo,$org,$customerId,6),0,6));
         $answer='Showing '.count($rows).' latest internal CRM note(s) for '.$name.'. Notes are private staff records.';

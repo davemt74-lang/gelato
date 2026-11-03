@@ -10,6 +10,7 @@ require_once __DIR__.'/../includes/agent-voice-conversation.php';
 require_once __DIR__.'/../includes/agent-private-voice.php';
 require_once __DIR__.'/../includes/food-monster-b8d3-tool-runtime.php';
 require_once __DIR__.'/../includes/food-monster-menu-context.php';
+require_once __DIR__.'/../includes/agent-confirmation-core.php';
 
 $user=app_require_auth();
 $org=(int)$user['organization_id'];$uid=(int)$user['id'];
@@ -78,6 +79,9 @@ try{
     $last=end($records);
     if(!$last||($last['role']??'')!=='user'||trim((string)($last['content']??''))!==$message)
         app_json_response(['ok'=>false,'message'=>'Send this message through the Gelato Agent chat.'],409);
+    // Proposal creation binds to this committed user turn, never a model argument.
+    gac_request_context(array_replace($in,['threadId'=>$threadId,
+        'sourceMessageId'=>(string)$last['public_id']]),$pdo,$user);
     $history=fmllm_history($records,12);
     $personMemory=fm9e_llm_memory($pdo,$user,$threadId,$last);
     $engagement=['mode'=>'ordinary','context'=>'','reply'=>null];
@@ -162,6 +166,10 @@ try{
             'channel'=>(string)($last['channel']??'text'),
             'voiceEventId'=>(string)($last['voice_event_public_id']??''),
             'privateVoiceApproved'=>$allowTools];
+        // Carry only the exact evidence the browser retained from the displayed
+        // canonical proposal. Never fill these fields from a session-wide latest slot.
+        foreach(['proposalId','proposalHash','proposalMessageId'] as $reviewField)
+            if(is_string($in[$reviewField]??null))$context[$reviewField]=$in[$reviewField];
         if($allowTools){
             $result=fm8d3_turn($pdo,$user,$selected['provider'],$key,$history,$personMemory,
                 context:$context);
@@ -189,6 +197,8 @@ try{
             'privateToolsAvailable'=>$allowTools,
             'voiceIdentityRequired'=>(($last['channel']??'')==='voice'&&!$allowTools),
         ])]);
+}catch(GacConfirmationConflict $e){
+    app_json_response(['ok'=>false,'message'=>$e->getMessage()],409);
 }catch(InvalidArgumentException $e){
     app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);
 }catch(FmLlmProviderException $e){

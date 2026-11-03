@@ -83,7 +83,7 @@ try{
  if($action==='training.evidence_eligibility')app_json_response(['ok'=>true,'evidence'=>glasses_v11_production_evidence_set_eligibility($pdo,$org,(string)($in['evidencePublicId']??''),(string)($in['eligibility']??'review'),(string)($in['reason']??''),$actor)]);
  if($action==='training.program_create')app_json_response(['ok'=>true,'program'=>glasses_training_program_create($pdo,$org,$in,$actor)],201);
  if($action==='training.assignment_create')app_json_response(['ok'=>true,'assignment'=>glasses_training_assignment_create($pdo,$org,$in,$actor)],201);
- if($action==='training.session_end')app_json_response(['ok'=>true,'session'=>glasses_training_session_end($pdo,$org,(string)($in['sessionPublicId']??''),(string)($in['status']??'completed'),(string)($in['reason']??''),$actor)]);
+ if($action==='training.session_end')app_json_response(['ok'=>true,'session'=>glasses_training_session_end_managed($pdo,$user,(string)($in['sessionPublicId']??''),(string)($in['status']??'completed'),(string)($in['reason']??''))]);
  if($action==='pilot.create')app_json_response(['ok'=>true,'pilot'=>glasses_production_pilot_create($pdo,$org,$in,$actor)],201);
  if($action==='pilot.activate')app_json_response(['ok'=>true,'pilot'=>glasses_production_pilot_set_status($pdo,$org,(string)($in['pilotPublicId']??''),'active',(string)($in['reason']??''),$actor)]);
  if($action==='pilot.pause')app_json_response(['ok'=>true,'pilot'=>glasses_production_pilot_set_status($pdo,$org,(string)($in['pilotPublicId']??''),'paused',(string)($in['reason']??''),$actor)]);
@@ -178,4 +178,4 @@ try{
  if($action==='final.validate_scene')app_json_response(['ok'=>true,'finalValidation'=>glasses_vision_final_validate_scene($pdo,$org,(string)($in['scenePublicId']??''))],201);
  if($action==='final.verify')app_json_response(['ok'=>true,'verification'=>glasses_vision_final_verify($pdo,$org,(string)($in['publicId']??''))]);
  app_json_response(['ok'=>false,'message'=>'Unsupported Vision Lab action.'],422);
-}catch(InvalidArgumentException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);}catch(Throwable $e){error_log('[gelato-vision-lab] '.$e->getMessage());app_json_response(['ok'=>false,'message'=>'Vision Lab request could not be completed.'],500);}
+}catch(DomainException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],403);}catch(InvalidArgumentException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);}catch(Throwable $e){error_log('[gelato-vision-lab] '.$e->getMessage());app_json_response(['ok'=>false,'message'=>'Vision Lab request could not be completed.'],500);}

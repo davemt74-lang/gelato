@@ -15,8 +15,8 @@
     await load(`js/agent-page-context.js?v=${version}`);
     await load(`js/pos-agent-context.js?v=${version}`);
     await load(`js/pos-runtime.js?v=${version}`);
-    await load(`js/global-agent.js?v=${version}`);
-    await load(`js/dynamic-agent-canvas.js?v=${version}`);
+    await load(`js/global-agent.js?v=${version}-hardening-c1`);
+    await load(`js/dynamic-agent-canvas.js?v=${version}-hardening-c1`);
   }
 
   boot().catch((error) => console.error('Gelato POS boot failed:', error));

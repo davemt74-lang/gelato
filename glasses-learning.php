@@ -159,6 +159,6 @@ $boot=[
 window.GELATO_GLASS_LEARNING=<?=json_encode($boot,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE|JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT)?>;
 </script>
 <script src="assets/js/glasses-learning.js?v=20260928-1"></script>
-<script src="js/universal-admin-page-shell.js?v=20260915-2"></script>
+<script src="js/universal-admin-page-shell.js?v=20260915-2-hardening-c1"></script>
 </body>
 </html>

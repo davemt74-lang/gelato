@@ -2,6 +2,7 @@
 declare(strict_types=1);
 // Full deployment archives retain tests; database fixtures may run only from CLI.
 if(PHP_SAPI!=='cli'){http_response_code(404);header('Content-Type: text/plain; charset=utf-8');exit('Not found.');}
+require_once __DIR__.'/hardening-agent-confirmation-test-support.php';
 
 
 /** 3K2I-B: real MariaDB records through the official Food Monster / Prep Agent path. */
@@ -20,7 +21,7 @@ function nmva_check(bool $condition,string $message): void
 }
 function nmva_reject(callable $call,string $message): void
 {
-    try{$call();}catch(InvalidArgumentException|DomainException|PrepAgentPermissionException $e){
+    try{$call();}catch(InvalidArgumentException|DomainException|PrepAgentPermissionException|GacConfirmationConflict $e){
         nmva_check(true,$message);return;
     }
     throw new RuntimeException('Need More vendor agent accepted '.$message);
@@ -52,7 +53,7 @@ $mapA=purchasing_save_vendor_item($pdo,$org,['vendorId'=>$vendorA['public_id'],'
     'packSize'=>2,'packUnit'=>'kg','pricePerPack'=>12,'preferred'=>1],$uid);
 $mapB=purchasing_save_vendor_item($pdo,$org,['vendorId'=>$vendorB['public_id'],'inventoryId'=>$stockId,
     'packSize'=>3,'packUnit'=>'kg','pricePerPack'=>15,'preferred'=>0],$uid);
-$context=['threadId'=>'agent-vendor-'.$tag,'channel'=>'text'];
+$context=['threadId'=>'agent-'.bin2hex(random_bytes(10)),'channel'=>'text'];
 $readArgs=['name'=>'Vendor Test Flour','date'=>$day];
 $baseArgs=['list'=>'inventory','reference_mode'=>'name','name'=>'Vendor Test Flour','date'=>$day];
 $countOrders=static function()use($pdo,$org):int{
@@ -77,7 +78,7 @@ nmva_check(!fm8d18j11_catalogue($manager,['channel'=>'voice','privateVoiceApprov
 nmva_reject(static fn()=>fm8d18j11_vendor_read($readArgs,$staff,$context),'staff supplier read');
 nmva_reject(static fn()=>fm8d18j11_vendor_read($readArgs,$manager,['channel'=>'voice','privateVoiceApproved'=>false]),'unverified room voice supplier read');
 nmva_reject(static fn()=>fm8d18j11_vendor_read($readArgs,$manager,['channel'=>'voice','privateVoiceApproved'=>true]),'voice approval without matching identity event');
-nmva_reject(static fn()=>fm8d18j11_propose($baseArgs+['action'=>'create_purchase_draft','vendor_number'=>1],$manager,$context),'draft without displayed supplier selection');
+nmva_reject(static fn()=>fm8d18j11_propose($baseArgs+['action'=>'create_purchase_draft','vendor_number'=>1],$manager,hac_test_model_context($pdo,$manager,$context)),'draft without displayed supplier selection');
 nmva_check(fm8d18j11_action_fields($baseArgs+['action'=>'create_purchase_draft','vendor_number'=>'1'],$manager)===['vendor_number'],
     'model must use a bounded integer selection');
 $read=fm8d18j11_vendor_read($readArgs,$reader,$context);
@@ -104,14 +105,14 @@ nmva_check(gaw_route($manager,'Create a draft with the second supplier',$context
 nmva_check(gaw_route($manager,'Create a draft with the second supplier','another-thread')['domain']!=='daily_prep_model_tools',
     'another thread does not inherit supplier routing');
 $preferArgs=$baseArgs+['action'=>'set_preferred_vendor','vendor_number'=>$numberB];
-$proposal=fm8d18j11_propose($preferArgs,$manager,$context);
+$proposal=fm8d18j11_propose($preferArgs,$manager,hac_test_model_context($pdo,$manager,$context));
 nmva_check($proposal['data']['requiresConfirmation']===true&&$countOrders()===0,'preferred supplier action only proposes');
 $q=$pdo->prepare('SELECT is_preferred FROM inventory_vendor_items WHERE organization_id=? AND public_id=?');
 $q->execute([$org,$mapB['public_id']]);nmva_check((int)$q->fetchColumn()===0,'proposal did not change preferred supplier');
-prep_agent_handle($pdo,$manager,['message'=>'Cancel']);
+prep_agent_handle($pdo,$manager,hac_test_input($pdo,$manager,'prep',['message'=>'Cancel']));
 $q->execute([$org,$mapB['public_id']]);nmva_check((int)$q->fetchColumn()===0,'Cancel leaves supplier unchanged');
-fm8d18j11_propose($preferArgs,$manager,$context);
-$preferred=prep_agent_handle($pdo,$manager,['message'=>'Confirm']);
+fm8d18j11_propose($preferArgs,$manager,hac_test_model_context($pdo,$manager,$context));
+$preferred=prep_agent_handle($pdo,$manager,hac_test_input($pdo,$manager,'prep',['message'=>'Confirm']));
 $q->execute([$org,$mapB['public_id']]);
 nmva_check($preferred['skill']==='prep.action_confirmed'&&(int)$q->fetchColumn()===1,'existing Confirm applies exact preferred supplier');
 nmva_check($countOrders()===0,'preferred change creates no order');
@@ -120,23 +121,23 @@ nmva_check($countOrders()===0,'preferred change creates no order');
 $read=fm8d18j11_vendor_read($readArgs,$manager,$context);
 foreach($read['data']['options'] as $option)if($option['vendor']===$vendorB['name'])$numberB=(int)$option['number'];
 $draftArgs=$baseArgs+['action'=>'create_purchase_draft','vendor_number'=>$numberB];
-$proposal=fm8d18j11_propose($draftArgs,$manager,$context);
+$proposal=fm8d18j11_propose($draftArgs,$manager,hac_test_model_context($pdo,$manager,$context));
 nmva_check($proposal['data']['requiresConfirmation']===true&&$countOrders()===0,'draft proposal leaves database untouched');
 nmva_check(str_contains($proposal['data']['answer'],$vendorB['name'])&&str_contains($proposal['data']['answer'],'$30.00'),
     'proposal discloses selected supplier and exact rounded pack subtotal');
-nmva_reject(static fn()=>prep_agent_handle($pdo,$reader,['message'=>'Confirm']),'confirmation after Purchasing Manage revoked');
+nmva_reject(static fn()=>prep_agent_handle($pdo,$reader,hac_test_input($pdo,$reader,'prep',['message'=>'Confirm'])),'confirmation after Purchasing Manage revoked');
 nmva_check($countOrders()===0&&!gac_pending_get('prep',$org,$uid),'denied confirmation clears pending proposal without creating order');
-fm8d18j11_propose($draftArgs,$manager,$context);
+fm8d18j11_propose($draftArgs,$manager,hac_test_model_context($pdo,$manager,$context));
 $pdo->prepare('UPDATE inventory_vendor_items SET price_per_pack=16,updated_at=NOW(6) WHERE organization_id=? AND public_id=?')
     ->execute([$org,$mapB['public_id']]);
-nmva_reject(static fn()=>prep_agent_handle($pdo,$manager,['message'=>'Confirm']),'supplier price changed after proposal');
+nmva_reject(static fn()=>prep_agent_handle($pdo,$manager,hac_test_input($pdo,$manager,'prep',['message'=>'Confirm'])),'supplier price changed after proposal');
 nmva_check($countOrders()===0&&!gac_pending_get('prep',$org,$uid),'stale quote cannot create order');
-nmva_reject(static fn()=>fm8d18j11_propose($draftArgs,$manager,$context),'stale displayed supplier comparison');
+nmva_reject(static fn()=>fm8d18j11_propose($draftArgs,$manager,hac_test_model_context($pdo,$manager,$context)),'stale displayed supplier comparison');
 $read=fm8d18j11_vendor_read($readArgs,$manager,$context);
 foreach($read['data']['options'] as $option)if($option['vendor']===$vendorB['name'])$numberB=(int)$option['number'];
 $draftArgs['vendor_number']=$numberB;
-fm8d18j11_propose($draftArgs,$manager,$context);
-$confirmed=prep_agent_handle($pdo,$manager,['message'=>'Confirm']);
+fm8d18j11_propose($draftArgs,$manager,hac_test_model_context($pdo,$manager,$context));
+$confirmed=prep_agent_handle($pdo,$manager,hac_test_input($pdo,$manager,'prep',['message'=>'Confirm']));
 nmva_check($confirmed['skill']==='prep.action_confirmed'&&$countOrders()===1,'only separate Confirm creates one draft');
 $order=purchasing_order($pdo,$org,$confirmed['data']['result']['orderId']);
 nmva_check($order['status']==='draft'&&$order['vendor_public_id']===$vendorB['public_id'],
@@ -146,7 +147,7 @@ nmva_check(count($order['items'])===1&&(int)$order['items'][0]['vendor_item_id']
     'selected mapping, pack rounding and current confirmed price reach canonical purchase order');
 nmva_check(($confirmed['data']['proof']['url']??'')==='need-more-purchasing.php'
     &&str_contains($confirmed['answer'],$order['order_number']),'reply links to evidence and states actual created order');
-nmva_reject(static fn()=>prep_agent_handle($pdo,$manager,['message'=>'Confirm']),'replayed confirmation');
+nmva_reject(static fn()=>prep_agent_handle($pdo,$manager,hac_test_input($pdo,$manager,'prep',['message'=>'Confirm'])),'replayed confirmation');
 $read=fm8d18j11_vendor_read($readArgs,$manager,$context);
 nmva_check(!$read['data']['canDraft']&&!empty($read['data']['openOrders']),'Food Monster receives open-order blocker after draft');
 nmva_check((float)$pdo->query('SELECT on_hand_quantity FROM inventory_items WHERE organization_id='.$org)->fetchColumn()===$stockBefore

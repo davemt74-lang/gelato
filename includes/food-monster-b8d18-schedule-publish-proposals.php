@@ -56,7 +56,7 @@ function fm8d18i_propose(array $args,array $actor,array $context):array
             'answer'=>(string)sac_proposal_result($pending,['Staff Scheduling'])['answer'],
             'source'=>'Gelato Scheduling Agent (server-verified proposal)',
             'requiresConfirmation'=>true,
-            'proposal'=>['id'=>$pending['id'],'type'=>$pending['type'],'expiresAt'=>$pending['expires']],
+            'proposal'=>gac_public_proposal($pending),
         ]];
     }finally{if($opened&&session_status()===PHP_SESSION_ACTIVE)session_write_close();}
 }

@@ -16,12 +16,13 @@ const unified=read('api/food-monster-unified-knowledge.php');
 const training=read('api/food-monster-training.php');
 const trainingNative=read('includes/food-monster-b8d6-training.php');
 
-assert(agent.includes('approvedPrivateVoiceToken(text,submitted)'),'client must request approval for the exact committed message');
+assert(agent.includes('approvedPrivateVoiceToken(text,submitted,turnThread)'),'client must request approval for the exact committed message');
+assert(agent.includes('const turnThread = await ensureThread();'),'voice approval uses the immutable turn conversation');
 assert(agent.includes('requestPrivateVoiceConfirmation(text)'),'operator must deliberately confirm the request');
 assert(agent.includes("action:'authorize_private_voice'"),'private approval goes to authenticated Agent Workspace');
-assert(agent.includes('privateTurnToken,csrf_token:S.csrf'),'direct model path passes one-turn grant');
+assert(agent.includes('privateTurnToken,...reviewed,csrf_token:S.csrf'),'direct model path passes one-turn grant');
 assert(agent.includes('csrf:S.csrf,privateTurnToken'),'model widget path passes one-turn grant');
-assert(browser.includes('provider:selected,privateTurnToken,csrf_token:csrf'),'model widget preserves token');
+assert(browser.includes('provider:selected,privateTurnToken,...reviewed,csrf_token:csrf'),'model widget preserves token');
 assert(!agent.includes('S.verifiedSpeaker.eventId||'), 'no manual voice event from earlier turn may be borrowed');
 assert(!agent.includes("action:'route',message:text,threadId:S.thread"),'no private agent phrase routing without provider');
 assert(!browser.includes('offlineFallback:true'),'browser may not invent an offline private-tool grant');

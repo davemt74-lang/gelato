@@ -35,7 +35,7 @@ if($action==='ask'){
     $result=catering_agent_actions_handle($pdo,$user,$input);
     app_audit($pdo,$organizationId,(int)$user['id'],'agent.catering_skill_used','agent_skill',(string)($result['skill']??'catering'),null,['message'=>mb_substr((string)($input['message']??''),0,300,'UTF-8'),'sources'=>$result['sources']??[]]);
     app_json_response($result);
-  }catch(CateringAgentActionPermissionException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],403);}
+  }catch(GacConfirmationConflict $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],409);}catch(CateringAgentActionPermissionException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],403);}
   catch(Throwable $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);}
 }
 if($action==='run_skill'){

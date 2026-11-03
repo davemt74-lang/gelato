@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__.'/food-monster-observation-contracts.php';
 /**
  * FM-B8D13C. Local-only, per-step checkpoints for model-selected Agent tasks.
  * A checkpoint is signed by its server-held execution lease and bound to
@@ -53,8 +54,11 @@ function fm8d13c_trace(PDO $pdo,array $claim,array $plan):array
         if($task['impact']!=='read')
             throw new DomainException('Routine updates cannot resume checkpoints.');
         $json=(string)$row['observation_json'];
-        $observation=json_decode($json,true);
-        if(strlen($json)>3072||!is_array($observation))
+        if(strlen($json)>fm8do_limit((string)$row['tool_name']))
+            throw new DomainException('Task checkpoint observation is invalid.');
+        try{$observation=json_decode($json,true,32,JSON_THROW_ON_ERROR);}
+        catch(Throwable){throw new DomainException('Task checkpoint observation is invalid.');}
+        if(!is_array($observation)||!fm8do_fits((string)$row['tool_name'],$observation))
             throw new DomainException('Task checkpoint observation is invalid.');
         $trace[]=['index'=>$index,'tool'=>(string)$row['tool_name'],
             'status'=>'completed','observation'=>$observation];
@@ -76,8 +80,8 @@ function fm8d13c_checkpoint(PDO $pdo,array $claim,array $plan,array $step):void
         ||!is_string($tool)||$tool!==($plan[$index]['tool']??null)
         ||($step['status']??'')!=='completed'||!is_array($obs))
         throw new DomainException('Only an executed, verified plan step may be saved.');
-    $json=json_encode($obs,JSON_THROW_ON_ERROR|JSON_INVALID_UTF8_SUBSTITUTE);
-    if(strlen($json)>3072)throw new DomainException('Checkpoint observation is too large.');
+    if(!fm8do_fits($tool,$obs))throw new DomainException('Checkpoint observation exceeds its contract.');
+    $json=fm8do_json($obs);
     $pdo->beginTransaction();
     try{
         $task=fm8d13c_lease($pdo,$claim,true);

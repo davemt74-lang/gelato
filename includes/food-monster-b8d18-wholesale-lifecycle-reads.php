@@ -55,7 +55,7 @@ function fm8d18j9a_quote_search(array $args,array $actor):array
     if(count($all)>8)$answer.=' Narrow your search; additional matches exist.';
     if(count($rows)>1)$answer.=' Select one exact quote ID.';
     return ['ok'=>true,'data'=>[
-        'answer'=>mb_substr($answer,0,1500,'UTF-8'),'source'=>'Gelato Wholesale Quotes',
+        'answer'=>$answer,'source'=>'Gelato Wholesale Quotes',
         'readOnly'=>true,'matches'=>$rows,'truncated'=>count($all)>8,
     ]];
 }
@@ -96,9 +96,9 @@ function fm8d18j9a_quote_read(array $args,array $actor):array
     $answer=$quote['quote_number'].' ['.$quote['public_id'].'] · '.$section.': '
         .($parts?implode('; ',$parts):'No saved records.').(count($all)>10?' More entries exist.':'');
     return ['ok'=>true,'data'=>[
-        'answer'=>mb_substr($answer,0,1600,'UTF-8'),'source'=>'Gelato Wholesale Quotes',
+        'answer'=>$answer,'source'=>'Gelato Wholesale Quotes',
         'readOnly'=>true,'quotePublicId'=>(string)$quote['public_id'],'section'=>$section,
-        'records'=>$rows,'truncated'=>count($all)>10||mb_strlen($answer,'UTF-8')>1600,
+        'records'=>$rows,'truncated'=>count($all)>10,
     ]];
 }
 function fm8d18j9a_order_read(array $args,array $actor):array
@@ -149,9 +149,9 @@ function fm8d18j9a_order_read(array $args,array $actor):array
         .($parts?implode('; ',$parts):'No saved events.');
     if(count($all)>10)$answer.=' More records exist.';
     return ['ok'=>true,'data'=>[
-        'answer'=>mb_substr($answer,0,1700,'UTF-8'),'source'=>'Gelato Wholesale Orders',
+        'answer'=>$answer,'source'=>'Gelato Wholesale Orders',
         'readOnly'=>true,'orderPublicId'=>(string)$order['public_id'],'section'=>$section,
-        'records'=>$rows,'truncated'=>count($all)>10||mb_strlen($answer,'UTF-8')>1700,
+        'records'=>$rows,'truncated'=>count($all)>10,
     ]];
 }
 function fm8d18j9a_catalogue(array $actor,array $context=[]):array

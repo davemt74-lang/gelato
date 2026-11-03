@@ -1,8 +1,10 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const source=fs.readFileSync('js/global-agent.js','utf8');
+const reviewSource=fs.readFileSync('js/agent-confirmation-transport.js','utf8');
 const recognizers=[],sent=[],listeners={},voiceTimers=[],restartTimers=[],events=[];
-let verifiedHandoff=false;
+let messageSequence=0;
+let verifiedHandoff=false,deferredModel=null;
 let n=0;const ok=(value,reason)=>{assert.ok(value,reason);n++};
 const input={value:'',dataset:{},handlers:{},dispatchEvent(e){this.handlers[e.type]?.(e);},
  addEventListener(t,f){this.handlers[t]=f}};
@@ -22,7 +24,7 @@ let pref={listening_enabled:0,proactive_voice_enabled:0,wake_phrase:'Hey Gelato'
 const fetch=async(url,opt={})=>{
  const body=opt.body?JSON.parse(opt.body):{};sent.push({url,body});
  let data={ok:true};
- if(url.includes('bootstrap'))data={ok:true,csrf:'x',activeThread:'thread',
+ if(url.includes('bootstrap'))data={ok:true,csrf:'x',activeThread:'agent-'+ 'a'.repeat(20),
   user:{id:15,name:'Kitchen'},permissions:['agent.proactive','voice.agent']};
  else if(url.includes('proactive-agent.php?action=preferences'))data={ok:true,preferences:pref};
  else if(url.includes('proactive-agent.php')&&body.action==='preferences'){
@@ -30,9 +32,11 @@ const fetch=async(url,opt={})=>{
   data={ok:true,preferences:pref};
  }
  else if(url.includes('voice-identity.php'))data={ok:true,match:{matched:true,sessionUserMatch:true,userId:15,eventId:'verified'}};
- else if(body.action==='append')data={ok:true,message:{databaseId:12},
+ else if(body.action==='append')data={ok:true,message:{id:'msg-'+ (++messageSequence).toString(16).padStart(20,'0'),
+  databaseId:messageSequence,role:body.role,content:body.content,structured:body.structured??null,channel:body.channel||'text'},
   roomSpeaker:body.channel==='voice'&&verifiedHandoff?{handoffFromPreviousVerifiedTurn:true}:null,
   participant:body.channel==='voice'&&verifiedHandoff?{personId:23}:null};
+ else if(url.includes('food-monster-llm.php')&&deferredModel){deferredModel.started();return deferredModel.promise;}
  else if(url.includes('proactive-agent.php'))data={ok:true,events:[]};
  return {ok:true,json:async()=>data};
 };
@@ -49,6 +53,7 @@ const context={window,document,fetch,navigator:{mediaDevices:{getUserMedia:async
  setTimeout:(fn,ms)=>{if(ms===2800)queueMicrotask(fn);if(ms===1200)voiceTimers.push(fn);
   if(ms>=650&&ms<=8000&&ms!==1200)restartTimers.push(fn);return 1},
  clearTimeout:()=>{}};
+vm.runInNewContext(reviewSource,context,{filename:'agent-confirmation-transport.js'});
 vm.runInNewContext(source,context);
 const flush=async()=>{for(let i=0;i<50;i++)await Promise.resolve()};
 (async()=>{
@@ -100,5 +105,25 @@ const flush=async()=>{for(let i=0;i<50;i++)await Promise.resolve()};
   if(i<4)restartTimers.shift()?.();
  }
  ok(!agent.listening&&!agent.conversationMode,'repeated restarts pause microphone and conversation');
+ // A model response from the old account must not survive private-state cleanup.
+ let releaseModel,modelStarted;
+ const modelGate=new Promise(resolve=>{releaseModel=resolve});
+ const modelReady=new Promise(resolve=>{modelStarted=resolve});
+ deferredModel={promise:modelGate,started:modelStarted};
+ const lateSend=agent.send('Private request before sign-out',false);
+ const lateRejected=assert.rejects(lateSend,/session changed/i);
+ await modelReady;
+ const agentMessages=sent.filter(x=>x.body.action==='append'&&x.body.role==='agent').length;
+ const receipts=sent.filter(x=>x.body.action==='record_action').length;
+ const replies=events.filter(e=>e.type==='gelato-agent-response').length;
+ window.GelatoAgentReview.clear();
+ releaseModel({ok:true,json:async()=>({ok:true,answer:'Old private model response',data:null})});
+ await lateRejected;
+ ok(sent.filter(x=>x.body.action==='append'&&x.body.role==='agent').length===agentMessages,
+   'late model response cannot append an old private assistant message after logout');
+ ok(sent.filter(x=>x.body.action==='record_action').length===receipts,
+   'late model response cannot write an action receipt after logout');
+ ok(events.filter(e=>e.type==='gelato-agent-response').length===replies,
+   'late model response cannot publish old private content after logout');
  console.log('FM-G10B/G12B noisy room and duplicate turns PASS ('+n+' assertions)');
 })().catch(e=>{console.error(e);process.exitCode=1});

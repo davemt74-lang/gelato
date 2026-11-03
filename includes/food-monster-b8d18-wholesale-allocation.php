@@ -47,7 +47,7 @@ function fm8d18j8b_stage(array $actor,string $type,array $payload,string $summar
         return ['ok'=>true,'data'=>[
             'answer'=>$summary."\n\nReply Confirm to apply through the Wholesale Agent, or Cancel. No order allocation has changed yet.",
             'source'=>'Gelato Wholesale Fulfillment (server-verified pending proposal)',
-            'requiresConfirmation'=>true,'proposal'=>['id'=>$pending['id'],'type'=>$type],
+            'requiresConfirmation'=>true,'proposal'=>gac_public_proposal($pending),
         ]];
     }finally{if($opened&&session_status()===PHP_SESSION_ACTIVE)session_write_close();}
 }

@@ -31,6 +31,11 @@
     wakeFinal:{text:'',at:0}, recoveryPendingTurn:null,
   };
 
+  async function reviewTransport() {
+    if (!window.GelatoAgentReview) await import('./agent-confirmation-transport.js?v=20261103-c1');
+    return window.GelatoAgentReview;
+  }
+
   const has = (permission) => S.permissions.includes('*') || S.permissions.includes(permission);
 
   async function req(url, opt = {}) {
@@ -83,7 +88,7 @@
     if (!document.getElementById('gelato-agent-bar') || window.GelatoDynamicAgentCanvas
         || document.querySelector('script[src*="dynamic-agent-canvas.js"]')) return;
     const script = document.createElement('script');
-    script.src = 'js/dynamic-agent-canvas.js?v=20261027-b8d17b-navigation1';
+    script.src = 'js/dynamic-agent-canvas.js?v=20261027-b8d17b-navigation1-hardening-c1';
     script.dataset.gelatoChatPopup = '1';
     document.head.appendChild(script);
   }
@@ -143,11 +148,11 @@
     return S.thread;
   }
 
-  async function append(role, content, meta = {}) {
-    await ensureThread();
+  async function append(role, content, meta = {}, threadId = '') {
+    const targetThread = threadId || await ensureThread();
     return post('api/agent-workspace.php', {
       action: 'append',
-      threadId: S.thread,
+      threadId: targetThread,
       role,
       content,
       ...meta,
@@ -299,13 +304,13 @@
       try{dialog.showModal();}catch{finish(false);}
     });
   }
-  async function approvedPrivateVoiceToken(text,submitted){
+  async function approvedPrivateVoiceToken(text,submitted,threadId=S.thread){
     if(!voiceMayNeedPrivateAccess(text))return '';
     const messageId=String(submitted?.message?.id||'');
     if(!/^msg-[a-f0-9]{20}$/.test(messageId))return '';
     if(!await requestPrivateVoiceConfirmation(text))return '';
     const response=await post('api/agent-workspace.php',{
-      action:'authorize_private_voice',threadId:S.thread,messageId
+      action:'authorize_private_voice',threadId,messageId
     });
     return String(response.privateTurnToken||'');
   }
@@ -346,6 +351,12 @@
     status('Gelato is checking your restaurant context…');
 
     try {
+      const review = await reviewTransport();
+      const reviewGeneration = review.generation;
+      const checkSession = () => review.assertGeneration(reviewGeneration);
+      const turnThread = await ensureThread();
+      checkSession();
+      const reviewed = review.fields(turnThread);
       // One signed voice event is evidence for ONE completed transcript only.
       // A subsequent turn without fresh verification is deliberately unknown.
       // A new acoustic match is required for THIS speech turn. Never reuse
@@ -362,15 +373,17 @@
             possibleVoiceEvent=String(verification.match.eventId||'');
         }catch(error){diag('voice-turn-unverified',{reason:String(error?.name||'unavailable')});}
       }
+      checkSession();
       // Never reuse a prior manual voice match for a new utterance.
       const freshSpeakerEvent=/^voice-[a-zA-Z0-9-]{8,90}$/.test(possibleVoiceEvent)
         &&!S.usedVoiceEvents.has(possibleVoiceEvent)?possibleVoiceEvent:'';
       const submitted = await append('user', text, {
         channel: voice ? 'voice' : 'text',
         voiceEventId: freshSpeakerEvent,
-      });
+      }, turnThread);
+      checkSession();
       window.dispatchEvent(new CustomEvent('gelato-agent-task-start',{
-        detail:{threadId:S.thread,turnId:String(submitted?.message?.id||'')}
+        detail:{threadId:turnThread,turnId:String(submitted?.message?.id||'')}
       }));
       if(freshSpeakerEvent){
         S.usedVoiceEvents.add(freshSpeakerEvent);
@@ -385,12 +398,13 @@
           handoff:Boolean(handoff)}
       }));
       if(handoff)window.dispatchEvent(new CustomEvent('gelato-agent-speaker-handoff',{
-        detail:{verified:true,threadId:S.thread}
+        detail:{verified:true,threadId:turnThread}
       }));
 
       // This consent is bound to the committed transcript, not a voiceprint.
       const privateTurnToken=voice
-        ?await approvedPrivateVoiceToken(text,submitted):'';
+        ?await approvedPrivateVoiceToken(text,submitted,turnThread):'';
+      checkSession();
 
       // FM-B8D11: every chat turn goes through the configured AI provider
       // for model-selected native skills or a permission-scoped existing
@@ -398,16 +412,17 @@
       let route={route:null,domain:'model_selected'};
       let result;
       if(window.GelatoFoodMonsterLLM?.ask){
-        result=await window.GelatoFoodMonsterLLM.ask({text,threadId:S.thread,csrf:S.csrf,privateTurnToken});
+        result=await window.GelatoFoodMonsterLLM.ask({text,threadId:turnThread,csrf:S.csrf,privateTurnToken,reviewed});
       }else{
         const response=await fetch('api/food-monster-llm.php',{
           method:'POST',cache:'no-store',
           headers:{Accept:'application/json','Content-Type':'application/json','X-CSRF-Token':S.csrf},
-          body:JSON.stringify({action:'chat',message:text,threadId:S.thread,provider:'auto',privateTurnToken,csrf_token:S.csrf})
+          body:JSON.stringify({action:'chat',message:text,threadId:turnThread,provider:'auto',privateTurnToken,...reviewed,csrf_token:S.csrf})
         });
         result=await response.json().catch(()=>({ok:false,message:'Invalid AI service response.'}));
         if(!response.ok||!result.ok)throw new Error(result.message||'The configured AI service is unavailable.');
       }
+      checkSession();
 
       // Missing providers must not route room speech to owner-scoped agents.
 
@@ -423,14 +438,14 @@
         // reject arbitrary URL parameters and external redirects.
         const validQuery=routeQuery===''||(
           routePath==='api/food-monster-unified-knowledge.php'
-          &&routeQuery==='?threadId='+encodeURIComponent(S.thread)
+          &&routeQuery==='?threadId='+encodeURIComponent(turnThread)
         );
         // A delegation applies to this exact server-committed user turn and
         // resolves only to a known local PHP Agent. It cannot be used as a
         // browser-provided URL, model-suggested arbitrary endpoint, or replay.
         if(!/^api\/[a-z][a-z0-9-]{1,80}\.php$/.test(routePath)
            ||!validQuery
-           ||serverThread!==S.thread
+           ||serverThread!==turnThread
            ||serverMessage!==String(submitted?.message?.id||''))
           throw new Error('Agent handoff could not be verified. No operation was sent.');
         route={route:endpoint,domain:String(delegation.domain||'restaurant_agent')};
@@ -442,6 +457,11 @@
           if(!['Confirm','Cancel'].includes(delegation.forwardMessage)
              ||!String(delegation.node||'').match(/^[a-z][a-z0-9_]{2,45}$/))
             throw new Error('Pending Agent decision could not be verified.');
+          if(!reviewed.proposalId || !reviewed.proposalHash || !reviewed.proposalMessageId
+             ||delegation.proposalId!==reviewed.proposalId
+             ||delegation.proposalHash!==reviewed.proposalHash
+             ||delegation.proposalMessageId!==reviewed.proposalMessageId)
+            throw new Error('The handoff does not match the proposal shown in this conversation.');
           delegatedMessage=delegation.forwardMessage;
         }
         const response=await fetch(endpoint,{
@@ -450,12 +470,20 @@
           body:JSON.stringify({
             action:'ask',message:delegatedMessage,voice:Boolean(voice),
             voiceEventId:voice?freshSpeakerEvent:'',
-            threadId:S.thread,csrf_token:S.csrf
+            threadId:turnThread,sourceMessageId:String(submitted.message.id),...reviewed,csrf_token:S.csrf
           })
         });
         result=await response.json().catch(()=>({ok:false,message:'Invalid destination Agent response.'}));
         if(!response.ok||!result.ok)
           throw new Error(result.message||'The authorized restaurant Agent could not complete the request.');
+        checkSession();
+      }
+
+      let reviewedHandoff = null;
+      if (result.data?.reviewedProposal) {
+        reviewedHandoff = await review.handoff(turnThread, result.data.reviewedProposal, S.csrf);
+        checkSession();
+        result.answer = (result.answer || 'Approval saved.') + '\n\n' + reviewedHandoff.content;
       }
 
       // Display only, after the canonical turn has completed routing.
@@ -481,7 +509,7 @@
         &&suggested.sourceMessageIds.length>=2
         &&suggested.executed===false)
         ?String(suggested.text||'').slice(0,200):'';
-      const answer=(greeting?greeting+' ':'')+(followupMessage?followupMessage+' ':'')+baseAnswer
+      let answer=(greeting?greeting+' ':'')+(followupMessage?followupMessage+' ':'')+baseAnswer
         +(suggestedText?'\n\n'+suggestedText:'');
       const agentMessage = await append('agent', answer, {
         channel: voice ? 'voice' : 'text',
@@ -489,31 +517,40 @@
         tool: route.route || 'capabilities',
         structured: createdTaskId ? {responseData:result.data??null,operationalFollowup:{taskId:createdTaskId,reportMessageId:String(followup.reportMessageId||''),alreadyCreated:followup.alreadyCreated===true}} : (result.data ?? null),
         sources: Array.isArray(result.sources) ? result.sources : [],
-      });
+      }, turnThread);
+      checkSession();
+      // Use the server's canonical review text and final message-bound hash.
+      answer = agentMessage.message.content;
+      if(result?.data?.proposal) result.data = agentMessage.message.structured;
+      result.answer = answer;
 
       if(result?.data?.approval?.type==='vision_sample_review')
         showVisionApproval(result.data.approval);
 
       await post('api/agent-workspace.php', {
         action: 'record_action',
-        threadId: S.thread,
+        threadId: turnThread,
         messageDatabaseId: agentMessage.message.databaseId,
         skill: result.skill || route.domain,
         route: route.route || 'capabilities',
         request: {message: text, voice: Boolean(voice)},
         result: {answer, data: result.data ?? null, sources: result.sources ?? []},
-      });
+      }).catch(error => diag('action-receipt-unavailable', {reason:String(error?.name || 'unavailable')}));
+      checkSession();
 
       status(answer, 7000);
       window.dispatchEvent(new CustomEvent('gelato-agent-response', {
-        detail: {answer, result, threadId: S.thread},
+        detail: {answer, result, threadId: turnThread},
       }));
+      checkSession();
+      if (review.isDecision(text)) review.forget(turnThread, reviewed.proposalId);
+      review.remember(turnThread, reviewedHandoff || agentMessage.message);
       const navigation=result?.data?.navigation;
       if(!voice && navigation?.kind==='verified_internal_page'
          && /^[a-z][a-z0-9-]*\.php(?:#[a-z][a-z0-9-]*)?$/.test(String(navigation.href||''))){
         // Never navigate before canonical chat history and the action receipt
         // have been recorded. Only a server-selected, local page can redirect.
-        window.setTimeout(()=>window.location.assign(navigation.href),900);
+        window.setTimeout(()=>{if(review.generation===reviewGeneration)window.location.assign(navigation.href);},900);
       }
       if (voice && window.speechSynthesis && has('voice.agent')) speak(answer);
       else if(S.conversation&&voice) status('Reply ready. Browser voice output is unavailable; read the response above.',7000);
@@ -1240,6 +1277,16 @@
     identifySpeaker,
     get verifiedSpeaker(){return S.verifiedSpeaker&&Date.now()<S.verifiedSpeaker.verifiedUntil?S.verifiedSpeaker:null;},
     selectThread,
+    readDetails(structured) {
+      const data = structured?.responseData ?? structured;
+      return (Array.isArray(data?.readDetails) ? data.readDetails : []).filter(item =>
+        item && typeof item.label === 'string' && typeof item.url === 'string'
+        && /^[a-z][a-z0-9-]*\.php(?:#[a-z][a-z0-9-]*)?$/.test(item.url));
+    },
+    async reviewMessages(threadId, messages) {
+      const review = await reviewTransport();
+      review.restore(String(threadId), messages);
+    },
     refreshContext,
     get foodMonsterContext(){return S.foodMonsterContext;},
     get threadId() { return S.thread; },

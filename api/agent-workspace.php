@@ -5,6 +5,7 @@ require __DIR__.'/../includes/agent-workspace-core.php';
 require_once __DIR__.'/../includes/agent-voice-conversation.php';
 require_once __DIR__.'/../includes/agent-private-voice.php';
 require_once __DIR__.'/../includes/agent-node-registry.php';
+require_once __DIR__.'/../includes/agent-confirmation-core.php';
 require_once __DIR__.'/../includes/admin-control-core.php';
 require_once __DIR__.'/../includes/menu-training-knowledge.php';
 require_once __DIR__.'/../includes/food-monster-multi-node.php';
@@ -40,9 +41,11 @@ if(!gaw_ready($pdo))app_json_response(['ok'=>false,'message'=>'Agent Workspace m
 if($_SERVER['REQUEST_METHOD']==='GET'){
     $action=(string)($_GET['action']??'bootstrap');
     if($action==='bootstrap'){
+        if(empty($_SESSION['browser_state_id']))$_SESSION['browser_state_id']=bin2hex(random_bytes(16));
+        $browserState=['organizationId'=>$org,'userId'=>'db-user-'.$uid,'identity'=>(string)$_SESSION['browser_state_id']];
         $threads=gaw_threads($pdo,$org,$uid,40);$active=$threads[0]['public_id']??null;
         if(!$active){$thread=gaw_create_thread($pdo,$org,$uid);$threads=gaw_threads($pdo,$org,$uid,40);$active=$thread['public_id']??null;}
-        app_json_response(['ok'=>true,'csrf'=>app_csrf_token(),'threads'=>$threads,'activeThread'=>$active,'messages'=>$active?gaw_messages($pdo,$org,$uid,(string)$active,120):[],'user'=>['id'=>$uid,'name'=>$user['display_name'],'firstName'=>$user['first_name'],'role'=>$user['role_slug']],'permissions'=>$user['permissions'],'foodMonsterContext'=>fm9a_context($pdo,$user)]);
+        app_json_response(['ok'=>true,'csrf'=>app_csrf_token(),'browserState'=>$browserState,'threads'=>$threads,'activeThread'=>$active,'messages'=>$active?gaw_messages($pdo,$org,$uid,(string)$active,120):[],'user'=>['id'=>$uid,'name'=>$user['display_name'],'firstName'=>$user['first_name'],'role'=>$user['role_slug']],'permissions'=>$user['permissions'],'foodMonsterContext'=>fm9a_context($pdo,$user)]);
     }
     if($action==='food_monster_context')app_json_response(['ok'=>true,'foodMonsterContext'=>fm9a_context($pdo,$user)]);
     if($action==='person_memory'){
@@ -85,6 +88,7 @@ if($_SERVER['REQUEST_METHOD']==='GET'){
 if($_SERVER['REQUEST_METHOD']!=='POST'){header('Allow: GET, POST');app_json_response(['ok'=>false,'message'=>'Method not allowed.'],405);}
 $in=app_json_input();app_verify_request_csrf($in);$action=(string)($in['action']??'');
 try{
+    gac_request_context($in,$pdo,$user);
     if($action==='authorize_private_voice'){
         // Only a deliberate click in the authenticated user's UI may request
         // private tool access for this exact committed voice turn. Acoustic
@@ -117,6 +121,22 @@ try{
         // The Agent training ledger uses private system records. A client
         // must never impersonate those records using the public chat API.
         if($role==='system')throw new DomainException('System records are reserved for server-side services.');
+        $canonicalContent=(string)($in['content']??'');
+        $canonicalStructured=is_array($in['structured']??null)?$in['structured']:null;
+        $proposalRow=null;
+        $proposalIdentity=$canonicalStructured['proposal']??$canonicalStructured['data']['proposal']??$canonicalStructured['responseData']['proposal']??null;
+        if($role==='agent'&&is_array($proposalIdentity)){
+            $proposalRow=gac_pending_for_binding((string)($proposalIdentity['node']??''),$org,$uid,
+                (string)($proposalIdentity['id']??''),$thread);
+            if(($proposalRow['proposalMessageId']??'')!=='')
+                throw new GacConfirmationConflict('This proposal is already saved. Review its original message before confirming.');
+            // The server supplies the review text and action identity. Browser
+            // text, model prose and unrelated follow-ups cannot describe a different write.
+            $canonicalContent=gac_proposal_answer($proposalRow);
+            $approvalReview=($proposalRow['node']??'')==='food_monster_high_impact';
+            $canonicalStructured=[($approvalReview?'requiresApproval':'requiresConfirmation')=>true,
+                'proposal'=>gac_public_proposal($proposalRow)];
+        }
         $channel=(string)($in['channel']??'text');
         $voiceEvent=(string)($in['voiceEventId']??'');
         $greeting=null;
@@ -138,11 +158,19 @@ try{
                     $personSpeaker=fm9d_resolve_speaker($pdo,$user,$voiceEvent);
                 }
             }
-            $message=gaw_append($pdo,$org,$uid,$thread,$role,(string)($in['content']??''),[
+            $message=gaw_append($pdo,$org,$uid,$thread,$role,$canonicalContent,[
                 'channel'=>$channel,'skill'=>$in['skill']??null,'tool'=>$in['tool']??null,
-                'voiceEventId'=>$voiceEvent,'structured'=>$in['structured']??null,
+                'voiceEventId'=>$voiceEvent,'structured'=>$canonicalStructured,
                 'sources'=>is_array($in['sources']??null)?$in['sources']:[]
             ]);
+            if($proposalRow!==null){
+                $bound=gac_pending_bind_message($pdo,(string)$proposalRow['node'],$org,$uid,
+                    (string)$proposalRow['id'],$thread,(string)$message['id']);
+                $message['structured']['proposal']=$bound;
+                $pdo->prepare('UPDATE agent_messages SET structured_json=? WHERE id=? AND organization_id=? AND user_id=?')
+                    ->execute([json_encode($message['structured'],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR),
+                        (int)$message['databaseId'],$org,$uid]);
+            }
             if($role==='user'){
                 // Never carry a previous voice's attribution across a new turn.
                 unset($_SESSION[$pendingKey]);
@@ -151,13 +179,22 @@ try{
                         $pdo,$user,$personSpeaker,(string)$in['content'],$thread);
                 }
             }elseif($role==='agent'&&isset($_SESSION[$pendingKey])){
-                fm9d_mirror_reply($pdo,$user,(array)$_SESSION[$pendingKey],$thread,(string)$in['content']);
+                fm9d_mirror_reply($pdo,$user,(array)$_SESSION[$pendingKey],$thread,$canonicalContent);
                 unset($_SESSION[$pendingKey]);
             }
             $pdo->commit();
             if($role==='user')gavp_clear_approved();
         }catch(Throwable $error){
             if($pdo->inTransaction())$pdo->rollBack();
+            if($proposalRow!==null){
+                // Session state is still locked and has not been flushed. A
+                // failed database commit must not leave a binding to a rolled-back message.
+                $current=gac_pending_raw((string)$proposalRow['node'],$org,$uid);
+                if(($current['id']??'')===$proposalRow['id']){
+                    $bucket=&gac_pending_bucket((string)$proposalRow['node']);
+                    $bucket[gac_key($org,$uid)]=$proposalRow;
+                }
+            }
             unset($_SESSION[$pendingKey]);
             throw $error;
         }
@@ -402,18 +439,24 @@ try{
         // records a decision but does not execute the underlying operation.
         $approvalThread=trim((string)($in['threadId']??''));
         if(fm9a_is_super_admin_session($user)&&preg_match('/^Confirm[.!]?$/i',$message)
-            &&fm9i_active_grant($user,$approvalThread))
+            &&($grant=fm9i_active_grant($user,$approvalThread))
+            &&($grant['confirmationProposal']['id']??'')===($in['proposalId']??'')){
+            fm9f_verify_grant_review($user,$grant,$in);
             app_json_response(['ok'=>true,'route'=>'api/food-monster-approvals.php',
                 'domain'=>'food_monster_task_archival','node'=>'brain','nodeMode'=>'approved_domain_write']);
+        }
         if(fm9a_is_super_admin_session($user)&&preg_match('/^Confirm[.!]?$/i',$message)
-            &&fm9h_active_grant($user,$approvalThread))
+            &&($grant=fm9h_active_grant($user,$approvalThread))
+            &&($grant['confirmationProposal']['id']??'')===($in['proposalId']??'')){
+            fm9f_verify_grant_review($user,$grant,$in);
             app_json_response(['ok'=>true,'route'=>'api/food-monster-approvals.php',
                 'domain'=>'food_monster_permission_change','node'=>'brain',
                 'nodeMode'=>'approved_domain_write']);
+        }
         $approvalIntent=fm9f_approval_chat_intent($message);
         if($approvalIntent&&fm9a_is_super_admin_session($user)){
             $pending=$approvalIntent['action']==='decide'
-                ?gac_pending_get('food_monster_high_impact',$org,$uid):null;
+                ?gac_pending_reviewed('food_monster_high_impact',$org,$uid,$in):null;
             $approvalThread=trim((string)($in['threadId']??''));
             if($approvalIntent['action']==='propose'
                 ||($pending&&($pending['payload']['threadId']??'')===$approvalThread))
@@ -454,8 +497,10 @@ try{
         $canLiveShift=app_has_permission('table_service.view',$user)||app_has_permission('pos.use',$user)||app_has_permission('kds.view',$user);
         $confirmationIntent=preg_match('/^(?:confirm|yes|yes please|do it|go ahead|execute|apply|cancel|cancel it|discard|never mind|nevermind|stop)(?:\s+(?:it|that|change|action))?[.!]?$/u',$text)===1;
         if($confirmationIntent){
-            $pendingNode=gaw_pending_action_node($org,$uid);
+            $pendingNode=gaw_pending_action_node($org,$uid,$in);
+            if($pendingNode===null)throw new GacConfirmationConflict('Review the exact current proposal in this conversation before confirming or cancelling.');
             if($pendingNode==='front_of_house'&&app_has_permission('host.view',$user)&&(app_has_permission('table_service.view',$user)||app_has_permission('host.use',$user)||app_has_permission('host.manage',$user)))app_json_response(['ok'=>true]+gaw_node_route('front_of_house','front_of_house_confirmation'));
+            if($pendingNode==='marketing'&&(app_has_permission('packages.view',$user)||app_has_permission('public_pages.edit',$user)||app_has_permission('settings.organization_edit',$user)))app_json_response(['ok'=>true]+gaw_node_route('marketing','marketing_confirmation'));
             if($pendingNode==='crm'&&app_has_permission('crm.view',$user))app_json_response(['ok'=>true]+gaw_node_route('crm','crm_confirmation'));
             if($pendingNode==='catering'&&app_has_permission('catering.view',$user)&&app_has_permission('catering.agent',$user))app_json_response(['ok'=>true]+gaw_node_route('catering','catering_confirmation'));
             if($pendingNode==='wholesale'&&app_has_permission('wholesale.view',$user)&&app_has_permission('wholesale.agent',$user))app_json_response(['ok'=>true]+gaw_node_route('wholesale','wholesale_confirmation'));
@@ -467,6 +512,7 @@ try{
             if($pendingNode==='recipes'&&app_has_permission('recipes.view',$user)&&app_has_permission('recipes.agent',$user))app_json_response(['ok'=>true]+gaw_node_route('recipes','recipe_confirmation'));
             if($pendingNode==='online_orders'&&$canOnlineOrders)app_json_response(['ok'=>true]+gaw_node_route('online_orders','online_order_confirmation'));
             if($pendingNode==='timeclock'&&app_has_permission('timeclock.agent',$user))app_json_response(['ok'=>true]+gaw_node_route('timeclock','timeclock_confirmation'));
+            throw new GacConfirmationConflict('The reviewed action is no longer available to this account.');
         }
 
         if($isHostStandContext){
@@ -545,7 +591,7 @@ try{
         $handoffIntent=preg_match('/\b(handoff|handoffs|shift note|station note|arrival brief|what happened before i got here|what happened before my shift|anything i should know|tell (?:the )?next shift|leave .*next shift|note .*next shift)\b/u',$text)===1;
         if($handoffIntent&&(app_has_permission('employee.handoffs.view',$user)||app_has_permission('employee.handoffs.create',$user)||app_has_permission('employee.handoffs.manage',$user)||app_has_permission('employee.self',$user)||app_has_permission('agent.employee_view',$user)))app_json_response(['ok'=>true]+gaw_node_route('employee_handoff'));
 
-        $fallback=gaw_route($user,$message,$roomThread);
+        $fallback=gaw_route($user,$message,$roomThread,$in);
         if($isTableServiceContext){
             $fallbackDomain=(string)($fallback['domain']??'general');
             $localIntent=preg_match('/\b(this table|selected table|this bar seat|selected bar seat|this check|selected check|this order|server|seat|party|transfer|move|fire|hold|send|unsent|ready|late|food|kitchen|turn|reset|reservation|attach customer|add item|remove item|item note|what needs attention|what should we do|what(?:\x27s| is) going on)\b/u',$text)===1;
@@ -613,4 +659,5 @@ try{
     if($action==='archive'){$id=trim((string)($in['threadId']??''));$thread=gaw_thread($pdo,$org,$uid,$id);if(!$thread)throw new InvalidArgumentException('Agent conversation not found.');$pdo->prepare("UPDATE agent_conversations SET status='archived',archived_at=NOW(6),updated_at=NOW(6) WHERE id=?")->execute([(int)$thread['id']]);app_audit($pdo,$org,$uid,'agent.thread_archived','agent_conversation',$id);app_json_response(['ok'=>true]);}
     if($action==='rename'){$id=trim((string)($in['threadId']??''));$title=trim((string)($in['title']??''));if($title==='')throw new InvalidArgumentException('Conversation title is required.');$thread=gaw_thread($pdo,$org,$uid,$id);if(!$thread)throw new InvalidArgumentException('Agent conversation not found.');$pdo->prepare('UPDATE agent_conversations SET title=?,updated_at=NOW(6) WHERE id=?')->execute([mb_substr($title,0,220,'UTF-8'),(int)$thread['id']]);app_json_response(['ok'=>true]);}
     app_json_response(['ok'=>false,'message'=>'Unsupported Agent Workspace action.'],422);
+}catch(GacConfirmationConflict $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],409);
 }catch(Throwable $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],$e instanceof InvalidArgumentException?422:500);}

@@ -88,15 +88,36 @@ assert.equal(restricted.auth.current(),null);
 const missingBootstrap = browser(null);
 assert.equal(missingBootstrap.state.storage.getItem('anything'),null,'unscoped storage fails closed');
 (async()=>{
-  const bridge = browser(bootstrap(40,1,'bridge-login',['inventory.view']),local);
-  bridge.context.fetch = async()=>({ok:true,json:async()=>({ok:true,answer:'Private stock result',data:{}})});
+  const bridgeIdentity = 'a'.repeat(32);
+  const bridge = browser(bootstrap(40,1,bridgeIdentity,['inventory.view']),local);
+  const bridgeThread = 'agent-' + 'b'.repeat(20);
+  let bridgeMessage = 0;
+  bridge.context.fetch = async(url,options={})=>{
+    const body=options.body ? JSON.parse(options.body) : {};
+    let data;
+    if(url==='api/agent-workspace.php?action=bootstrap')data={ok:true,user:{id:40},
+      browserState:{organizationId:1,userId:'db-user-40',identity:bridgeIdentity}};
+    else if(url==='api/agent-workspace.php' && body.action==='new_thread')data={ok:true,thread:{public_id:bridgeThread}};
+    else if(url==='api/agent-workspace.php' && body.action==='append')data={ok:true,message:{
+      id:'msg-'+String(++bridgeMessage).padStart(20,'0'),role:body.role,content:body.content,structured:body.structured??null}};
+    else if(url==='api/operations-agent.php'){
+      assert.equal(body.threadId,bridgeThread,'bridge sends its canonical thread');
+      assert.equal(body.sourceMessageId,'msg-'+String(1).padStart(20,'0'),'bridge sends its saved user message');
+      data={ok:true,answer:'Private stock result',data:{}};
+    }else throw Error('Unexpected bridge request: '+url);
+    return {ok:true,json:async()=>data};
+  };
+  vm.runInNewContext(source('agent-confirmation-transport.js'),bridge.context);
   vm.runInNewContext(source('restaurant-agent-bridge.js'),bridge.context);
   await bridge.window.GelatoRestaurantAgent.submit('show current inventory');
   const history=bridge.auth.read('restaurant-owner-agent-chat-v1',[]);
   assert.equal(history.length,2,'actual agent bridge uses scoped conversation storage');
   assert.equal(history[1].text,'Private stock result');
   assert.equal(local.getItem('restaurant-owner-agent-chat-v1'),null,'actual bridge does not recreate the shared chat key');
+  const reviewKey=`gelato-private-v1:1:db-user-40:${bridgeIdentity}:agent-review:owner-restaurant-agent`;
+  assert.equal(JSON.parse(bridge.session.getItem(reviewKey)).threadId,bridgeThread,'actual transport scopes its pointer to this login');
   const nextUser=browser(bootstrap(41,1,'next-login'),local,bridge.session);
   assert.equal(nextUser.auth.read('restaurant-owner-agent-chat-v1',[]).length,0,'actual bridge conversation does not cross account switch');
+  assert.equal(bridge.session.getItem(reviewKey),null,'account switch removes the actual transport pointer');
   console.log('hardening browser-state behavioral tests passed');
 })().catch(error=>{console.error(error);process.exitCode=1;});

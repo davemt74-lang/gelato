@@ -110,7 +110,7 @@ function fm8d18_propose(string $type,array $payload,string $summary,array $actor
             'answer'=>$summary."\n\nReply Confirm to apply this change, or Cancel to discard it. Nothing has been changed yet.",
             'source'=>'Gelato Operations (server-verified proposal)',
             'requiresConfirmation'=>true,
-            'proposal'=>['id'=>$pending['id'],'type'=>$type],
+            'proposal'=>gac_public_proposal($pending),
         ]];
     }finally{
         if($opened&&session_status()===PHP_SESSION_ACTIVE)session_write_close();

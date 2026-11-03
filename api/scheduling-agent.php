@@ -38,7 +38,7 @@ try{
         'contextModule'=>(string)($pageContext['module']??''),
     ]);
     app_json_response($result);
-}catch(SchedulingAgentPermissionException $e){
+}catch(GacConfirmationConflict $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],409);}catch(SchedulingAgentPermissionException $e){
     app_json_response(['ok'=>false,'message'=>$e->getMessage()],403);
 }catch(InvalidArgumentException $e){
     app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);

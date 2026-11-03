@@ -121,7 +121,7 @@ try{
         app_json_response(['ok'=>true,'session'=>$session],201);
     }
     if($action==='training.session_end'){
-        $session=glasses_training_session_end($pdo,(int)$device['organization_id'],(string)($in['sessionPublicId']??''),(string)($in['status']??'completed'),(string)($in['reason']??''),(int)$device['paired_by']);
+        $session=glasses_training_session_end($pdo,(int)$device['organization_id'],(string)($in['sessionPublicId']??''),(string)($in['status']??'completed'),(string)($in['reason']??''),$device);
         app_json_response(['ok'=>true,'session'=>$session]);
     }
 

@@ -1,5 +1,7 @@
 <?php
 declare(strict_types=1);
+if(PHP_SAPI!=='cli'){http_response_code(404);exit;}
+require_once __DIR__.'/hardening-agent-confirmation-test-support.php';
 
 require __DIR__.'/../includes/bootstrap.php';
 require __DIR__.'/../includes/catering-agent-actions.php';
@@ -34,35 +36,35 @@ $operation=$pdo->query("SELECT * FROM restaurant_operations WHERE organization_i
 cwdb_assert((bool)$operation,'Catering operation fixture was not created.');
 $context=['module'=>'catering','selectedOperationPublicId'=>$operation['public_id']];
 
-$proposal=catering_agent_actions_handle($pdo,$user,['message'=>'add catering task: Agent lifecycle task','pageContext'=>$context]);
+$proposal=catering_agent_actions_handle($pdo,$user,hac_test_input($pdo,$user,'catering',['message'=>'add catering task: Agent lifecycle task','pageContext'=>$context]));
 cwdb_assert(($proposal['skill']??'')==='catering.action_proposal','Catering write did not enter proposal state.');
 cwdb_assert(($proposal['data']['requiresConfirmation']??false)===true,'Catering proposal did not require confirmation.');
 cwdb_assert(cwdb_count($pdo,"SELECT COUNT(*) FROM restaurant_operation_tasks WHERE organization_id=? AND operation_id=? AND title=?",[$org,$operation['id'],'Agent lifecycle task'])===0,'Catering task was written before confirmation.');
 
-$confirmed=catering_agent_actions_handle($pdo,$user,['message'=>'Confirm','pageContext'=>$context]);
+$confirmed=catering_agent_actions_handle($pdo,$user,hac_test_input($pdo,$user,'catering',['message'=>'Confirm','pageContext'=>$context]));
 cwdb_assert(($confirmed['skill']??'')==='catering.action_confirmed','Catering confirmation did not execute.');
 cwdb_assert(cwdb_count($pdo,"SELECT COUNT(*) FROM restaurant_operation_tasks WHERE organization_id=? AND operation_id=? AND title=?",[$org,$operation['id'],'Agent lifecycle task'])===1,'Confirmed Catering task was not persisted.');
 
-$statusProposal=catering_agent_actions_handle($pdo,$user,['message'=>'mark task Agent lifecycle task done','pageContext'=>$context]);
+$statusProposal=catering_agent_actions_handle($pdo,$user,hac_test_input($pdo,$user,'catering',['message'=>'mark task Agent lifecycle task done','pageContext'=>$context]));
 cwdb_assert(($statusProposal['data']['requiresConfirmation']??false)===true,'Catering status write skipped proposal state.');
-$statusConfirmed=catering_agent_actions_handle($pdo,$user,['message'=>'Confirm','pageContext'=>$context]);
+$statusConfirmed=catering_agent_actions_handle($pdo,$user,hac_test_input($pdo,$user,'catering',['message'=>'Confirm','pageContext'=>$context]));
 cwdb_assert(($statusConfirmed['data']['status']??'')==='done','Catering task status confirmation did not execute.');
 $cwStatus=$pdo->prepare("SELECT status FROM restaurant_operation_tasks WHERE organization_id=? AND operation_id=? AND title=?");
 $cwStatus->execute([$org,$operation['id'],'Agent lifecycle task']);
 cwdb_assert($cwStatus->fetchColumn()==='done','Confirmed Catering task status was not persisted.');
 
-$cancelProposal=catering_agent_actions_handle($pdo,$user,['message'=>'add catering task: This must be cancelled','pageContext'=>$context]);
+$cancelProposal=catering_agent_actions_handle($pdo,$user,hac_test_input($pdo,$user,'catering',['message'=>'add catering task: This must be cancelled','pageContext'=>$context]));
 cwdb_assert(($cancelProposal['data']['requiresConfirmation']??false)===true,'Catering cancel fixture did not enter proposal state.');
-$cancelled=catering_agent_actions_handle($pdo,$user,['message'=>'Cancel','pageContext'=>$context]);
+$cancelled=catering_agent_actions_handle($pdo,$user,hac_test_input($pdo,$user,'catering',['message'=>'Cancel','pageContext'=>$context]));
 cwdb_assert(($cancelled['skill']??'')==='catering.action_cancelled','Catering proposal was not cancelled.');
 cwdb_assert(cwdb_count($pdo,"SELECT COUNT(*) FROM restaurant_operation_tasks WHERE organization_id=? AND operation_id=? AND title=?",[$org,$operation['id'],'This must be cancelled'])===0,'Cancelled Catering proposal changed the database.');
 
-$staleProposal=catering_agent_actions_handle($pdo,$user,['message'=>'mark task Agent lifecycle task blocked','pageContext'=>$context]);
+$staleProposal=catering_agent_actions_handle($pdo,$user,hac_test_input($pdo,$user,'catering',['message'=>'mark task Agent lifecycle task blocked','pageContext'=>$context]));
 cwdb_assert(($staleProposal['data']['requiresConfirmation']??false)===true,'Catering stale-write fixture did not enter proposal state.');
 $pdo->prepare("UPDATE restaurant_operation_tasks SET status='in_progress',updated_at=DATE_ADD(NOW(6),INTERVAL 1 SECOND) WHERE organization_id=? AND operation_id=? AND title=?")
     ->execute([$org,$operation['id'],'Agent lifecycle task']);
 $staleRejected=false;
-try{catering_agent_actions_handle($pdo,$user,['message'=>'Confirm','pageContext'=>$context]);}catch(InvalidArgumentException $e){$staleRejected=str_contains($e->getMessage(),'changed');}
+try{catering_agent_actions_handle($pdo,$user,hac_test_input($pdo,$user,'catering',['message'=>'Confirm','pageContext'=>$context]));}catch(InvalidArgumentException $e){$staleRejected=str_contains($e->getMessage(),'changed');}
 cwdb_assert($staleRejected,'Catering stale proposal was not rejected by the DB-backed concurrency guard.');
 $cwStatus->execute([$org,$operation['id'],'Agent lifecycle task']);
 cwdb_assert($cwStatus->fetchColumn()==='in_progress','Catering stale confirmation overwrote newer state.');
@@ -88,23 +90,23 @@ $orderCreated=wholesale_commerce_create_order($pdo,$org,$account,['items'=>[['sk
 $order=wholesale_fulfillment_order($pdo,$org,$orderCreated['publicId']);
 $wContext=['module'=>'wholesale','selectedWholesaleOrderPublicId'=>$order['public_id']];
 
-$wProposal=wholesale_agent_handle($pdo,$user,['message'=>'create fulfillment batch for all remaining quantities','pageContext'=>$wContext]);
+$wProposal=wholesale_agent_handle($pdo,$user,hac_test_input($pdo,$user,'wholesale',['message'=>'create fulfillment batch for all remaining quantities','pageContext'=>$wContext]));
 cwdb_assert(($wProposal['skill']??'')==='wholesale.action_proposal','Wholesale create-batch write did not enter proposal state.');
 cwdb_assert(($wProposal['data']['requiresConfirmation']??false)===true,'Wholesale create-batch proposal did not require confirmation.');
 cwdb_assert(cwdb_count($pdo,"SELECT COUNT(*) FROM wholesale_fulfillments WHERE organization_id=? AND wholesale_order_id=?",[$org,$order['id']])===0,'Wholesale batch was written before confirmation.');
 
-$wConfirmed=wholesale_agent_handle($pdo,$user,['message'=>'Confirm','pageContext'=>$wContext]);
+$wConfirmed=wholesale_agent_handle($pdo,$user,hac_test_input($pdo,$user,'wholesale',['message'=>'Confirm','pageContext'=>$wContext]));
 cwdb_assert(($wConfirmed['skill']??'')==='wholesale.action_confirmed','Wholesale create-batch confirmation did not execute.');
 $batchPublic=(string)($wConfirmed['data']['batchId']??'');
 cwdb_assert($batchPublic!=='','Wholesale confirmation did not return the created batch.');
 cwdb_assert(cwdb_count($pdo,"SELECT COUNT(*) FROM wholesale_fulfillments WHERE organization_id=? AND wholesale_order_id=? AND public_id=?",[$org,$order['id'],$batchPublic])===1,'Confirmed Wholesale batch was not persisted.');
 
 $batchContext=$wContext+['selectedWholesaleBatchPublicId'=>$batchPublic];
-$cancelBatchProposal=wholesale_agent_handle($pdo,$user,['message'=>'cancel this batch','pageContext'=>$batchContext]);
+$cancelBatchProposal=wholesale_agent_handle($pdo,$user,hac_test_input($pdo,$user,'wholesale',['message'=>'cancel this batch','pageContext'=>$batchContext]));
 cwdb_assert(($cancelBatchProposal['data']['requiresConfirmation']??false)===true,'Wholesale batch cancellation skipped proposal state.');
 $q=$pdo->prepare("SELECT status FROM wholesale_fulfillments WHERE organization_id=? AND public_id=?");$q->execute([$org,$batchPublic]);
 cwdb_assert($q->fetchColumn()==='draft','Wholesale batch changed before cancellation confirmation.');
-$cancelBatchConfirmed=wholesale_agent_handle($pdo,$user,['message'=>'Confirm','pageContext'=>$batchContext]);
+$cancelBatchConfirmed=wholesale_agent_handle($pdo,$user,hac_test_input($pdo,$user,'wholesale',['message'=>'Confirm','pageContext'=>$batchContext]));
 cwdb_assert(($cancelBatchConfirmed['data']['status']??'')==='cancelled','Wholesale batch cancellation did not execute.');
 $q->execute([$org,$batchPublic]);
 cwdb_assert($q->fetchColumn()==='cancelled','Confirmed Wholesale batch cancellation was not persisted.');
@@ -118,7 +120,7 @@ require_once __DIR__.'/../includes/wholesale-receivables.php';
 $j9Confirm=static function(string $orderPublic)use($pdo,$user):array{
     if(session_status()!==PHP_SESSION_ACTIVE)session_start();
     try{return wholesale_agent_handle($pdo,$user,
-        ['message'=>'Confirm','pageContext'=>['module'=>'wholesale','selectedWholesaleOrderPublicId'=>$orderPublic]]);}
+        hac_test_input($pdo,$user,'wholesale',['message'=>'Confirm','pageContext'=>['module'=>'wholesale','selectedWholesaleOrderPublicId'=>$orderPublic]]));}
     finally{if(session_status()===PHP_SESSION_ACTIVE)session_write_close();}
 };
 $newOrder=static function(string $status='requested')use($pdo,$org,$account,$sku,$uid):array{
@@ -268,7 +270,7 @@ cwdb_assert(fm8d18j10b_catalogue($j10ViewOnly)===[],'View-only actor exposed fin
 // must not even receive a write proposal.
 $readOnly=$user;$readOnly['permissions']=['wholesale.view','wholesale.agent'];
 $permissionBlocked=false;
-try{wholesale_agent_handle($pdo,$readOnly,['message'=>'create fulfillment batch for all remaining quantities','pageContext'=>$wContext]);}catch(WholesaleAgentPermissionException){$permissionBlocked=true;}
+try{wholesale_agent_handle($pdo,$readOnly,hac_test_input($pdo,$readOnly,'wholesale',['message'=>'create fulfillment batch for all remaining quantities','pageContext'=>$wContext]));}catch(WholesaleAgentPermissionException){$permissionBlocked=true;}
 cwdb_assert($permissionBlocked,'Wholesale write proposal bypassed wholesale.manage permission.');
 
 echo "Catering + Wholesale DB-backed Agent lifecycle passed.\n";

@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__.'/agent-confirmation-core.php';
 
 function gaw_agent_nodes(): array
 {
@@ -175,38 +176,27 @@ function gaw_normalize_node_route(array $route): array
     return ['ok'=>true]+$route;
 }
 
-function gaw_pending_action_node(int $organizationId,int $userId): ?string
+/**
+ * With evidence this is an exact reviewed-proposal lookup, never "most recent".
+ * The null form is only an existence guard used while staging new proposals.
+ */
+function gaw_pending_action_node(int $organizationId,int $userId,?array $evidence=null): ?string
 {
-    $key=$organizationId.':'.$userId;
+    if($organizationId<1||$userId<1)return null;
+    $nodes=array_values(array_unique(array_merge(
+        array_keys((array)($_SESSION['agent_node_pending']??[])),['purchasing','scheduling'])));
     $candidates=[];
-
-    foreach((array)($_SESSION['agent_node_pending']??[]) as $node=>$rows){
-        $proposal=is_array($rows)?($rows[$key]??null):null;
-        if(!is_array($proposal))continue;
-        $expires=(int)($proposal['expires']??0);
-        if($expires<time()){
-            unset($_SESSION['agent_node_pending'][$node][$key]);
-            continue;
+    foreach($nodes as $node){
+        $row=gac_pending_get((string)$node,$organizationId,$userId);
+        if(!$row)continue;
+        if($evidence!==null){
+            try{gac_pending_reviewed((string)$node,$organizationId,$userId,$evidence,false);}
+            catch(GacConfirmationConflict){continue;}
+            return (string)$node;
         }
-        $candidates[]=['node'=>(string)$node,'created'=>(int)($proposal['created']??($expires-600)),'expires'=>$expires];
+        $candidates[]=['node'=>(string)$node,'created'=>(int)($row['created']??0)];
     }
-
-    $legacy=[
-        'purchasing'=>'purchasing_agent_pending',
-        'scheduling'=>'schedule_agent_pending',
-    ];
-    foreach($legacy as $node=>$sessionKey){
-        $proposal=$_SESSION[$sessionKey][$key]??null;
-        if(!is_array($proposal))continue;
-        $expires=(int)($proposal['expires']??0);
-        if($expires<time()){
-            unset($_SESSION[$sessionKey][$key]);
-            continue;
-        }
-        $candidates[]=['node'=>$node,'created'=>(int)($proposal['created']??($expires-600)),'expires'=>$expires];
-    }
-
     if(!$candidates)return null;
-    usort($candidates,static fn($a,$b)=>($b['created']<=>$a['created'])?:($b['expires']<=>$a['expires']));
+    usort($candidates,static fn($a,$b)=>$b['created']<=>$a['created']);
     return (string)$candidates[0]['node'];
 }

@@ -35,14 +35,9 @@ try{
     $pdo->beginTransaction();
     accounts_lock_org($pdo,$organizationId);
     // Lock affected identities in one stable order before their membership versions change.
-    $affected=[];
-    if($roleId>0){
-        $q=$pdo->prepare('SELECT DISTINCT om.user_id FROM organization_memberships om
-            JOIN user_roles ur ON ur.membership_id=om.id AND ur.revoked_at IS NULL
-            WHERE om.organization_id=? AND ur.role_id=?');$q->execute([$organizationId,$roleId]);$affected=$q->fetchAll(PDO::FETCH_COLUMN);
-    }
+    $affected=$roleId>0?accounts_role_user_ids($pdo,$organizationId,$roleId):[];
     accounts_lock_users($pdo,array_merge([$actorId],$affected));
-    $actor=accounts_actor($pdo,$organizationId,$actorId);
+    $actor=accounts_actor($pdo,$organizationId,$actorId,true);
     accounts_require($actor,'roles.edit');accounts_require($actor,'roles.assign_permissions');
     if($action==='create')accounts_require($actor,'roles.create');
     $owner=in_array('*',$actor['permissions'],true);
@@ -73,9 +68,7 @@ try{
     $grant=$pdo->prepare('INSERT INTO role_permissions(role_id,permission_id) SELECT ?,id FROM permissions WHERE permission_key=?');
     foreach($validKeys as $key)$grant->execute([$roleId,$key]);
     if($action==='update'&&$oldKeys!==$validKeys){
-        $pdo->prepare('UPDATE organization_memberships om JOIN user_roles ur ON ur.membership_id=om.id AND ur.revoked_at IS NULL
-            SET om.updated_at=GREATEST(NOW(6),DATE_ADD(om.updated_at,INTERVAL 1 MICROSECOND))
-            WHERE om.organization_id=? AND ur.role_id=?')->execute([$organizationId,$roleId]);
+        accounts_role_revoke_sessions($pdo,$organizationId,$roleId);
     }
     app_audit($pdo,$organizationId,$actorId,$auditAction,'role',(string)$roleId,
         $previous?['name'=>$previous['name'],'permissions'=>$oldKeys]:null,['name'=>$name,'permissions'=>$validKeys]);

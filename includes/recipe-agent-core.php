@@ -248,18 +248,20 @@ function recipe_agent_parse_ingredient(string $text,?string $targetRecipeName=nu
 
 function recipe_agent_handle(PDO $pdo,array $user,array $input): array
 {
+    gac_request_context($input,$pdo,$user);
     recipe_agent_require_read($user);if(!recipe_agent_ready($pdo))throw new RuntimeException('Recipe data is not installed. Run upgrade.php.');
     $org=(int)$user['organization_id'];$uid=(int)$user['id'];$message=trim((string)($input['message']??''));
     if($message===''||mb_strlen($message,'UTF-8')>2400)throw new InvalidArgumentException('Ask Gelato a recipe question no longer than 2,400 characters.');
     $context=is_array($input['pageContext']??null)?$input['pageContext']:[];$pending=gac_pending_get('recipes',$org,$uid);
 
     if(gac_is_confirm($message)){
-        if(!$pending)throw new InvalidArgumentException('There is no pending Recipe action to confirm.');
-        try{$result=recipe_agent_execute_pending($pdo,$user,$pending);}catch(Throwable $e){gac_pending_clear('recipes',$org,$uid);throw $e;}
-        gac_pending_clear('recipes',$org,$uid);return ['ok'=>true]+$result;
+        $pending=gac_pending_claim('recipes',$org,$uid,$input);
+        try{$result=recipe_agent_execute_pending($pdo,$user,$pending);}catch(Throwable $e){gac_pending_clear('recipes',$org,$uid,(string)$pending['id']);throw $e;}
+        gac_pending_clear('recipes',$org,$uid,(string)$pending['id']);return ['ok'=>true]+$result;
     }
-    if(gac_is_cancel($message)&&$pending){
-        gac_pending_clear('recipes',$org,$uid);app_audit($pdo,$org,$uid,'recipe.agent_action_discarded','recipe_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']??null]);
+    if(gac_is_cancel($message)){
+        $pending=gac_pending_claim('recipes',$org,$uid,$input);
+        gac_pending_clear('recipes',$org,$uid,(string)$pending['id']);app_audit($pdo,$org,$uid,'recipe.agent_action_discarded','recipe_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']??null]);
         return ['ok'=>true,'skill'=>'recipe.action_cancelled','answer'=>'Cancelled. I did not change the recipe.','data'=>['cancelledProposal'=>$pending['id']],'sources'=>['Recipe + Production Standards Agent']];
     }
 

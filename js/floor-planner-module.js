@@ -82,11 +82,11 @@
 
   function install() {
     installOperationsNav();
-    loadScript('js/global-agent.js?v=20261026-b8d16a-voice1', 'gelato-global-agent');
+    loadScript('js/global-agent.js?v=20261026-b8d16a-voice1-hardening-c1', 'gelato-global-agent');
     loadScript('js/admin-shell-consolidation.js?v=20261013-nav1', 'gelato-admin-shell-consolidation');
     loadScript('js/equipment-module.js', 'equipment-module');
     loadScript('js/catering-module.js', 'catering-module');
-    loadScript('js/restaurant-agent-bridge.js', 'restaurant-agent-bridge');
+    loadScript('js/restaurant-agent-bridge.js?v=hardening-c1', 'restaurant-agent-bridge');
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, { once: true });

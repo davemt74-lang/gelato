@@ -62,7 +62,7 @@ function fm8d18j6b_propose(array $args,array $actor):array
         return ['ok'=>true,'data'=>[
             'answer'=>$summary."\n\nReply Confirm to apply through the Marketing Agent, or Cancel. Nothing has changed yet.",
             'source'=>'Gelato Marketing Agent (server-verified pending proposal)',
-            'requiresConfirmation'=>true,'proposal'=>['id'=>$pending['id'],'type'=>'package_status'],
+            'requiresConfirmation'=>true,'proposal'=>gac_public_proposal($pending),
         ]];
     }finally{if($opened&&session_status()===PHP_SESSION_ACTIVE)session_write_close();}
 }

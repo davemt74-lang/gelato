@@ -70,8 +70,10 @@ d17d_assert(str_contains($api,'(?:make|create|build|start)')&&str_contains($api,
 d17d_assert(str_contains($api,'A prep-list proposal can contain at most 30 items'),'oversized prep request is rejected');
 d17d_assert(str_contains($api,"'taskIds'")&&str_contains($api,"'url'=>'operations.php'"),'created prep tasks return record receipts');
 $core=(string)file_get_contents(dirname(__DIR__).'/includes/operations-core.php');
+$confirmationCore=(string)file_get_contents(dirname(__DIR__).'/includes/agent-confirmation-core.php');
 d17d_assert(str_contains($api,"'inventory_adjust'")&&str_contains($api,"'inventory.manage'")
-    &&str_contains($api,'session_write_close()'),'manager-only confirm and consume before write');
+    &&str_contains($api,'gac_pending_claim(')&&str_contains($confirmationCore,'session_write_close()'),
+    'manager-only confirm uses the shared durable claim before write');
 d17d_assert(str_contains($api,"'transactionId'")&&str_contains($api,"'proof'")
     &&str_contains($api,"'url'=>'operations.php'"),'real transaction receipt and review location');
 d17d_assert(str_contains($core,'FOR UPDATE')&&str_contains($core,'$expectedOnHand')

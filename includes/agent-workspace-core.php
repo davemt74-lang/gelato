@@ -110,7 +110,7 @@ function gaw_append(PDO $pdo,int $org,int $userId,string $threadPublicId,string 
     return ['id'=>$public,'databaseId'=>$messageId,'role'=>$role,'channel'=>$channel,'content'=>$content,'skill'=>$meta['skill']??null,'tool'=>$meta['tool']??null,'structured'=>$meta['structured']??null,'sources'=>$meta['sources']??[],'createdAt'=>date('Y-m-d H:i:s')];
 }
 
-function gaw_route(array $user,string $message,string $threadId=''): array
+function gaw_route(array $user,string $message,string $threadId='',array $confirmationContext=[]): array
 {
     $text=mb_strtolower(preg_replace('/^hey\s+gelato[,\s]*/iu','',trim($message))??trim($message),'UTF-8');
     $menu='/\b(menu|menu item|sold.?out|86(?:d)?|eighty.?six|food item|drink item|menu price|pizza size|modifier|toppings?|add.?on)\b/u';
@@ -132,7 +132,8 @@ function gaw_route(array $user,string $message,string $threadId=''): array
 
     $confirmationIntent=preg_match('/^(?:confirm|yes|yes please|do it|go ahead|execute|apply|cancel|cancel it|discard|never mind|nevermind|stop)(?:\s+(?:it|that|change|action))?[.!]?$/u',$text)===1;
     if($confirmationIntent&&function_exists('gaw_pending_action_node')&&function_exists('gaw_node_route')){
-        $pendingNode=gaw_pending_action_node((int)($user['organization_id']??0),(int)($user['id']??0));
+        $pendingNode=gaw_pending_action_node((int)($user['organization_id']??0),(int)($user['id']??0),array_replace($confirmationContext,['threadId'=>$threadId]));
+        if($pendingNode===null)throw new GacConfirmationConflict('Review the exact current proposal in this conversation before confirming or cancelling.');
         if($pendingNode==='front_of_house'&&app_has_permission('host.view',$user)&&(app_has_permission('table_service.view',$user)||app_has_permission('host.use',$user)||app_has_permission('host.manage',$user)))return gaw_node_route('front_of_house','front_of_house_confirmation');
         if($pendingNode==='marketing'&&(app_has_permission('packages.view',$user)||app_has_permission('public_pages.edit',$user)||app_has_permission('settings.organization_edit',$user)))return gaw_node_route('marketing','marketing_confirmation');
         if($pendingNode==='equipment'&&app_has_permission('equipment.view',$user)&&app_has_permission('agent.equipment_skills',$user))return gaw_node_route('equipment','equipment_confirmation');

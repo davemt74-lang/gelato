@@ -1,5 +1,7 @@
 <?php
 declare(strict_types=1);
+if(PHP_SAPI!=='cli'){http_response_code(404);exit;}
+require_once __DIR__.'/hardening-agent-confirmation-test-support.php';
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/food-monster-high-impact-approval.php';
 $pdo=app_pdo();$checks=0;
@@ -30,9 +32,10 @@ $source=operations_create_task($pdo,$org,[
     'sourceType'=>'food_monster_report','sourcePublicId'=>'msg-'.str_repeat('a',20)],$uid);
 try{fm9i_prepare($pdo,$owner,'task '.$source['public_id']);g9i_ok(false,'source linked denied');}
 catch(DomainException){g9i_ok(true,'source linked denied');}
+hac_test_context($pdo,$owner,['threadId'=>$tid]);
 $pending=fm9f_approval_propose($owner,'record_deletion',$summary,$tid,$pdo);
 g9i_ok(!$pending['executed'],'proposal did not archive task');
-$decision=fm9f_approval_decide($owner,$pending['proposalId'],'approve');
+$decision=fm9f_approval_decide($owner,$pending['proposalId'],'approve',hac_test_review($pdo,$owner,'food_monster_high_impact'));
 g9i_ok(!$decision['executed']&&$decision['handoff']['taskId']===$id,'approval bound exact task');
 g9i_ok(operations_task_by_public_id($pdo,$org,$id)!==null,'approved but not yet executed');
 try{fm9i_execute($pdo,$staff,$tid);g9i_ok(false,'staff execute denied');}
@@ -54,8 +57,9 @@ g9i_ok((int)$events->fetchColumn()===1,'one durable Agent Brain execution receip
 try{fm9i_execute($pdo,$owner,$tid);g9i_ok(false,'replay denied');}
 catch(DomainException){g9i_ok(true,'replay denied');}
 $stale=operations_create_task($pdo,$org,['title'=>'Stale test task','category'=>'general'],$uid);
+hac_test_context($pdo,$owner,['threadId'=>$tid]);
 $new=fm9f_approval_propose($owner,'record_deletion','task '.$stale['public_id'],$tid,$pdo);
-fm9f_approval_decide($owner,$new['proposalId'],'approve');
+fm9f_approval_decide($owner,$new['proposalId'],'approve',hac_test_review($pdo,$owner,'food_monster_high_impact'));
 $pdo->prepare("UPDATE restaurant_tasks SET updated_at=DATE_ADD(NOW(6), INTERVAL 60 SECOND)
  WHERE organization_id=? AND public_id=?")->execute([$org,$stale['public_id']]);
 try{fm9i_execute($pdo,$owner,$tid);g9i_ok(false,'stale state denied');}

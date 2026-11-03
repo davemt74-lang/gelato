@@ -187,7 +187,7 @@ function fm8d5_summarize_recipe(array $row,bool $method=false):string
 }
 function fm8d5_observation(string $message,string $source):array
 {
-    return ['ok'=>true,'data'=>['answer'=>mb_substr($message,0,2900,'UTF-8'),'source'=>$source]];
+    return ['ok'=>true,'data'=>['answer'=>$message,'source'=>$source]];
 }
 function fm8d5_catalogue(array $principal):array
 {

@@ -20,8 +20,8 @@
   const actorIdentity = () => String(Auth.current()?.id || Auth.current()?.userId || Auth.current()?.publicId || '');
   try {
     const saved = Auth.read(prepMemoryKey, null);
-    if (saved?.actor && saved.actor === actorIdentity() && saved.until > Date.now()) {
-      recentPrepUntil = saved.until;
+    if (saved?.actor && saved.actor === actorIdentity()) {
+      if (saved.until > Date.now()) recentPrepUntil = saved.until;
       if (saved.pendingUntil > Date.now()) pendingEndpoint = saved.pendingEndpoint || null;
     }
   } catch { /* Conversation state remains usable without sessionStorage. */ }
@@ -66,11 +66,12 @@
     try {
       // Keep Confirm/Cancel on the same specialist that produced the proposal.
       const endpoint = (pendingEndpoint && confirmationIntent.test(text)) ? pendingEndpoint : ((isPrep(text) || prepFollowup(text)) ? 'api/prep-intelligence-agent.php' : (isEmployeeHandoff(text) ? 'api/employee-agent.php' : (isTimeclock(text) ? 'api/timeclock-agent.php' : (isScheduling(text) ? 'api/scheduling-agent.php' : (isOperations(text) ? 'api/operations-agent.php' : 'api/agent-brain.php')))));
-      const response = await fetch(endpoint,{method:'POST',cache:'no-store',headers:{'Content-Type':'application/json','Accept':'application/json','X-CSRF-Token':window.RESTAURANT_CSRF_TOKEN || ''},body:JSON.stringify({action:'ask',message:text,voice:!!options.voice,voiceEventId:options.voiceEventId||'',csrf_token:window.RESTAURANT_CSRF_TOKEN || ''})});
-      const data = await response.json(); if (!response.ok || !data.ok) throw new Error(data.message || 'The Restaurant Agent could not complete that request.');
+      if(!window.GelatoAgentReview)await import('./agent-confirmation-transport.js?v=20261103-c1');
+      const data = await window.GelatoAgentReview.ask(endpoint, {action:'ask',message:text,voice:!!options.voice,voiceEventId:options.voiceEventId||''}, {csrf:window.RESTAURANT_CSRF_TOKEN||'',key:'owner-restaurant-agent'});
       pendingEndpoint = data.data?.requiresConfirmation ? endpoint : null;
       rememberPrep(endpoint, !!data.data?.requiresConfirmation);
       if (pending) pending.remove(); saveMessage('agent', data.answer || data.reply || 'Done.'); appendMessage('agent', data.answer || data.reply || 'Done.');
+      window.GelatoAgentReview.acknowledge(data);
       if (guidance) guidance.textContent = `Restaurant Agent skill: ${data.skill || 'knowledge.search'}`;
       return data;
     } catch (error) {

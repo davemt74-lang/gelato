@@ -1,7 +1,9 @@
 'use strict';
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const source=fs.readFileSync('js/global-agent.js','utf8');
+const reviewSource=fs.readFileSync('js/agent-confirmation-transport.js','utf8');
 const recognizers=[],sent=[],listeners={};
+let messageSequence=0;
 let n=0;const ok=(value,reason)=>{assert.ok(value,reason);n++};
 const input={value:'',dataset:{},handlers:{},dispatchEvent(e){this.handlers[e.type]?.(e);},addEventListener(t,f){this.handlers[t]=f}};
 class Recognition{
@@ -20,11 +22,12 @@ let pref={listening_enabled:0,proactive_voice_enabled:0,wake_phrase:'Hey Gelato'
 const fetch=async(url,opt={})=>{
  const body=opt.body?JSON.parse(opt.body):{};sent.push({url,body});
  let data={ok:true};
- if(url.includes('bootstrap'))data={ok:true,csrf:'x',activeThread:'thread',user:{id:15,name:'Kitchen'},permissions:['agent.proactive','voice.agent']};
+ if(url.includes('bootstrap'))data={ok:true,csrf:'x',activeThread:'agent-'+ '7'.repeat(20),user:{id:15,name:'Kitchen'},permissions:['agent.proactive','voice.agent']};
  else if(url.includes('proactive-agent.php?action=preferences'))data={ok:true,preferences:pref};
  else if(url.includes('proactive-agent.php')&&body.action==='preferences'){pref={listening_enabled:body.listeningEnabled?1:0,proactive_voice_enabled:0,wake_phrase:'Hey Gelato'};data={ok:true,preferences:pref}}
  else if(url.includes('voice-identity.php'))data={ok:true,match:{matched:true,sessionUserMatch:true,userId:15,eventId:'verified'}};
- else if(body.action==='append')data={ok:true,message:{databaseId:12}};
+ else if(body.action==='append')data={ok:true,message:{id:'msg-'+ (++messageSequence).toString(16).padStart(20,'0'),
+  databaseId:messageSequence,role:body.role,content:body.content,structured:body.structured??null,channel:body.channel||'text'}};
  else if(url.includes('proactive-agent.php'))data={ok:true,events:[]};
  return {ok:true,json:async()=>data};
 };
@@ -38,6 +41,7 @@ const context={window,document,fetch,navigator:{mediaDevices:{getUserMedia:async
  Event:class{constructor(type){this.type=type;this.isTrusted=false}},
  Float64Array,Uint8Array,Date,Promise,console,
  setInterval:fn=>{fn();return 1},clearInterval:()=>{},setTimeout:(fn,ms)=>{if(ms===2800)queueMicrotask(fn);return 1},clearTimeout:()=>{}};
+vm.runInNewContext(reviewSource,context,{filename:'agent-confirmation-transport.js'});
 vm.runInNewContext(source,context);
 const flush=async()=>{for(let i=0;i<40;i++)await Promise.resolve()};
 (async()=>{

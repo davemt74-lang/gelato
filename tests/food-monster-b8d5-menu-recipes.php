@@ -360,7 +360,7 @@ b8d5_assert(!str_contains(json_encode($brokerHistory,JSON_THROW_ON_ERROR),'Chef 
     'unified knowledge results never leak into the next external model request');
 $delegationSource=file_get_contents(dirname(__DIR__).'/js/global-agent.js');
 b8d5_assert(is_string($delegationSource)
-    &&str_contains($delegationSource,"routeQuery==='?threadId='+encodeURIComponent(S.thread)"),
+    &&str_contains($delegationSource,"routeQuery==='?threadId='+encodeURIComponent(turnThread)"),
     'offline knowledge-agent handoff permits only the canonical same-thread query');
 $voiceApiSource=file_get_contents(dirname(__DIR__).'/api/food-monster-llm.php');
 b8d5_assert(is_string($voiceApiSource)

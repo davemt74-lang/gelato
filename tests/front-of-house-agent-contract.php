@@ -1,5 +1,7 @@
 <?php
 declare(strict_types=1);
+if(PHP_SAPI!=='cli'){http_response_code(404);exit;}
+require_once __DIR__.'/hardening-agent-confirmation-test-support.php';
 
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/front-of-house-agent-core.php';
@@ -34,37 +36,37 @@ $res=service_reservation_protection_reservation_create($pdo,$org,$location,[
 ],$uid);
 $context=['module'=>'host_stand','locationId'=>$location,'date'=>$date,'selectedReservationPublicId'=>$res['publicId']];
 
-$read=front_of_house_agent_handle($pdo,$user,['message'=>'What is going on with this reservation?','pageContext'=>$context]);
+$read=front_of_house_agent_handle($pdo,$user,hac_test_input($pdo,$user,'front_of_house',['message'=>'What is going on with this reservation?','pageContext'=>$context]));
 fohci(($read['skill']??'')==='front_of_house.reservation','Selected Host Stand reservation must resolve through FOH context.');
 fohci(str_contains((string)$read['answer'],'Jamie Guest'),'Reservation answer must use the selected server-side reservation.');
 
-$proposal=front_of_house_agent_handle($pdo,$user,['message'=>'Mark this reservation confirmed','pageContext'=>$context]);
+$proposal=front_of_house_agent_handle($pdo,$user,hac_test_input($pdo,$user,'front_of_house',['message'=>'Mark this reservation confirmed','pageContext'=>$context]));
 fohci(($proposal['skill']??'')==='front_of_house.action_proposal','Reservation status write must be proposed first.');
 fohci((string)fohci_one($pdo,'SELECT status FROM guest_reservations WHERE organization_id=? AND public_id=?',[$org,$res['publicId']])==='booked','Proposal must not mutate reservation status.');
 fohci(gaw_pending_action_node($org,$uid)==='front_of_house','Main Agent confirmation resolver must follow the FOH proposal.');
-$confirmed=front_of_house_agent_handle($pdo,$user,['message'=>'Confirm','pageContext'=>$context]);
+$confirmed=front_of_house_agent_handle($pdo,$user,hac_test_input($pdo,$user,'front_of_house',['message'=>'Confirm','pageContext'=>$context]));
 fohci(($confirmed['skill']??'')==='front_of_house.action_confirmed','Confirm must execute the pending reservation action.');
 fohci((string)fohci_one($pdo,'SELECT status FROM guest_reservations WHERE organization_id=? AND public_id=?',[$org,$res['publicId']])==='confirmed','Confirmed proposal must persist reservation status.');
 
 $beforeChecks=(int)fohci_one($pdo,'SELECT COUNT(*) FROM pos_checks WHERE organization_id=?',[$org]);
-$seatProposal=front_of_house_agent_handle($pdo,$user,['message'=>'Seat this reservation','pageContext'=>$context]);
+$seatProposal=front_of_house_agent_handle($pdo,$user,hac_test_input($pdo,$user,'front_of_house',['message'=>'Seat this reservation','pageContext'=>$context]));
 fohci(($seatProposal['skill']??'')==='front_of_house.action_proposal','Seating must require confirmation.');
 fohci((int)fohci_one($pdo,'SELECT COUNT(*) FROM pos_checks WHERE organization_id=?',[$org])===$beforeChecks,'Seat proposal must not create a POS check.');
-$seated=front_of_house_agent_handle($pdo,$user,['message'=>'Yes','pageContext'=>$context]);
+$seated=front_of_house_agent_handle($pdo,$user,hac_test_input($pdo,$user,'front_of_house',['message'=>'Yes','pageContext'=>$context]));
 fohci(($seated['data']['reservation']['status']??'')==='seated','Confirmed seating must move the reservation to seated.');
 fohci((int)fohci_one($pdo,'SELECT COUNT(*) FROM pos_checks WHERE organization_id=?',[$org])===$beforeChecks+1,'Confirmed seating must create exactly one canonical POS check.');
 fohci((string)fohci_one($pdo,'SELECT state FROM service_tables WHERE organization_id=? AND public_id=?',[$org,$t1['publicId']])==='seated','Confirmed seating must mark the assigned table seated.');
 
 $pdo->prepare("UPDATE service_tables SET state='dirty',active_check_id=NULL,dirty_at=NOW(6),cleaning_started_at=NULL,ready_at=NULL,updated_at=NOW(6) WHERE organization_id=? AND public_id=?")->execute([$org,$t2['publicId']]);
 $tableContext=['module'=>'host_stand','locationId'=>$location,'date'=>$date,'selectedTablePublicId'=>$t2['publicId']];
-$cleanProposal=front_of_house_agent_handle($pdo,$user,['message'=>'Start cleaning this table','pageContext'=>$tableContext]);
+$cleanProposal=front_of_house_agent_handle($pdo,$user,hac_test_input($pdo,$user,'front_of_house',['message'=>'Start cleaning this table','pageContext'=>$tableContext]));
 fohci(($cleanProposal['skill']??'')==='front_of_house.action_proposal','Start cleaning must be proposed first.');
 fohci((string)fohci_one($pdo,'SELECT state FROM service_tables WHERE organization_id=? AND public_id=?',[$org,$t2['publicId']])==='dirty','Cleaning proposal must leave table dirty.');
-front_of_house_agent_handle($pdo,$user,['message'=>'Confirm','pageContext'=>$tableContext]);
+front_of_house_agent_handle($pdo,$user,hac_test_input($pdo,$user,'front_of_house',['message'=>'Confirm','pageContext'=>$tableContext]));
 fohci((string)fohci_one($pdo,'SELECT state FROM service_tables WHERE organization_id=? AND public_id=?',[$org,$t2['publicId']])==='cleaning','Confirmed cleaning must enter cleaning state.');
-$readyProposal=front_of_house_agent_handle($pdo,$user,['message'=>'Mark this table ready','pageContext'=>$tableContext]);
+$readyProposal=front_of_house_agent_handle($pdo,$user,hac_test_input($pdo,$user,'front_of_house',['message'=>'Mark this table ready','pageContext'=>$tableContext]));
 fohci(($readyProposal['skill']??'')==='front_of_house.action_proposal','Table ready must be proposed first.');
-front_of_house_agent_handle($pdo,$user,['message'=>'Confirm','pageContext'=>$tableContext]);
+front_of_house_agent_handle($pdo,$user,hac_test_input($pdo,$user,'front_of_house',['message'=>'Confirm','pageContext'=>$tableContext]));
 fohci((string)fohci_one($pdo,'SELECT state FROM service_tables WHERE organization_id=? AND public_id=?',[$org,$t2['publicId']])==='available','Confirmed ready action must return table to available.');
 
 $staleAt=$start->modify('+4 hours');
@@ -72,15 +74,15 @@ $stale=service_reservation_protection_reservation_create($pdo,$org,$location,[
     'type'=>'reservation','guestName'=>'Stale Guest','partySize'=>2,'scheduledAt'=>$staleAt->format('Y-m-d H:i:s'),'durationMinutes'=>90,'tablePublicIds'=>[$t2['publicId']],'source'=>'agent',
 ],$uid);
 $staleContext=['module'=>'host_stand','locationId'=>$location,'date'=>$staleAt->format('Y-m-d'),'selectedReservationPublicId'=>$stale['publicId']];
-front_of_house_agent_handle($pdo,$user,['message'=>'Mark this reservation arrived','pageContext'=>$staleContext]);
+front_of_house_agent_handle($pdo,$user,hac_test_input($pdo,$user,'front_of_house',['message'=>'Mark this reservation arrived','pageContext'=>$staleContext]));
 $pdo->prepare('UPDATE guest_reservations SET notes=?,updated_at=DATE_ADD(NOW(6),INTERVAL 2 SECOND) WHERE organization_id=? AND public_id=?')->execute(['Changed after proposal',$org,$stale['publicId']]);
-$blocked=false;try{front_of_house_agent_handle($pdo,$user,['message'=>'Confirm','pageContext'=>$staleContext]);}catch(InvalidArgumentException $e){$blocked=str_contains($e->getMessage(),'changed after I proposed');}
+$blocked=false;try{front_of_house_agent_handle($pdo,$user,hac_test_input($pdo,$user,'front_of_house',['message'=>'Confirm','pageContext'=>$staleContext]));}catch(InvalidArgumentException $e){$blocked=str_contains($e->getMessage(),'changed after I proposed');}
 fohci($blocked,'Stale reservation proposal must be rejected at confirmation.');
 fohci((string)fohci_one($pdo,'SELECT status FROM guest_reservations WHERE organization_id=? AND public_id=?',[$org,$stale['publicId']])==='booked','Stale confirmation must not mutate reservation state.');
 
-$viewerRead=front_of_house_agent_handle($pdo,$viewer,['message'=>'How many available tables do we have?','pageContext'=>['module'=>'host_stand','locationId'=>$location,'date'=>$date]]);
+$viewerRead=front_of_house_agent_handle($pdo,$viewer,hac_test_input($pdo,$viewer,'front_of_house',['message'=>'How many available tables do we have?','pageContext'=>['module'=>'host_stand','locationId'=>$location,'date'=>$date]]));
 fohci(($viewerRead['skill']??'')==='front_of_house.availability','Host viewer must retain FOH read access.');
-$writeBlocked=false;try{front_of_house_agent_handle($pdo,$viewer,['message'=>'Mark this reservation arrived','pageContext'=>$staleContext]);}catch(FrontOfHouseAgentPermissionException){$writeBlocked=true;}
+$writeBlocked=false;try{front_of_house_agent_handle($pdo,$viewer,hac_test_input($pdo,$viewer,'front_of_house',['message'=>'Mark this reservation arrived','pageContext'=>$staleContext]));}catch(FrontOfHouseAgentPermissionException){$writeBlocked=true;}
 fohci($writeBlocked,'Host viewer without host.use must not propose FOH writes.');
 
 $route=gaw_route($user,'What reservations do we have today?');

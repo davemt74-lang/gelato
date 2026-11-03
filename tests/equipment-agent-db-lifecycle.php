@@ -1,5 +1,7 @@
 <?php
 declare(strict_types=1);
+if(PHP_SAPI!=='cli'){http_response_code(404);exit;}
+require_once __DIR__.'/hardening-agent-confirmation-test-support.php';
 
 require __DIR__.'/../includes/bootstrap.php';
 require __DIR__.'/../includes/agent-node-registry.php';
@@ -45,38 +47,39 @@ $genericRoute=gaw_route($user,'Show me the service history.');
 eadb_assert(($genericRoute['domain']??'')!=='equipment_maintenance','Generic service-history language was globally hijacked by the Equipment Agent.');
 
 // Read intelligence is side-effect-free and selected-asset context is resolved server-side.
-$summary=equipment_agent_handle($pdo,$user,['message'=>'What equipment needs attention?','pageContext'=>['module'=>'equipment']]);
+$summary=equipment_agent_handle($pdo,$user,hac_test_input($pdo,$user,'equipment',['message'=>'What equipment needs attention?','pageContext'=>['module'=>'equipment']]));
 eadb_assert(($summary['skill']??'')==='equipment.maintenance_attention','Equipment attention read returned the wrong skill.');
 eadb_assert((int)($summary['data']['summary']['overdueMaintenance']??0)>=1,'Overdue maintenance was not surfaced.');
-$assetRead=equipment_agent_handle($pdo,$user,['message'=>'What is the service history?','pageContext'=>$context]);
+$assetRead=equipment_agent_handle($pdo,$user,hac_test_input($pdo,$user,'equipment',['message'=>'What is the service history?','pageContext'=>$context]));
 eadb_assert(($assetRead['data']['asset']['publicId']??'')==='equip-agent-ci','Selected equipment context was not resolved server-side.');
 
 // Status: Propose -> Confirm -> Execute. No write before Confirm.
-$statusProposal=equipment_agent_handle($pdo,$user,['message'=>'mark this equipment out of service','pageContext'=>$context]);
+$statusProposal=equipment_agent_handle($pdo,$user,hac_test_input($pdo,$user,'equipment',['message'=>'mark this equipment out of service','pageContext'=>$context]));
 eadb_assert(($statusProposal['data']['requiresConfirmation']??false)===true,'Equipment status write skipped proposal state.');
 eadb_assert(eadb_scalar($pdo,"SELECT operational_status FROM equipment_assets WHERE organization_id=? AND public_id=?",[$org,'equip-agent-ci'])==='active','Equipment status changed before confirmation.');
-$pendingRoute=gaw_route($user,'Confirm');
+$review=hac_test_review($pdo,$user,'equipment');
+$pendingRoute=gaw_route($user,'Confirm',$review['threadId'],$review);
 eadb_assert(($pendingRoute['route']??'')==='api/equipment-agent.php','Pending Equipment confirmation did not route back to its owning node.');
-$statusConfirmed=equipment_agent_handle($pdo,$user,['message'=>'Confirm','pageContext'=>$context]);
+$statusConfirmed=equipment_agent_handle($pdo,$user,hac_test_input($pdo,$user,'equipment',['message'=>'Confirm','pageContext'=>$context]));
 eadb_assert(($statusConfirmed['data']['status']??'')==='out_of_service','Equipment status confirmation did not execute.');
 eadb_assert(eadb_scalar($pdo,"SELECT operational_status FROM equipment_assets WHERE organization_id=? AND public_id=?",[$org,'equip-agent-ci'])==='out_of_service','Confirmed Equipment status was not persisted.');
 
 // Schedule + Cancel: cancelled proposal must not mutate next_service_on.
 $originalDue=(string)eadb_scalar($pdo,"SELECT next_service_on FROM equipment_assets WHERE organization_id=? AND public_id=?",[$org,'equip-agent-ci']);
 $newDue=date('Y-m-d',strtotime('+14 days'));
-$scheduleProposal=equipment_agent_handle($pdo,$user,['message'=>"schedule maintenance {$newDue}",'pageContext'=>$context]);
+$scheduleProposal=equipment_agent_handle($pdo,$user,hac_test_input($pdo,$user,'equipment',['message'=>"schedule maintenance {$newDue}",'pageContext'=>$context]));
 eadb_assert(($scheduleProposal['data']['requiresConfirmation']??false)===true,'Equipment schedule write skipped proposal state.');
-$cancelled=equipment_agent_handle($pdo,$user,['message'=>'Cancel','pageContext'=>$context]);
+$cancelled=equipment_agent_handle($pdo,$user,hac_test_input($pdo,$user,'equipment',['message'=>'Cancel','pageContext'=>$context]));
 eadb_assert(($cancelled['skill']??'')==='equipment.action_cancelled','Equipment schedule proposal did not cancel.');
 eadb_assert((string)eadb_scalar($pdo,"SELECT next_service_on FROM equipment_assets WHERE organization_id=? AND public_id=?",[$org,'equip-agent-ci'])===$originalDue,'Cancelled Equipment schedule changed the database.');
 
 // Service history: Confirm creates the service event and updates maintenance dates.
 $serviceDue=date('Y-m-d',strtotime('+90 days'));
 $beforeEvents=(int)eadb_scalar($pdo,"SELECT COUNT(*) FROM equipment_service_events WHERE organization_id=? AND equipment_asset_id=?",[$org,$assetId]);
-$serviceProposal=equipment_agent_handle($pdo,$user,['message'=>"record repair: replaced thermostat next due {$serviceDue}",'pageContext'=>$context]);
+$serviceProposal=equipment_agent_handle($pdo,$user,hac_test_input($pdo,$user,'equipment',['message'=>"record repair: replaced thermostat next due {$serviceDue}",'pageContext'=>$context]));
 eadb_assert(($serviceProposal['data']['requiresConfirmation']??false)===true,'Equipment service write skipped proposal state.');
 eadb_assert((int)eadb_scalar($pdo,"SELECT COUNT(*) FROM equipment_service_events WHERE organization_id=? AND equipment_asset_id=?",[$org,$assetId])===$beforeEvents,'Equipment service event was written before confirmation.');
-$serviceConfirmed=equipment_agent_handle($pdo,$user,['message'=>'Confirm','pageContext'=>$context]);
+$serviceConfirmed=equipment_agent_handle($pdo,$user,hac_test_input($pdo,$user,'equipment',['message'=>'Confirm','pageContext'=>$context]));
 eadb_assert(($serviceConfirmed['skill']??'')==='equipment.action_confirmed','Equipment service confirmation did not execute.');
 eadb_assert((int)eadb_scalar($pdo,"SELECT COUNT(*) FROM equipment_service_events WHERE organization_id=? AND equipment_asset_id=?",[$org,$assetId])===$beforeEvents+1,'Confirmed Equipment service event was not persisted.');
 eadb_assert((string)eadb_scalar($pdo,"SELECT next_service_on FROM equipment_assets WHERE organization_id=? AND public_id=?",[$org,'equip-agent-ci'])===$serviceDue,'Confirmed Equipment service next-due date was not persisted.');
@@ -84,26 +87,26 @@ $desc=(string)eadb_scalar($pdo,"SELECT description FROM equipment_service_events
 eadb_assert($desc==='replaced thermostat','Equipment service description parser persisted unexpected text.');
 
 // Concurrency: confirmation must reject a stale equipment record and preserve newer state.
-$stale=equipment_agent_handle($pdo,$user,['message'=>'mark this equipment active','pageContext'=>$context]);
+$stale=equipment_agent_handle($pdo,$user,hac_test_input($pdo,$user,'equipment',['message'=>'mark this equipment active','pageContext'=>$context]));
 eadb_assert(($stale['data']['requiresConfirmation']??false)===true,'Equipment stale-write fixture did not enter proposal state.');
 $pdo->prepare("UPDATE equipment_assets SET operational_status='maintenance',updated_at=DATE_ADD(NOW(6),INTERVAL 1 SECOND) WHERE organization_id=? AND public_id=?")->execute([$org,'equip-agent-ci']);
 $staleRejected=false;
-try{equipment_agent_handle($pdo,$user,['message'=>'Confirm','pageContext'=>$context]);}catch(InvalidArgumentException $e){$staleRejected=str_contains($e->getMessage(),'changed');}
+try{equipment_agent_handle($pdo,$user,hac_test_input($pdo,$user,'equipment',['message'=>'Confirm','pageContext'=>$context]));}catch(InvalidArgumentException $e){$staleRejected=str_contains($e->getMessage(),'changed');}
 eadb_assert($staleRejected,'Equipment stale proposal was not rejected.');
 eadb_assert(eadb_scalar($pdo,"SELECT operational_status FROM equipment_assets WHERE organization_id=? AND public_id=?",[$org,'equip-agent-ci'])==='maintenance','Stale Equipment confirmation overwrote newer state.');
 
 // Permission boundaries: view/skill alone cannot propose edit or service writes.
 $readOnly=$user;$readOnly['permissions']=['equipment.view','agent.equipment_skills'];
 $editBlocked=false;
-try{equipment_agent_handle($pdo,$readOnly,['message'=>'mark this equipment out of service','pageContext'=>$context]);}catch(EquipmentAgentPermissionException){$editBlocked=true;}
+try{equipment_agent_handle($pdo,$readOnly,hac_test_input($pdo,$readOnly,'equipment',['message'=>'mark this equipment out of service','pageContext'=>$context]));}catch(EquipmentAgentPermissionException){$editBlocked=true;}
 eadb_assert($editBlocked,'Equipment status proposal bypassed equipment.edit permission.');
 $serviceBlocked=false;
-try{equipment_agent_handle($pdo,$readOnly,['message'=>'record repair: permission test','pageContext'=>$context]);}catch(EquipmentAgentPermissionException){$serviceBlocked=true;}
+try{equipment_agent_handle($pdo,$readOnly,hac_test_input($pdo,$readOnly,'equipment',['message'=>'record repair: permission test','pageContext'=>$context]));}catch(EquipmentAgentPermissionException){$serviceBlocked=true;}
 eadb_assert($serviceBlocked,'Equipment service proposal bypassed equipment.service permission.');
 
 // Replacement intelligence may hand off to Purchasing but must not create a PO itself.
 $poBefore=(int)eadb_scalar($pdo,"SELECT COUNT(*) FROM purchase_orders WHERE organization_id=?",[$org]);
-$replacement=equipment_agent_handle($pdo,$user,['message'=>'Should we replace this equipment?','pageContext'=>$context]);
+$replacement=equipment_agent_handle($pdo,$user,hac_test_input($pdo,$user,'equipment',['message'=>'Should we replace this equipment?','pageContext'=>$context]));
 eadb_assert(($replacement['data']['handoff']['node']??'')==='purchasing','Equipment replacement intelligence did not identify the Purchasing handoff.');
 eadb_assert((int)eadb_scalar($pdo,"SELECT COUNT(*) FROM purchase_orders WHERE organization_id=?",[$org])===$poBefore,'Equipment replacement read created a purchase order.');
 

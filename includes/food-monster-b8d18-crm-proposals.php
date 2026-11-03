@@ -66,7 +66,7 @@ function fm8d18d_propose(array $user,string $type,array $payload,string $summary
             'answer'=>$summary."\n\nReply Confirm to apply through the CRM Agent, or Cancel. No CRM record has been changed yet.",
             'source'=>'Gelato Customer CRM (server-verified proposal)',
             'requiresConfirmation'=>true,
-            'proposal'=>['id'=>$pending['id'],'type'=>$type],
+            'proposal'=>gac_public_proposal($pending),
         ]];
     }finally{if($opened&&session_status()===PHP_SESSION_ACTIVE)session_write_close();}
 }
