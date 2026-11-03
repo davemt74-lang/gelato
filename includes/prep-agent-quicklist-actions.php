@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__.'/daily-quicklist-receipts.php';
 
 /**
  * Section 3K2C: confirmation-only Daily Prep and Need More actions.
@@ -91,6 +92,29 @@ function pqa_context_resolve(PDO $pdo,int $org,int $uid,string $threadId,string 
         }
     }
     throw new InvalidArgumentException('That checklist item is no longer available. Show the list again.');
+}
+/** Numbered RECEIPT references are session/tenant/user/thread/item bound. */
+function pqa_receipt_context_key(int $org,int $uid,string $threadId): string
+{
+    return pqa_context_key($org,$uid,$threadId);
+}
+function pqa_receipt_context_save(int $org,int $uid,string $threadId,string $itemId,array $candidates): void
+{
+    if(session_status()!==PHP_SESSION_ACTIVE)throw new RuntimeException('A secure Agent Chat session is required.');
+    $_SESSION['prep_receipt_selection'][pqa_receipt_context_key($org,$uid,$threadId)]=[
+        'org'=>$org,'user'=>$uid,'itemId'=>$itemId,'expires'=>time()+900,
+        'receipts'=>array_values(array_map(static fn(array $row):int=>(int)$row['id'],array_slice($candidates,0,20)))];
+}
+function pqa_receipt_context_resolve(int $org,int $uid,string $threadId,string $itemId,int $number): int
+{
+    if(session_status()!==PHP_SESSION_ACTIVE)throw new InvalidArgumentException('Show the recorded receipts first.');
+    $key=pqa_receipt_context_key($org,$uid,$threadId);
+    $ctx=$_SESSION['prep_receipt_selection'][$key]??null;
+    if(!is_array($ctx)||$ctx['org']!==$org||$ctx['user']!==$uid
+        ||$ctx['itemId']!==$itemId||$ctx['expires']<time()
+        ||$number<1||$number>20||!isset($ctx['receipts'][$number-1]))
+        throw new InvalidArgumentException('Show the eligible recorded receipts for this Need More item first, then choose a number.');
+    return (int)$ctx['receipts'][$number-1];
 }
 function pqa_numbered_brief(array $context): string
 {
@@ -195,8 +219,10 @@ function pqa_require_action_permissions(array $user,array $intent): void
     pac_require($user,'prep.intelligence.view','Prep Intelligence view permission is required.');
     pac_require($user,'prep.intelligence.agent','Prep Agent permission is required.');
     if(!daily_quicklist_can_view($user))throw new PrepAgentPermissionException('Daily Prep staff access is required.');
-    if(in_array($intent['op'],['update','notify'],true)&&!daily_quicklist_can_manage($user))
+    if(in_array($intent['op'],['update','notify','reconcile_receipt'],true)&&!daily_quicklist_can_manage($user))
         throw new PrepAgentPermissionException('Only managers can change checklist statuses, manager notes, or notifications.');
+    if($intent['op']==='reconcile_receipt'&&!daily_quicklist_receipt_permission($user))
+        throw new PrepAgentPermissionException('Manager and Inventory View permissions are required to reconcile receipts.');
     if($intent['op']==='set_target')
         pac_require($user,'recipes.view','Recipe Library view permission is required for batch targets.');
 }
@@ -284,6 +310,17 @@ function pqa_propose(PDO $pdo,int $org,int $uid,array $user,array $intent,string
             $description='Update '.$title.($status!==$row['status']?' status to '.str_replace('_',' ',$status):'').
                 ($note!==$row['adminNote']?' with manager note "'.$note.'"':'').
                 ($quantityNote!==$row['quantityNote']?' with requested amount "'.$quantityNote.'"':'');
+        }elseif($op==='reconcile_receipt'){
+            if($kind!=='inventory'||$row['status']==='received')
+                throw new InvalidArgumentException('Only outstanding Need More requests can be reconciled.');
+            $receiptId=(int)($intent['receiptTransactionId']??0);
+            $candidates=daily_quicklist_receipt_candidates($pdo,$org,(string)$row['id']);
+            $found=null;
+            foreach($candidates as $candidate)if((int)$candidate['id']===$receiptId){$found=$candidate;break;}
+            if(!$found)throw new InvalidArgumentException('The selected inventory receipt is no longer eligible. Show receipts again.');
+            $payload['receiptTransactionId']=$receiptId;
+            $description='Link the existing '.daily_quicklist_format_quantity($found['quantity']).' '.$found['unit'].
+                ' receipt from '.$found['when'].' and mark '.$title.' received (no stock adjustment)';
         }elseif($op==='notify')$description='Notify managers to check '.$title;
         elseif($op==='archive')$description='Remove '.$title.' from '.($kind==='prep'?'Daily Prep':'Need More').' (retain audit history)';
         else throw new InvalidArgumentException('Unsupported Daily Prep action.');
@@ -299,7 +336,7 @@ function pqa_execute(PDO $pdo,int $org,int $uid,array $user,array $payload): arr
 {
     $intent=(array)($payload['intent']??[]);$op=(string)($intent['op']??'');
     $date=daily_quicklist_date((string)($payload['date']??''));
-    if(!in_array($op,['add_need_more','toggle','timer','set_target','update','notify','archive'],true))
+    if(!in_array($op,['add_need_more','toggle','timer','set_target','update','notify','archive','reconcile_receipt'],true))
         throw new InvalidArgumentException('Unsupported proposed Daily Prep action.');
     pqa_require_action_permissions($user,$intent);
     if(!daily_quicklist_ready($pdo))throw new InvalidArgumentException('Daily Prep is not installed.');
@@ -352,8 +389,11 @@ function pqa_execute(PDO $pdo,int $org,int $uid,array $user,array $payload): arr
             $input['adminNote']=$intent['note']??$row['adminNote'];
             if(array_key_exists('quantityNote',$intent))$input['quantityNote']=$intent['quantityNote'];
         }
-        $result=daily_quicklist_mutate($pdo,$org,$uid,$op,$input,daily_quicklist_can_manage($user),
-            app_has_permission('recipes.view',$user));
+        $result=$op==='reconcile_receipt'
+            ?daily_quicklist_reconcile_receipt($pdo,$org,$uid,$user,$id,
+                (int)($payload['receiptTransactionId']??0),(string)$payload['fingerprint'])
+            :daily_quicklist_mutate($pdo,$org,$uid,$op,$input,daily_quicklist_can_manage($user),
+                app_has_permission('recipes.view',$user));
     }
     app_audit($pdo,$org,$uid,'prep.agent_daily_quicklist_confirmed','daily_quicklist_item',$result['id'],null,
         ['action'=>$op,'date'=>$date]);

@@ -25,6 +25,14 @@
 
 ## Limits and deployed acceptance
 
+### Section 3K2F — Recorded receipt reconciliation
+
+- Operations Inventory remains the **only** action that records physical receiving and adjusts on-hand quantities. Need More reconciliation only references an existing, completed `inventory_transactions` receipt ledger entry.
+- A separate immutable link table permits exactly **one Need More request per receipt transaction** and **one receipt per request**. Confirmation validates tenant, exact saved inventory link, unit, positive received quantity, request/receipt chronology, outstanding status and both unique relationships inside one database transaction.
+- Managers with Inventory View can inspect eligible recorded receipts and explicitly link one in the Inventory UI; links remain visible as receipt evidence and in the append-only Need More event history. A received/reconciled request cannot be reopened without creating a new request.
+- The official Food Monster catalog adds `get_need_more_receipts` (read and numbered selection) and `link_confirmed_receipt` in `propose_daily_prep_action`. User, tenant, conversation and item bind the numbered receipt selection for 15 minutes; the model cannot supply raw ledger IDs. Agent proposals are separate Confirm/Cancel actions with fresh permission and stale-record checks, including approved private voice.
+- No receipt is auto-selected based on a free-text requested amount, and partial/unmatched receipts are never silently assumed to satisfy a request. Unlinked requests continue to support manual manager status and notes.
+
 ### Section 3K2E — Inventory and Need More stock context
 
 - `get_need_more_stock_insights` is an additional native Food Monster read tool for operators with **Inventory View plus Prep Agent access**. It reads saved on-hand quantities and configured reorder points, joins active Need More requests, and displays exact-name ingredient links from incomplete dated prep recipes **only with Recipe View**.

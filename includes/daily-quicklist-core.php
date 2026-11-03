@@ -519,6 +519,13 @@ function daily_quicklist_mutate(PDO $pdo,int $org,int $actor,string $action,arra
             $valid=$row['list_type']==='prep'?['todo','in_progress','paused','done']:['need_more','ordered','received'];
             $newStatus=(string)($input['status']??$row['status']);
             if(!in_array($newStatus,$valid,true))throw new InvalidArgumentException('Invalid status for this list.');
+            if($row['list_type']==='inventory'&&$row['status']==='received'&&$newStatus!=='received'
+                &&function_exists('daily_quicklist_receipts_ready')&&daily_quicklist_receipts_ready($pdo)){
+                $q=$pdo->prepare('SELECT id FROM daily_quicklist_receipts WHERE organization_id=? AND item_id=? LIMIT 1');
+                $q->execute([$org,(int)$row['id']]);
+                if($q->fetchColumn()!==false)
+                    throw new InvalidArgumentException('This request has a linked inventory receipt. Create a new Need More request instead.');
+            }
             $note=mb_substr(trim((string)($input['adminNote']??($row['admin_note']??''))),0,2000,'UTF-8');
             $quantityNote=(string)($row['quantity_note']??'');
             if(array_key_exists('quantityNote',$input)){

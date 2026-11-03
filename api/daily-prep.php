@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require __DIR__ . '/../includes/bootstrap.php';
 require_once __DIR__ . '/../includes/daily-quicklist-core.php';
+require_once __DIR__ . '/../includes/daily-quicklist-receipts.php';
 
 $user=app_require_auth();
 if(!daily_quicklist_can_view($user))app_json_response(['ok'=>false,'message'=>'Daily Prep is available to operational staff only.'],403);
@@ -18,6 +19,11 @@ try{
             if(!$manager)app_json_response(['ok'=>false,'message'=>'Manager access required.'],403);
             app_json_response(['ok'=>true,'events'=>daily_quicklist_history($pdo,$org,(string)($_GET['id']??''))]);
         }
+        if($action==='receipts'){
+            if(!daily_quicklist_receipt_permission($user))
+                app_json_response(['ok'=>false,'message'=>'Inventory View and manager permissions required.'],403);
+            app_json_response(['ok'=>true,'receipts'=>daily_quicklist_receipt_candidates($pdo,$org,(string)($_GET['id']??''))]);
+        }
         if($action!=='bootstrap')throw new InvalidArgumentException('Unknown list action.');
         $date=daily_quicklist_date($_GET['date']??date('Y-m-d'));
         $recipes=$canRecipe?daily_quicklist_recipes($pdo,$org):[];
@@ -31,6 +37,7 @@ try{
             'recipes'=>$recipes,
             'inventory'=>$inventory,
             'stockAlerts'=>$canInventory?daily_quicklist_stock_alerts($inventory,$recipes,$items):[],
+            'receiptLinks'=>daily_quicklist_receipt_permission($user)?daily_quicklist_receipt_links($pdo,$org):[],
         ]);
     }
     if($_SERVER['REQUEST_METHOD']!=='POST'){
@@ -38,6 +45,16 @@ try{
     }
     $input=app_json_input();app_verify_request_csrf($input);
     $action=(string)($input['action']??'');
+    if($action==='reconcile_receipt'){
+        if(!daily_quicklist_receipt_permission($user))
+            app_json_response(['ok'=>false,'message'=>'Inventory View and manager permissions required.'],403);
+        $raw=$input['transactionId']??null;
+        if(!is_int($raw)||$raw<1)throw new InvalidArgumentException('Choose a valid saved receipt.');
+        $result=daily_quicklist_reconcile_receipt($pdo,$org,$actor,$user,(string)($input['id']??''),$raw);
+        app_audit($pdo,$org,$actor,'daily_quicklist.receipt_reconciled','daily_quicklist_item',$result['id'],null,
+            ['transactionId'=>$raw]);
+        app_json_response(['ok'=>true]+$result);
+    }
     if($action==='generate_menu'){
         $result=daily_quicklist_apply_menu_selection($pdo,$org,$actor,
             (string)($input['date']??''),is_array($input['keys']??null)?$input['keys']:[],
