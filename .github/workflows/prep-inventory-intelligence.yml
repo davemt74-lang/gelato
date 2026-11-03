@@ -13,6 +13,7 @@ on:
       - 'database/20261224_daily_prep_quicklist.sql'
       - 'database/20261225_daily_prep_recipe_targets.sql'
       - 'database/20261226_daily_prep_receipt_reconciliation.sql'
+      - 'database/20261227_daily_prep_partial_receipts.sql'
       - 'includes/daily-quicklist-receipts.php'
       - 'tests/daily-prep-quicklist-contract.php'
       - 'api/prep-intelligence.php'
@@ -48,6 +49,7 @@ on:
       - 'database/20261224_daily_prep_quicklist.sql'
       - 'database/20261225_daily_prep_recipe_targets.sql'
       - 'database/20261226_daily_prep_receipt_reconciliation.sql'
+      - 'database/20261227_daily_prep_partial_receipts.sql'
       - 'includes/daily-quicklist-receipts.php'
       - 'tests/daily-prep-quicklist-contract.php'
       - 'api/prep-intelligence.php'
@@ -145,6 +147,9 @@ jobs:
           grep -q 'fm8d18j11_catalogue' includes/food-monster-b8d3-tool-runtime.php
           grep -q 'expectedFingerprint' includes/daily-quicklist-core.php
           grep -q 'uq_quicklist_receipt_transaction' database/20261226_daily_prep_receipt_reconciliation.sql
+          grep -q 'requested_stock_quantity' database/20261227_daily_prep_partial_receipts.sql
+          grep -q 'allocated_quantity' database/20261227_daily_prep_partial_receipts.sql
+          grep -q 'set_requested_stock_quantity' includes/food-monster-b8d18-daily-prep-model-tools.php
           grep -q 'get_need_more_receipts' includes/food-monster-b8d18-daily-prep-model-tools.php
           grep -q 'daily_prep' includes/food-monster-skill-registry.php
           grep -q 'generate_menu' api/daily-prep.php

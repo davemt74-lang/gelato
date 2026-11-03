@@ -48,6 +48,19 @@ function fm8d18j11_read(array $args,array $actor,array $context): array
             pqa_numbered_brief($selection).
             ' You can say "mark the second prep item done" or name the item. '.
             'Any changes require a separate Confirm. Open Daily Prep to view recipes and timers.';
+        if(fm8d18j11_can_receipts($actor)&&daily_quicklist_receipts_ready($pdo)){
+            $parts=[];
+            foreach($rows as $row){
+                if($row['type']!=='inventory'||$row['status']==='received'
+                    ||$row['requestedStockQuantity']===null||!$row['inventoryId'])continue;
+                $progress=daily_quicklist_receipt_progress($pdo,$org,(string)$row['id']);
+                $parts[]=$row['title'].': '.daily_quicklist_format_quantity($progress['receivedQuantity']).
+                    ' of '.daily_quicklist_format_quantity($progress['requestedQuantity']).' '.$progress['unit'].
+                    ' recorded, '.daily_quicklist_format_quantity($progress['remainingQuantity']).' remaining';
+                if(count($parts)>=10)break;
+            }
+            if($parts)$message.=' Active numeric Need More quantities: '.implode('; ',$parts).'.';
+        }
         return ['ok'=>true,'data'=>[
             'answer'=>$message,'source'=>'Gelato official Daily Prep/Need More records',
             'proof'=>['url'=>'daily-prep.php'],
@@ -96,6 +109,7 @@ function fm8d18j11_receipts_read(array $args,array $actor,array $context): array
     $org=(int)$actor['organization_id'];$uid=(int)$actor['id'];$date=fm8d18j11_date($args);
     $row=pqa_resolve_item($pdo,$org,$date,'inventory',$name);
     $candidates=daily_quicklist_receipt_candidates($pdo,$org,(string)$row['id']);
+    $progress=daily_quicklist_receipt_progress($pdo,$org,(string)$row['id']);
     $opened=session_status()!==PHP_SESSION_ACTIVE;
     if($opened&&!session_start())throw new RuntimeException('Could not start receipt selection session.');
     try{pqa_receipt_context_save($org,$uid,(string)($context['threadId']??''),(string)$row['id'],$candidates);}
@@ -105,6 +119,11 @@ function fm8d18j11_receipts_read(array $args,array $actor,array $context): array
         daily_quicklist_format_quantity($receipt['quantity']).' '.$receipt['unit'].' received '.$receipt['when'];
     $answer=$candidates?'Eligible ALREADY RECORDED stock receipts for '.$row['title'].': '.implode('; ',$parts).'.'
         :'No eligible confirmed inventory receipt was recorded after this Need More request. Receive stock through Operations first.';
+    if($progress['requestedQuantity']!==null)
+        $answer.=' Numeric Need More target: '.daily_quicklist_format_quantity($progress['requestedQuantity']).' '.$progress['unit'].
+            '; already allocated: '.daily_quicklist_format_quantity($progress['receivedQuantity']).' '.$progress['unit'].
+            '; still outstanding: '.daily_quicklist_format_quantity($progress['remainingQuantity']).' '.$progress['unit'].'.';
+    else $answer.=' No numeric stock target is saved; linking one full receipt will close this legacy request.';
     $answer.=' Linking one requires a separate Confirm. It marks Need More received but never adjusts stock again.';
     return ['ok'=>true,'data'=>['answer'=>$answer,'count'=>count($candidates),
         'source'=>'Gelato immutable inventory receipt ledger and Need More',
@@ -116,7 +135,7 @@ function fm8d18j11_allowed_actions(array $actor): array
         'timer_resume','timer_stop','set_batch_target','add_need_more','remove_item'];
     if(daily_quicklist_can_manage($actor))
         array_push($actions,'set_status','set_manager_note','set_requested_amount','notify_managers');
-    if(fm8d18j11_can_receipts($actor))$actions[]='link_confirmed_receipt';
+    if(fm8d18j11_can_receipts($actor))array_push($actions,'link_confirmed_receipt','set_requested_stock_quantity');
     return $actions;
 }
 function fm8d18j11_action_fields(array $args,array $actor): array
@@ -166,10 +185,25 @@ function fm8d18j11_action_fields(array $args,array $actor): array
         if(!array_key_exists('note',$args)||!is_string($args['note'])
             ||mb_strlen(trim((string)$args['note']),'UTF-8')>120)$missing[]='note';
     }
+    if($action==='set_requested_stock_quantity'){
+        if($list!=='inventory')$missing[]='list';
+        if(!is_int($args['quantity']??null)&&!is_float($args['quantity']??null)
+            ||!is_finite((float)($args['quantity']??0))
+            ||(float)($args['quantity']??0)<0.001||(float)($args['quantity']??0)>1000000
+            ||abs((float)($args['quantity']??0)-round((float)($args['quantity']??0),3))>0.0000001)
+            $missing[]='quantity';
+        if(isset($args['unit'])&&(!is_string($args['unit'])||mb_strlen($args['unit'],'UTF-8')>40))
+            $missing[]='unit';
+    }
     if($action==='link_confirmed_receipt'){
         if($list!=='inventory'||$mode==='none')$missing[]='list';
         if(!is_int($args['receipt_number']??null)
             ||$args['receipt_number']<1||$args['receipt_number']>20)$missing[]='receipt_number';
+        if(array_key_exists('quantity',$args)&&(!is_int($args['quantity'])&&!is_float($args['quantity'])
+            ||!is_finite((float)$args['quantity'])||(float)$args['quantity']<0.001
+            ||(float)$args['quantity']>1000000
+            ||abs((float)$args['quantity']-round((float)$args['quantity'],3))>0.0000001))
+            $missing[]='quantity';
     }
     if($action==='add_need_more'&&isset($args['note'])
         &&(!is_string($args['note'])||mb_strlen($args['note'],'UTF-8')>120))$missing[]='note';
@@ -189,6 +223,8 @@ function fm8d18j11_intent(array $args,array $row): array
     if($action==='set_status')return $intent+['op'=>'update','status'=>$args['status']];
     if($action==='set_manager_note')return $intent+['op'=>'update','note'=>trim((string)$args['note'])];
     if($action==='set_requested_amount')return $intent+['op'=>'update','quantityNote'=>trim((string)$args['note'])];
+    if($action==='set_requested_stock_quantity')return $intent+['op'=>'update',
+        'requestedStockQuantity'=>(float)$args['quantity'],'unit'=>(string)($args['unit']??'')];
     if($action==='notify_managers')return $intent+['op'=>'notify'];
     throw new InvalidArgumentException('Unsupported Daily Prep tool action.');
 }
@@ -223,6 +259,7 @@ function fm8d18j11_propose(array $args,array $actor,array $context): array
                     (int)$args['receipt_number']);
                 $intent=['op'=>'reconcile_receipt','kind'=>'inventory','target'=>$row['title'],
                     'resolvedItemId'=>$row['id'],'receiptTransactionId'=>$receiptId];
+                if(array_key_exists('quantity',$args))$intent['allocatedQuantity']=(float)$args['quantity'];
             }else $intent=fm8d18j11_intent($args,$row);
             $result=pqa_propose($pdo,$org,$uid,$actor,$intent,$date);
             if(!pqa_context_get($org,$uid,$threadId))
@@ -262,7 +299,7 @@ function fm8d18j11_catalogue(array $actor,array $context=[]): array
             'execute'=>static fn(array $a,array $user):array=>fm8d18j11_read($a,$user,$context),
         ],
         'propose_daily_prep_action'=>[
-            'description'=>'ONLY when the employee explicitly asks to change Daily Prep or Need More. Choose one item by exact name, ordinal from a previously displayed numbered list, or focused "that item" after a prior selection. The model NEVER supplies item IDs. Use reference_mode none only for generate_menu or adding a named Need More request. For recipe targets use saved yield. Manager status, internal notes, requested Need More amounts, and notices require management permission. The note field carries the exact requested amount for set_requested_amount. For link_confirmed_receipt, first call get_need_more_receipts for the same named item, then use receipt_number from that numbered, expiring, session-bound list. This links an EXISTING physical receipt and marks Need More received; it NEVER receives stock twice. Every change stages an expiring Prep Agent proposal for separate Confirm with fresh checks. No stock adjustments or master recipe edits. Unverified voice cannot use it.',
+            'description'=>'ONLY when the employee explicitly asks to change Daily Prep or Need More. Choose one item by exact name, ordinal from a previously displayed numbered list, or focused "that item" after a prior selection. The model NEVER supplies item IDs. Use reference_mode none only for generate_menu or adding a named Need More request. For recipe targets use saved yield. Manager status, internal notes, requested Need More amounts, and notices require management permission. The note field carries the exact requested amount for set_requested_amount. For set_requested_stock_quantity, use an explicit numeric target in the stock item’s saved base unit (not a free-form note). For link_confirmed_receipt, first call get_need_more_receipts for the same named item, then use receipt_number from that numbered, expiring, session-bound list. This allocates an EXISTING physical receipt toward the saved numeric target, possibly leaving an outstanding balance; legacy unquantified requests close with one full receipt. The optional quantity is the explicitly requested allocation in canonical units. It NEVER receives stock twice. Every change stages an expiring Prep Agent proposal for separate Confirm with fresh checks. No stock adjustments or master recipe edits. Unverified voice cannot use it.',
             'parameters'=>['type'=>'object','properties'=>[
                 'action'=>['type'=>'string','enum'=>$actions],
                 'list'=>['type'=>'string','enum'=>['prep','inventory'],
@@ -274,8 +311,8 @@ function fm8d18j11_catalogue(array $actor,array $context=[]): array
                 'receipt_number'=>['type'=>'integer','minimum'=>1,'maximum'=>20,
                     'description'=>'Number from a previous get_need_more_receipts result in this same user conversation; never a database transaction ID'],
                 'date'=>['type'=>'string','description'=>'Optional restaurant-local YYYY-MM-DD; omit for today'],
-                'quantity'=>['type'=>'number','exclusiveMinimum'=>0,'maximum'=>10000,
-                    'description'=>'Explicit desired recipe batch yield, only for set_batch_target'],
+                'quantity'=>['type'=>'number','exclusiveMinimum'=>0,'maximum'=>1000000,
+                    'description'=>'Explicit recipe batch target for set_batch_target (max 10000), numeric Need More target for set_requested_stock_quantity, or optional partial receipt allocation for link_confirmed_receipt. Never infer numbers from free-form notes.'],
                 'unit'=>['type'=>'string','description'=>'Optional supplied saved recipe yield unit, must match canonical unit'],
                 'status'=>['type'=>'string','enum'=>['todo','in_progress','paused','done','need_more','ordered','received']],
                 'note'=>['type'=>'string','maxLength'=>2000,
@@ -306,7 +343,7 @@ function fm8d18j11_catalogue(array $actor,array $context=[]): array
     }
     if(fm8d18j11_can_receipts($actor)){
         $tools['get_need_more_receipts']=[
-            'description'=>'For a manager, read eligible ALREADY-RECORDED stock receipts for one named, inventory-linked, active Need More item. Return numbered receipt amounts and timestamps only; save a 15-minute user/tenant/conversation/item selection. Never supply raw transaction IDs to the model. Read only. A separate Confirm is required to link one receipt and mark the request received; no physical stock changes.',
+            'description'=>'For a manager, read eligible ALREADY-RECORDED stock receipts, current numeric Need More target, already allocated and outstanding quantities in the exact saved stock unit. Return numbered receipt amounts and timestamps only; save a 15-minute user/tenant/conversation/item selection. Never supply raw transaction IDs. A separate Confirm links an existing receipt; partial allocations leave a visible balance, never change physical stock.',
             'parameters'=>['type'=>'object','properties'=>[
                 'name'=>['type'=>'string','description'=>'Exact existing Need More item name'],
                 'date'=>['type'=>'string','description'=>'Optional YYYY-MM-DD; defaults to restaurant-local today'],

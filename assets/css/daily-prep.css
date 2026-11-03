@@ -26,3 +26,12 @@ main{padding:0 clamp(16px,4.8vw,78px) 32px}.hero{border-radius:0 0 28px 28px;bac
 .receipt-options{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:13px 0 0 40px;padding:12px;background:#eef6ef;border:1px solid #c9dfcc;border-radius:10px}
 .receipt-options strong{font-size:12px;color:#285b3c}.receipt-options p{font-size:11px;color:#63836e;margin:0;flex-basis:100%}.receipt-options span{font-size:11px;color:#66816d}
 @media(max-width:640px){.receipt-options{margin-left:0}.receipt-options .small-btn{flex:1 1 100%}}
+
+/* 3K2G — numeric stock targets and partial receipt evidence. */
+.manager-bar .stock-target{display:flex;align-items:center;gap:7px;flex-wrap:wrap;color:#315e40;font-size:11px;font-weight:800;background:#eef7ef;border:1px solid #d4e6d5;border-radius:9px;padding:6px 9px}
+.manager-bar .stock-target input{width:110px;min-width:92px;flex:none;background:#fff;text-align:right;font-weight:800}
+.stock-progress{display:inline-flex;gap:4px;flex-wrap:wrap;color:#205f3f;background:#eaf4ea;padding:4px 8px;border-radius:7px;font-weight:700}
+.receipt-options .receipt-choice{display:flex;align-items:center;gap:10px;flex-wrap:wrap;width:100%;padding:10px 0;border-top:1px solid #c9dfcc}
+.receipt-options .receipt-choice label{display:flex;align-items:center;gap:5px;color:#345a40;font-size:11px;font-weight:700}
+.receipt-options .receipt-allocation{width:95px;min-width:80px;border:1px solid #bcd5bf;border-radius:7px;padding:8px;color:#315a3f;background:#fff}
+@media(max-width:640px){.manager-bar .stock-target{width:100%}.receipt-options .receipt-choice{align-items:stretch}.receipt-options .receipt-choice label{flex:1 1 100%}.receipt-options .receipt-choice .small-btn{width:100%}}
