@@ -19,6 +19,21 @@ const {start}=require('./hardening-accounts-server.cjs');
     await page.waitForFunction(()=>!!window.GelatoAccounts);
   }
   async function fillInvite(email){
+    await owner.locator('#openCreateUser').scrollIntoViewIfNeeded();
+    const layout=await owner.locator('#openCreateUser').evaluate(button=>{
+      const navigation=document.getElementById('gelato-server-navigation');
+      const content=document.querySelector('.main>.content');
+      const rect=button.getBoundingClientRect();
+      const hit=document.elementFromPoint(rect.x+rect.width/2,rect.y+rect.height/2);
+      return {reachable:button.contains(hit),button:rect.toJSON(),
+        navigation:navigation?.getBoundingClientRect().toJSON(),
+        content:content?.getBoundingClientRect().toJSON(),
+        interceptedBy:hit?{tag:hit.tagName,id:hit.id,className:hit.className}:null};
+    });
+    assert.ok(layout.navigation&&layout.content,'Server-rendered admin navigation must remain available');
+    assert.ok(layout.navigation.bottom<=layout.content.top+1,
+      'Admin navigation must reserve space above page content: '+JSON.stringify(layout));
+    assert.ok(layout.reachable,'Invitation button must receive ordinary pointer input: '+JSON.stringify(layout));
     await owner.locator('#openCreateUser').click();
     await owner.locator('#account-firstName').fill('Browser');
     await owner.locator('#account-lastName').fill('Employee');

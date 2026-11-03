@@ -48,16 +48,18 @@ if ($adminControlAllowed) {
     // workspace-shell-sync.js. Keep the independent Admin tools fallback,
     // but do not inject a second copy of the same routes into the sidebar.
     $navCss = '<style id="gelato-server-navigation-styles">'
-        . '.gelato-server-navigation{position:fixed;top:72px;right:15px;z-index:10040;font:600 12px/1.35 system-ui,sans-serif}'
-        . '.gelato-server-navigation>summary{cursor:pointer;list-style:none;background:#17231f;color:white;border:1px solid #53645d;padding:11px 14px;border-radius:12px;box-shadow:0 6px 25px #0003}'
+        . '.gelato-server-navigation{align-self:flex-end;flex:0 0 auto;width:min(500px,calc(100% - 30px));margin:8px 15px;font:600 12px/1.35 system-ui,sans-serif}'
+        . '.gelato-server-navigation>summary{width:fit-content;max-width:100%;margin-left:auto;cursor:pointer;list-style:none;background:#17231f;color:white;border:1px solid #53645d;padding:11px 14px;border-radius:12px;box-shadow:0 6px 25px #0003}'
         . '.gelato-version-label{font-size:9px;color:#c6f0dc;margin-left:8px}'
-        . '.gelato-server-navigation-panel{position:absolute;right:0;top:calc(100% + 7px);width:min(500px,90vw);max-height:calc(100vh - 140px);overflow:auto;padding:16px;border:1px solid #ddd;background:white;color:#151a18;border-radius:13px;box-shadow:0 20px 65px #0003}'
+        . '.gelato-server-navigation-panel{margin-top:7px;max-height:min(50vh,500px);overflow:auto;padding:16px;border:1px solid #ddd;background:white;color:#151a18;border-radius:13px;box-shadow:0 20px 65px #0003}'
         . '.gelato-server-navigation-group{display:flex;gap:7px;align-items:baseline;flex-wrap:wrap;padding:9px 0;border-top:1px solid #eee}'
         . '.gelato-server-navigation-group b{min-width:100%;font-size:11px;color:#555}'
         . '.gelato-server-navigation-group a{padding:6px 9px;background:#f1f5f2;border:1px solid #e5eae6;border-radius:7px;text-decoration:none;color:#193f30;font-size:11px}'
         . '</style>';
     $html = str_replace('</head>', $navCss . '</head>', $html);
-    $html = str_replace('<body>', '<body>' . $navHtml, $html);
+    // Reserve space for both the summary and expanded fallback panel in the
+    // main column; floating it above the page blocks actions and dialog controls.
+    $html = str_replace('<div class="content">', $navHtml . '<div class="content">', $html);
     // Cache-bust all static workspace assets on every merged release.
     $assetVersion = rawurlencode(substr($releaseSha, 0, 12));
     $html = preg_replace_callback(
