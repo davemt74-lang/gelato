@@ -1,9 +1,10 @@
 <?php
 declare(strict_types=1);
 require __DIR__.'/includes/bootstrap.php';
-require_once __DIR__.'/includes/daily-quicklist-receipts.php';
+require_once __DIR__.'/includes/daily-quicklist-purchase-drafts.php';
 $user=app_require_auth();
 if(!daily_quicklist_receipt_permission($user)){http_response_code(403);exit('Manager and Inventory View permissions required.');}
+$canDraft=dqpo_can_draft($user);
 ?>
 <!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -59,6 +60,8 @@ if(!daily_quicklist_receipt_permission($user)){http_response_code(403);exit('Man
 (function(){
 'use strict';
 const date=document.getElementById('board-date'),list=document.getElementById('board-list'),summary=document.getElementById('board-summary'),alert=document.getElementById('board-alert');
+const canDraft=<?php echo $canDraft?'true':'false'; ?>;
+const csrf=<?php echo json_encode(app_csrf_token(),JSON_HEX_TAG|JSON_HEX_AMP|JSON_HEX_APOS|JSON_HEX_QUOT); ?>;
 const dialog=document.getElementById('draft-dialog'),quoteBody=document.getElementById('draft-quote'),draftError=document.getElementById('draft-error'),create=document.getElementById('draft-create');
 let currentQuote=null;
 const esc=v=>String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -112,7 +115,7 @@ create.addEventListener('click',async()=>{
  create.disabled=true;draftError.textContent='';
  try{
   const res=await fetch('api/daily-prep.php',{method:'POST',credentials:'same-origin',
-    headers:{'Content-Type':'application/json','X-Requested-With':'XMLHttpRequest'},
+    headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},
     body:JSON.stringify({action:'po_draft_create',id:currentQuote.requestId,quoteHash:currentQuote.quoteHash})});
   const body=await res.json();if(!res.ok||!body.ok)throw Error(body.message||'Draft creation failed.');
   dialog.close();await load();alert.textContent='Created '+body.order.orderNumber+' as a draft. Open Purchasing to review before submission.';
