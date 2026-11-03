@@ -16,6 +16,7 @@ final class VirtualPreviewStatement extends PDOStatement {
     public function execute(?array $params=null):bool {$this->args=$params??[];return true;}
     public function fetchAll(int $mode=PDO::FETCH_DEFAULT,...$args):array {
         if(str_contains($this->sql,'FROM locations'))return [['id'=>3,'name'=>'Main Location']];
+        if(str_contains($this->sql,'FROM user_roles'))return $this->args[1]==='glasses.view'?[3]:[4];
         if(str_contains($this->sql,'FROM kds_stations'))return [['public_id'=>'pizza-line','name'=>'Pizza Line']];
         return [];
     }
@@ -49,6 +50,8 @@ try {
 }
 $denied=['organization_id'=>1,'permissions'=>[]];
 previewAssert(glasses_simulator_virtual_devices($db,$denied)===[],'unauthorized viewers receive no virtual stations');
+$wrongKitchen=['organization_id'=>1,'membership_id'=>7,'permissions'=>['glasses.view','kds.view']];
+previewAssert(glasses_simulator_virtual_devices($db,$wrongKitchen)===[],'a glasses location does not grant preview when KDS view is scoped elsewhere');
 $js=(string)file_get_contents(__DIR__.'/../assets/js/glasses-web-simulator.js');
 $php=(string)file_get_contents(__DIR__.'/../glasses-simulator.php');
 $api=(string)file_get_contents(__DIR__.'/../api/glasses-simulator.php');

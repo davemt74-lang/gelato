@@ -20,23 +20,31 @@ function vision_contract_retained_release(PDO $pdo,int $org,int $actor,string $d
 {
     if($count<3||$count>90||$classCount<1||$classCount>3||$count<$classCount*3)
         throw new InvalidArgumentException('The retained-release fixture needs every class in all three splits.');
-    $labels=['ingredient','cheese','pepperoni'];$splits=['train','val','test'];
+    $labels=['ingredient','cheese','pepperoni'];
+    $lastCompleteGroup=intdiv($count,$classCount)-1;
     for($i=0;$i<$count;$i++){
+        // Every capture group carries every class, so the real split retains class coverage.
+        $group=min(intdiv($i,$classCount),$lastCompleteGroup);
         $media=glasses_vision_training_media_store($pdo,$org,[
             'imageBase64'=>base64_encode(vision_contract_source_png($i)),
             'consentBasis'=>'training_media_opt_in','retentionDays'=>1,
             'annotations'=>[['label'=>$labels[$i%$classCount],'bbox'=>['x'=>.1,'y'=>.1,'width'=>.4,'height'=>.4]]],
             'brightnessMean'=>.5,'contrastMean'=>.3,'blurScore'=>120,
-            'captureGroup'=>$datasetPublic.'-source-'.$i,
+            'captureGroup'=>$datasetPublic.'-source-'.$group,
         ],$actor);
         glasses_vision_lab_review_sample($pdo,$org,$media['samplePublicId'],['decision'=>'approve','notes'=>'Reviewed contract fixture source.'],$actor);
-        glasses_vision_lab_add_dataset_sample($pdo,$org,$datasetPublic,$media['samplePublicId'],$splits[intdiv($i,$classCount)%3]);
+        glasses_vision_lab_add_dataset_sample($pdo,$org,$datasetPublic,$media['samplePublicId'],'train');
     }
+    $plan=glasses_vision_curation_create_split_plan($pdo,$org,$datasetPublic,['seed'=>74,'trainRatio'=>.34,'valRatio'=>.33,'testRatio'=>.33],$actor);
+    glasses_vision_curation_apply_split_plan($pdo,$org,$plan['publicId'],$actor);
     $dataset=glasses_vision_lab_freeze_dataset($pdo,$org,$datasetPublic,$actor);
     $release=glasses_vision_training_release_build($pdo,$org,$datasetPublic,'yolo11n_640',$actor);
     $row=glasses_vision_training_release_row($pdo,$org,$release['publicId']);
     $artifact=glasses_vision_training_release_artifact($pdo,$org,$release['publicId']);
     if($dataset['rowCount']!==$count||$dataset['classCount']!==$classCount||$release['manifest']['itemCount']!==$count||$artifact['bytes']<=0)
         throw new RuntimeException('The retained-release fixture did not preserve its reviewed source set.');
+    $coverage=glasses_vision_lab_dataset_coverage($pdo,$org,$datasetPublic);
+    if(min($coverage['splits'])<$classCount||($release['manifest']['splitPlan']['planHash']??null)!==$plan['planHash'])
+        throw new RuntimeException('The retained release must bind to the applied plan and retain evidence in all splits.');
     return ['dataset'=>$dataset,'release'=>$release,'row'=>$row];
 }

@@ -36,6 +36,12 @@ async function test(){
   requests=[];ctx.cfg.csrf=stale;
   await assert.rejects(ctx.requestApi('build.observe',{componentKey:'test'}),/Repeat your action/);
   assert.deepEqual(requests.map(x=>x.options.method),['POST','GET'],'build observations cannot auto-replay');
+  requests=[];ctx.cfg.csrf=stale;
+  await assert.rejects(ctx.requestApi('vision.shadow_assignment'),/Repeat your action/);
+  assert.deepEqual(requests.map(x=>x.options.method),['POST','GET'],'starting a shadow evaluation cannot auto-replay');
+  requests=[];ctx.cfg.csrf=stale;
+  await ctx.requestApi('vision.model_assignment');
+  assert.deepEqual(requests.map(x=>x.options.method),['POST','GET','POST'],'read-only model lookup may retry');
   requests=[];ctx.state.recovery.networkFault=true;
   await assert.rejects(ctx.requestApi('hardware.health.normalize'),/SIMULATED_NETWORK_OFFLINE/);
   assert.equal(requests.length,0,'fault simulation still blocks real requests');

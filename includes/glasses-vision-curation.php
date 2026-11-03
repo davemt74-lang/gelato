@@ -13,19 +13,22 @@ function glasses_vision_curation_ready(PDO $pdo): bool {
 }
 
 function glasses_vision_curation_dataset(PDO $pdo,int $org,string $publicId,bool $forUpdate=false): array {
-    $q=$pdo->prepare("SELECT * FROM glasses_vision_dataset_versions WHERE organization_id=? AND public_id=? LIMIT 1".($forUpdate?' FOR UPDATE':''));
+    if($forUpdate)return glasses_vision_lab_lock_dataset($pdo,$org,$publicId);
+    $q=$pdo->prepare("SELECT * FROM glasses_vision_dataset_versions WHERE organization_id=? AND public_id=? LIMIT 1");
     $q->execute([$org,$publicId]);$row=$q->fetch();if(!$row)throw new InvalidArgumentException('Vision dataset was not found.');return $row;
 }
 
 function glasses_vision_curation_decide(PDO $pdo,int $org,string $datasetPublic,string $samplePublic,string $decision,string $reason,int $actor): array {
     if(!in_array($decision,['include','exclude'],true))throw new InvalidArgumentException('Curation decision must be include or exclude.');
     $reason=mb_substr(trim($reason),0,1000);if($reason==='')throw new InvalidArgumentException('Curation rationale is required.');
-    $dataset=glasses_vision_curation_dataset($pdo,$org,$datasetPublic);if($dataset['status']!=='draft')throw new InvalidArgumentException('Frozen datasets are immutable.');
-    $q=$pdo->prepare("SELECT s.id FROM glasses_vision_training_samples s JOIN glasses_vision_dataset_items di ON di.sample_id=s.id AND di.organization_id=s.organization_id WHERE s.organization_id=? AND s.public_id=? AND di.dataset_id=? LIMIT 1");
-    $q->execute([$org,$samplePublic,(int)$dataset['id']]);$sampleId=(int)$q->fetchColumn();if(!$sampleId)throw new InvalidArgumentException('Sample is not part of this dataset.');
-    $pdo->prepare("INSERT INTO glasses_vision_dataset_curation_events (organization_id,dataset_id,sample_id,decision,reason,source,actor_user_id) VALUES (?,?,?,?,?,'manual',?)")
-      ->execute([$org,(int)$dataset['id'],$sampleId,$decision,$reason,$actor]);
-    return ['datasetPublicId'=>$datasetPublic,'samplePublicId'=>$samplePublic,'decision'=>$decision,'reason'=>$reason];
+    return glasses_transaction($pdo,function()use($pdo,$org,$datasetPublic,$samplePublic,$decision,$reason,$actor):array{
+        $dataset=glasses_vision_lab_lock_dataset($pdo,$org,$datasetPublic);if($dataset['status']!=='draft')throw new InvalidArgumentException('Frozen datasets are immutable.');
+        $q=$pdo->prepare("SELECT s.id FROM glasses_vision_training_samples s JOIN glasses_vision_dataset_items di ON di.sample_id=s.id AND di.organization_id=s.organization_id WHERE s.organization_id=? AND s.public_id=? AND di.dataset_id=? LIMIT 1");
+        $q->execute([$org,$samplePublic,(int)$dataset['id']]);$sampleId=(int)$q->fetchColumn();if(!$sampleId)throw new InvalidArgumentException('Sample is not part of this dataset.');
+        $pdo->prepare("INSERT INTO glasses_vision_dataset_curation_events (organization_id,dataset_id,sample_id,decision,reason,source,actor_user_id) VALUES (?,?,?,?,?,'manual',?)")
+          ->execute([$org,(int)$dataset['id'],$sampleId,$decision,$reason,$actor]);
+        return ['datasetPublicId'=>$datasetPublic,'samplePublicId'=>$samplePublic,'decision'=>$decision,'reason'=>$reason];
+    });
 }
 
 function glasses_vision_curation_rows(PDO $pdo,int $org,string $datasetPublic): array {
@@ -105,21 +108,21 @@ function glasses_vision_curation_split_groups(array $groups,int $seed,float $tra
 }
 
 function glasses_vision_curation_create_split_plan(PDO $pdo,int $org,string $datasetPublic,array $input,int $actor): array {
-    $dataset=glasses_vision_curation_dataset($pdo,$org,$datasetPublic);if($dataset['status']!=='draft')throw new InvalidArgumentException('Frozen datasets are immutable.');
-    $rows=array_values(array_filter(glasses_vision_curation_rows($pdo,$org,$datasetPublic),static fn($r)=>$r['curationDecision']!=='exclude'&&$r['reviewStatus']==='approved'));
-    if(count($rows)<3)throw new InvalidArgumentException('At least three included approved samples are required.');
-    $policy=[
-        'captureGroup'=>($input['captureGroup']??true)!==false,'buildSession'=>($input['buildSession']??true)!==false,
-        'device'=>($input['device']??false)===true,'operator'=>($input['operator']??false)===true,'location'=>($input['location']??false)===true,
-        'station'=>($input['station']??false)===true,'menuItem'=>($input['menuItem']??false)===true,
-    ];
-    $seed=max(0,(int)($input['seed']??74));$train=(float)($input['trainRatio']??.70);$val=(float)($input['valRatio']??.15);$test=(float)($input['testRatio']??.15);
-    $split=glasses_vision_curation_split_groups(glasses_vision_curation_union_find($rows,$policy),$seed,$train,$val,$test);
-    $assignments=[];foreach($split['groups'] as $group)foreach($group['rows'] as $row)$assignments[]=['samplePublicId'=>$row['samplePublicId'],'groupKey'=>$group['key'],'groupLabel'=>$group['label'],'split'=>$group['split'],'grouping'=>['captureGroups'=>$row['captureGroups'],'deviceIds'=>$row['deviceIds']??[],'buildPublicId'=>$row['buildPublicId'],'operatorUserId'=>$row['operatorUserId'],'locationId'=>$row['locationId'],'stationId'=>$row['stationId'],'menuItemId'=>$row['menuItemId']]];
-    usort($assignments,static fn($a,$b)=>strcmp($a['samplePublicId'],$b['samplePublicId']));
-    $manifest=['schema'=>'gelato.vision_group_split.v1','datasetPublicId'=>$datasetPublic,'seed'=>$seed,'ratios'=>['train'=>$train,'val'=>$val,'test'=>$test],'policy'=>$policy,'counts'=>$split['counts'],'groupCount'=>count($split['groups']),'assignments'=>$assignments];
-    $hash=hash('sha256',json_encode($manifest,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR));$public=glasses_public_id('vision-split');
-    return glasses_transaction($pdo,function()use($pdo,$org,$dataset,$public,$seed,$train,$val,$test,$policy,$manifest,$hash,$actor,$assignments):array{
+    return glasses_transaction($pdo,function()use($pdo,$org,$datasetPublic,$input,$actor):array{
+        $dataset=glasses_vision_lab_lock_dataset($pdo,$org,$datasetPublic);if($dataset['status']!=='draft')throw new InvalidArgumentException('Frozen datasets are immutable.');
+        $rows=array_values(array_filter(glasses_vision_curation_rows($pdo,$org,$datasetPublic),static fn($r)=>$r['curationDecision']!=='exclude'&&$r['reviewStatus']==='approved'));
+        if(count($rows)<3)throw new InvalidArgumentException('At least three included approved samples are required.');
+        $policy=[
+            'captureGroup'=>($input['captureGroup']??true)!==false,'buildSession'=>($input['buildSession']??true)!==false,
+            'device'=>($input['device']??false)===true,'operator'=>($input['operator']??false)===true,'location'=>($input['location']??false)===true,
+            'station'=>($input['station']??false)===true,'menuItem'=>($input['menuItem']??false)===true,
+        ];
+        $seed=max(0,(int)($input['seed']??74));$train=(float)($input['trainRatio']??.70);$val=(float)($input['valRatio']??.15);$test=(float)($input['testRatio']??.15);
+        $split=glasses_vision_curation_split_groups(glasses_vision_curation_union_find($rows,$policy),$seed,$train,$val,$test);
+        $assignments=[];foreach($split['groups'] as $group)foreach($group['rows'] as $row)$assignments[]=['samplePublicId'=>$row['samplePublicId'],'groupKey'=>$group['key'],'groupLabel'=>$group['label'],'split'=>$group['split'],'grouping'=>['captureGroups'=>$row['captureGroups'],'deviceIds'=>$row['deviceIds']??[],'buildPublicId'=>$row['buildPublicId'],'operatorUserId'=>$row['operatorUserId'],'locationId'=>$row['locationId'],'stationId'=>$row['stationId'],'menuItemId'=>$row['menuItemId']]];
+        usort($assignments,static fn($a,$b)=>strcmp($a['samplePublicId'],$b['samplePublicId']));
+        $manifest=['schema'=>'gelato.vision_group_split.v1','datasetPublicId'=>$datasetPublic,'seed'=>$seed,'ratios'=>['train'=>$train,'val'=>$val,'test'=>$test],'policy'=>$policy,'counts'=>$split['counts'],'groupCount'=>count($split['groups']),'assignments'=>$assignments];
+        $hash=hash('sha256',json_encode($manifest,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR));$public=glasses_public_id('vision-split');
         $pdo->prepare("INSERT INTO glasses_vision_dataset_split_plans (organization_id,public_id,dataset_id,seed,train_ratio,val_ratio,test_ratio,policy_json,manifest_json,plan_hash,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
           ->execute([$org,$public,(int)$dataset['id'],$seed,$train,$val,$test,json_encode($policy),json_encode($manifest,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE),$hash,$actor]);
         $planId=(int)$pdo->lastInsertId();$sq=$pdo->prepare("SELECT id FROM glasses_vision_training_samples WHERE organization_id=? AND public_id=? LIMIT 1");
@@ -129,17 +132,42 @@ function glasses_vision_curation_create_split_plan(PDO $pdo,int $org,string $dat
     });
 }
 
+function glasses_vision_curation_plan_splits(PDO $pdo,int $org,int $planId): array {
+    $q=$pdo->prepare('SELECT sample_id,split_name FROM glasses_vision_dataset_split_assignments WHERE organization_id=? AND split_plan_id=? ORDER BY sample_id');
+    $q->execute([$org,$planId]);return $q->fetchAll(PDO::FETCH_KEY_PAIR);
+}
+
+function glasses_vision_curation_current_splits(PDO $pdo,int $org,int $datasetId,bool $omitExcluded=false): array {
+    $q=$pdo->prepare("SELECT i.sample_id,i.split_name,s.review_status,
+      (SELECT c.decision FROM glasses_vision_dataset_curation_events c WHERE c.organization_id=i.organization_id AND c.dataset_id=i.dataset_id AND c.sample_id=i.sample_id ORDER BY c.id DESC LIMIT 1) decision
+      FROM glasses_vision_dataset_items i JOIN glasses_vision_training_samples s ON s.id=i.sample_id AND s.organization_id=i.organization_id
+      WHERE i.organization_id=? AND i.dataset_id=? ORDER BY i.sample_id".($pdo->inTransaction()?' FOR UPDATE':''));
+    $q->execute([$org,$datasetId]);$splits=[];
+    foreach($q->fetchAll() as $row){
+        if($omitExcluded&&$row['decision']==='exclude')continue;
+        $splits[$row['sample_id']]=$row['decision']!=='exclude'&&$row['review_status']==='approved'?$row['split_name']:null;
+    }
+    return $splits;
+}
+
 function glasses_vision_curation_apply_split_plan(PDO $pdo,int $org,string $planPublic,int $actor): array {
-    return glasses_transaction($pdo,function()use($pdo,$org,$planPublic,$actor):array{
-        $q=$pdo->prepare("SELECT p.*,d.public_id dataset_public_id,d.status dataset_status FROM glasses_vision_dataset_split_plans p JOIN glasses_vision_dataset_versions d ON d.id=p.dataset_id WHERE p.organization_id=? AND p.public_id=? LIMIT 1 FOR UPDATE");
-        $q->execute([$org,$planPublic]);$plan=$q->fetch();if(!$plan)throw new InvalidArgumentException('Split plan was not found.');if($plan['dataset_status']!=='draft')throw new InvalidArgumentException('Frozen datasets are immutable.');
-        if($plan['status']==='applied')return ['publicId'=>$planPublic,'status'=>'applied','datasetPublicId'=>$plan['dataset_public_id']];
+    $q=$pdo->prepare('SELECT d.public_id FROM glasses_vision_dataset_split_plans p JOIN glasses_vision_dataset_versions d ON d.id=p.dataset_id AND d.organization_id=p.organization_id WHERE p.organization_id=? AND p.public_id=? LIMIT 1');
+    $q->execute([$org,$planPublic]);$datasetPublic=$q->fetchColumn();if($datasetPublic===false)throw new InvalidArgumentException('Split plan was not found.');
+    return glasses_transaction($pdo,function()use($pdo,$org,$planPublic,$actor,$datasetPublic):array{
+        $dataset=glasses_vision_lab_lock_dataset($pdo,$org,$datasetPublic);if($dataset['status']!=='draft')throw new InvalidArgumentException('Frozen datasets are immutable.');
+        $q=$pdo->prepare('SELECT * FROM glasses_vision_dataset_split_plans WHERE organization_id=? AND public_id=? AND dataset_id=? LIMIT 1 FOR UPDATE');
+        $q->execute([$org,$planPublic,(int)$dataset['id']]);$plan=$q->fetch();if(!$plan)throw new InvalidArgumentException('Split plan was not found.');
+        if($plan['status']==='applied')return ['publicId'=>$planPublic,'status'=>'applied','datasetPublicId'=>$datasetPublic];
+        $planned=glasses_vision_curation_plan_splits($pdo,$org,(int)$plan['id']);
+        $included=glasses_vision_curation_current_splits($pdo,$org,(int)$dataset['id'],true);
+        if(array_keys($planned)!==array_keys($included)||in_array(null,$included,true))
+            throw new InvalidArgumentException('Dataset samples changed. Generate a new group-aware split plan before applying it.');
         $pdo->prepare("DELETE di FROM glasses_vision_dataset_items di JOIN glasses_vision_dataset_curation_events ce ON ce.id=(SELECT MAX(c2.id) FROM glasses_vision_dataset_curation_events c2 WHERE c2.organization_id=di.organization_id AND c2.dataset_id=di.dataset_id AND c2.sample_id=di.sample_id) WHERE di.organization_id=? AND di.dataset_id=? AND ce.decision='exclude'")
           ->execute([$org,(int)$plan['dataset_id']]);
         $pdo->prepare("UPDATE glasses_vision_dataset_items di JOIN glasses_vision_dataset_split_assignments a ON a.sample_id=di.sample_id AND a.organization_id=di.organization_id SET di.split_name=a.split_name WHERE di.organization_id=? AND di.dataset_id=? AND a.split_plan_id=?")
           ->execute([$org,(int)$plan['dataset_id'],(int)$plan['id']]);
         $pdo->prepare("UPDATE glasses_vision_dataset_split_plans SET status='applied',applied_by=?,applied_at=NOW(6) WHERE organization_id=? AND id=?")->execute([$actor,$org,(int)$plan['id']]);
-        return ['publicId'=>$planPublic,'status'=>'applied','datasetPublicId'=>$plan['dataset_public_id'],'coverage'=>glasses_vision_lab_dataset_coverage($pdo,$org,(string)$plan['dataset_public_id'])];
+        return ['publicId'=>$planPublic,'status'=>'applied','datasetPublicId'=>$datasetPublic,'coverage'=>glasses_vision_lab_dataset_coverage($pdo,$org,$datasetPublic)];
     });
 }
 
@@ -152,8 +180,10 @@ function glasses_vision_curation_split_plans(PDO $pdo,int $org,string $datasetPu
 
 function glasses_vision_curation_freeze_guard(PDO $pdo,int $org,string $datasetPublic): void {
     $dataset=glasses_vision_curation_dataset($pdo,$org,$datasetPublic);if($dataset['status']==='frozen')return;
-    $q=$pdo->prepare("SELECT COUNT(*) FROM glasses_vision_dataset_split_plans WHERE organization_id=? AND dataset_id=? AND status='applied'");
-    $q->execute([$org,(int)$dataset['id']]);if((int)$q->fetchColumn()<1)throw new InvalidArgumentException('Dataset freeze blocked: apply a governed group-aware split plan first.');
+    $q=$pdo->prepare("SELECT id FROM glasses_vision_dataset_split_plans WHERE organization_id=? AND dataset_id=? AND status='applied' ORDER BY applied_at DESC,id DESC LIMIT 1");
+    $q->execute([$org,(int)$dataset['id']]);$planId=(int)$q->fetchColumn();if($planId<1)throw new InvalidArgumentException('Dataset freeze blocked: apply a governed group-aware split plan first.');
+    if(glasses_vision_curation_plan_splits($pdo,$org,$planId)!==glasses_vision_curation_current_splits($pdo,$org,(int)$dataset['id']))
+        throw new InvalidArgumentException('Dataset changed after applying its split plan. Generate and apply a new group-aware split plan before freezing.');
 }
 
 function glasses_vision_curation_catalog(PDO $pdo,int $org): array {

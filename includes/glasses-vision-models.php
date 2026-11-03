@@ -342,6 +342,17 @@ function glasses_vision_model_rollouts(PDO $pdo,int $org): array
     return $out;
 }
 
+function glasses_vision_rollout_scope_allowed(?array $scope,?int $locationId): bool
+{
+    return $scope===null||($locationId!==null&&in_array($locationId,$scope,true));
+}
+
+function glasses_vision_require_rollout_scope(?array $scope,?int $locationId): void
+{
+    if(!glasses_vision_rollout_scope_allowed($scope,$locationId))
+        throw new DomainException('Glasses management permission is required for this rollout scope.');
+}
+
 function glasses_vision_model_rollout_create(PDO $pdo,int $org,array $input,int $userId): array
 {
     if(!glasses_vision_models_ready($pdo))throw new RuntimeException('Vision model rollout migration is not installed.');
@@ -447,8 +458,8 @@ function glasses_vision_shadow_rollout_for_device(PDO $pdo,array $device,string 
 function glasses_vision_shadow_summary(PDO $pdo,int $org,string $runPublicId): array
 {
     $q=$pdo->prepare("SELECT sr.*,r.public_id rollout_public_id,
-            cp.public_id champion_public_id,cp.model_name champion_name,cp.model_version champion_version,
-            xp.public_id challenger_public_id,xp.model_name challenger_name,xp.model_version challenger_version
+            cp.public_id champion_public_id,cp.model_name champion_name,cp.model_version champion_version,cp.artifact_sha256 champion_sha,
+            xp.public_id challenger_public_id,xp.model_name challenger_name,xp.model_version challenger_version,xp.artifact_sha256 challenger_sha
         FROM glasses_vision_shadow_runs sr
         JOIN glasses_vision_model_rollouts r ON r.id=sr.rollout_id AND r.organization_id=sr.organization_id
         JOIN glasses_vision_model_packages cp ON cp.id=sr.champion_package_id AND cp.organization_id=sr.organization_id
@@ -456,18 +467,55 @@ function glasses_vision_shadow_summary(PDO $pdo,int $org,string $runPublicId): a
         WHERE sr.organization_id=? AND sr.public_id=? LIMIT 1");
     $q->execute([$org,trim($runPublicId)]);$row=$q->fetch();
     if(!$row)throw new InvalidArgumentException('Shadow evaluation run was not found.');
-    $frames=(int)$row['frame_count'];$critical=(int)$row['critical_mismatch_count'];
-    $champ=(int)$row['correction_champion_wins'];$chall=(int)$row['correction_challenger_wins'];
+    $frames=(int)$row['frame_count'];$critical=(int)$row['critical_mismatch_count'];$disagree=(int)$row['disagreement_count'];
+    $champ=(int)$row['correction_champion_wins'];$chall=(int)$row['correction_challenger_wins'];$ties=(int)$row['correction_ties'];
+    $detectionFrames=null;$evidenceCriticalRate=null;$reviewHash=null;$eligible=false;
+    // Older browser runs could include fixture output. Only the new browser
+    // ingress marks frames bound to both assigned ONNX artifact digests.
+    $eligibleSource="(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(metadata_json,'$.source')),'')<>'web_glasses_simulator_shadow'
+        OR JSON_UNQUOTE(JSON_EXTRACT(metadata_json,'$.captureProvenance'))='browser_onnx_bound')";
+    if($row['status']==='running'){
+        $q=$pdo->prepare("SELECT COUNT(*) FROM (SELECT id FROM glasses_vision_shadow_events
+            WHERE organization_id=? AND shadow_run_id=? AND champion_detection_count+challenger_detection_count>0 AND $eligibleSource
+            LIMIT 30) progress_frames");
+        $q->execute([$org,(int)$row['id']]);$detectionFrames=(int)$q->fetchColumn();
+    }
+    if($row['status']==='completed'){
+        // Running summaries use counters. Derive consequential eligibility from the sealed frame ledger.
+        $q=$pdo->prepare("SELECT COUNT(*) frame_count, SUM(detection_bearing) detection_frames,
+            SUM(NOT consistent) inconsistent_frames, SUM(critical_mismatch) critical_count,
+            SUM(detection_bearing AND critical_mismatch) evidence_critical_count,
+            SUM(champion_only_count+challenger_only_count>0) disagreement_count,
+            SUM(detection_bearing AND correction_alignment='champion') champion_wins,
+            SUM(detection_bearing AND correction_alignment='challenger') challenger_wins,
+            SUM(detection_bearing AND correction_alignment='both') ties
+            FROM (SELECT e.*, champion_detection_count+challenger_detection_count>0 detection_bearing,
+                champion_detection_count=matched_count+champion_only_count
+                AND challenger_detection_count=matched_count+challenger_only_count consistent
+                FROM glasses_vision_shadow_events e WHERE e.organization_id=? AND e.shadow_run_id=? AND $eligibleSource) evidence");
+        $q->execute([$org,(int)$row['id']]);$evidence=$q->fetch();
+        $frames=(int)$evidence['frame_count'];$detectionFrames=(int)$evidence['detection_frames'];
+        $critical=(int)$evidence['critical_count'];$disagree=(int)$evidence['disagreement_count'];
+        $champ=(int)$evidence['champion_wins'];$chall=(int)$evidence['challenger_wins'];$ties=(int)$evidence['ties'];
+        $evidenceCriticalRate=$detectionFrames>0?(int)$evidence['evidence_critical_count']/$detectionFrames:1.0;
+        $eligible=$detectionFrames>=30&&(int)$evidence['inconsistent_frames']===0&&$evidenceCriticalRate<=0.10&&$chall>=$champ;
+        if($eligible){
+            $reviewHash=hash('sha256',json_encode([
+                $org,$row['rollout_public_id'],$row['public_id'],$row['detector_name'],$row['completed_at'],
+                $row['champion_public_id'],$row['champion_sha'],$row['challenger_public_id'],$row['challenger_sha'],$evidence,
+            ],JSON_THROW_ON_ERROR));
+        }
+    }
     $criticalRate=$frames>0?$critical/$frames:1.0;
-    $eligible=$frames>=30&&$criticalRate<=0.10&&$chall>=$champ;
     return [
         'schema'=>'gelato.vision_shadow_evaluation.v1','publicId'=>(string)$row['public_id'],
         'rolloutPublicId'=>(string)$row['rollout_public_id'],'detectorName'=>(string)$row['detector_name'],
-        'status'=>(string)$row['status'],'frameCount'=>$frames,'disagreementCount'=>(int)$row['disagreement_count'],
-        'disagreementRate'=>$frames>0?round((int)$row['disagreement_count']/$frames,6):0.0,
+        'status'=>(string)$row['status'],'frameCount'=>$frames,'disagreementCount'=>$disagree,
+        'disagreementRate'=>$frames>0?round($disagree/$frames,6):0.0,
         'criticalMismatchCount'=>$critical,'criticalMismatchRate'=>round($criticalRate,6),
-        'correctionChampionWins'=>$champ,'correctionChallengerWins'=>$chall,'correctionTies'=>(int)$row['correction_ties'],
-        'eligibleForCanary'=>$eligible,
+        'correctionChampionWins'=>$champ,'correctionChallengerWins'=>$chall,'correctionTies'=>$ties,
+        'detectionFrameCount'=>$detectionFrames,'evidenceCriticalMismatchRate'=>$evidenceCriticalRate===null?null:round($evidenceCriticalRate,6),
+        'eligibleForCanary'=>$eligible,'reviewHash'=>$reviewHash,
         'champion'=>['publicId'=>(string)$row['champion_public_id'],'label'=>(string)$row['champion_name'].' '.(string)$row['champion_version']],
         'challenger'=>['publicId'=>(string)$row['challenger_public_id'],'label'=>(string)$row['challenger_name'].' '.(string)$row['challenger_version']],
         'startedAt'=>$row['started_at'],'completedAt'=>$row['completed_at'],
@@ -503,23 +551,38 @@ function glasses_vision_shadow_assignment(PDO $pdo,array $device,string $session
     ];
 }
 
-function glasses_vision_shadow_report(PDO $pdo,array $device,string $sessionPublicId,array $input): array
+function glasses_vision_shadow_report(PDO $pdo,array $device,string $sessionPublicId,array $input,bool $browserReport=false): array
 {
     if(!glasses_vision_shadow_ready($pdo))throw new RuntimeException('Vision shadow evaluation migration is not installed.');
-    $org=(int)$device['organization_id'];$session=glasses_build_session_row($pdo,$org,$sessionPublicId,false);
-    glasses_build_assert_device_session($device,$session);
+    return glasses_transaction($pdo,function()use($pdo,$device,$sessionPublicId,$input,$browserReport):array{
     $runPublic=trim((string)($input['shadowRunPublicId']??''));$frameKey=mb_substr(trim((string)($input['frameKey']??'')),0,160,'UTF-8');
     if($runPublic===''||$frameKey==='')throw new InvalidArgumentException('Shadow run and frame key are required.');
-    $q=$pdo->prepare("SELECT * FROM glasses_vision_shadow_runs WHERE organization_id=? AND public_id=? AND device_id=? AND build_session_id=? LIMIT 1");
-    $q->execute([$org,$runPublic,(int)$device['id'],(int)$session['id']]);$run=$q->fetch();
-    if(!$run)throw new InvalidArgumentException('Shadow evaluation run does not belong to this device/build.');
+    $org=(int)$device['organization_id'];$run=glasses_vision_shadow_lock_run($pdo,$device,$sessionPublicId,$runPublic);
     if((string)$run['status']!=='running')throw new InvalidArgumentException('Shadow evaluation run is not active.');
     $alignment=strtolower(trim((string)($input['correctionAlignment']??'unknown')));
     if(!in_array($alignment,['unknown','champion','challenger','both','neither'],true))throw new InvalidArgumentException('Shadow correction alignment is invalid.');
-    $ints=[];foreach(['championDetectionCount','challengerDetectionCount','matchedCount','championOnlyCount','challengerOnlyCount'] as $key){$v=(int)($input[$key]??0);if($v<0||$v>1000)throw new InvalidArgumentException('Shadow detection counts are invalid.');$ints[$key]=$v;}
+    $ints=[];foreach(['championDetectionCount','challengerDetectionCount','matchedCount','championOnlyCount','challengerOnlyCount'] as $key){$v=$input[$key]??0;if(!is_numeric($v)||$v<0||$v>1000||floor((float)$v)!==(float)$v)throw new InvalidArgumentException('Shadow detection counts are invalid.');$ints[$key]=(int)$v;}
+    if($ints['championDetectionCount']!==$ints['matchedCount']+$ints['championOnlyCount']
+        ||$ints['challengerDetectionCount']!==$ints['matchedCount']+$ints['challengerOnlyCount'])
+        throw new InvalidArgumentException('Shadow matches and unmatched counts must reconcile with both detection totals.');
     $critical=!empty($input['criticalMismatch']);$meanIou=max(0,min(1,(float)($input['meanIou']??0)));
     $champConf=max(0,min(1,(float)($input['championMeanConfidence']??0)));$challConf=max(0,min(1,(float)($input['challengerMeanConfidence']??0)));
     $metadata=is_array($input['metadata']??null)?$input['metadata']:[];
+    unset($metadata['captureProvenance']);
+    if($browserReport){
+        $q=$pdo->prepare("SELECT id,artifact_sha256 FROM glasses_vision_model_packages
+            WHERE organization_id=? AND id IN (?,?) AND runtime_type='onnx'");
+        $q->execute([$org,(int)$run['champion_package_id'],(int)$run['challenger_package_id']]);
+        $digests=$q->fetchAll(PDO::FETCH_KEY_PAIR);
+        if(($metadata['source']??null)!=='web_glasses_simulator_shadow'||($metadata['adapter']??null)!=='onnx'
+            ||!in_array($metadata['cameraSource']??null,['browser','sdk'],true)
+            ||!isset($digests[$run['champion_package_id']],$digests[$run['challenger_package_id']])
+            ||($metadata['championArtifactSha256']??null)!==$digests[$run['champion_package_id']]
+            ||($metadata['challengerArtifactSha256']??null)!==$digests[$run['challenger_package_id']])
+            throw new InvalidArgumentException('Shadow camera evidence does not match the assigned ONNX model pair. Refresh the simulator and reload the governed models.');
+        $metadata['captureProvenance']='browser_onnx_bound';
+        $alignment='unknown';
+    }
     $insert=$pdo->prepare("INSERT IGNORE INTO glasses_vision_shadow_events
         (organization_id,shadow_run_id,frame_key,champion_detection_count,challenger_detection_count,matched_count,champion_only_count,challenger_only_count,mean_iou,champion_mean_confidence,challenger_mean_confidence,correction_alignment,critical_mismatch,metadata_json)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
@@ -533,23 +596,44 @@ function glasses_vision_shadow_report(PDO $pdo,array $device,string $sessionPubl
             WHERE organization_id=? AND id=?")->execute([$disagree,$champWin,$challWin,$tie,$critical?1:0,$org,(int)$run['id']]);
     }
     return ['idempotent'=>$insert->rowCount()===0,'summary'=>glasses_vision_shadow_summary($pdo,$org,$runPublic)];
+    });
+}
+
+function glasses_vision_shadow_lock_run(PDO $pdo,array $device,string $sessionPublicId,string $runPublicId): array
+{
+    $org=(int)$device['organization_id'];
+    $q=$pdo->prepare("SELECT * FROM glasses_vision_shadow_runs WHERE organization_id=? AND public_id=? AND device_id=? LIMIT 1 FOR UPDATE");
+    $q->execute([$org,trim($runPublicId),(int)$device['id']]);$run=$q->fetch();
+    if(!$run)throw new InvalidArgumentException('Shadow evaluation run does not belong to this device/build.');
+    $session=glasses_build_session_row($pdo,$org,$sessionPublicId,false);
+    glasses_build_assert_device_session($device,$session);
+    if((int)$run['build_session_id']!==(int)$session['id'])
+        throw new InvalidArgumentException('Shadow evaluation run does not belong to this device/build.');
+    return $run;
 }
 
 function glasses_vision_shadow_complete(PDO $pdo,array $device,string $sessionPublicId,string $runPublicId): array
 {
-    $org=(int)$device['organization_id'];$session=glasses_build_session_row($pdo,$org,$sessionPublicId,false);glasses_build_assert_device_session($device,$session);
-    $q=$pdo->prepare("SELECT id FROM glasses_vision_shadow_runs WHERE organization_id=? AND public_id=? AND device_id=? AND build_session_id=? LIMIT 1");
-    $q->execute([$org,trim($runPublicId),(int)$device['id'],(int)$session['id']]);$id=(int)$q->fetchColumn();
-    if($id<1)throw new InvalidArgumentException('Shadow evaluation run does not belong to this device/build.');
-    $pdo->prepare("UPDATE glasses_vision_shadow_runs SET status='completed',completed_at=COALESCE(completed_at,NOW(6)),updated_at=NOW(6) WHERE organization_id=? AND id=?")->execute([$org,$id]);
+    return glasses_transaction($pdo,function()use($pdo,$device,$sessionPublicId,$runPublicId):array{
+    $org=(int)$device['organization_id'];$run=glasses_vision_shadow_lock_run($pdo,$device,$sessionPublicId,$runPublicId);
+    $pdo->prepare("UPDATE glasses_vision_shadow_runs SET status='completed',completed_at=NOW(6),updated_at=NOW(6) WHERE organization_id=? AND id=? AND status='running'")->execute([$org,(int)$run['id']]);
     return glasses_vision_shadow_summary($pdo,$org,$runPublicId);
+    });
 }
 
-function glasses_vision_shadow_rollout_gate(PDO $pdo,int $org,int $rolloutId): array
+function glasses_vision_shadow_rollout_gate(PDO $pdo,int $org,int $rolloutId,?string $runPublicId=null): array
 {
     if(!glasses_vision_shadow_ready($pdo))return ['eligible'=>false,'reason'=>'shadow_migration_missing'];
-    $q=$pdo->prepare("SELECT public_id FROM glasses_vision_shadow_runs WHERE organization_id=? AND rollout_id=? AND status='completed' ORDER BY completed_at DESC,id DESC");
-    $q->execute([$org,$rolloutId]);$runs=$q->fetchAll(PDO::FETCH_COLUMN);
+    $sql="SELECT sr.public_id FROM glasses_vision_shadow_runs sr
+        JOIN glasses_vision_model_rollouts r ON r.id=sr.rollout_id AND r.organization_id=sr.organization_id
+        JOIN glasses_build_sessions b ON b.id=sr.build_session_id AND b.organization_id=sr.organization_id AND b.device_id=sr.device_id
+        WHERE sr.organization_id=? AND sr.rollout_id=? AND sr.status='completed' AND sr.completed_at IS NOT NULL
+          AND sr.champion_package_id=r.baseline_package_id AND sr.challenger_package_id=r.target_package_id
+          AND sr.detector_name=r.detector_name";
+    $args=[$org,$rolloutId];
+    if($runPublicId!==null){$sql.=' AND sr.public_id=?';$args[]=$runPublicId;}
+    $q=$pdo->prepare($sql.' ORDER BY sr.completed_at DESC,sr.id DESC');
+    $q->execute($args);$runs=$q->fetchAll(PDO::FETCH_COLUMN);
     foreach($runs as $runPublic){$summary=glasses_vision_shadow_summary($pdo,$org,(string)$runPublic);if($summary['eligibleForCanary'])return ['eligible'=>true,'reason'=>'shadow_passed','summary'=>$summary];}
     return ['eligible'=>false,'reason'=>$runs?'shadow_failed':'shadow_required'];
 }
@@ -996,11 +1080,12 @@ function glasses_vision_drift_incident_row(PDO $pdo,int $org,string $publicId,bo
     return $row;
 }
 
-function glasses_vision_drift_incidents(PDO $pdo,int $org): array
+function glasses_vision_drift_incidents(PDO $pdo,int $org,?array $locationScope=null): array
 {
-    if(!glasses_vision_drift_recovery_ready($pdo))return [];
-    $q=$pdo->prepare("SELECT * FROM glasses_vision_drift_incidents WHERE organization_id=? ORDER BY resolved_at IS NULL DESC,last_seen_at DESC,id DESC LIMIT 100");
-    $q->execute([$org]);return array_map('glasses_vision_drift_incident_public',$q->fetchAll());
+    if($locationScope===[]||!glasses_vision_drift_recovery_ready($pdo))return [];
+    $locationSql=$locationScope===null?'':' AND location_id IN ('.implode(',',array_fill(0,count($locationScope),'?')).')';
+    $q=$pdo->prepare('SELECT * FROM glasses_vision_drift_incidents WHERE organization_id=?'.$locationSql.' ORDER BY resolved_at IS NULL DESC,last_seen_at DESC,id DESC LIMIT 100');
+    $q->execute([$org,...($locationScope??[])]);return array_map('glasses_vision_drift_incident_public',$q->fetchAll());
 }
 
 function glasses_vision_drift_recovery_event(PDO $pdo,int $org,int $incidentId,string $type,?string $previous,?string $next,?string $remediation,?string $notes,?int $actor,array $evidence=[]): void
@@ -1082,9 +1167,9 @@ function glasses_vision_drift_recovery_progress(PDO $pdo,int $org,array $assignm
     }
 }
 
-function glasses_vision_model_rollout_activate(PDO $pdo,int $org,string $publicId,int $userId): array
+function glasses_vision_model_rollout_activate(PDO $pdo,int $org,string $publicId,int $userId,array $shadowReview=[]): array
 {
-    return glasses_transaction($pdo,function()use($pdo,$org,$publicId,$userId):array{
+    return glasses_transaction($pdo,function()use($pdo,$org,$publicId,$userId,$shadowReview):array{
         $row=glasses_vision_model_rollout_row($pdo,$org,$publicId,true);
         $status=(string)$row['status'];
         if(!in_array($status,['draft','paused'],true))
@@ -1095,25 +1180,38 @@ function glasses_vision_model_rollout_activate(PDO $pdo,int $org,string $publicI
             throw new InvalidArgumentException('Target model package is in automatic rollback cooldown.');
         $targetPackage=glasses_vision_model_package_row($pdo,$org,(string)$row['target_public_id'],false);
         $targetMetadata=json_decode((string)($targetPackage['metadata_json']??'null'),true);
+        $audit=[];
         if(is_array($targetMetadata)&&isset($targetMetadata['modelComparison'])){
             $comparison=glasses_vision_model_comparison_metadata($targetMetadata);
             if(!$comparison||!$comparison['eligible'])
                 throw new InvalidArgumentException('Target model package failed champion/challenger eligibility.');
-        }
-        if(is_array($targetMetadata)&&isset($targetMetadata['modelComparison'])){
-            $shadowGate=glasses_vision_shadow_rollout_gate($pdo,$org,(int)$row['id']);
+            $runPublicId=trim((string)($shadowReview['runPublicId']??''));
+            $reviewHash=trim((string)($shadowReview['reviewHash']??''));
+            $reason=trim((string)($shadowReview['reason']??''));
+            if($runPublicId===''||!preg_match('/^[a-f0-9]{64}$/D',$reviewHash)||$reason===''||mb_strlen($reason,'UTF-8')>1000)
+                throw new InvalidArgumentException('Review a passing live shadow run and document the decision before canary activation.');
+            $shadowGate=glasses_vision_shadow_rollout_gate($pdo,$org,(int)$row['id'],$runPublicId);
             if(!$shadowGate['eligible'])
                 throw new InvalidArgumentException('Target model package requires a passing live shadow evaluation before canary activation.');
-            $rcq=$pdo->prepare("SELECT id FROM glasses_vision_model_release_candidates WHERE organization_id=? AND model_package_id=? AND status='approved' ORDER BY id DESC LIMIT 1");
-            try{$rcq->execute([$org,(int)$row['target_package_id']]);$rcId=(int)$rcq->fetchColumn();}catch(Throwable){$rcId=0;}
+            if(!hash_equals($shadowGate['summary']['reviewHash'],$reviewHash))
+                throw new InvalidArgumentException('Shadow evidence changed. Review the current run before activating.');
+            $audit['shadowReview']=['runPublicId'=>$runPublicId,'reviewHash'=>$reviewHash,'reason'=>$reason];
+            $rcTable=$pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='glasses_vision_model_release_candidates'");
+            $rcId=0;
+            if((int)$rcTable->fetchColumn()===1){
+                $rcq=$pdo->prepare("SELECT id FROM glasses_vision_model_release_candidates WHERE organization_id=? AND model_package_id=? AND status='approved' ORDER BY id DESC LIMIT 1 FOR UPDATE");
+                $rcq->execute([$org,(int)$row['target_package_id']]);$rcId=(int)$rcq->fetchColumn();
+            }
             if($rcId>0){
-                $vq=$pdo->prepare("SELECT COUNT(*) FROM glasses_vision_shadow_validations WHERE organization_id=? AND rollout_id=? AND release_candidate_id=? AND status='passed'");
+                $vq=$pdo->prepare("SELECT public_id FROM glasses_vision_shadow_validations WHERE organization_id=? AND rollout_id=? AND release_candidate_id=? AND status='passed' ORDER BY id DESC LIMIT 1");
                 $vq->execute([$org,(int)$row['id'],$rcId]);
-                if((int)$vq->fetchColumn()<1)
+                $validationId=$vq->fetchColumn();
+                if($validationId===false)
                     throw new InvalidArgumentException('V11 rollout requires a passing Section 9 shadow validation before canary activation.');
+                $audit['shadowReview']['v11ValidationPublicId']=$validationId;
             }
         }
-        if(is_array($targetMetadata)&&isset($targetMetadata['modelComparison'])&&glasses_vision_canary_ready($pdo)){
+        if($audit&&glasses_vision_canary_ready($pdo)){
             if(abs((float)$row['canary_percent']-5.0)>0.0001)
                 throw new InvalidArgumentException('Comparison-aware production rollout must begin at the 5% canary stage.');
         }
@@ -1127,7 +1225,7 @@ function glasses_vision_model_rollout_activate(PDO $pdo,int $org,string $publicI
             SET status='active',activated_by=?,activated_at=COALESCE(activated_at,NOW(6)),paused_at=NULL,paused_by=NULL,updated_at=NOW(6)
             WHERE organization_id=? AND id=?")
             ->execute([$userId,$org,(int)$row['id']]);
-        glasses_vision_model_rollout_event($pdo,$org,(int)$row['id'],'activated',$status,'active',$percent,$percent,$userId);
+        glasses_vision_model_rollout_event($pdo,$org,(int)$row['id'],'activated',$status,'active',$percent,$percent,$userId,$audit);
         return glasses_vision_model_rollout_public(glasses_vision_model_rollout_row($pdo,$org,$publicId,false));
     });
 }
@@ -1308,7 +1406,7 @@ function glasses_vision_model_assignment_record(
 }
 
 function glasses_vision_model_assignment(
-    PDO $pdo,array $device,string $sessionPublicId,string $detectorName
+    PDO $pdo,array $device,string $sessionPublicId,string $detectorName,bool $record=true
 ): array {
     if(!glasses_vision_models_ready($pdo))
         throw new RuntimeException('Vision model rollout migrations are not installed.');
@@ -1336,7 +1434,7 @@ function glasses_vision_model_assignment(
             'package'=>null,
             'compatibility'=>['compatible'=>true,'reasons'=>[]],
         ];
-        glasses_vision_model_assignment_record($pdo,$device,$session,$result,null,null);
+        if($record)glasses_vision_model_assignment_record($pdo,$device,$session,$result,null,null);
         return $result;
     }
 
@@ -1386,7 +1484,7 @@ function glasses_vision_model_assignment(
         'package'=>$package!==null?glasses_vision_model_package_public($package):null,
         'compatibility'=>$compatibility,
     ];
-    glasses_vision_model_assignment_record($pdo,$device,$session,$result,$rollout,$package);
+    if($record)glasses_vision_model_assignment_record($pdo,$device,$session,$result,$rollout,$package);
     return $result;
 }
 
@@ -1557,17 +1655,21 @@ function glasses_vision_model_catalog(PDO $pdo,array $user): array
         );
     }
 
-    $rollouts=glasses_vision_model_rollouts($pdo,$org);
+    $viewScope=operational_location_scope($pdo,$user,'glasses.view');
+    $manageScope=operational_location_scope($pdo,$user,'glasses.manage');
+    $rollouts=array_values(array_filter(glasses_vision_model_rollouts($pdo,$org),
+        static fn(array $rollout):bool=>glasses_vision_rollout_scope_allowed($viewScope,$rollout['locationId'])));
     $metrics=[];
     foreach($rollouts as $rollout)$metrics[(string)$rollout['publicId']]=glasses_vision_model_rollout_metrics($pdo,$org,(string)$rollout['publicId']);
 
     return [
         'ready'=>glasses_vision_models_ready($pdo),
         'canManage'=>app_has_permission('glasses.manage',$user),
+        'manageLocationIds'=>$manageScope,
         'packages'=>glasses_vision_model_packages($pdo,$org),
         'rollouts'=>$rollouts,
         'metricsByRollout'=>$metrics,
-        'driftIncidents'=>glasses_vision_drift_incidents($pdo,$org),
+        'driftIncidents'=>glasses_vision_drift_incidents($pdo,$org,$viewScope),
         'locations'=>array_map(static fn(array $location):array=>[
             'id'=>(int)$location['id'],'name'=>(string)$location['name'],'primary'=>(bool)$location['is_primary']
         ],$locations),

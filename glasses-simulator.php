@@ -513,7 +513,7 @@ if(!app_has_permission('glasses.view',$user)){http_response_code(403);exit('AR g
         </div>
         <div id="visionModelStatus" class="vision-model-status"><strong>FIXTURE</strong><span>No governed browser model loaded.</span></div>
         <div class="shadow-model-panel">
-          <div class="console-heading"><div><small>LIVE SHADOW MODEL</small><strong>Champion vs challenger</strong></div><span id="shadowSummary">0 frames · shadow inactive</span></div>
+          <div class="console-heading"><div><small>LIVE SHADOW MODEL</small><strong>Champion vs challenger</strong></div><span id="shadowSummary">0/30 detection frames · shadow inactive</span></div>
           <div class="inline-actions">
             <button id="startShadowModel" type="button">Start Shadow Challenger</button>
             <button id="completeShadowModel" type="button" disabled>Complete Shadow Run</button>
@@ -650,7 +650,7 @@ window.GELATO_GLASSES_SIMULATOR={
 <script src="assets/js/glasses-mediapipe-hands.js?v=20261014-282"></script>
 <script src="assets/js/glasses-mediapipe-hands-ui.js?v=20261014-281"></script>
 <script src="assets/js/glasses-camera-sources.js?v=20261014-284a"></script>
-<script src="assets/js/glasses-web-simulator.js?v=20261103-live-expo"></script>
+<script src="assets/js/glasses-web-simulator.js?v=20261103-vision-boundaries"></script>
 <script src="assets/js/glasses-voice-device.js?v=20261013-device1"></script>
 <script src="assets/js/glasses-simulator-voice.js?v=20261014-285b"></script>
 <script src="assets/js/glasses-pov-calibration.js?v=20261014-284b"></script>

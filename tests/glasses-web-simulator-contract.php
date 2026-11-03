@@ -186,9 +186,11 @@ gws_assert(str_contains($page,'shadowModelStatus')&&str_contains($page,'shadowSu
 gws_assert(str_contains($core,"\$action==='vision.shadow_assignment'")&&str_contains($core,'glasses_vision_shadow_assignment'),'Simulator must obtain shadow challengers through governed server assignment.');
 gws_assert(str_contains($core,"\$action==='vision.shadow_report'")&&str_contains($core,'glasses_vision_shadow_report'),'Simulator must report shadow telemetry through a dedicated non-build action.');
 gws_assert(str_contains($js,'function startShadowModel')&&str_contains($js,'function runShadowFrame'),'Browser runtime must load and execute a challenger beside the champion.');
-gws_assert(str_contains($js,"shadow.champion?.publicId!==state.browserModel.package.publicId"),'Shadow runtime must verify its champion matches the currently authoritative browser model.');
+gws_assert(str_contains($js,"shadow.champion?.publicId!==binding.model.package.publicId")
+    &&str_contains($js,"shadow.champion.artifactSha256"),'Shadow runtime must verify the governed champion identity and checksum.');
 gws_assert(str_contains($js,'compareShadowDetections'),'Shadow runtime must compare champion/challenger detections on the same frame.');
-gws_assert(str_contains($js,"metadata:{source:'web_glasses_simulator_shadow',authoritative:false}"),'Shadow telemetry must explicitly declare itself non-authoritative.');
+gws_assert(str_contains($js,"metadata:{source:'web_glasses_simulator_shadow',authoritative:false,adapter:'onnx'"),
+    'Shadow telemetry must declare governed ONNX provenance and no build authority.');
 gws_assert(!str_contains($js,"shadowModel.session.run({[state.browserModel"),'Shadow model must not reuse or mutate champion session authority.');
 gws_assert(str_contains($css,'.shadow-model-panel'),'Shadow evaluation must have a visible but distinct simulator UI.');
 

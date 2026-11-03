@@ -163,6 +163,7 @@ function validateRollout(){
      errors.push('Target and baseline must use the same detector, platform, and runtime.');
  }
  if(!Number.isFinite(canary)||canary<0||canary>100)errors.push('Canary percentage must be between 0 and 100.');
+ if(!el.location.value&&Array.isArray(catalog.manageLocationIds))errors.push('Choose a location you manage.');
  if(el.station.value&&!el.location.value)errors.push('Station scope requires a location.');
  el.rolloutValidation.innerHTML=errors.length
    ?'<strong>Needs attention</strong><ul>'+errors.map(function(x){return '<li>'+esc(x)+'</li>';}).join('')+'</ul>'
@@ -183,8 +184,9 @@ function populatePackageSelects(){
 
 function populateLocations(){
  var current=el.location.value;
- var html='<option value="">Organization-wide</option>';
- locations.forEach(function(l){html+='<option value="'+Number(l.id)+'">'+esc(l.name)+'</option>';});
+ var scoped=Array.isArray(catalog.manageLocationIds);
+ var html='<option value="">'+(scoped?'Choose a location':'Organization-wide')+'</option>';
+ locations.filter(function(l){return !scoped||catalog.manageLocationIds.includes(Number(l.id));}).forEach(function(l){html+='<option value="'+Number(l.id)+'">'+esc(l.name)+'</option>';});
  el.location.innerHTML=html;
  if(locations.some(function(l){return String(l.id)===current;}))el.location.value=current;
  populateStations();
@@ -212,7 +214,7 @@ function renderPackages(){
     '<td>'+(floor.length?floor.join('<br>'):'None')+'</td>'+
     '<td><code title="'+esc(p.artifactSha256)+'">'+esc(shortSha(p.artifactSha256))+'</code></td>'+
     '<td><span class="gvm-pill '+esc(p.status)+'">'+esc(p.status)+'</span></td>'+
-    '<td>'+(catalog.canManage&&p.status==='ready'?'<button type="button" class="admin-button quiet" data-retire="'+esc(p.publicId)+'">Retire</button>':'')+'</td>'+
+    '<td>'+(catalog.canManage&&!Array.isArray(catalog.manageLocationIds)&&p.status==='ready'?'<button type="button" class="admin-button quiet" data-retire="'+esc(p.publicId)+'">Retire</button>':'')+'</td>'+
    '</tr>';
  }).join('');
 }
@@ -232,7 +234,7 @@ function reportsLabel(r){
  return '<span>'+Number(seen)+' seen</span><span>'+Number(activated)+' activated</span><span'+(failed?' class="danger"':'')+'>'+Number(failed)+' failed</span>'+health+drift;
 }
 function rolloutControls(r){
- if(!catalog.canManage)return '';
+ if(!catalog.canManage||(Array.isArray(catalog.manageLocationIds)&&!catalog.manageLocationIds.includes(r.locationId)))return '';
  var html='<div class="gvm-actions">';
  if(r.status==='draft')html+='<button type="button" class="admin-button quiet" data-rollout-action="activate" data-id="'+esc(r.publicId)+'">Activate</button>';
  if(r.status==='active'){
@@ -355,6 +357,26 @@ async function rolloutAction(action,id){
    if(!window.confirm('Roll back this rollout to its declared baseline package?'))return;
  }
  try{
+   if(action==='activate'){
+     var rollout=rollouts.find(function(r){return r.publicId===id;});
+     var target=packages.find(function(p){return p.publicId===rollout?.targetPackagePublicId;});
+     if(target?.metadata?.modelComparison){
+       var evidence=await request({...payload,action:'rollout.shadow_evidence'});
+       var run=evidence.shadowEvidence;
+       var reason=window.prompt(
+         'Review completed shadow run '+run.publicId+'\n'+
+         'Champion '+run.champion.label+' → challenger '+run.challenger.label+'\n'+
+         run.detectionFrameCount+' detection-bearing frames of '+run.frameCount+' total · '+
+         Math.round(run.evidenceCriticalMismatchRate*100)+'% critical mismatch on detection frames\n'+
+         'Correction alignment wins '+run.correctionChampionWins+' champion / '+run.correctionChallengerWins+' challenger\n\n'+
+         'Document your decision to activate this rollout:',
+         ''
+       );
+       if(reason===null)return;
+       if(!reason.trim())throw new Error('Document why this shadow evidence is ready for canary.');
+       payload.shadowReview={runPublicId:run.publicId,reviewHash:run.reviewHash,reason:reason.trim()};
+     }
+   }
    var data=await request(payload);
    var i=rollouts.findIndex(function(r){return r.publicId===id;});if(i>=0)rollouts[i]=data.rollout;
    renderAll();toast('Rollout '+action+' complete.');

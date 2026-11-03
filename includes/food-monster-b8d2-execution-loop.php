@@ -15,7 +15,7 @@ function fm8d2_refresh_operator(PDO $pdo,array $principal):?array
     $uid=(int)($principal['id']??0);
     $org=(int)($principal['organization_id']??0);
     if($uid<1||$org<1)return null;
-    $q=$pdo->prepare("SELECT r.slug AS role_slug,r.is_owner_role,r.is_system_role
+    $q=$pdo->prepare("SELECT om.id AS membership_id,r.slug AS role_slug,r.is_owner_role,r.is_system_role
         FROM users u
         JOIN organization_memberships om ON om.user_id=u.id AND om.organization_id=?
         JOIN user_roles ur ON ur.membership_id=om.id AND ur.revoked_at IS NULL

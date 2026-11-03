@@ -18,10 +18,7 @@ $championPublic='vision-model-champion-'.$slug;$championHash=hash('sha256','cham
 $pdo->prepare("INSERT INTO glasses_vision_model_packages (organization_id,public_id,detector_name,model_name,model_version,runtime_type,platform,artifact_url,artifact_sha256,artifact_bytes,status,created_by) VALUES (?,?,'ingredient_detector','Champion Detector','v1','onnx','air3','https://example.test/champion.onnx',?,100,'ready',?)")->execute([$org,$championPublic,$championHash,$actor]);
 
 $datasetPublic='vision-dataset-'.$slug;
-$pdo->prepare("INSERT INTO glasses_vision_dataset_versions (organization_id,public_id,name,version_label,status,created_by) VALUES (?,?,?,'v1','draft',?)")->execute([$org,$datasetPublic,'Experiment Corpus',$actor]);$datasetId=(int)$pdo->lastInsertId();
-$planPublic='vision-split-'.$slug;$planHash=hash('sha256','split-'.$slug);
-$pdo->prepare("INSERT INTO glasses_vision_dataset_split_plans (organization_id,public_id,dataset_id,status,seed,train_ratio,val_ratio,test_ratio,policy_json,manifest_json,plan_hash,created_by,applied_by,applied_at) VALUES (?,?,?,'applied',74,.7,.15,.15,'{}','{}',?,?,?,NOW(6))")->execute([$org,$planPublic,$datasetId,$planHash,$actor,$actor]);$planId=(int)$pdo->lastInsertId();
-
+$pdo->prepare("INSERT INTO glasses_vision_dataset_versions (organization_id,public_id,name,version_label,status,created_by) VALUES (?,?,?,'v1','draft',?)")->execute([$org,$datasetPublic,'Experiment Corpus',$actor]);
 $retained=vision_contract_retained_release($pdo,$org,$actor,$datasetPublic,3,1);
 $datasetHash=$retained['dataset']['datasetHash'];$releasePublic=$retained['release']['publicId'];$releaseHash=$retained['release']['releaseHash'];$releaseId=(int)$retained['row']['id'];
 $pdo->prepare("UPDATE glasses_vision_training_releases SET status='qualified' WHERE organization_id=? AND id=?")->execute([$org,$releaseId]);

@@ -183,12 +183,19 @@ $draft=glasses_vision_model_rollout_create($pdo,$org,[
 ],$user);
 gvm_assert((string)$draft['status']==='draft'&&(float)$draft['canaryPercent']===0.0,'New rollout must remain draft.');
 
+$assignmentCount=fn():int=>(int)gvm_one($pdo,'SELECT COUNT(*) FROM glasses_vision_model_assignments WHERE organization_id=?',[$org]);
+$previewBefore=glasses_vision_model_assignment($pdo,$device,$sessionPublic,'food-model-v3',false);
+gvm_assert($previewBefore['reason']==='no_rollout'&&$assignmentCount()===0,'A browser hold lookup must not issue a device assignment.');
 $before=glasses_vision_model_assignment($pdo,$device,$sessionPublic,'food-model-v3');
 gvm_assert((string)$before['action']==='hold'&&(string)$before['reason']==='no_rollout','Draft rollout must never be assigned.');
 
 $active=glasses_vision_model_rollout_activate($pdo,$org,(string)$draft['publicId'],$user);
 gvm_assert((string)$active['status']==='active','Activation must be explicit.');
+$beforePreview=$assignmentCount();
+$previewAssignment=glasses_vision_model_assignment($pdo,$device,$sessionPublic,'food-model-v3',false);
+gvm_assert($previewAssignment['action']==='apply'&&$assignmentCount()===$beforePreview,'A browser apply lookup must not issue a device assignment.');
 $baselineAssignment=glasses_vision_model_assignment($pdo,$device,$sessionPublic,'food-model-v3');
+gvm_assert($baselineAssignment===$previewAssignment&&$assignmentCount()===$beforePreview+1,'The native selection matches the browser lookup and records issuance.');
 gvm_assert((string)$baselineAssignment['action']==='apply','Compatible rollout must produce an apply assignment.');
 gvm_assert((string)$baselineAssignment['selection']==='baseline','Zero-percent canary must select baseline.');
 gvm_assert((string)$baselineAssignment['package']['publicId']===(string)$baseline['publicId'],'Baseline cohort must receive baseline package.');
@@ -329,6 +336,43 @@ $shadowTarget=glasses_vision_model_package_create($pdo,$org,[
         'summary'=>['map50Delta'=>0.03,'recallDelta'=>0.02,'demonstratedGain'=>true],
     ]],
 ],$user);
+$emptyDraft=glasses_vision_model_rollout_create($pdo,$org,[
+    'targetPackagePublicId'=>$shadowTarget['publicId'],'baselinePackagePublicId'=>$baseline['publicId'],
+    'locationId'=>$location,'stationPublicId'=>(string)$station['public_id'],'canaryPercent'=>5,
+],$user);
+$emptyShadow=glasses_vision_shadow_assignment($pdo,$device,$sessionPublic,'food-model-v3');
+gvm_assert($emptyShadow['rolloutPublicId']===$emptyDraft['publicId'],'The empty-frame regression must evaluate its own rollout.');
+for($i=1;$i<=30;$i++)glasses_vision_shadow_report($pdo,$device,$sessionPublic,[
+    'shadowRunPublicId'=>$emptyShadow['runPublicId'],'frameKey'=>'empty-'.$i,
+    'correctionAlignment'=>$i===30?'challenger':'unknown',
+]);
+$emptyComplete=glasses_vision_shadow_complete($pdo,$device,$sessionPublic,$emptyShadow['runPublicId']);
+gvm_assert($emptyComplete['frameCount']===30&&$emptyComplete['detectionFrameCount']===0&&!$emptyComplete['eligibleForCanary'],
+    'Thirty empty reports and a client-claimed correction cannot establish shadow evidence.');
+$emptyBlocked=false;
+try{glasses_vision_model_rollout_activate($pdo,$org,$emptyDraft['publicId'],$user,[
+    'runPublicId'=>$emptyShadow['runPublicId'],'reviewHash'=>str_repeat('a',64),'reason'=>'This cannot approve blank frames.',
+]);}catch(InvalidArgumentException $e){$emptyBlocked=str_contains($e->getMessage(),'passing live shadow evaluation');}
+gvm_assert($emptyBlocked,'An explicit review cannot promote an empty shadow run.');
+
+$dilutedDraft=glasses_vision_model_rollout_create($pdo,$org,[
+    'targetPackagePublicId'=>$shadowTarget['publicId'],'baselinePackagePublicId'=>$baseline['publicId'],
+    'locationId'=>$location,'stationPublicId'=>(string)$station['public_id'],'canaryPercent'=>5,
+],$user);
+$dilutedShadow=glasses_vision_shadow_assignment($pdo,$device,$sessionPublic,'food-model-v3');
+gvm_assert($dilutedShadow['rolloutPublicId']===$dilutedDraft['publicId'],'The padding regression must evaluate its own rollout.');
+for($i=1;$i<=60;$i++){
+    $detections=$i<=30?1:0;
+    glasses_vision_shadow_report($pdo,$device,$sessionPublic,[
+        'shadowRunPublicId'=>$dilutedShadow['runPublicId'],'frameKey'=>'diluted-'.$i,
+        'championDetectionCount'=>$detections,'challengerDetectionCount'=>$detections,'matchedCount'=>$detections,
+        'criticalMismatch'=>$i<=4,
+    ]);
+}
+$dilutedComplete=glasses_vision_shadow_complete($pdo,$device,$sessionPublic,$dilutedShadow['runPublicId']);
+gvm_assert($dilutedComplete['criticalMismatchRate']<0.10&&$dilutedComplete['evidenceCriticalMismatchRate']>0.10&&!$dilutedComplete['eligibleForCanary'],
+    'Background frames cannot dilute critical mismatches in detection evidence.');
+
 $shadowDraft=glasses_vision_model_rollout_create($pdo,$org,[
     'targetPackagePublicId'=>$shadowTarget['publicId'],'baselinePackagePublicId'=>$baseline['publicId'],
     'locationId'=>$location,'stationPublicId'=>(string)$station['public_id'],'canaryPercent'=>5,
@@ -342,6 +386,26 @@ $shadow=glasses_vision_shadow_assignment($pdo,$device,$sessionPublic,'food-model
 gvm_assert(($shadow['action']??'')==='shadow','Eligible draft challenger must be available in non-authoritative shadow mode.');
 gvm_assert((string)$shadow['champion']['publicId']===(string)$baseline['publicId'],'Shadow assignment champion must be the rollout baseline.');
 gvm_assert((string)$shadow['challenger']['publicId']===(string)$shadowTarget['publicId'],'Shadow assignment challenger must be the rollout target.');
+$inconsistentBlocked=false;
+try{glasses_vision_shadow_report($pdo,$device,$sessionPublic,[
+    'shadowRunPublicId'=>$shadow['runPublicId'],'frameKey'=>'inconsistent',
+    'championDetectionCount'=>1,'challengerDetectionCount'=>0,'matchedCount'=>1,
+]);}catch(InvalidArgumentException){$inconsistentBlocked=true;}
+gvm_assert($inconsistentBlocked,'Impossible frame totals must be rejected before entering the ledger.');
+$browserMetadata=['source'=>'web_glasses_simulator_shadow','adapter'=>'onnx','cameraSource'=>'browser',
+    'championArtifactSha256'=>$shadow['champion']['artifactSha256'],
+    'challengerArtifactSha256'=>$shadow['challenger']['artifactSha256']];
+$browserFrame=['shadowRunPublicId'=>$shadow['runPublicId'],'frameKey'=>'legacy-browser',
+    'championDetectionCount'=>1,'challengerDetectionCount'=>1,'matchedCount'=>1];
+$oldBrowser=glasses_vision_shadow_report($pdo,$device,$sessionPublic,$browserFrame+[
+    'metadata'=>['source'=>'web_glasses_simulator_shadow','captureProvenance'=>'browser_onnx_bound'],
+]);
+gvm_assert($oldBrowser['summary']['detectionFrameCount']===0,'Unbound browser telemetry and client provenance flags cannot qualify.');
+$wrongPairBlocked=false;
+try{glasses_vision_shadow_report($pdo,$device,$sessionPublic,array_replace($browserFrame,[
+    'frameKey'=>'wrong-browser-pair','metadata'=>array_replace($browserMetadata,['championArtifactSha256'=>str_repeat('f',64)]),
+]),true);}catch(InvalidArgumentException $e){$wrongPairBlocked=str_contains($e->getMessage(),'assigned ONNX model pair');}
+gvm_assert($wrongPairBlocked,'Browser shadow telemetry must name both assigned ONNX checksums.');
 for($i=1;$i<=30;$i++){
     $reported=glasses_vision_shadow_report($pdo,$device,$sessionPublic,[
         'shadowRunPublicId'=>$shadow['runPublicId'],'frameKey'=>'frame-'.$i,
@@ -349,9 +413,10 @@ for($i=1;$i<=30;$i++){
         'championOnlyCount'=>0,'challengerOnlyCount'=>0,'meanIou'=>0.82,
         'championMeanConfidence'=>0.91,'challengerMeanConfidence'=>0.93,
         'correctionAlignment'=>$i===30?'challenger':'unknown','criticalMismatch'=>false,
-        'metadata'=>['source'=>'ci_shadow','authoritative'=>false],
-    ]);
+        'metadata'=>$i===1?$browserMetadata:['source'=>'ci_shadow','authoritative'=>false],
+    ],$i===1);
 }
+gvm_assert(!$reported['summary']['eligibleForCanary']&&$reported['summary']['reviewHash']===null,'An open run cannot be approved.');
 $duplicateShadow=glasses_vision_shadow_report($pdo,$device,$sessionPublic,[
     'shadowRunPublicId'=>$shadow['runPublicId'],'frameKey'=>'frame-30',
     'championDetectionCount'=>1,'challengerDetectionCount'=>1,'matchedCount'=>1,
@@ -360,8 +425,19 @@ gvm_assert($duplicateShadow['idempotent']===true,'Shadow frame keys must be idem
 $shadowComplete=glasses_vision_shadow_complete($pdo,$device,$sessionPublic,(string)$shadow['runPublicId']);
 gvm_assert($shadowComplete['frameCount']===30&&$shadowComplete['eligibleForCanary']===true,'Thirty clean same-frame evaluations must satisfy the default shadow canary gate.');
 gvm_assert($shadowComplete['correctionChallengerWins']===1&&$shadowComplete['correctionChampionWins']===0,'Shadow summary must preserve correction alignment evidence.');
-$shadowActive=glasses_vision_model_rollout_activate($pdo,$org,(string)$shadowDraft['publicId'],$user);
+$unreviewedBlocked=false;
+try{glasses_vision_model_rollout_activate($pdo,$org,$shadowDraft['publicId'],$user);}catch(InvalidArgumentException $e){$unreviewedBlocked=str_contains($e->getMessage(),'document the decision');}
+gvm_assert($unreviewedBlocked,'Even passing client correction evidence needs an authorized rollout decision.');
+$shadowReview=['runPublicId'=>$shadowComplete['publicId'],'reviewHash'=>$shadowComplete['reviewHash'],'reason'=>'Reviewed representative station detection frames.'];
+$wrongHashBlocked=false;
+try{glasses_vision_model_rollout_activate($pdo,$org,$shadowDraft['publicId'],$user,array_replace($shadowReview,['reviewHash'=>str_repeat('a',64)]));}
+catch(InvalidArgumentException $e){$wrongHashBlocked=str_contains($e->getMessage(),'Shadow evidence changed');}
+gvm_assert($wrongHashBlocked,'A review must identify the exact server evidence digest.');
+$shadowActive=glasses_vision_model_rollout_activate($pdo,$org,(string)$shadowDraft['publicId'],$user,$shadowReview);
 gvm_assert((string)$shadowActive['status']==='active','Passing shadow evidence must unlock explicit canary activation.');
+$reviewAudit=gvm_one($pdo,"SELECT e.metadata_json FROM glasses_vision_model_rollout_events e JOIN glasses_vision_model_rollouts r ON r.id=e.rollout_id AND r.organization_id=e.organization_id
+    WHERE e.organization_id=? AND r.public_id=? AND e.event_type='activated' AND e.actor_user_id=?",[$org,$shadowDraft['publicId'],$user]);
+gvm_assert((json_decode((string)$reviewAudit,true)['shadowReview']??null)===$shadowReview,'Canary activation must retain the reviewing actor, exact run and decision.');
 glasses_vision_model_rollout_rollback($pdo,$org,(string)$shadowDraft['publicId'],$user,'Shadow gate contract complete.');
 
 gvm_assert(glasses_vision_canary_ready($pdo),'Canary production evaluation migration must be installed.');
@@ -378,8 +454,14 @@ for($i=1;$i<=30;$i++)glasses_vision_shadow_report($pdo,$device,$sessionPublic,[
     'championDetectionCount'=>1,'challengerDetectionCount'=>1,'matchedCount'=>1,'meanIou'=>0.88,
     'championMeanConfidence'=>0.91,'challengerMeanConfidence'=>0.94,'criticalMismatch'=>false,
 ]);
-glasses_vision_shadow_complete($pdo,$device,$sessionPublic,(string)$canaryShadow['runPublicId']);
-$canaryActive=glasses_vision_model_rollout_activate($pdo,$org,(string)$canaryDraft['publicId'],$user);
+$canaryComplete=glasses_vision_shadow_complete($pdo,$device,$sessionPublic,(string)$canaryShadow['runPublicId']);
+$wrongRunBlocked=false;
+try{glasses_vision_model_rollout_activate($pdo,$org,$canaryDraft['publicId'],$user,$shadowReview);}
+catch(InvalidArgumentException $e){$wrongRunBlocked=str_contains($e->getMessage(),'passing live shadow evaluation');}
+gvm_assert($wrongRunBlocked,'Evidence for another rollout of the same packages cannot authorize activation.');
+$canaryActive=glasses_vision_model_rollout_activate($pdo,$org,(string)$canaryDraft['publicId'],$user,[
+    'runPublicId'=>$canaryComplete['publicId'],'reviewHash'=>$canaryComplete['reviewHash'],'reason'=>'Reviewed the completed station comparison.',
+]);
 gvm_assert((float)$canaryActive['canaryPercent']===5.0,'Comparison-aware production rollout must begin at 5%.');
 
 $advanceBlocked=false;
@@ -552,7 +634,7 @@ $catalog=glasses_vision_model_catalog($pdo,[
 ]);
 gvm_assert($catalog['ready']===true&&$catalog['canManage']===true,'Owner model catalog must be ready/manageable.');
 gvm_assert(count($catalog['packages'])===7,'Catalog must expose registered model packages.');
-gvm_assert(count($catalog['rollouts'])===8,'Catalog must expose all rollout plans.');
+gvm_assert(count($catalog['rollouts'])===10,'Organization-wide catalog must expose all rollout plans including rejected shadow drafts.');
 gvm_assert(isset($catalog['metricsByRollout'][(string)$draft['publicId']]),'Catalog must expose rollout telemetry.');
 gvm_assert(($catalog['metricsByRollout'][(string)$canaryDraft['publicId']]['canaryHealth']['state']??'')==='rollback_required','Catalog must expose production canary health evidence.');
 gvm_assert(($catalog['metricsByRollout'][(string)$driftRollout['publicId']]['drift']['state']??'')==='critical','Catalog must expose latest production drift state.');

@@ -1,6 +1,7 @@
 'use strict';
 // Run the shipped simulator UI in Chromium against controlled API responses.
 const assert=require('node:assert/strict');
+const {createHash}=require('node:crypto');
 const fs=require('node:fs/promises');
 const path=require('node:path');
 const {chromium}=require('playwright');
@@ -17,6 +18,15 @@ const second={...item,kdsItemPublicId:'second-kds',posLine:{...line,id:124,name:
 const station={publicId:'pizza',name:'Pizza'};
 const work={location:{id:1,name:'Fixture kitchen'},station,focusItem:item,items:[item,second],metrics:{},revision:'1'.repeat(64)};
 const mozzarella='ingredient:9',customization='manual:order-customization';
+const shadowArtifacts={champion:'fixture champion',challenger:'fixture challenger'};
+function shadowPackage(name){
+  const bytes=shadowArtifacts[name];
+  return {publicId:name,modelName:name,modelVersion:'1',runtimeType:'onnx',artifactUrl:'/test-model/'+name,
+    artifactBytes:Buffer.byteLength(bytes),artifactSha256:createHash('sha256').update(bytes).digest('hex'),
+    metadata:{browserInference:{schema:'gelato.browser_onnx_detector.v1',decoder:'yolo_v8',labels:['Mozzarella'],
+      input:{name:'input',width:32,height:32},output:{name:'output',layout:'rows',boxScale:'normalized'}}}};
+}
+const champion=shadowPackage('champion'),challenger=shadowPackage('challenger');
 const components=[
   {componentKey:mozzarella,displayName:'Mozzarella',status:'waiting',expectedQuantity:2,detectedQuantity:0,unit:'portion',optional:false},
   {componentKey:customization,displayName:'Review ordered size and customizations',status:'verify',expectedQuantity:2,detectedQuantity:0,optional:false,
@@ -59,23 +69,41 @@ async function main(){
         canvas.width=320;canvas.height=240;
         const context=canvas.getContext('2d');
         context.fillRect(0,0,canvas.width,canvas.height);
-        const stream=canvas.captureStream(5);
-        stream.getVideoTracks()[0].requestFrame();
+        const stream=canvas.captureStream(0),track=stream.getVideoTracks()[0];
+        track.requestFrame();
+        let paints=0;
+        const timer=setInterval(()=>{
+          if(track.readyState==='ended'){clearInterval(timer);return;}
+          if(window.pauseFixtureCamera)return;
+          context.fillStyle=++paints%2?'red':'blue';context.fillRect(0,0,320,240);track.requestFrame();
+        },35);
         return stream;
       };
+      window.ort={Tensor:class {},InferenceSession:{create:async bytes=>({
+        inputNames:['input'],outputNames:['output'],release:async()=>{},
+        run:async()=>{
+          if(new TextDecoder().decode(bytes)==='fixture challenger'&&window.deferShadowInference)
+            await new Promise(resolve=>{window.releaseShadowInference=resolve;});
+          return {output:{dims:[1,1,5],data:[.5,.5,.25,.25,.95]}};
+        }
+      })}};
     });
-    let deferStart=false,validationRevision=0;
+    let deferStart=false,denyWork=false,validationRevision=0,shadowCount=29;
+    const shadowSummary=()=>({status:'running',detectionFrameCount:shadowCount,frameCount:shadowCount});
     page.on('pageerror',error=>errors.push(error.message));
     await page.route('**/*',async route=>{
       const request=route.request(),url=new URL(request.url()),pathname=url.pathname;
       if(url.hostname!=='localhost')return route.abort();
+      if(pathname.startsWith('/test-model/'))return route.fulfill({body:shadowArtifacts[pathname.split('/').at(-1)]});
       if(pathname==='/glasses-simulator.php')return route.fulfill({contentType:'text/html',body:html});
       if(pathname==='/api/glasses-camera-locations.php')return route.fulfill({json:{ok:true,configuration:{canManage:true,
         stations:[station],cameras:[{slot:1,displayName:'Fixture camera',enabled:true,role:'prep',stationPublicId:'pizza',
           rotation:0,revision:1,zone:{x:.1,y:.1,width:.8,height:.8}}]}}});
       if(pathname==='/api/glasses-simulator.php'){
         if(request.method()==='GET'){
-          const data=url.searchParams.get('action')==='work'?{work}:{csrfToken:csrf,devices:[device]};
+          const isWork=url.searchParams.get('action')==='work';
+          if(isWork&&denyWork)return route.fulfill({status:403,json:{ok:false,message:'Kitchen Display access is not assigned.'}});
+          const data=isWork?{work}:{csrfToken:csrf,devices:[device]};
           return route.fulfill({json:{ok:true,...data}});
         }
         const data=request.postDataJSON();
@@ -108,6 +136,16 @@ async function main(){
             token:'token-'+validationRevision,validationPublicId:data.validationPublicId,validationSnapshotHash:data.validationSnapshotHash}}});
         }
         if(data.action==='handoff.expo')return route.fulfill({json:{ok:true,handoff:{kdsStatus:'ready'}}});
+        if(data.action==='vision.model_assignment')return route.fulfill({json:{ok:true,assignment:{
+          action:'apply',detectorName:data.detectorName,buildSessionPublicId:data.buildSessionPublicId,package:champion,
+          compatibility:{compatible:true}}}});
+        if(data.action==='vision.profile')return route.fulfill({json:{ok:true,profile:{mappings:[]}}});
+        if(data.action==='vision.shadow_assignment')return route.fulfill({json:{ok:true,shadow:{
+          action:'shadow',runPublicId:'shadow-run',champion,challenger,summary:shadowSummary()}}});
+        if(data.action==='vision.shadow_report'){
+          shadowCount=Math.min(shadowCount+1,30);
+          return route.fulfill({json:{ok:true,shadow:{summary:shadowSummary()}}});
+        }
         return route.fulfill({json:{ok:true}});
       }
       if(pathname.startsWith('/api/'))return route.fulfill({json:{ok:false,message:'Unused fixture endpoint'}});
@@ -212,6 +250,58 @@ async function main(){
     await waitText('#buildBadge','no glasses build active');
     assert.equal(await page.locator('#startBuild').isEnabled(),true,'Cook can restart the same item after the edit.');
 
+    // A revoked Kitchen Display grant clears previously rendered order details.
+    await click('#startBuild');
+    await waitText('#buildBadge','fixture-build');
+    denyWork=true;
+    await click('#refreshWork');
+    await waitText('#syncBadge','ACCESS DENIED');
+    await waitText('#buildBadge','no glasses build active');
+    assert.doesNotMatch(await page.locator('#consoleItem').textContent(),/Audit pizza/);
+    assert.equal(await page.locator('#startBuild').isDisabled(),true);
+    denyWork=false;
+    await click('#refreshWork');
+    await waitText('#consoleItem','Audit pizza');
+
+    // Only fresh camera frames under the exact governed ONNX champion can report to Shadow.
+    await click('#startBuild');
+    await waitText('#buildBadge','fixture-build');
+    await click('#startCamera');
+    await waitText('#eventLog','Browser camera preview started.');
+    await page.selectOption('#visionMode','assisted',{force:true});
+    await click('#loadVisionModel');
+    await waitText('#visionModelStatus','READY');
+    await page.selectOption('#visionAdapterSelect','fixture',{force:true});
+    assert.equal(await page.locator('#startShadowModel').isDisabled(),true);
+    assert.equal(action('vision.shadow_assignment').length,0);
+    await page.evaluate(()=>{window.pauseFixtureCamera=true;});
+    await page.selectOption('#visionAdapterSelect','onnx',{force:true});
+    await click('#startShadowModel');
+    await waitText('#shadowSummary','29/30 detection frames');
+    assert.equal(await page.locator('#completeShadowModel').isDisabled(),true);
+    await click('#frameBurst');
+    await waitText('#eventLog','frame burst into bounded pipeline');
+    await page.waitForTimeout(700);
+    assert.equal(action('vision.shadow_report').length,0,'Injected burst frames cannot qualify a shadow run.');
+    await page.evaluate(()=>{window.pauseFixtureCamera=false;});
+    await waitText('#shadowSummary','30/30 detection frames');
+    assert.equal(await page.locator('#completeShadowModel').isEnabled(),true);
+    const [report]=action('vision.shadow_report');
+    assert.deepEqual(report.metadata,{source:'web_glasses_simulator_shadow',authoritative:false,adapter:'onnx',
+      cameraSource:'browser',championArtifactSha256:champion.artifactSha256,challengerArtifactSha256:challenger.artifactSha256});
+    await page.evaluate(()=>{window.deferShadowInference=true;});
+    await page.waitForFunction(()=>typeof window.releaseShadowInference==='function');
+    const reportCount=action('vision.shadow_report').length;
+    await page.selectOption('#visionAdapterSelect','fixture',{force:true});
+    await page.evaluate(()=>window.releaseShadowInference());
+    await waitText('#shadowModelStatus','Shadow session released');
+    await page.waitForTimeout(700);
+    assert.equal(action('vision.shadow_report').length,reportCount,'Switching to fixture retires the run and drops in-flight inference.');
+    assert.equal(await page.locator('#completeShadowModel').isDisabled(),true);
+    await click('#stopCamera');
+    await click('#resetSimulator');
+    await waitText('#consoleItem','Audit pizza');
+
     // Switching item, then display mode, invalidates a delayed Build Start response.
     deferStart=true;
     await page.waitForFunction(()=>!document.getElementById('startBuild').disabled);
@@ -235,7 +325,7 @@ async function main(){
     assert.equal(await page.locator('#buildBadge').textContent(),'Build build-mock-1','Late Live Build Start cannot replace the Mock build.');
     assert.equal(action('build.observe').length,1,'Mock evidence remains local.');
     assert.deepEqual(errors,[]);
-    console.log('PASS: Chromium Live build evidence, manual quantity, Expo confirmation, and stale-response controls.');
+    console.log('PASS: Chromium Live build, Expo, scoped access, and governed Shadow evidence.');
   }finally{await browser.close();}
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

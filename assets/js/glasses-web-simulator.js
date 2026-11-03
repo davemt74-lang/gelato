@@ -46,6 +46,7 @@ function invalidateBuildScope(){
   buildGeneration+=1;
   buildRequest=null;
   clearHandoffConfirmation();
+  if(state.shadowModel.binding)void stopShadowModel('build_reset');
 }
 function setBuildValidation(validation){
   const old=state.validation;
@@ -67,6 +68,7 @@ function displayLiveValidation(validation){
   setBuildValidation(validation);
 }
 function replaceBuild(build){
+  if(state.build?.publicId!==build?.publicId&&state.shadowModel.binding)void stopShadowModel('build_reset');
   state.build=build;
   state.validation=null;
   clearHandoffConfirmation();
@@ -133,7 +135,7 @@ const SIM_READ_ONLY_ACTIONS=new Set([
   'hardware.frame_pipeline','hardware.runtime','hardware.frame.prepare',
   'hardware.display.prepare','hardware.input.prepare','hardware.model.prepare',
   'work','build.get','validation.get','vision.model_assignment','vision.profile',
-  'vision.shadow_assignment','vision.ingredient_readonly_assignment'
+  'vision.ingredient_readonly_assignment'
 ]);
 async function refreshSimulatorCsrf(){
   const r=await fetch(cfg.api,{method:'GET',credentials:'same-origin',cache:'no-store',headers:{Accept:'application/json'}});
@@ -349,7 +351,7 @@ function applyLiveWork(work,{announce=false}={}){
   return previous!==next;
 }
 async function fetchLiveStationWork(devicePublicId){
-  if(!devicePublicId)throw new Error('No accessible display. Check location and glasses.view permission.');
+  if(!devicePublicId)throw new Error('No accessible display. Check glasses and Kitchen Display access for this location.');
   if(state.syncAbort)state.syncAbort.abort();
   const controller=new AbortController();state.syncAbort=controller;
   const timeout=setTimeout(()=>controller.abort(),4500);
@@ -359,7 +361,7 @@ async function fetchLiveStationWork(devicePublicId){
     if(cfg.runtimePublicId)url.searchParams.set('runtimePublicId',cfg.runtimePublicId);
     const r=await fetch(url.toString(),{method:'GET',credentials:'same-origin',cache:'no-store',signal:controller.signal});
     const d=await r.json().catch(()=>({ok:false,message:'Invalid server response.'}));
-    if(!r.ok||!d.ok)throw new Error(d.message||'Live station synchronization failed.');
+    if(!r.ok||!d.ok)throw Object.assign(new Error(d.message||'Live station synchronization failed.'),{status:r.status});
     return d;
   }finally{
     clearTimeout(timeout);if(state.syncAbort===controller)state.syncAbort=null;
@@ -383,7 +385,9 @@ async function syncLiveStationWork(announce=true){
     if(epoch!==state.syncEpoch||state.mode!=='live'||state.device?.publicId!==devicePublicId)return false;
     state.syncErrors+=1;
     const message=e?.name==='AbortError'?'Live station synchronization timed out.':(e?.message||'Live station synchronization failed.');
-    setSyncBadge('error','SYNC RETRY');
+    const accessDenied=e?.status===401||e?.status===403;
+    if(accessDenied&&state.work)applyLiveWork(null);
+    setSyncBadge('error',accessDenied?'ACCESS DENIED':'SYNC RETRY');
     if(state.syncErrors===1||state.syncErrors%4===0)log('SYNC',message);
     return false;
   }finally{
@@ -483,6 +487,7 @@ function saveCameraPrefs(){
 }
 function setCameraHealth(stateName,label){
   const el=$('cameraHealth');if(!el)return;el.textContent=label;el.dataset.state=stateName;
+  updateShadowStartControl();
   if(typeof renderProductionReadiness==='function')renderProductionReadiness();
 }
 function applyCameraPresentation(persist=true){
@@ -581,6 +586,7 @@ async function requestCameraDiscoveryAccess(){
 let cameraStartEpoch=0;
 function stopCamera(reason='stopped'){
   ++cameraStartEpoch;
+  if(state.shadowModel.binding)void stopShadowModel('camera_changed');
   stopVisionRuntime(reason);
   if(state.cameraStream)state.cameraStream.getTracks().forEach(t=>t.stop());
   state.dataset.frozen=false;state.dataset.drag=null;state.dataset.annotations=[];state.dataset.captureGroup=null;state.dataset.burstSeq=0;renderDatasetAnnotations();
@@ -781,10 +787,14 @@ function finishDatasetBox(event){
   renderDatasetAnnotations();
 }
 function freezeDatasetFrame(){
-  const video=$('cameraVideo');if(!state.cameraStream||!video.videoWidth)return;video.pause();state.dataset.frozen=true;renderDatasetAnnotations();log('DATASET','Camera frame frozen for labeling.');
+  const video=$('cameraVideo');if(!state.cameraStream||!video.videoWidth)return;video.pause();
+  if(state.shadowModel.binding)void stopShadowModel('camera_changed');
+  updateShadowStartControl();
+  state.dataset.frozen=true;renderDatasetAnnotations();log('DATASET','Camera frame frozen for labeling.');
 }
 async function resumeDatasetFrame(){
-  const video=$('cameraVideo');if(!state.cameraStream)return;await video.play();state.dataset.frozen=false;state.dataset.annotations=[];renderDatasetAnnotations();log('DATASET','Camera resumed; current annotations cleared.');
+  const video=$('cameraVideo');if(!state.cameraStream)return;await video.play();updateShadowStartControl();
+  state.dataset.frozen=false;state.dataset.annotations=[];renderDatasetAnnotations();log('DATASET','Camera resumed; current annotations cleared.');
 }
 function canvasToBlob(canvas,type='image/jpeg',quality=.92){return new Promise(resolve=>canvas.toBlob(resolve,type,quality));}
 function hexNibble(n){return Number(n).toString(16);}
@@ -970,8 +980,13 @@ const ORT_WEB_VERSION='1.30.0';
 const ORT_WEB_BASE='https://cdn.jsdelivr.net/npm/onnxruntime-web@'+ORT_WEB_VERSION+'/dist/';
 const BROWSER_MODEL_MAX_BYTES=512*1024*1024;
 let ortLoadPromise=null;
+function updateShadowStartControl(){
+  const button=$('startShadowModel');
+  if(button)button.disabled=!shadowChampionBinding()||['loading','ready','completing'].includes(state.shadowModel.status);
+}
 function setVisionModelStatus(status,message){
   state.browserModel.status=status;
+  updateShadowStartControl();
   const el=$('visionModelStatus');if(!el)return;
   el.dataset.state=status;el.innerHTML='<strong>'+escapeHtml(status.toUpperCase())+'</strong><span>'+escapeHtml(message||'')+'</span>';
 }
@@ -1053,6 +1068,7 @@ function decodeYoloV8(tensor,config){
   return nmsDetections(out,config.nmsIou,config.maxDetections);
 }
 async function unloadGovernedVisionModel(reason='unloaded'){
+  if(state.shadowModel.binding)void stopShadowModel('champion_changed');
   clearAssemblySuggestion();clearTemporalRuntime();stopVisionRuntime('model_unloaded');
   const epoch=++state.browserModel.loadEpoch,session=state.browserModel.session;
   state.browserModel.session=null;state.browserModel.assignment=null;state.browserModel.profile=null;state.browserModel.config=null;state.browserModel.package=null;state.browserModel.verifiedSha256=null;
@@ -1066,6 +1082,7 @@ async function loadGovernedVisionModel(){
   if(!state.device)throw new Error('Choose a glasses device first.');
   if(!state.build)throw new Error('Start a build before loading its governed model assignment.');
   const detector=String($('visionDetectorName').value||'').trim();if(!detector)throw new Error('Detector name is required.');
+  if(state.shadowModel.binding)void stopShadowModel('champion_changed');
   const epoch=++state.browserModel.loadEpoch;setVisionModelStatus('loading','Requesting governed assignment…');$('loadVisionModel').disabled=true;
   try{
     const [assignmentResult,profileResult]=await Promise.all([
@@ -1352,26 +1369,68 @@ async function loadReadonlyIngredientModel(){
    }
  }
 }
+const SHADOW_MIN_DETECTION_FRAMES=30;
+function liveShadowCamera(){
+  const video=$('cameraVideo'),track=state.cameraTrack,source=state.cameraInput?.kind;
+  return state.cameraSource==='camera'&&state.cameraStream?.active&&track?.readyState==='live'&&
+    track.enabled&&!track.muted&&video?.srcObject===state.cameraStream&&!video.paused&&!video.ended&&
+    (source==='browser'||source==='sdk')?{track,source}:null;
+}
+function shadowChampionBinding(){
+  const model=state.browserModel,buildId=state.build?.publicId;
+  const detector=String($('visionDetectorName')?.value||'').trim().toLowerCase().replace(/[^a-z0-9._-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,120);
+  const camera=liveShadowCamera();
+  if(state.mode!=='live'||displayChanging||document.hidden||visionMode()==='manual'||!camera||
+    !state.device?.simulatorWritable||!buildId||$('visionAdapterSelect')?.value!=='onnx'||
+    model.status!=='ready'||!model.session||model.package?.runtimeType!=='onnx'||
+    model.assignment?.action!=='apply'||model.assignment?.buildSessionPublicId!==buildId||
+    model.assignment?.detectorName!==detector||model.assignment?.package?.publicId!==model.package.publicId||
+    !/^[a-f0-9]{64}$/.test(model.verifiedSha256||'')||
+    model.verifiedSha256!==String(model.package.artifactSha256||'').toLowerCase())return null;
+  return {model,modelEpoch:model.loadEpoch,championSha:model.verifiedSha256,buildId,generation:buildGeneration,
+    deviceId:state.device.publicId,detector,track:camera.track,cameraSource:camera.source};
+}
+function shadowScopeCurrent(scope){
+  if(state.shadowModel!==scope||!scope.binding)return false;
+  const current=shadowChampionBinding(),bound=scope.binding;
+  return !!current&&Object.keys(bound).every(key=>bound[key]===current[key]);
+}
 function setShadowStatus(status,message){
   state.shadowModel.status=status;const el=$('shadowModelStatus');if(el){el.dataset.state=status;el.innerHTML='<strong>'+escapeHtml(status.toUpperCase())+'</strong><span>'+escapeHtml(message||'')+'</span>';}
+  updateShadowStartControl();renderShadowSummary();
 }
 async function stopShadowModel(reason='idle'){
   const session=state.shadowModel.session;state.shadowModel={status:'idle',session:null,assignment:null,config:null,package:null,verifiedSha256:null,runPublicId:null,summary:null,frameSeq:0,busy:false};
   const stopped=state.shadowModel;
   try{if(session&&typeof session.release==='function')await session.release();}catch{}
   if(stopped!==state.shadowModel)return;
-  setShadowStatus('idle',reason==='build_reset'?'Shadow session released for build boundary.':'No shadow challenger loaded.');
-  if($('completeShadowModel'))$('completeShadowModel').disabled=true;
+  setShadowStatus('idle',reason==='idle'?'No shadow challenger loaded.':'Shadow session released. Start Shadow again with the current live camera, model and build.');
 }
 async function startShadowModel(){
-  if(state.mode!=='live'||!state.build||!state.browserModel.package)throw new Error('Load the live champion ONNX model and start a build first.');
-  const detector=String($('visionDetectorName').value||'').trim(),d=await api('vision.shadow_assignment',{buildSessionPublicId:state.build.publicId,detectorName:detector}),shadow=d.shadow;
-  if(shadow?.action!=='shadow')throw new Error('No eligible draft challenger is available for shadow evaluation.');
-  if(shadow.champion?.publicId!==state.browserModel.package.publicId)throw new Error('Current browser champion does not match the shadow rollout baseline.');
-  setShadowStatus('loading','Loading challenger '+shadow.challenger.modelName+' '+shadow.challenger.modelVersion+'…');
-  const loaded=await createVerifiedOnnxSession(shadow.challenger,(s,m)=>setShadowStatus(s,m));
-  state.shadowModel={status:'ready',session:loaded.session,assignment:shadow,config:loaded.config,package:shadow.challenger,verifiedSha256:loaded.digest,runPublicId:shadow.runPublicId,summary:shadow.summary,frameSeq:0,busy:false};
-  $('completeShadowModel').disabled=false;setShadowStatus('ready',shadow.challenger.modelName+' '+shadow.challenger.modelVersion+' · shadow only');renderShadowSummary();log('SHADOW','Challenger loaded in non-authoritative shadow mode.');
+  const binding=shadowChampionBinding();
+  if(!binding)throw new Error('Start a live camera and build, then load the matching governed ONNX champion on a writable paired device.');
+  if(['loading','ready','completing'].includes(state.shadowModel.status))return;
+  void stopShadowModel();
+  const scope={binding,captureId:crypto.randomUUID(),summary:null,session:null,frameSeq:0,lastCameraTime:-1,busy:false};
+  state.shadowModel=scope;setShadowStatus('loading','Requesting governed shadow assignment…');
+  try{
+    const d=await api('vision.shadow_assignment',{buildSessionPublicId:binding.buildId,detectorName:binding.detector}),shadow=d.shadow;
+    if(!shadowScopeCurrent(scope))return;
+    if(shadow?.action!=='shadow')throw new Error('No eligible draft challenger is available for shadow evaluation.');
+    if(shadow.champion?.publicId!==binding.model.package.publicId||
+      String(shadow.champion.artifactSha256||'').toLowerCase()!==binding.championSha)
+      throw new Error('Current browser champion does not match the shadow rollout baseline.');
+    scope.summary=shadow.summary;scope.runPublicId=shadow.runPublicId;
+    if(scope.summary?.status==='completed'){showCompletedShadow(scope.summary);return;}
+    const loaded=await createVerifiedOnnxSession(shadow.challenger,(_status,message)=>{
+      if(shadowScopeCurrent(scope))setShadowStatus('loading',message);
+    });
+    if(!shadowScopeCurrent(scope)){await loaded.session.release?.();return;}
+    Object.assign(scope,{session:loaded.session,assignment:shadow,config:loaded.config,
+      package:shadow.challenger,verifiedSha256:loaded.digest});
+    setShadowStatus('ready',shadow.challenger.modelName+' '+shadow.challenger.modelVersion+' · shadow only');
+    log('SHADOW','Challenger loaded in non-authoritative shadow mode.');
+  }catch(error){if(shadowScopeCurrent(scope)){setShadowStatus('error',error.message);log('SHADOW',error.message);}}
 }
 function compareShadowDetections(champion,challenger){
   const used=new Set(),pairs=[];let championOnly=0;
@@ -1382,23 +1441,40 @@ function compareShadowDetections(champion,challenger){
 }
 function meanConfidence(items){return items.length?items.reduce((n,d)=>n+Number(d.confidence||0),0)/items.length:0;}
 async function runShadowFrame(frame,champion){
-  const s=state.shadowModel;if(s.status!=='ready'||s.busy)return;s.busy=true;
+  const s=frame.shadowScope;
+  const current=()=>s?.status==='ready'&&shadowScopeCurrent(s)&&frame.pipelineEpoch===state.framePipeline.epoch&&
+    frame.championModel===s.binding.model&&frame.inferenceAdapter===VISION_ADAPTERS.onnx;
+  if(!current()||s.busy||frame.cameraTime<=s.lastCameraTime)return;
+  s.lastCameraTime=frame.cameraTime;s.busy=true;
   try{
-    const challenger=await inferOnnxModel(s,frame),cmp=compareShadowDetections(champion,challenger),seq=++s.frameSeq;
-    if(seq%2===0){
-      const d=await api('vision.shadow_report',{buildSessionPublicId:state.build.publicId,shadowRunPublicId:s.runPublicId,frameKey:state.build.publicId+'-'+seq,championDetectionCount:champion.length,challengerDetectionCount:challenger.length,matchedCount:cmp.matchedCount,championOnlyCount:cmp.championOnlyCount,challengerOnlyCount:cmp.challengerOnlyCount,meanIou:cmp.meanIou,championMeanConfidence:meanConfidence(champion),challengerMeanConfidence:meanConfidence(challenger),criticalMismatch:cmp.criticalMismatch,correctionAlignment:'unknown',metadata:{source:'web_glasses_simulator_shadow',authoritative:false}});
-      s.summary=d.shadow.summary;renderShadowSummary();
-    }
-  }catch(e){setShadowStatus('error',e.message);log('SHADOW',e.message);}finally{s.busy=false;}
+    const challenger=(await inferOnnxModel(s,frame)).filter(d=>d.componentKey&&!window.GelatoHandTracker?.isHand(d));
+    if(!current()||++s.frameSeq%2!==0)return;
+    const cmp=compareShadowDetections(champion,challenger);
+    const d=await api('vision.shadow_report',{buildSessionPublicId:s.binding.buildId,shadowRunPublicId:s.runPublicId,frameKey:s.captureId+'-'+s.frameSeq,championDetectionCount:champion.length,challengerDetectionCount:challenger.length,matchedCount:cmp.matchedCount,championOnlyCount:cmp.championOnlyCount,challengerOnlyCount:cmp.challengerOnlyCount,meanIou:cmp.meanIou,championMeanConfidence:meanConfidence(champion),challengerMeanConfidence:meanConfidence(challenger),criticalMismatch:cmp.criticalMismatch,correctionAlignment:'unknown',metadata:{source:'web_glasses_simulator_shadow',authoritative:false,adapter:'onnx',cameraSource:s.binding.cameraSource,championArtifactSha256:s.binding.championSha,challengerArtifactSha256:s.verifiedSha256}});
+    if(current()){s.summary=d.shadow.summary;renderShadowSummary();}
+  }catch(e){if(current()){setShadowStatus('error',e.message);log('SHADOW',e.message);}}finally{s.busy=false;}
 }
 function renderShadowSummary(){
-  const el=$('shadowSummary');if(!el)return;const s=state.shadowModel.summary;
-  el.textContent=s?(s.frameCount+' frames · '+Math.round(s.disagreementRate*100)+'% disagree · '+Math.round(s.criticalMismatchRate*100)+'% critical · '+(s.eligibleForCanary?'CANARY READY':'COLLECTING')):'0 frames · shadow inactive';
+  const el=$('shadowSummary'),button=$('completeShadowModel'),scope=state.shadowModel,s=scope.summary;
+  const count=Number(s?.detectionFrameCount||0),complete=s?.status==='completed';
+  if(button)button.disabled=scope.status!=='ready'||count<SHADOW_MIN_DETECTION_FRAMES||complete;
+  if(el)el.textContent=s?(Math.min(count,SHADOW_MIN_DETECTION_FRAMES)+'/'+SHADOW_MIN_DETECTION_FRAMES+' detection frames · '+s.frameCount+' total · '+
+    (complete?(s.eligibleForCanary?'READY FOR MANAGER REVIEW':'SEALED · DID NOT PASS'):'COLLECTING LIVE EVIDENCE')):'0/30 detection frames · shadow inactive';
+}
+function showCompletedShadow(summary){
+  setShadowStatus(summary.eligibleForCanary?'passed':'completed',summary.eligibleForCanary
+    ?'Shadow evaluation passed. A manager can review it before canary activation.'
+    :'This run is sealed and did not pass. Start a fresh live build to collect new evidence.');
 }
 async function completeShadowModel(){
-  if(!state.shadowModel.runPublicId||!state.build)return;
-  const d=await api('vision.shadow_complete',{buildSessionPublicId:state.build.publicId,shadowRunPublicId:state.shadowModel.runPublicId});state.shadowModel.summary=d.shadow;renderShadowSummary();
-  setShadowStatus(d.shadow.eligibleForCanary?'passed':'completed',d.shadow.eligibleForCanary?'Shadow evaluation passed canary gate.':'Shadow evaluation completed but did not pass canary gate.');log('SHADOW','Shadow run completed: '+(d.shadow.eligibleForCanary?'eligible':'not eligible')+'.');
+  const s=state.shadowModel;
+  if(s.status!=='ready'||!shadowScopeCurrent(s)||Number(s.summary?.detectionFrameCount||0)<SHADOW_MIN_DETECTION_FRAMES)return;
+  setShadowStatus('completing','Sealing the live evidence for review…');
+  try{
+    const d=await api('vision.shadow_complete',{buildSessionPublicId:s.binding.buildId,shadowRunPublicId:s.runPublicId});
+    if(!shadowScopeCurrent(s))return;
+    s.summary=d.shadow;showCompletedShadow(d.shadow);
+  }catch(e){if(shadowScopeCurrent(s)){setShadowStatus('ready',e.message);log('SHADOW',e.message);}}
 }
 const VISION_ADAPTERS={
   fixture:{
@@ -1416,9 +1492,7 @@ const VISION_ADAPTERS={
   onnx:{
     id:'onnx',
     async detect(frame){
-      const model=state.browserModel;if(model.status!=='ready'||!model.session||!model.config)throw new Error('Governed ONNX model is not loaded.');
-      const ort=await ensureOrtWeb(),tensor=preprocessOnnxFrame(frame.video,model.config,ort);
-      return inferOnnxModel(model,frame);
+      return inferOnnxModel(frame.championModel,frame);
     }
   }
 };
@@ -1634,12 +1708,13 @@ function renderFramePipelineMetrics(){
   if(el)el.textContent='queue '+m.queueDepth+' · processed '+m.processedFrames+' · dropped '+m.droppedFrames+' · stale '+m.staleFrames+' · timeout '+m.timedOutFrames+' · cancelled '+m.cancelledFrames+' · failed '+m.failedFrames;
   if(badge)badge.textContent=state.framePipeline.worker?'PROCESSING':m.queueDepth?'QUEUED':'IDLE';
 }
-function captureVisionFrameSnapshot(seq){
+function captureVisionFrameSnapshot(seq,shadowScope=null){
   const video=$('cameraVideo');
   if(!video?.videoWidth||!video?.videoHeight)return null;
   const canvas=document.createElement('canvas');canvas.width=video.videoWidth;canvas.height=video.videoHeight;
   const ctx=canvas.getContext('2d',{alpha:false});ctx.drawImage(video,0,0,canvas.width,canvas.height);
-  return {seq,capturedAt:Date.now(),video:canvas,build:state.build,temporalTracks:state.temporalTracks};
+  return {seq,capturedAt:Date.now(),video:canvas,build:state.build,temporalTracks:state.temporalTracks,
+    shadowScope,cameraTime:video.currentTime,pipelineEpoch:state.framePipeline.epoch};
 }
 function enqueueVisionFrame(frame){
   if(!frame)return false;
@@ -1677,8 +1752,8 @@ async function deliverVisionInference(frame,raw,started){
     });
   }
   const filtered=(raw||[]).filter(d=>d&&d.bbox&&d.confidence>=threshold);
-  if(state.shadowModel.status==='ready')runShadowFrame(frame,filtered);
   const core=window.GelatoHandTracker;
+  if(frame.shadowScope)void runShadowFrame(frame,filtered.filter(d=>d.componentKey&&!core?.isHand(d)));
   const realModel=$('visionAdapterSelect')?.value==='onnx'&&state.browserModel.status==='ready';
   if(core){
     const detections=realModel?(raw||[]):[];
@@ -1718,7 +1793,8 @@ async function processFrameQueue(){
       const controller=new AbortController();fp.currentAbort=controller;const started=performance.now();
       try{
         const adapterName=$('visionAdapterSelect')?.value||'fixture';state.visionAdapter=VISION_ADAPTERS[adapterName]||VISION_ADAPTERS.fixture;
-        const inference=inferenceWithTimeout(frame,state.visionAdapter,p.inferenceTimeoutMs,controller.signal);
+        frame.inferenceAdapter=state.visionAdapter;frame.championModel=state.browserModel;
+        const inference=inferenceWithTimeout(frame,frame.inferenceAdapter,p.inferenceTimeoutMs,controller.signal);
         try{
           const raw=await inference.result;
           if(epoch!==fp.epoch||controller.signal.aborted){m.cancelledFrames++;continue;}
@@ -1736,7 +1812,8 @@ async function processFrameQueue(){
 }
 function capturePipelineFrame(){
   if(visionMode()==='manual'||!state.cameraStream||document.hidden)return;
-  const seq=++state.framePipeline.nextSeq,frame=captureVisionFrameSnapshot(seq);enqueueVisionFrame(frame);
+  const shadowScope=state.shadowModel.status==='ready'&&shadowScopeCurrent(state.shadowModel)?state.shadowModel:null;
+  const seq=++state.framePipeline.nextSeq,frame=captureVisionFrameSnapshot(seq,shadowScope);enqueueVisionFrame(frame);
 }
 function scheduleVisionCapture(){
   if(state.visionTimer)clearTimeout(state.visionTimer);
@@ -2208,6 +2285,7 @@ function render(){
   $('startBuild').disabled=buildRequest!==null||displayChanging||!!build||!item||(live&&(!state.device||!state.device.simulatorWritable));
   $('injectUnexpected').disabled=live||!build;
   $('evaluateBuild').disabled=buildRequest!==null||displayChanging||!build||(live&&(!state.device||!state.device.simulatorWritable));
+  updateShadowStartControl();
   $('submitCameraTarget').disabled=buildRequest!==null||displayChanging||!build||!state.cameraTarget||!state.cameraStream||(live&&!state.device?.simulatorWritable);
   $('autoPlayBuild').disabled=live;
   $('nextDetection').disabled=live;
@@ -2227,7 +2305,7 @@ function render(){
     startCamera:'Requires browser camera permission (HTTPS).',
     captureFrame:'Start the camera first.',
     loadVisionModel:'Requires an active build, governed model assignment and authorized package.',
-    startShadowModel:'Requires a governed active model build/session.',
+    startShadowModel:'Requires a live camera, an active build, a matching governed ONNX champion and a writable paired device.',
     datasetExport:'Capture and label a dataset sample first.',
     datasetUpload:'Requires glasses.manage, opt-in, and captured samples.',
     submitCameraTarget:'Manual camera observations require a writable device and active build. The live browser preview is read-only.'
@@ -2270,9 +2348,9 @@ async function refreshWork(){
       state.work=structuredClone(mock.work);state.selectedKdsItemPublicId=state.work.focusItem?.kdsItemPublicId||'';
       setSyncBadge('paused','SYNC OFF');log('MOCK','Loaded sample POS/KDS work.');render();return;
     }
-    if(!state.device)throw new Error('No accessible display. Check location and glasses.view permission.');
+    if(!state.device)throw new Error('No accessible display. Check glasses and Kitchen Display access for this location.');
     await syncLiveStationWork(true);
-    if(state.syncErrors)log('ERROR','Refresh failed. Check the SYNC RETRY badge and event log.');
+    if(state.syncErrors)log('ERROR','Refresh failed. Check the sync badge and event log.');
   }catch(e){log('ERROR',e.message);}
 }
 async function startBuild(){
@@ -2608,8 +2686,9 @@ $('cameraDeviceSelect').addEventListener('change',async()=>{saveCameraPrefs();if
  });
 $('cameraResolution').addEventListener('change',async()=>{saveCameraPrefs();if(state.cameraStream)await startCamera();});
 $('cameraManualTarget').addEventListener('change',e=>{$('glassesStage').classList.toggle('camera-targeting',e.target.checked);if(!e.target.checked)clearCameraTarget();});
-$('visionMode').addEventListener('change',()=>{clearHandoffConfirmation();clearAssemblySuggestion();state.visionMode=visionMode();startVisionRuntime();render();});
-$('visionAdapterSelect').addEventListener('change',()=>{clearAssemblySuggestion();state.visionAdapter=VISION_ADAPTERS[$('visionAdapterSelect').value]||VISION_ADAPTERS.fixture;clearTemporalRuntime();startVisionRuntime();});
+$('visionMode').addEventListener('change',()=>{if(visionMode()==='manual'&&state.shadowModel.binding)void stopShadowModel('camera_changed');clearHandoffConfirmation();clearAssemblySuggestion();state.visionMode=visionMode();startVisionRuntime();render();});
+$('visionAdapterSelect').addEventListener('change',()=>{if(state.shadowModel.binding)void stopShadowModel('adapter_changed');clearAssemblySuggestion();state.visionAdapter=VISION_ADAPTERS[$('visionAdapterSelect').value]||VISION_ADAPTERS.fixture;clearTemporalRuntime();startVisionRuntime();updateShadowStartControl();});
+$('visionDetectorName').addEventListener('input',()=>{if(state.shadowModel.binding)void stopShadowModel('champion_changed');updateShadowStartControl();});
 $('loadVisionModel').addEventListener('click',()=>loadGovernedVisionModel().catch(e=>{setVisionModelStatus('error',e.message);log('ERROR',e.message);}));
 $('unloadVisionModel').addEventListener('click',()=>unloadGovernedVisionModel());
 $('startShadowModel').addEventListener('click',()=>startShadowModel().catch(e=>{setShadowStatus('error',e.message);log('SHADOW',e.message);}));

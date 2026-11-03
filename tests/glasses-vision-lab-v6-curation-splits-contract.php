@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+if(PHP_SAPI!=='cli'){http_response_code(404);exit('Not found.');}
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/pos-core.php';
 require_once __DIR__.'/../includes/kds-core.php';
@@ -23,6 +24,14 @@ function v6_sample(PDO $pdo,int $org,array $device,string $session,string $key,s
     glasses_build_observe($pdo,$device,$session,['observationKey'=>$key,'componentKey'=>$component,'displayName'=>'Bacon','observationAction'=>'added','quantity'=>1,'confidence'=>.91,'trackingId'=>'v6-'.$key,'metadata'=>['detectorLabel'=>'bacon']]);
     $sample=glasses_vision_lab_queue_observation($pdo,$org,$key,null,$actor);
     return glasses_vision_lab_review_sample($pdo,$org,(string)$sample['publicId'],['decision'=>'approve','notes'=>'V6 approved evidence.'],$actor);
+}
+
+if(($argv[1]??'')==='concurrent-add'){
+    $pdo=app_pdo();$pdo->exec('SET SESSION innodb_lock_wait_timeout=10');
+    echo $pdo->query('SELECT CONNECTION_ID()')->fetchColumn()."\n";fflush(STDOUT);
+    try{glasses_vision_lab_add_dataset_sample($pdo,(int)$argv[2],$argv[3],$argv[4],'train');}
+    catch(InvalidArgumentException $error){v6_assert($error->getMessage()==='Frozen datasets are immutable.','The blocked writer must recheck the locked dataset status.');exit;}
+    throw new RuntimeException('A concurrent writer modified the frozen dataset.');
 }
 
 $pdo=app_pdo();v6_assert(glasses_vision_curation_ready($pdo),'Vision Lab V6 migration must be installed.');
@@ -88,8 +97,43 @@ v6_assert(($splits['train']??0)>0&&($splits['val']??0)>0&&($splits['test']??0)>0
 $state2=[];foreach($rows2 as $r)$state2[$r['samplePublicId']]=$r;
 v6_assert($state2[$samples['a1']['publicId']]['split']===$state2[$samples['a2']['publicId']]['split'],'Applied dataset must retain protected group co-location.');
 
-$frozen=glasses_vision_lab_freeze_dataset($pdo,$org,(string)$dataset['publicId'],$actor);
+$datasetPublic=(string)$dataset['publicId'];$independent=(string)$samples['c1']['publicId'];$excluded=(string)$samples['d1']['publicId'];
+$priorSplit=$state2[$independent]['split'];
+glasses_vision_dataset_intelligence_set_split($pdo,$org,$datasetPublic,$independent,$priorSplit==='train'?'val':'train');
+$blocked=false;try{glasses_vision_lab_freeze_dataset($pdo,$org,$datasetPublic,$actor);}catch(InvalidArgumentException $error){$blocked=str_contains($error->getMessage(),'changed after applying');}
+v6_assert($blocked,'A direct split edit must invalidate the previous applied sample mapping.');
+glasses_vision_lab_add_dataset_sample($pdo,$org,$datasetPublic,$excluded,'train');
+glasses_vision_curation_decide($pdo,$org,$datasetPublic,$excluded,'include','Restore sample before replanning.',$actor);
+$blocked=false;try{glasses_vision_curation_apply_split_plan($pdo,$org,$plan2['publicId'],$actor);}catch(InvalidArgumentException $error){$blocked=str_contains($error->getMessage(),'Dataset samples changed');}
+v6_assert($blocked,'An old draft plan cannot be applied to a changed included sample set.');
+glasses_vision_curation_decide($pdo,$org,$datasetPublic,$excluded,'exclude','Confirm the redundant sample is excluded.',$actor);
+$freshPlan=glasses_vision_curation_create_split_plan($pdo,$org,$datasetPublic,['seed'=>74],$actor);
+glasses_vision_curation_apply_split_plan($pdo,$org,$freshPlan['publicId'],$actor);
+
+$pdo->beginTransaction();$worker=null;$pipes=[];
+try{
+    glasses_vision_lab_lock_dataset($pdo,$org,$datasetPublic);
+    $worker=proc_open([PHP_BINARY,__FILE__,'concurrent-add',(string)$org,$datasetPublic,$excluded],[0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']],$pipes);
+    v6_assert(is_resource($worker),'Start an independent database writer.');
+    fclose($pipes[0]);stream_set_timeout($pipes[1],10);
+    $connection=(int)fgets($pipes[1]);v6_assert($connection>0,'Concurrent writer must connect.');
+    $deadline=microtime(true)+5;
+    $waiting=$pdo->prepare("SELECT COUNT(*) FROM information_schema.INNODB_TRX WHERE trx_mysql_thread_id=? AND trx_state='LOCK WAIT'");
+    do{$waiting->execute([$connection]);$blocked=(int)$waiting->fetchColumn()===1;if(!$blocked)usleep(200000);}while(!$blocked&&microtime(true)<$deadline);
+    v6_assert($blocked,'Concurrent writer must wait on the canonical dataset lock.');
+    $frozen=glasses_vision_lab_freeze_dataset($pdo,$org,$datasetPublic,$actor);
+    $pdo->commit();
+    $errors=stream_get_contents($pipes[2]);
+    v6_assert(proc_close($worker)===0,'Waiting writer must reject a frozen dataset. '.$errors);
+}finally{
+    if($pdo->inTransaction())$pdo->rollBack();
+    if(is_resource($worker))proc_terminate($worker);
+    foreach($pipes as $pipe)if(is_resource($pipe))fclose($pipe);
+    if(is_resource($worker))proc_close($worker);
+}
 v6_assert($frozen['status']==='frozen'&&strlen((string)$frozen['datasetHash'])===64,'Curated group-split dataset must freeze successfully.');
+$replayed=glasses_vision_lab_freeze_dataset($pdo,$org,$datasetPublic,$actor);
+v6_assert($replayed===$frozen&&$replayed['itemCount']===4,'Concurrent adds and freeze replay must preserve the exact frozen dataset.');
 
 $page=file_get_contents(__DIR__.'/../glasses-vision-lab.php');$api=file_get_contents(__DIR__.'/../api/glasses-vision-lab.php');$js=file_get_contents(__DIR__.'/../assets/js/glasses-vision-lab.js');
 v6_assert((str_contains($page,'Vision Lab V6')||str_contains($page,'Vision Lab V7')||str_contains($page,'Vision Lab V8')||str_contains($page,'Vision Lab V9'))&&str_contains($page,'Curated Dataset Builder'),'V6 workspace must expose curated dataset controls.');

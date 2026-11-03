@@ -35,6 +35,7 @@ function fm8d7_status(PDO $pdo,array $actor):array
 }
 function fm8d7_operations(PDO $pdo,array $actor):array
 {
+    if(!glasses_vision_lab_org_access($pdo,$actor,'glasses.view'))throw new DomainException('Pooled Vision Operations read is not permitted.');
     $data=glasses_vision_ops_catalog($pdo,$actor);
     if(empty($data['ready']))return fm8d7_observe('AR Glasses Operations is not installed or upgraded.');
     $s=(array)($data['summary']??[]);
@@ -72,6 +73,7 @@ function fm8d7_models(PDO $pdo,array $actor):array
 }
 function fm8d7_scenes(PDO $pdo,array $actor,array $args):array
 {
+    if(!glasses_vision_lab_org_access($pdo,$actor,'glasses.view'))throw new DomainException('Pooled Vision Lab scene read is not permitted.');
     $limit=max(1,min(5,(int)($args['limit']??3)));
     $data=glasses_vision_scene_recent($pdo,(int)$actor['organization_id'],$limit);
     if(empty($data['ready']))return fm8d7_observe('Live Vision Scene database is not installed or upgraded.');
@@ -89,6 +91,7 @@ function fm8d7_scenes(PDO $pdo,array $actor,array $args):array
 }
 function fm8d7_validations(PDO $pdo,array $actor,array $args):array
 {
+    if(!glasses_vision_lab_org_access($pdo,$actor,'glasses.view'))throw new DomainException('Pooled Vision Lab validation read is not permitted.');
     if(!glasses_vision_final_ready($pdo))
         return fm8d7_observe('Final Product Validation database is not installed or upgraded.');
     $rows=glasses_vision_final_recent($pdo,(int)$actor['organization_id'],
@@ -103,6 +106,7 @@ function fm8d7_validations(PDO $pdo,array $actor,array $args):array
 }
 function fm8d7_fleet(PDO $pdo,array $actor):array
 {
+    if(!glasses_vision_lab_org_access($pdo,$actor,'glasses.view'))throw new DomainException('Pooled Vision Lab fleet read is not permitted.');
     $data=glasses_vision_fleet_health_catalog($pdo,(int)$actor['organization_id']);
     if(empty($data['ready']))return fm8d7_observe('Vision Fleet Health database is not installed or upgraded.');
     $states=(array)($data['states']??[]);
@@ -116,23 +120,24 @@ function fm8d7_vision_catalogue(array $principal):array
 {
     if(!app_has_permission('glasses.view',$principal))return [];
     $auth=static fn(array $actor,array $args):bool=>app_has_permission('glasses.view',$actor);
+    $pooled=static fn(array $actor,array $args):bool=>glasses_vision_lab_org_access(null,$actor,'glasses.view');
     $none=['type'=>'object','properties'=>new stdClass(),'additionalProperties'=>false];
     $limit=['type'=>'object','properties'=>[
         'limit'=>['type'=>'integer','minimum'=>1,'maximum'=>8,
             'description'=>'Number of latest recorded observations to summarize']],
         'additionalProperties'=>false];
     $validate=static fn(array $args,array $actor):array=>[];
-    return [
+    $tools=[
       'get_vision_lab_overview'=>[
         'description'=>'Read real Vision Lab inventory of devices, assignments, missions, saved samples, datasets and open drift incidents for the signed-in restaurant. Use when asked what Vision Lab knows or whether training data exists. No model actions or camera access.',
         'parameters'=>$none,'allowedArguments'=>[],'impact'=>'read',
-        'authorize'=>$auth,'validate'=>$validate,
+        'authorize'=>$pooled,'validate'=>$validate,
         'execute'=>static fn(array $args,array $actor):array=>fm8d7_status(app_pdo(),$actor),
       ],
       'get_vision_device_health'=>[
         'description'=>'Read current AR Glasses Operations recorded device health, offline or warning devices, active rollouts and drift alerts. Use for "are my glasses connected", which cameras are offline, or equipment health. Does not start or stop a device.',
         'parameters'=>$none,'allowedArguments'=>[],'impact'=>'read',
-        'authorize'=>$auth,'validate'=>$validate,
+        'authorize'=>$pooled,'validate'=>$validate,
         'execute'=>static fn(array $args,array $actor):array=>fm8d7_operations(app_pdo(),$actor),
       ],
       'get_vision_model_rollouts'=>[
@@ -144,20 +149,21 @@ function fm8d7_vision_catalogue(array $principal):array
       'get_recent_vision_observations'=>[
         'description'=>'Read the last 1–5 SAVED Vision Scene observation summaries and detected object labels from the signed-in restaurant. This is evidence history, not a live camera feed. Never pretend to see live video.',
         'parameters'=>$limit,'allowedArguments'=>['limit'],'impact'=>'read',
-        'authorize'=>$auth,'validate'=>$validate,
+        'authorize'=>$pooled,'validate'=>$validate,
         'execute'=>static fn(array $args,array $actor):array=>fm8d7_scenes(app_pdo(),$actor,$args),
       ],
       'get_recent_product_vision_checks'=>[
         'description'=>'Read recent saved camera-assisted final product presentation or quality checks. Results are advisory and never automatically authorize release or food safety compliance.',
         'parameters'=>$limit,'allowedArguments'=>['limit'],'impact'=>'read',
-        'authorize'=>$auth,'validate'=>$validate,
+        'authorize'=>$pooled,'validate'=>$validate,
         'execute'=>static fn(array $args,array $actor):array=>fm8d7_validations(app_pdo(),$actor,$args),
       ],
       'get_vision_fleet_analyses'=>[
         'description'=>'Read historical fleet-health analyses, state breakdowns, and count of recorded fleet actions. Never interpret past analyses as proof of live device connection.',
         'parameters'=>$none,'allowedArguments'=>[],'impact'=>'read',
-        'authorize'=>$auth,'validate'=>$validate,
+        'authorize'=>$pooled,'validate'=>$validate,
         'execute'=>static fn(array $args,array $actor):array=>fm8d7_fleet(app_pdo(),$actor),
       ],
     ];
+    return $pooled($principal,[])?$tools:['get_vision_model_rollouts'=>$tools['get_vision_model_rollouts']];
 }

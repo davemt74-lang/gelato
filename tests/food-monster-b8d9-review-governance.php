@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once dirname(__DIR__).'/includes/bootstrap.php';
 require_once dirname(__DIR__).'/includes/food-monster-llm.php';
 require_once dirname(__DIR__).'/includes/food-monster-b8d3-tool-runtime.php';
+require_once __DIR__.'/glasses-vision-lab-auth-fixture.php';
 
 $checks=0;
 function b8d9_check(bool $ok,string $desc):void {
@@ -18,7 +19,7 @@ $pdo->prepare("INSERT INTO users (email,password_hash,first_name,last_name,displ
 $uid=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO organization_memberships (organization_id,user_id,status)
     VALUES (?,?,'active')")->execute([$org,$uid]);
-$actor=['id'=>$uid,'organization_id'=>$org,'display_name'=>'Review Inspector','permissions'=>['glasses.view']];
+$actor=array_replace(vision_lab_test_grant($pdo,$org,$uid,['glasses.view','glasses.manage']),['display_name'=>'Review Inspector','permissions'=>['glasses.view']]);
 b8d9_check(glasses_vision_lab_ready($pdo),'Vision Lab installed');
 b8d9_check(glasses_vision_annotation_qa_ready($pdo),'Vision QA schema installed');
 b8d9_check(glasses_v11_model_rc_ready($pdo),'model release governance schema installed');
@@ -117,7 +118,8 @@ b8d9_check(($blocked['data']['status']??'')==='denied',
     'fresh authorization blocks review after permission revoked');
 $pdo->prepare("INSERT INTO organizations (name,status,timezone) VALUES (?,'active','America/Phoenix')")
     ->execute(['Other Vision Review '.$slug]);$otherOrg=(int)$pdo->lastInsertId();
-$foreign=fm8d9_review_queue($pdo,array_replace($actor,['organization_id'=>$otherOrg]));
+$pdo->prepare("INSERT INTO organization_memberships (organization_id,user_id,status) VALUES (?,?,'active')")->execute([$otherOrg,$uid]);
+$foreign=fm8d9_review_queue($pdo,vision_lab_test_grant($pdo,$otherOrg,$uid,['glasses.view']));
 b8d9_check(!str_contains($foreign['data']['answer'],$sampleA)
     &&str_contains($foreign['data']['answer'],'No unreviewed samples'),
     'tenant isolation keeps review sample metadata private');

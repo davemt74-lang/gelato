@@ -1,0 +1,111 @@
+name: Vision Lab and Simulator Boundaries
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/glasses-vision-boundaries.yml'
+      - 'api/glasses-vision-*.php'
+      - 'api/glasses-simulator.php'
+      - 'api/glasses-device.php'
+      - 'includes/glasses-vision-*.php'
+      - 'includes/glasses-simulator.php'
+      - 'includes/glasses-validation.php'
+      - 'includes/glasses-work.php'
+      - 'includes/operational-access.php'
+      - 'glasses-vision-lab.php'
+      - 'assets/js/glasses-vision-lab.js'
+      - 'assets/js/glasses-web-simulator.js'
+      - 'tests/glasses-vision-boundaries-*'
+      - 'tests/glasses-vision-lab-freeze-browser.cjs'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/glasses-vision-boundaries.yml'
+      - 'api/glasses-vision-*.php'
+      - 'api/glasses-simulator.php'
+      - 'api/glasses-device.php'
+      - 'includes/glasses-vision-*.php'
+      - 'includes/glasses-simulator.php'
+      - 'includes/glasses-validation.php'
+      - 'includes/glasses-work.php'
+      - 'includes/operational-access.php'
+      - 'glasses-vision-lab.php'
+      - 'assets/js/glasses-vision-lab.js'
+      - 'assets/js/glasses-web-simulator.js'
+      - 'tests/glasses-vision-boundaries-*'
+      - 'tests/glasses-vision-lab-freeze-browser.cjs'
+
+permissions:
+  contents: read
+
+jobs:
+  vision-boundaries:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Create an isolated fixture database
+        run: |
+          export MARIADB_ROOT_PASSWORD="$(openssl rand -hex 24)"
+          export MARIADB_PASSWORD="$(openssl rand -hex 24)"
+          echo "::add-mask::$MARIADB_ROOT_PASSWORD"
+          echo "::add-mask::$MARIADB_PASSWORD"
+          docker run -d --name gelato-vision-ci -p 127.0.0.1::3306 \
+            --env MARIADB_ROOT_PASSWORD --env MARIADB_PASSWORD \
+            --env MARIADB_DATABASE=gelato_vision_ci --env MARIADB_USER=gelato_vision_ci mariadb:10.11
+          export MYSQL_PWD="$MARIADB_PASSWORD"
+          db() {
+            docker exec -i --env MYSQL_PWD gelato-vision-ci mariadb \
+              --protocol=tcp --host=127.0.0.1 --user=gelato_vision_ci gelato_vision_ci "$@"
+          }
+          for attempt in $(seq 1 60); do
+            if db -e 'SELECT 1' >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          db < database/install.sql
+          port="$(docker port gelato-vision-ci 3306/tcp | sed -n 's/^127\.0\.0\.1://p')"
+          [[ "$port" =~ ^[0-9]+$ ]]
+          {
+            echo "GELATO_VISION_CI_DB_PORT=$port"
+            echo "GELATO_VISION_CI_DB_PASSWORD=$MARIADB_PASSWORD"
+          } >> "$GITHUB_ENV"
+      - name: Apply application migrations
+        run: |
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Vision CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix'],
+            'database'=>['host'=>'127.0.0.1','port'=>(int)getenv('GELATO_VISION_CI_DB_PORT'),
+              'name'=>'gelato_vision_ci','username'=>'gelato_vision_ci',
+              'password'=>getenv('GELATO_VISION_CI_DB_PASSWORD'),'charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_vision_ci','cookie_secure'=>false],
+            'storage'=>['private_root'=>getenv('RUNNER_TEMP').'/gelato-vision-private'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $upgrade=new UpgradeService(app_pdo(),__DIR__);
+          $upgrade->ensureTrackingTables();
+          $upgrade->bootstrapLegacyHistory(null);
+          $upgrade->applyPending(null);
+          if($upgrade->pendingMigrations())exit(1);
+          PHP
+      - name: Exercise authenticated Vision Lab and simulator boundaries
+        run: node tests/glasses-vision-boundaries-http.cjs
+      - name: Exercise the shipped Freeze controls in Chromium
+        run: |
+          npm install --prefix /tmp/gelato-vision-lab-browser --no-audit --no-fund playwright@1.62.1
+          node /tmp/gelato-vision-lab-browser/node_modules/playwright/cli.js install --with-deps chromium
+          NODE_PATH=/tmp/gelato-vision-lab-browser/node_modules node tests/glasses-vision-lab-freeze-browser.cjs
+      - name: Remove the fixture database
+        if: always()
+        run: docker rm -f gelato-vision-ci >/dev/null 2>&1 || true

@@ -22,6 +22,7 @@ try{
         }
         if($action==='work'){
             $device=glasses_simulator_device($pdo,$user,(string)($_GET['devicePublicId']??''),false);
+            glasses_simulator_assert_kitchen_view($pdo,$user,$device);
             $runtimePublicId=trim((string)($_GET['runtimePublicId']??''));
             if($runtimePublicId!=='')glasses_employee_runtime_assert_binding($pdo,$user,$runtimePublicId,$device);
             app_json_response([

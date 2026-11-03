@@ -21,11 +21,7 @@ $pdo->prepare("INSERT INTO glasses_vision_model_packages (organization_id,public
 
 $datasetPublic='vision-dataset-'.$slug;$assemblyHash=hash('sha256','assembly-'.$slug);
 $pdo->prepare("INSERT INTO glasses_vision_dataset_versions (organization_id,public_id,name,version_label,status,assembly_policy_json,assembly_manifest_json,assembly_hash,created_by) VALUES (?,?,?,'v11','draft','{}','{}',?,?)")
-  ->execute([$org,$datasetPublic,'V11 Corpus',$assemblyHash,$actor]);$datasetId=(int)$pdo->lastInsertId();
-
-$planPublic='vision-split-'.$slug;$planHash=hash('sha256','split-'.$slug);
-$pdo->prepare("INSERT INTO glasses_vision_dataset_split_plans (organization_id,public_id,dataset_id,status,seed,train_ratio,val_ratio,test_ratio,policy_json,manifest_json,plan_hash,created_by,applied_by,applied_at) VALUES (?,?,?,'applied',74,.7,.15,.15,'{}','{}',?,?,?,NOW(6))")
-  ->execute([$org,$planPublic,$datasetId,$planHash,$actor,$actor]);$planId=(int)$pdo->lastInsertId();
+  ->execute([$org,$datasetPublic,'V11 Corpus',$assemblyHash,$actor]);
 
 $retained=vision_contract_retained_release($pdo,$org,$actor,$datasetPublic,30,3);
 $datasetHash=$retained['dataset']['datasetHash'];$releasePublic=$retained['release']['publicId'];$releaseHash=$retained['release']['releaseHash'];$releaseId=(int)$retained['row']['id'];

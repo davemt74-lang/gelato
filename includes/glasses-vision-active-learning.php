@@ -130,7 +130,13 @@ function glasses_vision_active_learning_scan(PDO $pdo,int $org,int $actor,string
 function glasses_vision_active_learning_candidates(PDO $pdo,int $org,string $status='open',int $limit=200): array {
     $limit=max(1,min(500,$limit));$where=$status==='all'?'':' AND c.status=?';$args=[$org];if($status!=='all')$args[]=$status;
     $q=$pdo->prepare("SELECT c.*,d.public_id device_public_id,d.display_name device_name,l.name location_name,s.name station_name,u.display_name operator_name,m.public_id mission_public_id,m.title mission_title,ts.public_id sample_public_id
-      FROM glasses_vision_active_learning_candidates c LEFT JOIN glasses_devices d ON d.id=c.device_id LEFT JOIN locations l ON l.id=c.location_id LEFT JOIN kds_stations s ON s.id=c.station_id LEFT JOIN users u ON u.id=c.operator_user_id LEFT JOIN glasses_vision_training_missions m ON m.id=c.mission_id LEFT JOIN glasses_vision_training_samples ts ON ts.id=c.queued_sample_id
+      FROM glasses_vision_active_learning_candidates c
+      LEFT JOIN glasses_devices d ON d.id=c.device_id AND d.organization_id=c.organization_id
+      LEFT JOIN locations l ON l.id=c.location_id AND l.organization_id=c.organization_id
+      LEFT JOIN kds_stations s ON s.id=c.station_id AND s.organization_id=c.organization_id AND (c.location_id IS NULL OR s.location_id=c.location_id)
+      LEFT JOIN users u ON u.id=c.operator_user_id AND EXISTS (SELECT 1 FROM organization_memberships om WHERE om.user_id=u.id AND om.organization_id=c.organization_id)
+      LEFT JOIN glasses_vision_training_missions m ON m.id=c.mission_id AND m.organization_id=c.organization_id
+      LEFT JOIN glasses_vision_training_samples ts ON ts.id=c.queued_sample_id AND ts.organization_id=c.organization_id
       WHERE c.organization_id=?".$where." ORDER BY c.priority_score DESC,c.generated_at DESC LIMIT ".$limit);
     $q->execute($args);return array_map(static function($r):array{return ['publicId'=>$r['public_id'],'candidateType'=>$r['candidate_type'],'sourceType'=>$r['source_type'],'sourceReference'=>$r['source_reference'],'canonicalLabel'=>$r['canonical_label'],'priorityScore'=>(float)$r['priority_score'],'severity'=>$r['severity'],'reason'=>$r['reason'],'evidence'=>json_decode((string)($r['evidence_json']??'null'),true)?:[],'suggestedTitle'=>$r['suggested_title'],'suggestedTargets'=>json_decode((string)($r['suggested_targets_json']??'null'),true)?:[],'status'=>$r['status'],'devicePublicId'=>$r['device_public_id'],'deviceName'=>$r['device_name'],'locationName'=>$r['location_name'],'stationName'=>$r['station_name'],'operatorName'=>$r['operator_name'],'missionPublicId'=>$r['mission_public_id'],'missionTitle'=>$r['mission_title'],'samplePublicId'=>$r['sample_public_id'],'generatedAt'=>$r['generated_at']];},$q->fetchAll());
 }
@@ -138,7 +144,12 @@ function glasses_vision_active_learning_create_mission(PDO $pdo,int $org,string 
     return glasses_transaction($pdo,function()use($pdo,$org,$candidatePublic,$actor):array{
         $q=$pdo->prepare("SELECT * FROM glasses_vision_active_learning_candidates WHERE organization_id=? AND public_id=? LIMIT 1 FOR UPDATE");$q->execute([$org,$candidatePublic]);$c=$q->fetch();if(!$c)throw new InvalidArgumentException('Active-learning candidate was not found.');if($c['mission_id']!==null)throw new InvalidArgumentException('Candidate already has a training mission.');
         $targets=json_decode((string)$c['suggested_targets_json'],true)?:glasses_vision_active_learning_targets((string)$c['candidate_type']);
-        $devicePublic=null;if($c['device_id']!==null){$dq=$pdo->prepare("SELECT public_id FROM glasses_devices WHERE organization_id=? AND id=?");$dq->execute([$org,(int)$c['device_id']]);$devicePublic=$dq->fetchColumn()?:null;}
+        $devicePublic=null;if($c['device_id']!==null){
+            // Candidates retain the capture route even when a device has moved since then.
+            $dq=$pdo->prepare("SELECT public_id FROM glasses_devices WHERE organization_id=? AND id=? AND status='active'
+              AND (? IS NULL OR location_id=?) AND (? IS NULL OR station_id IS NULL OR station_id=?)");
+            $dq->execute([$org,(int)$c['device_id'],$c['location_id'],$c['location_id'],$c['station_id'],$c['station_id']]);$devicePublic=$dq->fetchColumn()?:null;
+        }
         $stationPublic=null;if($c['station_id']!==null){$sq=$pdo->prepare("SELECT public_id FROM kds_stations WHERE organization_id=? AND id=?");$sq->execute([$org,(int)$c['station_id']]);$stationPublic=$sq->fetchColumn()?:null;}
         $mission=glasses_vision_lab_create_mission($pdo,$org,['title'=>$c['suggested_title']?:'Active-learning mission','description'=>$c['reason'],'assignedUserId'=>$c['operator_user_id'],'assignedDevicePublicId'=>$devicePublic,'locationId'=>$c['location_id'],'stationPublicId'=>$stationPublic,'targetSamples'=>(int)($targets['samples']??0),'targetPositive'=>(int)($targets['positive']??0),'targetNegative'=>(int)($targets['negative']??0),'targetHardExamples'=>(int)($targets['hardExamples']??0),'sourceType'=>'active_learning','sourceReference'=>$c['public_id'],'conditions'=>['candidateType'=>$c['candidate_type'],'evidence'=>json_decode((string)($c['evidence_json']??'null'),true)?:[]]],$actor);
         $mq=$pdo->prepare("SELECT id FROM glasses_vision_training_missions WHERE organization_id=? AND public_id=?");$mq->execute([$org,(string)$mission['publicId']]);$missionId=(int)$mq->fetchColumn();

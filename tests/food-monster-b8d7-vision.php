@@ -3,6 +3,7 @@ declare(strict_types=1);
 require_once dirname(__DIR__).'/includes/bootstrap.php';
 require_once dirname(__DIR__).'/includes/food-monster-llm.php';
 require_once dirname(__DIR__).'/includes/food-monster-b8d3-tool-runtime.php';
+require_once __DIR__.'/glasses-vision-lab-auth-fixture.php';
 
 $checks=0;
 function b8d7_assert(bool $yes,string $msg):void{
@@ -18,8 +19,7 @@ $pdo->prepare("INSERT INTO users (email,password_hash,first_name,last_name,displ
 $uid=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO organization_memberships (organization_id,user_id,status)
     VALUES (?,?,'active')")->execute([$org,$uid]);
-$actor=['id'=>$uid,'organization_id'=>$org,'display_name'=>'Vision Tester',
-    'permissions'=>['glasses.view']];
+$actor=vision_lab_test_grant($pdo,$org,$uid,['glasses.view'])+['display_name'=>'Vision Tester'];
 $registered=fm8d7_vision_catalogue($actor);
 $names=['get_vision_lab_overview','get_vision_device_health','get_vision_model_rollouts',
     'get_recent_vision_observations','get_recent_product_vision_checks','get_vision_fleet_analyses'];
@@ -79,7 +79,9 @@ b8d7_assert(($denied['data']['status']??'')==='denied',
     'fresh permission revocation blocks model-selected vision access');
 $pdo->prepare("INSERT INTO organizations (name,status,timezone) VALUES (?,'active','America/Phoenix')")
     ->execute(['Another Vision '.$slug]);
-$other=array_replace($actor,['organization_id'=>(int)$pdo->lastInsertId()]);
+$otherOrg=(int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO organization_memberships (organization_id,user_id,status) VALUES (?,?,'active')")->execute([$otherOrg,$uid]);
+$other=vision_lab_test_grant($pdo,$otherOrg,$uid,['glasses.view']);
 $foreign=$registered['get_recent_vision_observations']['execute']([],$other);
 b8d7_assert(str_contains($foreign['data']['answer'],'No saved'),
     'scenes from another restaurant never appear across tenant boundary');
