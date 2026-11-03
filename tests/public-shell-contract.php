@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 $root = dirname(__DIR__);
-$marker = '<script src="assets/js/public-shell.js?v=20260915-1"></script>';
+$marker = '<script src="assets/js/public-shell.js?v=20260915-1-hardening-d1"></script>';
 $publicPages = [
     'index.php', 'menu.php', 'gelato.php', 'about.php', 'contact.php', 'locations.php',
     'online-order.php', 'customer-signup.php', 'customer-login.php', 'customer-account.php',

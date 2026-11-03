@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__.'/glasses-vision-media-retention.php';
 
 require_once __DIR__.'/glasses-vision-mining.php';
 require_once __DIR__.'/glasses-vision-training-media.php';
@@ -38,6 +39,7 @@ function glasses_vision_retraining_run(PDO $pdo,int $org,string $publicId): arra
 
 function glasses_vision_retraining_media_integrity(array $media): array
 {
+    if(!glasses_vision_media_retained($media))return ['ok'=>false,'reason'=>'training_media_retention_expired'];
     $relative=str_replace('\\','/',trim((string)($media['storage_relative_path']??'')));
     if($relative===''||str_starts_with($relative,'/')||preg_match('~(^|/)\.\.(/|$)~',$relative))
         return ['ok'=>false,'reason'=>'invalid_media_storage_reference'];
@@ -89,7 +91,7 @@ function glasses_vision_retraining_source(PDO $pdo,int $org,array $candidate): a
     }
     if(!$media&&$sample){
         $mq=$pdo->prepare("SELECT * FROM glasses_vision_training_media
-          WHERE organization_id=? AND sample_id=? AND status='active'
+          WHERE organization_id=? AND sample_id=? AND ".glasses_vision_media_retained_sql()."
           ORDER BY CASE quality_state WHEN 'good' THEN 0 WHEN 'warning' THEN 1 WHEN 'review' THEN 2 WHEN 'poor' THEN 3 ELSE 4 END,created_at,id LIMIT 1");
         $mq->execute([$org,(int)$sample['id']]);$media=$mq->fetch()?:null;
     }
@@ -99,6 +101,7 @@ function glasses_vision_retraining_source(PDO $pdo,int $org,array $candidate): a
     elseif((string)$sample['review_status']!=='approved'){$eligibility='ineligible';$reason='sample_not_approved';}
     elseif(!$media){$eligibility='ineligible';$reason='missing_active_training_media';}
     elseif((string)$media['status']!=='active'){$eligibility='ineligible';$reason='training_media_not_active';}
+    elseif(!glasses_vision_media_retained($media)){$eligibility='ineligible';$reason='training_media_retention_expired';}
     elseif((string)$media['consent_basis']!=='training_media_opt_in'){$eligibility='ineligible';$reason='training_media_not_opted_in';}
     elseif((string)$media['quality_state']==='poor'){$eligibility='ineligible';$reason='poor_training_media';}
     else{

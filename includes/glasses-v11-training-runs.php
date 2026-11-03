@@ -85,6 +85,7 @@ function glasses_v11_training_run_contract(PDO $pdo,int $org,string $experimentP
   $dq->execute([$org,(int)$x['candidate_dataset_id']]);$assemblyHash=$dq->fetchColumn();
   if(!is_string($assemblyHash)||strlen($assemblyHash)!==64)throw new InvalidArgumentException('V11 training run requires a V11 assembled dataset hash.');
   if((string)$x['release_status']!=='qualified')throw new InvalidArgumentException('Training run requires a qualified training release.');
+  glasses_vision_training_release_require_sources($pdo,$org,glasses_vision_training_release_row($pdo,$org,(string)$x['release_public_id']));
   $config=glasses_v11_training_run_config(json_decode((string)$x['training_config_json'],true)?:[]);
   if(isset($input['config'])){
     if(!is_array($input['config']))throw new InvalidArgumentException('Training configuration override must be an object.');
@@ -132,6 +133,7 @@ function glasses_v11_training_run_start(PDO $pdo,int $org,string $publicId,int $
     $r=glasses_v11_training_run_row($pdo,$org,$publicId,true);
     if((string)$r['status']==='running')return glasses_v11_training_run_public($r);
     if((string)$r['status']!=='planned')throw new InvalidArgumentException('Only a planned training run may start.');
+    glasses_vision_training_release_require_sources($pdo,$org,glasses_vision_training_release_row($pdo,$org,(string)$r['release_public_id']));
     if((string)$r['experiment_status']==='ready')glasses_vision_experiment_start($pdo,$org,(string)$r['experiment_public_id'],$actor);
     $pdo->prepare("UPDATE glasses_vision_training_runs SET status='running',started_by=?,started_at=NOW(6) WHERE organization_id=? AND id=?")->execute([$actor,$org,(int)$r['id']]);
     return glasses_v11_training_run_public(glasses_v11_training_run_row($pdo,$org,$publicId));
@@ -190,6 +192,7 @@ function glasses_v11_training_run_complete(PDO $pdo,int $org,string $publicId,ar
 function glasses_v11_training_run_rerun(PDO $pdo,int $org,string $publicId,array $input,int $actor): array {
   $parent=glasses_v11_training_run_row($pdo,$org,$publicId,false);
   if(!in_array((string)$parent['status'],['failed','cancelled'],true))throw new InvalidArgumentException('Only failed or cancelled runs may be retried.');
+  glasses_vision_training_release_require_sources($pdo,$org,glasses_vision_training_release_row($pdo,$org,(string)$parent['release_public_id']));
   $runKey=mb_substr(trim((string)($input['runKey']??($parent['run_key'].'-retry-'.((int)$parent['attempt_no']+1)))),0,190,'UTF-8');
   $attempt=(int)$parent['attempt_no']+1;
   $identity=['schema'=>GLASSES_V11_TRAINING_RUN_SCHEMA,'experimentHash'=>$parent['experiment_hash'],'datasetHash'=>$parent['dataset_hash_snapshot'],

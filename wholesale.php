@@ -89,6 +89,6 @@ $csrf = app_csrf_token();
   });
 })();
 </script>
-<script src="assets/js/public-shell.js?v=20260915-1"></script>
+<script src="assets/js/public-shell.js?v=20260915-1-hardening-d1"></script>
 </body>
 </html>

@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__.'/glasses-vision-media-retention.php';
 require_once __DIR__.'/glasses-order-photo-stages.php';
 require_once __DIR__.'/customer-inbox-core.php';
 require_once __DIR__.'/glasses-vision-training-media.php';
@@ -63,7 +64,7 @@ function glasses_customer_photo_share_candidates(PDO $pdo,int $org,int $location
         JOIN glasses_camera_photo_library p ON p.id=s.photo_library_id AND p.organization_id=s.organization_id
             AND p.location_id=s.location_id AND p.status='active' AND p.camera_slot=s.camera_slot
         JOIN glasses_vision_training_media m ON m.id=p.media_id AND m.organization_id=p.organization_id
-            AND m.status='active' AND (m.retention_until IS NULL OR m.retention_until>NOW(6))
+            AND ".glasses_vision_media_retained_sql('m')."
         LEFT JOIN glasses_order_photo_shares share ON share.organization_id=s.organization_id AND share.stage_id=s.id
         LEFT JOIN glasses_order_photo_notifications notif ON notif.organization_id=s.organization_id
             AND notif.online_order_id=oo.id
@@ -139,7 +140,7 @@ function glasses_customer_photo_notify_once(PDO $pdo,int $org,int $onlineOrderId
           JOIN glasses_camera_photo_library p ON p.id=s.photo_library_id AND p.organization_id=s.organization_id
             AND p.location_id=s.location_id AND p.status='active'
           JOIN glasses_vision_training_media m ON m.id=p.media_id AND m.organization_id=p.organization_id
-            AND m.status='active' AND (m.retention_until IS NULL OR m.retention_until>NOW(6))
+            AND ".glasses_vision_media_retained_sql('m')."
           JOIN online_orders oo ON oo.pos_check_id=k.check_id AND oo.organization_id=s.organization_id
             AND oo.location_id=s.location_id AND oo.id=share.online_order_id
           WHERE share.organization_id=? AND share.online_order_id=? AND share.revoked_at IS NULL
@@ -216,7 +217,7 @@ function glasses_customer_photo_staff_action(PDO $pdo,array $user,int $locationI
         if(!$stage||$stage['status']!=='confirmed'||!glasses_customer_photo_stage_camera_valid((string)$stage['stage'],(int)$stage['camera_slot'])
             ||(int)$stage['revision']!==$revision||$stage['item_status']==='cancelled'
             ||$stage['photo_status']!=='active'||$stage['media_status']!=='active'
-            ||($stage['retention_until']!==null&&strtotime((string)$stage['retention_until'])<=time()))
+            ||!glasses_vision_media_retained(['status'=>$stage['media_status'],'retention_until'=>$stage['retention_until']]))
             throw new DomainException('Photo must be confirmed, current, active, and from the correct oven camera.');
         $current=$pdo->prepare("SELECT id,revoked_at,photo_library_id FROM glasses_order_photo_shares
             WHERE organization_id=? AND stage_id=? FOR UPDATE");
@@ -271,7 +272,7 @@ function glasses_customer_photo_visible(PDO $pdo,int $org,int $customerId,string
         JOIN glasses_camera_photo_library p ON p.id=s.photo_library_id AND p.organization_id=s.organization_id
             AND p.location_id=share.location_id AND p.id=share.photo_library_id AND p.status='active'
         JOIN glasses_vision_training_media m ON m.id=p.media_id AND m.organization_id=p.organization_id
-            AND m.status='active' AND (m.retention_until IS NULL OR m.retention_until>NOW(6))
+            AND ".glasses_vision_media_retained_sql('m')."
         WHERE share.organization_id=? AND share.location_id=? AND share.online_order_id=?
             AND share.revoked_at IS NULL ORDER BY s.reviewed_at ASC LIMIT 30");
     $q->execute([$org,(int)$order['location_id'],(int)$order['id']]);

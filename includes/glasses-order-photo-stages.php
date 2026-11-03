@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__.'/glasses-vision-media-retention.php';
 require_once __DIR__.'/glasses-camera-photo-library.php';
 require_once __DIR__.'/kds-core.php';
 
@@ -47,7 +48,7 @@ function glasses_order_photo_snapshot(PDO $pdo,array $user,int $locationId):arra
       JOIN kds_order_items k ON k.id=s.kds_item_id AND k.organization_id=s.organization_id
       JOIN pos_checks c ON c.id=k.check_id AND c.organization_id=k.organization_id
       LEFT JOIN glasses_camera_photo_library p ON p.id=s.photo_library_id AND p.organization_id=s.organization_id
-      LEFT JOIN glasses_vision_training_media m ON m.id=p.media_id AND m.organization_id=s.organization_id AND m.status='active'
+      LEFT JOIN glasses_vision_training_media m ON m.id=p.media_id AND m.organization_id=s.organization_id AND ".glasses_vision_media_retained_sql('m')."
       JOIN users u ON u.id=s.reviewer_id
       WHERE s.organization_id=? AND s.location_id=? ORDER BY s.reviewed_at DESC LIMIT 150");
     $q->execute([$org,$locationId]);$records=[];
@@ -104,7 +105,7 @@ function glasses_order_photo_action(PDO $pdo,array $user,int $locationId,array $
             $menu->execute([$org,(int)$item['pos_check_item_id']]);
             $expectedMenuId=(int)$menu->fetchColumn();
             $photo=$pdo->prepare("SELECT p.id,p.camera_slot,p.status,p.menu_item_id FROM glasses_camera_photo_library p
-                 JOIN glasses_vision_training_media m ON m.id=p.media_id AND m.organization_id=p.organization_id AND m.status='active'
+                 JOIN glasses_vision_training_media m ON m.id=p.media_id AND m.organization_id=p.organization_id AND ".glasses_vision_media_retained_sql('m')."
                  WHERE p.organization_id=? AND p.location_id=? AND p.id=? LIMIT 1 FOR UPDATE");
             $photo->execute([$org,$locationId,$v['photoLibraryId']]);$row=$photo->fetch(PDO::FETCH_ASSOC);
             if(!$row||$row['status']!=='active'||(int)$row['camera_slot']!==$slot)

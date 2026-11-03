@@ -11,7 +11,11 @@ if(!wholesale_receivables_ready($pdo))app_json_response(['ok'=>false,'message'=>
 if($_SERVER['REQUEST_METHOD']==='GET'){
     $action=(string)($_GET['action']??'list');
     try{
-        if($action==='list')app_json_response(['ok'=>true,'invoices'=>wholesale_receivables_list($pdo,$org),'aging'=>wholesale_receivables_aging($pdo,$org),'orders'=>wholesale_receivables_orders($pdo,$org)]);
+        if($action==='list'){
+            $limit=max(1,min(300,(int)($_GET['limit']??300)));$offset=max(0,(int)($_GET['offset']??0));
+            $invoices=wholesale_receivables_list($pdo,$org,$limit,$offset);
+            app_json_response(['ok'=>true,'invoices'=>$invoices,'invoicePage'=>wholesale_receivables_page_info($pdo,$org,null,$limit,$offset,count($invoices)),'aging'=>wholesale_receivables_aging($pdo,$org),'orders'=>wholesale_receivables_orders($pdo,$org)]);
+        }
         if($action==='detail'){$id=trim((string)($_GET['id']??''));if($id==='')throw new InvalidArgumentException('Wholesale invoice is required.');app_json_response(['ok'=>true,'detail'=>wholesale_receivables_detail($pdo,$org,$id)]);}
         throw new InvalidArgumentException('Unsupported Wholesale receivables action.');
     }catch(InvalidArgumentException|RuntimeException $e){app_json_response(['ok'=>false,'message'=>$e->getMessage()],422);}

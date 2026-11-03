@@ -12,7 +12,7 @@ $core=$read('includes/online-order-core.php');
 $integration=$read('includes/menu-order-integration.php');
 $endpoint=$read('api/online-order-customizations.php');
 $orderPage=$read('online-order.php');
-$foodCartActive=str_contains($orderPage,'assets/js/online-order-food.js?v=20260915-1');
+$foodCartActive=str_contains($orderPage,'assets/js/online-order-food.js?v=20260915-1-hardening-d1');
 $orderJs=$read($foodCartActive?'assets/js/online-order-food.js':'assets/js/online-order.js');
 $posEntry=$read('js/pos.js');
 $posJs=$read(str_contains($posEntry,'js/pos-runtime.js')?'js/pos-runtime.js':'js/pos.js');
@@ -39,7 +39,7 @@ $checks=[
     'customer customization labels stay display-only'=>str_contains($orderJs,'submitPayload')&&(str_contains($orderJs,'customizationLabels')||str_contains($orderJs,'row.labels')),
     'paid add-ons are server validated before POS pricing'=>str_contains($integration,'menu_manager_validate_addons')&&str_contains($integration,'menu_manager_apply_pos_addons'),
     'online order page loads current Food cart implementation'=>$foodCartActive,
-    'online order page keeps universal public shell'=>str_contains($orderPage,'assets/js/public-shell.js?v=20260915-1'),
+    'online order page keeps universal public shell'=>str_contains($orderPage,'assets/js/public-shell.js?v=20260915-1-hardening-d1'),
     'native POS renders line special instructions'=>str_contains($posJs,'special_instructions'),
     'native POS entrypoint preserves specialized runtime'=>str_contains($posEntry,'js/pos-runtime.js'),
     'KDS renders line special instructions'=>str_contains($kdsJs,'special_instructions'),

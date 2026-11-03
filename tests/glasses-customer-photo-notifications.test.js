@@ -3,6 +3,7 @@ const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/st
 const files={
  sql:fs.readFileSync('database/20261211_section260_customer_photo_notifications.sql','utf8'),
  core:fs.readFileSync('includes/glasses-customer-photo-notifications.php','utf8'),
+ retention:fs.readFileSync('includes/glasses-vision-media-retention.php','utf8'),
  api:fs.readFileSync('api/glasses-photo-notifications.php','utf8'),
  client:fs.readFileSync('assets/js/glasses-customer-photo-notifications.js','utf8'),
  portal:fs.readFileSync('customer-order-photos.php','utf8'),
@@ -29,8 +30,31 @@ assert.match(files.core,/customer_inbox_send_direct/);
 assert.match(files.core,/share\.photo_library_id/);
 assert.match(files.core,/s\.photo_library_id=share\.photo_library_id/);
 assert.match(files.core,/p\.id=share\.photo_library_id/);
-assert.match(files.core,/m\.status='active'/);
-assert.match(files.core,/m\.retention_until IS NULL OR m\.retention_until>NOW\(6\)/);
+// Candidate lists, notification eligibility and the customer's visible gallery
+// must all apply the same retention boundary before cleanup changes row status.
+function phpFunction(source,name){
+  const start=source.indexOf('function '+name+'(');
+  assert.ok(start>=0,name+' must exist');
+  const next=source.indexOf('\nfunction ',start+1);
+  return source.slice(start,next<0?undefined:next);
+}
+assert.match(files.core,/require_once __DIR__\.'\/glasses-vision-media-retention\.php'/);
+for(const name of ['glasses_customer_photo_share_candidates','glasses_customer_photo_notify_once','glasses_customer_photo_visible']){
+  const body=phpFunction(files.core,name);
+  assert.match(body,/JOIN glasses_vision_training_media m ON m\.id=p\.media_id AND m\.organization_id=p\.organization_id/);
+  assert.match(body,/glasses_vision_media_retained_sql\('m'\)/,name+' must require retained media using its joined alias');
+}
+const retainedSql=phpFunction(files.retention,'glasses_vision_media_retained_sql');
+assert.match(retainedSql,/status='active' AND \(/,'retained SQL must require active media');
+assert.match(retainedSql,/retention_until IS NULL OR \{\$prefix\}retention_until>UTC_TIMESTAMP\(6\)/,'finite retention must use a strict UTC deadline, including microseconds');
+assert.ok(!/\bNOW\(/.test(retainedSql),'retention cannot depend on the connection local timezone');
+const retainedRow=phpFunction(files.retention,'glasses_vision_media_retained');
+assert.match(retainedRow,/\['status'\]\?\?null\)!=='active'/);
+assert.match(retainedRow,/!array_key_exists\('retention_until',\$row\)\)return false/,'missing retention evidence must fail closed');
+assert.match(retainedRow,/\$row\['retention_until'\]===null\)return true/,'null is the explicit no-deadline case');
+assert.match(retainedRow,/new DateTimeZone\('UTC'\)/);
+assert.match(retainedRow,/return \$until>\(\$now\?\?new DateTimeImmutable\('now',\$utc\)\)/,'byte access uses the same strict deadline as query eligibility');
+assert.match(files.image,/glasses_vision_media_retained\(\$record\)/,'the byte route must recheck retention after gallery authorization');
 assert.match(files.core,/oo\.customer_id=\?/);
 assert.match(files.core,/oo\.status IN \('ready','kitchen_complete','completed'\)/);
 assert.match(files.core,/share\.revoked_at IS NULL/);

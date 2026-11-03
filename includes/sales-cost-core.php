@@ -117,7 +117,8 @@ function sales_cost_recipe(PDO $pdo,int $org,int $recipeId,float $servings,float
     $itemQ=$pdo->prepare("SELECT id,name,normalized_key,base_unit,unit_cost,updated_at FROM inventory_items WHERE organization_id=? AND normalized_key=? AND status='active' AND archived_at IS NULL LIMIT 1");
     $lines=[];$gaps=[];$total=0.0;$parsedCount=0;$costedCount=0;
     foreach($ingredients as $ingredient){
-        $parsed=operations_parse_ingredient($ingredient);if(!$parsed)continue;$parsedCount++;$key=operations_slug(operations_normalized_ingredient((string)$parsed['name']));$itemQ->execute([$org,$key]);$inv=$itemQ->fetch()?:null;$line=['ingredient'=>$parsed['name'],'quantity'=>$parsed['quantity'],'unit'=>$parsed['unit'],'inventoryItem'=>$inv['name']??null,'inventoryUnit'=>$inv['base_unit']??null,'unitCost'=>isset($inv['unit_cost'])?(float)$inv['unit_cost']:null,'extendedCost'=>null,'status'=>'missing'];
+        $parsed=operations_parse_ingredient($ingredient);$parsedCount++;if(!$parsed){$gaps[]='Review ingredient '.$parsedCount.': a named ingredient is required.';$lines[]=['ingredient'=>'Ingredient '.$parsedCount,'quantity'=>null,'unit'=>'','extendedCost'=>null,'status'=>'needs_review','raw'=>$ingredient];continue;}$key=operations_slug(operations_normalized_ingredient((string)$parsed['name']));$itemQ->execute([$org,$key]);$inv=$itemQ->fetch()?:null;$line=['ingredient'=>$parsed['name'],'quantity'=>$parsed['quantity'],'unit'=>$parsed['unit'],'inventoryItem'=>$inv['name']??null,'inventoryUnit'=>$inv['base_unit']??null,'unitCost'=>isset($inv['unit_cost'])?(float)$inv['unit_cost']:null,'extendedCost'=>null,'status'=>'missing'];
+        if(!empty($parsed['needsReview'])){$gaps[]=$parsed['name'].': '.$parsed['reviewReason'];$line['status']='needs_review';$line['raw']=$parsed['raw'];$lines[]=$line;continue;}
         if(!$inv){$gaps[]=$parsed['name'].': inventory item not mapped.';$line['status']='inventory_missing';$lines[]=$line;continue;}
         if($parsed['quantity']===null){$gaps[]=$parsed['name'].': ingredient quantity missing.';$line['status']='quantity_missing';$lines[]=$line;continue;}
         if($inv['unit_cost']===null){$gaps[]=$parsed['name'].': inventory unit cost missing.';$line['status']='cost_missing';$lines[]=$line;continue;}
@@ -125,7 +126,7 @@ function sales_cost_recipe(PDO $pdo,int $org,int $recipeId,float $servings,float
         if($converted===null){$gaps[]=$parsed['name'].': cannot convert '.($parsed['unit']?:'unspecified unit').' to '.(($inv['base_unit']??'')?:'unspecified inventory unit').'.';$line['status']='unit_mismatch';$lines[]=$line;continue;}
         $extended=$converted*(float)$inv['unit_cost'];$line['convertedQuantity']=round($converted,5);$line['extendedCost']=round($extended,4);$line['status']='costed';$total+=$extended;$costedCount++;$lines[]=$line;
     }
-    $servings=max(.0001,$servings);$wasteMultiplier=1+max(0,$wastePct)/100;$unitCost=$parsedCount>0&&$costedCount>0?($total*$wasteMultiplier/$servings):null;$coverage=$parsedCount>0?$costedCount/$parsedCount:0;
+    $servings=max(.0001,$servings);$wasteMultiplier=1+max(0,$wastePct)/100;$unitCost=$parsedCount>0&&$costedCount===$parsedCount?($total*$wasteMultiplier/$servings):null;$coverage=$parsedCount>0?$costedCount/$parsedCount:0;
     return ['recipePublicId'=>$recipe['public_id'],'recipeName'=>$recipe['name'],'recipeCost'=>round($total,4),'servingsPerRecipe'=>$servings,'wasteFactorPercent'=>$wastePct,'unitCost'=>$unitCost!==null?round($unitCost,4):null,'coverage'=>round($coverage,4),'costedIngredients'=>$costedCount,'ingredientCount'=>$parsedCount,'ingredients'=>$lines,'gaps'=>$gaps];
 }
 

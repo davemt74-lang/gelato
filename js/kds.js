@@ -1,15 +1,23 @@
 (()=>{'use strict';
 const C=window.KDS_CONFIG||{};
-const S={locationId:0,station:'',history:false,data:null,loading:false,selectedTicketId:'',lastBumpedId:'',started:false,leaving:false,receivedAt:Date.now(),refreshTimer:null,clockTimer:null,page:0,pageSize:8};
+const S={locationId:0,station:'',history:false,data:null,loading:false,selectedTicketId:'',lastBumpedId:'',started:false,leaving:false,receivedAt:Date.now(),refreshTimer:null,clockTimer:null,page:0,pageSize:8,viewGeneration:0,viewKey:'',dataViewKey:'',dataViewGeneration:0,requestId:0,readController:null,writing:false,loadError:''};
 const $=s=>document.querySelector(s);
 const esc=v=>String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
 const fmtAge=s=>{s=Math.max(0,Math.floor(Number(s)||0));const m=Math.floor(s/60),r=s%60;return m+':'+String(r).padStart(2,'0')};
 const fmtQty=n=>{const v=Number(n)||0;return Number.isInteger(v)?String(v):v.toFixed(2).replace(/0+$/,'').replace(/\.$/,'')};
 const label=s=>String(s||'').replaceAll('_',' ').replace(/\b\w/g,c=>c.toUpperCase());
-const canUpdate=()=>Boolean(S.data?.permissions?.update)&&!S.history;
+const viewKey=()=>JSON.stringify([S.locationId,S.station,S.history]);
+const dataMatchesView=()=>Boolean(S.data)&&S.dataViewKey===viewKey()&&S.dataViewGeneration===S.viewGeneration;
+const canUpdate=()=>dataMatchesView()&&!S.loadError&&!S.writing&&Boolean(S.data?.permissions?.update)&&!S.history;
+function captureView(){
+  const key=viewKey();
+  if(S.viewKey!==key){S.viewKey=key;S.viewGeneration++;}
+  return Object.freeze({key,generation:S.viewGeneration,locationId:S.locationId,station:S.station,history:S.history});
+}
+const isCurrentView=view=>view.generation===S.viewGeneration&&view.key===viewKey();
 function toast(message){const e=$('#toast');e.textContent=message;e.classList.remove('hidden');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.add('hidden'),2600)}
-async function liveApi(method='GET',body=null){let url='api/kds.php';if(method==='GET'){const q=new URLSearchParams();if(S.locationId)q.set('locationId',S.locationId);if(S.station)q.set('station',S.station);url+='?'+q.toString()}const options={method,headers:{Accept:'application/json'},cache:'no-store'};if(body){options.headers['Content-Type']='application/json';options.headers['X-CSRF-Token']=C.csrf||'';options.body=JSON.stringify(body)}const response=await fetch(url,options),json=await response.json().catch(()=>({ok:false,message:'Invalid server response.'}));if(!response.ok||!json.ok)throw new Error(json.message||'Kitchen request failed.');return json}
-async function historyApi(){const q=new URLSearchParams();if(S.locationId)q.set('locationId',S.locationId);const response=await fetch('api/kds-history.php?'+q.toString(),{headers:{Accept:'application/json'},cache:'no-store'}),json=await response.json().catch(()=>({ok:false,message:'Invalid server response.'}));if(!response.ok||!json.ok)throw new Error(json.message||'Kitchen order history failed.');return json}
+async function liveApi(method='GET',body=null,view=captureView(),signal){let url='api/kds.php';if(method==='GET'){const q=new URLSearchParams();if(view.locationId)q.set('locationId',view.locationId);if(view.station)q.set('station',view.station);url+='?'+q.toString()}const options={method,headers:{Accept:'application/json'},cache:'no-store',signal};if(body){options.headers['Content-Type']='application/json';options.headers['X-CSRF-Token']=C.csrf||'';options.body=JSON.stringify(body)}const response=await fetch(url,options),json=await response.json().catch(()=>({ok:false,message:'Invalid server response.'}));if(!response.ok||!json.ok)throw new Error(json.message||'Kitchen request failed.');return json}
+async function historyApi(view,signal){const q=new URLSearchParams();if(view.locationId)q.set('locationId',view.locationId);const response=await fetch('api/kds-history.php?'+q.toString(),{headers:{Accept:'application/json'},cache:'no-store',signal}),json=await response.json().catch(()=>({ok:false,message:'Invalid server response.'}));if(!response.ok||!json.ok)throw new Error(json.message||'Kitchen order history failed.');return json}
 function stationOptions(selected=''){const stations=S.data?.board?.stations||[];return '<option value="">Unrouted</option>'+stations.map(s=>`<option value="${esc(s.public_id)}" ${String(selected)===String(s.public_id)?'selected':''}>${esc(s.name)}</option>`).join('')}
 function renderLocations(){const el=$('#location'),locations=S.data?.locations||[];el.innerHTML=locations.map(l=>`<option value="${Number(l.id)}" ${Number(l.id)===Number(S.locationId)?'selected':''}>${esc(l.name)}</option>`).join('')}
 function renderTabs(){if(S.history){$('#tabs').innerHTML='<button class="tab active">Order history · last 24 hours</button>';return}const board=S.data?.board||{},counts=board.stationCounts||{},stations=board.stations||[];const tabs=[['','Expo / All',Number(counts.all||0)],['unrouted','Unrouted',Number(counts.unrouted||0)],...stations.map(s=>[String(s.public_id),String(s.name),Number(counts[s.public_id]||0)])];$('#tabs').innerHTML=tabs.map(([id,name,count])=>`<button class="tab ${S.station===id?'active':''}" data-station="${esc(id)}">${esc(name)} · ${count}</button>`).join('')}
@@ -24,14 +32,55 @@ function renderLiveBoard(){const all=S.data?.board?.tickets||[],el=$('#board');c
 function renderPageControls(total,pages){const bar=$('#kdsSlotBar');if(!bar)return;bar.innerHTML='<span>Showing orders '+(total?S.page*S.pageSize+1:0)+'–'+Math.min(total,(S.page+1)*S.pageSize)+' of '+total+' active ticket'+(total===1?'':'s')+'</span><span class="kds-slot-pages"><button type="button" id="kdsPrevPage" '+(S.page===0?'disabled':'')+'>← Previous 8</button><strong>Page '+(S.page+1)+' of '+pages+'</strong><button type="button" id="kdsNextPage" '+(S.page>=pages-1?'disabled':'')+'>Next 8 →</button></span>';}
 function renderHistoryBoard(){const tickets=S.data?.tickets||[],el=$('#board');if(!tickets.length){el.innerHTML='<div class="empty">No completed kitchen orders in the last 24 hours.</div>';return}el.innerHTML=tickets.map(ticket=>{const headline=ticket.tableName?`${ticket.checkNumber} · ${ticket.tableName}`:ticket.checkNumber;const subtitle=[label(ticket.serviceMode),ticket.serverName?`Server ${ticket.serverName}`:null,`${Number(ticket.guestCount)} guest${Number(ticket.guestCount)===1?'':'s'}`,ticket.completedAt?String(ticket.completedAt):null].filter(Boolean).join(' · ');const items=(ticket.items||[]).map(item=>`<div class="kitem"><div class="kitem-top"><div><div class="kitem-name">${esc(fmtQty(item.quantity))}× ${esc(item.item_name_snapshot)}</div>${item.option_name_snapshot?`<div class="option">${esc(item.option_name_snapshot)}</div>`:''}</div><div class="age">${fmtAge(item.durationSeconds)}</div></div>${item.special_instructions?`<div class="instructions">${esc(item.special_instructions)}</div>`:''}<div class="item-meta"><span class="chip ${item.status==='completed'?'ready':''}">${esc(label(item.status))}</span>${item.station_name?`<span class="chip">${esc(item.station_name)}</span>`:''}</div></div>`).join('');return `<article class="ticket"><div class="ticket-head"><div><strong>${esc(headline)}</strong><small>${esc(subtitle)}</small></div><div class="age">${fmtAge(ticket.durationSeconds)}</div></div><div class="ticket-items">${items}</div></article>`}).join('')}
 function renderBoard(){if(S.history){$('#kdsSlotBar').innerHTML='History · no live slot numbers';renderHistoryBoard()}else renderLiveBoard()}
-function render(){renderLocations();renderTabs();renderAlert();renderAllDay();renderBoard();$('#history').textContent=S.history?'Back to live':'Order history'}
-async function load(){if(S.loading)return;S.loading=true;try{const data=S.history?await historyApi():await liveApi();S.data=data;S.receivedAt=Date.now();if(!S.locationId)S.locationId=Number(data.locationId)||0;render()}catch(e){toast(e.message)}finally{S.loading=false}}
-async function post(body){try{const data=await liveApi('POST',{locationId:S.locationId,station:S.station,...body});if(data.board)S.data.board=data.board;S.receivedAt=Date.now();render();return data}catch(e){toast(e.message);throw e}}
-function tickAges(){if(S.history)return;const delta=Math.max(0,Math.floor((Date.now()-S.receivedAt)/1000));document.querySelectorAll('[data-live-age]').forEach(el=>{el.textContent=fmtAge(Number(el.dataset.liveAge||0)+delta)})}
+function render(){
+  $('#history').textContent=S.history?'Back to live':'Order history';
+  if(S.data?.locations?.length)renderLocations();
+  if(!dataMatchesView()){
+    $('#tabs').innerHTML='';$('#unroutedAlert').classList.remove('show');$('#unroutedAlert').innerHTML='';
+    $('#allDay').innerHTML='';$('#kdsSlotBar').textContent='';
+    $('#board').innerHTML=`<div class="empty" role="status">${esc(S.loadError||'Loading kitchen orders…')}</div>`;
+    return;
+  }
+  renderTabs();renderAlert();renderAllDay();renderBoard();
+}
+async function load(force=false){
+  const previousKey=S.viewKey,view=captureView();
+  // Coalesce polling for one view, but a new selection always gets its own request.
+  if(force!==true&&previousKey===view.key&&(S.loading||S.writing))return;
+  const requestId=++S.requestId;S.readController?.abort();
+  const controller=new AbortController();S.readController=controller;S.loading=true;S.loadError='';
+  let timedOut=false;const deadline=setTimeout(()=>{timedOut=true;controller.abort();},15000);
+  if(!dataMatchesView())render();
+  try{
+    const data=view.history?await historyApi(view,controller.signal):await liveApi('GET',null,view,controller.signal);
+    if(requestId!==S.requestId||!isCurrentView(view))return;
+    if(view.locationId&&Number(data.locationId)!==view.locationId)throw new Error('Kitchen response does not match the selected location. Refresh to try again.');
+    if(!S.locationId){S.locationId=Number(data.locationId)||0;S.viewKey=viewKey();}
+    S.data=data;S.dataViewKey=viewKey();S.dataViewGeneration=S.viewGeneration;S.receivedAt=Date.now();
+  }catch(e){
+    if(requestId===S.requestId&&isCurrentView(view)&&(e.name!=='AbortError'||timedOut)){S.loadError=timedOut?'Kitchen request timed out. Retrying shortly.':e.message;toast(S.loadError);}
+  }finally{
+    clearTimeout(deadline);
+    if(requestId===S.requestId){S.loading=false;S.readController=null;render();}
+  }
+}
+async function post(body){
+  const view=captureView();
+  if(!canUpdate()){toast('Wait for the selected kitchen view to load before changing an order.');return null;}
+  // An older GET must not replace the board returned by this write.
+  ++S.requestId;S.readController?.abort();S.readController=null;S.loading=false;S.writing=true;render();
+  try{
+    const data=await liveApi('POST',{...body,locationId:view.locationId,station:view.station},view);
+    if(!isCurrentView(view))return null;
+    if(data.board)S.data.board=data.board;S.receivedAt=Date.now();return data;
+  }catch(e){if(isCurrentView(view))toast(e.message);throw e;}
+  finally{S.writing=false;render();void load(true);}
+}
+function tickAges(){if(S.history||!dataMatchesView())return;const delta=Math.max(0,Math.floor((Date.now()-S.receivedAt)/1000));document.querySelectorAll('[data-live-age]').forEach(el=>{el.textContent=fmtAge(Number(el.dataset.liveAge||0)+delta)})}
 // Display eight at a time, but assign one continuous number to every active
 // ticket in the current station/location order. Page 2 starts at Order 9.
 function allOrderSlots(){
-  return (S.history?[]:(S.data?.board?.tickets||[])).map((ticket,index)=>({
+  return (S.history||!dataMatchesView()||S.loadError?[]:(S.data?.board?.tickets||[])).map((ticket,index)=>({
     slot:index+1,
     checkPublicId:String(ticket.checkPublicId||''),
     checkNumber:String(ticket.checkNumber||''),
@@ -62,17 +111,17 @@ window.GelatoKdsSlots={
   }
 };
 function selectedTicket(){return (S.data?.board?.tickets||[]).find(t=>String(t.checkPublicId)===String(S.selectedTicketId))||null}
-function selectRelative(delta){if(S.history)return;const tickets=S.data?.board?.tickets||[];if(!tickets.length)return;let i=tickets.findIndex(t=>String(t.checkPublicId)===String(S.selectedTicketId));if(i<0)i=0;else i=(i+delta+tickets.length)%tickets.length;S.selectedTicketId=String(tickets[i].checkPublicId);renderLiveBoard();document.querySelector(`[data-ticket="${CSS.escape(S.selectedTicketId)}"]`)?.scrollIntoView({block:'nearest',inline:'nearest'})}
-async function ticketAction(id,action){if(!id)return;const data=await post({action:'ticket.action',checkPublicId:id,ticketAction:action});if(action==='bump'){S.lastBumpedId=id;toast('Ticket bumped · R recalls')}if(action==='recall')toast('Ticket recalled to Expo');return data}
+function selectRelative(delta){if(S.history||!dataMatchesView())return;const tickets=S.data?.board?.tickets||[];if(!tickets.length)return;let i=tickets.findIndex(t=>String(t.checkPublicId)===String(S.selectedTicketId));if(i<0)i=0;else i=(i+delta+tickets.length)%tickets.length;S.selectedTicketId=String(tickets[i].checkPublicId);renderLiveBoard();document.querySelector(`[data-ticket="${CSS.escape(S.selectedTicketId)}"]`)?.scrollIntoView({block:'nearest',inline:'nearest'})}
+async function ticketAction(id,action){if(!id)return;const data=await post({action:'ticket.action',checkPublicId:id,ticketAction:action});if(!data)return null;if(action==='bump'){S.lastBumpedId=id;toast('Ticket bumped · R recalls')}if(action==='recall')toast('Ticket recalled to Expo');return data}
 async function bumpSelected(){if(!canUpdate()){toast('Kitchen update permission required at this location.');return}if(S.station){toast('Whole-ticket bump is available in Expo / All.');return}const ticket=selectedTicket();if(!ticket){toast('No ticket selected.');return}if(!ticket.readyToBump){toast('Selected ticket is not ready to bump.');return}await ticketAction(String(ticket.checkPublicId),'bump').catch(()=>{})}
 async function recallLast(){if(!canUpdate()){toast('Kitchen update permission required at this location.');return}if(S.station){toast('Recall the whole ticket from Expo / All.');return}if(!S.lastBumpedId){toast('No ticket has been bumped in this KDS session.');return}await ticketAction(S.lastBumpedId,'recall').catch(()=>{})}
 async function startKds(){if(S.started)return;S.started=true;$('#launch').classList.add('hidden');try{if(document.documentElement.requestFullscreen)await document.documentElement.requestFullscreen()}catch(e){toast('Browser full-screen permission was blocked. Press Esc to return to the Kitchen Dashboard.')}}
 function leaveToDashboard(){if(S.leaving)return;S.leaving=true;window.location.href=C.dashboardUrl||'kds-dashboard.php'}
-document.addEventListener('click',async e=>{if(e.target.closest('#startKds')){await startKds();return}const tab=e.target.closest('[data-station]');if(tab&&!S.history){S.station=tab.dataset.station||'';S.selectedTicketId='';S.page=0;await load();return}const ticketCard=e.target.closest('[data-ticket]');if(ticketCard)S.selectedTicketId=String(ticketCard.dataset.ticket||'');const item=e.target.closest('[data-item]');const itemAct=e.target.closest('[data-item-act]');if(item&&itemAct){itemAct.disabled=true;await post({action:'item.transition',itemPublicId:item.dataset.item,status:itemAct.dataset.itemAct}).catch(()=>{});return}const recall=e.target.closest('[data-item-recall]');if(item&&recall){recall.disabled=true;await post({action:'item.recall',itemPublicId:item.dataset.item}).catch(()=>{});return}const ticketAct=e.target.closest('[data-ticket-act]');if(ticketCard&&ticketAct){ticketAct.disabled=true;await ticketAction(String(ticketCard.dataset.ticket),String(ticketAct.dataset.ticketAct)).catch(()=>{});return}if(ticketCard&&!S.history)renderLiveBoard()});
+document.addEventListener('click',async e=>{if(e.target.closest('#startKds')){await startKds();return}const tab=e.target.closest('[data-station]');if(tab&&!S.history){S.station=tab.dataset.station||'';S.selectedTicketId='';S.page=0;await load();return}const ticketCard=e.target.closest('[data-ticket]');if(ticketCard)S.selectedTicketId=String(ticketCard.dataset.ticket||'');const item=e.target.closest('[data-item]');const itemAct=e.target.closest('[data-item-act]');if(item&&itemAct){itemAct.disabled=true;await post({action:'item.transition',itemPublicId:item.dataset.item,status:itemAct.dataset.itemAct}).catch(()=>{});return}const recall=e.target.closest('[data-item-recall]');if(item&&recall){recall.disabled=true;await post({action:'item.recall',itemPublicId:item.dataset.item}).catch(()=>{});return}const ticketAct=e.target.closest('[data-ticket-act]');if(ticketCard&&ticketAct){ticketAct.disabled=true;await ticketAction(String(ticketCard.dataset.ticket),String(ticketAct.dataset.ticketAct)).catch(()=>{});return}if(ticketCard&&!S.history&&dataMatchesView())renderLiveBoard()});
 document.addEventListener('change',async e=>{if(e.target.id==='location'){S.locationId=Number(e.target.value)||0;S.station='';S.page=0;S.selectedTicketId='';S.lastBumpedId='';await load();return}if(e.target.matches('[data-route]')){const item=e.target.closest('[data-item]');if(!item)return;await post({action:'item.reassign',itemPublicId:item.dataset.item,stationPublicId:e.target.value||null}).catch(()=>{})}});
 document.addEventListener('keydown',async e=>{const tag=(e.target?.tagName||'').toLowerCase();if(['input','select','textarea'].includes(tag))return;if(!S.started){if(e.key==='Enter'){e.preventDefault();await startKds()}return}if(e.key==='Escape'){e.preventDefault();if(document.fullscreenElement&&document.exitFullscreen){await document.exitFullscreen().catch(()=>leaveToDashboard())}else leaveToDashboard();return}if(['ArrowRight','ArrowDown'].includes(e.key)){e.preventDefault();selectRelative(1);return}if(['ArrowLeft','ArrowUp'].includes(e.key)){e.preventDefault();selectRelative(-1);return}if(e.key==='Enter'||e.key.toLowerCase()==='b'){e.preventDefault();await bumpSelected();return}if(e.key.toLowerCase()==='r'){e.preventDefault();await recallLast();return}if(e.key.toLowerCase()==='h'){e.preventDefault();S.history=!S.history;S.selectedTicketId='';await load()}});
 document.addEventListener('click',(event)=>{if(event.target.closest('#kdsPrevPage')&&S.page>0){S.page--;renderBoard()}else if(event.target.closest('#kdsNextPage')&&S.page<Math.ceil((S.data?.board?.tickets||[]).length/S.pageSize)-1){S.page++;renderBoard()}});
-$('#refresh').addEventListener('click',load);$('#history').addEventListener('click',async()=>{S.history=!S.history;S.selectedTicketId='';await load()});
+$('#refresh').addEventListener('click',()=>load(true));$('#history').addEventListener('click',async()=>{S.history=!S.history;S.selectedTicketId='';await load()});
 document.addEventListener('fullscreenchange',()=>{if(S.started&&!document.fullscreenElement)leaveToDashboard()});
-load();S.refreshTimer=setInterval(()=>{if(!S.history)load()},5000);S.clockTimer=setInterval(tickAges,1000);
+load();S.refreshTimer=setInterval(()=>{if(!S.history||S.loadError)load()},5000);S.clockTimer=setInterval(tickAges,1000);
 })();

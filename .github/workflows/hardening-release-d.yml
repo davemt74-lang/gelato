@@ -1,0 +1,181 @@
+name: Hardening Release D - Data Integrity and Retention
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  data-integrity:
+    name: MariaDB regressions, lock waits, retention and browser journeys
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_hardening_d_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - name: Check out the tested revision and its baseline
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Install PHP with native database and private-file extensions
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, pdo_sqlite, mbstring, curl, fileinfo, sodium, zip, posix
+          coverage: none
+          ini-values: date.timezone=UTC, memory_limit=512M
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Lint all tracked PHP modules and new browser entrypoints
+        run: |
+          set -euo pipefail
+          git ls-files -z '*.php' | xargs -0 -n1 php -l > /tmp/gelato-hardening-d-php-lint.log
+          node --check js/kds.js
+          node --check assets/js/online-order-food.js
+          node --check assets/js/online-order.js
+          node --check assets/js/public-shell.js
+          node --check tests/hardening-media-retention-http.cjs
+
+      - name: Shipped frontend behavior with deliberately reordered responses
+        run: node tests/hardening-frontend-consistency.cjs
+
+      - name: Deny deployed test entrypoints before configuration exists
+        run: node tests/deployed-test-entrypoints.cjs
+
+      - name: Install and fully upgrade a clean MariaDB database
+        id: setup_database
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_hardening_d_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Hardening D CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_hardening_d_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_hardening_d_ci','session_lifetime_seconds'=>28800,'session_idle_timeout_seconds'=>28800,'session_absolute_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+            'storage'=>['private_root'=>'/tmp/gelato-hardening-d-private'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $pdo=app_pdo();
+          if($pdo->getAttribute(PDO::ATTR_DRIVER_NAME)!=='mysql'||(bool)$pdo->getAttribute(PDO::ATTR_EMULATE_PREPARES))throw new RuntimeException('Release D requires native MariaDB PDO.');
+          $upgrade=new UpgradeService($pdo,__DIR__);
+          $upgrade->ensureTrackingTables();$upgrade->bootstrapLegacyHistory(null);
+          $applied=$upgrade->applyPending(null);$upgrade->assertAppliedChecksumsUnchanged();
+          if($upgrade->pendingMigrations()!==[]||$upgrade->applyPending(null)!==[])throw new RuntimeException('Clean/repeat upgrade did not converge.');
+          echo 'Clean install and repeat upgrade passed; applied '.count($applied)." migrations.\n";
+          PHP
+
+      - name: Reproduce the original data and retention failures on Release C
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin 5f328cc67babaa4a654f1562c8b0e623c3defe98
+          python3 tests/hardening-release-d-before-after.py
+
+      - name: Fresh task archive authority and deterministic revocation waits
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' }}
+        run: |
+          php tests/hardening-task-archive-contract.php
+          php tests/food-monster-g9i-task-archive.php
+
+      - name: Complete invoice totals and account-scoped detail pagination
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' }}
+        run: |
+          php tests/hardening-receivables-totals.php
+          php tests/wholesale-receivables-contract.php
+
+      - name: Overnight, midnight, leave and daylight-saving scheduling
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' }}
+        run: |
+          php tests/hardening-scheduling-intervals.php
+          php tests/scheduling-contract.php
+
+      - name: Reviewed recipe parsing and atomic source reconciliation
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' }}
+        run: |
+          php tests/hardening-recipe-ingredients.php
+          php tests/hardening-recipe-sources.php
+          php tests/hardening-recipe-source-concurrency.php
+          php tests/sales-cost-margin-contract.php
+          php tests/wholesale-demand-commitments-contract.php
+
+      - name: Deadline-enforced media, exact training qualification and retryable cleanup
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' }}
+        run: |
+          php tests/hardening-media-retention-contract.php
+          php tests/hardening-media-retention-concurrency.php
+          php tests/hardening-media-filesystem-contract.php
+          php tests/hardening-media-retention-nested.php
+
+      - name: Authenticated media access, export, CSRF and tenant HTTP boundaries
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' }}
+        run: node tests/hardening-media-retention-http.cjs
+
+      - name: Existing private workspace and visual training regressions
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' }}
+        run: |
+          php tests/hardening-workspace-contract.php
+          php tests/glasses-vision-lab-v5-training-media-contract.php
+          php tests/glasses-vision-lab-v6-training-release-contract.php
+
+      - name: Install the repository-pinned Playwright browser runtime
+        id: browser_runtime
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' }}
+        run: |
+          npm install --prefix /tmp/gelato-hardening-browser --no-audit --no-fund playwright@1.62.1
+          node /tmp/gelato-hardening-browser/node_modules/playwright/cli.js install --with-deps chromium
+
+      - name: Chromium kitchen views, item customizations and public cart counts
+        if: ${{ !cancelled() && steps.browser_runtime.outcome == 'success' }}
+        env:
+          NODE_PATH: /tmp/gelato-hardening-browser/node_modules
+          QA_OUTPUT_DIR: /tmp/gelato-hardening-d-browser
+        run: node tests/hardening-frontend-browser.cjs
+
+      - name: Preserve migration checksums and repeat upgrade
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' }}
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';require 'includes/UpgradeService.php';
+          $upgrade=new UpgradeService(app_pdo(),__DIR__);$upgrade->assertAppliedChecksumsUnchanged();
+          if($upgrade->pendingMigrations()!==[]||$upgrade->applyPending(null)!==[])throw new RuntimeException('Release D must leave migration history unchanged.');
+          echo "Migration checksums and repeat upgrade remain clean.\n";
+          PHP
+
+      - name: Retain lint, original failure evidence and browser screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hardening-release-d-validation
+          path: |
+            /tmp/gelato-hardening-d-php-lint.log
+            /tmp/gelato-hardening-d-baseline.json
+            /tmp/gelato-hardening-d-browser
+          if-no-files-found: warn
+          retention-days: 14

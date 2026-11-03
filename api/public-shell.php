@@ -13,6 +13,15 @@ try {
 $settings = is_array($context['settings'] ?? null) ? $context['settings'] : public_site_defaults();
 $address = public_site_format_address($settings);
 $socials = public_site_social_links($settings);
+$selectedLocationId = 0;
+try {
+    require_once __DIR__ . '/../includes/online-order-core.php';
+    $selectedLocation = location_selected(online_order_locations(app_pdo(), (int)($context['organizationId'] ?? 0)));
+    $selectedLocationId = (int)($selectedLocation['id'] ?? 0);
+} catch (Throwable $exception) {
+    // A partial installation can still serve its public header and footer.
+    error_log('Public cart location unavailable: ' . $exception->getMessage());
+}
 
 app_json_response([
     'ok' => true,
@@ -21,5 +30,6 @@ app_json_response([
         'address' => $address,
         'hoursText' => (string)($settings['hours_text'] ?? ''),
         'socials' => $socials,
+        'selectedLocationId' => $selectedLocationId,
     ],
 ]);

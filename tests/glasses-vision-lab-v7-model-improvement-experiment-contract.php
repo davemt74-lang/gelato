@@ -1,7 +1,9 @@
 <?php
 declare(strict_types=1);
+if(PHP_SAPI!=='cli'){http_response_code(404);header('Content-Type: text/plain; charset=utf-8');exit('Not found.');}
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/glasses-vision-experiments.php';
+require_once __DIR__.'/vision-retained-release-fixture.php';
 
 function v75_assert(bool $c,string $m):void{if(!$c)throw new RuntimeException($m);}
 function v75_count(PDO $pdo,string $sql,array $a=[]):int{$q=$pdo->prepare($sql);$q->execute($a);return (int)$q->fetchColumn();}
@@ -15,14 +17,14 @@ $pdo->prepare("INSERT INTO users (email,password_hash,first_name,last_name,displ
 $championPublic='vision-model-champion-'.$slug;$championHash=hash('sha256','champion-'.$slug);
 $pdo->prepare("INSERT INTO glasses_vision_model_packages (organization_id,public_id,detector_name,model_name,model_version,runtime_type,platform,artifact_url,artifact_sha256,artifact_bytes,status,created_by) VALUES (?,?,'ingredient_detector','Champion Detector','v1','onnx','air3','https://example.test/champion.onnx',?,100,'ready',?)")->execute([$org,$championPublic,$championHash,$actor]);
 
-$datasetPublic='vision-dataset-'.$slug;$datasetHash=hash('sha256','dataset-'.$slug);
-$pdo->prepare("INSERT INTO glasses_vision_dataset_versions (organization_id,public_id,name,version_label,status,dataset_hash,row_count,class_count,created_by,frozen_by,frozen_at) VALUES (?,?,?,'v1','frozen',?,3,1,?,?,NOW(6))")->execute([$org,$datasetPublic,'Experiment Corpus',$datasetHash,$actor,$actor]);$datasetId=(int)$pdo->lastInsertId();
+$datasetPublic='vision-dataset-'.$slug;
+$pdo->prepare("INSERT INTO glasses_vision_dataset_versions (organization_id,public_id,name,version_label,status,created_by) VALUES (?,?,?,'v1','draft',?)")->execute([$org,$datasetPublic,'Experiment Corpus',$actor]);$datasetId=(int)$pdo->lastInsertId();
 $planPublic='vision-split-'.$slug;$planHash=hash('sha256','split-'.$slug);
 $pdo->prepare("INSERT INTO glasses_vision_dataset_split_plans (organization_id,public_id,dataset_id,status,seed,train_ratio,val_ratio,test_ratio,policy_json,manifest_json,plan_hash,created_by,applied_by,applied_at) VALUES (?,?,?,'applied',74,.7,.15,.15,'{}','{}',?,?,?,NOW(6))")->execute([$org,$planPublic,$datasetId,$planHash,$actor,$actor]);$planId=(int)$pdo->lastInsertId();
 
-$releasePublic='vision-release-'.$slug;$releaseHash=hash('sha256','release-'.$slug);
-$manifest=['schema'=>GLASSES_VISION_TRAINING_RELEASE_SCHEMA,'releaseHash'=>$releaseHash,'dataset'=>['publicId'=>$datasetPublic,'datasetHash'=>$datasetHash],'splitPlan'=>['publicId'=>$planPublic,'planHash'=>$planHash],'trainingProfile'=>['name'=>'yolo11n_640'],'items'=>[]];
-$pdo->prepare("INSERT INTO glasses_vision_training_releases (organization_id,public_id,dataset_id,split_plan_id,status,training_profile,profile_json,manifest_json,release_hash,artifact_relative_path,artifact_sha256,artifact_bytes,created_by) VALUES (?,?,?,?,'qualified','yolo11n_640','{}',?,?,?, ?,1,?)")->execute([$org,$releasePublic,$datasetId,$planId,json_encode($manifest,JSON_UNESCAPED_SLASHES),$releaseHash,$org.'/fixture.zip',hash('sha256','zip-'.$slug),$actor]);$releaseId=(int)$pdo->lastInsertId();
+$retained=vision_contract_retained_release($pdo,$org,$actor,$datasetPublic,3,1);
+$datasetHash=$retained['dataset']['datasetHash'];$releasePublic=$retained['release']['publicId'];$releaseHash=$retained['release']['releaseHash'];$releaseId=(int)$retained['row']['id'];
+$pdo->prepare("UPDATE glasses_vision_training_releases SET status='qualified' WHERE organization_id=? AND id=?")->execute([$org,$releaseId]);
 
 $q1Public='vision-qualification-'.$slug.'-1';$q1Hash=hash('sha256','q1-'.$slug);
 $pdo->prepare("INSERT INTO glasses_vision_training_qualifications (organization_id,public_id,training_release_id,passed,score,policy_json,result_json,qualification_hash,actor_user_id) VALUES (?,?,?,1,100,'{}','{}',?,?)")->execute([$org,$q1Public,$releaseId,$q1Hash,$actor]);$q1Id=(int)$pdo->lastInsertId();

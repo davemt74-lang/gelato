@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__.'/glasses-vision-media-retention.php';
 
 require_once __DIR__.'/glasses-training-identity.php';
 require_once __DIR__.'/glasses-vision-training-media.php';
@@ -149,7 +150,7 @@ function glasses_v11_production_evidence_get(PDO $pdo,int $org,string $public): 
     'buildSessionPublicId'=>$r['build_public_id'],'modelPackagePublicId'=>$r['model_package_public_id'],'modelArtifactSha256'=>$r['model_artifact_sha256'],
     'recipeStepKey'=>$r['recipe_step_key'],'validationOutcome'=>$r['validation_outcome'],'trainingEligibility'=>$r['training_eligibility'],
     'trainingExclusionReason'=>$r['training_exclusion_reason'],'privacyScope'=>$r['privacy_scope'],'retentionUntil'=>$r['retention_until'],
-    'qualityState'=>$r['quality_state'],'status'=>$r['status'],'capturedAt'=>$r['created_at']
+    'qualityState'=>$r['quality_state'],'status'=>($r['status']==='active'&&!glasses_vision_media_retained($r)?'expired':$r['status']),'capturedAt'=>$r['created_at']
   ];
 }
 
@@ -158,7 +159,7 @@ function glasses_v11_production_evidence_set_eligibility(PDO $pdo,int $org,strin
   $reason=mb_substr(trim($reason),0,500,'UTF-8');
   if($eligibility==='excluded'&&$reason==='')throw new InvalidArgumentException('Excluding production evidence requires a reason.');
   return glasses_transaction($pdo,function()use($pdo,$org,$public,$eligibility,$reason,$actor):array{
-    $q=$pdo->prepare("SELECT id,training_eligibility FROM glasses_vision_training_media WHERE organization_id=? AND public_id=? AND status='active' LIMIT 1 FOR UPDATE");
+    $q=$pdo->prepare("SELECT id,training_eligibility FROM glasses_vision_training_media WHERE organization_id=? AND public_id=? AND ".glasses_vision_media_retained_sql()." LIMIT 1 FOR UPDATE");
     $q->execute([$org,$public]);$r=$q->fetch();if(!$r)throw new InvalidArgumentException('Production evidence was not found.');
     $pdo->prepare("UPDATE glasses_vision_training_media SET training_eligibility=?,training_exclusion_reason=? WHERE organization_id=? AND id=?")
       ->execute([$eligibility,$eligibility==='excluded'?$reason:null,$org,(int)$r['id']]);
@@ -170,7 +171,7 @@ function glasses_v11_production_evidence_set_eligibility(PDO $pdo,int $org,strin
 function glasses_v11_production_evidence_catalog(PDO $pdo,int $org,int $limit=100): array {
   if(!glasses_v11_evidence_ready($pdo))return ['evidence'=>[]];
   $limit=max(1,min(500,$limit));
-  $q=$pdo->prepare("SELECT public_id FROM glasses_vision_training_media WHERE organization_id=? AND training_session_id IS NOT NULL AND status='active' ORDER BY id DESC LIMIT ".$limit);
+  $q=$pdo->prepare("SELECT public_id FROM glasses_vision_training_media WHERE organization_id=? AND training_session_id IS NOT NULL AND ".glasses_vision_media_retained_sql()." ORDER BY id DESC LIMIT ".$limit);
   $q->execute([$org]);
   return ['evidence'=>array_map(fn($id)=>glasses_v11_production_evidence_get($pdo,$org,(string)$id),$q->fetchAll(PDO::FETCH_COLUMN))];
 }

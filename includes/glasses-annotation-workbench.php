@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__.'/glasses-vision-media-retention.php';
 
 require_once __DIR__.'/glasses-production-evidence.php';
 require_once __DIR__.'/glasses-vision-annotation-qa.php';
@@ -46,7 +47,7 @@ function glasses_v11_annotation_validate_annotations(array $annotations): array 
 function glasses_v11_annotation_submit(PDO $pdo,int $org,array $in,int $actor): array {
   if(!glasses_v11_annotation_ready($pdo))throw new RuntimeException('V11 annotation correction migration is not installed.');
   $evidence=glasses_v11_production_evidence_get($pdo,$org,(string)($in['evidencePublicId']??''));
-  $q=$pdo->prepare("SELECT m.id media_id,m.sample_id,m.recipe_step_key,s.canonical_label,s.annotation_json FROM glasses_vision_training_media m JOIN glasses_vision_training_samples s ON s.id=m.sample_id WHERE m.organization_id=? AND m.public_id=? LIMIT 1");
+  $q=$pdo->prepare("SELECT m.id media_id,m.sample_id,m.recipe_step_key,s.canonical_label,s.annotation_json FROM glasses_vision_training_media m JOIN glasses_vision_training_samples s ON s.id=m.sample_id WHERE m.organization_id=? AND m.public_id=? AND ".glasses_vision_media_retained_sql('m')." LIMIT 1");
   $q->execute([$org,$evidence['publicId']]);$base=$q->fetch();if(!$base)throw new InvalidArgumentException('Evidence sample is unavailable.');
   $type=(string)($in['correctionType']??'combined');
   if(!in_array($type,['label','bbox','false_positive','false_negative','step','ingredient','combined'],true))throw new InvalidArgumentException('Correction type is invalid.');

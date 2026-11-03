@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+require_once __DIR__.'/glasses-vision-media-retention.php';
 
 require_once __DIR__.'/glasses-vision-training-media.php';
 
@@ -32,8 +33,8 @@ function glasses_vision_curation_rows(PDO $pdo,int $org,string $datasetPublic): 
     $q=$pdo->prepare("SELECT s.public_id,s.canonical_label,s.review_status,s.source_type,s.source_reference,s.operator_user_id,u.display_name operator_name,
       di.split_name,di.created_at dataset_added_at,
       bs.public_id build_public_id,k.location_id,l.name location_name,k.station_id,ks.name station_name,pci.menu_item_id,mi.name menu_item_name,
-      (SELECT GROUP_CONCAT(DISTINCT m.capture_group ORDER BY m.capture_group SEPARATOR '||') FROM glasses_vision_training_media m WHERE m.organization_id=s.organization_id AND m.sample_id=s.id AND m.status='active' AND m.capture_group IS NOT NULL) capture_groups,
-      (SELECT GROUP_CONCAT(DISTINCT m.device_id ORDER BY m.device_id SEPARATOR '||') FROM glasses_vision_training_media m WHERE m.organization_id=s.organization_id AND m.sample_id=s.id AND m.status='active' AND m.device_id IS NOT NULL) device_ids,
+      (SELECT GROUP_CONCAT(DISTINCT m.capture_group ORDER BY m.capture_group SEPARATOR '||') FROM glasses_vision_training_media m WHERE m.organization_id=s.organization_id AND m.sample_id=s.id AND ".glasses_vision_media_retained_sql('m')." AND m.capture_group IS NOT NULL) capture_groups,
+      (SELECT GROUP_CONCAT(DISTINCT m.device_id ORDER BY m.device_id SEPARATOR '||') FROM glasses_vision_training_media m WHERE m.organization_id=s.organization_id AND m.sample_id=s.id AND ".glasses_vision_media_retained_sql('m')." AND m.device_id IS NOT NULL) device_ids,
       ce.decision curation_decision,ce.reason curation_reason,ce.created_at curation_at
       FROM glasses_vision_dataset_items di
       JOIN glasses_vision_training_samples s ON s.id=di.sample_id AND s.organization_id=di.organization_id

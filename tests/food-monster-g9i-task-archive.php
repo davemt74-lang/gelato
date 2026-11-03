@@ -14,6 +14,12 @@ $pdo->prepare("INSERT INTO users (email,password_hash,first_name,last_name,displ
 $uid=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO organization_memberships (organization_id,user_id,status) VALUES (?,?,'active')")
   ->execute([$org,$uid]);
+$membership=(int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO roles (organization_id,name,slug,is_system_role,is_owner_role,is_assignable)
+  VALUES (?,'Super Admin','super_admin',1,1,0)")->execute([$org]);
+$ownerRole=(int)$pdo->lastInsertId();
+$pdo->prepare('INSERT INTO user_roles (membership_id,role_id,assigned_by) VALUES (?,?,?)')
+  ->execute([$membership,$ownerRole,$uid]);
 $owner=['id'=>$uid,'organization_id'=>$org,'is_owner_role'=>1,'permissions'=>['*']];
 $staff=$owner;$staff['is_owner_role']=0;
 $thread=gaw_create_thread($pdo,$org,$uid,'text','FM-G9I task archive');

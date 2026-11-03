@@ -78,7 +78,7 @@ function glasses_vision_annotation_qa_agreement(array $reviews): array
     ];
 }
 
-function glasses_vision_annotation_qa_analyze(PDO $pdo,int $org,?string $datasetPublic=null): array
+function glasses_vision_annotation_qa_analyze(PDO $pdo,int $org,?string $datasetPublic=null,?array $samplePublicIds=null): array
 {
     $datasetId=glasses_vision_dataset_intelligence_dataset_id($pdo,$org,$datasetPublic);
     $scope=$datasetId===null?'':" JOIN glasses_vision_dataset_items di ON di.organization_id=s.organization_id AND di.sample_id=s.id AND di.dataset_id=? ";
@@ -87,6 +87,7 @@ function glasses_vision_annotation_qa_analyze(PDO $pdo,int $org,?string $dataset
       FROM glasses_vision_training_samples s {$scope}
       WHERE s.organization_id=? ORDER BY s.id");
     $q->execute($args);$rows=$q->fetchAll();
+    if($samplePublicIds!==null){$allowed=array_fill_keys($samplePublicIds,true);$rows=array_values(array_filter($rows,static fn($r)=>isset($allowed[$r['public_id']])));}
 
     $sampleQa=[];$classAreas=[];$incomplete=0;$invalidBoxes=0;
     foreach($rows as $row){
@@ -118,6 +119,7 @@ function glasses_vision_annotation_qa_analyze(PDO $pdo,int $org,?string $dataset
       {$reviewScope}
       WHERE r.organization_id=? AND r.correction_id IS NULL ORDER BY r.sample_id,r.id");
     $rq->execute($args);$reviews=$rq->fetchAll();
+    if($samplePublicIds!==null)$reviews=array_values(array_filter($reviews,static fn($r)=>isset($allowed[$r['sample_public_id']])));
     $agreement=glasses_vision_annotation_qa_agreement($reviews);
 
     $adjudication=[];

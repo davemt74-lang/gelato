@@ -107,6 +107,6 @@ if (str_contains($homeHeader, $accountCta)) {
 <?php public_site_render_footer($settings); ?>
 <script src="assets/js/home-pizza-scroll.js?v=20260915-2"></script>
 <script src="assets/js/site.js?v=20260914"></script>
-<script src="assets/js/public-shell.js?v=20260915-1"></script>
+<script src="assets/js/public-shell.js?v=20260915-1-hardening-d1"></script>
 </body>
 </html>
