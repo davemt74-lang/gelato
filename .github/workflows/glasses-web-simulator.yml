@@ -145,6 +145,7 @@ on:
       - 'tests/glasses-hud-voice-contract.php'
       - 'tests/glasses-live-kds-contract.php'
       - 'tests/glasses-web-simulator-contract.php'
+      - 'tests/glasses-live-build-browser.cjs'
       - 'tests/glasses-live-virtual-preview-contract.php'
       - 'docs/GLASSES-WEB-SIMULATOR.md'
       - '.github/workflows/glasses-web-simulator.yml'
@@ -310,6 +311,16 @@ jobs:
           php tests/glasses-device-tabs-contract.php
       - name: Hardware-free Live access, control state and write isolation
         run: php tests/glasses-live-virtual-preview-contract.php
+
+      - name: Install the repository-pinned Chromium runtime
+        run: |
+          npm install --prefix /tmp/gelato-live-build-browser --no-audit --no-fund playwright@1.62.1
+          node /tmp/gelato-live-build-browser/node_modules/playwright/cli.js install --with-deps chromium
+
+      - name: Exercise live build and Expo controls in Chromium
+        env:
+          NODE_PATH: /tmp/gelato-live-build-browser/node_modules
+        run: node tests/glasses-live-build-browser.cjs
 
       - name: Preserve real POS KDS and AR authority
         run: |

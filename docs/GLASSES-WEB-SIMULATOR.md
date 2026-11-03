@@ -17,7 +17,7 @@ The **Next Step**, **Next Item**, **Previous**, **Item Added**, and **Repeat** b
 
 **Speak replies** controls voice response playback. If speech recognition is unavailable or permission is denied, the manual buttons still work. The mic is never started automatically. The event log and a temporary caption explain each action.
 
-For safety, an active build cannot be advanced or ingredient-confirmed using preview navigation: verified observations continue through the existing governed Detect / Validation / Expo workflow. The new frontend never starts a build, records ingredients, or sends kitchen state changes from voice commands.
+Preview navigation remains separate from the ingredient ledger. Use governed camera observations or the explicit ingredient confirmation controls to record live build progress.
 
 The right sidebar now puts **Work**, **Simulator Readiness**, **Ingredient Detections**, **Build Exceptions**, and **Event Log** first. Hardware SDK diagnostics, vision/model experiments, calibration, and datasets are retained under the **Advanced settings** expander.
 
@@ -48,9 +48,12 @@ Read access requires `glasses.view`. Live state-changing actions require both `g
 
 ## Live data path
 
-POS / KDS → `glasses_current_work()` → web simulator → `glasses_build_start()` → simulated detector events → `glasses_build_observe()` → `glasses_validation_evaluate()` → controlled `glasses_handoff_to_expo()`.
+Live work flows from POS and KDS through `glasses_current_work()`, `glasses_build_start()`, the observation and manual review ledger, and `glasses_validation_evaluate()`. The existing Expo handoff updates KDS after the cook reviews the validation and confirms the same build.
 
-The simulator never directly updates KDS item status.
+- **Detect** and **Inject Unexpected** are Mock controls. Live browser camera targets create review cues. Choose **Confirm full quantity** after verifying the amount on the order.
+- Governed browser recognition can credit a single-unit order. Review multi-unit quantities manually because one camera track can describe one placement. When the build flags an order customization, verify the order and record the explicit customization review before handoff.
+- The first Expo click prepares a two-minute review for the current authenticated session. Confirming applies it to the same device, build, KDS revision and validation. If the ticket or evidence changes, review and confirm again.
+- Active sessions created before this release need a fresh build. Start the selected item again so the server can replace the older build and recalculate its requirements.
 
 ## Visual contract
 

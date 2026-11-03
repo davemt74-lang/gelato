@@ -61,7 +61,8 @@ assert.match(js,/assemblySources.set\(/,'local provenance distinguishes operator
 assert.match(js,/if\(next&&!state.build\)/,'build cannot silently switch ticket item');
 assert.match(js,/reconcileAutomaticAssemblyEvidence\(\)/,'retractions reopen automatically acknowledged ingredients');
 assert.match(js,/rejectedAssemblyTracks.add\(assemblySuggestion.signature\)/,'rejected suggestion is not immediately repeated');
-assert.match(js,/state.mode==='live'&&!autoAssemblyOptIn\)\{state.temporalReadySince=0;return;\}/,'no automatic validation when opt-in is off');
+assert.match(js,/state.mode==='live'&&\(!autoAssemblyOptIn\|\|requiresManualBuildReview\(\)\)\)\{state.temporalReadySince=0;return;\}/,'no automatic Live validation when opt-in is off or the build requires operator review');
+assert.match(js,/if\(state.temporalTracks.get\(lost.key\)===lost\)state.temporalTracks.delete\(lost.key\);/,'a removed track must restabilize with a fresh identifier before reappearing');
 assert.match(js,/clearAssemblySuggestion\(\);clearTemporalRuntime\(\);stopVisionRuntime\('model_unloaded'\)/,'model unload invalidates transient recognition evidence');
 
 assert.match(html,/id="visionAssemblyAutoOptIn"/,'per-runtime explicit opt-in exists');

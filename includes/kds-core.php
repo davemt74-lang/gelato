@@ -75,6 +75,17 @@ function kds_send_check(PDO $pdo,int $org,string $checkPublicId,int $userId,bool
 
 function kds_item(PDO $pdo,int $org,string $publicId,bool $forUpdate=false): array
 {
+    if($forUpdate&&$pdo->inTransaction()){
+        // POS voids and ticket commands lock the check before its routed items.
+        // A joined locking read alone can take the KDS row before the check.
+        $q=$pdo->prepare('SELECT check_id FROM kds_order_items WHERE organization_id=? AND public_id=? LIMIT 1');
+        $q->execute([$org,$publicId]);
+        $checkId=$q->fetchColumn();
+        if($checkId===false)throw new InvalidArgumentException('Kitchen item was not found.');
+        $q=$pdo->prepare('SELECT id FROM pos_checks WHERE organization_id=? AND id=? FOR UPDATE');
+        $q->execute([$org,(int)$checkId]);
+        if($q->fetchColumn()===false)throw new InvalidArgumentException('Kitchen item was not found.');
+    }
     $q=$pdo->prepare('SELECT k.*,c.public_id check_public_id,c.check_number,c.status check_status,i.item_name_snapshot,i.option_name_snapshot,i.quantity,i.special_instructions,i.status pos_item_status,s.name station_name,s.target_seconds FROM kds_order_items k JOIN pos_checks c ON c.id=k.check_id AND c.organization_id=k.organization_id JOIN pos_check_items i ON i.id=k.pos_check_item_id AND i.organization_id=k.organization_id LEFT JOIN kds_stations s ON s.id=k.station_id AND s.organization_id=k.organization_id WHERE k.organization_id=? AND k.public_id=? LIMIT 1'.($forUpdate?' FOR UPDATE':''));$q->execute([$org,$publicId]);$r=$q->fetch();if(!$r)throw new InvalidArgumentException('Kitchen item was not found.');return $r;
 }
 

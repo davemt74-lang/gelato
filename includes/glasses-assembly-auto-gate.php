@@ -14,8 +14,8 @@ function glasses_assembly_auto_observation_validate(PDO $pdo,array $device,array
     string $buildSessionPublicId,array $input): void
 {
     $meta=is_array($input['metadata']??null)?$input['metadata']:[];
-    if(($meta['automatic']??null)!==true)return;
-    if((string)($meta['source']??'')!=='web_glasses_simulator_auto_vision'
+    if(($meta['automatic']??null)!==true
+       ||(string)($meta['source']??'')!=='web_glasses_simulator_auto_vision'
        ||(string)($meta['adapter']??'')!=='onnx')
         throw new DomainException('Automatic browser observations require the governed ONNX adapter.');
     $runtimeId=trim((string)($input['runtimePublicId']??''));
@@ -55,7 +55,7 @@ function glasses_assembly_auto_observation_validate(PDO $pdo,array $device,array
     // to the selected item's actual menu assembly ingredients.
     $session=glasses_build_session_row($pdo,(int)$device['organization_id'],$buildSessionPublicId);
     glasses_build_assert_device_session($device,$session);
-    $work=glasses_current_work($pdo,$device);
+    $work=glasses_current_work($pdo,$device,false);
     $item=null;
     foreach((array)($work['items']??[]) as $workItem){
         if((string)($workItem['kdsItemPublicId']??'')===(string)$session['kds_public_id']){

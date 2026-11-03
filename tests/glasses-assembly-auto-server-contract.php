@@ -36,7 +36,8 @@ foreach([
 }
 s269(str_contains($dispatcher,"glasses_assembly_auto_observation_validate("),'server dispatch enforces automatic observation gate');
 s269(str_contains($dispatcher,"glasses_build_observe("),'manual and governed build path remains intact');
-s269(str_contains($gate,"if((\$meta['automatic']??null)!==true)return"),'nonautomatic operator observations untouched');
+s269(!str_contains($gate,"if((\$meta['automatic']??null)!==true)return"),'missing automatic intent cannot bypass the governed observation gate');
+s269(str_contains($dispatcher,"'evidenceKind'=>'manual_camera_review'"),'manual browser cues use a separate review-only path');
 s269(str_contains($gate,"if(\$confidence<\$floor"),'backend enforces class/auto confidence floor');
 s269(str_contains($gate,"if(!hash_equals("),'profile hash must remain unchanged');
 s269(str_contains($gate,"action")&&str_contains($gate,"compatible"),'server requires authorized model assignment');

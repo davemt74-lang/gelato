@@ -25,9 +25,12 @@ function glasses_vision_active_learning_targets(string $type): array {
 }
 function glasses_vision_active_learning_upsert(PDO $pdo,int $org,array $in): array {
     $type=(string)$in['candidateType'];$source=(string)$in['sourceType'];$ref=(string)$in['sourceReference'];
-    $key=glasses_vision_active_learning_candidate_key($type,$source,$ref);
-    $q=$pdo->prepare("SELECT id,public_id,status FROM glasses_vision_active_learning_candidates WHERE organization_id=? AND candidate_key=? LIMIT 1");
-    $q->execute([$org,$key]);$existing=$q->fetch();
+    $legacyKey=glasses_vision_active_learning_candidate_key($type,$source,$ref);
+    $observationId=(int)($in['observationId']??0);
+    // Observation keys are unique within a build; preserve old candidates only when they match this exact row.
+    $key=$observationId>0?glasses_vision_active_learning_candidate_key($type,$source,'observation-id:'.$observationId):$legacyKey;
+    $q=$pdo->prepare("SELECT id,public_id,status FROM glasses_vision_active_learning_candidates WHERE organization_id=? AND (candidate_key=? OR (candidate_key=? AND observation_id=?)) LIMIT 1");
+    $q->execute([$org,$key,$legacyKey,$observationId]);$existing=$q->fetch();
     if($existing)return ['created'=>false,'id'=>(int)$existing['id'],'publicId'=>$existing['public_id'],'status'=>$existing['status']];
     $public=glasses_public_id('vision-al');
     $targets=is_array($in['suggestedTargets']??null)?$in['suggestedTargets']:glasses_vision_active_learning_targets($type);
@@ -41,8 +44,8 @@ function glasses_vision_active_learning_wearer(PDO $pdo,int $org,int $deviceId,s
     $q=$pdo->prepare("SELECT a.id,a.user_id FROM glasses_user_device_assignments a WHERE a.organization_id=? AND a.device_id=? AND a.assigned_at<=? AND (a.released_at IS NULL OR a.released_at>?) ORDER BY a.assigned_at DESC,a.id DESC LIMIT 1");
     $q->execute([$org,$deviceId,$at,$at]);$r=$q->fetch();return $r?:null;
 }
-function glasses_vision_active_learning_queue_observation(PDO $pdo,int $org,int $candidateId,string $observationKey,int $actor): bool {
-    $sample=glasses_vision_lab_queue_observation($pdo,$org,$observationKey,null,$actor);
+function glasses_vision_active_learning_queue_observation(PDO $pdo,int $org,int $candidateId,int $observationId,int $actor): bool {
+    $sample=glasses_vision_lab_queue_observation_by_id($pdo,$org,$observationId,null,$actor);
     $q=$pdo->prepare("SELECT id FROM glasses_vision_training_samples WHERE organization_id=? AND public_id=? LIMIT 1");$q->execute([$org,(string)$sample['publicId']]);$sampleId=(int)$q->fetchColumn();
     $pdo->prepare("UPDATE glasses_vision_active_learning_candidates SET queued_sample_id=?,updated_at=NOW(6) WHERE organization_id=? AND id=?")->execute([$sampleId,$org,$candidateId]);
     return true;
@@ -50,6 +53,7 @@ function glasses_vision_active_learning_queue_observation(PDO $pdo,int $org,int 
 function glasses_vision_active_learning_scan(PDO $pdo,int $org,int $actor,string $trigger='manual'): array {
     if(!glasses_vision_active_learning_ready($pdo))throw new RuntimeException('Vision Lab V3 migration is not installed.');
     $created=0;$queued=0;$counts=['correction'=>0,'low_confidence'=>0,'shadow_disagreement'=>0,'drift_incident'=>0,'canary_failure'=>0,'rare_class'=>0];
+    $synthetic=glasses_vision_lab_synthetic_observation_sql();
 
     $q=$pdo->prepare("SELECT o.id,o.observation_key,o.component_key,o.confidence,o.created_at,s.device_id,k.location_id,k.station_id,d.display_name device_name
       FROM glasses_build_observations o
@@ -57,24 +61,24 @@ function glasses_vision_active_learning_scan(PDO $pdo,int $org,int $actor,string
       JOIN kds_order_items k ON k.id=s.kds_order_item_id AND k.organization_id=s.organization_id
       JOIN glasses_devices d ON d.id=s.device_id
       JOIN glasses_observation_corrections c ON c.observation_id=o.id AND c.organization_id=o.organization_id
-      WHERE o.organization_id=? GROUP BY o.id ORDER BY MAX(c.id) DESC LIMIT 1000");
+      WHERE o.organization_id=? AND NOT $synthetic GROUP BY o.id ORDER BY MAX(c.id) DESC LIMIT 1000");
     $q->execute([$org]);
     foreach($q->fetchAll() as $r){
         $wearer=glasses_vision_active_learning_wearer($pdo,$org,(int)$r['device_id'],(string)$r['created_at']);
         $res=glasses_vision_active_learning_upsert($pdo,$org,['candidateType'=>'correction','sourceType'=>'production_observation','sourceReference'=>(string)$r['observation_key'],'observationId'=>(int)$r['id'],'deviceId'=>(int)$r['device_id'],'locationId'=>(int)$r['location_id'],'stationId'=>$r['station_id']!==null?(int)$r['station_id']:null,'operatorUserId'=>$wearer?(int)$wearer['user_id']:null,'canonicalLabel'=>(string)$r['component_key'],'priorityScore'=>92,'severity'=>'high','reason'=>'Human correction indicates production evidence worth review.','evidence'=>['confidence'=>$r['confidence']!==null?(float)$r['confidence']:null],'suggestedTitle'=>'Corrected '.$r['component_key'].' examples']);
-        if($res['created']){$created++;$counts['correction']++;if(glasses_vision_active_learning_queue_observation($pdo,$org,(int)$res['id'],(string)$r['observation_key'],$actor))$queued++;}
+        if($res['created']){$created++;$counts['correction']++;if(glasses_vision_active_learning_queue_observation($pdo,$org,(int)$res['id'],(int)$r['id'],$actor))$queued++;}
     }
 
     $q=$pdo->prepare("SELECT o.id,o.observation_key,o.component_key,o.confidence,o.created_at,s.device_id,k.location_id,k.station_id
       FROM glasses_build_observations o JOIN glasses_build_sessions s ON s.id=o.build_session_id AND s.organization_id=o.organization_id
       JOIN kds_order_items k ON k.id=s.kds_order_item_id AND k.organization_id=s.organization_id
-      WHERE o.organization_id=? AND o.confidence IS NOT NULL AND o.confidence<0.75 ORDER BY o.confidence ASC,o.id DESC LIMIT 1000");
+      WHERE o.organization_id=? AND o.confidence IS NOT NULL AND o.confidence<0.75 AND NOT $synthetic ORDER BY o.confidence ASC,o.id DESC LIMIT 1000");
     $q->execute([$org]);
     foreach($q->fetchAll() as $r){
         $conf=(float)$r['confidence'];$wearer=glasses_vision_active_learning_wearer($pdo,$org,(int)$r['device_id'],(string)$r['created_at']);
         $score=min(95,72+((0.75-$conf)*60));
         $res=glasses_vision_active_learning_upsert($pdo,$org,['candidateType'=>'low_confidence','sourceType'=>'production_observation','sourceReference'=>(string)$r['observation_key'],'observationId'=>(int)$r['id'],'deviceId'=>(int)$r['device_id'],'locationId'=>(int)$r['location_id'],'stationId'=>$r['station_id']!==null?(int)$r['station_id']:null,'operatorUserId'=>$wearer?(int)$wearer['user_id']:null,'canonicalLabel'=>(string)$r['component_key'],'priorityScore'=>$score,'severity'=>$conf<0.5?'high':'warning','reason'=>'Production detection confidence is below the active-learning threshold.','evidence'=>['confidence'=>$conf,'threshold'=>0.75],'suggestedTitle'=>'Low-confidence '.$r['component_key'].' examples']);
-        if($res['created']){$created++;$counts['low_confidence']++;if(glasses_vision_active_learning_queue_observation($pdo,$org,(int)$res['id'],(string)$r['observation_key'],$actor))$queued++;}
+        if($res['created']){$created++;$counts['low_confidence']++;if(glasses_vision_active_learning_queue_observation($pdo,$org,(int)$res['id'],(int)$r['id'],$actor))$queued++;}
     }
 
     $q=$pdo->prepare("SELECT e.id,e.frame_key,e.critical_mismatch,e.champion_only_count,e.challenger_only_count,e.mean_iou,e.correction_alignment,e.created_at,r.device_id,b.location_id,b.station_id
@@ -107,9 +111,10 @@ function glasses_vision_active_learning_scan(PDO $pdo,int $org,int $actor,string
         if($res['created']){$created++;$counts['canary_failure']++;}
     }
 
+    $syntheticApproved=glasses_vision_lab_synthetic_observation_sql('approved_observation');
     $q=$pdo->prepare("SELECT o.component_key,COUNT(*) production_count,
-      (SELECT COUNT(*) FROM glasses_vision_training_samples ts WHERE ts.organization_id=o.organization_id AND ts.review_status='approved' AND ts.canonical_label=o.component_key) approved_count
-      FROM glasses_build_observations o WHERE o.organization_id=? GROUP BY o.component_key HAVING production_count>=3 AND approved_count<20 ORDER BY approved_count ASC,production_count DESC LIMIT 100");
+      (SELECT COUNT(*) FROM glasses_vision_training_samples ts LEFT JOIN glasses_build_observations approved_observation ON approved_observation.id=ts.observation_id AND approved_observation.organization_id=ts.organization_id WHERE ts.organization_id=o.organization_id AND ts.review_status='approved' AND ts.canonical_label=o.component_key AND NOT $syntheticApproved) approved_count
+      FROM glasses_build_observations o WHERE o.organization_id=? AND NOT $synthetic GROUP BY o.component_key HAVING production_count>=3 AND approved_count<20 ORDER BY approved_count ASC,production_count DESC LIMIT 100");
     $q->execute([$org]);
     foreach($q->fetchAll() as $r){
         $approved=(int)$r['approved_count'];$prod=(int)$r['production_count'];$score=min(88,65+min(20,$prod)-$approved);

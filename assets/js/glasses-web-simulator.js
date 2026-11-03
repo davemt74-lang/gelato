@@ -9,6 +9,82 @@ const PHYSICAL_PLACEMENT_CERTIFIED=false; // 285D4: never auto-acknowledge until
 let autoAssemblyOptIn=false;
 try{autoAssemblyOptIn=localStorage.getItem(AUTO_ASSEMBLY_KEY)==='1';}catch{}
 let assemblySuggestion=null,assemblySuggestionSignature='',assemblyEpoch=0;
+let buildGeneration=0,displayGeneration=0,handoffGeneration=0,buildRequest=null,displayChanging=false;
+const EXPO_CONFIRMATION_MS=120000;
+
+function selectedBuildWorkKey(){
+  const item=selectedItem(),line=item?.posLine;
+  return JSON.stringify([state.work?.station?.publicId,state.work?.location?.id,
+    item?.kdsItemPublicId,item?.kdsRevision,item?.status,line?.id,line?.updatedAt,line?.quantity,line?.optionName,line?.specialInstructions,line?.modifiers]);
+}
+function buildMatchesLiveWork(build,item){
+  const line=item?.posLine,context=build.context;
+  return !!line&&!!context&&['queued','in_progress'].includes(item.status)&&
+    (build.posCheckItemId==null||build.posCheckItemId===line.id)&&
+    (build.locationId==null||build.locationId===state.work?.location?.id)&&
+    (build.stationPublicId==null||build.stationPublicId===state.work?.station?.publicId)&&
+    (context.posLineUpdatedAt??null)===(line.updatedAt??null)&&Number(context.quantity)===Number(line.quantity)&&
+    (context.optionName||'')===(line.optionName||'')&&(context.specialInstructions||'')===(line.specialInstructions||'')&&
+    JSON.stringify(context.modifiers||[])===JSON.stringify(line.modifiers||[]);
+}
+function captureBuildScope(){
+  return {generation:buildGeneration,mode:state.mode,deviceId:state.device?.publicId,
+    workKey:selectedBuildWorkKey(),build:state.build};
+}
+function buildScopeCurrent(scope){
+  return scope.generation===buildGeneration&&scope.mode===state.mode&&scope.deviceId===state.device?.publicId&&
+    scope.workKey===selectedBuildWorkKey()&&scope.build===state.build;
+}
+function clearHandoffConfirmation(){
+  handoffGeneration+=1;
+  state.cookUx.handoffArmed=false;
+  state.cookUx.handoffConfirmation=null;
+  if(state.cookUx.preview==='explicit_handoff')state.cookUx.preview=null;
+  $('handoffExpo').textContent='Send to Expo / Finishing';
+}
+function invalidateBuildScope(){
+  buildGeneration+=1;
+  buildRequest=null;
+  clearHandoffConfirmation();
+}
+function setBuildValidation(validation){
+  const old=state.validation;
+  if(old?.publicId!==validation?.publicId||old?.revision!==validation?.revision||
+    old?.snapshotHash!==validation?.snapshotHash||old?.status!==validation?.status)
+    clearHandoffConfirmation();
+  state.validation=validation;
+}
+function displayLiveValidation(validation){
+  if(validation?.buildSessionPublicId!==state.build?.publicId||!Array.isArray(validation?.summary?.checks))
+    throw new Error('Current build validation was unavailable. Validate the build again.');
+  const existing=new Map(state.build.components.map(component=>[component.componentKey,component]));
+  state.build.components=validation.summary.checks.map(check=>{
+    const component=existing.get(check.componentKey);
+    return {...component,componentKey:check.componentKey,displayName:check.displayName,unit:check.unit,
+      expectedQuantity:check.expectedQuantity,detectedQuantity:check.detectedQuantity,status:check.componentStatus,
+      confidence:check.confidence,optional:component?.metadata?.advisoryForCustomizedOrder?component.optional:check.optional};
+  });
+  setBuildValidation(validation);
+}
+function replaceBuild(build){
+  state.build=build;
+  state.validation=null;
+  clearHandoffConfirmation();
+}
+function beginBuildRequest(){
+  if(buildRequest||displayChanging)return null;
+  const scope=captureBuildScope();
+  buildRequest=scope;
+  render();
+  return scope;
+}
+function finishBuildRequest(scope){
+  if(scope&&buildRequest===scope){buildRequest=null;render();}
+}
+function requiresManualBuildReview(){
+  return Number(state.build?.context?.quantity??selectedItem()?.posLine?.quantity??1)!==1||
+    state.build?.components?.some(component=>component.metadata?.manualReviewRequired===true);
+}
 const productionAutoFocus=window.GelatoProductionAutoFocus?.create?.()||null;
 let recentProductionHands=null;
 function resetProductionFocusEvidence(){productionAutoFocus?.reset();recentProductionHands=null;}
@@ -69,12 +145,13 @@ async function refreshSimulatorCsrf(){
 }
 async function api(action,payload={}){
   if(state.recovery?.networkFault)throw new Error('SIMULATED_NETWORK_OFFLINE');
+  const devicePublicId=state.device?.publicId||'',runtimePublicId=cfg.runtimePublicId||'';
   async function post(){
     const r=await fetch(cfg.api,{
       method:'POST',
       headers:{'Content-Type':'application/json','X-CSRF-Token':cfg.csrf},
       credentials:'same-origin',cache:'no-store',
-      body:JSON.stringify({csrf_token:cfg.csrf,action,devicePublicId:state.device?.publicId||'',runtimePublicId:cfg.runtimePublicId||'',...payload})
+      body:JSON.stringify({csrf_token:cfg.csrf,action,devicePublicId,runtimePublicId,...payload})
     });
     const d=await r.json().catch(()=>({ok:false,message:'Invalid server response.'}));
     return {r,d};
@@ -125,6 +202,7 @@ function invalidateTransientVision(reason){
   log('RECOVERY','Invalidated transient vision state: '+reason+'.');renderRuntimeRecovery();
 }
 function enterRecovery(stateName,reason,{stopSync=false}={}){
+  invalidateBuildScope();
   state.recovery.epoch+=1;if(state.recovery.timer){clearTimeout(state.recovery.timer);state.recovery.timer=null;}
   state.recovery.state=stateName;state.recovery.lastReason=reason;invalidateTransientVision(reason);
   if(stopSync)stopLiveStationSync('idle');renderRuntimeRecovery();
@@ -133,10 +211,18 @@ async function rehydrateCanonicalBuild(){
   if(state.device?.virtualPreview)return false; // Live preview never starts or resumes a kitchen build.
   const saved=recoveryStored(),candidateSession=saved?.devicePublicId===state.device?.publicId?saved?.buildSessionPublicId:null;
   if(candidateSession){
+    const scope=captureBuildScope();
     try{
       const d=await api('build.get',{buildSessionPublicId:candidateSession});
-      if(d.buildSession?.status==='active'&&['queued','in_progress'].includes(d.buildSession?.kdsStatus)){state.build=d.buildSession;state.validation=null;saveRecoveryResume();return true;}
-    }catch(e){log('RECOVERY','Saved build could not be rehydrated: '+e.message);}
+      if(!buildScopeCurrent(scope))return false;
+      const build=d.buildSession,item=orderItems().find(item=>item.kdsItemPublicId===build?.kdsItemPublicId);
+      if(build?.status==='active'&&buildMatchesLiveWork(build,item)){
+        state.selectedKdsItemPublicId=build.kdsItemPublicId;
+        replaceBuild(build);saveRecoveryResume();return true;
+      }
+      clearRecoveryResume();
+      log('RECOVERY','Saved build is no longer current. Start a build for the current order.');
+    }catch(e){if(buildScopeCurrent(scope))log('RECOVERY','Saved build could not be rehydrated: '+e.message);}
   }
   // Recovery restores only a previously saved active session. Entering Live
   // or reconnecting must never create a fresh kitchen build implicitly.
@@ -162,6 +248,7 @@ async function resumeRuntimeRecovery(reason='manual_resume'){
     },RUNTIME_FRESH_BARRIER_MS);
     return true;
   }catch(e){
+    if(epoch!==state.recovery.epoch)return false;
     state.recovery.state=/no longer resumable/i.test(e.message)?'blocked':'disconnected';
     state.recovery.lastReason=e.message||'recovery_failed';state.recovery.suppressAutomatic=true;renderRuntimeRecovery();log('RECOVERY',state.recovery.lastReason);return false;
   }
@@ -202,10 +289,10 @@ function setSyncBadge(status,label){
 }
 function liveWorkFingerprint(work){
   const items=(work?.items||[]).map(x=>({
-    id:x.kdsItemPublicId||'',status:x.status||'',ticket:x.ticket?.checkNumber||'',
+    id:x.kdsItemPublicId||'',revision:x.kdsRevision??null,status:x.status||'',ticket:x.ticket?.checkNumber||'',
     table:x.ticket?.tableName||'',service:x.ticket?.serviceMode||'',
     name:x.posLine?.name||'',option:x.posLine?.optionName||'',
-    qty:x.posLine?.quantity??null,special:x.posLine?.specialInstructions||'',
+    qty:x.posLine?.quantity??null,updatedAt:x.posLine?.updatedAt||'',special:x.posLine?.specialInstructions||'',
     modifiers:(x.posLine?.modifiers||[]).map(m=>m.name||m.label||String(m))
   }));
   return JSON.stringify({revision:work?.revision||'',station:work?.station?.publicId||'',focus:work?.focusItem?.kdsItemPublicId||'',items});
@@ -226,6 +313,7 @@ function scheduleLiveStationSync(delay=LIVE_SYNC_BASE_MS){
 }
 function applyLiveWork(work,{announce=false}={}){
   const previous=state.syncFingerprint,next=liveWorkFingerprint(work);
+  const priorWork=selectedBuildWorkKey();
   const notifier=window.GelatoGlassesHudNotifications;
   const changes=previous&&!state.kitchenBusy&&state.work?.station?.publicId===work?.station?.publicId
     ?notifier?.transitioned?.(state.work.items||[],work?.items||[])||[]:[];
@@ -238,6 +326,19 @@ function applyLiveWork(work,{announce=false}={}){
     state.previewStepIndex=0;
     if(activeBuildItem&&ids.includes(activeBuildItem))state.selectedKdsItemPublicId=activeBuildItem;
     else state.selectedKdsItemPublicId=work?.focusItem?.kdsItemPublicId||ids[0]||'';
+  }
+  const activeItem=activeBuildItem&&items.find(item=>item.kdsItemPublicId===activeBuildItem);
+  const retireBuild=state.build&&!buildMatchesLiveWork(state.build,activeItem);
+  if(priorWork!==selectedBuildWorkKey()||retireBuild){
+    invalidateBuildScope();
+    state.validation=null;
+  }
+  if(retireBuild){
+    replaceBuild(null);clearRecoveryResume();clearCameraTarget();$('detectionLayer').innerHTML='';
+    void stopShadowModel('build_reset');void unloadGovernedVisionModel('build_reset');
+    log('LIVE',activeItem&&['queued','in_progress'].includes(activeItem.status)
+      ?'The order or station changed. Start a new build for the current order.'
+      :'This build is no longer active at the selected station. Refresh current kitchen work.');
   }
   state.syncFingerprint=next;state.lastSyncAt=Date.now();state.ticketSyncAt=(typeof performance!=='undefined'&&performance.now)?performance.now():Date.now();render();
   for(const change of changes)notifier?.announceTicket?.(change.event,change.item,{
@@ -590,25 +691,38 @@ function setCameraTargetFromPointer(event){
   $('submitCameraTarget').disabled=false;$('clearCameraTarget').disabled=false;
 }
 async function submitCameraTargetObservation(){
+  let scope=null;
   try{
-    if(!state.cameraTarget)throw new Error('Choose a target on the camera image first.');
+    if(!state.cameraTarget||state.cameraSource!=='camera'||!state.cameraStream)
+      throw new Error('Choose a target on the active camera image first.');
     if(!state.build)throw new Error('Start a build first.');
     const selected=$('cameraTargetComponent').value,current=currentComponent();
     const c=state.build.components.find(x=>x.componentKey===selected)||current;
     if(!c)throw new Error('No build component is available for this target.');
-    const confidence=Number($('cameraTargetConfidence').value)/100,qty=Math.max(.001,Number(c.expectedQuantity||1)-Number(c.detectedQuantity||0));
+    if(c.componentKey==='manual:order-customization')throw new Error('Review order customizations directly in the build checklist.');
+    const entered=Number($('cameraTargetConfidence').value)/100;
+    const confidence=state.mode==='live'?Math.min(.74,entered):entered;
+    const qty=Math.max(.001,Number(c.expectedQuantity||1)-Number(c.detectedQuantity||0));
     flashDetection(c,{confidence,state:confidence<.75?'low-confidence':'confirmed'});
-    if(confidence<.75)captureHardExample('manual_low_confidence',[{label:c.displayName,componentKey:c.componentKey,confidence,bbox:state.cameraTarget}],{key:'manual-low|'+c.componentKey,summary:c.displayName+' '+Math.round(confidence*100)+'% manual review'});
+    if(entered<.75)captureHardExample('manual_low_confidence',[{label:c.displayName,componentKey:c.componentKey,confidence,bbox:state.cameraTarget}],{key:'manual-low|'+c.componentKey,summary:c.displayName+' '+Math.round(confidence*100)+'% manual review'});
     if(state.mode==='mock'){
-      c.detectedQuantity=Number(c.detectedQuantity||0)+qty;c.confidence=confidence;c.status=confidence<.75?'verify':'confirmed';state.validation=null;render();log('VISION','Submitted camera target for '+c.displayName+' in mock mode.');return;
+      c.detectedQuantity=Number(c.detectedQuantity||0)+qty;c.confidence=confidence;c.status=confidence<.75?'verify':'confirmed';setBuildValidation(null);render();log('VISION','Submitted camera target for '+c.displayName+' in mock mode.');return;
     }
-    const d=await api('build.observe',{buildSessionPublicId:state.build.publicId,observationKey:'camera-websim-'+Date.now()+'-'+state.seq,componentKey:c.componentKey,displayName:c.displayName,observationAction:'added',quantity:qty,confidence,trackingId:'camera-websim-'+state.seq,bbox:state.cameraTarget,metadata:{source:'web_glasses_simulator_camera',manualTarget:true}});
-    state.build=d.buildSession;state.validation=null;render();log('LIVE','Submitted camera-target observation for '+c.displayName+'.');
-  }catch(e){log('ERROR',e.message);}
+    if(!state.device?.simulatorWritable)throw new Error('A writable paired device is required.');
+    scope=beginBuildRequest();if(!scope)return;
+    setBuildValidation(null);
+    const d=await api('build.observe',{buildSessionPublicId:scope.build.publicId,observationKey:'camera-websim-'+Date.now()+'-'+state.seq,componentKey:c.componentKey,displayName:c.displayName,observationAction:'added',quantity:qty,confidence,trackingId:'camera-websim-'+state.seq,bbox:state.cameraTarget,metadata:{source:'web_glasses_simulator_camera',manualTarget:true}});
+    if(!buildScopeCurrent(scope))return;
+    replaceBuild(d.buildSession);log('LIVE','Camera target recorded for '+c.displayName+'. Confirm the full quantity after review.');
+  }catch(e){if(!scope||buildScopeCurrent(scope))log('ERROR',e.message);}
+  finally{finishBuildRequest(scope);}
 }
 function renderCameraTargetComponents(){
   const comps=state.build?.components||[];
-  $('cameraTargetComponent').innerHTML='<option value="">Current required component</option>'+comps.filter(c=>c.status!=='unexpected'&&c.status!=='ignored').map(c=>'<option value="'+escapeHtml(c.componentKey)+'">'+escapeHtml(c.displayName)+'</option>').join('');
+  const target=$('cameraTargetComponent'),selected=target.value;
+  const available=comps.filter(c=>c.status!=='unexpected'&&c.status!=='ignored'&&c.componentKey!=='manual:order-customization');
+  target.innerHTML='<option value="">Current required component</option>'+available.map(c=>'<option value="'+escapeHtml(c.componentKey)+'">'+escapeHtml(c.displayName)+'</option>').join('');
+  if(available.some(c=>c.componentKey===selected))target.value=selected;
 }
 
 function datasetSlug(value){return String(value||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,80)||'class';}
@@ -940,9 +1054,10 @@ function decodeYoloV8(tensor,config){
 }
 async function unloadGovernedVisionModel(reason='unloaded'){
   clearAssemblySuggestion();clearTemporalRuntime();stopVisionRuntime('model_unloaded');
-  state.browserModel.loadEpoch+=1;const session=state.browserModel.session;
+  const epoch=++state.browserModel.loadEpoch,session=state.browserModel.session;
   state.browserModel.session=null;state.browserModel.assignment=null;state.browserModel.profile=null;state.browserModel.config=null;state.browserModel.package=null;state.browserModel.verifiedSha256=null;
   try{if(session&&typeof session.release==='function')await session.release();}catch{}
+  if(epoch!==state.browserModel.loadEpoch)return;
   $('unloadVisionModel').disabled=true;setVisionModelStatus('idle',reason==='build_reset'?'Model released for build boundary.':'No governed browser model loaded.');
   if($('visionAdapterSelect')?.value==='onnx')state.visionAdapter=null;
 }
@@ -1242,7 +1357,9 @@ function setShadowStatus(status,message){
 }
 async function stopShadowModel(reason='idle'){
   const session=state.shadowModel.session;state.shadowModel={status:'idle',session:null,assignment:null,config:null,package:null,verifiedSha256:null,runPublicId:null,summary:null,frameSeq:0,busy:false};
+  const stopped=state.shadowModel;
   try{if(session&&typeof session.release==='function')await session.release();}catch{}
+  if(stopped!==state.shadowModel)return;
   setShadowStatus('idle',reason==='build_reset'?'Shadow session released for build boundary.':'No shadow challenger loaded.');
   if($('completeShadowModel'))$('completeShadowModel').disabled=true;
 }
@@ -1351,7 +1468,7 @@ function trackDetections(detections,now){
   for(const d of detections){
     const key=d.componentKey||d.label;seen.add(key);
     const prev=state.temporalTracks.get(key);
-    const track=prev||{key,trackId:'webvision-'+(++state.visionFrameSeq)+'-'+Date.now(),firstSeen:now,lastSeen:now,frames:0,stable:false,present:false,submitted:false,submittedQuantity:0,removed:false,bbox:d.bbox,label:d.label,componentKey:d.componentKey};
+    const track=prev||{key,trackId:'webvision-'+(++state.visionFrameSeq)+'-'+Date.now(),firstSeen:now,lastSeen:now,frames:0,stable:false,present:false,submitted:false,submittedQuantity:0,bbox:d.bbox,label:d.label,componentKey:d.componentKey};
     track.lastSeen=now;track.frames+=1;track.present=true;track.missingSince=0;track.bbox=d.bbox;track.confidence=d.confidence;track.label=d.label;track.componentKey=d.componentKey;
     track.profileMatched=d.profileMatched===true;track.profileMinimumConfidence=Number(d.profileMinimumConfidence||0);
     track.detectorLabel=d.detectorLabel||d.label;
@@ -1381,7 +1498,7 @@ async function submitTemporalObservation(track,action,quantity,metadata={}){
   if(!state.build||!track.componentKey)return false;
   // Never submit production evidence from a test fixture, unprofiled label,
   // unverified model, old build, or disabled opt-in.
-  if(state.mode==='live'&&(!autoAssemblyOptIn||!cfg.runtimePublicId||
+  if(state.mode==='live'&&(requiresManualBuildReview()||!autoAssemblyOptIn||!cfg.runtimePublicId||
       !state.cameraStream||visionMode()!=='automatic'||
       state.visionAdapter?.id!=='onnx'||state.browserModel.status!=='ready'||
       !state.browserModel.verifiedSha256||state.browserModel.assignment?.action!=='apply'||
@@ -1402,6 +1519,7 @@ async function submitTemporalObservation(track,action,quantity,metadata={}){
       norm(String(i.id).split(':').slice(1).join(':')||i.name)===norm(displayName)))
       return false;
   }
+  let scope=null;
   try{
     if(state.mode==='mock'){
       if(!component)return false;
@@ -1409,9 +1527,11 @@ async function submitTemporalObservation(track,action,quantity,metadata={}){
       component.detectedQuantity=action==='removed'?Math.max(0,current-quantity):action==='seen'?Math.max(current,quantity):current+quantity;
       component.confidence=track.confidence;
       component.status=component.detectedQuantity<=0?'waiting':track.confidence<.75?'verify':component.detectedQuantity+.0001>=Number(component.expectedQuantity||1)?'confirmed':'detected';
-      state.validation=null;render();return true;
+      setBuildValidation(null);render();return true;
     }
-    const result=await api('build.observe',{buildSessionPublicId:state.build.publicId,observationKey:'browser-temporal-'+action+'-'+Date.now()+'-'+state.seq,componentKey:track.componentKey,displayName,observationAction:action,quantity,confidence:track.confidence||.9,trackingId:track.trackId,bbox:track.bbox,metadata:{source:'web_glasses_simulator_auto_vision',
+    scope=beginBuildRequest();if(!scope)return false;
+    setBuildValidation(null);
+    const result=await api('build.observe',{buildSessionPublicId:scope.build.publicId,observationKey:'browser-temporal-'+action+'-'+Date.now()+'-'+state.seq,componentKey:track.componentKey,displayName,observationAction:action,quantity,confidence:track.confidence||.9,trackingId:track.trackId,bbox:track.bbox,metadata:{source:'web_glasses_simulator_auto_vision',
       temporalSource:'web_glasses_simulator_temporal_vision',automatic:true,temporal:true,
       adapter:state.visionAdapter?.id||'fixture',runtimePublicId:cfg.runtimePublicId||'',
       detectorName:state.browserModel.assignment?.detectorName||'',
@@ -1419,12 +1539,15 @@ async function submitTemporalObservation(track,action,quantity,metadata={}){
       profileHash:state.browserModel.profile?.profileHash||'',
       requestedThreshold:Number($('visionConfidenceThreshold')?.value||75)/100,
       ...metadata}});
-    state.build=result.buildSession;state.validation=null;
-    reconcileAutomaticAssemblyEvidence();render();return true;
-  }catch(e){log('ERROR',e.message);return false;}
+    if(!buildScopeCurrent(scope))return false;
+    replaceBuild(result.buildSession);
+    reconcileAutomaticAssemblyEvidence();return true;
+  }catch(e){if(!scope||buildScopeCurrent(scope))log('ERROR',e.message);return false;}
+  finally{finishBuildRequest(scope);}
 }
 async function processTemporalEvents(now){
-  if(visionMode()!=='automatic'||!state.build||state.mode==='live'&&!autoAssemblyOptIn)return;
+  if(visionMode()!=='automatic'||!state.build||state.mode==='live'&&(!autoAssemblyOptIn||requiresManualBuildReview()))return;
+  const generation=buildGeneration;
   for(const track of state.temporalTracks.values()){
     if(track.present&&track.stable&&!track.submitted){
       const component=state.build.components?.find(c=>c.componentKey===track.componentKey);
@@ -1438,28 +1561,33 @@ async function processTemporalEvents(now){
         });
       }
       const qty=component?Math.max(.001,Number(component.expectedQuantity||1)-Number(component.detectedQuantity||0)):1;
-      if(await submitTemporalObservation(track,'added',qty,{sequenceViolation:!!violation})){
-        track.submitted=true;track.submittedQuantity=qty;track.removed=false;state.temporalSequence.push({componentKey:track.componentKey,at:now,action:'added'});pushTemporalEvent('added',track,{quantity:qty});
+      const applied=await submitTemporalObservation(track,'added',qty,{sequenceViolation:!!violation});
+      if(generation!==buildGeneration)return;
+      if(applied){
+        track.submitted=true;track.submittedQuantity=qty;state.temporalSequence.push({componentKey:track.componentKey,at:now,action:'added'});pushTemporalEvent('added',track,{quantity:qty});
       }
     }
   }
-  const stableMissing=[...state.temporalTracks.values()].filter(t=>t.stable&&t.submitted&&!t.present&&!t.removed&&t.missingSince&&now-t.missingSince>=VISION_REMOVAL_GRACE_MS);
+  const stableMissing=[...state.temporalTracks.values()].filter(t=>t.stable&&t.submitted&&!t.present&&t.missingSince&&now-t.missingSince>=VISION_REMOVAL_GRACE_MS);
   for(const lost of stableMissing){
     const replacement=[...state.temporalTracks.values()].find(t=>t!==lost&&t.present&&t.stable&&!t.submitted&&bboxIou(lost.bbox,t.bbox)>=VISION_REPLACEMENT_IOU);
-    if(await submitTemporalObservation(lost,'removed',Math.max(.001,lost.submittedQuantity||1),{reason:replacement?'replacement':'track_absent'})){
-      lost.removed=true;lost.submitted=false;state.temporalSequence.push({componentKey:lost.componentKey,at:now,action:'removed'});pushTemporalEvent(replacement?'replaced':'removed',lost,{replacementComponentKey:replacement?.componentKey||null});
+    const applied=await submitTemporalObservation(lost,'removed',Math.max(.001,lost.submittedQuantity||1),{reason:replacement?'replacement':'track_absent'});
+    if(generation!==buildGeneration)return;
+    if(applied){
+      if(state.temporalTracks.get(lost.key)===lost)state.temporalTracks.delete(lost.key);
+      state.temporalSequence.push({componentKey:lost.componentKey,at:now,action:'removed'});pushTemporalEvent(replacement?'replaced':'removed',lost,{replacementComponentKey:replacement?.componentKey||null});
       captureHardExample(replacement?'replacement':'track_disappearance',[lost,...(replacement?[replacement]:[])],{key:(replacement?'replacement|':'disappear|')+lost.componentKey,summary:replacement?(lost.label||lost.componentKey)+' → '+(replacement.label||replacement.componentKey):(lost.label||lost.componentKey)+' disappeared after stable presence'});
       if(replacement)log('VISION',(lost.label||lost.componentKey)+' replaced by '+(replacement.label||replacement.componentKey)+'.');else log('VISION',(lost.label||lost.componentKey)+' removed after stable absence.');
     }
   }
 }
 function temporalAssessment(now=Date.now()){
-  const comps=state.build?.components||[];
+  const comps=(state.build?.components||[]).filter(c=>!c.metadata?.advisoryForCustomizedOrder);
   if(!state.build)return {ready:false,state:'IDLE',missing:0,verify:0,unexpected:0,sequence:0,pending:0};
   const missing=comps.filter(c=>!c.optional&&!['confirmed','ignored','unexpected'].includes(c.status)).length;
   const verify=comps.filter(c=>c.status==='verify').length;
   const unexpected=comps.filter(c=>c.status==='unexpected').length;
-  const pending=[...state.temporalTracks.values()].filter(t=>(t.present&&!t.stable)||(t.stable&&t.submitted&&!t.present&&!t.removed&&now-t.missingSince<VISION_REMOVAL_GRACE_MS)).length;
+  const pending=[...state.temporalTracks.values()].filter(t=>(t.present&&!t.stable)||(t.stable&&t.submitted&&!t.present&&now-t.missingSince<VISION_REMOVAL_GRACE_MS)).length;
   const sequence=state.temporalViolations.length;
   const ready=missing===0&&verify===0&&unexpected===0&&pending===0&&sequence===0;
   return {ready,state:ready?'READY':sequence||verify||unexpected?'BLOCKED':'BUILDING',missing,verify,unexpected,sequence,pending};
@@ -1472,17 +1600,21 @@ function renderTemporalPanel(){
 }
 async function autoEvaluateTemporalReadiness(now=Date.now()){
   const gate=temporalAssessment(now);state.temporalGate=gate;renderTemporalPanel();
-  if(visionMode()!=='automatic'||!gate.ready||state.mode==='live'&&!autoAssemblyOptIn){state.temporalReadySince=0;return;}
+  if(visionMode()!=='automatic'||!gate.ready||state.mode==='live'&&(!autoAssemblyOptIn||requiresManualBuildReview())){state.temporalReadySince=0;return;}
   if(!state.temporalReadySince){state.temporalReadySince=now;return;}
   if(now-state.temporalReadySince<VISION_READY_STABLE_MS||state.temporalValidationBusy)return;
   const fingerprint=(state.build?.publicId||'')+'|'+(state.build?.components||[]).map(c=>c.componentKey+':'+c.status+':'+c.detectedQuantity).join(',');
   if(fingerprint===state.temporalValidationFingerprint)return;
   state.temporalValidationBusy=true;
+  let scope=null;
   try{
     if(state.mode==='mock'){mockValidate();state.temporalValidationFingerprint=fingerprint;log('VALIDATION','Temporal build automatically validated: '+state.validation.status);render();return;}
-    const d=await api('validation.evaluate',{buildSessionPublicId:state.build.publicId});state.validation=d.validation;state.temporalValidationFingerprint=fingerprint;log('VALIDATION','Temporal build automatically validated: '+state.validation.status);render();
-  }catch(e){log('ERROR',e.message);}
-  finally{state.temporalValidationBusy=false;}
+    scope=beginBuildRequest();if(!scope)return;
+    const d=await api('validation.evaluate',{buildSessionPublicId:scope.build.publicId});
+    if(!buildScopeCurrent(scope))return;
+    displayLiveValidation(d.validation);state.temporalValidationFingerprint=fingerprint;log('VALIDATION','Temporal build automatically validated: '+state.validation.status);
+  }catch(e){if(!scope||buildScopeCurrent(scope))log('ERROR',e.message);}
+  finally{state.temporalValidationBusy=false;finishBuildRequest(scope);}
 }
 function framePipelinePolicy(){
   return {
@@ -1631,7 +1763,7 @@ function mockBuild(){return {publicId:'build-mock-1',status:'active',kdsItemPubl
 function selectedItem(){const items=state.work?.items||[];if(state.selectedKdsItemPublicId){const chosen=items.find(x=>x.kdsItemPublicId===state.selectedKdsItemPublicId);if(chosen)return chosen;}return state.work?.focusItem||items[0]||null;}
 function deriveSteps(){const item=selectedItem();const fromBuild=state.build?.context?.buildDefinition?.steps;if(Array.isArray(fromBuild)&&fromBuild.length)return fromBuild.map(x=>typeof x==='string'?x:(x.text||x.label||''));const rx=item?.recipeSource?.recipe?.instructions;return Array.isArray(rx)&&rx.length?rx:['Recipe steps unavailable — see the KDS item details'];}
 function itemName(){return selectedItem()?.posLine?.name||state.build?.context?.itemName||'No focused item';}
-function currentComponent(){return state.build?.components?.find(c=>!c.optional&&!['confirmed','ignored'].includes(c.status))||null;}
+function currentComponent(){return state.build?.components?.find(c=>!c.optional&&!c.metadata?.advisoryForCustomizedOrder&&!['confirmed','ignored'].includes(c.status))||null;}
 function orderItems(){const items=state.work?.items||[];return items.length?items:(state.work?.focusItem?[state.work.focusItem]:[]);}
 function ticketElapsedSeconds(item,index){
   if(state.mode!=='live'){
@@ -1930,20 +2062,20 @@ function renderBuildRail(item){
 function renderValidationPanel(comps,validation){
   const unexpected=comps.filter(c=>c.status==='unexpected').length;
   const missing=comps.filter(c=>!c.optional&&!['confirmed','ignored','unexpected'].includes(c.status)).length;
-  const accounted=comps.filter(c=>c.status==='confirmed'||(c.optional&&c.status==='ignored')).length;
-  const required=comps.filter(c=>!c.optional&&c.status!=='unexpected').length;
+  const accounted=validation?.summary?.passedComponents??comps.filter(c=>!c.optional&&c.status==='confirmed').length;
+  const required=validation?.summary?.requiredComponents??comps.filter(c=>!c.optional&&c.status!=='unexpected').length;
   const stateName=!state.build?'PREVIEW':validation?.status==='ready_for_finishing'?'READY':validation?.status==='blocked'?'BLOCKED':comps.some(c=>c.status==='verify')?'VERIFY':'BUILDING';
   $('hudValidationState').textContent=stateName;
   $('hudValidationCount').textContent=accounted+' / '+required+' accounted';
-  $('hudValidationMissing').textContent=String(missing);
-  $('hudValidationUnexpected').textContent=String(unexpected);
+  $('hudValidationMissing').textContent=String(validation?.summary?.missingComponents??missing);
+  $('hudValidationUnexpected').textContent=String(validation?.summary?.unexpectedComponents??unexpected);
   $('hudValidationDetail').textContent=!state.build?'Recipe preview only — ingredient verification requires a governed build':(validation?.summary?.next?.message||validation?.status||'Build in progress');
   $('validationCard').hidden=!state.build;
   $('validationCard').className='hud-card hud-validation-panel '+stateName.toLowerCase();
 }
 function renderNextInstruction(comp,validation){
   const instructions=deriveSteps();
-  const next=!selectedItem()&&!state.build?'Waiting for KDS orders':comp?'Add '+comp.displayName:(!state.build&&selectedItem()?instructions[Math.min(state.previewStepIndex||0,Math.max(0,instructions.length-1))]||'Review ticket':validation?.nextStage==='expo_finishing'?'Send to Expo / Finishing':'Validate build');
+  const next=!selectedItem()&&!state.build?'Waiting for KDS orders':comp?(comp.metadata?.manualReviewRequired?comp.displayName:'Add '+comp.displayName):(!state.build&&selectedItem()?instructions[Math.min(state.previewStepIndex||0,Math.max(0,instructions.length-1))]||'Review ticket':validation?.nextStage==='expo_finishing'?'Send to Expo / Finishing':'Validate build');
   $('hudNextCenter').textContent=next;
   $('hudNextTarget').textContent=!selectedItem()&&!state.build?'Send a POS ticket to KDS':comp?(Number(comp.detectedQuantity||0)+' / '+Number(comp.expectedQuantity||0)+' '+(comp.unit||'')):(!state.build&&selectedItem()?'STEP '+((state.previewStepIndex||0)+1)+' OF '+instructions.length+' · PREVIEW ONLY':(validation?.status||'Product validation'));
 }
@@ -1971,7 +2103,7 @@ function renderCookUxState(comps,validation){
   setCookUxAlert(null);
 }
 function stopCookVision(reason='human_stop'){
-  state.cookUx.stopped=true;state.cookUx.handoffArmed=false;state.cookUx.preview='stop_cancel';
+  invalidateBuildScope();state.cookUx.stopped=true;state.cookUx.preview='stop_cancel';
   stopVisionRuntime('stopped');clearTemporalRuntime();state.visionSubmitted.clear();renderCookUxState(state.build?.components||[],state.validation);renderTopStatus();render();
   log('UX','STOP cancelled automatic observations: '+reason+'.');
 }
@@ -2008,6 +2140,27 @@ function renderProductionReadiness(){
   element.dataset.state=result.state;
   element.textContent='PRODUCTION '+result.state.toUpperCase()+' · '+result.message;
 }
+function renderBuildComponent(component,live,item){
+  const key=escapeHtml(component.componentKey),name=escapeHtml(component.displayName);
+  const customization=component.componentKey==='manual:order-customization';
+  const advisory=component.metadata?.advisoryForCustomizedOrder===true;
+  const line={...item?.posLine,...state.build?.context};
+  const ordered=[line.quantity!=null?'Ordered quantity: '+line.quantity:'',line.optionName,
+    ...(line.modifiers||[]).map(m=>m.name||m.label),line.specialInstructions].filter(Boolean).join(' · ');
+  const amount=Number(component.expectedQuantity||0)+' '+String(component.unit||'');
+  const detail=customization?ordered||'Review the ordered size and special instructions.':advisory?'Base recipe reference · '+amount:
+    component.status+' · '+Number(component.detectedQuantity||0)+' / '+amount;
+  let button='';
+  if(!live){
+    button='<button type="button" data-detect="'+key+'" '+(component.status==='confirmed'?'disabled':'')+'>Detect</button>';
+  }else if(!advisory&&!['confirmed','ignored'].includes(component.status)&&(!component.optional||component.status==='verify')){
+    const label=customization?'Confirm customization reviewed':'Confirm full quantity';
+    const title=customization?'Confirm you reviewed the ordered size, modifiers and instructions.':'Confirm '+amount.trim()+' of '+component.displayName+' for the entire ordered line.';
+    button='<button type="button" data-confirm-build-component="'+key+'" title="'+escapeHtml(title)+'" '+
+      (buildRequest||displayChanging||!state.device?.simulatorWritable?'disabled':'')+'>'+label+'</button>';
+  }
+  return '<div class="component-row '+escapeHtml(component.status)+'"><div class="copy"><strong>'+name+'</strong><small>'+escapeHtml(detail)+'</small></div>'+button+'</div>';
+}
 function render(){
   const live=state.mode==='live',item=selectedItem(),build=state.build,validation=state.validation;
   renderProductionReadiness();
@@ -2026,7 +2179,8 @@ function render(){
         ? '<strong>SETUP NEEDED</strong> · No accessible location or station. Contact an administrator about glasses.view and KDS routing.'
         : noHardware
           ? '<strong>LIVE BROWSER PREVIEW</strong> · No physical glasses needed. '+count+' current KDS items · '+escapeHtml(state.device.locationName||'Restaurant')+' / '+escapeHtml(state.device.stationName||'All stations')+'. Only orders sent to KDS appear. Read-only: select a real paired device to enable live build or Expo actions.'
-          : '<strong>LIVE DEVICE</strong> · '+count+' current KDS items. Live build and Expo actions require glasses.manage, kds.update and a routed station.';
+          : '<strong>LIVE DEVICE</strong> · '+count+' current KDS items. Live build and Expo actions require glasses.manage, kds.update and a routed station.'+
+            (build&&requiresManualBuildReview()?' Review and confirm quantities and customizations for the entire ordered line.':'');
     guide.innerHTML=message;
   }
   $('consoleItem').textContent=itemName();
@@ -2041,16 +2195,20 @@ function render(){
     ['Guests',item?.ticket?.guestCount||'—'],['Special',item?.posLine?.specialInstructions||'None']
   ].map(([a,b])=>'<div><small>'+escapeHtml(a)+'</small><strong>'+escapeHtml(b)+'</strong></div>').join('');
   const comp=currentComponent(),comps=build?.components||[];
-  renderTopStatus();renderOrdersQueue(item);renderNextInstruction(comp,validation);renderBuildRail(item);renderValidationPanel(comps,validation);renderCookUxState(comps,validation);
+  const requiredReview=comps.filter(c=>!c.metadata?.advisoryForCustomizedOrder);
+  renderTopStatus();renderOrdersQueue(item);renderNextInstruction(comp,validation);renderBuildRail(item);renderValidationPanel(requiredReview,validation);renderCookUxState(requiredReview,validation);
   $('componentCount').textContent=String(comps.length);renderCameraTargetComponents();renderDatasetClassOptions();renderDatasetAnnotations();renderActiveLearning();
-  $('componentControls').innerHTML=comps.filter(c=>c.status!=='unexpected'&&c.status!=='ignored').map(c=>'<div class="component-row '+escapeHtml(c.status)+'"><div class="copy"><strong>'+escapeHtml(c.displayName)+'</strong><small>'+escapeHtml(c.status)+' · '+Number(c.detectedQuantity||0)+' / '+Number(c.expectedQuantity||0)+' '+escapeHtml(c.unit||'')+'</small></div><button type="button" data-detect="'+escapeHtml(c.componentKey)+'" '+(c.status==='confirmed'||(live&&!automaticObservationsAllowed())?'disabled':'')+'>Detect</button></div>').join('')||'<span class="sim-muted">Start a build to simulate detections.</span>';
+  $('componentControls').innerHTML=comps.filter(c=>c.status!=='unexpected'&&c.status!=='ignored').map(c=>renderBuildComponent(c,live,item)).join('')||
+    '<span class="sim-muted">'+(live?'Start a build to review the ordered ingredients.':'Start a build to simulate detections.')+'</span>';
   const unexpected=comps.filter(c=>c.status==='unexpected');
-  $('exceptions').innerHTML=unexpected.map(c=>'<div class="exception-row"><span>'+escapeHtml(c.displayName)+'</span><button data-resolve="'+escapeHtml(c.componentKey)+'" type="button">Resolve</button></div>').join('')||'<span class="sim-muted">No build exceptions.</span>';
+  $('exceptions').innerHTML=unexpected.map(c=>'<div class="exception-row"><span>'+escapeHtml(c.displayName)+'</span><button data-resolve="'+escapeHtml(c.componentKey)+'" type="button" '+(live&&(buildRequest||displayChanging||!state.device?.simulatorWritable)?'disabled':'')+'>Resolve</button></div>').join('')||'<span class="sim-muted">No build exceptions.</span>';
   renderTemporalPanel();
-  $('handoffExpo').disabled=validation?.status!=='ready_for_finishing'||(visionMode()==='automatic'&&!state.temporalGate?.ready)||(live&&!automaticObservationsAllowed());
-  $('startBuild').disabled=!!build||!item||(live&&(!state.device||!state.device.simulatorWritable));
-  $('injectUnexpected').disabled=!build||(live&&(!state.device||!state.device.simulatorWritable));
-  $('evaluateBuild').disabled=!build||(live&&(!state.device||!state.device.simulatorWritable));
+  if(state.cookUx.handoffConfirmation?.expiresAt<Date.now())clearHandoffConfirmation();
+  $('handoffExpo').disabled=buildRequest!==null||displayChanging||!handoffReady();
+  $('startBuild').disabled=buildRequest!==null||displayChanging||!!build||!item||(live&&(!state.device||!state.device.simulatorWritable));
+  $('injectUnexpected').disabled=live||!build;
+  $('evaluateBuild').disabled=buildRequest!==null||displayChanging||!build||(live&&(!state.device||!state.device.simulatorWritable));
+  $('submitCameraTarget').disabled=buildRequest!==null||displayChanging||!build||!state.cameraTarget||!state.cameraStream||(live&&!state.device?.simulatorWritable);
   $('autoPlayBuild').disabled=live;
   $('nextDetection').disabled=live;
   $('lowConfidenceDetection').disabled=live;
@@ -2064,7 +2222,7 @@ function render(){
     lowConfidenceDetection:'Mock-only demonstration. Switch Mode to Mock.',
     completeMockBuild:'Mock-only demonstration. Switch Mode to Mock.',
     handoffExpo:'Requires a validated active build, explicit confirmation and authorized KDS update.',
-    injectUnexpected:'Start a build first; live observations require a paired device and write authority.',
+    injectUnexpected:'Mock-only demonstration. Switch Mode to Mock.',
     evaluateBuild:'Start a build first; browser preview does not modify kitchen state.',
     startCamera:'Requires browser camera permission (HTTPS).',
     captureFrame:'Start the camera first.',
@@ -2117,20 +2275,51 @@ async function refreshWork(){
     if(state.syncErrors)log('ERROR','Refresh failed. Check the SYNC RETRY badge and event log.');
   }catch(e){log('ERROR',e.message);}
 }
-async function startBuild(){try{await stopShadowModel('build_reset');await unloadGovernedVisionModel('build_reset');clearTemporalRuntime();if(state.mode==='mock'){state.build=mockBuild();state.validation=null;log('MOCK','Started mock build session.');render();return;}const item=selectedItem();if(!item)throw new Error('No selected KDS item.');const d=await api('build.start',{kdsItemPublicId:item.kdsItemPublicId,sourceRevision:state.work.revision});state.build=d.buildSession;state.validation=null;saveRecoveryResume();state.recovery.state='ready';state.recovery.suppressAutomatic=false;state.recovery.lastReason='build_session_active';renderRuntimeRecovery();log('LIVE','Started build '+state.build.publicId+' against real KDS item.');render();}catch(e){log('ERROR',e.message);}}
-async function detect(key){try{if(!state.build)throw new Error('Start a build first.');const c=state.build.components.find(x=>x.componentKey===key);if(!c)return;const qty=Math.max(.001,Number(c.expectedQuantity||1)-Number(c.detectedQuantity||0));flashDetection(c,{confidence:.96,state:'confirmed'});if(state.mode==='mock'){c.detectedQuantity=Number(c.detectedQuantity||0)+qty;c.confidence=.96;c.status=c.detectedQuantity+.0001>=Number(c.expectedQuantity||1)?'confirmed':'detected';state.build.summary.currentComponentKey=currentComponent()?.componentKey||null;state.validation=null;log('VISION','Detected '+c.displayName+' in mock mode.');render();return;}const obs='websim-'+state.build.publicId+'-'+Date.now()+'-'+state.seq;const d=await api('build.observe',{buildSessionPublicId:state.build.publicId,observationKey:obs,componentKey:c.componentKey,displayName:c.displayName,observationAction:'added',quantity:qty,confidence:.96,trackingId:'websim-'+state.seq,bbox:{x:.18,y:.46,width:.18,height:.16},metadata:{source:'web_glasses_simulator'}});state.build=d.buildSession;state.validation=null;log('LIVE','Submitted simulated detection for '+c.displayName+'.');render();}catch(e){log('ERROR',e.message);}}
+async function startBuild(){
+  const item=selectedItem();
+  if(state.build||state.kitchenBusy||!item)return;
+  const scope=beginBuildRequest();if(!scope)return;
+  try{
+    await stopShadowModel('build_reset');
+    if(!buildScopeCurrent(scope))return;
+    await unloadGovernedVisionModel('build_reset');
+    if(!buildScopeCurrent(scope))return;
+    if(scope.mode==='mock'){
+      replaceBuild(mockBuild());log('MOCK','Started mock build session.');return;
+    }
+    if(!state.device?.simulatorWritable)throw new Error('A writable paired device is required.');
+    const d=await api('build.start',{kdsItemPublicId:item.kdsItemPublicId,sourceRevision:state.work.revision});
+    if(!buildScopeCurrent(scope))return;
+    replaceBuild(d.buildSession);saveRecoveryResume();
+    state.recovery.state='ready';state.recovery.suppressAutomatic=false;state.recovery.lastReason='build_session_active';
+    renderRuntimeRecovery();log('LIVE','Started build '+state.build.publicId+' against real KDS item.');
+  }catch(e){if(buildScopeCurrent(scope))log('ERROR',e.message);}
+  finally{finishBuildRequest(scope);}
+}
+function detect(key){
+  if(state.mode!=='mock'||!state.build)return;
+  const component=state.build.components.find(x=>x.componentKey===key);
+  if(!component||component.status==='confirmed')return;
+  const quantity=Math.max(.001,Number(component.expectedQuantity||1)-Number(component.detectedQuantity||0));
+  component.detectedQuantity=Number(component.detectedQuantity||0)+quantity;
+  component.confidence=.96;
+  component.status=component.detectedQuantity+.0001>=Number(component.expectedQuantity||1)?'confirmed':'detected';
+  state.build.summary.currentComponentKey=currentComponent()?.componentKey||null;
+  setBuildValidation(null);flashDetection(component,{confidence:.96,state:'confirmed'});
+  log('VISION','Detected '+component.displayName+' in mock mode.');render();
+}
 function ensureMockBuild(){if(state.mode!=='mock')throw new Error('Demo controls are available only in Mock mode.');if(!state.build)state.build=mockBuild();}
 async function playNextMockDetection(){
   try{ensureMockBuild();const c=currentComponent();if(!c){mockValidate();render();log('DEMO','All required ingredients are accounted for.');return;}
-  const qty=Math.max(.001,Number(c.expectedQuantity||1)-Number(c.detectedQuantity||0));c.detectedQuantity=Number(c.detectedQuantity||0)+qty;c.confidence=.96;c.status='confirmed';flashDetection(c,{confidence:.96,state:'confirmed'});state.validation=null;render();log('DEMO','Detected '+c.displayName+'.');}
+  const qty=Math.max(.001,Number(c.expectedQuantity||1)-Number(c.detectedQuantity||0));c.detectedQuantity=Number(c.detectedQuantity||0)+qty;c.confidence=.96;c.status='confirmed';flashDetection(c,{confidence:.96,state:'confirmed'});setBuildValidation(null);render();log('DEMO','Detected '+c.displayName+'.');}
   catch(e){log('ERROR',e.message);}
 }
 function injectLowConfidenceDetection(){
-  try{ensureMockBuild();const c=currentComponent();if(!c)throw new Error('No remaining component.');c.confidence=.61;c.status='verify';flashDetection(c,{confidence:.61,state:'low-confidence'});state.validation=null;render();log('DEMO','Low-confidence '+c.displayName+' requires verification.');}
+  try{ensureMockBuild();const c=currentComponent();if(!c)throw new Error('No remaining component.');c.confidence=.61;c.status='verify';flashDetection(c,{confidence:.61,state:'low-confidence'});setBuildValidation(null);render();log('DEMO','Low-confidence '+c.displayName+' requires verification.');}
   catch(e){log('ERROR',e.message);}
 }
 async function completeMockScenario(){
-  try{ensureMockBuild();for(const c of state.build.components){if(c.status==='unexpected')continue;if(!c.optional){c.detectedQuantity=Number(c.expectedQuantity||1);c.confidence=.98;c.status='confirmed';}}
+  try{ensureMockBuild();clearHandoffConfirmation();for(const c of state.build.components){if(c.status==='unexpected')continue;if(!c.optional){c.detectedQuantity=Number(c.expectedQuantity||1);c.confidence=.98;c.status='confirmed';}}
   mockValidate();render();log('DEMO','Completed mock build and validation.');}
   catch(e){log('ERROR',e.message);}
 }
@@ -2140,22 +2329,136 @@ function toggleAutoPlay(){
   if(state.autoPlayTimer){stopAutoPlay();return;}
   ensureMockBuild();$('autoPlayBuild').textContent='Stop Auto';state.autoPlayTimer=setInterval(()=>{const c=currentComponent();if(!c){mockValidate();render();stopAutoPlay();return;}playNextMockDetection();},1100);log('DEMO','Auto Play started.');
 }
-async function injectUnexpected(){try{if(!state.build)throw new Error('Start a build first.');const key='websim:unexpected-'+Date.now();if(state.mode==='mock'){state.build.components.push({componentKey:key,displayName:'Unexpected Ingredient',expectedQuantity:0,detectedQuantity:1,unit:'',optional:false,status:'unexpected',confidence:.94});flashDetection({displayName:'Unexpected Ingredient',status:'unexpected',confidence:.94},{confidence:.94,state:'unexpected'});state.validation=null;log('VISION','Injected unexpected ingredient.');render();return;}const d=await api('build.observe',{buildSessionPublicId:state.build.publicId,observationKey:'websim-unexpected-'+Date.now(),componentKey:key,displayName:'Unexpected Ingredient',observationAction:'added',quantity:1,confidence:.94,trackingId:key,bbox:{x:.28,y:.52,width:.16,height:.14},metadata:{source:'web_glasses_simulator',unexpected:true}});state.build=d.buildSession;state.validation=null;log('LIVE','Submitted unexpected ingredient evidence.');render();}catch(e){log('ERROR',e.message);}}
-async function resolveUnexpected(key){try{if(state.mode==='mock'){const c=state.build?.components.find(x=>x.componentKey===key);if(c)c.status='ignored';state.validation=null;log('MOCK','Resolved unexpected ingredient.');render();return;}const d=await api('build.resolve_unexpected',{buildSessionPublicId:state.build.publicId,componentKey:key});state.build=d.buildSession;state.validation=null;log('LIVE','Resolved unexpected ingredient.');render();}catch(e){log('ERROR',e.message);}}
-async function validate(){try{if(!state.build)throw new Error('Start a build first.');if(state.mode==='mock'){mockValidate();log('VALIDATION','Mock result: '+state.validation.status);render();return;}const d=await api('validation.evaluate',{buildSessionPublicId:state.build.publicId});state.validation=d.validation;log('LIVE','Validation result: '+state.validation.status);render();}catch(e){log('ERROR',e.message);}}
-async function handoff(){try{
-  if(!state.validation||state.validation.status!=='ready_for_finishing')throw new Error('Validation is not ready for Expo.');
-  if(!state.cookUx.handoffArmed){
-    state.cookUx.handoffArmed=true;state.cookUx.preview='explicit_handoff';renderCookUxState(state.build?.components||[],state.validation);
-    $('handoffExpo').textContent='Confirm Send to Expo';log('UX','Expo handoff armed; explicit second confirmation required.');return;
+function injectUnexpected(){
+  if(state.mode!=='mock'||!state.build)return;
+  const key='websim:unexpected-'+Date.now();
+  const component={componentKey:key,displayName:'Unexpected Ingredient',expectedQuantity:0,detectedQuantity:1,unit:'',optional:false,status:'unexpected',confidence:.94};
+  state.build.components.push(component);
+  flashDetection(component,{confidence:.94,state:'confirmed'});
+  setBuildValidation(null);log('VISION','Injected unexpected ingredient in Mock mode.');render();
+}
+async function updateLiveBuildComponent(action,componentKey){
+  if(state.mode!=='live'||!state.build||!state.device?.simulatorWritable)return;
+  const component=state.build.components.find(c=>c.componentKey===componentKey);
+  if(!component||component.status==='confirmed'||component.status==='ignored')return;
+  const scope=beginBuildRequest();if(!scope)return;
+  try{
+    setBuildValidation(null);
+    const d=await api(action,{buildSessionPublicId:scope.build.publicId,componentKey});
+    if(!buildScopeCurrent(scope))return;
+    replaceBuild(d.buildSession);
+    log('LIVE',action==='build.resolve_unexpected'?'Resolved unexpected ingredient.':
+      componentKey==='manual:order-customization'?'Confirmed order customization review.':'Confirmed full quantity of '+component.displayName+'.');
+  }catch(e){if(buildScopeCurrent(scope))log('ERROR',e.message);}
+  finally{finishBuildRequest(scope);}
+}
+function resolveUnexpected(key){
+  if(state.mode==='live')return updateLiveBuildComponent('build.resolve_unexpected',key);
+  const component=state.build?.components.find(c=>c.componentKey===key&&c.status==='unexpected');
+  if(!component)return;
+  component.status='ignored';setBuildValidation(null);log('MOCK','Resolved unexpected ingredient.');render();
+}
+async function validate(){
+  if(!state.build)return;
+  if(state.mode==='mock'){
+    mockValidate();log('VALIDATION','Mock result: '+state.validation.status);render();return;
   }
-  state.cookUx.handoffArmed=false;state.cookUx.preview=null;$('handoffExpo').textContent='Send to Expo / Finishing';
-  if(state.mode==='mock'){log('MOCK','Explicitly confirmed simulated Expo handoff.');await unloadGovernedVisionModel('build_reset');state.build=null;state.validation=null;render();return;}
-  const d=await api('handoff.expo',{buildSessionPublicId:state.build.publicId});log('LIVE','Explicit Expo handoff completed; KDS status '+(d.handoff.kdsStatus||'ready')+'.');await unloadGovernedVisionModel('build_reset');state.build=null;state.validation=null;clearRecoveryResume();await refreshWork();
-}catch(e){state.cookUx.handoffArmed=false;$('handoffExpo').textContent='Send to Expo / Finishing';log('ERROR',e.message);}}
-function resetSimulator(){stopShadowModel('build_reset');unloadGovernedVisionModel('build_reset');state.build=null;state.validation=null;state.selectedKdsItemPublicId='';clearTemporalRuntime();clearCameraTarget();$('detectionLayer').innerHTML='';log('SYSTEM','Simulator build state reset; POS/KDS records were not changed.');refreshWork();}
-$('modeSelect').addEventListener('change',async e=>{if(cfg.runtimePublicId&&e.target.value!=='live'){e.target.value='live';return;}stopAutoPlay();stopLiveStationSync('idle');await unloadGovernedVisionModel('build_reset');state.mode=e.target.value;state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;clearAssemblySession();clearTemporalRuntime();state.syncFingerprint='';log('MODE','Switched to '+state.mode+'.');if(state.mode==='live'){if(state.device?.virtualPreview){state.recovery.state='ready';renderRuntimeRecovery();startLiveStationSync();}else{enterRecovery('recovering','live_mode_selected');await resumeRuntimeRecovery('live_mode_selected');}}else{state.recovery.state='ready';state.recovery.suppressAutomatic=false;state.recovery.lastReason='mock_runtime_ready';renderRuntimeRecovery();await refreshWork();}});
-$('deviceSelect').addEventListener('change',async e=>{if(cfg.runtimePublicId){e.target.value=state.device?.publicId||'';return;}stopLiveStationSync('idle');await unloadGovernedVisionModel('build_reset');state.device=state.devices.find(x=>x.publicId===e.target.value)||null;if(state.device)localStorage.setItem(LIVE_DEVICE_KEY,state.device.publicId);window.dispatchEvent(new CustomEvent('gelato-glasses-location-change',{detail:{locationId:state.device?.locationId||null}}));state.work=null;state.selectedKdsItemPublicId='';state.build=null;state.validation=null;clearAssemblySession();clearTemporalRuntime();state.syncFingerprint='';if(state.mode==='live'&&state.device){if(state.device.virtualPreview){state.recovery.state='ready';renderRuntimeRecovery();startLiveStationSync();}else{enterRecovery('recovering','device_changed');await resumeRuntimeRecovery('device_changed');}}else render();});
+  if(!state.device?.simulatorWritable)return;
+  const scope=beginBuildRequest();if(!scope)return;
+  try{
+    const d=await api('validation.evaluate',{buildSessionPublicId:scope.build.publicId});
+    if(!buildScopeCurrent(scope))return;
+    displayLiveValidation(d.validation);log('LIVE','Validation result: '+state.validation.status);
+  }catch(e){if(buildScopeCurrent(scope))log('ERROR',e.message);}
+  finally{finishBuildRequest(scope);}
+}
+function handoffReady(){
+  if(!state.build||state.validation?.status!=='ready_for_finishing')return false;
+  if(visionMode()==='automatic'&&!(state.mode==='live'&&requiresManualBuildReview())&&!state.temporalGate?.ready)return false;
+  return state.mode==='mock'||(state.device?.simulatorWritable&&automaticObservationsAllowed()&&
+    state.validation.publicId&&state.validation.snapshotHash&&state.validation.buildSessionPublicId===state.build.publicId);
+}
+async function handoff(){
+  if(!handoffReady())return;
+  if(state.cookUx.handoffConfirmation?.expiresAt<Date.now())clearHandoffConfirmation();
+  const scope=beginBuildRequest();if(!scope)return;
+  const validation=state.validation,confirmationGeneration=handoffGeneration;
+  try{
+    if(!state.cookUx.handoffArmed){
+      if(scope.mode==='live'){
+        const d=await api('handoff.prepare',{buildSessionPublicId:scope.build.publicId,
+          validationPublicId:validation.publicId,validationSnapshotHash:validation.snapshotHash});
+        if(!buildScopeCurrent(scope)||confirmationGeneration!==handoffGeneration||!handoffReady()||state.validation!==validation)return;
+        const confirmation=d.handoffConfirmation;
+        if(!confirmation?.token||confirmation.validationPublicId!==validation.publicId||
+          confirmation.validationSnapshotHash!==validation.snapshotHash)
+          throw new Error('Expo confirmation does not match the displayed validation. Validate the build again.');
+        state.cookUx.handoffConfirmation={...confirmation,expiresAt:Date.now()+EXPO_CONFIRMATION_MS};
+      }
+      state.cookUx.handoffArmed=true;state.cookUx.preview='explicit_handoff';
+      $('handoffExpo').textContent='Confirm Send to Expo';
+      log('UX','Expo handoff armed. Review the build and confirm Send to Expo.');
+      return;
+    }
+    const confirmation=state.cookUx.handoffConfirmation;
+    clearHandoffConfirmation();
+    if(scope.mode==='live'){
+      if(!confirmation||confirmation.validationPublicId!==validation.publicId||
+        confirmation.validationSnapshotHash!==validation.snapshotHash)return;
+      const d=await api('handoff.expo',{buildSessionPublicId:scope.build.publicId,confirmationToken:confirmation.token});
+      if(!buildScopeCurrent(scope))return;
+      log('LIVE','Explicit Expo handoff completed. KDS status '+(d.handoff.kdsStatus||'ready')+'.');
+      clearRecoveryResume();
+    }else{
+      log('MOCK','Explicitly confirmed simulated Expo handoff.');
+    }
+    replaceBuild(null);
+    void unloadGovernedVisionModel('build_reset');
+    if(scope.mode==='live')await refreshWork();
+  }catch(e){
+    if(buildScopeCurrent(scope)){clearHandoffConfirmation();log('ERROR',e.message);}
+  }finally{finishBuildRequest(scope);}
+}
+function resetSimulator(){
+  invalidateBuildScope();
+  if(state.mode==='live')clearRecoveryResume();
+  void stopShadowModel('build_reset');void unloadGovernedVisionModel('build_reset');
+  replaceBuild(null);state.selectedKdsItemPublicId='';clearTemporalRuntime();clearCameraTarget();$('detectionLayer').innerHTML='';
+  log('SYSTEM','Simulator build state reset. POS/KDS records were not changed.');render();void refreshWork();
+}
+async function changeDisplay(mode,device){
+  const generation=++displayGeneration;
+  displayChanging=true;invalidateBuildScope();
+  state.recovery.epoch+=1;
+  if(state.recovery.timer){clearTimeout(state.recovery.timer);state.recovery.timer=null;}
+  stopAutoPlay();stopLiveStationSync('idle');
+  state.mode=mode;state.device=device;state.work=null;state.selectedKdsItemPublicId='';replaceBuild(null);
+  clearAssemblySession();clearTemporalRuntime();clearCameraTarget();state.syncFingerprint='';
+  render();
+  const releasingShadow=stopShadowModel('build_reset'),releasingModel=unloadGovernedVisionModel('build_reset');
+  await Promise.all([releasingShadow,releasingModel]);
+  if(generation!==displayGeneration)return;
+  displayChanging=false;
+  if(mode==='mock'){
+    state.recovery.state='ready';state.recovery.suppressAutomatic=false;state.recovery.lastReason='mock_runtime_ready';
+    renderRuntimeRecovery();await refreshWork();
+  }else if(device?.virtualPreview){
+    state.recovery.state='ready';renderRuntimeRecovery();startLiveStationSync();
+  }else if(device){
+    enterRecovery('recovering','display_changed');await resumeRuntimeRecovery('display_changed');
+  }else render();
+}
+$('modeSelect').addEventListener('change',e=>{
+  if(cfg.runtimePublicId&&e.target.value!=='live'){e.target.value='live';return;}
+  log('MODE','Switched to '+e.target.value+'.');void changeDisplay(e.target.value,state.device);
+});
+$('deviceSelect').addEventListener('change',e=>{
+  if(cfg.runtimePublicId){e.target.value=state.device?.publicId||'';return;}
+  const device=state.devices.find(x=>x.publicId===e.target.value)||null;
+  if(device)localStorage.setItem(LIVE_DEVICE_KEY,device.publicId);
+  void changeDisplay(state.mode,device);
+  window.dispatchEvent(new CustomEvent('gelato-glasses-location-change',{detail:{locationId:device?.locationId||null}}));
+});
 /* Selecting a kitchen item goes directly to the recipe/build view; no extra load step.
  * Live build writes require a paired writable device and an already started KDS item. */
 async function focusKitchenItem(publicId,{autoBegin=true,source='manual'}={}){
@@ -2163,6 +2466,7 @@ async function focusKitchenItem(publicId,{autoBegin=true,source='manual'}={}){
   const next=orderItems().find(x=>x.kdsItemPublicId===publicId);
   if(!next)return {ok:false,message:'KDS selection is stale. Refresh your orders.'};
   if(state.selectedKdsItemPublicId!==next.kdsItemPublicId){
+    invalidateBuildScope();
     clearAssemblySuggestion();
     window.GelatoHandTrackingUI?.reset?.();
     resetProductionFocusEvidence();
@@ -2174,7 +2478,7 @@ async function focusKitchenItem(publicId,{autoBegin=true,source='manual'}={}){
     resetProductionFocusEvidence();
     productionFocusNote('Manual ticket focus locked · say “follow activity” to resume automatic selection.','manual');
   }
-  state.previewStepIndex=0;state.validation=null;render();
+  state.previewStepIndex=0;setBuildValidation(null);render();
   window.GelatoGlassesHudNotifications?.publish?.({
     event:'item.selected',severity:'info',message:(next.posLine?.name||'Item')+' selected.',
     speech:(next.posLine?.name||'Item')+' selected.'
@@ -2255,6 +2559,7 @@ function acknowledgeIngredient(result,options={}){
     });
     const next=assembly()?.nextItemInTicket(activeTicket(),item.kdsItemPublicId,id=>itemActions(id));
     if(next&&!state.build){
+      invalidateBuildScope();
       state.selectedKdsItemPublicId=next.kdsItemPublicId;
       state.previewStepIndex=0;
       render();
@@ -2303,7 +2608,7 @@ $('cameraDeviceSelect').addEventListener('change',async()=>{saveCameraPrefs();if
  });
 $('cameraResolution').addEventListener('change',async()=>{saveCameraPrefs();if(state.cameraStream)await startCamera();});
 $('cameraManualTarget').addEventListener('change',e=>{$('glassesStage').classList.toggle('camera-targeting',e.target.checked);if(!e.target.checked)clearCameraTarget();});
-$('visionMode').addEventListener('change',()=>{clearAssemblySuggestion();state.visionMode=visionMode();startVisionRuntime();});
+$('visionMode').addEventListener('change',()=>{clearHandoffConfirmation();clearAssemblySuggestion();state.visionMode=visionMode();startVisionRuntime();render();});
 $('visionAdapterSelect').addEventListener('change',()=>{clearAssemblySuggestion();state.visionAdapter=VISION_ADAPTERS[$('visionAdapterSelect').value]||VISION_ADAPTERS.fixture;clearTemporalRuntime();startVisionRuntime();});
 $('loadVisionModel').addEventListener('click',()=>loadGovernedVisionModel().catch(e=>{setVisionModelStatus('error',e.message);log('ERROR',e.message);}));
 $('unloadVisionModel').addEventListener('click',()=>unloadGovernedVisionModel());
@@ -2375,7 +2680,12 @@ $('opticalMaskToggle').addEventListener('change',e=>{opticalMaskEnabled=!!e.targ
 function bindLocalImage(inputId,imageId,onLoaded){let currentUrl='';$(inputId).addEventListener('change',e=>{const file=e.target.files?.[0];if(!file)return;if(currentUrl)URL.revokeObjectURL(currentUrl);currentUrl=URL.createObjectURL(file);const image=$(imageId);image.src=currentUrl;image.hidden=false;if(onLoaded)onLoaded();log('ASSET','Previewing local '+file.name+'.');});}
 bindLocalImage('sceneFile','sceneImage',()=>{$('scenePlaceholder').hidden=true;});
 bindLocalImage('glassesFile','glassesImage',()=>{frameMode='image';localStorage.setItem(FRAME_MODE_KEY,frameMode);applyFrameMode();});
-$('componentControls').addEventListener('click',e=>{const b=e.target.closest('[data-detect]');if(b)detect(b.dataset.detect);});
+$('componentControls').addEventListener('click',e=>{
+  const demo=e.target.closest('[data-detect]');
+  if(demo){detect(demo.dataset.detect);return;}
+  const confirmation=e.target.closest('[data-confirm-build-component]');
+  if(confirmation)void updateLiveBuildComponent('build.confirm',confirmation.dataset.confirmBuildComponent);
+});
 
 const CAL_KEY='gelato.webGlassesSimulator.calibration.v1'+':u'+String(cfg.userId||0)+':rt'+String(cfg.runtimePublicId||'default');
 const PRESET_KEY='gelato.webGlassesSimulator.presets.v1'+':u'+String(cfg.userId||0)+':rt'+String(cfg.runtimePublicId||'default');
@@ -2628,6 +2938,7 @@ async function kitchenCommand(action,{spoken=false}={}){
   if(!item)return {ok:false,message:'Choose a live kitchen item first.'};
   if(!kitchenWritable())return {ok:false,message:'You do not have permission to update KDS at this location.'};
   if(state.build)return {ok:false,message:'Finish the active glasses build before changing the kitchen workflow.'};
+  if(buildRequest||displayChanging)return {ok:false,message:'Wait for the current build or display action.'};
   if(state.kitchenBusy)return {ok:false,message:'A kitchen action is already being processed.'};
   const ticket=item.ticket?.checkPublicId||'';
   const matching=orderItems().filter(x=>x.ticket?.checkPublicId===ticket);
@@ -2669,6 +2980,7 @@ async function kitchenCommand(action,{spoken=false}={}){
     data={checkPublicId:ticket,ticketAction:KITCHEN_TICKET_ACTIONS[action]};
   }
   state.kitchenBusy=true;updateKitchenControls();
+  const originalDisplay=displayGeneration,originalSelection=state.selectedKdsItemPublicId;
   try{
     if(state.mode==='mock'){
       if(action==='item_added')item.latestOperatorNote=note;
@@ -2683,11 +2995,14 @@ async function kitchenCommand(action,{spoken=false}={}){
       const type=action==='item_added'?'kds.item.note':
         ['start_item','ready_item'].includes(action)?'kds.item.transition':'kds.ticket.action';
       await api(type,data);
+      if(originalDisplay!==displayGeneration||originalSelection!==state.selectedKdsItemPublicId)
+        return {ok:true,message:'Kitchen action completed on the previous selection.'};
     }
     state.finishConfirmation=null;
     if(action==='item_added'&&$('simItemNoteInput'))$('simItemNoteInput').value='';
     if(state.mode==='live')await syncLiveStationWork(true);
     else render();
+    if(originalDisplay!==displayGeneration)return {ok:true,message:'Kitchen action completed on the previous display.'};
     const hudNotice=window.GelatoGlassesHudNotifications;
     const ticketEvent=hudNotice?.eventForCommand?.(action);
     const stage=hudNotice?.stateByTicket?.(orderItems())?.get(ticket)?.stage||null;
@@ -2702,7 +3017,7 @@ async function kitchenCommand(action,{spoken=false}={}){
     log(state.mode==='live'?'KDS':'MOCK',message);
     return {ok:true,message};
   }catch(error){
-    log('KDS',String(error?.message||'Kitchen action failed.'));
+    if(originalDisplay===displayGeneration)log('KDS',String(error?.message||'Kitchen action failed.'));
     return {ok:false,message:String(error?.message||'Kitchen action failed.')};
   }finally{state.kitchenBusy=false;updateKitchenControls();}
 }
@@ -3009,8 +3324,10 @@ window.GelatoReadOnlyIngredientRuntime={
   unload:unloadReadonlyIngredientModel
 };
 window.addEventListener('gelato-glasses-runtime-revoked',()=>{
+  displayGeneration+=1;displayChanging=false;invalidateBuildScope();
+  state.recovery.epoch+=1;
   stopLiveStationSync('runtime_revoked');stopVisionRuntime('runtime_revoked');stopCamera('runtime_revoked');
-  state.recovery.suppressAutomatic=true;state.recovery.state='blocked';state.build=null;state.validation=null;
+  state.recovery.suppressAutomatic=true;state.recovery.state='blocked';replaceBuild(null);
   clearAssemblySession();render();log('SYSTEM','Assigned runtime was ended or access revoked. Refresh from runtime manager.');
 });
 (async()=>{await loadDevices();window.GelatoGlassesDisplayPreferences.ready=true;window.dispatchEvent(new CustomEvent('gelato-glasses-preferences-ready'));const cp=cameraPrefs();if(cp.resolution)$('cameraResolution').value=cp.resolution;if(cp.fit)$('cameraFit').value=cp.fit;$('cameraMirror').checked=!!cp.mirror;applyCameraPresentation(false);await enumerateCameras();if(!cameraSupported())setCameraHealth('error','UNSUPPORTED');refreshPresets();applyCalibration();render();if(state.device){startLiveStationSync();}else{setSyncBadge('error','NO DISPLAY');}setInterval(renderTopStatus,30000);setInterval(tickLiveTicketTimers,1000);renderRuntimeRecovery();refreshDeviceHealth();setInterval(refreshDeviceHealth,5000);const savedResume=recoveryStored();if(savedResume?.devicePublicId&&state.device?.publicId===savedResume.devicePublicId&&!state.device.virtualPreview){resumeRuntimeRecovery('app_restart_resume');}log('SYSTEM','Simulator ready. Pizza Line Reference HUD loaded.');})();

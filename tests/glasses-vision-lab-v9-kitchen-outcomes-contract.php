@@ -47,7 +47,9 @@ $pdo->prepare("INSERT INTO glasses_vision_model_packages (organization_id,public
 $pdo->prepare("INSERT INTO glasses_vision_model_packages (organization_id,public_id,detector_name,model_name,model_version,runtime_type,platform,artifact_url,artifact_sha256,artifact_bytes,status,created_by) VALUES (?,?,'ingredient_detector','Learning Detector','base','onnx','inmo_air3','https://example.test/learn-base.onnx',?,123,'ready',?)")->execute([$org,'learn-base-'.$slug,$baseHash,$actor]);$baseId=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO glasses_vision_model_rollouts (organization_id,public_id,detector_name,target_package_id,baseline_package_id,location_id,station_id,canary_percent,status,created_by,activated_by,activated_at) VALUES (?,?,'ingredient_detector',?,?,?,?,100.00,'active',?,?,UTC_TIMESTAMP(6))")->execute([$org,'learn-rollout-'.$slug,$modelId,$baseId,$location,(int)$station['id'],$actor,$actor]);
 
-glasses_build_confirm($pdo,$device,$sessionPublic,$componentKey);
+$ingredientReview=glasses_build_confirm($pdo,$device,$sessionPublic,$componentKey);
+v99_assert(empty($ingredientReview['summary']['accounted']),'Ingredient confirmation must leave POS customization review pending.');
+glasses_build_confirm($pdo,$device,$sessionPublic,GLASSES_BUILD_CUSTOMIZATION_REVIEW,$actor);
 v99_assert(!empty(glasses_build_payload($pdo,$org,$sessionPublic)['summary']['accounted']),'Build must be accounted.');
 
 function v99_scene(PDO $pdo,array $device,string $sessionPublic,string $slug,string $frame,?float $score,array $defects=[],bool $visible=true):array{

@@ -42,7 +42,9 @@ $modelHash=hash('sha256','rw-model-'.$slug);$baseHash=hash('sha256','rw-base-'.$
 $pdo->prepare("INSERT INTO glasses_vision_model_packages (organization_id,public_id,detector_name,model_name,model_version,runtime_type,platform,artifact_url,artifact_sha256,artifact_bytes,status,created_by) VALUES (?,?,'ingredient_detector','RW Detector','v9.8','onnx','inmo_air3','https://example.test/rw.onnx',?,123,'ready',?)")->execute([$org,'rw-model-'.$slug,$modelHash,$actor]);$modelId=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO glasses_vision_model_packages (organization_id,public_id,detector_name,model_name,model_version,runtime_type,platform,artifact_url,artifact_sha256,artifact_bytes,status,created_by) VALUES (?,?,'ingredient_detector','RW Detector','base','onnx','inmo_air3','https://example.test/rw-base.onnx',?,123,'ready',?)")->execute([$org,'rw-base-'.$slug,$baseHash,$actor]);$baseId=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO glasses_vision_model_rollouts (organization_id,public_id,detector_name,target_package_id,baseline_package_id,location_id,station_id,canary_percent,status,created_by,activated_by,activated_at) VALUES (?,?,'ingredient_detector',?,?,?,?,100.00,'active',?,?,UTC_TIMESTAMP(6))")->execute([$org,'rw-rollout-'.$slug,$modelId,$baseId,$location,(int)$station['id'],$actor,$actor]);
-glasses_build_confirm($pdo,$device,$sessionPublic,$componentKey);
+$ingredientReview=glasses_build_confirm($pdo,$device,$sessionPublic,$componentKey);
+v98_assert(empty($ingredientReview['summary']['accounted']),'Ingredient confirmation must leave POS customization review pending.');
+glasses_build_confirm($pdo,$device,$sessionPublic,GLASSES_BUILD_CUSTOMIZATION_REVIEW,$actor);
 v98_assert(!empty(glasses_build_payload($pdo,$org,$sessionPublic)['summary']['accounted']),'Build must be accounted.');
 
 function v98_scene(PDO $pdo,array $device,string $sessionPublic,string $slug,string $frame,?float $score,array $defects=[],bool $visible=true):array{

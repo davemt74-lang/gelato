@@ -78,14 +78,14 @@ function kds_production_board(PDO $pdo,int $org,int $locationId,?string $station
         ? ' LEFT JOIN service_check_contexts cx ON cx.organization_id=k.organization_id AND cx.check_id=k.check_id LEFT JOIN users su ON su.id=cx.server_user_id'
         : '';
 
-    $sql="SELECT k.public_id,k.status,k.sent_at,k.fired_at,k.started_at,k.ready_at,k.completed_at,k.cancelled_at,k.station_id,
+    $sql="SELECT k.public_id,k.status,k.revision,k.sent_at,k.fired_at,k.started_at,k.ready_at,k.completed_at,k.cancelled_at,k.station_id,
         TIMESTAMPDIFF(SECOND,COALESCE(k.fired_at,k.sent_at),NOW(6)) active_age_seconds,
         TIMESTAMPDIFF(SECOND,k.completed_at,NOW(6)) completed_age_seconds,
         s.public_id station_public_id,s.name station_name,s.target_seconds,
         c.public_id check_public_id,c.check_number,c.business_date,c.service_mode,c.table_name,c.guest_count,c.status check_status,
         TIMESTAMPDIFF(SECOND,c.opened_at,NOW(6)) pos_open_age_seconds,
         ou.display_name opened_by_name,
-        i.id pos_check_item_id,i.menu_item_id,i.item_name_snapshot,i.option_name_snapshot,i.quantity,i.special_instructions,i.status pos_item_status"
+        i.id pos_check_item_id,i.menu_item_id,i.item_name_snapshot,i.option_name_snapshot,i.quantity,i.special_instructions,i.status pos_item_status,i.updated_at pos_item_updated_at"
         .$itemExtra.$serviceSelect."
         FROM kds_order_items k
         JOIN pos_checks c ON c.id=k.check_id AND c.organization_id=k.organization_id

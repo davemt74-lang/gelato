@@ -26,8 +26,8 @@ gws_assert(str_contains($page,'lens-projection'),'Page must have a dedicated len
 gws_assert(str_contains($page,'detectionLayer'),'Page must expose ingredient outline layer.');
 gws_assert(str_contains($js,"mode==='mock'"),'Simulator must have isolated mock mode.');
 gws_assert(str_contains($js,"mode==='live'"),'Simulator must have real Gelato live mode.');
-gws_assert(str_contains($js,"metadata:{source:'web_glasses_simulator'"),'Live simulated observations must be source-labelled.');
-gws_assert(str_contains($js,"validation.status!=='ready_for_finishing'"),'Expo control must remain gated by product validation.');
+gws_assert(str_contains($js,"if(state.mode!=='mock'||!state.build)return;")&&!str_contains($js,"metadata:{source:'web_glasses_simulator'}"),'Scripted detections must stay within Mock mode.');
+gws_assert(str_contains($js,"state.validation?.status!=='ready_for_finishing'")&&str_contains($js,"api('handoff.prepare'")&&str_contains($js,'confirmationToken:confirmation.token'),'Expo requires a ready validation and matching server confirmation.');
 gws_assert(str_contains($js,'function selectedItem()'),'Live simulator must allow explicit KDS work selection.');
 gws_assert(str_contains($js,'resetSimulator'),'Simulator must support releasing local build UI state for the next ticket.');
 gws_assert(str_contains($page,'workItemSelect'),'Page must expose KDS item selector.');
@@ -127,7 +127,7 @@ gws_assert(str_contains($js,'VISION_READY_STABLE_MS'),'Automatic product validat
 gws_assert(str_contains($js,'function autoEvaluateTemporalReadiness'),'Temporal runtime must automatically invoke canonical product validation only after stable readiness.');
 gws_assert(str_contains($js,"api('validation.evaluate'"),'Automatic temporal readiness must reuse canonical product validation.');
 gws_assert(str_contains($js,"temporalSource:'web_glasses_simulator_temporal_vision'"),'Temporal observations must retain explicit temporal pipeline provenance.');
-gws_assert(str_contains($js,"visionMode()==='automatic'&&!state.temporalGate?.ready"),'Expo handoff must remain blocked when automatic temporal validation is not ready.');
+gws_assert(str_contains($js,"visionMode()==='automatic'&&!(state.mode==='live'&&requiresManualBuildReview())&&!state.temporalGate?.ready"),'Expo must wait for automatic temporal readiness unless the Live build requires explicit operator verification.');
 gws_assert(str_contains($js,'function clearTemporalRuntime'),'Temporal state must reset at build, mode and device boundaries.');
 gws_assert(str_contains($css,'.temporal-event')&&str_contains($css,'.vision-auto-box.pending'),'Temporal events and pre-stable tracks must have visible, distinct UI states.');
 gws_assert(str_contains($core,"require_once __DIR__.'/glasses-vision-models.php'")&&str_contains($core,"require_once __DIR__.'/glasses-vision-profiles.php'"),'Simulator must reuse governed model assignment and vision profile services.');
