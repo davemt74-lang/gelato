@@ -26,10 +26,15 @@ try{
             $date=daily_quicklist_date($_GET['date']??date('Y-m-d'));
             app_json_response(['ok'=>true,'board'=>daily_quicklist_purchasing_board($pdo,$org,$date)]);
         }
+        if($action==='po_vendor_options'){
+            require_once __DIR__.'/../includes/daily-quicklist-purchase-drafts.php';
+            if(!dqpo_can_compare($user))app_json_response(['ok'=>false,'message'=>'Need More manager and Purchasing View permissions required.'],403);
+            app_json_response(['ok'=>true,'comparison'=>dqpo_comparison($pdo,$org,(string)($_GET['id']??''))]);
+        }
         if($action==='po_draft_preview'){
             require_once __DIR__.'/../includes/daily-quicklist-purchase-drafts.php';
             if(!dqpo_can_draft($user))app_json_response(['ok'=>false,'message'=>'Need More manager and Purchasing management permissions required.'],403);
-            app_json_response(['ok'=>true,'quote'=>dqpo_quote($pdo,$org,(string)($_GET['id']??''))]);
+            app_json_response(['ok'=>true,'quote'=>dqpo_quote($pdo,$org,(string)($_GET['id']??''),null,(string)($_GET['vendorItemId']??''))]);
         }
         if($action==='receipts'){
             if(!daily_quicklist_receipt_permission($user))
@@ -58,10 +63,19 @@ try{
     }
     $input=app_json_input();app_verify_request_csrf($input);
     $action=(string)($input['action']??'');
+    if($action==='po_vendor_prefer'){
+        require_once __DIR__.'/../includes/daily-quicklist-purchase-drafts.php';
+        if(!dqpo_can_draft($user))app_json_response(['ok'=>false,'message'=>'Need More manager and Purchasing management permissions required.'],403);
+        $comparison=dqpo_set_preferred($pdo,$org,$actor,$user,(string)($input['id']??''),
+            (string)($input['vendorItemId']??''),(string)($input['comparisonHash']??''));
+        app_audit($pdo,$org,$actor,'daily_quicklist.vendor_preferred','inventory_item',$comparison['stockId'],null,
+            ['needMoreId'=>$comparison['requestId'],'vendorItemId'=>(string)($input['vendorItemId']??'')]);
+        app_json_response(['ok'=>true,'comparison'=>$comparison,'message'=>'Preferred vendor saved. No order was created.']);
+    }
     if($action==='po_draft_create'){
         require_once __DIR__.'/../includes/daily-quicklist-purchase-drafts.php';
         if(!dqpo_can_draft($user))app_json_response(['ok'=>false,'message'=>'Need More manager and Purchasing management permissions required.'],403);
-        $order=dqpo_create_draft($pdo,$org,$actor,$user,(string)($input['id']??''),(string)($input['quoteHash']??''));
+        $order=dqpo_create_draft($pdo,$org,$actor,$user,(string)($input['id']??''),(string)($input['quoteHash']??''),(string)($input['vendorItemId']??''));
         app_audit($pdo,$org,$actor,'daily_quicklist.po_draft_created','purchase_order',$order['orderId'],null,
             ['needMoreId'=>$order['requestId'],'orderedQuantity'=>$order['orderedQuantity']]);
         app_json_response(['ok'=>true,'order'=>$order,'message'=>'Draft purchase order created. Review it in Purchasing before submission.'],201);

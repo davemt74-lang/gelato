@@ -16,6 +16,15 @@ on:
       - 'database/20261227_daily_prep_partial_receipts.sql'
       - 'includes/daily-quicklist-receipts.php'
       - 'includes/daily-quicklist-purchase-drafts.php'
+      - 'includes/daily-quicklist-vendor-intelligence.php'
+      - 'includes/purchasing-orders.php'
+      - 'js/need-more-purchasing.js'
+      - 'assets/css/need-more-purchasing.css'
+      - 'tests/need-more-vendor-intelligence-contract.php'
+      - 'tests/need-more-vendor-agent-contract.php'
+      - 'tests/need-more-purchasing-ui.cjs'
+      - 'tests/need-more-purchasing-browser.cjs'
+      - 'tests/purchasing-vendor-integrity-contract.php'
       - 'need-more-purchasing.php'
       - 'tests/daily-prep-quicklist-contract.php'
       - 'api/prep-intelligence.php'
@@ -54,6 +63,15 @@ on:
       - 'database/20261227_daily_prep_partial_receipts.sql'
       - 'includes/daily-quicklist-receipts.php'
       - 'includes/daily-quicklist-purchase-drafts.php'
+      - 'includes/daily-quicklist-vendor-intelligence.php'
+      - 'includes/purchasing-orders.php'
+      - 'js/need-more-purchasing.js'
+      - 'assets/css/need-more-purchasing.css'
+      - 'tests/need-more-vendor-intelligence-contract.php'
+      - 'tests/need-more-vendor-agent-contract.php'
+      - 'tests/need-more-purchasing-ui.cjs'
+      - 'tests/need-more-purchasing-browser.cjs'
+      - 'tests/purchasing-vendor-integrity-contract.php'
       - 'need-more-purchasing.php'
       - 'tests/daily-prep-quicklist-contract.php'
       - 'api/prep-intelligence.php'
@@ -102,6 +120,10 @@ jobs:
           php -l api/daily-prep.php
           php -l includes/daily-quicklist-core.php
           php -l includes/daily-quicklist-purchase-drafts.php
+          php -l includes/daily-quicklist-vendor-intelligence.php
+          php -l tests/need-more-vendor-intelligence-contract.php
+          php -l tests/need-more-vendor-agent-contract.php
+          php -l tests/purchasing-vendor-integrity-contract.php
           php -l need-more-purchasing.php
           php -l includes/daily-quicklist-receipts.php
           php -l tests/daily-prep-quicklist-contract.php
@@ -122,6 +144,8 @@ jobs:
           php -l includes/agent-workspace-core.php
           php -l tests/prep-inventory-intelligence-contract.php
           node --check js/daily-prep.js
+          node --check js/need-more-purchasing.js
+          node tests/need-more-purchasing-ui.cjs
           node --check js/prep-intelligence.js
           node --check js/restaurant-agent-bridge.js
           node tests/prep-agent-bridge-routing.cjs
@@ -191,6 +215,11 @@ jobs:
         run: php tests/prep-inventory-intelligence-contract.php
       - name: Staff daily prep, recipe and Need More contract
         run: php tests/daily-prep-quicklist-contract.php
+      - name: Vendor comparison and purchasing integrity contracts
+        run: |
+          php tests/need-more-vendor-intelligence-contract.php
+          php tests/purchasing-vendor-integrity-contract.php
+          php tests/need-more-vendor-agent-contract.php
       - name: Verify upgrader idempotence
         run: |
           php <<'PHP'
@@ -204,3 +233,28 @@ jobs:
           if($r) exit(3);
           echo "idempotent\n";
           PHP
+
+  vendor-browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned browser QA runtime
+        run: |
+          npm install --prefix /tmp/gelato-browser-qa --no-audit --no-fund playwright@1.62.1
+          node /tmp/gelato-browser-qa/node_modules/playwright/cli.js install --with-deps chromium
+      - name: Desktop and mobile purchasing browser contract
+        env:
+          NODE_PATH: /tmp/gelato-browser-qa/node_modules
+          QA_OUTPUT_DIR: /tmp/gelato-purchasing-qa
+        run: node tests/need-more-purchasing-browser.cjs
+      - name: Purchasing browser review screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gelato-3k2ib-browser-proof
+          path: /tmp/gelato-purchasing-qa/*.png
+          if-no-files-found: warn
+          retention-days: 14

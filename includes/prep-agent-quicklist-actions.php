@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__.'/daily-quicklist-receipts.php';
+require_once __DIR__.'/daily-quicklist-purchase-drafts.php';
 
 /**
  * Section 3K2C: confirmation-only Daily Prep and Need More actions.
@@ -116,6 +117,38 @@ function pqa_receipt_context_resolve(int $org,int $uid,string $threadId,string $
         throw new InvalidArgumentException('Show the eligible recorded receipts for this Need More item first, then choose a number.');
     return (int)$ctx['receipts'][$number-1];
 }
+/** Vendor numbers refer only to an actually displayed, unexpired comparison. */
+function pqa_vendor_context_get(int $org,int $uid,string $threadId=''): ?array
+{
+    if(session_status()!==PHP_SESSION_ACTIVE)return null;
+    $key=pqa_context_key($org,$uid,$threadId);
+    $row=$_SESSION['prep_vendor_selection'][$key]??null;
+    if(!is_array($row)||(int)($row['org']??0)!==$org||(int)($row['user']??0)!==$uid
+        ||(int)($row['expires']??0)<time()){
+        unset($_SESSION['prep_vendor_selection'][$key]);return null;
+    }
+    return $row;
+}
+function pqa_vendor_context_save(int $org,int $uid,string $threadId,array $comparison): void
+{
+    if(session_status()!==PHP_SESSION_ACTIVE)throw new RuntimeException('A secure Agent Chat session is required.');
+    $_SESSION['prep_vendor_selection'][pqa_context_key($org,$uid,$threadId)]=[
+        'org'=>$org,'user'=>$uid,'itemId'=>(string)$comparison['requestId'],'expires'=>time()+900,
+        'comparisonHash'=>(string)$comparison['comparisonHash'],
+        'options'=>array_values(array_map(static fn(array $row):array=>[
+            'vendorItemId'=>(string)$row['vendorItemId'],'eligible'=>($row['eligible']??false)===true,
+        ],array_slice($comparison['options'],0,20))),
+    ];
+}
+function pqa_vendor_context_resolve(int $org,int $uid,string $threadId,string $itemId,int $number): array
+{
+    $ctx=pqa_vendor_context_get($org,$uid,$threadId);
+    if(!$ctx||$ctx['itemId']!==$itemId||$number<1||$number>20||!isset($ctx['options'][$number-1]))
+        throw new InvalidArgumentException('Show the supplier options for this Need More item in this conversation first, then choose a displayed number.');
+    $option=$ctx['options'][$number-1];
+    if(!$option['eligible'])throw new InvalidArgumentException('That supplier mapping needs its pack or unit information corrected before selection.');
+    return ['vendorItemId'=>$option['vendorItemId'],'comparisonHash'=>$ctx['comparisonHash']];
+}
 function pqa_numbered_brief(array $context): string
 {
     $lines=[];
@@ -226,6 +259,8 @@ function pqa_require_action_permissions(array $user,array $intent): void
         throw new PrepAgentPermissionException('Manager and Inventory View permissions are required for numeric Need More targets.');
     if($intent['op']==='reconcile_receipt'&&!daily_quicklist_receipt_permission($user))
         throw new PrepAgentPermissionException('Manager and Inventory View permissions are required to reconcile receipts.');
+    if(in_array($intent['op'],['create_purchase_draft','set_preferred_vendor'],true)&&!dqpo_can_draft($user))
+        throw new PrepAgentPermissionException('Need More manager, Inventory View and Purchasing View/Manage permissions are required.');
     if($intent['op']==='set_target')
         pac_require($user,'recipes.view','Recipe Library view permission is required for batch targets.');
 }
@@ -333,6 +368,36 @@ function pqa_propose(PDO $pdo,int $org,int $uid,array $user,array $intent,string
                 ($quantityNote!==$row['quantityNote']?' with requested amount "'.$quantityNote.'"':'').
                 ($stockQty!==$row['requestedStockQuantity']?' with numeric stock target '.
                     daily_quicklist_format_quantity((float)$stockQty).' '.$stockUnit:'');
+        }elseif(in_array($op,['create_purchase_draft','set_preferred_vendor'],true)){
+            if($kind!=='inventory'||$row['status']==='received')
+                throw new InvalidArgumentException('Choose an outstanding Need More request.');
+            $comparison=dqpo_comparison($pdo,$org,(string)$row['id']);
+            if(!hash_equals((string)$comparison['comparisonHash'],(string)($intent['comparisonHash']??'')))
+                throw new InvalidArgumentException('The displayed supplier comparison changed. Show the current supplier options again.');
+            $selected=null;
+            foreach($comparison['options'] as $option)
+                if($option['vendorItemId']===($intent['vendorItemId']??'')){$selected=$option;break;}
+            if(!$selected||!$selected['eligible'])throw new InvalidArgumentException('The selected supplier is no longer eligible.');
+            $payload['vendorItemId']=(string)$selected['vendorItemId'];
+            $payload['comparisonHash']=(string)$comparison['comparisonHash'];
+            if($op==='create_purchase_draft'){
+                $quote=dqpo_quote($pdo,$org,(string)$row['id'],null,$payload['vendorItemId']);
+                $payload['quoteHash']=(string)$quote['quoteHash'];
+                $description='Create a DRAFT purchase order for '.$title.' from '.$quote['vendor'].': '.
+                    daily_quicklist_format_quantity((float)$quote['packs']).' packs × '.
+                    daily_quicklist_format_quantity((float)$quote['packSize']).' '.$quote['unit'].
+                    ', total '.daily_quicklist_format_quantity((float)$quote['orderedQuantity']).' '.$quote['unit'].
+                    ', pack-rounding overage '.daily_quicklist_format_quantity((float)$quote['overageQuantity']).' '.$quote['unit'].
+                    ', estimated subtotal '.($quote['estimatedSubtotal']===null?'not priced':'$'.number_format((float)$quote['estimatedSubtotal'],2)).
+                    '. '.implode(' ',(array)($quote['warnings']??[])).
+                    ' This does not submit an order, contact a vendor, receive stock or close Need More';
+            }else{
+                $description='Set '.$selected['vendor'].' ('.daily_quicklist_format_quantity((float)$selected['packSize']).
+                    ' '.$selected['packUnit'].' pack) as the preferred supplier for '.$title.
+                    '. This updates the saved supplier preference and its catalog details'.
+                    ($selected['unitPrice']===null?' (unit cost is not priced)':', including unit cost $'.number_format((float)$selected['unitPrice'],4).' per '.$comparison['unit']).
+                    '; it creates no purchase order and changes no stock quantity';
+            }
         }elseif($op==='reconcile_receipt'){
             if($kind!=='inventory'||$row['status']==='received')
                 throw new InvalidArgumentException('Only outstanding Need More requests can be reconciled.');
@@ -374,7 +439,7 @@ function pqa_execute(PDO $pdo,int $org,int $uid,array $user,array $payload): arr
 {
     $intent=(array)($payload['intent']??[]);$op=(string)($intent['op']??'');
     $date=daily_quicklist_date((string)($payload['date']??''));
-    if(!in_array($op,['add_need_more','toggle','timer','set_target','update','notify','archive','reconcile_receipt'],true))
+    if(!in_array($op,['add_need_more','toggle','timer','set_target','update','notify','archive','reconcile_receipt','create_purchase_draft','set_preferred_vendor'],true))
         throw new InvalidArgumentException('Unsupported proposed Daily Prep action.');
     pqa_require_action_permissions($user,$intent);
     if(!daily_quicklist_ready($pdo))throw new InvalidArgumentException('Daily Prep is not installed.');
@@ -407,6 +472,22 @@ function pqa_execute(PDO $pdo,int $org,int $uid,array $user,array $payload): arr
         foreach($rows as $candidate)if($candidate['id']===$id&&$candidate['type']===$kind){$row=$candidate;break;}
         if(!$row||!hash_equals((string)($payload['fingerprint']??''),pqa_item_fingerprint($row)))
             throw new InvalidArgumentException('That checklist item changed after the proposal. Review the current list and ask again.');
+        if(in_array($op,['create_purchase_draft','set_preferred_vendor'],true)){
+            if($kind!=='inventory')throw new InvalidArgumentException('The proposed purchase must belong to Need More.');
+            $vendorItemId=(string)($payload['vendorItemId']??'');
+            if($op==='create_purchase_draft'){
+                $result=dqpo_create_draft($pdo,$org,$uid,$user,$id,(string)($payload['quoteHash']??''),$vendorItemId);
+                $answer='Confirmed. Created '.$result['orderNumber'].' as a draft for '.$row['title'].' from '.$result['vendor'].'. Review it in Purchasing before submission. No stock quantity changed.';
+            }else{
+                $result=dqpo_set_preferred($pdo,$org,$uid,$user,$id,$vendorItemId,(string)($payload['comparisonHash']??''));
+                $answer='Confirmed. Updated the saved preferred supplier for '.$row['title'].'. No purchase order was created and no stock quantity changed.';
+            }
+            app_audit($pdo,$org,$uid,'prep.agent_daily_quicklist_confirmed','daily_quicklist_item',$id,null,
+                ['action'=>$op,'date'=>$date,'vendorItemId'=>$vendorItemId,'orderId'=>$result['orderId']??null]);
+            return ['ok'=>true,'skill'=>'prep.action_confirmed','answer'=>$answer,
+                'data'=>['action'=>$op,'itemId'=>$id,'result'=>$result,'proof'=>['url'=>'need-more-purchasing.php']],
+                'sources'=>[$id]];
+        }
         $input=['id'=>$id,'expectedFingerprint'=>(string)$payload['fingerprint']];
         if($op==='toggle'){
             $desired=(string)($intent['status']??'');
