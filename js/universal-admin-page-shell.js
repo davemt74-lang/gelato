@@ -34,7 +34,7 @@
   function ensureAddCanvas() {
     if (document.querySelector('script[data-global-add-canvas]')) return;
     const script = document.createElement('script');
-    script.src = 'js/global-add-canvas.js?v=20261023-manual-chat1-hardening-c1';
+    script.src = 'js/global-add-canvas.js?v=20261103-e1';
     script.dataset.globalAddCanvas = '1';
     document.head.appendChild(script);
   }

@@ -95,6 +95,9 @@ function timeclock_agent_propose(PDO $pdo,array $user,string $type,array $payloa
 {
     $org=(int)$user['organization_id'];$uid=(int)$user['id'];
     if(!app_has_permission('timeclock.self',$user))throw new TimeclockAgentPermissionException('Personal time-clock permission required for clock and break actions.');
+    $turn=gac_protected_turn($org,$uid);
+    $payload['source']=$turn['channel']==='voice'?'voice':'agent';
+    $payload['voiceEventId']=$turn['voiceEventId'];
     $clock=tv_open_clock($pdo,$org,$uid);
     $openBreakId=null;
     if($clock){
@@ -136,11 +139,19 @@ function timeclock_agent_execute_pending(PDO $pdo,array $user,array $proposal): 
     if((int)($proposal['organizationId']??0)!==$org||(int)($proposal['userId']??0)!==$uid)throw new TimeclockAgentPermissionException('This Time Clock proposal belongs to another session.');
     if(!app_has_permission('timeclock.self',$user))throw new TimeclockAgentPermissionException('Personal time-clock permission required.');
     $type=(string)($proposal['type']??'');$payload=is_array($proposal['payload']??null)?$proposal['payload']:[];
-    $source=(string)($payload['source']??'agent');if(!in_array($source,['agent','voice'],true))$source='agent';
-    $voiceEventId=(string)($payload['voiceEventId']??'');
+    // The confirming turn owns the action's channel. A spoken Confirm needs
+    // its own receipt; the original proposal's event cannot be borrowed.
+    $source=($proposal['decisionChannel']??'')==='voice'?'voice':'agent';
+    $voiceEventId=$source==='voice'?(string)($proposal['decisionVoiceEventId']??''):'';
     $pdo->beginTransaction();
     try{
         tv_lock_employee($pdo,$org,$uid);
+        if($source==='voice'){
+            $turn=gac_protected_turn($org,$uid);
+            if($turn['channel']!=='voice'||$turn['voiceEventId']!==$voiceEventId
+                ||$turn['sourceMessageId']!==($proposal['decisionMessageId']??''))
+                throw new GacConfirmationConflict('The spoken confirmation changed before execution. Speak again.');
+        }
         $clock=timeclock_agent_assert_state($pdo,$org,$uid,$payload);
         if($type==='clock_in'){
             if($clock)throw new InvalidArgumentException('You are already clocked in.');
@@ -157,7 +168,8 @@ function timeclock_agent_execute_pending(PDO $pdo,array $user,array $proposal): 
             if(!$clock)throw new InvalidArgumentException('Clock in before using breaks.');
             tv_break_action($pdo,$org,$uid,$uid,'end',$source,$voiceEventId);$answer='Confirmed. Your break has ended.';$entity=(string)$clock['public_id'];
         }else throw new InvalidArgumentException('The pending Time Clock action is no longer supported.');
-        app_audit($pdo,$org,$uid,'timeclock.agent_action_confirmed','time_clock_entry',$entity,null,['proposalId'=>$proposal['id'],'actionType'=>$type,'source'=>$source]);
+        app_audit($pdo,$org,$uid,'timeclock.agent_action_confirmed','time_clock_entry',$entity,null,['proposalId'=>$proposal['id'],'actionType'=>$type,'source'=>$source,
+            'decisionMessageId'=>$proposal['decisionMessageId']??null,'voiceEventId'=>$voiceEventId]);
         $pdo->commit();
         return ['skill'=>'timeclock.action_confirmed','answer'=>$answer,'data'=>['actionType'=>$type,'clockPublicId'=>$entity],'sources'=>['Time Clock','Time Clock + Attendance Agent']];
     }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
@@ -173,6 +185,7 @@ function timeclock_agent_handle(PDO $pdo,array $user,array $input): array
     $voice=!empty($input['voice']);$voiceEventId=trim((string)($input['voiceEventId']??''));$source=$voice?'voice':'agent';
 
     if(gac_is_confirm($message)){
+        if(!app_has_permission('timeclock.self',$user))throw new TimeclockAgentPermissionException('Personal time-clock permission required.');
         $pending=gac_pending_claim('timeclock',$org,$uid,$input);
         try{$result=timeclock_agent_execute_pending($pdo,$user,$pending);}catch(Throwable $e){gac_pending_clear('timeclock',$org,$uid,(string)$pending['id']);throw $e;}
         gac_pending_clear('timeclock',$org,$uid,(string)$pending['id']);return ['ok'=>true]+$result;

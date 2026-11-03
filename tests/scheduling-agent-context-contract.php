@@ -56,9 +56,13 @@ sac_assert(str_contains($core,'sac_week_snapshot')&&str_contains($core,"That sch
 sac_assert(str_contains($core,'sac_view_all')&&str_contains($core,'sac_view_self')&&str_contains($core,'Scheduling or staff visibility permission is required.'),'Scheduling Agent permission must not bypass underlying schedule/staff visibility permissions.');
 sac_assert(str_contains($core,"Schedule view permission is required for the restaurant roster.")&&str_contains($core,"Schedule view permission is required to compare staff availability."),'Cross-staff roster and availability intelligence must require schedule-wide visibility.');
 sac_assert(str_contains($confirmation,"'organizationId'=>\$organizationId,'userId'=>\$userId")
-    &&str_contains($confirmation,'gac_creation_binding($organizationId,$userId)')
+    &&str_contains($confirmation,'$binding=gac_claim_protected_turn($organizationId,$userId);')
+    &&str_contains($confirmation,'$turn=gac_protected_turn($org,$uid);')
+    &&str_contains($confirmation,'$binding=gac_creation_binding($org,$uid);')
+    &&str_contains($confirmation,"'threadId'=>\$binding['threadId'],'sourceMessageId'=>\$binding['sourceMessageId']")
+    &&str_contains($confirmation,"gac_canonical_message(\$pdo,\$org,\$uid,\$binding['threadId'],\$binding['sourceMessageId'],'user')")
     &&str_contains($core,'does not belong to your session'),
-    'Pending actions must be bound to the authenticated organization, user, and canonical conversation.');
+    'Pending actions must pass the protected-turn guard and retain the authenticated organization, user, and canonical conversation binding.');
 
 sac_assert(str_contains($posLoader,'js/agent-page-context.js'),'POS must load the shared context layer before its adapter.');
 sac_assert(str_contains($posContext,"module: 'pos'")&&str_contains($posContext,'GelatoAgentPageContext?.register?.(provider)'),'POS must register with the same shared context layer.');

@@ -26,10 +26,12 @@ namespace Gelato.Ar.Core
         public long FrameTimestampNanoseconds { get; set; }
         public VisionDetectorRuntimeState DetectorState { get; set; } = VisionDetectorRuntimeState.Starting;
         public bool ModelRuntimeReady { get; set; }
-        public bool HeartbeatHealthy { get; set; } = true;
+        public bool? HeartbeatHealthy { get; set; }
+        public double? LastHeartbeatSucceededAtMs { get; set; }
+        public long HeartbeatObservationVersion { get; set; }
         public string HeartbeatError { get; set; } = string.Empty;
         public string ThermalState { get; set; } = "unknown";
-        public bool ResourceConstrained { get; set; }
+        public bool? ResourceConstrained { get; set; }
     }
 
     public sealed class DeviceRuntimeIncident
@@ -66,6 +68,9 @@ namespace Gelato.Ar.Core
         public long LastFrameTimestampNanoseconds { get; internal set; }
         public double LastDistinctFrameAtMs { get; internal set; }
         public double LastHeartbeatAtMs { get; internal set; }
+        public bool? HeartbeatHealthy { get; internal set; }
+        public string ThermalState { get; internal set; } = "unknown";
+        public bool? ResourceConstrained { get; internal set; }
         public int ConsecutiveRecoveryFailures { get; internal set; }
         public IReadOnlyList<DeviceRuntimeIncident> Incidents { get; internal set; } = Array.Empty<DeviceRuntimeIncident>();
         public DeviceRuntimeTelemetry Telemetry { get; internal set; } = new DeviceRuntimeTelemetry();
@@ -99,6 +104,10 @@ namespace Gelato.Ar.Core
         private double _lastDistinctFrameAtMs = -1d;
         private double _lastHeartbeatAtMs = -1d;
         private bool _heartbeatSeen;
+        private long _lastHeartbeatObservationVersion = -1;
+        private bool? _heartbeatHealthy;
+        private string _thermalState = "unknown";
+        private bool? _resourceConstrained;
         private double _lastRecoveryAttemptAtMs = double.NegativeInfinity;
         private int _consecutiveRecoveryFailures;
         private long _incidentSequence;
@@ -123,10 +132,13 @@ namespace Gelato.Ar.Core
 
             ObserveFrame(signals, nowMs);
             ObserveHeartbeat(signals, nowMs);
+            _heartbeatHealthy = signals.HeartbeatHealthy;
+            _thermalState = string.IsNullOrWhiteSpace(signals.ThermalState) ? "unknown" : signals.ThermalState;
+            _resourceConstrained = signals.ResourceConstrained;
 
             var state = DeviceRuntimeOperationalState.Ready;
             var code = "ready";
-            var message = "Device runtime is healthy.";
+            var message = "Required runtime checks are ready; optional device telemetry may be unavailable.";
 
             if (!signals.PlatformInitialized)
             {
@@ -184,15 +196,27 @@ namespace Gelato.Ar.Core
                 code = "detector_degraded";
                 message = "Detector runtime is degraded.";
             }
-            else if (!signals.HeartbeatHealthy || IsHeartbeatStale(nowMs))
+            else if (signals.HeartbeatHealthy == false)
             {
                 state = DeviceRuntimeOperationalState.Degraded;
-                code = !signals.HeartbeatHealthy ? "heartbeat_failed" : "heartbeat_stale";
+                code = "heartbeat_failed";
                 message = string.IsNullOrWhiteSpace(signals.HeartbeatError)
                     ? "Device heartbeat is unhealthy."
                     : signals.HeartbeatError;
             }
-            else if (signals.ResourceConstrained)
+            else if (signals.HeartbeatHealthy == null || !_heartbeatSeen)
+            {
+                state = DeviceRuntimeOperationalState.Starting;
+                code = "heartbeat_unknown";
+                message = "No validated heartbeat is available for the current device credential.";
+            }
+            else if (IsHeartbeatStale(nowMs))
+            {
+                state = DeviceRuntimeOperationalState.Degraded;
+                code = "heartbeat_stale";
+                message = "The last successful device heartbeat is stale.";
+            }
+            else if (signals.ResourceConstrained == true)
             {
                 state = DeviceRuntimeOperationalState.Degraded;
                 code = "resource_constrained";
@@ -262,13 +286,21 @@ namespace Gelato.Ar.Core
 
         private void ObserveHeartbeat(DeviceRuntimeSignals signals, double nowMs)
         {
-            if (signals.HeartbeatHealthy)
+            var observed = signals.LastHeartbeatSucceededAtMs;
+            if (observed.HasValue && !double.IsNaN(observed.Value) && !double.IsInfinity(observed.Value)
+                && observed.Value >= 0d && observed.Value <= nowMs)
             {
                 _heartbeatSeen = true;
-                _lastHeartbeatAtMs = nowMs;
-                return;
+                _lastHeartbeatAtMs = Math.Max(_lastHeartbeatAtMs, observed.Value);
             }
-            _telemetry.HeartbeatFailures++;
+            else if (signals.HeartbeatHealthy != false)
+            {
+                _heartbeatSeen = false;
+                _lastHeartbeatAtMs = -1d;
+            }
+            if (signals.HeartbeatHealthy == false && signals.HeartbeatObservationVersion != _lastHeartbeatObservationVersion)
+                _telemetry.HeartbeatFailures++;
+            _lastHeartbeatObservationVersion = signals.HeartbeatObservationVersion;
         }
 
         private bool IsFrameStale(double nowMs)
@@ -280,7 +312,7 @@ namespace Gelato.Ar.Core
         private bool IsHeartbeatStale(double nowMs)
         {
             return _heartbeatSeen &&
-                   nowMs - _lastHeartbeatAtMs > _options.HeartbeatStaleAfter.TotalMilliseconds;
+                   nowMs - _lastHeartbeatAtMs >= _options.HeartbeatStaleAfter.TotalMilliseconds;
         }
 
         private void ApplyState(DeviceRuntimeOperationalState state, string code, string message, double nowMs)
@@ -342,6 +374,9 @@ namespace Gelato.Ar.Core
                 LastFrameTimestampNanoseconds = _lastFrameTimestamp,
                 LastDistinctFrameAtMs = _lastDistinctFrameAtMs,
                 LastHeartbeatAtMs = _lastHeartbeatAtMs,
+                HeartbeatHealthy = _heartbeatHealthy,
+                ThermalState = _thermalState,
+                ResourceConstrained = _resourceConstrained,
                 ConsecutiveRecoveryFailures = _consecutiveRecoveryFailures,
                 Incidents = incidents,
                 Telemetry = new DeviceRuntimeTelemetry

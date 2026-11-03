@@ -152,6 +152,7 @@ namespace Gelato.Ar.Core
             {
                 await ReportBestEffortAsync(CreateReport(assignment, "download_started", "download_started"), cancellationToken).ConfigureAwait(false);
                 artifact = await _fetcher.FetchAsync(artifactUri, _maximumArtifactBytes, cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
             }
             catch (OperationCanceledException)
             {
@@ -197,6 +198,7 @@ namespace Gelato.Ar.Core
             VisionModelPreparedArtifact prepared;
             try
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 prepared = await _runtime.PrepareAsync(package, artifact, cancellationToken).ConfigureAwait(false);
                 if (prepared == null) throw new InvalidOperationException("Runtime returned no prepared model.");
                 if (!string.Equals(prepared.PackagePublicId, package.PublicId, StringComparison.Ordinal))
@@ -218,9 +220,11 @@ namespace Gelato.Ar.Core
                 return await FailAsync(assignment, "runtime_prepare_failed", ex.Message, cancellationToken).ConfigureAwait(false);
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             try
             {
                 await _runtime.ActivateAsync(prepared, cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
             }
             catch (OperationCanceledException)
             {

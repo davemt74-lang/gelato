@@ -181,6 +181,61 @@ dq_assert(!hash_equals($fingerprint,daily_quicklist_selection_fingerprint([$chan
 
 require_once __DIR__.'/../includes/prep-agent-core.php';
 require_once __DIR__.'/../includes/agent-workspace-core.php';
+require_once __DIR__.'/../includes/timeclock-voice-core.php';
+require_once __DIR__.'/../includes/agent-voice-conversation.php';
+require_once __DIR__.'/../includes/agent-private-voice.php';
+
+/** Controlled acoustic features exercise production matching, not a live microphone. */
+function dq_voice_features():array
+{
+    return tv_voice_vector(array_map(static fn(int $n):float=>$n/100,range(1,24)));
+}
+
+/**
+ * A new canonical spoken turn, including its independent private-use consent.
+ * The profile and voice permissions are explicitly seeded by the caller.
+ * Passing an event tests unknown/replayed evidence; null requests a fresh match.
+ */
+function dq_voice_input(PDO $pdo,array $user,string $message,?string $event=null,bool $approve=true):array
+{
+    $org=(int)$user['organization_id'];$uid=(int)$user['id'];$key=$org.':'.$uid;
+    $pending=gac_pending_get('prep',$org,$uid);
+    $decision=gac_is_confirm($message)||gac_is_cancel($message);
+    $review=$decision&&$pending?hac_test_review($pdo,$user,'prep'):[];
+    $thread=$review['threadId']??($GLOBALS['hac_test_threads'][$key]??null);
+    if(!$thread)$thread=gaw_create_thread($pdo,$org,$uid,'voice')['public_id'];
+    if($event===null){
+        $match=tv_voice_match($pdo,$org,$uid,dq_voice_features(),false);
+        dq_assert($match['matched']&&$match['sessionUserMatch'],'voice fixture matches the active signed-in staff profile');
+        $event=(string)$match['eventId'];
+    }
+    gavp_clear_approved();
+    $pdo->beginTransaction();
+    try{
+        $receipt=avc_claim_unused_event($pdo,$org,$user,$event)?$event:'';
+        $saved=gaw_append($pdo,$org,$uid,$thread,'user',$message,
+            ['channel'=>'voice','voiceEventId'=>$receipt]);
+        $pdo->commit();
+    }catch(Throwable $error){if($pdo->inTransaction())$pdo->rollBack();throw $error;}
+    $canonical=gac_canonical_message($pdo,$org,$uid,$thread,$saved['id'],'user');
+    dq_assert($canonical['channel']==='voice'&&$canonical['voice_event_public_id']===$receipt,
+        'the actual saved turn retains its voice channel and one-use receipt');
+    if($receipt!=='')dq_assert((avc_verified_speaker($pdo,$org,$user,$receipt)['userId']??0)===$uid,
+        'canonical voice attribution belongs to the signed-in employee');
+    // The HTTP regression separately exercises the real UI token-issuance API.
+    // Here the exact canonical turn gets explicit consent before model/delegation.
+    if($approve){
+        $token=gavp_issue($org,$uid,$thread,$saved['id']);
+        dq_assert(gavp_consume($org,$uid,$thread,$saved['id'],$token),
+            'each spoken command or decision consumes its own operator approval');
+    }
+    $input=['message'=>$message,'voice'=>true,'voiceEventId'=>$receipt,
+        'threadId'=>$thread,'sourceMessageId'=>$saved['id']]+$review;
+    $GLOBALS['hac_test_threads'][$key]=$thread;
+    gac_request_context($input,$pdo,$user);
+    return $input;
+}
+
 dq_assert(menu_manager_ready($pdo),'menu manager schema must be installed for generation');
 $cat=pos_transaction($pdo,fn():array=>menu_manager_category_save($pdo,$org,null,['name'=>'Gelato CI Pizza','sortOrder'=>10,'status'=>'active']));
 $menuItem=menu_manager_save_item($pdo,$org,null,[
@@ -200,6 +255,11 @@ try{daily_quicklist_apply_menu_selection($pdo,$org,$actor,$day,$selectedKeys,tru
     throw new RuntimeException('stale menu snapshot accepted');}catch(InvalidArgumentException){}
 $staffAgent=['id'=>$actor,'organization_id'=>$org,
     'permissions'=>['prep.intelligence.view','prep.intelligence.agent','tasks.self','recipes.view','menu.view']];
+$voiceStaffAgent=$staffAgent;
+$voiceStaffAgent['permissions']=array_merge($staffAgent['permissions'],['voice.self','voice.agent']);
+$pdo->prepare("INSERT INTO voice_identity_profiles(organization_id,user_id,status,consent_version,consented_at,enrolled_at,voiceprint_json,sample_count)
+    VALUES (?,?,'active','contract-consent',NOW(6),NOW(6),?,1)")
+    ->execute([$org,$actor,json_encode(dq_voice_features(),JSON_THROW_ON_ERROR)]);
 $route=gaw_route($staffAgent,'Generate daily prep checklist from the menu');
 dq_assert($route['route']===null&&$route['domain']==='daily_prep_model_tools','menu-backed prep routes to registered native model tools');
 $route=gaw_route($staffAgent,'What is on our Need More list?');
@@ -211,11 +271,32 @@ $read=prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',
 dq_assert($read['skill']==='prep.daily_quicklist'&&($read['data']['proof']['url']??'')==='daily-prep.php'
     &&str_contains($read['answer'],'Need More'),
     'official agent reads the shared quicklist and returns a real UI link');
-$voiceProposal=prep_agent_handle($pdo,$staffAgent,
-    hac_test_input($pdo,$staffAgent,'prep',['message'=>'Generate daily prep checklist for '.$day.' from menu','voice'=>true]));
+$beforeVoiceGeneration=daily_quicklist_items($pdo,$org,$day);
+$generationText='Generate daily prep checklist for '.$day.' from menu';
+try{prep_agent_handle($pdo,$voiceStaffAgent,
+    hac_test_input($pdo,$voiceStaffAgent,'prep',['message'=>$generationText,'voice'=>true]));
+    throw new RuntimeException('a typed canonical source accepted a synthetic voice flag');}catch(GacConfirmationConflict){}
+dq_assert(!gac_pending_get('prep',$org,$actor)
+    &&daily_quicklist_items($pdo,$org,$day)===$beforeVoiceGeneration,
+    'a mislabeled microphone fixture neither stages a proposal nor changes Daily Prep');
+$unapprovedGeneration=dq_voice_input($pdo,$voiceStaffAgent,$generationText,null,false);
+try{prep_agent_handle($pdo,$voiceStaffAgent,$unapprovedGeneration);
+    throw new RuntimeException('an acoustic match accepted without per-turn operator consent');}catch(GacConfirmationConflict){}
+dq_assert(!gac_pending_get('prep',$org,$actor)
+    &&daily_quicklist_items($pdo,$org,$day)===$beforeVoiceGeneration,
+    'a matched speaker without per-turn consent neither stages a proposal nor changes Daily Prep');
+$voiceGeneration=dq_voice_input($pdo,$voiceStaffAgent,$generationText);
+$voiceProposal=prep_agent_handle($pdo,$voiceStaffAgent,$voiceGeneration);
 dq_assert($voiceProposal['skill']==='prep.action_proposal','authorized voice and typed requests use the same proposal path');
-$cancelled=prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Cancel','voice'=>true]));
+$voiceCancel=dq_voice_input($pdo,$voiceStaffAgent,'Cancel');
+dq_assert($voiceCancel['voiceEventId']!==$voiceGeneration['voiceEventId']
+    &&$voiceCancel['sourceMessageId']!==$voiceGeneration['sourceMessageId']
+    &&$voiceCancel['threadId']===$voiceGeneration['threadId'],
+    'spoken Cancel uses a fresh event and canonical turn in the proposal conversation');
+$cancelled=prep_agent_handle($pdo,$voiceStaffAgent,$voiceCancel);
 dq_assert($cancelled['skill']==='prep.action_cancelled','spoken cancellation does not create tasks');
+dq_assert(daily_quicklist_items($pdo,$org,$day)===$beforeVoiceGeneration,
+    'spoken generation followed by Cancel leaves the checklist unchanged');
 $proposal=prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Generate daily prep checklist for '.$day.' from menu']));
 dq_assert($proposal['skill']==='prep.action_proposal','agent generation is confirmation-only');
 $pending=gac_pending_get('prep',$org,$actor);
@@ -262,12 +343,32 @@ $agentItem=daily_quicklist_add($pdo,$org,$actor,
 // fixtures deliberately use 2026-11-02 and must not be counted as today's items.
 daily_quicklist_add($pdo,$org,$actor,
     ['type'=>'prep','date'=>$agentDay,'title'=>'Agent Numbered Companion'],true);
-$voiceStart=prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Start timer for Agent Batch on Daily Prep','voice'=>true]));
+$voiceStartRequest=dq_voice_input($pdo,$voiceStaffAgent,'Start timer for Agent Batch on Daily Prep');
+$voiceStart=prep_agent_handle($pdo,$voiceStaffAgent,$voiceStartRequest);
 dq_assert($voiceStart['skill']==='prep.action_proposal'
     &&($voiceStart['data']['requiresConfirmation']??false),'voice timer request only proposes');
 dq_assert(!current(array_values(array_filter(daily_quicklist_items($pdo,$org,$agentDay),
     static fn(array $r):bool=>$r['id']===$agentItem)))['timerRunning'],'voice proposal did not start a timer');
-$voiceStartDone=prep_agent_handle($pdo,$staffAgent,hac_test_input($pdo,$staffAgent,'prep',['message'=>'Confirm','voice'=>true]));
+hac_test_review($pdo,$voiceStaffAgent,'prep');
+$reviewedTimer=gac_pending_get('prep',$org,$actor);
+foreach(['unknown'=>'','replayed'=>$voiceStartRequest['voiceEventId']] as $kind=>$invalidEvent){
+    $invalidConfirm=dq_voice_input($pdo,$voiceStaffAgent,'Confirm',$invalidEvent);
+    dq_assert($invalidConfirm['voiceEventId']==='',
+        $kind.' evidence cannot attach to a new spoken Confirm');
+    try{prep_agent_handle($pdo,$voiceStaffAgent,$invalidConfirm);
+        throw new RuntimeException($kind.' spoken timer confirmation accepted');}catch(GacConfirmationConflict){}
+    dq_assert(gac_pending_get('prep',$org,$actor)===$reviewedTimer,
+        $kind.' spoken confirmation preserves the exact reviewed timer proposal');
+    dq_assert(!current(array_values(array_filter(daily_quicklist_items($pdo,$org,$agentDay),
+        static fn(array $r):bool=>$r['id']===$agentItem)))['timerRunning'],
+        $kind.' spoken confirmation cannot start the timer');
+}
+$voiceConfirm=dq_voice_input($pdo,$voiceStaffAgent,'Confirm');
+dq_assert($voiceConfirm['voiceEventId']!==$voiceStartRequest['voiceEventId']
+    &&$voiceConfirm['sourceMessageId']!==$voiceStartRequest['sourceMessageId']
+    &&$voiceConfirm['threadId']===$voiceStartRequest['threadId'],
+    'spoken Confirm uses a fresh matched event and exact proposal conversation');
+$voiceStartDone=prep_agent_handle($pdo,$voiceStaffAgent,$voiceConfirm);
 dq_assert($voiceStartDone['skill']==='prep.action_confirmed'
     &&($voiceStartDone['data']['proof']['url']??'')==='daily-prep.php','confirmed spoken timer uses shared checklist');
 $agentRows=daily_quicklist_items($pdo,$org,$agentDay);

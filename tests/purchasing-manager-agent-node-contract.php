@@ -45,9 +45,13 @@ pman_assert(str_contains($core,'pac_guard_order')&&str_contains($core,'updatedAt
 pman_assert(str_contains($core,'purchasing_create_order')&&str_contains($core,'purchasing_submit')&&str_contains($core,'purchasing_receive'),'Confirmed actions must reuse canonical Purchasing functions.');
 pman_assert(str_contains($core,'no damage or shortage exceptions'),'Full receiving must explicitly state that damage/shortage exceptions are not being recorded.');
 pman_assert(str_contains($confirmation,"'organizationId'=>\$organizationId,'userId'=>\$userId")
-    &&str_contains($confirmation,'gac_creation_binding($organizationId,$userId)')
+    &&str_contains($confirmation,'$binding=gac_claim_protected_turn($organizationId,$userId);')
+    &&str_contains($confirmation,'$turn=gac_protected_turn($org,$uid);')
+    &&str_contains($confirmation,'$binding=gac_creation_binding($org,$uid);')
+    &&str_contains($confirmation,"'threadId'=>\$binding['threadId'],'sourceMessageId'=>\$binding['sourceMessageId']")
+    &&str_contains($confirmation,"gac_canonical_message(\$pdo,\$org,\$uid,\$binding['threadId'],\$binding['sourceMessageId'],'user')")
     &&str_contains($core,'does not belong to your session'),
-    'Pending Purchasing actions must be bound to the authenticated organization, user, and canonical conversation.');
+    'Pending Purchasing actions must pass the protected-turn guard and retain the authenticated organization, user, and canonical conversation binding.');
 
 pman_assert(str_contains($endpoint,"require_once __DIR__.'/../includes/purchasing-agent-core.php'")&&str_contains($endpoint,'purchasing_agent_handle($pdo,$user,$input)'),'Purchasing endpoint must delegate to the confirmed-action core.');
 pman_assert(!str_contains($endpoint,'purchasing_create_order('),'HTTP endpoint must not directly create a PO before the confirmed-action core runs.');

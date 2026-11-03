@@ -28,7 +28,19 @@ proactiveAssert(str_contains($timeclock,"window.GelatoGlobalAgent.setListening")
 proactiveAssert(str_contains($timeclock,'loadProactivePreferences()'),'Time Clock restores saved prefs without activation');
 proactiveAssert(str_contains($timeclock,"window.addEventListener('gelato-agent-listening-change'"),'Time Clock reflects actual Global Agent status');
 proactiveAssert(str_contains($timeclock,"voiceAlertsEnabled"),'proactive speaking preference retained');
-proactiveAssert(str_contains($timeclock,"stopContinuous();stopProactive()"),'local microphone and polling stopped when global owns runtime');
+proactiveAssert(!str_contains($timeclock,'SpeechRecognition')
+    &&!str_contains($timeclock,'function startContinuous(')
+    &&!str_contains($timeclock,'function pollProactive(')
+    &&!str_contains($timeclock,'proactiveTimer'),
+    'Time Clock has no duplicate recognizer or proactive polling loop');
+proactiveAssert(str_contains($timeclock,"review.microphone({csrf:C.csrf,key:'timeclock-page'})")
+    &&str_contains($timeclock,"review.voiceConversation({csrf:C.csrf,key:'timeclock-page'})")
+    &&str_contains($timeclock,'window.GelatoGlobalAgent.enableWakeStandby()')
+    &&str_contains($timeclock,'syncSharedListening(window.GelatoGlobalAgent.listeningStatus)'),
+    'one-shot, listening and wake controls retain their canonical conversation and share one runtime owner');
+proactiveAssert(str_contains($timeclock,'if(!sharedAgentAvailable())')
+    &&str_contains($timeclock,'Gelato Voice Agent is not ready. Reload the page or use the typed controls.'),
+    'an unavailable canonical runtime fails closed instead of starting a local microphone');
 proactiveAssert(str_contains($page,'id="proactiveListeningStatus"')&&str_contains($page,'aria-live="polite"'),'visible accessible status');
 proactiveAssert(str_contains($page,'id="listeningToggle"')&&str_contains($page,'id="wakeStandbyToggle"')&&str_contains($page,'id="microphoneOff"'),'explicit user controls');
 proactiveAssert(str_contains($page,'js/proactive-listening-commands.js?v=20261013-listening1'),'shared parser loaded on Time Clock');

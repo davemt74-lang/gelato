@@ -10,6 +10,9 @@ internal static class DeviceRuntimeSupervisorContract
         RepeatedFrameBecomesStaleAndFreshFrameRecovers();
         DetectorFailureFailsClosed();
         HeartbeatAndThermalHealthAreGoverned();
+        HeartbeatRequiresAnObservedSuccessAndDoesNotRefreshOnEvaluate();
+        HeartbeatFailuresAreCountedOncePerProbe();
+        UnmeasuredTelemetryRemainsUnknown();
         RecoveryCooldownAndFailureBudgetAreBounded();
         IncidentLedgerIsDeduplicatedAndBounded();
     }
@@ -72,6 +75,61 @@ internal static class DeviceRuntimeSupervisorContract
         Assert(failed.PrimaryCode == "thermal_critical", "critical thermal state must be diagnosable");
     }
 
+    private static void HeartbeatRequiresAnObservedSuccessAndDoesNotRefreshOnEvaluate()
+    {
+        var supervisor = new DeviceRuntimeSupervisor(Options());
+        var signals = Healthy(1);
+        signals.HeartbeatHealthy = null;
+        signals.LastHeartbeatSucceededAtMs = null;
+        var unknown = supervisor.Evaluate(signals, TimeSpan.Zero);
+        Assert(unknown.PrimaryCode == "heartbeat_unknown" && unknown.LastHeartbeatAtMs < 0,
+            "unknown heartbeat must not invent a successful observation");
+        signals.HeartbeatHealthy = true;
+        signals.LastHeartbeatSucceededAtMs = 200d;
+        var future = supervisor.Evaluate(signals, TimeSpan.FromMilliseconds(10));
+        Assert(!future.CanProcessAutomatedVision, "a future heartbeat timestamp must fail closed");
+        signals.LastHeartbeatSucceededAtMs = double.NaN;
+        Assert(!supervisor.Evaluate(signals, TimeSpan.FromMilliseconds(11)).CanProcessAutomatedVision,
+            "non-finite heartbeat timestamps must fail closed");
+        signals.LastHeartbeatSucceededAtMs = 12d;
+        signals.FrameTimestampNanoseconds++;
+        Assert(supervisor.Evaluate(signals, TimeSpan.FromMilliseconds(12)).CanProcessAutomatedVision,
+            "a real successful heartbeat may restore readiness");
+        signals.FrameTimestampNanoseconds++;
+        var stale = supervisor.Evaluate(signals, TimeSpan.FromMilliseconds(112));
+        Assert(stale.PrimaryCode == "heartbeat_stale" && stale.LastHeartbeatAtMs == 12d,
+            "evaluating runtime health must not refresh the actual heartbeat timestamp");
+        signals.LastHeartbeatSucceededAtMs = 113d;
+        signals.FrameTimestampNanoseconds++;
+        Assert(supervisor.Evaluate(signals, TimeSpan.FromMilliseconds(113)).CanProcessAutomatedVision,
+            "a subsequent successful probe must recover stale heartbeat health");
+    }
+
+    private static void HeartbeatFailuresAreCountedOncePerProbe()
+    {
+        var supervisor = new DeviceRuntimeSupervisor(Options());
+        var signals = Healthy(1);
+        signals.HeartbeatHealthy = false;
+        signals.HeartbeatObservationVersion = 1;
+        supervisor.Evaluate(signals, TimeSpan.Zero);
+        var repeated = supervisor.Evaluate(signals, TimeSpan.FromMilliseconds(1));
+        Assert(repeated.Telemetry.HeartbeatFailures == 1, "one failed probe must not be counted once per frame");
+        signals.HeartbeatObservationVersion = 2;
+        Assert(supervisor.Evaluate(signals, TimeSpan.FromMilliseconds(2)).Telemetry.HeartbeatFailures == 2,
+            "a second failed probe must count as a new failure");
+    }
+
+    private static void UnmeasuredTelemetryRemainsUnknown()
+    {
+        var supervisor = new DeviceRuntimeSupervisor(Options());
+        var signals = Healthy(1);
+        signals.ThermalState = "unknown";
+        signals.ResourceConstrained = null;
+        var health = supervisor.Evaluate(signals, TimeSpan.Zero);
+        Assert(health.ThermalState == "unknown" && health.ResourceConstrained == null,
+            "unsupported thermal and resource telemetry must stay explicitly unknown");
+    }
+
     private static void RecoveryCooldownAndFailureBudgetAreBounded()
     {
         var options = Options();
@@ -126,6 +184,7 @@ internal static class DeviceRuntimeSupervisorContract
         DetectorState = VisionDetectorRuntimeState.Ready,
         ModelRuntimeReady = true,
         HeartbeatHealthy = true,
+        LastHeartbeatSucceededAtMs = 0d,
         ThermalState = "normal",
         ResourceConstrained = false
     };

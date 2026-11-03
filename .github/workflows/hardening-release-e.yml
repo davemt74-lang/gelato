@@ -1,0 +1,222 @@
+name: Hardening Release E - Runtime Boundaries
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Shared assistant limits and canonical microphone actions
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_hardening_e_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - name: Check out the tested revision
+        uses: actions/checkout@v4
+
+      - name: Install PHP with native database and private-file extensions
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, pdo_sqlite, mbstring, curl, fileinfo, sodium, zip, posix
+          coverage: none
+          ini-values: date.timezone=UTC, memory_limit=512M
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Lint all tracked PHP modules and changed browser entrypoints
+        run: |
+          set -euo pipefail
+          git ls-files -z '*.php' | xargs -0 -n1 php -l > /tmp/gelato-hardening-e-php-lint.log
+          node --check js/global-agent.js
+          node --check js/agent-confirmation-transport.js
+          node --check js/restaurant-agent-bridge.js
+          node --check js/operations-core.js
+          node --check js/timeclock-voice.js
+          node --check tests/hardening-public-agent-http.cjs
+          node --check tests/hardening-legacy-voice-http.cjs
+          node --check tests/hardening-legacy-voice-browser.cjs
+
+      - name: Shipped microphone callbacks and existing conversation routing
+        run: |
+          node tests/hardening-legacy-voice.cjs
+          node tests/hardening-agent-confirmation-browser-state.cjs
+          node tests/prep-agent-bridge-routing.cjs
+          node tests/proactive-global-listening.test.js
+          node tests/agent-private-voice-contract.test.cjs
+
+      - name: Deny deployed test entrypoints before configuration exists
+        run: node tests/deployed-test-entrypoints.cjs
+
+      - name: Install and fully upgrade a clean MariaDB database
+        id: setup_database
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_hardening_e_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Hardening E CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_hardening_e_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_hardening_e_ci','session_lifetime_seconds'=>28800,'session_idle_timeout_seconds'=>28800,'session_absolute_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+            'storage'=>['private_root'=>'/tmp/gelato-hardening-e-private'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';require 'includes/UpgradeService.php';
+          $pdo=app_pdo();
+          if($pdo->getAttribute(PDO::ATTR_DRIVER_NAME)!=='mysql'||(bool)$pdo->getAttribute(PDO::ATTR_EMULATE_PREPARES))throw new RuntimeException('Release E requires native MariaDB PDO.');
+          $upgrade=new UpgradeService($pdo,__DIR__);
+          $upgrade->ensureTrackingTables();$upgrade->bootstrapLegacyHistory(null);
+          $applied=$upgrade->applyPending(null);$upgrade->assertAppliedChecksumsUnchanged();
+          if($upgrade->pendingMigrations()!==[]||$upgrade->applyPending(null)!==[])throw new RuntimeException('Clean/repeat upgrade did not converge.');
+          echo 'Clean install and repeat upgrade passed; applied '.count($applied)." migrations.\n";
+          PHP
+
+      - name: Reproduce original cookie-reset and microphone failures on Release D
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin 82eda028f40af0c849b403ee037740f96bc3173b
+          python3 tests/hardening-release-e-before-after.py --backend
+
+      - name: Durable shared limits, bounded payloads and tenant isolation
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' }}
+        run: php tests/hardening-public-agent-limits.php
+
+      - name: Concurrent provider admission and crash lease recovery
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' }}
+        run: php tests/hardening-public-agent-concurrency.php
+
+      - name: Actual public controller HTTP and bounded local provider transport
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' }}
+        run: node tests/hardening-public-agent-http.cjs
+
+      - name: Canonical voice events, spoken confirmation and current authority
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' }}
+        run: php tests/hardening-legacy-voice.php
+
+      - name: Spoken actions and confirmations over authenticated HTTP
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' }}
+        run: node tests/hardening-legacy-voice-http.cjs
+
+      - name: Existing exact-proposal and private voice authorization contracts
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' }}
+        run: |
+          php tests/hardening-agent-confirmation-contract.php
+          php tests/agent-private-voice-turn.php
+          node tests/hardening-agent-confirmation-http.cjs
+
+      - name: Existing time-clock mutation concurrency
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' }}
+        run: |
+          php tests/hardening-timeclock-concurrency.php
+          php tests/timeclock-agent-lifecycle.php
+
+      - name: Install the repository-pinned Playwright browser runtime
+        id: browser_runtime
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' }}
+        run: |
+          npm install --prefix /tmp/gelato-hardening-browser --no-audit --no-fund playwright@1.62.1
+          node /tmp/gelato-hardening-browser/node_modules/playwright/cli.js install --with-deps chromium
+
+      - name: Chromium microphone controls with controlled speech events
+        if: ${{ !cancelled() && steps.browser_runtime.outcome == 'success' }}
+        env:
+          NODE_PATH: /tmp/gelato-hardening-browser/node_modules
+          QA_OUTPUT_DIR: /tmp/gelato-hardening-e-browser
+        run: node tests/hardening-legacy-voice-browser.cjs
+
+      - name: Preserve migration checksums and repeat upgrade
+        if: ${{ !cancelled() && steps.setup_database.outcome == 'success' }}
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';require 'includes/UpgradeService.php';
+          $upgrade=new UpgradeService(app_pdo(),__DIR__);$upgrade->assertAppliedChecksumsUnchanged();
+          if($upgrade->pendingMigrations()!==[]||$upgrade->applyPending(null)!==[])throw new RuntimeException('Release E must leave migration history unchanged.');
+          echo "Migration checksums and repeat upgrade remain clean.\n";
+          PHP
+
+      - name: Retain lint, original failure evidence and browser screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hardening-release-e-backend-validation
+          path: |
+            /tmp/gelato-hardening-e-php-lint.log
+            /tmp/gelato-hardening-e-backend-baseline.json
+            /tmp/gelato-hardening-e-browser
+          if-no-files-found: warn
+          retention-days: 14
+
+  unity:
+    name: Actual Unity adapters under a deterministic Unity API facade
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Validate Unity assembly manifests
+        run: |
+          python3 -m json.tool glasses/inmo-air3-unity/Runtime/Core/Gelato.Ar.Core.asmdef >/dev/null
+          python3 -m json.tool glasses/inmo-air3-unity/Runtime/Unity/Gelato.Ar.Unity.asmdef >/dev/null
+
+      - name: Compile hardware-neutral AIR3 core
+        run: dotnet build glasses/inmo-air3-unity/Runtime/Core/Gelato.Ar.Core.csproj -c Release --nologo
+
+      - name: Core workflow and health-state contracts
+        if: ${{ !cancelled() }}
+        run: dotnet run --project glasses/inmo-air3-unity/Tests/Gelato.Ar.Core.Tests.csproj -c Release
+
+      - name: Reproduce the original optimistic heartbeat in actual controller code
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin 82eda028f40af0c849b403ee037740f96bc3173b
+          python3 tests/hardening-release-e-before-after.py --unity
+
+      - name: Actual gateway, model fetcher, heartbeat and deadline adapter behavior
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          dotnet run --project glasses/inmo-air3-unity/AdapterTests/Gelato.Ar.Unity.Adapter.Tests.csproj -c Release | tee /tmp/gelato-hardening-e-unity-adapters.log
+
+      - name: Retain actual adapter test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hardening-release-e-unity-validation
+          path: |
+            /tmp/gelato-hardening-e-unity-*.log
+            /tmp/gelato-hardening-e-unity-baseline.json
+          if-no-files-found: warn
+          retention-days: 14

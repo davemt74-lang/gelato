@@ -15,8 +15,10 @@ $agent=$read('js/global-agent.js');
 $llm=$read('api/food-monster-llm.php');
 $suggestions=$read('js/food-monster-suggestions.js');
 $version='20261014-fmg6';
-$agentVersion='20261027-b8d17b-navigation1';
+$agentVersion='20261103-e1';
+$agentLoaderVersion=$agentVersion;
 $manualChatVersion='20261023-manual-chat1';
+// The Agent dependency changed; the mascot and stylesheet stamps stay independent.
 // Stage, workspace and global admin loaders must all fetch the current mascot/chat UI.
 $stageAgentVersion=$agentVersion;
 $stageMascotVersion='20261026-b8d16a-mascot1';
@@ -26,12 +28,12 @@ check_g6(str_contains($global,'js/food-monster.js?v='.$stageMascotVersion),
 check_g6(str_contains($actor,'v='.$manualChatVersion),
     'Mascot preserves its current stylesheet cache stamp');
 foreach(['js/universal-admin-page-shell.js'=>$universal,'js/workspace-shell-sync.js'=>$workspace] as $path=>$body)
- check_g6(str_contains($body,'v='.$manualChatVersion),'Current shared loader release stamp is missing in '.$path);
+ check_g6(str_contains($body,'js/global-add-canvas.js?v='.$agentLoaderVersion),'Current shared Agent loader release stamp is missing in '.$path);
 check_g6(str_contains($global,'js/global-agent.js?v='.$agentVersion),'Global Agent fallback cache must update');
 check_g6(str_contains($global,'js/agent-next-moves.js?v='.$version),'Shared Next Moves dismissal cache must update');
 check_g6(str_contains($global,'js/food-monster.js?v='.$stageMascotVersion),'Mascot cache must update on global pages');
-check_g6(str_contains($universal,'js/global-add-canvas.js?v='.$manualChatVersion),'Universal admin shell must request new loader');
-check_g6(str_contains($workspace,'js/global-add-canvas.js?v='.$manualChatVersion),'Workspace shell must request new loader');
+check_g6(str_contains($universal,'js/global-add-canvas.js?v='.$agentLoaderVersion),'Universal admin shell must request new loader');
+check_g6(str_contains($workspace,'js/global-add-canvas.js?v='.$agentLoaderVersion),'Workspace shell must request new loader');
 check_g6(str_contains($page,'css/food-monster.css?v='.$stageCssVersion),'Stage CSS must be fresh');
 check_g6(str_contains($page,'js/global-agent.js?v='.$stageAgentVersion),'Stage global Agent must be fresh');
 check_g6(str_contains($page,'js/food-monster.js?v='.$stageMascotVersion),'Stage mascot must be fresh');

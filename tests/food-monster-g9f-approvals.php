@@ -10,7 +10,8 @@ session_start();
 $owner=['id'=>1,'organization_id'=>7,'role_slug'=>'super_admin'];
 $staff=['id'=>2,'organization_id'=>7,'role_slug'=>'employee'];
 $pdo=new PDO('sqlite::memory:');
-hac_test_context($pdo,$owner,['threadId'=>'agent-'.str_repeat('e',20)]);
+hac_test_context($pdo,$owner,['threadId'=>'agent-'.str_repeat('e',20),
+    'message'=>'Request approval: large_refund: Review refund proposal']);
 try{fm9f_approval_propose($staff,'major_purchase','Buy new oven','agent-'.str_repeat('e',20));check_it(false,'staff rejected');}
 catch(DomainException){check_it(true,'staff rejected');}
 try{fm9f_approval_propose($owner,'arbitrary_tool','Do anything','agent-'.str_repeat('e',20));check_it(false,'allowlist');}
@@ -22,11 +23,20 @@ try{fm9f_approval_propose($owner,'large_refund','Try replacing prior approval','
 catch(GacConfirmationConflict){check_it(true,'pending proposal protected');}
 try{fm9f_approval_decide($staff,$p['proposalId'],'approve');check_it(false,'staff decision denied');}
 catch(DomainException){check_it(true,'staff decision denied');}
-try{fm9f_approval_decide($owner,'gap-incorrect','approve',$review);check_it(false,'wrong token denied');}
+// Reproduce the evidence-only fixture error without weakening the real guard.
+gac_request_context($review,$pdo,$owner);
+try{fm9f_approval_decide($owner,$p['proposalId'],'approve',$review);check_it(false,'review evidence alone cannot approve');}
+catch(GacConfirmationConflict){check_it(true,'review evidence alone cannot approve');}
+check_it((gac_pending_get('food_monster_high_impact',7,1)['id']??null)===$p['proposalId'],
+    'missing current decision leaves the approval pending');
+$approvalInput=hac_test_context($pdo,$owner,['message'=>'Approve']+$review);
+check_it($approvalInput['sourceMessageId']!==$p['proposal']['sourceMessageId'],
+    'owner approval uses a new canonical decision turn');
+try{fm9f_approval_decide($owner,'gap-incorrect','approve',$approvalInput);check_it(false,'wrong token denied');}
 catch(GacConfirmationConflict){check_it(true,'wrong token denied');}
-$d=fm9f_approval_decide($owner,$p['proposalId'],'approve',$review);
+$d=fm9f_approval_decide($owner,$p['proposalId'],'approve',$approvalInput);
 check_it($d['decision']==='approve'&&!$d['executed'],'owner approval does not execute tool');
-try{fm9f_approval_decide($owner,$p['proposalId'],'approve',$review);check_it(false,'replay blocked');}
+try{fm9f_approval_decide($owner,$p['proposalId'],'approve',$approvalInput);check_it(false,'replay blocked');}
 catch(GacConfirmationConflict){check_it(true,'replay blocked');}
 
 
@@ -51,6 +61,10 @@ check_it(str_contains($workspace,'fm9f_approval_chat_intent')
     &&str_contains($domainRouter,"'high_impact_approval'")
     &&str_contains($client,'const delegation=result?.data?.delegation;'),
     'Model-first chat retains the owner-only legacy approval gate');
+hac_test_context($pdo,$owner,['threadId'=>'agent-'.str_repeat('e',20),
+    'message'=>'Request approval: large_refund: Review a refund proposal']);
 $p2=fm9f_approval_propose($owner,'large_refund','Review a refund proposal','agent-'.str_repeat('e',20));
-$d2=fm9f_approval_decide($owner,$p2['proposalId'],'reject',hac_test_review($pdo,$owner,'food_monster_high_impact'));
+$review=hac_test_review($pdo,$owner,'food_monster_high_impact');
+$rejectionInput=hac_test_context($pdo,$owner,['message'=>'Reject']+$review);
+$d2=fm9f_approval_decide($owner,$p2['proposalId'],'reject',$rejectionInput);
 check_it($d2['decision']==='reject'&&!$d2['executed'],'owner rejection is nonexecuting');
