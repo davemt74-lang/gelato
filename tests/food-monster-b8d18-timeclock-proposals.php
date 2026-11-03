@@ -51,7 +51,7 @@ f18f_check(($tool['validate'])(['action'=>'clock_out'],$user)===[],'model action
 $pdo=new PDO('sqlite::memory:');
 $pdo->setAttribute(PDO::ATTR_ERRMODE,PDO::ERRMODE_EXCEPTION);
 $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE,PDO::FETCH_ASSOC);
-$pdo->exec('CREATE TABLE schedule_shifts (id INTEGER PRIMARY KEY, public_id TEXT, title TEXT, starts_at TEXT, ends_at TEXT)');
+$pdo->exec('CREATE TABLE schedule_shifts (id INTEGER PRIMARY KEY, organization_id INTEGER NOT NULL, public_id TEXT, title TEXT, starts_at TEXT, ends_at TEXT)');
 $pdo->exec('CREATE TABLE time_clock_entries (id INTEGER PRIMARY KEY, organization_id INTEGER, user_id INTEGER, public_id TEXT, schedule_shift_id INTEGER, clocked_in_at TEXT, clocked_out_at TEXT, updated_at TEXT, status TEXT)');
 $pdo->exec('CREATE TABLE time_clock_breaks (id INTEGER PRIMARY KEY, time_clock_entry_id INTEGER, started_at TEXT, ended_at TEXT)');
 $before=(int)$pdo->query('SELECT COUNT(*) FROM time_clock_entries')->fetchColumn();
@@ -61,10 +61,17 @@ f18f_reject(static fn()=>fm8d18f_preflight($pdo,$user,'clock_out'),
     'cannot clock out when not clocked in');
 f18f_reject(static fn()=>fm8d18f_preflight($pdo,$user,'break_start'),
     'cannot start break without clock-in');
-$pdo->exec("INSERT INTO time_clock_entries VALUES (4,19,9,'other-tenant',NULL,'2026-10-31 08:00:00',NULL,'2026-10-31 08:00:00','open')");
+$pdo->exec("INSERT INTO schedule_shifts VALUES (1,19,'private-shift','Other restaurant shift','2026-10-31 08:00:00','2026-10-31 16:00:00'),(2,17,'own-shift','Current restaurant shift','2026-10-31 08:00:00','2026-10-31 16:00:00')");
+$pdo->exec("INSERT INTO time_clock_entries VALUES (4,19,9,'other-tenant',1,'2026-10-31 08:00:00',NULL,'2026-10-31 08:00:00','open')");
 f18f_check(str_contains(fm8d18f_preflight($pdo,$user,'clock_in'),'clock you in'),
     'clock records from another tenant are ignored');
-$pdo->exec("INSERT INTO time_clock_entries VALUES (5,17,9,'own-punch',NULL,'2026-10-31 08:00:00',NULL,'2026-10-31 08:00:00','open')");
+$pdo->exec("INSERT INTO time_clock_entries VALUES (5,17,9,'own-punch',1,'2026-10-31 08:00:00',NULL,'2026-10-31 08:00:00','open')");
+$clock=tv_open_clock($pdo,17,9);
+f18f_check(($clock['public_id']??'')==='own-punch'&&$clock['shift_public_id']===null,
+    'foreign shift reference cannot disclose another tenant while the own punch stays visible');
+$pdo->exec('UPDATE time_clock_entries SET schedule_shift_id=2 WHERE id=5');
+f18f_check((tv_open_clock($pdo,17,9)['shift_public_id']??'')==='own-shift',
+    'matching tenant shift joins the own punch');
 f18f_reject(static fn()=>fm8d18f_preflight($pdo,$user,'clock_in'),
     'duplicate clock-in rejected');
 f18f_check(str_contains(fm8d18f_preflight($pdo,$user,'clock_out'),'clock you out'),
