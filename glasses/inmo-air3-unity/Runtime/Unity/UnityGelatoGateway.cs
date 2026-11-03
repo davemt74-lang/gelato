@@ -9,16 +9,33 @@ using UnityEngine.Networking;
 
 namespace Gelato.Ar.Unity
 {
-    public sealed class UnityGelatoGateway : MonoBehaviour, IGelatoGateway
+    public sealed class UnityGelatoGateway : MonoBehaviour, IGelatoGateway, IGelatoHeartbeatGateway
     {
         [SerializeField] private string baseUrl = "https://example.com";
         [SerializeField] private string deviceApiPath = "/api/glasses-device.php";
+        [SerializeField, Range(0.1f, 120f)] private float requestTimeoutSeconds = 10f;
 
         private string _deviceToken;
+        private UnityRequestContext _requestContext;
+
+        private void Awake()
+        {
+            _requestContext = new UnityRequestContext();
+        }
 
         public void SetDeviceToken(string token)
         {
             _deviceToken = token == null ? string.Empty : token.Trim();
+        }
+
+        public async Task HeartbeatAsync(CancellationToken cancellationToken)
+        {
+            var response = await PostAsync<HeartbeatResponse>(new ActionRequest
+            {
+                action = DeviceApiActions.Heartbeat
+            }, true, cancellationToken);
+            if (!response.ok || response.device == null || string.IsNullOrWhiteSpace(response.device.publicId))
+                throw new InvalidOperationException("Gelato did not acknowledge the authenticated device heartbeat.");
         }
 
         public async Task<PairResult> PairAsync(string pairingCode, DeviceDescriptor device, CancellationToken cancellationToken)
@@ -435,8 +452,16 @@ namespace Gelato.Ar.Unity
             };
         }
 
-        private async Task<T> PostAsync<T>(object payload, bool authenticated, CancellationToken cancellationToken) where T : class
+        private Task<T> PostAsync<T>(object payload, bool authenticated, CancellationToken cancellationToken) where T : class
         {
+            if (_requestContext == null)
+                throw new InvalidOperationException("Gelato gateway has not initialized its Unity execution context.");
+            return _requestContext.RunAsync(() => PostOnUnityContextAsync<T>(payload, authenticated, cancellationToken));
+        }
+
+        private async Task<T> PostOnUnityContextAsync<T>(object payload, bool authenticated, CancellationToken cancellationToken) where T : class
+        {
+            cancellationToken.ThrowIfCancellationRequested();
             if (authenticated && string.IsNullOrWhiteSpace(_deviceToken))
                 throw new InvalidOperationException("Gelato device token is not configured.");
 
@@ -451,18 +476,8 @@ namespace Gelato.Ar.Unity
                 request.SetRequestHeader("Accept", "application/json");
                 if (authenticated) request.SetRequestHeader("Authorization", "Bearer " + _deviceToken);
 
-                var operation = request.SendWebRequest();
-                while (!operation.isDone)
-                {
-                    if (cancellationToken.IsCancellationRequested)
-                    {
-                        request.Abort();
-                        cancellationToken.ThrowIfCancellationRequested();
-                    }
-                    await Task.Yield();
-                }
-
-                cancellationToken.ThrowIfCancellationRequested();
+                await UnityRequestDeadline.SendAsync(request,
+                    TimeSpan.FromSeconds(Math.Max(0.1f, Math.Min(120f, requestTimeoutSeconds))), cancellationToken);
 
                 var body = request.downloadHandler != null ? request.downloadHandler.text : string.Empty;
                 if (request.result != UnityWebRequest.Result.Success)
@@ -650,6 +665,7 @@ namespace Gelato.Ar.Unity
 
         [Serializable] private sealed class ErrorResponse { public bool ok; public string message; }
         [Serializable] private sealed class DeviceDto { public string publicId; }
+        [Serializable] private sealed class HeartbeatResponse { public bool ok; public DeviceDto device; }
         [Serializable] private sealed class PairResponse { public bool ok; public DeviceDto device; public string deviceToken; }
         [Serializable] private sealed class WorkResponse { public bool ok; public WorkDto work; }
         [Serializable] private sealed class WorkDto

@@ -49,6 +49,17 @@ return [
         'public_root' => '',
     ],
 
+    // Public assistant limits are shared across sessions and PHP workers.
+    // Reservation units conservatively count request bytes plus bounded output;
+    // they are not provider billing tokens or a dollar-spend guarantee.
+    'public_agent_limits' => [
+        'network_requests_per_10_minutes' => 20,
+        'organization_requests_per_10_minutes' => 100,
+        'organization_token_units_per_day' => 1000000,
+        'organization_concurrent_requests' => 4,
+        'provider_timeout_seconds' => 30,
+    ],
+
     'security' => [
         'session_name' => 'restaurant_workspace_session',
         'session_lifetime_seconds' => 28800,

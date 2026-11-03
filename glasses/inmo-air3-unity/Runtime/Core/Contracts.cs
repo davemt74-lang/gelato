@@ -23,6 +23,13 @@ namespace Gelato.Ar.Core
         void Clear();
     }
 
+    // Gateways without a real heartbeat implementation remain unsupported for
+    // automated vision health; a successful unrelated read is not a heartbeat.
+    public interface IGelatoHeartbeatGateway
+    {
+        Task HeartbeatAsync(CancellationToken cancellationToken);
+    }
+
     public interface IGelatoGateway
     {
         void SetDeviceToken(string token);

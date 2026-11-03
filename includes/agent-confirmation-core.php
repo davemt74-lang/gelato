@@ -14,7 +14,7 @@ function gac_request_context(array $input,PDO $pdo,array $actor): void
 {
     $GLOBALS['gac_request_context']=['input'=>$input,'pdo'=>$pdo,
         'organizationId'=>(int)($actor['organization_id']??0),
-        'userId'=>(int)($actor['id']??0)];
+        'userId'=>(int)($actor['id']??0),'actor'=>$actor];
 }
 
 function gac_session_lock(): void
@@ -86,7 +86,7 @@ function gac_canonical_message(PDO $pdo,int $org,int $uid,string $threadId,strin
     if(!preg_match('/^agent-[a-f0-9]{20}$/D',$threadId)
         ||!preg_match('/^msg-[a-f0-9]{20}$/D',$messageId))
         throw new GacConfirmationConflict('Use the reviewed proposal in its original conversation.');
-    $q=$pdo->prepare('SELECT m.public_id,m.role,m.content,m.structured_json,m.channel,m.voice_event_public_id
+    $q=$pdo->prepare('SELECT m.id,m.conversation_id,m.public_id,m.role,m.content,m.structured_json,m.channel,m.voice_event_public_id
         FROM agent_messages m INNER JOIN agent_conversations c ON c.id=m.conversation_id
         WHERE c.organization_id=? AND c.user_id=? AND c.public_id=? AND c.archived_at IS NULL
           AND m.organization_id=? AND m.user_id=? AND m.public_id=? AND m.role=? LIMIT 1');
@@ -109,6 +109,74 @@ function gac_creation_binding(int $org,int $uid): array
     return ['threadId'=>$threadId,'sourceMessageId'=>$sourceMessageId];
 }
 
+/**
+ * Resolve the current command from its saved, owner-scoped user turn. Browser
+ * voice flags and cached recognition events can never turn room speech into a
+ * typed command. Acoustic attribution remains an additional channel check,
+ * not authentication: account permissions and explicit private-turn consent
+ * still apply independently.
+ */
+function gac_protected_turn(int $org,int $uid): array
+{
+    $binding=gac_creation_binding($org,$uid);
+    $context=$GLOBALS['gac_request_context'];$input=$context['input'];$pdo=$context['pdo'];
+    $message=gac_canonical_message($pdo,$org,$uid,$binding['threadId'],$binding['sourceMessageId'],'user');
+    $latest=$pdo->prepare("SELECT id FROM agent_messages WHERE conversation_id=? AND organization_id=? AND user_id=? AND role='user' ORDER BY id DESC LIMIT 1");
+    $latest->execute([(int)$message['conversation_id'],$org,$uid]);
+    if((int)$latest->fetchColumn()!==(int)$message['id'])
+        throw new GacConfirmationConflict('This command is no longer the current conversation turn. Ask again in the original conversation.');
+    $saved=trim((string)$message['content']);
+    $requested=array_key_exists('message',$input)?trim((string)$input['message']):$saved;
+    $voice=($message['channel']??'')==='voice';
+    // The model may forward a canonical "yes" as Confirm (or "never mind" as
+    // Cancel); it may not substitute a different command or opposite decision.
+    if($voice&&!hash_equals($saved,$requested)
+        &&!(gac_is_confirm($saved)&&gac_is_confirm($requested))
+        &&!(gac_is_cancel($saved)&&gac_is_cancel($requested)))
+        throw new GacConfirmationConflict('The command does not match its saved conversation turn.');
+    if(!$voice&&!empty($input['voice']))
+        throw new GacConfirmationConflict('Record this microphone command as a new spoken conversation turn.');
+    $turn=$binding+['channel'=>$voice?'voice':'text',
+        'voiceEventId'=>$voice?(string)($message['voice_event_public_id']??''):''];
+    if(!$voice)return $turn;
+    require_once __DIR__.'/agent-voice-conversation.php';
+    require_once __DIR__.'/agent-private-voice.php';
+    $event=$turn['voiceEventId'];
+    if($event===''||(array_key_exists('voiceEventId',$input)
+        &&!hash_equals($event,(string)$input['voiceEventId'])))
+        throw new GacConfirmationConflict('This spoken action needs a fresh voice match for this exact command.');
+    $speaker=avc_verified_speaker($pdo,$org,(array)($context['actor']??[]),$event);
+    if(!$speaker||(int)$speaker['userId']!==$uid)
+        throw new GacConfirmationConflict('The current speaker could not be matched to the signed-in employee. Use the typed controls or speak again.');
+    $receipt=$pdo->prepare("SELECT COUNT(*) FROM voice_identity_events e
+        WHERE e.organization_id=? AND e.session_user_id=? AND e.matched_user_id=? AND e.public_id=?
+          AND JSON_EXTRACT(COALESCE(e.metadata_json,'{}'),'$.agentTurnConsumedAt') IS NOT NULL
+          AND (SELECT COUNT(*) FROM agent_messages m WHERE m.organization_id=e.organization_id
+            AND m.voice_event_public_id=e.public_id AND m.role='user')=1");
+    $receipt->execute([$org,$uid,$uid,$event]);
+    if((int)$receipt->fetchColumn()!==1
+        ||!gavp_was_approved($org,$uid,$turn['threadId'],$turn['sourceMessageId']))
+        throw new GacConfirmationConflict('Approve this exact spoken request in the signed-in Agent before changing restaurant data.');
+    return $turn;
+}
+
+/** One canonical spoken command may stage OR confirm one protected action. */
+function gac_claim_protected_turn(int $org,int $uid): array
+{
+    $turn=gac_protected_turn($org,$uid);
+    if($turn['channel']!=='voice')return $turn;
+    $pdo=$GLOBALS['gac_request_context']['pdo'];
+    $claim=$pdo->prepare("UPDATE voice_identity_events
+        SET metadata_json=JSON_SET(COALESCE(metadata_json,'{}'),'$.protectedAgentTurnConsumedAt',NOW(6))
+        WHERE organization_id=? AND session_user_id=? AND matched_user_id=? AND public_id=?
+          AND event_type='match' AND created_at>=DATE_SUB(NOW(6),INTERVAL 30 SECOND)
+          AND JSON_EXTRACT(COALESCE(metadata_json,'{}'),'$.protectedAgentTurnConsumedAt') IS NULL");
+    $claim->execute([$org,$uid,$uid,$turn['voiceEventId']]);
+    if($claim->rowCount()!==1)
+        throw new GacConfirmationConflict('This spoken command is stale or already used. Speak a new command or use the typed controls.');
+    return $turn;
+}
+
 function gac_pending_store(string $node,int $organizationId,int $userId,string $type,array $payload,string $summary,int $ttl=600): array
 {
     if($organizationId<1||$userId<1||!preg_match('/^[a-z][a-z0-9_]{1,80}$/D',$node))
@@ -118,7 +186,7 @@ function gac_pending_store(string $node,int $organizationId,int $userId,string $
     // Do not replace an unresolved or in-flight proposal, including legacy rows.
     if($existing&&max((int)($existing['expires']??0),(int)($existing['claimExpires']??0))>time())
         throw new GacConfirmationConflict('There is already a pending action for this Agent. Review and Confirm or Cancel it before requesting another.');
-    $binding=gac_creation_binding($organizationId,$userId);
+    $binding=gac_claim_protected_turn($organizationId,$userId);
     $prefix=$node==='purchasing'?'pap':($node==='scheduling'?'sap':'gap');
     $row=[
         'version'=>2,'id'=>$prefix.'-'.bin2hex(random_bytes(8)),
@@ -257,13 +325,17 @@ function gac_pending_claim(string $node,int $org,int $uid,array $input): array
 {
     gac_session_lock();
     $row=gac_pending_reviewed($node,$org,$uid,$input);
+    $turn=gac_claim_protected_turn($org,$uid);
+    if($turn['threadId']!==$row['threadId'])
+        throw new GacConfirmationConflict('Confirm the proposal in its original conversation.');
     $bucket=&gac_pending_bucket($node);
     $bucket[gac_key($org,$uid)]['status']='claimed';
     $bucket[gac_key($org,$uid)]['claimExpires']=time()+1800;
     if(!session_write_close())
         throw new GacConfirmationConflict('Could not persist this one-use confirmation. No action was executed.');
     gac_session_lock();
-    return $row;
+    return $row+['decisionChannel'=>$turn['channel'],'decisionVoiceEventId'=>$turn['voiceEventId'],
+        'decisionMessageId'=>$turn['sourceMessageId']];
 }
 
 function gac_proposal_result(array $proposal,string $skill,array $sources=[]): array

@@ -11,8 +11,11 @@ namespace Gelato.Ar.Core
         private readonly IGelatoGateway _gateway;
         private readonly IDeviceTokenStore _tokenStore;
         private string? _deviceToken;
+        private long _deviceCredentialVersion;
 
         public IGlassesPlatform Platform => _platform;
+        public bool IsPaired => !string.IsNullOrWhiteSpace(_deviceToken);
+        public long DeviceCredentialVersion => Volatile.Read(ref _deviceCredentialVersion);
         public WorkflowState State { get; private set; } = WorkflowState.Uninitialized;
         public CurrentWork? CurrentWork { get; private set; }
         public StationCalibration? StationCalibration { get; private set; }
@@ -43,11 +46,13 @@ namespace Gelato.Ar.Core
                 _deviceToken = _tokenStore.Load();
                 if (string.IsNullOrWhiteSpace(_deviceToken))
                 {
+                    Interlocked.Increment(ref _deviceCredentialVersion);
                     State = WorkflowState.Unpaired;
                     return;
                 }
 
                 _gateway.SetDeviceToken(_deviceToken);
+                Interlocked.Increment(ref _deviceCredentialVersion);
                 State = WorkflowState.Idle;
             }).ConfigureAwait(false);
         }
@@ -65,9 +70,21 @@ namespace Gelato.Ar.Core
 
                 _deviceToken = result.DeviceToken;
                 _gateway.SetDeviceToken(_deviceToken);
+                // Publish only after the gateway token has changed. Unity may
+                // observe this generation while this continuation runs elsewhere.
+                Interlocked.Increment(ref _deviceCredentialVersion);
                 _tokenStore.Save(_deviceToken);
                 State = WorkflowState.Idle;
             }).ConfigureAwait(false);
+        }
+
+        public Task HeartbeatAsync(CancellationToken cancellationToken = default)
+        {
+            EnsurePaired();
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!(_gateway is IGelatoHeartbeatGateway heartbeat))
+                throw new NotSupportedException("The configured gateway has no authenticated heartbeat implementation.");
+            return heartbeat.HeartbeatAsync(cancellationToken);
         }
 
         public async Task<CurrentWork> RefreshWorkAsync(CancellationToken cancellationToken = default)

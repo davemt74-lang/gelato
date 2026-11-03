@@ -185,11 +185,35 @@
       return result;
     } finally { conversation.busy = false; }
   }
+  async function voiceConversation(options = {}) {
+    const agent=window.GelatoGlobalAgent;
+    if(!agent?.user||typeof agent.talkOnce!=='function')
+      throw new Error('Gelato Voice Agent is not ready. Reload the page or use the typed controls.');
+    if(agent.busy)throw new Error('Wait for the current Agent response before speaking.');
+    const conversation=await conversationFor(String(options.key||''),String(options.csrf||''));
+    assertGeneration(conversation.generation);
+    if(conversation.busy)throw new Error('Wait for this Agent response before speaking.');
+    const current=String(agent.threadId||'');
+    if(current&&current!==conversation.threadId&&fields(current).proposalId)
+      throw new Error('Review and Confirm or Cancel the pending action in the current Gelato conversation before switching microphones.');
+    // Keep the page's previously displayed proposal and canonical history.
+    // Never copy microphone text into the page's typed-send handler.
+    agent.selectThread(conversation.threadId);
+    window.GelatoDynamicAgentCanvas?.openDrawer?.();
+    return conversation;
+  }
+  async function microphone(options = {}) {
+    const conversation=await voiceConversation(options),agent=window.GelatoGlobalAgent;
+    assertGeneration(conversation.generation);
+    conversation.busy=true;
+    try{return await agent.talkOnce({threadId:conversation.threadId});}
+    finally{conversation.busy=false;persist(conversation);}
+  }
   window.addEventListener?.('gelato:private-state-cleared', clear);
   window.addEventListener?.('storage', event => {
     if (event.newValue && ['gelato-workspace-logout-v1', 'gelato-workspace-principal-v1'].includes(event.key)) clear();
   });
-  window.GelatoAgentReview = {remember, fields, forget, restore, ask, acknowledge, handoff, clear,
+  window.GelatoAgentReview = {remember, fields, forget, restore, ask, microphone, voiceConversation, acknowledge, handoff, clear,
     get generation() { return generation; }, assertGeneration,
     isDecision: text => decision.test(String(text || '').trim())};
 })();

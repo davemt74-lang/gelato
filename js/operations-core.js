@@ -78,9 +78,18 @@
   async function refreshAll(){await loadSummary();await Promise.all([loadTasks(),loadInventory()]);}
   async function sendAgent(raw){
     const text=String(raw||'').trim().replace(/^hey\s+gelato[,\s]*/i,'');if(!text)return;const status=$('agentStatus');if(status){status.textContent='Gelato is working…';status.style.display='block';}
-    try{if(!window.GelatoAgentReview)await import('./agent-confirmation-transport.js?v=20261103-c1');const data=await window.GelatoAgentReview.ask('api/operations-agent.php',{message:text},{csrf:cfg.csrf,key:'operations-page'});if(status){status.textContent=data.answer||'Done.';status.style.display='block';window.GelatoAgentReview.acknowledge(data);}toast(data.skill||'Restaurant Agent');await refreshAll();}catch(err){if(status){status.textContent=err.message;status.style.display='block';}toast(err.message);}
+    try{if(!window.GelatoAgentReview)await import('./agent-confirmation-transport.js?v=20261103-e1');const data=await window.GelatoAgentReview.ask('api/operations-agent.php',{message:text},{csrf:cfg.csrf,key:'operations-page'});if(status){status.textContent=data.answer||'Done.';status.style.display='block';window.GelatoAgentReview.acknowledge(data);}toast(data.skill||'Restaurant Agent');await refreshAll();}catch(err){if(status){status.textContent=err.message;status.style.display='block';}toast(err.message);}
   }
-  function startVoice(){const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){toast('Voice recognition is not available in this browser.');return;}const rec=new SR();rec.lang='en-US';rec.interimResults=false;rec.continuous=false;const mic=$('agentMic');if(mic)mic.textContent='●';rec.onresult=e=>{const text=[...e.results].map(r=>r[0].transcript).join(' ');if($('agentInput'))$('agentInput').value=text;sendAgent(text);};rec.onerror=e=>toast('Voice: '+(e.error||'recognition error'));rec.onend=()=>{if(mic)mic.textContent='🎙';};rec.start();}
+  async function startVoice(){
+    const mic=$('agentMic');if(mic?.disabled)return;
+    if(mic){mic.disabled=true;mic.textContent='●';}
+    try{
+      if(!window.GelatoAgentReview)await import('./agent-confirmation-transport.js?v=20261103-e1');
+      const result=await window.GelatoAgentReview.microphone({csrf:cfg.csrf,key:'operations-page'});
+      if(result){const status=$('agentStatus');if(status){status.textContent=result.answer||result.reply||'See the Gelato conversation.';status.style.display='block';}await refreshAll();}
+    }catch(error){toast(error.message||'Gelato voice is unavailable.');}
+    finally{if(mic){mic.disabled=false;mic.textContent='🎙';}}
+  }
 
   document.querySelectorAll('[data-tab]').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.querySelector(`[data-panel="${b.dataset.tab}"]`)?.classList.add('active');}));
   $('refresh')?.addEventListener('click',()=>refreshAll().catch(e=>toast(e.message)));$('taskSearch')?.addEventListener('input',()=>loadTasks().catch(e=>toast(e.message)));$('taskCategory')?.addEventListener('change',()=>loadTasks().catch(e=>toast(e.message)));$('taskStatus')?.addEventListener('change',()=>loadTasks().catch(e=>toast(e.message)));$('newTask')?.addEventListener('click',newTaskForm);

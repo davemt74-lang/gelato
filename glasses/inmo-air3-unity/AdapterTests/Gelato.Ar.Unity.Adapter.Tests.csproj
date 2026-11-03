@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- Inspector/JsonUtility fields are populated by Unity, not constructors. -->
+    <NoWarn>$(NoWarn);CS0649;CS8632</NoWarn>
+    <DefineConstants>$(DefineConstants);GELATO_UNITY_ADAPTER_CONTRACT;UNITY_2020_2_OR_NEWER</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Runtime/Core/Gelato.Ar.Core.csproj" />
+    <Compile Include="../Runtime/Unity/UnityRequestContext.cs" Link="Production/UnityRequestContext.cs" />
+    <Compile Include="../Runtime/Unity/UnityRequestDeadline.cs" Link="Production/UnityRequestDeadline.cs" />
+    <Compile Include="../Runtime/Unity/UnityGelatoGateway.cs" Link="Production/UnityGelatoGateway.cs" />
+    <Compile Include="../Runtime/Unity/UnityVisionModelArtifactFetcher.cs" Link="Production/UnityVisionModelArtifactFetcher.cs" />
+    <Compile Include="../Runtime/Unity/VisionRuntimeController.cs" Link="Production/VisionRuntimeController.cs" />
+    <Compile Include="../Runtime/Unity/VisionDetectorBehaviour.cs" Link="Production/VisionDetectorBehaviour.cs" />
+    <Compile Include="../Runtime/Unity/VisionModelRuntimeHostBehaviour.cs" Link="Production/VisionModelRuntimeHostBehaviour.cs" />
+    <Compile Include="../Runtime/Unity/UnityVisionModelRuntimePersistence.cs" Link="Production/UnityVisionModelRuntimePersistence.cs" />
+    <Compile Include="../Runtime/Unity/GelatoArBootstrap.cs" Link="Production/GelatoArBootstrap.cs" />
+  </ItemGroup>
+</Project>

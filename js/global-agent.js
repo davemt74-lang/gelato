@@ -15,6 +15,7 @@
     verifiedSpeaker: null,
     usedVoiceEvents:new Set(),
     voiceMonitor:null, voiceMonitorStarting:false, voiceSample:null,
+    onceCapturing:false, onceRecognition:null,
     listening: false,
     savedListening: false,
     wakeStandby: false,
@@ -32,7 +33,7 @@
   };
 
   async function reviewTransport() {
-    if (!window.GelatoAgentReview) await import('./agent-confirmation-transport.js?v=20261103-c1');
+    if (!window.GelatoAgentReview) await import('./agent-confirmation-transport.js?v=20261103-e1');
     return window.GelatoAgentReview;
   }
 
@@ -305,7 +306,9 @@
     });
   }
   async function approvedPrivateVoiceToken(text,submitted,threadId=S.thread){
-    if(!voiceMayNeedPrivateAccess(text))return '';
+    const reviewedDecision=window.GelatoAgentReview?.isDecision(text)
+      &&Boolean(window.GelatoAgentReview.fields(threadId).proposalId);
+    if(!voiceMayNeedPrivateAccess(text)&&!reviewedDecision)return '';
     const messageId=String(submitted?.message?.id||'');
     if(!/^msg-[a-f0-9]{20}$/.test(messageId))return '';
     if(!await requestPrivateVoiceConfirmation(text))return '';
@@ -599,7 +602,7 @@
     try{void monitor.context.close();}catch{}
   }
   async function startVoiceMonitor(){
-    if(S.voiceMonitor||S.voiceMonitorStarting||!S.listening||document.hidden||!has('voice.agent')||!has('voice.self')
+    if(S.voiceMonitor||S.voiceMonitorStarting||!(S.listening||S.onceCapturing)||document.hidden||!has('voice.agent')||!has('voice.self')
        ||!navigator.mediaDevices?.getUserMedia)return false;
     const Audio=window.AudioContext||window.webkitAudioContext;
     if(!Audio)return false;
@@ -607,7 +610,7 @@
     S.voiceMonitorStarting=true;
     try{
       const profile=await req('api/voice-identity.php?action=profile');
-      if(profile.profile?.status!=='active'||!S.listening||document.hidden)return false;
+      if(profile.profile?.status!=='active'||!(S.listening||S.onceCapturing)||document.hidden)return false;
       stream=await navigator.mediaDevices.getUserMedia({
         audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:false}
       });
@@ -615,7 +618,7 @@
       const source=context.createMediaStreamSource(stream);
       const analyser=context.createAnalyser();analyser.fftSize=1024;
       source.connect(analyser);
-      if(!S.listening||document.hidden){stream.getTracks().forEach(track=>track.stop());void context.close();return false;}
+      if(!(S.listening||S.onceCapturing)||document.hidden){stream.getTracks().forEach(track=>track.stop());void context.close();return false;}
       const monitor={stream,context,frames:[],timer:null};
       S.voiceMonitor=monitor;
       const bins=new Uint8Array(analyser.frequencyBinCount);
@@ -829,15 +832,18 @@
     if(S.rec)stopContinuous();
     return new Promise((resolve,reject)=>{
       const rec=new Recognition();let settled=false,finalText='',timer=0;
+      S.onceRecognition=rec;
       rec.lang='en-US';rec.continuous=false;rec.interimResults=true;rec.maxAlternatives=1;
       function finish(error){
         if(settled)return;settled=true;clearTimeout(timer);
+        if(S.onceRecognition===rec)S.onceRecognition=null;
         rec.onresult=rec.onerror=rec.onend=null;
         try{rec.stop?.();}catch{}
         if(error)reject(error);else if(finalText)resolve(finalText);
         else reject(new Error('No speech recognized. Check microphone permissions and try again.'));
       }
       rec.onresult=event=>{
+        if(document.hidden||!S.onceCapturing){finish(new Error('Microphone paused. Click Talk again when ready.'));return;}
         for(let i=event.resultIndex||0;i<event.results.length;i++){
           const result=event.results[i],spoken=String(result[0]?.transcript||'').trim();
           if(!spoken)continue;
@@ -851,19 +857,36 @@
       try{rec.start();}catch(error){finish(error);}
     });
   }
-  async function talkOnce() {
-    if(S.conversation){interruptSpeech('conversation-mic');return;}
+  async function talkOnce(options={}) {
+    if(S.conversation&&!options.threadId){interruptSpeech('conversation-mic');return;}
+    if(S.busy||S.onceCapturing)throw new Error('Wait for the current Agent turn before starting another microphone command.');
+    if(!S.user||!has('voice.agent'))throw new Error('The signed-in Voice Agent is not ready. Reload the page or use the typed controls.');
+    const turnThread=await ensureThread(),review=await reviewTransport(),generation=review.generation;
+    if(S.busy||S.onceCapturing)throw new Error('Wait for the current Agent turn before starting another microphone command.');
+    if(options.threadId&&options.threadId!==turnThread)throw new Error('Reopen the original Agent conversation before speaking.');
     const shouldResume=S.listening||S.wakeStandby;
+    S.onceCapturing=true;S.voiceSample=null;
     try {
       interruptSpeech('talk-once');
+      clearConversationTimer();
+      if(S.voiceMonitor)S.voiceMonitor.frames=[];
+      // Each one-shot command uses the same per-turn sampler as continuous
+      // speech. No enrollment/manual verification event is carried forward.
+      await startVoiceMonitor();
+      if(document.hidden||!S.onceCapturing)throw new Error('Microphone paused. Click Talk again when ready.');
       status('Listening… speaking will appear in the chat bar.');
       const text = await speechOnce();
+      review.assertGeneration(generation);
+      if(S.thread!==turnThread)throw new Error('The Agent conversation changed while listening. Speak again in the intended conversation.');
       window.dispatchEvent(new CustomEvent('gelato-agent-voice-transcript', {detail: {text}}));
       return await send(text, true);
     } catch (error) {
       status(error.message||'Could not transcribe speech.', 4500);
+      if(options.threadId)throw error;
       return null;
     } finally {
+      S.onceCapturing=false;
+      if(!S.listening)stopVoiceMonitor();
       if(shouldResume&&!document.hidden&&!S.rec)startContinuous();
     }
   }
@@ -942,6 +965,7 @@
     }catch(error){status(error.message,3500);return false;}
   }
   async function setListening(on,{keepWake=false}={}){
+    if(!on&&!keepWake&&S.onceCapturing){S.onceCapturing=false;try{S.onceRecognition?.abort();}catch{}stopVoiceMonitor();}
     if(on){
       if(!has('agent.proactive')){
         status('Your account does not have proactive Agent permission.',4500);
@@ -1235,10 +1259,10 @@
   }
 
   document.addEventListener('visibilitychange',()=>{
-    if(document.hidden){S.recoveryPendingTurn=null;clearConversationTimer();S.conversationDraft='';stopVoiceMonitor();stopContinuous();diag('paused');if(S.listening||S.wakeStandby)status('Microphone paused · tab hidden.');}
+    if(document.hidden){S.recoveryPendingTurn=null;clearConversationTimer();S.conversationDraft='';S.onceCapturing=false;try{S.onceRecognition?.abort();}catch{}stopVoiceMonitor();stopContinuous();diag('paused');if(S.listening||S.wakeStandby)status('Microphone paused · tab hidden.');}
     else if(S.listening||S.wakeStandby){startContinuous();if(S.listening)void startVoiceMonitor();}
   });
-  window.addEventListener('beforeunload',()=>{stopVoiceMonitor();stopContinuous();interruptSpeech('page-unload');});
+  window.addEventListener('beforeunload',()=>{S.onceCapturing=false;try{S.onceRecognition?.abort();}catch{}stopVoiceMonitor();stopContinuous();interruptSpeech('page-unload');});
 
   function proactiveGreet(text){
     if(!S.proactiveVoiceEnabled||!has('agent.proactive')||document.hidden
@@ -1294,6 +1318,7 @@
     get user() { return S.user; },
     get permissions() { return [...S.permissions]; },
     get listening() { return S.listening; },
+    get busy() { return S.busy||S.onceCapturing; },
   };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, {once: true});

@@ -1877,7 +1877,7 @@
     {
       "path": "api/public-agent.php",
       "feature": "public_site",
-      "sourceBlob": "b07449b1283c0e419bba4956232254d418e00685",
+      "sourceBlob": "5c742e40e3241bf5f035cf73c8996c462e179741",
       "discoveredActions": [],
       "permissionTokensSeen": [],
       "directAppRequireAuthCall": false,

@@ -27,7 +27,7 @@ if (!is_string($html)) {
     exit('The workspace template could not be loaded.');
 }
 $script = '<script>window.RESTAURANT_SERVER_SESSION=true;window.RESTAURANT_CSRF_TOKEN=' . json_encode(app_csrf_token(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) . ';window.RESTAURANT_CURRENT_USER_ID=' . (int)$user['id'] . ';window.RESTAURANT_ADMIN_CONTROL_ALLOWED=' . ($adminControlAllowed ? 'true' : 'false') . ';window.RESTAURANT_ADMIN_DASHBOARD_ALLOWED=' . ($adminDashboardAllowed ? 'true' : 'false') . ';window.RESTAURANT_WORKSPACE_BOOTSTRAP=' . json_encode($bootstrap, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) . ';if(window.RESTAURANT_ADMIN_CONTROL_ALLOWED){document.addEventListener("DOMContentLoaded",function(){var settings=document.getElementById("profileSettingsLink");if(!settings||document.getElementById("restaurantAdminControlLink"))return;var link=document.createElement("a");link.id="restaurantAdminControlLink";link.href="admin.php";link.textContent="▦ Restaurant Admin";settings.insertAdjacentElement("afterend",link);});}</script>';
-$html = str_replace('<script src="js/auth.js"></script>', $script . "\n  <script src=\"js/private-browser-state.js?v=hardening-a1\"></script>\n  <script src=\"js/auth.js\"></script>\n  <script src=\"js/floor-planner-module.js?v=hardening-c1\"></script>", $html);
+$html = str_replace('<script src="js/auth.js"></script>', $script . "\n  <script src=\"js/private-browser-state.js?v=hardening-a1\"></script>\n  <script src=\"js/auth.js\"></script>\n  <script src=\"js/floor-planner-module.js?v=20261103-e1\"></script>", $html);
 // Server-rendered navigation stays available when browser-local role data or JS is stale.
 if ($adminControlAllowed) {
     $releaseSha = is_file(__DIR__ . '/DEPLOY_SHA.txt')
@@ -76,7 +76,7 @@ if ($adminControlAllowed) {
     $html = str_replace('</head>', "  <link rel=\"stylesheet\" href=\"css/admin-tech-theme.css?v=20261013-nav1\">\n</head>", $html);
     $html = str_replace('<body>', '<body class="gelato-admin-tech-theme">', $html);
 }
-$html = str_replace('</body>', "  <script src=\"js/workspace-shell-sync.js?v=20261023-manual-chat1-hardening-c1\"></script>\n</body>", $html);
+$html = str_replace('</body>', "  <script src=\"js/workspace-shell-sync.js?v=20261103-e1\"></script>\n</body>", $html);
 // Training owns its visible chat/voice controls. Load after all inline
 // page handlers, and after the Admin theme so the user bubble keeps contrast.
 $html = str_replace('</head>', "  <link rel=\"stylesheet\" href=\"css/training-workspace-chat.css?v=20261013-training1\">\n</head>", $html);

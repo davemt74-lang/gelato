@@ -110,4 +110,4 @@ $boot=['apiUrl'=>'api/glasses-vision-lab.php','mediaApiUrl'=>'api/glasses-vision
 <script src="assets/js/glasses-v11-model-release-candidates.js?v=20260929-v11-8"></script>
 <script src="assets/js/glasses-v11-shadow-validation.js?v=20260929-v11-9"></script>
 <script src="assets/js/glasses-v11-canary-release.js?v=20260929-v11-10"></script>
-<script src="assets/js/glasses-v11-production-learning.js?v=20260929-v11-11"></script><script src="js/universal-admin-page-shell.js?v=20261012-ui1-hardening-c1"></script></body></html>
+<script src="assets/js/glasses-v11-production-learning.js?v=20260929-v11-11"></script><script src="js/universal-admin-page-shell.js?v=20261103-e1"></script></body></html>

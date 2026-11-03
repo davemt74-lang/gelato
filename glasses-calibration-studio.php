@@ -206,6 +206,6 @@ window.GELATO_CALIBRATION_STUDIO=<?=json_encode($boot,JSON_UNESCAPED_SLASHES|JSO
 </script>
 <script src="assets/js/glasses-calibration-geometry.js?v=20260928-1"></script>
 <script src="assets/js/glasses-calibration-studio.js?v=20260928-1"></script>
-<script src="js/universal-admin-page-shell.js?v=20260915-2-hardening-c1"></script>
+<script src="js/universal-admin-page-shell.js?v=20261103-e1"></script>
 </body>
 </html>

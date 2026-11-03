@@ -8,8 +8,25 @@ namespace Gelato.Ar.Unity
 {
     public sealed class UnityVisionModelArtifactFetcher : IVisionModelArtifactFetcher
     {
-        public async Task<byte[]> FetchAsync(Uri artifactUri, long maximumBytes, CancellationToken cancellationToken)
+        private readonly TimeSpan _downloadDeadline;
+        private readonly UnityRequestContext _requestContext;
+
+        public UnityVisionModelArtifactFetcher(TimeSpan? downloadDeadline = null)
         {
+            _downloadDeadline = downloadDeadline ?? TimeSpan.FromSeconds(60);
+            if (_downloadDeadline <= TimeSpan.Zero || _downloadDeadline.TotalSeconds > 3600d)
+                throw new ArgumentOutOfRangeException(nameof(downloadDeadline));
+            _requestContext = new UnityRequestContext();
+        }
+
+        public Task<byte[]> FetchAsync(Uri artifactUri, long maximumBytes, CancellationToken cancellationToken)
+        {
+            return _requestContext.RunAsync(() => FetchOnUnityContextAsync(artifactUri, maximumBytes, cancellationToken));
+        }
+
+        private async Task<byte[]> FetchOnUnityContextAsync(Uri artifactUri, long maximumBytes, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
             if (artifactUri == null) throw new ArgumentNullException(nameof(artifactUri));
             if (!string.Equals(artifactUri.Scheme, Uri.UriSchemeHttps, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Vision model artifacts require HTTPS.");
@@ -17,17 +34,11 @@ namespace Gelato.Ar.Unity
 
             using (var request = UnityWebRequest.Get(artifactUri))
             {
-                var operation = request.SendWebRequest();
-                while (!operation.isDone)
+                await UnityRequestDeadline.SendAsync(request, _downloadDeadline, cancellationToken, () =>
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
                     if (request.downloadedBytes > (ulong)maximumBytes)
-                    {
-                        request.Abort();
                         throw new InvalidOperationException("Vision model artifact exceeded the configured download limit.");
-                    }
-                    await Task.Yield();
-                }
+                });
 
 #if UNITY_2020_2_OR_NEWER
                 if (request.result != UnityWebRequest.Result.Success)
