@@ -19,6 +19,13 @@ try{
             if(!$manager)app_json_response(['ok'=>false,'message'=>'Manager access required.'],403);
             app_json_response(['ok'=>true,'events'=>daily_quicklist_history($pdo,$org,(string)($_GET['id']??''))]);
         }
+        if($action==='purchasing_board'){
+            if(!daily_quicklist_receipt_permission($user))
+                app_json_response(['ok'=>false,'message'=>'Manager and Inventory View permissions required.'],403);
+            require_once __DIR__.'/../includes/daily-quicklist-purchasing-board.php';
+            $date=daily_quicklist_date($_GET['date']??date('Y-m-d'));
+            app_json_response(['ok'=>true,'board'=>daily_quicklist_purchasing_board($pdo,$org,$date)]);
+        }
         if($action==='receipts'){
             if(!daily_quicklist_receipt_permission($user))
                 app_json_response(['ok'=>false,'message'=>'Inventory View and manager permissions required.'],403);

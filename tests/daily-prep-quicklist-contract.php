@@ -790,4 +790,17 @@ dq_assert(daily_quicklist_history($pdo,$org,$newRequest)[0]['event']==='receipt_
 dq_assert((daily_quicklist_receipt_links($pdo,$org)[$needIdAgain]['quantity']??null)===2.0,
     'old one-to-one receipt is backfilled at its full original quantity');
 
+require_once __DIR__.'/../includes/daily-quicklist-purchasing-board.php';
+$boardBefore=(int)$pdo->query('SELECT COUNT(*) FROM inventory_transactions WHERE organization_id='.$org)->fetchColumn();
+$board=daily_quicklist_purchasing_board($pdo,$org,$agentDay);
+dq_assert($board['date']===$agentDay&&$board['totals']['requests']>=1,
+    'manager purchasing board reads active Need More requests');
+dq_assert(count(array_filter($board['requests'],
+    static fn(array $r):bool=>$r['id']===$afterShortage))===1,
+    'board retains the exact Need More identity');
+dq_assert((int)$pdo->query('SELECT COUNT(*) FROM inventory_transactions WHERE organization_id='.$org)->fetchColumn()===$boardBefore,
+    'purchasing board does not write a physical stock transaction');
+$otherBoard=daily_quicklist_purchasing_board($pdo,$other,$agentDay);
+dq_assert(count($otherBoard['requests'])===0,
+    'purchasing dashboard never exposes another restaurant tenant');
 echo "daily-prep-quicklist contract passed\n";
