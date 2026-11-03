@@ -1,7 +1,7 @@
 (() => {
   'use strict';
 
-  const version = '20261103-pos-location1';
+  const version = '20261103-e1-pos-location1';
   const load = (src) => new Promise((resolve, reject) => {
     const script = document.createElement('script');
     script.src = src;

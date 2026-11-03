@@ -253,7 +253,9 @@ function pos_floor_plan_unique_table_name(PDO $pdo,int $org,int $locationId,stri
 function pos_floor_plan_sync_tables(PDO $pdo,int $org,int $locationId,int $userId): array
 {
     if(!pos_floor_plan_ready($pdo))throw new RuntimeException('POS floor-plan integration migration is not installed. Run upgrade.php.');
-    return table_service_transaction($pdo,function()use($pdo,$org,$locationId,$userId):array{
+    $owns=!$pdo->inTransaction();
+    if($owns)$pdo->beginTransaction();
+    try{
         pos_floor_plan_lock_publication($pdo,$org);
         table_service_location($pdo,$org,$locationId);
         $row=pos_floor_plan_selected_row($pdo,$org,$locationId);
@@ -288,6 +290,11 @@ function pos_floor_plan_sync_tables(PDO $pdo,int $org,int $locationId,int $userI
             }
         }
         $retirement=pos_floor_plan_retire_unmapped($pdo,$org,$locationId,$userId,['plan'=>$selectedId,'points'=>$componentIds]);
-        return ['floorPlanPublicId'=>$selectedId,'componentTables'=>count($structures),'componentServicePoints'=>count($structures),'created'=>$created,'updated'=>$updated]+$retirement+['bootstrap'=>pos_floor_plan_bootstrap($pdo,$org,$locationId)];
-    });
+        $result=['floorPlanPublicId'=>$selectedId,'componentTables'=>count($structures),'componentServicePoints'=>count($structures),'created'=>$created,'updated'=>$updated]+$retirement+['bootstrap'=>pos_floor_plan_bootstrap($pdo,$org,$locationId)];
+        if($owns)$pdo->commit();
+        return $result;
+    }catch(Throwable $error){
+        if($owns&&$pdo->inTransaction())$pdo->rollBack();
+        throw $error;
+    }
 }

@@ -32,9 +32,20 @@ ops_assert(str_contains($pos,'id="readyTickets"')&&str_contains($pos,'id="readyB
 ops_assert(str_contains($pos,'.menu-scroll{min-height:0;overflow-y:auto'),'POS menu must retain an independent vertical scroll region.');
 ops_assert(str_contains($posEntry,'js/pos-runtime.js'),'POS entrypoint must preserve the specialized runtime behind its Agent-aware loader.');
 ops_assert(str_contains($posCore,'t.id table_id')&&str_contains($posJs,'Table ID #${tableId}')&&str_contains($posJs,'Opened by'),'Active ticket drawer must expose the canonical service-table ID and staff user.');
-ops_assert(str_contains($posJs,"function switchView(view)")&&str_contains($posJs,"switchView('menu')")&&str_contains($posJs,"view==='ready'"),'POS Menu, Floor Plan, and READY must be first-class switchable workspace sections.');
-ops_assert(str_contains($posJs,"if(t.checkPublicId){selectCheck(t.checkPublicId);return}"),'Occupied mapped service points must reopen their existing active check.');
-ops_assert(str_contains($posJs,"if(String(t.state)!=='available')"),'Unavailable mapped service points must not start duplicate checks.');
+ops_assert(
+    str_contains($posJs,"b.addEventListener('click',()=>switchView(b.dataset.posView")&&
+    str_contains($posJs,"$('menuView')?.classList.toggle('hidden',state.view!=='menu')")&&
+    str_contains($posJs,"$('floorView')?.classList.toggle('hidden',state.view!=='floor')")&&
+    str_contains($posJs,"$('readyView')?.classList.toggle('hidden',state.view!=='ready')"),
+    'POS Menu, Floor Plan, and READY must be first-class switchable workspace sections.'
+);
+ops_assert((bool)preg_match('/if\s*\(\s*(\w+)\.checkPublicId\s*\)\s*\{\s*(?:void\s+)?selectCheck\(\1\.checkPublicId\)\s*;\s*return/',$posJs),'Occupied mapped service points must reopen their existing active check.');
+ops_assert(
+    str_contains($posJs,'state.permissions.tableUse&&t.seatAllowed===true')&&
+    str_contains($posJs,'if(table.seatAllowed!==true)return toast(')&&
+    str_contains($posJs,"if(!table||table.seatAllowed!==true||!state.permissions.tableUse)return toast("),
+    'Unavailable mapped service points must not start duplicate checks, including after a seating dialog is open.'
+);
 ops_assert(str_contains($posJs,'function renderReady()')&&str_contains($posJs,"fetch('api/pos-ready.php?locationId='")&&str_contains($posJs,'setInterval(refreshReady,4000)'),'POS must poll and render canonical KDS-ready tickets.');
 ops_assert(str_contains($posReady,"require_once __DIR__.'/../includes/kds-production.php'")&&str_contains($posReady,'readyToBump'),'POS READY feed must reuse the KDS production board ready-to-bump definition.');
 ops_assert(str_contains($posReady,'checkStatus')&&str_contains($posReady,"!=='open'"),'POS READY feed must exclude closed checks.');

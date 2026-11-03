@@ -47,6 +47,10 @@ function bootstrap(id, row = null) {
   const tables = [
     table(id),
     table(id, { publicId: 'manual-' + id, name: 'Manual table', xPercent: 40, floorPlanPublicId: null, floorPlanComponentId: null }),
+    table(id, { publicId: 'occupied-' + id, name: 'Occupied table', xPercent: 55, floorPlanComponentId: 'occupied-component',
+      state: 'seated', seatAllowed: false, checkPublicId: check(id).publicId }),
+    table(id, { publicId: 'blocked-' + id, name: 'Blocked table', xPercent: 75, floorPlanComponentId: 'blocked-component',
+      state: 'blocked', seatAllowed: false }),
     table(id, { publicId: 'prior-' + id, floorPlanPublicId: 'old-plan', name: 'Prior-plan table' }),
     table(id, { publicId: 'retired-' + id, floorPlanComponentId: 'removed-component', status: 'retired',
       retired: true, seatAllowed: false, checkPublicId: check(id, 'retired').publicId, name: 'Retired table' }),
@@ -144,10 +148,15 @@ async function main() {
     const expectCheck = row => page.locator('#ticketHead h2').getByText(row.checkNumber, { exact: true }).waitFor();
 
     await page.locator('[data-pos-view="floor"]').click();
+    assert.ok(await page.locator('#floorView').isVisible());
     assert.ok(await page.locator('[data-table-public="table-11"]').isEnabled());
     assert.ok(await page.locator('[data-table-public="manual-11"]').isEnabled());
+    assert.equal(await page.locator('[data-table-public="blocked-11"]').isEnabled(), false);
     assert.equal(await page.locator('[data-table-public="prior-11"], [data-table-public="retired-11"]').count(), 0,
       'Former plan and retired rows cannot be rendered over the current floor.');
+    await page.locator('[data-table-public="occupied-11"]').click();
+    await expectCheck(check(11));
+    assert.equal(await page.locator('#newModal').isVisible(), false, 'An occupied point opens its existing check.');
     const retired = check(11, 'retired');
     await selectCheck(retired);
     await expectCheck(retired);
@@ -179,6 +188,9 @@ async function main() {
     await staleCheck.seen;
     await selectLocation(22);
     await page.locator('#readyTickets').getByText('South READY', { exact: true }).waitFor({ state: 'attached' });
+    await page.locator('[data-pos-view="ready"]').click();
+    assert.ok(await page.locator('#readyView').isVisible());
+    assert.equal(await page.locator('#floorView').isVisible(), false);
     await selectCheck(check(22));
     await expectCheck(check(22));
     await staleCheck.finish();
