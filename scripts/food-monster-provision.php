@@ -11,6 +11,55 @@ require_once __DIR__ . '/../includes/first-owner-setup.php';
 require_once __DIR__ . '/../includes/UpgradeService.php';
 require_once __DIR__ . '/../includes/food-monster-installation.php';
 
+function gelato_hosted_install_schema(PDO $pdo, string $installationId): void
+{
+    $lock = 'gelato-hosted-schema-' . substr(hash('sha256', (string)$pdo->query('SELECT DATABASE()')->fetchColumn()), 0, 32);
+    $gate = $pdo->prepare('SELECT GET_LOCK(?, 10)');
+    $gate->execute([$lock]);
+    if ((int)$gate->fetchColumn() !== 1) {
+        throw new RuntimeException('Another process is initializing the hosted database.');
+    }
+    try {
+        $tables = $pdo->query('SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE()')->fetchAll(PDO::FETCH_COLUMN);
+        if ($tables === []) {
+            $pdo->exec('CREATE TABLE gelato_hosted_bootstrap (installation_id CHAR(32) PRIMARY KEY, seed_complete TINYINT NOT NULL DEFAULT 0) ENGINE=InnoDB');
+        } elseif (!in_array('gelato_hosted_bootstrap', $tables, true)) {
+            throw new RuntimeException('The nonempty database has no managed installation journal.');
+        }
+        $journal = $pdo->query('SELECT installation_id, seed_complete FROM gelato_hosted_bootstrap')->fetchAll();
+        if ($journal === [] && ($tables === [] || $tables === ['gelato_hosted_bootstrap'])) {
+            $pdo->prepare('INSERT INTO gelato_hosted_bootstrap (installation_id) VALUES (?)')->execute([$installationId]);
+        } elseif (count($journal) !== 1 || $journal[0]['installation_id'] !== $installationId) {
+            throw new RuntimeException('The database journal belongs to a different installation.');
+        } elseif ((int)$journal[0]['seed_complete'] === 1) {
+            return;
+        }
+
+        $sql = file_get_contents(RESTAURANT_APP_ROOT . '/database/install.sql');
+        $parts = $sql === false ? [] : explode('-- Baseline permission and allergen seed data.', $sql, 2);
+        if (count($parts) !== 2) {
+            throw new RuntimeException('The Gelato database archive is incomplete.');
+        }
+        // MySQL commits DDL independently. The job journal permits replay of
+        // already-created baseline tables only for this dedicated database.
+        UpgradeService::executeSqlScript($pdo, $parts[0], true);
+        $pdo->beginTransaction();
+        try {
+            UpgradeService::executeSqlScript($pdo, $parts[1]);
+            $pdo->prepare('UPDATE gelato_hosted_bootstrap SET seed_complete = 1 WHERE installation_id = ?')->execute([$installationId]);
+            $pdo->commit();
+        } catch (Throwable $error) {
+            if ($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            throw $error;
+        }
+    } finally {
+        $release = $pdo->prepare('SELECT RELEASE_LOCK(?)');
+        $release->execute([$lock]);
+    }
+}
+
 try {
     $bytes = stream_get_contents(STDIN, 16385);
     if ($bytes === false || strlen($bytes) > 16384) {
@@ -38,13 +87,7 @@ try {
     }
 
     $pdo = app_pdo();
-    if ((int)$pdo->query('SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE()')->fetchColumn() === 0) {
-        $sql = file_get_contents(RESTAURANT_APP_ROOT . '/database/install.sql');
-        if ($sql === false) {
-            throw new RuntimeException('The Gelato database archive is incomplete.');
-        }
-        UpgradeService::executeSqlScript($pdo, $sql);
-    }
+    gelato_hosted_install_schema($pdo, $expected);
     if (!app_schema_is_installed($pdo)) {
         throw new RuntimeException('The target database has an incomplete Gelato schema.');
     }
