@@ -45,12 +45,18 @@ try{purchasing_agent_handle($pdo,$manager,hac_test_input($pdo,$manager,'purchasi
 catch(DomainException){$blocked=true;}
 paa_assert($blocked,'Purchase submission cannot bypass Super Admin approval.');
 paa_assert((purchasing_order($pdo,$org,$poId)['status']??'')==='draft','Blocked confirmation leaves PO draft.');
+hac_test_context($pdo,$manager,['threadId'=>$approvalThread['public_id'],
+    'message'=>'Request approval: major_purchase: Review this exact order']);
 $approval=fm9f_approval_propose($manager,'major_purchase','Review this exact order',
     $approvalThread['public_id'],$pdo);
 paa_assert(($approval['purchaseOrderId']??'')===$poId,'Approval binds actual PO, not client text.');
 $review=hac_test_review($pdo,$manager,'food_monster_high_impact');
-gac_request_context($review,$pdo,$manager);
-$decision=fm9f_approval_decide($manager,$approval['proposalId'],'approve',$review);
+// The review identifies the proposal; approval is its own saved typed turn.
+$approvalInput=hac_test_context($pdo,$manager,['message'=>'Approve']+$review);
+paa_assert($approvalInput['threadId']===$approvalThread['public_id']
+    &&$approvalInput['sourceMessageId']!==$approval['proposal']['sourceMessageId'],
+    'High-impact approval needs a fresh canonical user turn in its original conversation.');
+$decision=fm9f_approval_decide($manager,$approval['proposalId'],'approve',$approvalInput);
 paa_assert(($decision['handoff']['purchaseOrderId']??'')===$poId
     &&$decision['executed']===false,'Approval generates scoped grant without execution.');
 $tampered=$originalSubmitProposal;

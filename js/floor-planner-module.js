@@ -86,7 +86,7 @@
     loadScript('js/admin-shell-consolidation.js?v=20261013-nav1', 'gelato-admin-shell-consolidation');
     loadScript('js/equipment-module.js', 'equipment-module');
     loadScript('js/catering-module.js', 'catering-module');
-    loadScript('js/restaurant-agent-bridge.js?v=hardening-c1', 'restaurant-agent-bridge');
+    loadScript('js/restaurant-agent-bridge.js?v=20261103-e1', 'restaurant-agent-bridge');
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install, { once: true });

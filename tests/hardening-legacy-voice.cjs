@@ -74,6 +74,18 @@ async function say(f,button,text){
   const result=[{transcript:text,confidence:.99}];result.isFinal=true;
   f.recognizers.at(-1).onresult({resultIndex:0,results:[result]});await settle();
 }
+async function loadedScripts(filename,flags={}){
+  const requested=[];
+  const document={readyState:'complete',scripts:[],getElementById:()=>null,
+    querySelector:()=>null,querySelectorAll:()=>[],addEventListener(){},
+    createElement:()=>({dataset:{}}),head:{appendChild(script){
+      requested.push(script.src);document.scripts.push(script);script.onload?.();
+    }}};
+  const context={window:{RestaurantAuth:{has:()=>false},...flags},document,console,
+    MutationObserver:class{observe(){}disconnect(){}},setTimeout:()=>1,clearTimeout(){}};
+  vm.runInNewContext(fs.readFileSync(path.join(root,'js',filename),'utf8'),context,{filename});
+  await settle();return requested;
+}
 (async()=>{
   let checks=0;
   for(const [adapter,button]of [['restaurant-agent-bridge.js','gelatoVoiceButton'],['operations-core.js','agentMic'],['timeclock-voice.js','talkButton']]){
@@ -122,5 +134,21 @@ async function say(f,button,text){
   hidden.recognizers.at(-1).onresult({resultIndex:0,results:[phrase]});await settle();
   assert.equal(hidden.records.filter(r=>r.url==='api/timeclock-agent.php').length,0,'Hidden-tab late callbacks cannot execute a command.');checks++;
   assert.equal(hidden.streamsStopped,1);checks++;
+  // Execute each transitive loader: a cached D bridge can still label microphone
+  // speech typed, and a cached global runtime lacks the new turn protections.
+  for(const [loader,flags]of [['floor-planner-module.js',{}],['pos.js',{}],
+    ['table-cleaning-controls.js',{GELATO_TABLE_SERVICE:{}}],['table-cleaning-controls.js',{HOST_CONFIG:{}}]]){
+    const scripts=await loadedScripts(loader,flags);
+    assert.ok(scripts.includes('js/global-agent.js?v=20261103-e1'),`${loader} must request the secured global runtime with a new cache URL.`);checks++;
+    if(loader==='floor-planner-module.js'){
+      assert.ok(scripts.includes('js/restaurant-agent-bridge.js?v=20261103-e1'),
+        'Floor Planner must not reuse the cached voice:false restaurant bridge.');checks++;
+    }
+  }
+  for(const [page,asset]of [['pos.php','pos.js'],['table-service.php','table-cleaning-controls.js'],
+    ['host-stand.php','table-cleaning-controls.js'],['workspace.php','floor-planner-module.js']]){
+    assert.ok(fs.readFileSync(path.join(root,page),'utf8').includes(`js/${asset}?v=20261103-e1`),
+      `${page} must refresh its changed Agent loader before that loader can request the secured scripts.`);checks++;
+  }
   console.log(`Legacy voice shipped-script callbacks: PASS (${checks} assertions; canonical channel, fresh command/Confirm receipts, operator consent, unknown speaker, typed compatibility, conversation binding).`);
 })().catch(error=>{console.error(error);process.exitCode=1;});
