@@ -116,8 +116,10 @@ pending upgrades and an idempotent second upgrade, then runs the new observation
 confirmation, device ownership, concurrency, HTTP and actual-browser contracts.
 Existing workflow gates continue to exercise the affected specialist lifecycle,
 model routing, purchasing, training and permission behavior. Test entrypoints are
-CLI-only. Browser tests stub only the external model boundary and use the actual
-workspace, specialist APIs, session cookies and database for actions.
+CLI-only. The two-tab Food Monster browser journey stubs only the external model
+boundary. The standalone Operations case disables the global presentation-shell
+loader to exercise the actual legacy composer without a competing toolbar. Both
+use the actual workspace, specialist APIs, session cookies and database for actions.
 
 The release adds no schema migration. Install the complete deployment package
 using the normal Gelato backup and upload/extract process. Existing unbound

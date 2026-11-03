@@ -112,15 +112,18 @@ const {start} = require('./hardening-agent-confirmation-server.cjs');
 
     // Standalone Operations uses the shared canonical transport, including reload.
     const legacy = await context.newPage();
-    // Isolate the real legacy controls from the presentation adapter that
-    // replaces them with the global composer on the normal Operations page.
-    await legacy.route('**/js/operations-agent-context.js*', route => route.abort());
+    // Isolate the real legacy composer from the global presentation shell.
+    // Normal Operations uses that shell's global composer instead. Blocking
+    // its loader also prevents a late global toolbar from covering this one.
+    await legacy.route('**/js/universal-admin-page-shell.js*', route => route.abort());
     await legacy.goto(env.origin + '/operations.php');
+    assert.equal(await legacy.locator('#gelato-agent-bar').count(), 0, 'Standalone fixture excludes the global composer.');
     await legacy.locator('#agentInput').fill('receive 1 kg of ' + data.items.A.name);
     await legacy.locator('#agentSend').click();
     await legacy.waitForFunction(() => document.getElementById('agentStatus')?.textContent.includes('Reply Confirm'));
     assert.equal(stock('A'), 12, 'The standalone rendered proposal does not adjust stock.');
     await legacy.reload();
+    assert.equal(await legacy.locator('#gelato-agent-bar').count(), 0, 'Standalone reload stays isolated from the global composer.');
     await legacy.locator('#agentInput').fill('Confirm');
     await legacy.locator('#agentSend').click();
     await legacy.waitForFunction(() => document.getElementById('agentStatus')?.textContent.includes('Confirmed'));
