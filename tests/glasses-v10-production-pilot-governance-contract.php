@@ -16,6 +16,7 @@ $slug='v107-'.bin2hex(random_bytes(4));
 $pdo->prepare("INSERT INTO organizations (name,status,timezone) VALUES (?,'active','America/Phoenix')")->execute(['Pilot '.$slug]);$org=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO locations (organization_id,name,city,state,status) VALUES (?,'Pilot Kitchen','Phoenix','AZ','active')")->execute([$org]);$location=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO users (email,password_hash,first_name,last_name,display_name,status) VALUES (?,?,?,?,?,'active')")->execute([$slug.'@example.test','fixture-hash','Pilot','Admin','Pilot Admin']);$actor=(int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO organization_memberships (organization_id,user_id,status) VALUES (?,?,'active')")->execute([$org,$actor]);
 $station=kds_station_save($pdo,$org,$location,['name'=>'Pilot Line','slug'=>'pilot-'.$slug,'targetSeconds'=>300],$actor);
 
 $grant=glasses_create_pairing_grant($pdo,$org,$location,(string)$station['public_id'],$actor,10);

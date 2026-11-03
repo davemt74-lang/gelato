@@ -28,6 +28,7 @@ $slug='glci-'.bin2hex(random_bytes(4));
 $pdo->prepare("INSERT INTO organizations (name,status,timezone) VALUES (?,'active','America/Phoenix')")->execute(['Learning CI '.$slug]);$org=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO locations (organization_id,name,city,state,status,is_primary,sort_order) VALUES (?,'Main Kitchen','Phoenix','AZ','active',1,10)")->execute([$org]);$location=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO users (email,password_hash,first_name,last_name,display_name,status) VALUES (?,?,?,?,?,'active')")->execute([$slug.'@example.test',password_hash('CI-only-password',PASSWORD_DEFAULT),'Learning','Lead','Learning Lead']);$userId=(int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO organization_memberships (organization_id,user_id,status) VALUES (?,?,'active')")->execute([$org,$userId]);
 
 $station=kds_station_save($pdo,$org,$location,['name'=>'Sandwich','slug'=>'sandwich','targetSeconds'=>300,'sortOrder'=>10],$userId);
 $otherStation=kds_station_save($pdo,$org,$location,['name'=>'Fry','slug'=>'fry','targetSeconds'=>240,'sortOrder'=>20],$userId);

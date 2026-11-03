@@ -14,6 +14,7 @@ $slug='gvo-'.bin2hex(random_bytes(4));
 $pdo->prepare("INSERT INTO organizations (name,status,timezone) VALUES (?,'active','America/Phoenix')")->execute(['Vision Ops '.$slug]);$org=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO locations (organization_id,name,city,state,status) VALUES (?,'Fleet Kitchen','Phoenix','AZ','active')")->execute([$org]);$location=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO users (email,password_hash,first_name,last_name,display_name,status) VALUES (?,?,?,?,?,'active')")->execute([$slug.'@example.test',password_hash('CI-only-password',PASSWORD_DEFAULT),'Fleet','Admin','Fleet Admin']);$uid=(int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO organization_memberships (organization_id,user_id,status) VALUES (?,?,'active')")->execute([$org,$uid]);
 $station=kds_station_save($pdo,$org,$location,['name'=>'Pizza Line','slug'=>'pizza-line','targetSeconds'=>300],$uid);
 $grant=glasses_create_pairing_grant($pdo,$org,$location,(string)$station['public_id'],$uid,10);
 $paired=glasses_pair_device($pdo,(string)$grant['pairingCode'],['hardwareIdentifier'=>'AIR3-FLEET-'.$slug,'displayName'=>'Pizza AIR3','sdkVersion'=>'0.7.3','appVersion'=>'2.0.0']);

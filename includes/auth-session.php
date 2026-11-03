@@ -5,7 +5,8 @@ declare(strict_types=1);
 function app_session_credential_version(array $user): string
 {
     return hash('sha256', (string)$user['id'] . "\0" . (string)$user['password_hash']
-        . "\0" . (string)($user['password_changed_at'] ?? ''));
+        . "\0" . (string)($user['password_changed_at'] ?? '')
+        . "\0" . (string)($user['membership_updated_at'] ?? ''));
 }
 
 function app_session_is_current(array $session, array $user, array $security, int $now): bool
@@ -44,7 +45,7 @@ function app_session_start_user(PDO $pdo, int $organizationId, int $userId,
     string $authMethod = 'password', ?string $expectedPasswordHash = null): void
 {
     $q = $pdo->prepare("SELECT u.id, u.password_hash, u.password_changed_at, (u.locked_until>NOW(6)) AS login_locked,
-            om.organization_id
+            om.organization_id, om.updated_at AS membership_updated_at
         FROM users u JOIN organization_memberships om ON om.user_id=u.id
         WHERE u.id=? AND om.organization_id=? AND om.status='active'
           AND u.status='active' AND u.archived_at IS NULL LIMIT 1");

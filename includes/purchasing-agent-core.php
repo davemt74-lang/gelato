@@ -50,14 +50,15 @@ function pac_lines_signature(array $lines): string{
     return hash('sha256',json_encode($normalized,JSON_UNESCAPED_SLASHES));
 }
 function pac_outstanding_lines(array $po): array{
-    $lines=[];foreach((array)($po['items']??[]) as $item){$remaining=max(0,(float)$item['ordered_base_quantity']-(float)$item['received_base_quantity']);if($remaining>0.0001)$lines[]=['itemId'=>(string)$item['public_id'],'inventoryId'=>(string)$item['inventory_public_id'],'name'=>(string)$item['inventory_name'],'quantity'=>$remaining];}
+    if(in_array((string)($po['status']??''),['cancelled','received'],true))return [];
+    $lines=[];foreach((array)($po['items']??[]) as $item){$remaining=max(0,(float)$item['ordered_base_quantity']-(float)$item['received_base_quantity']);if($remaining>0)$lines[]=['itemId'=>(string)$item['public_id'],'inventoryId'=>(string)$item['inventory_public_id'],'name'=>(string)$item['inventory_name'],'quantity'=>$remaining];}
     return $lines;
 }
 function pac_outstanding_signature(array $lines): string{
     $normalized=[];foreach($lines as $line)$normalized[]=['itemId'=>(string)$line['itemId'],'quantity'=>round((float)$line['quantity'],4)];return hash('sha256',json_encode($normalized,JSON_UNESCAPED_SLASHES));
 }
 function pac_order_answer(array $po): string{
-    $parts=[];foreach((array)($po['items']??[]) as $item){$remaining=max(0,(float)$item['ordered_base_quantity']-(float)$item['received_base_quantity']);$parts[]=$item['inventory_name'].' '.rtrim(rtrim(number_format((float)$item['ordered_base_quantity'],2),'0'),'.').' '.$item['unit'].($remaining>0?' ('.rtrim(rtrim(number_format($remaining,2),'0'),'.').' outstanding)':' (received)');}
+    $parts=[];foreach((array)($po['items']??[]) as $item){$remaining=max(0,(float)$item['ordered_base_quantity']-(float)$item['received_base_quantity']);$parts[]=$item['inventory_name'].' '.rtrim(rtrim(number_format((float)$item['ordered_base_quantity'],4),'0'),'.').' '.$item['unit'].($remaining>0?' ('.rtrim(rtrim(number_format($remaining,4),'0'),'.').($po['status']==='cancelled'?' cancelled)':' outstanding)'):' (received)');}
     return $po['order_number'].' · '.$po['vendor_name'].' · '.str_replace('_',' ',(string)$po['status']).' · $'.number_format((float)$po['total_amount'],2).($parts?' · '.implode('; ',$parts):'');
 }
 function pac_suggestion_answer(PDO $pdo,int $org): array{
@@ -73,10 +74,9 @@ function pac_extract_item_query(string $message): string{
     return trim($value," \t\n\r\0\x0B?.!");
 }
 function pac_cancel_order(PDO $pdo,int $org,array $po,int $uid): array{
-    if(in_array((string)$po['status'],['received','cancelled'],true))throw new InvalidArgumentException('This purchase order cannot be cancelled in its current status.');
-    $stmt=$pdo->prepare("UPDATE purchase_orders SET status='cancelled',cancelled_at=NOW(6),cancelled_by=?,updated_by=?,updated_at=NOW(6) WHERE organization_id=? AND id=? AND status=? AND archived_at IS NULL");$stmt->execute([$uid,$uid,$org,(int)$po['id'],(string)$po['status']]);if($stmt->rowCount()!==1)throw new InvalidArgumentException('That purchase order changed before cancellation.');
-    purchasing_event($pdo,$org,(int)$po['id'],'cancelled','Purchase order cancelled through Gelato Agent.',$uid);return purchasing_order($pdo,$org,(string)$po['public_id'])??[];
+    return purchasing_cancel($pdo,$org,(string)$po['public_id'],$uid,pac_order_version($po));
 }
+
 function pac_execute_pending(PDO $pdo,int $org,int $uid,array $user,array $proposal): array{
     if((int)($proposal['organizationId']??0)!==$org||(int)($proposal['userId']??0)!==$uid)throw new PurchasingAgentPermissionException('This Purchasing Agent proposal does not belong to your session.');
     $type=(string)$proposal['type'];$payload=(array)$proposal['payload'];
@@ -98,7 +98,7 @@ function pac_execute_pending(PDO $pdo,int $org,int $uid,array $user,array $propo
             // commitment. Only the owner may confirm the exact approved,
             // still-current proposal; no model/voice delegation can bypass it.
             $grant=fm9g_authorize_purchase($user,$proposal);
-            $saved=purchasing_submit($pdo,$org,(string)$po['public_id'],$uid);
+            $saved=purchasing_submit($pdo,$org,(string)$po['public_id'],$uid,(array)$payload['expected']);
             $receipt=fm9g_record_purchase_result($pdo,$user,$grant,(string)$saved['public_id']);
             app_audit($pdo,$org,$uid,'purchasing.agent_po_submitted','purchase_order',(string)$po['public_id'],null,
                 ['proposalId'=>$proposal['id'],'approvalId'=>$grant['approvalId'],'receiptRecorded'=>$receipt]);
@@ -110,7 +110,7 @@ function pac_execute_pending(PDO $pdo,int $org,int $uid,array $user,array $propo
         }
         if($type==='cancel_po'){$saved=pac_cancel_order($pdo,$org,$po,$uid);app_audit($pdo,$org,$uid,'purchasing.agent_po_cancelled','purchase_order',(string)$po['public_id'],null,['proposalId'=>$proposal['id']]);return ['skill'=>'purchasing.action_confirmed','answer'=>'Confirmed. Cancelled '.$saved['order_number'].'.','data'=>['action'=>'cancel_po','purchaseOrderId'=>$saved['public_id']],'sources'=>['Purchase Orders']];}
         $lines=pac_outstanding_lines($po);if(!$lines)throw new InvalidArgumentException('That purchase order has no outstanding quantity to receive.');if(pac_outstanding_signature($lines)!==(string)$payload['outstandingSignature']){pac_pending_clear($org,$uid);throw new InvalidArgumentException('The outstanding quantities changed after I proposed receiving the PO. Review the order and ask again.');}
-        $receipt=purchasing_receive($pdo,$org,(string)$po['public_id'],array_map(static fn($line)=>['itemId'=>$line['itemId'],'quantity'=>$line['quantity']],$lines),$uid,'','Received in full through Gelato Agent after explicit confirmation.');app_audit($pdo,$org,$uid,'purchasing.agent_po_received','purchase_order',(string)$po['public_id'],null,['proposalId'=>$proposal['id'],'receiptId'=>$receipt['receiptId']??null]);return ['skill'=>'purchasing.action_confirmed','answer'=>'Confirmed. Recorded all remaining quantities on '.$po['order_number'].' as received in full. Receipt '.($receipt['receiptNumber']??'created').'.','data'=>['action'=>'receive_po_full','purchaseOrderId'=>$po['public_id'],'receiptId'=>$receipt['receiptId']??null],'sources'=>['Purchase Orders','Goods Receiving','Inventory']];
+        $receipt=purchasing_receive($pdo,$org,(string)$po['public_id'],array_map(static fn($line)=>['itemId'=>$line['itemId'],'quantity'=>$line['quantity']],$lines),$uid,'','Received in full through Gelato Agent after explicit confirmation.',(array)$payload['expected']);app_audit($pdo,$org,$uid,'purchasing.agent_po_received','purchase_order',(string)$po['public_id'],null,['proposalId'=>$proposal['id'],'receiptId'=>$receipt['receiptId']??null]);return ['skill'=>'purchasing.action_confirmed','answer'=>'Confirmed. Recorded all remaining quantities on '.$po['order_number'].' as received in full. Receipt '.($receipt['receiptNumber']??'created').'.','data'=>['action'=>'receive_po_full','purchaseOrderId'=>$po['public_id'],'receiptId'=>$receipt['receiptId']??null],'sources'=>['Purchase Orders','Goods Receiving','Inventory']];
     }
     throw new InvalidArgumentException('That pending Purchasing Agent action is no longer supported.');
 }
@@ -126,7 +126,7 @@ function purchasing_agent_handle(PDO $pdo,array $user,array $input): array{
     if(preg_match('/^(?:cancel|cancel it|discard|never mind|nevermind|stop)[.!]?$/i',$message)&&$pending){pac_pending_clear($org,$uid);app_audit($pdo,$org,$uid,'purchasing.agent_action_discarded','purchasing_agent_proposal',(string)$pending['id'],null,['type'=>$pending['type']]);return ['ok'=>true,'skill'=>'purchasing.action_cancelled','answer'=>'Cancelled. I did not change purchasing or inventory.','data'=>['cancelledProposal'=>$pending['id']],'sources'=>['Purchasing + Receiving']];}
 
     if($selected&&preg_match('/\b(?:show|describe|details?|status|what is|what\x27s|about)\s+(?:this|selected)\s+(?:po|purchase order)\b/i',$message))return ['ok'=>true,'skill'=>'purchasing.context_order','answer'=>pac_order_answer($selected).'.','data'=>['purchaseOrderId'=>$selected['public_id']],'sources'=>['Purchase Orders']];
-    if($selected&&preg_match('/\b(?:outstanding|remaining|missing|still due|still coming)\b/i',$message)){$lines=pac_outstanding_lines($selected);$answer=$lines?implode('; ',array_map(static fn($line)=>$line['name'].' '.round((float)$line['quantity'],2),$lines)).' outstanding on '.$selected['order_number'].'.':'Nothing remains outstanding on '.$selected['order_number'].'.';return ['ok'=>true,'skill'=>'purchasing.context_outstanding','answer'=>$answer,'data'=>['purchaseOrderId'=>$selected['public_id'],'outstandingLines'=>count($lines)],'sources'=>['Purchase Orders','Goods Receiving']];}
+    if($selected&&preg_match('/\b(?:outstanding|remaining|missing|still due|still coming)\b/i',$message)){$lines=pac_outstanding_lines($selected);$answer=$lines?implode('; ',array_map(static fn($line)=>$line['name'].' '.round((float)$line['quantity'],4),$lines)).' outstanding on '.$selected['order_number'].'.':'Nothing remains outstanding on '.$selected['order_number'].'.';return ['ok'=>true,'skill'=>'purchasing.context_outstanding','answer'=>$answer,'data'=>['purchaseOrderId'=>$selected['public_id'],'outstandingLines'=>count($lines)],'sources'=>['Purchase Orders','Goods Receiving']];}
 
     if($selected&&preg_match('/\bsubmit\s+(?:this|selected)\s+(?:po|purchase order)\b/i',$message)){
         pac_require($user,'purchasing.manage','Purchasing management permission is required to submit purchase orders.');if($selected['status']!=='draft')throw new InvalidArgumentException('Only a draft purchase order can be submitted.');$summary='Proposed action: submit '.$selected['order_number'].' to '.$selected['vendor_name'].' for $'.number_format((float)$selected['total_amount'],2).'.';$proposal=pac_pending_store($org,$uid,'submit_po',['purchaseOrderId'=>$selected['public_id'],'expected'=>pac_order_version($selected)],$summary);app_audit($pdo,$org,$uid,'purchasing.agent_action_proposed','purchasing_agent_proposal',(string)$proposal['id'],null,['type'=>'submit_po']);return pac_proposal_result($proposal,['Purchase Orders']);

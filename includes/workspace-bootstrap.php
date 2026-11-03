@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/bootstrap.php';
+require_once __DIR__ . '/user-accounts.php';
 
 /** The workspace only receives records that the authenticated actor may read. */
 function workspace_bootstrap(PDO $pdo, array $user): array
@@ -22,30 +23,16 @@ function workspace_bootstrap(PDO $pdo, array $user): array
     $current['role'] = $currentRole;
     $roles = [$currentRole];
     if (app_has_permission('roles.view', $user)) {
-        $statement = $pdo->prepare("SELECT r.*, GROUP_CONCAT(DISTINCT p.permission_key ORDER BY p.permission_key SEPARATOR ',') AS permission_keys
-            FROM roles r LEFT JOIN role_permissions rp ON rp.role_id=r.id
-            LEFT JOIN permissions p ON p.id=rp.permission_id
-            WHERE r.organization_id=? GROUP BY r.id ORDER BY r.is_owner_role DESC,r.name");
-        $statement->execute([$organizationId]);
-        $roles = array_map(static function (array $row): array {
-            $owner = app_role_has_owner_authority($row);
-            return ['id'=>'db-role-'.$row['id'], 'name'=>$row['name'], 'slug'=>$row['slug'],
-                'description'=>$row['description'] ?? '', 'system'=>(bool)$row['is_system_role'],
-                'owner'=>$owner, 'permissions'=>$owner ? ['*'] : array_values(array_filter(explode(',', (string)$row['permission_keys'])))];
-        }, $statement->fetchAll());
+        $roles=array_map(static fn(array $row):array=>[
+            'id'=>'db-role-'.$row['id'],'name'=>$row['name'],'slug'=>$row['slug'],
+            'description'=>$row['description']??'','system'=>(bool)$row['is_system_role'],
+            'owner'=>$row['owner'],'permissions'=>$row['permissions'],
+        ],accounts_roles($pdo,$organizationId));
     }
+
     $users = [workspace_user_payload($user)];
     if (app_has_permission('users.view', $user)) {
-        $statement = $pdo->prepare("SELECT u.id,u.email,u.first_name,u.last_name,u.display_name,u.status,u.last_login_at,u.created_at,
-                om.job_title,r.id AS role_id
-            FROM users u INNER JOIN organization_memberships om ON om.user_id=u.id AND om.organization_id=?
-            LEFT JOIN user_roles ur ON ur.membership_id=om.id AND ur.revoked_at IS NULL
-            LEFT JOIN roles r ON r.id=ur.role_id AND r.organization_id=om.organization_id
-            WHERE u.archived_at IS NULL
-            GROUP BY u.id,u.email,u.first_name,u.last_name,u.display_name,u.status,u.last_login_at,u.created_at,om.job_title,r.id
-            ORDER BY u.display_name");
-        $statement->execute([$organizationId]);
-        $users = array_map('workspace_user_payload', $statement->fetchAll());
+        $users = accounts_list($pdo,$organizationId,(int)$user['id']);
     }
     $jobs = [];
     if (app_has_permission('jobs.view', $user)) {
@@ -79,7 +66,7 @@ function workspace_bootstrap(PDO $pdo, array $user): array
 function workspace_user_payload(array $row): array
 {
     return ['id'=>'db-user-'.$row['id'], 'email'=>$row['email'], 'firstName'=>$row['first_name'],
-        'lastName'=>$row['last_name'], 'displayName'=>$row['display_name'],
+        'lastName'=>$row['last_name'], 'displayName'=>$row['display_name'], 'phone'=>$row['phone']??'',
         'roleId'=>!empty($row['role_id']) ? 'db-role-'.$row['role_id'] : '',
         'position'=>$row['job_title'] ?: 'Employee', 'status'=>$row['status'],
         'initials'=>mb_strtoupper(mb_substr((string)$row['first_name'],0,1).mb_substr((string)$row['last_name'],0,1)),

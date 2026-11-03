@@ -116,19 +116,121 @@ function operations_inventory_list(PDO $pdo,int $organizationId,string $query=''
     $stmt=$pdo->prepare("SELECT * FROM inventory_items WHERE {$where} ORDER BY (reorder_point IS NOT NULL AND on_hand_quantity<=reorder_point) DESC,name LIMIT {$limit}");$stmt->execute($params);return $stmt->fetchAll();
 }
 
-function operations_inventory_adjust(PDO $pdo,int $organizationId,string $publicId,float $delta,string $type,?int $userId,string $note='',?float $expectedOnHand=null): array
+/** Convert quantities to the database's four-decimal scale before doing arithmetic. */
+function operations_quantity_ticks(mixed $value,string $label='Quantity'): int
 {
-    $allowed=['count','receive','use','waste','adjust','transfer'];if(!in_array($type,$allowed,true))throw new InvalidArgumentException('Invalid inventory transaction type.');
+    if(is_bool($value)||(!is_int($value)&&!is_float($value)&&!is_string($value))||!is_numeric($value))
+        throw new InvalidArgumentException($label.' must be a valid number.');
+    $number=(float)$value;
+    if(!is_finite($number)||abs($number)>9999999999.9999)
+        throw new InvalidArgumentException($label.' is outside the supported range.');
+    if(abs($number-round($number,4))>0.00000001)
+        throw new InvalidArgumentException($label.' supports at most four decimal places.');
+    return (int)round($number*10000);
+}
+function operations_quantity_decimal(int $ticks): string
+{
+    $absolute=abs($ticks);
+    return ($ticks<0?'-':'').intdiv($absolute,10000).'.'.str_pad((string)($absolute%10000),4,'0',STR_PAD_LEFT);
+}
+function operations_inventory_optional_number(mixed $value,string $label,bool $cost=false): ?string
+{
+    if($value===null||$value==='')return null;
+    $ticks=operations_quantity_ticks($value,$label);
+    if($ticks<0||($cost&&$ticks>999999999999))
+        throw new InvalidArgumentException($label.' is outside the supported range.');
+    return operations_quantity_decimal($ticks);
+}
+
+/** A unit is assigned once, before stock has acquired a dimensional meaning. */
+function operations_inventory_assert_unit_change(PDO $pdo,int $org,array $item,string $unit): void
+{
+    $old=trim((string)($item['base_unit']??''));
+    if(strcasecmp($old,$unit)===0)return;
+    if($old!=='')
+        throw new InvalidArgumentException('The saved stock unit cannot be changed. Create a separate stock item or use an explicitly reviewed conversion.');
+    foreach(['on_hand_quantity','par_level','reorder_point','unit_cost'] as $field)
+        if(operations_quantity_ticks($item[$field]??0,$field)!==0)
+            throw new InvalidArgumentException('A stock unit cannot be assigned after quantities or costs exist. Review this item before conversion.');
+    $checks=[
+        ['inventory_transactions','SELECT 1 FROM inventory_transactions WHERE organization_id=? AND inventory_item_id=? LIMIT 1',[$org,(int)$item['id']]],
+        ['purchase_order_items','SELECT 1 FROM purchase_order_items WHERE organization_id=? AND inventory_item_id=? LIMIT 1',[$org,(int)$item['id']]],
+        ['daily_quicklist_items',"SELECT 1 FROM daily_quicklist_items WHERE organization_id=? AND source_inventory_public_id=? AND requested_stock_quantity IS NOT NULL LIMIT 1",[$org,(string)$item['public_id']]],
+    ];
+    foreach($checks as [$table,$sql,$args]){
+        if(!restaurant_brain_table_ready($pdo,$table))continue;
+        $q=$pdo->prepare($sql);$q->execute($args);
+        if($q->fetchColumn()!==false)
+            throw new InvalidArgumentException('A stock unit cannot be assigned after stock history, an order or a numeric Need More request exists.');
+    }
+}
+
+/** Canonical metadata update; takes the same stock lock as adjustments and drafts. */
+function operations_inventory_save(PDO $pdo,int $org,string $publicId,array $input,int $uid): array
+{
+    if($pdo->inTransaction())throw new LogicException('An inventory update requires its own transaction.');
     $pdo->beginTransaction();
     try{
-        $stmt=$pdo->prepare('SELECT * FROM inventory_items WHERE organization_id=? AND public_id=? AND archived_at IS NULL FOR UPDATE');$stmt->execute([$organizationId,$publicId]);$item=$stmt->fetch();if(!$item)throw new RuntimeException('Inventory item not found.');
-        $old=(float)$item['on_hand_quantity'];
-        if($expectedOnHand!==null&&abs($old-$expectedOnHand)>0.00001)throw new RuntimeException('Stock changed since the proposal. Ask for a fresh inventory adjustment.');
-        if($expectedOnHand!==null&&$type!=='count'&&$old+$delta<0)throw new RuntimeException('Stock is insufficient. Ask for a fresh physical count.');
-        $new=$type==='count'?$delta:$old+$delta;if($new<0)$new=0;
-        $pdo->prepare('UPDATE inventory_items SET on_hand_quantity=?,last_counted_at=IF(?="count",NOW(6),last_counted_at),updated_by=?,updated_at=NOW(6) WHERE id=?')->execute([$new,$type,$userId,(int)$item['id']]);
-        $pdo->prepare('INSERT INTO inventory_transactions (organization_id,inventory_item_id,transaction_type,quantity_delta,resulting_quantity,unit,note,created_by) VALUES (?,?,?,?,?,?,?,?)')->execute([$organizationId,(int)$item['id'],$type,$type==='count'?$new-$old:$delta,$new,$item['base_unit'],$note?:null,$userId]);
-        $transactionId=(int)$pdo->lastInsertId();$pdo->commit();$item['on_hand_quantity']=$new;$item['last_transaction_id']=$transactionId;return $item;
+        $q=$pdo->prepare('SELECT * FROM inventory_items WHERE organization_id=? AND public_id=? AND archived_at IS NULL LIMIT 1 FOR UPDATE');
+        $q->execute([$org,$publicId]);$item=$q->fetch(PDO::FETCH_ASSOC);
+        if(!$item)throw new InvalidArgumentException('Inventory item not found.');
+        $name=mb_substr(trim((string)($input['name']??$item['name'])),0,220,'UTF-8');
+        if($name==='')throw new InvalidArgumentException('Inventory name is required.');
+        $unit=trim((string)($input['baseUnit']??$item['base_unit']??''));
+        if(mb_strlen($unit,'UTF-8')>80)throw new InvalidArgumentException('The stock unit must be no longer than 80 characters.');
+        operations_inventory_assert_unit_change($pdo,$org,$item,$unit);
+        if(strcasecmp(trim((string)$item['base_unit']),$unit)===0)$unit=trim((string)$item['base_unit']);
+        $fields=[];
+        foreach(['category'=>['category',100],'storageLocation'=>['storage_location',180],
+            'vendorName'=>['vendor_name',180],'vendorSku'=>['vendor_sku',120]] as $key=>[$column,$length])
+            $fields[$column]=mb_substr(trim((string)($input[$key]??$item[$column]??'')),0,$length,'UTF-8')?:null;
+        $par=operations_inventory_optional_number($input['parLevel']??$item['par_level'],'Par level');
+        $reorder=operations_inventory_optional_number($input['reorderPoint']??$item['reorder_point'],'Reorder point');
+        $cost=operations_inventory_optional_number($input['unitCost']??$item['unit_cost'],'Unit cost',true);
+        $pdo->prepare('UPDATE inventory_items SET name=?,category=?,base_unit=?,storage_location=?,vendor_name=?,vendor_sku=?,par_level=?,reorder_point=?,unit_cost=?,updated_by=?,updated_at=NOW(6) WHERE id=? AND organization_id=?')
+            ->execute([$name,$fields['category'],$unit?:null,$fields['storage_location'],$fields['vendor_name'],$fields['vendor_sku'],$par,$reorder,$cost,$uid,(int)$item['id'],$org]);
+        if(function_exists('app_audit'))app_audit($pdo,$org,$uid,'inventory.item_updated','inventory_item',$publicId,
+            ['name'=>$item['name'],'baseUnit'=>$item['base_unit']],['name'=>$name,'baseUnit'=>$unit]);
+        $q->execute([$org,$publicId]);$saved=$q->fetch(PDO::FETCH_ASSOC);
+        if(!$saved)throw new RuntimeException('The saved inventory item could not be read.');
+        $pdo->commit();return $saved;
+    }catch(Throwable $error){if($pdo->inTransaction())$pdo->rollBack();throw $error;}
+}
+
+function operations_inventory_adjust(PDO $pdo,int $organizationId,string $publicId,float $delta,string $type,?int $userId,string $note='',?float $expectedOnHand=null): array
+{
+    $allowed=['count','receive','use','waste','adjust','transfer'];
+    if(!in_array($type,$allowed,true))throw new InvalidArgumentException('Invalid inventory transaction type.');
+    $requested=operations_quantity_ticks($delta);
+    if(in_array($type,['count','receive'],true)&&$requested<0)
+        throw new InvalidArgumentException('Counts and receipts cannot be negative.');
+    if(in_array($type,['use','waste'],true)&&$requested>0)
+        throw new InvalidArgumentException('Use and waste must reduce stock.');
+    if($type!=='count'&&$requested===0)throw new InvalidArgumentException('Enter a nonzero stock movement.');
+    if($pdo->inTransaction())throw new LogicException('A stock movement requires its own transaction.');
+    $pdo->beginTransaction();
+    try{
+        $stmt=$pdo->prepare('SELECT * FROM inventory_items WHERE organization_id=? AND public_id=? AND archived_at IS NULL FOR UPDATE');
+        $stmt->execute([$organizationId,$publicId]);$item=$stmt->fetch();
+        if(!$item)throw new RuntimeException('Inventory item not found.');
+        if(trim((string)$item['base_unit'])==='')throw new InvalidArgumentException('Set a stock unit before recording inventory movements.');
+        $old=operations_quantity_ticks($item['on_hand_quantity'],'Saved stock');
+        if($expectedOnHand!==null&&$old!==operations_quantity_ticks($expectedOnHand,'Expected stock'))
+            throw new RuntimeException('Stock changed since the proposal. Ask for a fresh inventory adjustment.');
+        $new=$type==='count'?$requested:$old+$requested;
+        if($new<0)throw new RuntimeException('Stock is insufficient. Record a fresh physical count before reducing it further.');
+        $applied=$new-$old;
+        if($new>99999999999999||abs($applied)>99999999999999)
+            throw new InvalidArgumentException('The resulting stock quantity is outside the supported range.');
+        $newDecimal=operations_quantity_decimal($new);$appliedDecimal=operations_quantity_decimal($applied);
+        $pdo->prepare('UPDATE inventory_items SET on_hand_quantity=?,last_counted_at=IF(?="count",NOW(6),last_counted_at),updated_by=?,updated_at=NOW(6) WHERE id=?')
+            ->execute([$newDecimal,$type,$userId,(int)$item['id']]);
+        $pdo->prepare('INSERT INTO inventory_transactions (organization_id,inventory_item_id,transaction_type,quantity_delta,resulting_quantity,unit,note,created_by) VALUES (?,?,?,?,?,?,?,?)')
+            ->execute([$organizationId,(int)$item['id'],$type,$appliedDecimal,$newDecimal,$item['base_unit'],$note?:null,$userId]);
+        $transactionId=(int)$pdo->lastInsertId();
+        if(function_exists('app_audit'))app_audit($pdo,$organizationId,$userId,'inventory.stock_changed','inventory_item',$publicId,
+            ['quantity'=>operations_quantity_decimal($old)],['type'=>$type,'quantity'=>$appliedDecimal,'result'=>$newDecimal,'transactionId'=>$transactionId]);
+        $pdo->commit();$item['on_hand_quantity']=(float)$newDecimal;$item['last_transaction_id']=$transactionId;return $item;
     }catch(Throwable $e){if($pdo->inTransaction())$pdo->rollBack();throw $e;}
 }
 

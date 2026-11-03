@@ -53,11 +53,9 @@ function glasses_handoff_public(array $row): array
     ];
 }
 
-function glasses_handoff_actor_user(array $device): int
+function glasses_handoff_actor_user(PDO $pdo,array $device): int
 {
-    $userId=(int)($device['paired_by']??0);
-    if($userId<1)throw new RuntimeException('Paired glasses has no accountable Gelato user for KDS handoff.');
-    return $userId;
+    return glasses_require_accountable_user($pdo,$device,$pdo->inTransaction());
 }
 
 function glasses_handoff_to_expo(PDO $pdo,array $device,string $sessionPublicId): array
@@ -66,6 +64,7 @@ function glasses_handoff_to_expo(PDO $pdo,array $device,string $sessionPublicId)
     $org=(int)$device['organization_id'];
 
     return glasses_transaction($pdo,function()use($pdo,$device,$org,$sessionPublicId):array{
+        $actorUserId=glasses_handoff_actor_user($pdo,$device);
         $session=glasses_build_session_row($pdo,$org,$sessionPublicId,true);
 
         if((int)$session['device_id']!==(int)$device['id'])
@@ -102,7 +101,6 @@ function glasses_handoff_to_expo(PDO $pdo,array $device,string $sessionPublicId)
         if(in_array($from,['held','completed','cancelled'],true))
             throw new InvalidArgumentException('Kitchen item cannot be handed to Expo from '.$from.'.');
 
-        $actorUserId=glasses_handoff_actor_user($device);
         $note='AR glasses validated handoff from '.(string)$device['public_id'].' using '.(string)$validation['publicId'].'.';
 
         if($from==='queued'){

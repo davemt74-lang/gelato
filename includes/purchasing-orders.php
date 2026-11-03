@@ -213,7 +213,70 @@ function purchasing_create_order(PDO $pdo,int $org,string $vendorPublic,array $l
         throw $e;
     }
 }
-function purchasing_submit(PDO $pdo,int $org,string $publicId,int $uid):array{$po=purchasing_order($pdo,$org,$publicId);if(!$po)throw new RuntimeException('Purchase order not found.');if($po['status']!=='draft')throw new InvalidArgumentException('Only draft purchase orders can be submitted.');if((float)$po['minimum_order_amount']>0&&(float)$po['total_amount']<(float)$po['minimum_order_amount'])throw new InvalidArgumentException('This purchase order is below the vendor minimum of $'.number_format((float)$po['minimum_order_amount'],2).'.');$pdo->prepare("UPDATE purchase_orders SET status='submitted',submitted_at=NOW(6),submitted_by=?,updated_by=?,updated_at=NOW(6) WHERE organization_id=? AND id=?")->execute([$uid,$uid,$org,(int)$po['id']]);purchasing_event($pdo,$org,(int)$po['id'],'submitted','Purchase order marked submitted.',$uid);return purchasing_order($pdo,$org,$publicId)??[];}
+/** Every status transition rechecks the canonical header inside its transaction. */
+function purchasing_order_lock(PDO $pdo,int $org,string $publicId,?array $expectedVersion=null): array
+{
+    if(!$pdo->inTransaction())throw new LogicException('Purchase-order locks require a transaction.');
+    $q=$pdo->prepare('SELECT * FROM purchase_orders WHERE organization_id=? AND public_id=? AND archived_at IS NULL LIMIT 1 FOR UPDATE');
+    $q->execute([$org,$publicId]);$po=$q->fetch(PDO::FETCH_ASSOC);
+    if(!$po)throw new InvalidArgumentException('Purchase order not found.');
+    if($expectedVersion!==null&&((string)($expectedVersion['status']??'')!==(string)$po['status']
+        ||(string)($expectedVersion['updatedAt']??'')!==(string)$po['updated_at']))
+        throw new InvalidArgumentException('That purchase order changed after the action was reviewed. Review the current PO and try again.');
+    return $po;
+}
+function purchasing_submit(PDO $pdo,int $org,string $publicId,int $uid,?array $expectedVersion=null): array
+{
+    if($pdo->inTransaction())throw new LogicException('Submitting a purchase order requires its own transaction.');
+    $pdo->beginTransaction();
+    try{
+        $po=purchasing_order_lock($pdo,$org,$publicId,$expectedVersion);
+        if($po['status']!=='draft')throw new InvalidArgumentException('Only draft purchase orders can be submitted.');
+        $q=$pdo->prepare("SELECT minimum_order_amount FROM vendors WHERE organization_id=? AND id=? AND archived_at IS NULL AND status='active'");
+        $q->execute([$org,(int)$po['vendor_id']]);$minimum=$q->fetchColumn();
+        if($minimum===false)throw new InvalidArgumentException('The purchase-order vendor is unavailable.');
+        if((float)$minimum>0&&(float)$po['total_amount']<(float)$minimum)
+            throw new InvalidArgumentException('This purchase order is below the vendor minimum of $'.number_format((float)$minimum,2).'.');
+        $q=$pdo->prepare("UPDATE purchase_orders SET status='submitted',submitted_at=NOW(6),submitted_by=?,updated_by=?,updated_at=NOW(6)
+            WHERE organization_id=? AND id=? AND status='draft' AND archived_at IS NULL");
+        $q->execute([$uid,$uid,$org,(int)$po['id']]);
+        if($q->rowCount()!==1)throw new RuntimeException('The purchase order changed before submission.');
+        purchasing_event($pdo,$org,(int)$po['id'],'submitted','Purchase order marked submitted.',$uid);
+        if(function_exists('app_audit'))app_audit($pdo,$org,$uid,'purchasing.po_submitted','purchase_order',$publicId,
+            ['status'=>'draft'],['status'=>'submitted']);
+        $saved=purchasing_order($pdo,$org,$publicId);$pdo->commit();return $saved??[];
+    }catch(Throwable $error){if($pdo->inTransaction())$pdo->rollBack();throw $error;}
+}
+
+/** Cancels the outstanding remainder only. Existing stock and receipt history are immutable. */
+function purchasing_cancel(PDO $pdo,int $org,string $publicId,int $uid,?array $expectedVersion=null): array
+{
+    if($pdo->inTransaction())throw new LogicException('Cancelling a purchase order requires its own transaction.');
+    $pdo->beginTransaction();
+    try{
+        $po=purchasing_order_lock($pdo,$org,$publicId,$expectedVersion);
+        if(!in_array((string)$po['status'],['draft','submitted','partially_received'],true))
+            throw new InvalidArgumentException('A received or already-cancelled purchase order cannot be cancelled.');
+        $q=$pdo->prepare('SELECT public_id,ordered_base_quantity,received_base_quantity,unit FROM purchase_order_items WHERE organization_id=? AND purchase_order_id=? ORDER BY id');
+        $q->execute([$org,(int)$po['id']]);$remainder=[];
+        foreach($q->fetchAll(PDO::FETCH_ASSOC) as $line){
+            $quantity=max(0,operations_quantity_ticks($line['ordered_base_quantity'])-operations_quantity_ticks($line['received_base_quantity']));
+            if($quantity>0)$remainder[]=['itemId'=>$line['public_id'],'quantity'=>operations_quantity_decimal($quantity),'unit'=>$line['unit']];
+        }
+        // A legacy inconsistent header must not permit cancellation of a completed order.
+        if(!$remainder&&$po['status']!=='draft')throw new InvalidArgumentException('A fully received purchase order cannot be cancelled.');
+        $q=$pdo->prepare("UPDATE purchase_orders SET status='cancelled',cancelled_at=NOW(6),updated_by=?,updated_at=NOW(6)
+            WHERE organization_id=? AND id=? AND status=? AND archived_at IS NULL");
+        $q->execute([$uid,$org,(int)$po['id'],(string)$po['status']]);
+        if($q->rowCount()!==1)throw new RuntimeException('The purchase order changed before cancellation.');
+        $metadata=['previousStatus'=>$po['status'],'cancelledRemainder'=>$remainder,'receiptsPreserved'=>true];
+        purchasing_event($pdo,$org,(int)$po['id'],'cancelled','Unreceived purchase-order quantities cancelled; existing receipts and stock preserved.',$uid,$metadata);
+        if(function_exists('app_audit'))app_audit($pdo,$org,$uid,'purchasing.po_cancelled','purchase_order',$publicId,
+            ['status'=>$po['status']],['status'=>'cancelled']+$metadata);
+        $saved=purchasing_order($pdo,$org,$publicId);$pdo->commit();return $saved??[];
+    }catch(Throwable $error){if($pdo->inTransaction())$pdo->rollBack();throw $error;}
+}
+
 function purchasing_price_compare(PDO $pdo,int $org,string $query): array
 {
     $q=$pdo->prepare("SELECT i.public_id inventory_id,i.name inventory_name,v.public_id vendor_id,v.name vendor_name,

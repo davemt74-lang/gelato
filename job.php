@@ -5,10 +5,12 @@ $brand = ['restaurantName' => 'Stonefellows', 'logoText' => 'SF'];
 $id = trim((string)($_GET['id'] ?? ''));
 try {
     require __DIR__ . '/includes/bootstrap.php';
+    require_once __DIR__ . '/includes/hiring-core.php';
     if (app_has_config()) {
         $pdo = app_pdo();
-        $statement = $pdo->prepare("SELECT * FROM jobs WHERE organization_id = (SELECT organization_id FROM brand_settings ORDER BY id ASC LIMIT 1) AND (CAST(id AS CHAR) = ? OR public_id = ? OR slug = ?) AND status = 'published' AND archived_at IS NULL AND (closes_at IS NULL OR closes_at >= CURDATE()) LIMIT 1");
-        $statement->execute([$id, $id, $id]);
+        $organizationId = hiring_public_organization_id($pdo);
+        $statement = $pdo->prepare("SELECT * FROM jobs WHERE organization_id = ? AND (CAST(id AS CHAR) = ? OR public_id = ? OR slug = ?) AND status = 'published' AND archived_at IS NULL AND (closes_at IS NULL OR closes_at >= CURDATE()) LIMIT 1");
+        $statement->execute([$organizationId, $id, $id, $id]);
         $row = $statement->fetch();
         if ($row) {
             $job = [

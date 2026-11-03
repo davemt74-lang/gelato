@@ -35,10 +35,22 @@ if($action==='inventory_sync'){
     ops_require($user,'inventory.manage');$result=operations_sync_inventory_sources($pdo,$organizationId,$userId);app_audit($pdo,$organizationId,$userId,'inventory.sources_synced','inventory','all',null,$result);app_json_response(['ok'=>true,'result'=>$result,'message'=>'Inventory source list synchronized from the menu ingredient catalog and active recipes.']);
 }
 if($action==='inventory_save'){
-    ops_require($user,'inventory.manage');$id=trim((string)($input['id']??''));$stmt=$pdo->prepare('SELECT * FROM inventory_items WHERE organization_id=? AND public_id=? AND archived_at IS NULL LIMIT 1');$stmt->execute([$organizationId,$id]);$item=$stmt->fetch();if(!$item)app_json_response(['ok'=>false,'message'=>'Inventory item not found.'],404);$name=mb_substr(trim((string)($input['name']??$item['name'])),0,220,'UTF-8');if($name==='')app_json_response(['ok'=>false,'message'=>'Inventory name is required.'],422);$pdo->prepare('UPDATE inventory_items SET name=?,category=?,base_unit=?,storage_location=?,vendor_name=?,vendor_sku=?,par_level=?,reorder_point=?,unit_cost=?,updated_by=?,updated_at=NOW(6) WHERE id=? AND organization_id=?')->execute([$name,($input['category']??'')?:null,($input['baseUnit']??'')?:null,($input['storageLocation']??'')?:null,($input['vendorName']??'')?:null,($input['vendorSku']??'')?:null,($input['parLevel']??'')!==''?(float)$input['parLevel']:null,($input['reorderPoint']??'')!==''?(float)$input['reorderPoint']:null,($input['unitCost']??'')!==''?(float)$input['unitCost']:null,$userId,(int)$item['id'],$organizationId]);app_audit($pdo,$organizationId,$userId,'inventory.item_updated','inventory_item',$id,null,['name'=>$name]);app_json_response(['ok'=>true,'message'=>'Inventory item updated.']);
+    ops_require($user,'inventory.manage');
+    try{
+        $item=operations_inventory_save($pdo,$organizationId,trim((string)($input['id']??'')),$input,$userId);
+        app_json_response(['ok'=>true,'item'=>$item,'message'=>'Inventory item updated.']);
+    }catch(InvalidArgumentException|RuntimeException $error){app_json_response(['ok'=>false,'message'=>$error->getMessage()],422);}
 }
 if($action==='inventory_adjust'){
-    ops_require($user,'inventory.manage');$id=trim((string)($input['id']??''));$type=(string)($input['type']??'adjust');if(!isset($input['quantity'])||!is_numeric($input['quantity']))app_json_response(['ok'=>false,'message'=>'A numeric quantity is required.'],422);$quantity=(float)$input['quantity'];if(in_array($type,['use','waste'],true))$quantity=-abs($quantity);elseif($type==='receive')$quantity=abs($quantity);$item=operations_inventory_adjust($pdo,$organizationId,$id,$quantity,$type,$userId,trim((string)($input['note']??'')));app_audit($pdo,$organizationId,$userId,'inventory.stock_changed','inventory_item',$id,null,['type'=>$type,'quantity'=>$quantity,'result'=>$item['on_hand_quantity']]);app_json_response(['ok'=>true,'item'=>$item,'message'=>'Inventory quantity updated.']);
+    ops_require($user,'inventory.manage');
+    $id=trim((string)($input['id']??''));$type=(string)($input['type']??'adjust');
+    if(!isset($input['quantity'])||!is_numeric($input['quantity']))app_json_response(['ok'=>false,'message'=>'A numeric quantity is required.'],422);
+    $quantity=(float)$input['quantity'];
+    if(in_array($type,['use','waste'],true))$quantity=-abs($quantity);elseif($type==='receive')$quantity=abs($quantity);
+    try{
+        $item=operations_inventory_adjust($pdo,$organizationId,$id,$quantity,$type,$userId,trim((string)($input['note']??'')));
+        app_json_response(['ok'=>true,'item'=>$item,'message'=>'Inventory quantity updated.']);
+    }catch(InvalidArgumentException|RuntimeException $error){app_json_response(['ok'=>false,'message'=>$error->getMessage()],422);}
 }
 if($action==='category_save'){
     ops_require($user,'tasks.manage');$id=trim((string)($input['id']??''));$name=mb_substr(trim((string)($input['name']??'')),0,140,'UTF-8');if($name==='')app_json_response(['ok'=>false,'message'=>'Category name is required.'],422);

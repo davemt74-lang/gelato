@@ -14,6 +14,7 @@ v118_assert(glasses_v11_model_rc_ready($pdo),'V11 release-candidate migration mu
 $slug='v118-'.bin2hex(random_bytes(4));
 $pdo->prepare("INSERT INTO organizations (name,status,timezone) VALUES (?,'active','America/Phoenix')")->execute(['V11 RC '.$slug]);$org=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO users (email,password_hash,first_name,last_name,display_name,status) VALUES (?,'fixture-hash','Release','Owner','Release Owner','active')")->execute([$slug.'@example.test']);$actor=(int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO organization_memberships (organization_id,user_id,status) VALUES (?,?,'active')")->execute([$org,$actor]);
 
 $comparison=['schema'=>'gelato.vision_model_comparison.v1','eligible'=>true,'override'=>false,'goldenTestHash'=>hash('sha256','golden-'.$slug),'regressions'=>[],'summary'=>['map50Delta'=>.04,'recallDelta'=>.03,'demonstratedGain'=>true]];
 $championPublic='vision-model-champion-'.$slug;$championHash=hash('sha256','champion-'.$slug);

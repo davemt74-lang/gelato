@@ -43,6 +43,7 @@ v86_assert(glasses_vision_fleet_health_ready($pdo),'V8 fleet-health migration mu
 $slug='vl86-'.bin2hex(random_bytes(4));
 $pdo->prepare("INSERT INTO organizations (name,status,timezone) VALUES (?,'active','America/Phoenix')")->execute(['Fleet Health '.$slug]);$org=(int)$pdo->lastInsertId();
 $pdo->prepare("INSERT INTO users (email,password_hash,first_name,last_name,display_name,status) VALUES (?,?,?,?,?,'active')")->execute([$slug.'@example.test','fixture-hash','Fleet','Reviewer','Fleet Reviewer']);$actor=(int)$pdo->lastInsertId();
+$pdo->prepare("INSERT INTO organization_memberships (organization_id,user_id,status) VALUES (?,?,'active')")->execute([$org,$actor]);
 $pdo->prepare("INSERT INTO users (email,password_hash,first_name,last_name,display_name,status) VALUES (?,?,?,?,?,'active')")->execute(['other-'.$slug.'@example.test','fixture-hash','Other','Reviewer','Other Reviewer']);$otherActor=(int)$pdo->lastInsertId();
 
 $locations=[];$stations=[];$devices=[];

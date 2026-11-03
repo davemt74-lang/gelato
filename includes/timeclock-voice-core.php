@@ -6,8 +6,49 @@ function tv_ready(PDO $pdo): bool {
     try{return (int)$pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name IN ('time_clock_entries','voice_identity_profiles','proactive_agent_events')")->fetchColumn()>=3;}catch(Throwable){return false;}
 }
 function tv_public_id(string $prefix): string{return $prefix.'-'.bin2hex(random_bytes(8));}
-function tv_open_clock(PDO $pdo,int $org,int $userId): ?array {
-    $q=$pdo->prepare("SELECT t.*,s.public_id shift_public_id,s.title shift_title,s.starts_at shift_starts_at,s.ends_at shift_ends_at FROM time_clock_entries t LEFT JOIN schedule_shifts s ON s.id=t.schedule_shift_id WHERE t.organization_id=? AND t.user_id=? AND t.status='open' AND t.clocked_out_at IS NULL ORDER BY t.clocked_in_at DESC LIMIT 1");$q->execute([$org,$userId]);$r=$q->fetch();return $r?:null;
+/** Mutations use a current locking read after the employee lock, never a prior snapshot. */
+function tv_open_clock(PDO $pdo,int $org,int $userId,bool $forUpdate=false): ?array {
+    $sql="SELECT t.*,s.public_id shift_public_id,s.title shift_title,s.starts_at shift_starts_at,s.ends_at shift_ends_at FROM time_clock_entries t LEFT JOIN schedule_shifts s ON s.id=t.schedule_shift_id AND s.organization_id=t.organization_id WHERE t.organization_id=? AND t.user_id=? AND t.status='open' AND t.clocked_out_at IS NULL ORDER BY t.clocked_in_at DESC,t.id DESC";
+    $sql.=$forUpdate?' LIMIT 2 FOR UPDATE':' LIMIT 1';
+    $q=$pdo->prepare($sql);$q->execute([$org,$userId]);$rows=$q->fetchAll();
+    if($forUpdate&&count($rows)>1)throw new InvalidArgumentException('Multiple open time entries need manager correction before another time-clock action.');
+    return $rows[0]??null;
+}
+
+/** Shared lock order for direct, confirmed-agent and employee-PIN paths. */
+function tv_lock_employee(PDO $pdo,int $org,int $userId,bool $requireActive=true): void {
+    if(!$pdo->inTransaction())throw new LogicException('Time-clock employee locks require a transaction.');
+    $q=$pdo->prepare('SELECT id,status,archived_at FROM users WHERE id=? FOR UPDATE');
+    $q->execute([$userId]);$user=$q->fetch();
+    $q=$pdo->prepare('SELECT id,status FROM organization_memberships WHERE organization_id=? AND user_id=? FOR UPDATE');
+    $q->execute([$org,$userId]);$membership=$q->fetch();
+    if(!$user||!$membership||($requireActive&&($user['status']!=='active'||$user['archived_at']!==null||$membership['status']!=='active')))
+        throw new InvalidArgumentException('Active restaurant staff profile required.');
+}
+
+/** Preserve an outer confirmed action transaction, while rolling back a failed operation. */
+function tv_employee_transaction(PDO $pdo,int $org,int $userId,callable $operation,bool $requireActive=true): array {
+    $own=!$pdo->inTransaction();$savepoint='tv_'.bin2hex(random_bytes(8));
+    if($own)$pdo->beginTransaction();else $pdo->exec('SAVEPOINT '.$savepoint);
+    try{
+        tv_lock_employee($pdo,$org,$userId,$requireActive);
+        $result=$operation();
+        if($own)$pdo->commit();else $pdo->exec('RELEASE SAVEPOINT '.$savepoint);
+        return $result;
+    }catch(Throwable $error){
+        if($pdo->inTransaction()){
+            if($own)$pdo->rollBack();
+            else{$pdo->exec('ROLLBACK TO SAVEPOINT '.$savepoint);$pdo->exec('RELEASE SAVEPOINT '.$savepoint);}
+        }
+        throw $error;
+    }
+}
+
+function tv_open_break(PDO $pdo,int $org,int $clockId): ?array {
+    $q=$pdo->prepare('SELECT * FROM time_clock_breaks WHERE organization_id=? AND time_clock_entry_id=? AND ended_at IS NULL ORDER BY started_at DESC,id DESC LIMIT 2 FOR UPDATE');
+    $q->execute([$org,$clockId]);$rows=$q->fetchAll();
+    if(count($rows)>1)throw new InvalidArgumentException('Multiple open breaks need manager correction before another time-clock action.');
+    return $rows[0]??null;
 }
 function tv_nearest_shift(PDO $pdo,int $org,int $userId,?DateTimeImmutable $now=null): ?array {
     $now=$now?:new DateTimeImmutable('now');$from=$now->modify('-4 hours')->format('Y-m-d H:i:s');$to=$now->modify('+8 hours')->format('Y-m-d H:i:s');
@@ -23,20 +64,80 @@ function tv_attendance_event(PDO $pdo,int $org,int $userId,string $type,string $
     $pdo->prepare('INSERT INTO attendance_events (organization_id,user_id,schedule_shift_id,time_clock_entry_id,event_type,severity,summary,metadata_json,actor_user_id) VALUES (?,?,?,?,?,?,?,?,?)')->execute([$org,$userId,$shiftId,$clockId,$type,$severity,mb_substr($summary,0,500,'UTF-8'),$meta?json_encode($meta,JSON_UNESCAPED_UNICODE):null,$actor]);
 }
 function tv_clock_in(PDO $pdo,int $org,int $userId,int $actor,string $source='manual',string $note='',string $voiceEventId=''): array {
-    tv_require_voice_event($pdo,$org,$userId,$source,$voiceEventId);if(tv_open_clock($pdo,$org,$userId))throw new InvalidArgumentException('You are already clocked in.');
-    if(!scheduling_staff_user($pdo,$org,$userId))throw new InvalidArgumentException('Active restaurant staff profile required.');$shift=tv_nearest_shift($pdo,$org,$userId);$now=new DateTimeImmutable('now');$public=tv_public_id('clock');
-    $pdo->prepare("INSERT INTO time_clock_entries (organization_id,public_id,user_id,schedule_shift_id,clocked_in_at,clock_in_source,clock_in_note,status,created_by,updated_by) VALUES (?,?,?,?,NOW(6),?,?, 'open',?,?)")->execute([$org,$public,$userId,$shift?(int)$shift['id']:null,$source,mb_substr(trim($note),0,1000,'UTF-8')?:null,$actor,$actor]);$id=(int)$pdo->lastInsertId();
-    $lateMin=0;if($shift){$lateMin=max(0,(int)floor(($now->getTimestamp()-(new DateTimeImmutable((string)$shift['starts_at']))->getTimestamp())/60));}tv_attendance_event($pdo,$org,$userId,'clock.in','Clocked in'.($shift?' for '.$shift['title']:''),$lateMin>5?'warning':'info',$shift?(int)$shift['id']:null,$id,$actor,['source'=>$source,'lateMinutes'=>$lateMin]);if($lateMin>5)tv_attendance_event($pdo,$org,$userId,'attendance.late','Clock-in was '.$lateMin.' minutes after scheduled start.','warning',(int)$shift['id'],$id,$actor,['lateMinutes'=>$lateMin]);return tv_open_clock($pdo,$org,$userId)?:[];
+    return tv_employee_transaction($pdo,$org,$userId,function()use($pdo,$org,$userId,$actor,$source,$note,$voiceEventId):array{
+        tv_require_voice_event($pdo,$org,$userId,$source,$voiceEventId);
+        if(tv_open_clock($pdo,$org,$userId,true))throw new InvalidArgumentException('You are already clocked in.');
+        if(!scheduling_staff_user($pdo,$org,$userId))throw new InvalidArgumentException('Active restaurant staff profile required.');
+        $shift=tv_nearest_shift($pdo,$org,$userId);$now=new DateTimeImmutable('now');$public=tv_public_id('clock');
+        $pdo->prepare("INSERT INTO time_clock_entries (organization_id,public_id,user_id,schedule_shift_id,clocked_in_at,clock_in_source,clock_in_note,status,created_by,updated_by) VALUES (?,?,?,?,NOW(6),?,?, 'open',?,?)")
+            ->execute([$org,$public,$userId,$shift?(int)$shift['id']:null,$source,mb_substr(trim($note),0,1000,'UTF-8')?:null,$actor,$actor]);
+        $id=(int)$pdo->lastInsertId();$lateMin=0;
+        if($shift)$lateMin=max(0,(int)floor(($now->getTimestamp()-(new DateTimeImmutable((string)$shift['starts_at']))->getTimestamp())/60));
+        tv_attendance_event($pdo,$org,$userId,'clock.in','Clocked in'.($shift?' for '.$shift['title']:''),$lateMin>5?'warning':'info',$shift?(int)$shift['id']:null,$id,$actor,['source'=>$source,'lateMinutes'=>$lateMin]);
+        if($lateMin>5)tv_attendance_event($pdo,$org,$userId,'attendance.late','Clock-in was '.$lateMin.' minutes after scheduled start.','warning',(int)$shift['id'],$id,$actor,['lateMinutes'=>$lateMin]);
+        app_audit($pdo,$org,$actor,'timeclock.clock_in','user',(string)$userId,null,['source'=>$source,'clockPublicId'=>$public]);
+        return tv_open_clock($pdo,$org,$userId,true)?:[];
+    });
 }
 function tv_clock_out(PDO $pdo,int $org,int $userId,int $actor,string $source='manual',string $note='',string $voiceEventId=''): array {
-    tv_require_voice_event($pdo,$org,$userId,$source,$voiceEventId);$entry=tv_open_clock($pdo,$org,$userId);if(!$entry)throw new InvalidArgumentException('You are not clocked in.');
-    $pdo->prepare('UPDATE time_clock_breaks SET ended_at=NOW(6) WHERE time_clock_entry_id=? AND ended_at IS NULL')->execute([(int)$entry['id']]);$pdo->prepare("UPDATE time_clock_entries SET clocked_out_at=NOW(6),clock_out_source=?,clock_out_note=?,status='closed',updated_by=?,updated_at=NOW(6) WHERE id=? AND organization_id=?")->execute([$source,mb_substr(trim($note),0,1000,'UTF-8')?:null,$actor,(int)$entry['id'],$org]);tv_attendance_event($pdo,$org,$userId,'clock.out','Clocked out','info',$entry['schedule_shift_id']?(int)$entry['schedule_shift_id']:null,(int)$entry['id'],$actor,['source'=>$source]);$q=$pdo->prepare('SELECT * FROM time_clock_entries WHERE id=? AND organization_id=?');$q->execute([(int)$entry['id'],$org]);return $q->fetch()?:[];
+    return tv_employee_transaction($pdo,$org,$userId,function()use($pdo,$org,$userId,$actor,$source,$note,$voiceEventId):array{
+        tv_require_voice_event($pdo,$org,$userId,$source,$voiceEventId);
+        $entry=tv_open_clock($pdo,$org,$userId,true);if(!$entry)throw new InvalidArgumentException('You are not clocked in.');
+        tv_open_break($pdo,$org,(int)$entry['id']);
+        $pdo->prepare('UPDATE time_clock_breaks SET ended_at=NOW(6) WHERE organization_id=? AND time_clock_entry_id=? AND ended_at IS NULL')->execute([$org,(int)$entry['id']]);
+        $q=$pdo->prepare("UPDATE time_clock_entries SET clocked_out_at=NOW(6),clock_out_source=?,clock_out_note=?,status='closed',updated_by=?,updated_at=NOW(6) WHERE id=? AND organization_id=? AND status='open' AND clocked_out_at IS NULL");
+        $q->execute([$source,mb_substr(trim($note),0,1000,'UTF-8')?:null,$actor,(int)$entry['id'],$org]);
+        if($q->rowCount()!==1)throw new InvalidArgumentException('The time entry changed. Refresh and try again.');
+        tv_attendance_event($pdo,$org,$userId,'clock.out','Clocked out','info',$entry['schedule_shift_id']?(int)$entry['schedule_shift_id']:null,(int)$entry['id'],$actor,['source'=>$source]);
+        app_audit($pdo,$org,$actor,'timeclock.clock_out','user',(string)$userId,null,['source'=>$source,'clockPublicId'=>$entry['public_id']]);
+        $q=$pdo->prepare('SELECT * FROM time_clock_entries WHERE id=? AND organization_id=?');$q->execute([(int)$entry['id'],$org]);return $q->fetch()?:[];
+    });
 }
 function tv_break_action(PDO $pdo,int $org,int $userId,int $actor,string $action,string $source='manual',string $voiceEventId=''): array {
-    tv_require_voice_event($pdo,$org,$userId,$source,$voiceEventId);$entry=tv_open_clock($pdo,$org,$userId);if(!$entry)throw new InvalidArgumentException('Clock in before using breaks.');$q=$pdo->prepare('SELECT * FROM time_clock_breaks WHERE time_clock_entry_id=? AND ended_at IS NULL ORDER BY started_at DESC LIMIT 1');$q->execute([(int)$entry['id']]);$open=$q->fetch();
-    if($action==='start'){if($open)throw new InvalidArgumentException('A break is already running.');$pdo->prepare("INSERT INTO time_clock_breaks (organization_id,time_clock_entry_id,started_at,source,created_by) VALUES (?,?,NOW(6),?,?)")->execute([$org,(int)$entry['id'],$source,$actor]);tv_attendance_event($pdo,$org,$userId,'break.start','Break started','info',$entry['schedule_shift_id']?(int)$entry['schedule_shift_id']:null,(int)$entry['id'],$actor,['source'=>$source]);}
-    elseif($action==='end'){if(!$open)throw new InvalidArgumentException('No active break to end.');$pdo->prepare('UPDATE time_clock_breaks SET ended_at=NOW(6) WHERE id=? AND organization_id=?')->execute([(int)$open['id'],$org]);tv_attendance_event($pdo,$org,$userId,'break.end','Break ended','info',$entry['schedule_shift_id']?(int)$entry['schedule_shift_id']:null,(int)$entry['id'],$actor,['source'=>$source]);}else throw new InvalidArgumentException('Unsupported break action.');
-    $q=$pdo->prepare('SELECT * FROM time_clock_breaks WHERE time_clock_entry_id=? ORDER BY started_at');$q->execute([(int)$entry['id']]);return $q->fetchAll();
+    return tv_employee_transaction($pdo,$org,$userId,function()use($pdo,$org,$userId,$actor,$action,$source,$voiceEventId):array{
+        tv_require_voice_event($pdo,$org,$userId,$source,$voiceEventId);
+        $entry=tv_open_clock($pdo,$org,$userId,true);if(!$entry)throw new InvalidArgumentException('Clock in before using breaks.');
+        $open=tv_open_break($pdo,$org,(int)$entry['id']);
+        if($action==='start'){
+            if($open)throw new InvalidArgumentException('A break is already running.');
+            $pdo->prepare("INSERT INTO time_clock_breaks (organization_id,time_clock_entry_id,started_at,source,created_by) VALUES (?,?,NOW(6),?,?)")->execute([$org,(int)$entry['id'],$source,$actor]);
+            tv_attendance_event($pdo,$org,$userId,'break.start','Break started','info',$entry['schedule_shift_id']?(int)$entry['schedule_shift_id']:null,(int)$entry['id'],$actor,['source'=>$source]);
+        }elseif($action==='end'){
+            if(!$open)throw new InvalidArgumentException('No active break to end.');
+            $q=$pdo->prepare('UPDATE time_clock_breaks SET ended_at=NOW(6) WHERE id=? AND organization_id=? AND ended_at IS NULL');$q->execute([(int)$open['id'],$org]);
+            if($q->rowCount()!==1)throw new InvalidArgumentException('The break changed. Refresh and try again.');
+            tv_attendance_event($pdo,$org,$userId,'break.end','Break ended','info',$entry['schedule_shift_id']?(int)$entry['schedule_shift_id']:null,(int)$entry['id'],$actor,['source'=>$source]);
+        }else throw new InvalidArgumentException('Unsupported break action.');
+        app_audit($pdo,$org,$actor,'timeclock.break_'.$action,'user',(string)$userId,null,['source'=>$source,'clockPublicId'=>$entry['public_id']]);
+        $q=$pdo->prepare('SELECT * FROM time_clock_breaks WHERE organization_id=? AND time_clock_entry_id=? ORDER BY started_at,id');$q->execute([$org,(int)$entry['id']]);return $q->fetchAll();
+    });
+}
+
+/** Managers may reconcile legacy duplicate entries one at a time without rewriting history. */
+function tv_correct_entry(PDO $pdo,int $org,string $publicId,int $actor,string $clockIn,string $clockOut,string $reason): array {
+    if(trim($reason)==='')throw new InvalidArgumentException('A correction reason is required.');
+    if(trim($clockIn)===''||trim($clockOut)==='')throw new InvalidArgumentException('Correction times are invalid.');
+    try{$a=new DateTimeImmutable($clockIn);$b=new DateTimeImmutable($clockOut);}catch(Throwable){throw new InvalidArgumentException('Correction times are invalid.');}
+    if($b<=$a)throw new InvalidArgumentException('Clock-out must be after clock-in.');
+    $q=$pdo->prepare('SELECT user_id FROM time_clock_entries WHERE organization_id=? AND public_id=?');$q->execute([$org,$publicId]);$userId=(int)$q->fetchColumn();
+    if($userId<1)throw new InvalidArgumentException('Time entry not found.');
+    return tv_employee_transaction($pdo,$org,$userId,function()use($pdo,$org,$userId,$publicId,$actor,$a,$b,$reason):array{
+        $q=$pdo->prepare('SELECT * FROM time_clock_entries WHERE organization_id=? AND public_id=? AND user_id=? FOR UPDATE');$q->execute([$org,$publicId,$userId]);$row=$q->fetch();
+        if(!$row)throw new InvalidArgumentException('Time entry not found.');
+        $q=$pdo->prepare('SELECT * FROM time_clock_breaks WHERE organization_id=? AND time_clock_entry_id=? ORDER BY started_at,id FOR UPDATE');$q->execute([$org,(int)$row['id']]);
+        foreach($q->fetchAll() as $break){
+            $start=new DateTimeImmutable((string)$break['started_at']);$end=$break['ended_at']===null?$b:new DateTimeImmutable((string)$break['ended_at']);
+            if($start<$a||$start>$b||$end<$start||$end>$b)throw new InvalidArgumentException('Correction must contain the saved break intervals.');
+        }
+        $before=['clocked_in_at'=>$row['clocked_in_at'],'clocked_out_at'=>$row['clocked_out_at']];
+        $after=['clocked_in_at'=>$a->format('Y-m-d H:i:s.u'),'clocked_out_at'=>$b->format('Y-m-d H:i:s.u')];
+        $pdo->prepare('UPDATE time_clock_breaks SET ended_at=? WHERE organization_id=? AND time_clock_entry_id=? AND ended_at IS NULL')->execute([$after['clocked_out_at'],$org,(int)$row['id']]);
+        $pdo->prepare("UPDATE time_clock_entries SET clocked_in_at=?,clocked_out_at=?,status='corrected',corrected_by=?,correction_reason=?,updated_by=?,updated_at=NOW(6) WHERE organization_id=? AND id=?")
+            ->execute([$after['clocked_in_at'],$after['clocked_out_at'],$actor,mb_substr(trim($reason),0,1000,'UTF-8'),$actor,$org,(int)$row['id']]);
+        tv_attendance_event($pdo,$org,$userId,'clock.corrected','Manager corrected a time entry.','warning',$row['schedule_shift_id']?(int)$row['schedule_shift_id']:null,(int)$row['id'],$actor,['before'=>$before,'after'=>$after,'reason'=>$reason]);
+        app_audit($pdo,$org,$actor,'timeclock.corrected','time_clock_entry',$publicId,$before,$after+['reason'=>$reason]);
+        $q=$pdo->prepare('SELECT * FROM time_clock_entries WHERE organization_id=? AND id=?');$q->execute([$org,(int)$row['id']]);return $q->fetch()?:[];
+    },false);
 }
 function tv_daily_summary(PDO $pdo,int $org,string $date): array {
     $day=DateTimeImmutable::createFromFormat('Y-m-d',$date);if(!$day||$day->format('Y-m-d')!==$date)$date=date('Y-m-d');$from=$date.' 00:00:00';$to=(new DateTimeImmutable($date))->modify('+1 day')->format('Y-m-d 00:00:00');

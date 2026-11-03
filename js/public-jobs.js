@@ -15,14 +15,6 @@
     return Number.isNaN(closingDate.getTime()) || closingDate >= new Date();
   }
 
-  function localJobs() {
-    try {
-      return JSON.parse(localStorage.getItem('restaurant-jobs-v1') || '[]').filter(isActive);
-    } catch {
-      return [];
-    }
-  }
-
   async function load() {
     try {
       const response = await fetch('api/public-jobs.php', {
@@ -32,7 +24,7 @@
       const data = await response.json();
       if (response.ok && Array.isArray(data.jobs)) return data.jobs.filter(isActive);
     } catch {}
-    return localJobs();
+    return [];
   }
 
   window.RestaurantPublicJobs = {defaults: [], isActive, load};

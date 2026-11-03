@@ -28,6 +28,7 @@
     serverData.set(keys.permissions, clone(bootstrap?.permissions || []));
     serverData.set(keys.session, clone(bootstrap?.session || null));
     serverData.set('restaurant-jobs-v1', clone(bootstrap?.jobs || []));
+    serverData.set('restaurant-resumes-v1', []);
     permissionCatalog.splice(0, permissionCatalog.length, ...(bootstrap?.permissions || []));
   }
   const read=(key,fallback)=>{
@@ -58,8 +59,7 @@
     seed();const session=read(keys.session,null);if(!session)return null;const user=users().find(item=>item.id===session.userId&&item.status==='active');if(!user)return null;return {...user,role:roles().find(role=>role.id===user.roleId)||null};
   }
   function login(email,password){
-    if(serverMode)return {ok:false,message:'Use the secure database login at login.php.'};
-    seed();const list=users();const user=list.find(item=>item.email.toLowerCase()===String(email).trim().toLowerCase());if(!user||user.password!==password)return {ok:false,message:'Use the secure database login at login.php.'};if(user.status!=='active')return {ok:false,message:`This account is ${user.status}. Contact the store owner.`};user.lastLogin=new Date().toISOString();write(keys.users,list);write(keys.session,{userId:user.id,createdAt:new Date().toISOString()});return {ok:true,user:{...user,role:roles().find(role=>role.id===user.roleId)}};
+    return {ok:false,message:'Use the secure database login at login.php.'};
   }
   function clearCurrent(){serverCurrent=null;serverData.clear();window.RESTAURANT_WORKSPACE_BOOTSTRAP=null;}
   function logout(){
@@ -69,7 +69,22 @@
   }
   window.addEventListener('gelato:private-state-cleared',clearCurrent);
   function has(permission,user=current()){if(!user||!user.role)return false;return user.role.permissions.includes('*')||user.role.permissions.includes(permission)}
-  function saveUsers(value){write(keys.users,value)}
+  function saveUsers(){throw new Error('Account changes must be saved through the account API.')}
+  function replaceServerUsers(value){
+    if(!serverMode||!Array.isArray(value))return;
+    serverData.set(keys.users,clone(value));
+  }
+  function applyServerAccount(value){
+    if(!serverMode||!value||typeof value.id!=='string')return;
+    const list=users(),index=list.findIndex(item=>item.id===value.id);
+    if(index<0)list.push(clone(value));else list[index]=clone(value);
+    replaceServerUsers(list);
+    if(serverCurrent?.id===value.id){
+      // Profile refresh cannot replace the immutable permission snapshot.
+      for(const key of ['firstName','lastName','displayName','phone','position','status','initials'])
+        if(Object.hasOwn(value,key))serverCurrent[key]=clone(value[key]);
+    }
+  }
   function saveRoles(value){write(keys.roles,value)}
   function installPosHeaderAction(){
     if(!has('pos.use'))return;
@@ -98,7 +113,7 @@
     link.setAttribute('aria-label','Open public site settings');
     landing.insertAdjacentElement('afterend',link);
   }
-  window.RestaurantAuth={keys,permissionCatalog,seed,users,roles,current,login,logout,has,saveUsers,saveRoles,read,write};
+  window.RestaurantAuth={keys,permissionCatalog,seed,users,roles,current,login,logout,has,saveUsers,saveRoles,replaceServerUsers,applyServerAccount,read,write};
   seed();
   function installHeaderActions(){installPosHeaderAction();installPublicSiteNavigation();}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',installHeaderActions,{once:true});else installHeaderActions();

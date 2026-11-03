@@ -35,7 +35,8 @@ $extraUsers=[];
 for($i=1;$i<=2;$i++){
   $pdo->prepare("INSERT INTO users (email,password_hash,first_name,last_name,display_name,status) VALUES (?,'fixture-hash','Canary',? ,?,'active')")
     ->execute(['v1110-'.$i.'-'.bin2hex(random_bytes(3)).'@example.test','Operator '.$i,'Canary Operator '.$i]);
-  $extraUsers[]=(int)$pdo->lastInsertId();
+  $extraUser=(int)$pdo->lastInsertId();$extraUsers[]=$extraUser;
+  $pdo->prepare("INSERT INTO organization_memberships (organization_id,user_id,status) VALUES (?,?,'active')")->execute([$org,$extraUser]);
 }
 $operators=array_merge([$actor],$extraUsers);
 $devices=[];

@@ -1,0 +1,189 @@
+name: Hardening Release B - Durable Operations
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  durable-operations:
+    name: MariaDB behavior, concurrency, HTTP and browser journeys
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_hardening_b_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - name: Check out the tested revision
+        uses: actions/checkout@v4
+
+      - name: Install PHP with native database and private-file extensions
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium, zip
+          coverage: none
+          ini-values: date.timezone=UTC, memory_limit=512M
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Lint every tracked PHP entrypoint and module
+        run: |
+          set -euo pipefail
+          git ls-files -z '*.php' | xargs -0 -n1 php -l > /tmp/gelato-hardening-b-php-lint.log
+
+      - name: Browser state, public branding and hiring behavior
+        run: |
+          node tests/hardening-browser-state.test.js
+          node tests/hardening-public-brand.test.js
+          node tests/hardening-hiring-browser.test.js
+          node tests/need-more-purchasing-ui.cjs
+          node tests/prep-agent-bridge-routing.cjs
+
+      - name: Deny deployed test entrypoints before configuration exists
+        run: node tests/deployed-test-entrypoints.cjs
+
+      - name: Install and fully upgrade a clean MariaDB database
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_hardening_b_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Hardening B CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_hardening_b_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_hardening_b_ci','session_lifetime_seconds'=>28800,'session_idle_timeout_seconds'=>28800,'session_absolute_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+            'storage'=>['private_root'=>'/tmp/gelato-hardening-b-private'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $pdo=app_pdo();
+          if($pdo->getAttribute(PDO::ATTR_DRIVER_NAME)!=='mysql'||(bool)$pdo->getAttribute(PDO::ATTR_EMULATE_PREPARES)) {
+              throw new RuntimeException('Release B requires MariaDB with native PDO prepares.');
+          }
+          $upgrade=new UpgradeService($pdo,__DIR__);
+          $upgrade->ensureTrackingTables();
+          $upgrade->bootstrapLegacyHistory(null);
+          $applied=$upgrade->applyPending(null);
+          $upgrade->assertAppliedChecksumsUnchanged();
+          if($upgrade->pendingMigrations()!==[])throw new RuntimeException('Clean upgrade left pending migrations.');
+          if($upgrade->applyPending(null)!==[])throw new RuntimeException('Repeat upgrade was not idempotent.');
+          $upgrade->assertAppliedChecksumsUnchanged();
+          echo 'Clean install, full upgrade and repeat upgrade passed; applied '.count($applied)." migrations.\n";
+          PHP
+
+      - name: Durable account invitations, permissions and concurrent acceptance
+        run: php tests/hardening-accounts-contract.php
+
+      - name: Durable hiring receipts, private files and fresh reviewer authority
+        run: php tests/hardening-hiring-contract.php
+
+      - name: Exact inventory ledger and competing purchase-order transitions
+        run: php tests/hardening-inventory-purchasing-contract.php
+
+      - name: Concurrent direct, agent and PIN time-clock transitions
+        run: php tests/hardening-timeclock-concurrency.php
+
+      - name: Suspended and foreign accounts cannot authorize paired glasses
+        run: php tests/hardening-glasses-account-authority.php
+
+      - name: Existing paired-glasses foundation and Expo handoff regressions
+        run: |
+          php tests/glasses-foundation-contract.php
+          php tests/glasses-expo-handoff-contract.php
+
+      - name: Account lifecycle through independent HTTP sessions
+        run: node tests/hardening-accounts-http.cjs
+
+      - name: Public applications, private downloads and hiring review over HTTP
+        run: node tests/hardening-hiring-http.cjs
+
+      - name: Inventory and purchasing writes over HTTP
+        run: node tests/hardening-inventory-http.cjs
+
+      - name: Native PDO equipment, knowledge and bounded role writes over HTTP
+        run: node tests/hardening-native-pdo-http.cjs
+
+      - name: Existing authentication and workspace permission regressions
+        run: |
+          php tests/hardening-auth-contract.php
+          php tests/hardening-workspace-contract.php
+          php tests/customer-account-contract.php
+
+      - name: Existing time-clock, voice and Food Monster lifecycle regressions
+        run: |
+          php tests/timeclock-agent-lifecycle.php
+          php tests/timeclock-voice-contract.php
+          php tests/food-monster-g9b-clock.php --db
+
+      - name: Existing confirmed purchasing and Need More regressions
+        run: |
+          php tests/purchasing-manager-agent-node-contract.php
+          php tests/purchasing-agent-actions-contract.php
+          php tests/prep-inventory-intelligence-contract.php
+          php tests/daily-prep-quicklist-contract.php
+          php tests/need-more-vendor-intelligence-contract.php
+          php tests/purchasing-vendor-integrity-contract.php
+          php tests/need-more-vendor-agent-contract.php
+
+      - name: Install the repository-pinned Playwright browser runtime
+        run: |
+          npm install --prefix /tmp/gelato-hardening-browser --no-audit --no-fund playwright@1.62.1
+          node /tmp/gelato-hardening-browser/node_modules/playwright/cli.js install --with-deps chromium
+
+      - name: Real desktop and mobile account invitation, edit and suspension journey
+        env:
+          NODE_PATH: /tmp/gelato-hardening-browser/node_modules
+        run: node tests/hardening-accounts-browser.cjs
+
+      - name: Existing desktop and mobile Need More purchasing journey
+        env:
+          NODE_PATH: /tmp/gelato-hardening-browser/node_modules
+          QA_OUTPUT_DIR: /tmp/gelato-hardening-b-browser
+        run: node tests/need-more-purchasing-browser.cjs
+
+      - name: Verify migration checksums and idempotence after all writes
+        run: |
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $upgrade=new UpgradeService(app_pdo(),__DIR__);
+          $upgrade->assertAppliedChecksumsUnchanged();
+          if($upgrade->pendingMigrations()!==[]||$upgrade->applyPending(null)!==[]) {
+              throw new RuntimeException('Acceptance tests must leave migration history unchanged.');
+          }
+          echo "Migration checksums and repeat upgrade remain clean.\n";
+          PHP
+
+      - name: Retain lint output and purchasing browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hardening-release-b-validation
+          path: |
+            /tmp/gelato-hardening-b-php-lint.log
+            /tmp/gelato-hardening-b-browser/*.png
+          if-no-files-found: warn
+          retention-days: 14
