@@ -47,6 +47,7 @@ function menu_order_submit_pickup(PDO $pdo,int $organizationId,array $account,ar
 {
     if(!online_order_ready($pdo))throw new RuntimeException('Online ordering is not installed. Run Upgrade first.');
     if(!app_has_permission('online_ordering.use',$account))throw new RuntimeException('Online ordering permission is required.');
+    customer_account_assert_order_identity($pdo,$organizationId,$account);
     $userId=(int)($account['id']??0);$customerId=(int)($account['customer_id']??0);if($userId<1||$customerId<1)throw new RuntimeException('Your customer account is not linked to the restaurant CRM.');
     $locationId=max(0,(int)($input['locationId']??0));$location=online_order_location($pdo,$organizationId,$locationId);$idempotency=online_order_idempotency_key($input['idempotencyKey']??null);
     if($existing=online_order_existing($pdo,$organizationId,$customerId,$idempotency))return $existing+['duplicate'=>true];

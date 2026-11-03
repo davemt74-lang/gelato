@@ -26,19 +26,20 @@
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const todayKey = () => new Date().toLocaleDateString('en-CA');
   const uid = prefix => `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const trainingStorage = window.GelatoPrivateState?.storage || {getItem:()=>null,setItem:()=>{},removeItem:()=>{}};
   const safeJson = (key, fallback) => {
     try {
-      const value = localStorage.getItem(key);
+      const value = trainingStorage.getItem(key);
       return value === null ? fallback : JSON.parse(value);
     } catch {
       return fallback;
     }
   };
   const saveJson = (key, value) => {
-    try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+    try { trainingStorage.setItem(key, JSON.stringify(value)); } catch {}
   };
-  const getText = (key, fallback = '') => { try { const value = localStorage.getItem(key); return value === null ? fallback : value; } catch { return fallback; } };
-  const setText = (key, value) => { try { localStorage.setItem(key, String(value)); } catch {} };
+  const getText = (key, fallback = '') => { try { const value = trainingStorage.getItem(key); return value === null ? fallback : value; } catch { return fallback; } };
+  const setText = (key, value) => { try { trainingStorage.setItem(key, String(value)); } catch {} };
   const activePositionId = () => getText('restaurant-active-position', 'server');
   const activePosition = () => positions.find(position => position.id === activePositionId()) || positions[0];
   const clickNav = page => document.querySelector(`[data-nav="${page}"]`)?.click();

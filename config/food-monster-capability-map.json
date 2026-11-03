@@ -1387,7 +1387,7 @@
     {
       "path": "api/jobs.php",
       "feature": "employee_workspace",
-      "sourceBlob": "d7fee017b37f3d61f93ee18cd9e3dab8e485167c",
+      "sourceBlob": "0e2fe9e57bc48701fae2fb443afb99d585a0ff82",
       "discoveredActions": [],
       "permissionTokensSeen": [
         "jobs.publish",
@@ -1954,7 +1954,7 @@
     {
       "path": "api/purchasing-document-view.php",
       "feature": "purchasing",
-      "sourceBlob": "77ae76e75ed9f0378334559151fdbb5d675643c2",
+      "sourceBlob": "ef75bf553a5ce91c4490f2346bf1434b735c07bf",
       "discoveredActions": [],
       "permissionTokensSeen": [
         "purchasing.view",
@@ -1968,7 +1968,7 @@
     {
       "path": "api/purchasing-document.php",
       "feature": "purchasing",
-      "sourceBlob": "8a0d4e8e3e367530c3722ec8582320864716ad5b",
+      "sourceBlob": "9e7fb654c17d25cdc52e6d75dd04eb90268e9634",
       "discoveredActions": [],
       "permissionTokensSeen": [
         "purchasing.manage",
@@ -2252,7 +2252,7 @@
     {
       "path": "api/task-proof-view.php",
       "feature": "operations",
-      "sourceBlob": "cd7ca8fdae87e41e6a87b65b6fb11be196132a84",
+      "sourceBlob": "47f7d6b744b91c45539cbb74326575e4940d86a5",
       "discoveredActions": [],
       "permissionTokensSeen": [
         "tasks.manage"
@@ -2265,7 +2265,7 @@
     {
       "path": "api/task-proof.php",
       "feature": "operations",
-      "sourceBlob": "1cd4637dec600cab7212a1f409c6cca8038937ad",
+      "sourceBlob": "5ab5185a62cb6f92b5384d861e5a595bbbacf625",
       "discoveredActions": [],
       "permissionTokensSeen": [
         "tasks.manage",

@@ -25,7 +25,9 @@
 
   function readForm() {
     try {
-      const parsed = JSON.parse(localStorage.getItem(FORM_KEY) || 'null');
+      const parsed = window.RESTAURANT_SERVER_SESSION
+        ? window.RestaurantAuth?.read(FORM_KEY, null)
+        : JSON.parse(localStorage.getItem(FORM_KEY) || 'null');
       return parsed && Array.isArray(parsed.fields) ? parsed : null;
     } catch {
       return null;
@@ -33,7 +35,8 @@
   }
 
   function writeForm(form) {
-    localStorage.setItem(FORM_KEY, JSON.stringify(form));
+    if (window.RESTAURANT_SERVER_SESSION) window.RestaurantAuth?.write(FORM_KEY, form);
+    else localStorage.setItem(FORM_KEY, JSON.stringify(form));
   }
 
   function toast(message, bad = false) {

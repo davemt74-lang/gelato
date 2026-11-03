@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/customer-account-core.php';
+require_once __DIR__.'/customer-account-fixtures.php';
 require_once __DIR__.'/../includes/location-core.php';
 require_once __DIR__.'/../includes/menu-manager-core.php';
 require_once __DIR__.'/../includes/menu-operations-core.php';
@@ -22,7 +23,7 @@ $locB=location_save($pdo,$org,null,['name'=>'North '.$slug,'public_slug'=>'north
 $locAId=(int)$locA['id'];$locBId=(int)$locB['id'];
 
 $password='MenuOps-CI!42';
-$registration=customer_account_register($pdo,$org,['firstName'=>'Menu','lastName'=>'Operator','email'=>$slug.'@example.test','phone'=>'6025550188','password'=>$password,'passwordConfirm'=>$password]);
+$registration=test_customer_account_verified($pdo,$org,['firstName'=>'Menu','lastName'=>'Operator','email'=>$slug.'@example.test','phone'=>'6025550188','password'=>$password,'passwordConfirm'=>$password]);
 $userId=(int)$registration['userId'];
 mop_assert($userId>0,'A valid actor user is required.');
 

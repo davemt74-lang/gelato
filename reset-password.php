@@ -27,7 +27,7 @@ $pinEnabled=fmpin_ready($pdo);
 
 if (preg_match('/^[a-f0-9]{64}$/', $token) === 1) {
     $statement = $pdo->prepare(
-        "SELECT prt.id AS reset_id, prt.user_id, prt.expires_at, prt.used_at,
+        "SELECT prt.id AS reset_id, prt.user_id, prt.expires_at, prt.used_at, (prt.expires_at > NOW(6)) AS token_current,
                 u.email, u.display_name, u.status, om.organization_id
          FROM password_reset_tokens prt
          INNER JOIN users u ON u.id = prt.user_id
@@ -42,7 +42,7 @@ if (preg_match('/^[a-f0-9]{64}$/', $token) === 1) {
 $validToken = $tokenRecord
     && $tokenRecord['used_at'] === null
     && $tokenRecord['status'] === 'active'
-    && strtotime((string)$tokenRecord['expires_at']) > time();
+    && (bool)$tokenRecord['token_current'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $validToken) {
     $password = (string)($_POST['password'] ?? '');
@@ -61,38 +61,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $validToken) {
         $error = 'Use at least 12 characters with an uppercase letter, lowercase letter, and number.';
     } else {
         $passwordHash = app_password_hash($password);
-        $pdo->beginTransaction();
         try {
-            $pdo->prepare(
-                "UPDATE users
-                 SET password_hash = :password_hash, password_changed_at = NOW(6),
-                     failed_login_count = 0, locked_until = NULL
-                 WHERE id = :user_id"
-            )->execute(['password_hash' => $passwordHash, 'user_id' => $tokenRecord['user_id']]);
-            $pdo->prepare(
-                "UPDATE password_reset_tokens SET used_at = NOW(6)
-                 WHERE user_id = :user_id AND used_at IS NULL"
-            )->execute(['user_id' => $tokenRecord['user_id']]);
-            if($pinEnabled && (string)($_POST['employee_pin']??'')!=='')fmpin_set($pdo,(int)$tokenRecord['organization_id'],(int)$tokenRecord['user_id'],(string)$_POST['employee_pin']);
-            app_audit(
-                $pdo,
-                (int)$tokenRecord['organization_id'],
-                (int)$tokenRecord['user_id'],
-                'authentication.password_reset_completed',
-                'user',
-                (string)$tokenRecord['user_id']
-            );
-            $pdo->commit();
-        } catch (Throwable $exception) {
-            if ($pdo->inTransaction()) {
-                $pdo->rollBack();
-            }
-            throw $exception;
+            app_password_reset_complete($pdo, $token, $passwordHash, static function (array $identity) use ($pdo, $pinEnabled): void {
+                if ($pinEnabled && (string)($_POST['employee_pin'] ?? '') !== '') {
+                    fmpin_set($pdo, $identity['organization_id'], $identity['user_id'], (string)$_POST['employee_pin']);
+                }
+            });
+            app_session_forget_user();
+            app_redirect('login.php?reset=success');
+        } catch (InvalidArgumentException) {
+            $validToken = false;
+            $error = 'This password-reset link is invalid, expired, or has already been used.';
         }
-
-        $_SESSION = [];
-        session_regenerate_id(true);
-        app_redirect('login.php?reset=success');
     }
 }
 

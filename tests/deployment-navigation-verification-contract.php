@@ -5,8 +5,10 @@ function verify_deploy(bool $x,string $label):void{if(!$x){fwrite(STDERR,"FAIL: 
 verify_deploy(app_role_has_owner_authority(['slug'=>'super_admin','is_system_role'=>1,'is_owner_role'=>0]),'canonical owner role');
 verify_deploy(!app_role_has_owner_authority(['slug'=>'super_admin','is_system_role'=>0,'is_owner_role'=>0]),'custom spoof denied');
 $workspace=file_get_contents(__DIR__.'/../workspace.php');
-verify_deploy(str_contains($workspace,'$isOwner = app_role_has_owner_authority($role);'),'workspace permissions match owner');
-verify_deploy(str_contains($workspace,'$permissions = $isOwner ?'),'role snapshot owner wildcard');
+$workspaceBootstrap=file_get_contents(__DIR__.'/../includes/workspace-bootstrap.php');
+verify_deploy(str_contains($workspace,'workspace_bootstrap($pdo, $user)'),'workspace uses permission-scoped bootstrap');
+verify_deploy(str_contains($workspaceBootstrap,'app_role_has_owner_authority($user)'),'workspace permissions match owner');
+verify_deploy(str_contains($workspaceBootstrap,"'permissions' => array_values("),'own role snapshot retains effective permissions');
 verify_deploy(str_contains($workspace,'admin_shell_filtered_navigation($user)'),'server menu fallback');
 verify_deploy(str_contains($workspace,'Build '),'visible build marker');
 $admin=file_get_contents(__DIR__.'/../admin.php');

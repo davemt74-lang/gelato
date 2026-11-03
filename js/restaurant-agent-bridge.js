@@ -19,7 +19,7 @@
   let recentPrepUntil = 0;
   const actorIdentity = () => String(Auth.current()?.id || Auth.current()?.userId || Auth.current()?.publicId || '');
   try {
-    const saved = JSON.parse(sessionStorage.getItem(prepMemoryKey) || 'null');
+    const saved = Auth.read(prepMemoryKey, null);
     if (saved?.actor && saved.actor === actorIdentity() && saved.until > Date.now()) {
       recentPrepUntil = saved.until;
       if (saved.pendingUntil > Date.now()) pendingEndpoint = saved.pendingEndpoint || null;
@@ -37,18 +37,18 @@
   function rememberPrep(endpoint, requiresConfirmation) {
     if (endpoint === 'api/prep-intelligence-agent.php') recentPrepUntil = Date.now() + 30 * 60 * 1000;
     const actor = actorIdentity();
-    if (!actor || typeof sessionStorage === 'undefined') return;
+    if (!actor) return;
     try {
-      sessionStorage.setItem(prepMemoryKey, JSON.stringify({actor, until: recentPrepUntil,
-        pendingEndpoint, pendingUntil: requiresConfirmation ? Date.now() + 10 * 60 * 1000 : 0}));
+      Auth.write(prepMemoryKey, {actor, until: recentPrepUntil,
+        pendingEndpoint, pendingUntil: requiresConfirmation ? Date.now() + 10 * 60 * 1000 : 0});
     } catch { /* Storage can be unavailable; server authorization still applies. */ }
   }
   function now() { return new Date().toISOString(); }
-  function readHistory() { try { return JSON.parse(localStorage.getItem(chatKey) || '[]'); } catch { return []; } }
+  function readHistory() { try { return Auth.read(chatKey, []); } catch { return []; } }
   function saveMessage(role, text) {
     const messages = readHistory();
     messages.push({id:`owner-message-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,7)}`,role,text,actionId:null,createdAt:now()});
-    localStorage.setItem(chatKey, JSON.stringify(messages.slice(-60)));
+    Auth.write(chatKey, messages.slice(-60));
   }
   function appendMessage(role, text, pending = false) {
     const root = document.getElementById('ownerAgentMessages'); if (!root) return null;

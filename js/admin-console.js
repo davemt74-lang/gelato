@@ -34,18 +34,18 @@
   let state={mode:'training',selectedResume:null,ownerAction:null};
   const read=(key,fallback)=>Auth.read(key,fallback);
   const write=(key,value)=>Auth.write(key,value);
-  function seed(){for(const [name,value] of Object.entries(defaults)){const key=keys[name];if(key&&!localStorage.getItem(key))write(key,value)}if(!localStorage.getItem(keys.audit))write(keys.audit,[])}
+  function seed(){for(const [name,value] of Object.entries(defaults)){const key=keys[name];if(key&&read(key,null)===null)write(key,window.RESTAURANT_SERVER_SESSION&&['resumes','jobs'].includes(name)?[]:value)}if(read(keys.audit,null)===null)write(keys.audit,[])}
   function audit(action,entityType,entityId,data={}){const user=Auth.current();const items=read(keys.audit,[]);items.unshift({id:uid('audit'),action,entityType,entityId,actorUserId:user?.id||null,actorName:user?.displayName||'Public',data,createdAt:now()});write(keys.audit,items.slice(0,500))}
   function toast(message,bad=false){let node=document.querySelector('.admin-toast');if(!node){node=document.createElement('div');node.className='admin-toast';Object.assign(node.style,{position:'fixed',zIndex:'150',right:'20px',bottom:'20px',maxWidth:'360px',padding:'12px 15px',borderRadius:'12px',color:'#fff',fontSize:'11px',fontWeight:'800',boxShadow:'0 18px 50px rgba(0,0,0,.22)',transition:'.2s'});document.body.appendChild(node)}node.style.background=bad?'#a62a24':'#171b1a';node.textContent=message;node.style.opacity='1';clearTimeout(node._timer);node._timer=setTimeout(()=>node.style.opacity='0',2600)}
   function current(){return Auth.current()}
   function can(permission){return Auth.has(permission)}
   function roles(){return Auth.roles()}
   function users(){return Auth.users()}
-  function resumes(){return read(keys.resumes,defaults.resumes)}
+  function resumes(){return read(keys.resumes,window.RESTAURANT_SERVER_SESSION?[]:defaults.resumes)}
   function form(){return read(keys.form,defaults.form)}
   function landing(){return read(keys.landing,defaults.landing)}
   function brand(){return read(keys.brand,defaults.brand)}
-  function jobs(){return read(keys.jobs,defaults.jobs)}
+  function jobs(){return read(keys.jobs,window.RESTAURANT_SERVER_SESSION?[]:defaults.jobs)}
   function roleFor(user){return roles().find(role=>role.id===user.roleId)}
   function initials(user){return user.initials||`${user.firstName?.[0]||''}${user.lastName?.[0]||''}`.toUpperCase()||'U'}
   function navigateTo(page){const btn=document.querySelector(`[data-nav="${page}"]`);if(btn)btn.click()}

@@ -1,0 +1,140 @@
+name: Hardening Release A - Identity and Private Data
+
+on:
+  pull_request:
+    paths:
+      - 'includes/bootstrap.php'
+      - 'includes/auth-session.php'
+      - 'includes/customer-account-core.php'
+      - 'includes/online-order-core.php'
+      - 'includes/menu-order-integration.php'
+      - 'includes/workspace-bootstrap.php'
+      - 'includes/browser-logout.php'
+      - 'includes/private-storage.php'
+      - 'includes/secret-key.php'
+      - 'login.php'
+      - 'logout.php'
+      - 'reset-password.php'
+      - 'admin-password-recovery.php'
+      - 'setup-first-user.php'
+      - 'wholesale-accept.php'
+      - 'customer-*.php'
+      - 'workspace.php'
+      - 'index.html'
+      - 'apply.html'
+      - 'landing.html'
+      - '.htaccess'
+      - 'config-example.php'
+      - 'deployment-check.php'
+      - 'api/jobs.php'
+      - 'api/purchasing-document*.php'
+      - 'api/task-proof*.php'
+      - 'includes/food-monster-pin.php'
+      - 'js/auth.js'
+      - 'js/private-browser-state.js'
+      - 'js/public-brand-render.js'
+      - 'js/restaurant-agent-bridge.js'
+      - 'js/admin-console.js'
+      - 'js/admin-extensions.js'
+      - 'js/form-media-admin.js'
+      - 'js/advanced-training.js'
+      - 'database/20261228_customer_email_verification.sql'
+      - 'tests/hardening-*'
+      - 'tests/customer-account-*'
+      - 'tests/customer-email-*'
+      - 'tests/private-storage-*'
+      - 'tests/secret-key-concurrency.php'
+      - '.github/workflows/hardening-release-a.yml'
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  identity-and-private-data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: gelato_hardening_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax and browser-state regressions
+        run: |
+          set -euo pipefail
+          git ls-files -z '*.php' | xargs -0 -n1 php -l > /tmp/gelato-hardening-php-lint.log
+          node tests/hardening-browser-state.test.js
+          node tests/hardening-public-brand.test.js
+          node tests/prep-agent-bridge-routing.cjs
+          node tests/training-workspace-voice.test.js
+          php tests/food-monster-g8b-pin-contract.php
+      - name: Install and upgrade a clean MariaDB database
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mariadb-client apache2
+          mariadb --skip-ssl -h 127.0.0.1 -uroot -proot gelato_hardening_ci < database/install.sql
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Hardening CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix','debug'=>false],
+            'database'=>['host'=>'127.0.0.1','port'=>3306,'name'=>'gelato_hardening_ci','username'=>'root','password'=>'root','charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_hardening_ci','session_lifetime_seconds'=>28800,'session_idle_timeout_seconds'=>28800,'session_absolute_lifetime_seconds'=>28800,'cookie_secure'=>false,'cookie_samesite'=>'Lax'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $upgrade=new UpgradeService(app_pdo(),__DIR__);
+          $upgrade->ensureTrackingTables();
+          $upgrade->bootstrapLegacyHistory(null);
+          $upgrade->applyPending(null);
+          $upgrade->assertAppliedChecksumsUnchanged();
+          if($upgrade->pendingMigrations()||$upgrade->applyPending(null))exit(1);
+          echo "Clean install and repeat upgrade passed\n";
+          PHP
+      - name: Authentication, verification and permissions behavior
+        run: |
+          php tests/hardening-auth-contract.php
+          php tests/hardening-workspace-contract.php
+          php tests/customer-account-contract.php
+          node tests/hardening-auth-http.cjs
+          node tests/customer-email-http.cjs
+      - name: Customer-facing feature regressions
+        run: |
+          php tests/online-ordering-inbox-contract.php
+          php tests/pickup-fulfillment-contract.php
+          php tests/order-recovery-contract.php
+          php tests/restaurant-order-lifecycle-contract.php
+          php tests/package-deals-contract.php
+          php tests/menu-manager-food-builder-contract.php
+          php tests/menu-manager-drink-builder-contract.php
+          php tests/menu-operations-agent-brain-contract.php
+          php tests/customer-crm-contract.php
+          php tests/native-pos-contract.php
+      - name: Private files, concurrent keys and fresh-install HTTP denials
+        run: |
+          php tests/private-storage-behavior.php
+          php tests/secret-key-concurrency.php
+          python3 tests/private-storage-package.test.py --http
+      - name: Existing public shell and deployment contracts
+        run: |
+          php tests/public-site-contract.php
+          php tests/static-workspace-entry-contract.php
+          php tests/deployment-navigation-verification-contract.php
+          node tests/deployed-test-entrypoints.cjs

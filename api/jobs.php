@@ -23,60 +23,7 @@ function list_jobs(PDO $pdo, int $organizationId): array {
     return array_map('job_payload', $statement->fetchAll());
 }
 
-function ensure_demo_jobs(PDO $pdo, int $organizationId, int $userId): int {
-    $jobs = [
-        [
-            'job-server', 'server', 'Server', 'Front of House', 'Phoenix, Arizona',
-            'Full-time or part-time', 'Day, evening, and weekend shifts', 'Hourly wage plus tips',
-            'Guide guests through the menu, deliver accurate service, and maintain a welcoming dining room.',
-            'Servers create a clear, friendly guest experience while protecting menu accuracy and food-safety communication.',
-            ['Learn the complete menu and current specials', 'Enter orders accurately and communicate modifications', 'Follow allergen escalation and service procedures', 'Maintain clean, stocked service areas'],
-            ['Reliable attendance', 'Clear communication', 'Ability to work standing shifts', 'Food Handler Card or ability to obtain one'],
-            ['Structured menu training', 'Position certification path', 'Employee meal benefits'],
-            10,
-        ],
-        [
-            'job-pizza-cook', 'pizza-cook', 'Pizza Cook', 'Kitchen', 'Phoenix, Arizona',
-            'Full-time or part-time', 'Evening and weekend availability preferred', 'Competitive hourly wage',
-            'Prepare pizzas to specification, manage oven timing, and protect recipe consistency.',
-            'Pizza cooks own dough, sauce, cheese, topping, and oven accuracy during high-volume service.',
-            ['Build pizzas from approved recipes', 'Verify modifiers and allergen-sensitive tickets', 'Maintain station sanitation and ingredient rotation', 'Coordinate timing with expo and the line'],
-            ['Kitchen experience preferred', 'Ability to lift restaurant supplies', 'Strong attention to detail', 'Food Handler Card or ability to obtain one'],
-            ['Paid menu training', 'Kitchen certification pathway', 'Growth into trainer or shift lead'],
-            20,
-        ],
-    ];
-
-    $statement = $pdo->prepare(
-        "INSERT IGNORE INTO jobs
-        (organization_id, public_id, slug, title, department, location_name, employment_type,
-         schedule_text, pay_range, summary, description, responsibilities_json, requirements_json,
-         benefits_json, status, sort_order, published_at, created_by, updated_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?, NOW(6), ?, ?)"
-    );
-
-    $inserted = 0;
-    foreach ($jobs as $job) {
-        [$publicId, $slug, $title, $department, $location, $employmentType, $schedule, $payRange,
-         $summary, $description, $responsibilities, $requirements, $benefits, $sortOrder] = $job;
-        $statement->execute([
-            $organizationId, $publicId, $slug, $title, $department, $location, $employmentType,
-            $schedule, $payRange, $summary, $description,
-            json_encode($responsibilities, JSON_THROW_ON_ERROR),
-            json_encode($requirements, JSON_THROW_ON_ERROR),
-            json_encode($benefits, JSON_THROW_ON_ERROR),
-            $sortOrder, $userId, $userId,
-        ]);
-        $inserted += $statement->rowCount();
-    }
-
-    return $inserted;
-}
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-    $inserted = ensure_demo_jobs($pdo, $organizationId, (int)$user['id']);
-    if ($inserted > 0) {
-        app_audit($pdo, $organizationId, (int)$user['id'], 'jobs.demo_seeded', 'job', null, null, ['count' => $inserted]);
-    }
     app_json_response(['ok' => true, 'jobs' => list_jobs($pdo, $organizationId)]);
 }
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { header('Allow: GET, POST'); app_json_response(['ok' => false, 'message' => 'Method not allowed.'], 405); }

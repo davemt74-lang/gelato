@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 $root=dirname(__DIR__);
-$required=['index.php','menu.php','gelato.php','about.php','contact.php','locations.php','jobs.html','job.php','apply.html','catering.php','wholesale.php','login.php','login.html','forgot-password.php','reset-password.php','workspace.php','public-site-settings.php','customer-signup.php','customer-login.php','customer-account.php','customer-logout.php','assets/css/site.css','assets/css/page-headers.css','assets/css/customer-account.css','css/stonefellows-public.css','css/stonefellows-public-v2.css','assets/js/site.js','assets/js/public-shell.js','assets/css/public-shell.css','js/public-account-menu.js','assets/images/README.md','includes/public-site.php','includes/customer-account-core.php','api/public-shell.php','database/20260914_public_site_settings.sql','database/20261002_customer_accounts_online_ordering_foundation.sql'];
+$required=['index.php','menu.php','gelato.php','about.php','contact.php','locations.php','jobs.html','job.php','apply.html','catering.php','wholesale.php','login.php','login.html','forgot-password.php','reset-password.php','workspace.php','public-site-settings.php','customer-signup.php','customer-verify-email.php','customer-login.php','customer-account.php','customer-logout.php','assets/css/site.css','assets/css/page-headers.css','assets/css/customer-account.css','css/stonefellows-public.css','css/stonefellows-public-v2.css','assets/js/site.js','assets/js/public-shell.js','assets/css/public-shell.css','js/public-account-menu.js','assets/images/README.md','includes/public-site.php','includes/customer-account-core.php','api/public-shell.php','database/20260914_public_site_settings.sql','database/20261002_customer_accounts_online_ordering_foundation.sql'];
 foreach($required as $path)if(!is_file($root.'/'.$path))throw new RuntimeException('Missing required root public-site file: '.$path);
 if(is_dir($root.'/public'))throw new RuntimeException('Legacy /public directory must not exist.');
 
@@ -32,7 +32,7 @@ foreach(['customer_account_authenticate','app_verify_csrf','customer-signup.php'
 $customerAccount=file_get_contents($root.'/customer-account.php')?:'';
 foreach(['customer_account_require','customer_account_profile','customer_account_orders','customer-logout.php'] as $needle)if(!str_contains($customerAccount,$needle))throw new RuntimeException('Customer account contract missing: '.$needle);
 $customerCore=file_get_contents($root.'/includes/customer-account-core.php')?:'';
-foreach(['customer.portal','online_ordering.use','crm_customers','crm_consent_set','Online Customer','password_verify','session_regenerate_id'] as $needle)if(!str_contains($customerCore,$needle))throw new RuntimeException('Customer identity contract missing: '.$needle);
+foreach(['customer.portal','online_ordering.use','crm_customers','crm_consent_set','Online Customer','password_verify','app_session_start_user'] as $needle)if(!str_contains($customerCore,$needle))throw new RuntimeException('Customer identity contract missing: '.$needle);
 
 $settings=file_get_contents($root.'/public-site-settings.php')?:'';foreach(['app_require_auth','app_verify_csrf','public_pages.edit','public_site_settings','workspace.php'] as $needle)if(!str_contains($settings,$needle))throw new RuntimeException('Admin settings contract missing: '.$needle);
 

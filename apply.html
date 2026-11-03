@@ -257,6 +257,7 @@
   });
 })();
 </script>
+<script src="js/public-brand-render.js?v=hardening-a1"></script>
 <script>
 (async () => {
   try {
@@ -265,8 +266,7 @@
     if (!response.ok || !data.brand) return;
     const brand = data.brand;
     const logo = document.getElementById('applyLogo');
-    if (brand.logoUrl) logo.innerHTML = `<img src="${brand.logoUrl}" alt="${brand.restaurantName || 'Stonefellows'} logo">`;
-    else logo.textContent = brand.logoText || 'SF';
+    window.GelatoPublicBrand.renderLogo(logo, brand, 'Stonefellows', 'SF');
     document.getElementById('applyBrand').textContent = brand.restaurantName || 'Stonefellows';
     document.title = `Submit Resume · ${brand.restaurantName || 'Stonefellows'}`;
   } catch {}

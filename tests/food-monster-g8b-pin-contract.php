@@ -19,7 +19,7 @@ pin_check(str_contains($js,"request('pin_login'")&&str_contains($js,"request('fa
 pin_check(str_contains($js,'csrf_token:csrf'),'expected CSRF field');
 pin_check(str_contains($api,'app_verify_request_csrf($in)'),'API CSRF');
 pin_check(str_contains($api,'app_require_auth()')&&str_contains($api,'app_current_user()'),'login vs enrollment auth');
-pin_check(str_contains($core,'session_regenerate_id(true)'),'rotate session');
+pin_check(str_contains($core,'app_session_start_user(') && str_contains(file_get_contents(__DIR__.'/../includes/auth-session.php'),'session_regenerate_id(true)'),'rotate credential-bound session');
 pin_check(str_contains($core,'password_verify($pin'),'server PIN verify');
 pin_check(str_contains($core,"'httponly'=>true")&&str_contains($core,"'secure'=>true")&&str_contains($core,"'samesite'=>'Strict'"),'secure device cookie');
 pin_check(str_contains($core,'is_owner_role')&&str_contains($core,'Protected Super Admin'),'terminal manager');

@@ -207,7 +207,11 @@ jobs:
             --exclude 'tests/' \
             --exclude 'docs/' \
             --exclude 'uploads/' \
-            --exclude 'storage/' \
+            --include '/storage/' \
+            --include '/storage/.htaccess' \
+            --exclude '/storage/***' \
+            --exclude '/includes/gelato-private-storage/' \
+            --exclude '/gelato-private-storage/' \
             --exclude 'config.php' \
             --exclude '.env' \
             --exclude '*-preview.png' \
@@ -220,7 +224,10 @@ jobs:
 
           1. Extract the contents of this ZIP directly into the application web root and overwrite included files.
           2. Preserve the live config.php file. It is intentionally not included in this package.
-          3. Preserve all existing uploads/ and storage/ content. Those directories are intentionally not included.
+          3. Preserve all existing uploads/ and storage/ content, especially storage/keys/application.key.
+             Only storage/.htaccess is included to install private-path denial rules.
+             Check private storage in deployment-check.php. Subdirectory installs may need
+             storage.private_root configured outside public_html; see config-example.php.
           4. Sign in as an owner/admin, open upgrade.php, and run Upgrade once.
           5. Hard-refresh the browser, then verify the POS Agent/ticket flow, Table Service Agent, Host Stand / Front of House Agent, CRM Agent, Catering Agent, Wholesale Agent, Marketing Agent, Equipment + Maintenance Agent, Recipe + Production Standards Agent, Online Ordering + Pickup Fulfillment Agent, and workspace.php before testing the remaining admin pages.
           EOF
@@ -230,7 +237,8 @@ jobs:
           test ! -e "$deploy_root/docs"
           test ! -e "$deploy_root/config.php"
           test ! -e "$deploy_root/uploads"
-          test ! -e "$deploy_root/storage"
+          test -s "$deploy_root/storage/.htaccess"
+          test "$(find "$deploy_root/storage" -type f | wc -l)" -eq 1
 
           required=(
             scheduling.php
@@ -318,8 +326,9 @@ jobs:
 
           (cd "$deploy_root" && zip -q -r "$GITHUB_WORKSPACE/stonefellows-runtime-deploy.zip" .)
           unzip -t "$GITHUB_WORKSPACE/stonefellows-runtime-deploy.zip"
+          python3 tests/private-storage-package.test.py --archive "$GITHUB_WORKSPACE/stonefellows-runtime-deploy.zip"
 
-          if zipinfo -1 "$GITHUB_WORKSPACE/stonefellows-runtime-deploy.zip" | grep -Eq '^(\.github/|tests/|docs/|config\.php$|uploads/|storage/)'; then
+          if zipinfo -1 "$GITHUB_WORKSPACE/stonefellows-runtime-deploy.zip" | grep -Eq '^(\.github/|tests/|docs/|config\.php$|uploads/)'; then
             echo 'Forbidden path found in deploy ZIP.'
             exit 1
           fi

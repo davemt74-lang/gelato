@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require __DIR__.'/../includes/bootstrap.php';
 require_once __DIR__.'/../includes/customer-account-core.php';
+require_once __DIR__.'/customer-account-fixtures.php';
 require_once __DIR__.'/../includes/location-core.php';
 require_once __DIR__.'/../includes/package-deals-core.php';
 require_once __DIR__.'/../includes/kds-core.php';
@@ -42,7 +43,7 @@ $soda=pkg_menu_item($pdo,$org,'Drinks','drinks-'.$slug,'Package Soda','soda-'.$s
 $gelato=pkg_menu_item($pdo,$org,'Dessert','dessert-'.$slug,'Package Gelato','gelato-'.$slug,8.00);
 
 $email=$slug.'@example.test';$password='Package-CI!42';
-$registration=customer_account_register($pdo,$org,['firstName'=>'Package','lastName'=>'Customer','email'=>$email,'phone'=>'6025550199','password'=>$password,'passwordConfirm'=>$password]);
+$registration=test_customer_account_verified($pdo,$org,['firstName'=>'Package','lastName'=>'Customer','email'=>$email,'phone'=>'6025550199','password'=>$password,'passwordConfirm'=>$password]);
 $userId=(int)$registration['userId'];
 $customerId=(int)pkg_one($pdo,'SELECT id FROM crm_customers WHERE organization_id=? AND user_id=?',[$org,$userId]);
 pkg_assert($customerId>0,'Package customer must be linked to CRM.');

@@ -39,9 +39,21 @@ return [
     //     'timeout_seconds' => 20,
     // ],
 
+    'storage' => [
+        // Leave empty for a dedicated sibling directory outside the application.
+        // Subdirectory installs must set an absolute path outside public_html, e.g.
+        // '/home/ACCOUNT/gelato-private/RESTAURANT'. Never put private files in uploads/.
+        'private_root' => '',
+        // Optional canonical web document root for CLI workers or aliased URL mounts.
+        // Example: '/home/ACCOUNT/public_html'. This is a validation boundary only.
+        'public_root' => '',
+    ],
+
     'security' => [
         'session_name' => 'restaurant_workspace_session',
         'session_lifetime_seconds' => 28800,
+        'session_idle_timeout_seconds' => 28800,
+        'session_absolute_lifetime_seconds' => 28800,
         'cookie_secure' => false, // Set true when the site uses HTTPS.
         'cookie_samesite' => 'Lax',
     ],

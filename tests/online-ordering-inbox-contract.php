@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require __DIR__.'/../includes/bootstrap.php';
 require __DIR__.'/../includes/customer-account-core.php';
+require_once __DIR__.'/customer-account-fixtures.php';
 require __DIR__.'/../includes/customer-inbox-core.php';
 require __DIR__.'/../includes/online-order-core.php';
 
@@ -36,7 +37,7 @@ $price=(int)$pdo->lastInsertId();
 
 $email=$slug.'@example.test';
 $password='Online-Order-CI!42';
-$registration=customer_account_register($pdo,$org,[
+$registration=test_customer_account_verified($pdo,$org,[
     'firstName'=>'Online','lastName'=>'Customer','email'=>$email,'phone'=>'6025550144','password'=>$password,'passwordConfirm'=>$password,
 ]);
 $userId=(int)$registration['userId'];

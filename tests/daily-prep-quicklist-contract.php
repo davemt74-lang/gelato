@@ -256,6 +256,10 @@ dq_assert(gaw_route($staffAgent,'Add Pizza Boxes to Need More')['route']===null,
 
 $agentItem=daily_quicklist_add($pdo,$org,$actor,
     ['type'=>'prep','date'=>$agentDay,'title'=>'Agent Batch','recipeId'=>$recipeId],true);
+// Ordinal follow-ups need two items on the agent's current working date. Earlier
+// fixtures deliberately use 2026-11-02 and must not be counted as today's items.
+daily_quicklist_add($pdo,$org,$actor,
+    ['type'=>'prep','date'=>$agentDay,'title'=>'Agent Numbered Companion'],true);
 $voiceStart=prep_agent_handle($pdo,$staffAgent,['message'=>'Start timer for Agent Batch on Daily Prep','voice'=>true]);
 dq_assert($voiceStart['skill']==='prep.action_proposal'
     &&($voiceStart['data']['requiresConfirmation']??false),'voice timer request only proposes');

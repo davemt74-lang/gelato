@@ -84,7 +84,7 @@
   }
 
   function localReadIds() {
-    try { return new Set(JSON.parse(localStorage.getItem(localNotificationReadKey) || '[]')); }
+    try { return new Set(Auth.read(localNotificationReadKey, [])); }
     catch { return new Set(); }
   }
 
@@ -195,7 +195,7 @@
     if (!eventType || !sourceId) return;
     const syncKey = `restaurant-activity-sync-v1:${Auth.current()?.id || 'guest'}`;
     let synced = [];
-    try { synced = JSON.parse(localStorage.getItem(syncKey) || '[]'); } catch { synced = []; }
+    try { synced = Auth.read(syncKey, []); } catch { synced = []; }
     const token = `${eventType}:${sourceId}`;
     if (synced.includes(token)) return;
     try {
@@ -210,7 +210,7 @@
         },
       });
       synced.unshift(token);
-      localStorage.setItem(syncKey, JSON.stringify(synced.slice(0, 300)));
+      Auth.write(syncKey, synced.slice(0, 300));
       await loadNotifications(false);
     } catch (error) {
       console.warn('Training activity notification could not be synchronized.', error);
@@ -302,7 +302,7 @@
       } else {
         const current = localReadIds();
         targetIds.forEach(id => current.add(String(id)));
-        localStorage.setItem(localNotificationReadKey, JSON.stringify([...current]));
+        Auth.write(localNotificationReadKey, [...current]);
         state.notifications = collectLocalNotifications();
       }
       renderNotificationUI();
@@ -317,7 +317,7 @@
         const data = await apiRequest('api/notifications.php', {method:'POST', body:{action:'mark_all_read'}});
         state.notifications = data.notifications || state.notifications.map(item => ({...item, readAt:item.readAt || new Date().toISOString()}));
       } else {
-        localStorage.setItem(localNotificationReadKey, JSON.stringify(state.notifications.map(item => item.id)));
+        Auth.write(localNotificationReadKey, state.notifications.map(item => item.id));
         state.notifications = collectLocalNotifications();
       }
       renderNotificationUI();
@@ -649,6 +649,8 @@
         if (serverMode) {
           const data = await apiRequest('api/roles.php', {method:'POST', body:payload});
           Auth.saveRoles(data.roles || []);
+          // A changed primary or secondary role requires a new effective grant snapshot.
+          if (!creating) { window.location.reload(); return; }
         } else {
           const roles = Auth.roles();
           if (creating) {
