@@ -766,7 +766,7 @@ dq_assert($finalConfirmed['skill']==='prep.action_confirmed',
     'manager confirms partial quantity from numbered immutable ledger receipt');
 $finalProgress=daily_quicklist_receipt_progress($pdo,$org,$newRequest);
 dq_assert($finalProgress['receivedQuantity']===5.0&&$finalProgress['remainingQuantity']===0.0,
-    '2 kg plus 3 kg allocated from separate receipts meets 5 kg target');
+    '2 kg plus 3 kg allocated from separate receipts meets 5 kg target: '.json_encode($finalProgress,JSON_THROW_ON_ERROR));
 $links=daily_quicklist_receipt_links($pdo,$org);
 dq_assert(count($links[$newRequest]['receipts']??[])===2
     &&$links[$newRequest]['quantity']===5.0
