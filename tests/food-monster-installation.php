@@ -1,5 +1,6 @@
 <?php
 declare(strict_types=1);
+if (PHP_SAPI !== 'cli') { http_response_code(404); exit; }
 
 define('RESTAURANT_APP_ROOT', dirname(__DIR__));
 define('TEST_PRIVATE_ROOT', sys_get_temp_dir() . '/gelato-license-' . bin2hex(random_bytes(8)));
@@ -33,6 +34,8 @@ $tools = fmi_agent_catalogue($owner, ['channel' => 'voice', 'privateVoiceApprove
 check_installation(count($tools) === 2 && $tools['get_gelato_update_status']['impact'] === 'read', 'Only owner read tools are available.');
 check_installation(!$tools['get_gelato_update_status']['authorize']($employee, []), 'Execution checks fresh owner authority.');
 check_installation($tools['get_gelato_update_status']['execute']([], $employee)['ok'] === false, 'Execute also enforces owner authority.');
+$unconfigured = $tools['get_gelato_license_status']['execute']([], $owner);
+check_installation($unconfigured['ok'] && str_contains($unconfigured['data']['answer'], 'Connect this installation'), 'Owner gets real unconfigured status.');
 check_installation(fmi_version() !== null, 'Build version file is valid.');
 foreach (['http://restaurant.example.test', 'https://127.0.0.1', 'https://user@restaurant.example.test'] as $url) {
     try {

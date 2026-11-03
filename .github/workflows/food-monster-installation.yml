@@ -10,6 +10,8 @@ on:
       - 'includes/food-monster-b8d3-tool-runtime.php'
       - 'includes/food-monster-skill-registry.php'
       - 'tests/food-monster-installation.php'
+      - 'includes/food-monster-observation-contracts.php'
+      - 'tests/food-monster-g7b1-registry.php'
       - '.github/workflows/food-monster-installation.yml'
   push:
     branches: [main]
@@ -21,6 +23,8 @@ on:
       - 'includes/food-monster-b8d3-tool-runtime.php'
       - 'includes/food-monster-skill-registry.php'
       - 'tests/food-monster-installation.php'
+      - 'includes/food-monster-observation-contracts.php'
+      - 'tests/food-monster-g7b1-registry.php'
       - '.github/workflows/food-monster-installation.yml'
 
 permissions:
@@ -43,3 +47,5 @@ jobs:
           php tests/food-monster-installation.php
           php tests/food-monster-b8d3-tool-selection.php
           php tests/food-monster-b8d17a-capability-truth.php
+          php tests/food-monster-g7b1-registry.php
+          php tests/hardening-food-monster-observations.php

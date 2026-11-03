@@ -23,6 +23,7 @@ function fm8do_contracts(): array
     };
     $add(['get_current_user'],3072,'agent-canvas.php','Agent Brain');
     $add(['get_my_hours'],3072,'timeclock.php','Time Clock');
+    $add(['get_gelato_license_status','get_gelato_update_status'],3072,'license-updates.php','License & Updates');
     $add(['get_my_schedule','get_employee_schedule','get_day_roster','check_staff_availability'],4096,'scheduling.php','Staff Scheduling');
     $add(['list_available_menu_items','get_menu_item','search_menu_ingredients'],4096,'menu-manager.php','Menu Manager');
     $add(['get_recipe_details','find_recipes_using_ingredient'],4096,'recipes.php','Recipe Library');

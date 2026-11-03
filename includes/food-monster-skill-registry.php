@@ -5,7 +5,7 @@ require_once __DIR__.'/agent-node-registry.php';
 function fm_skill_registry_definitions():array {
  return [
   'system.license_status'=>['node'=>'brain','label'=>'Food Monster license','description'=>'Review license and renewal status.','prompt'=>'Is my Food Monster license active, and when does it renew?','owner'=>true],
-  'system.update_status'=>['node'=>'brain','label'=>'Gelato updates','description'=>'Review the installed version, releases and failed updates.','prompt'=>'What Gelato version is installed, and is there an update?','owner'=>true],
+  'system.update_status'=>['node'=>'brain','label'=>'Gelato updates','description'=>'Review the installed version, releases and failed updates.','prompt'=>'What Gelato version is installed, and is there a newer release?','owner'=>true],
   'brain_brief'=>['node'=>'brain','label'=>'Agent Brain priorities','description'=>'Review cross-department risks and next moves.','prompt'=>'Show the Agent Brain priorities and recommended next reviews.','manager'=>true],
   'sales'=>['node'=>'sales','label'=>'Verified sales','description'=>'Review recorded sales totals from Sales Intelligence.','prompt'=>'What were our recorded sales today?','all'=>['sales.view','sales.agent']],
   'clock_ins'=>['node'=>'timeclock','label'=>'Staff clock-ins','description'=>'Review currently clocked-in staff.','prompt'=>'Who is currently clocked in?','all'=>['timeclock.agent'],'any'=>[['timeclock.view'],['attendance.view']]],

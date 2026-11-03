@@ -15,7 +15,7 @@ function b1_check(bool $ok,string $name):void {
 b1_check(fm_skill_registry_for_user(['role_slug'=>'staff','permissions'=>[]])===[],'Deny without permissions');
 $two=fm_skill_registry_for_user(['role_slug'=>'staff','permissions'=>['kds.view','schedule.view']]);
 b1_check(array_column($two,'id')===['kitchen','staffing'],'Only authorized reviews visible');
-$all=fm_skill_registry_for_user(['role_slug'=>'owner','permissions'=>['*']]);
+$all=fm_skill_registry_for_user(['role_slug'=>'owner','is_owner_role'=>1,'permissions'=>['*']]);
 b1_check(count($all)===count(fm_skill_registry_definitions()),'Owner scoped node list');
 foreach($all as $entry){
  b1_check(!isset($entry['route'],$entry['tools'],$entry['arguments']),'No model tool grants');
@@ -27,6 +27,7 @@ foreach($all as $entry){
 }
 $nonManager=fm_skill_registry_for_user(['role_slug'=>'staff','permissions'=>['*']]);
 b1_check(!in_array('brain_brief',array_column($nonManager,'id'),true),'Manager gate for Brain');
+b1_check(!array_intersect(['system.license_status','system.update_status'],array_column($nonManager,'id')),'License skills require protected owner authority');
 $partial=fm_skill_registry_for_user(['role_slug'=>'manager','permissions'=>['inventory.view','purchasing.view','recipes.view']]);
 b1_check($partial===[],'No agent use from read-only privilege alone for gated nodes');
 foreach([['inventory.view','inventory.agent'],['tasks.view','tasks.agent']] as $group){
