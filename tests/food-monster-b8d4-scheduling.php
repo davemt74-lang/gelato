@@ -77,14 +77,22 @@ $blocked=fm8d4_confirm_pending($pdo,$manager,[['role'=>'user','content'=>'What w
     static fn():array=>$manager);
 b8d4_assert($blocked===null,'discussion about confirmation cannot execute');
 $review=hac_test_review($pdo,$manager,'scheduling');
-gac_request_context($review,$pdo,$manager);
+// The live model endpoint binds each decision to its saved current user turn.
+// Review evidence identifies the proposal; it does not supply a Confirm turn.
+$confirmInput=hac_test_input($pdo,$manager,'scheduling',['message'=>'Confirm']+$review);
+b8d4_assert($confirmInput['threadId']===$pending['threadId']
+    &&$confirmInput['sourceMessageId']!==$pending['sourceMessageId'],
+    'confirmation has its own canonical user turn in the reviewed conversation');
 $revoked=array_replace($manager,['permissions'=>[]]);
-$denied=fm8d4_confirm_pending($pdo,$manager,[['role'=>'user','content'=>'Confirm']],
+$denied=fm8d4_confirm_pending($pdo,$manager,[['role'=>'user','content'=>$confirmInput['message']]],
     static fn():array=>$revoked);
 b8d4_assert(($denied['data']['status']??'')==='denied','fresh grant revocation stops confirmation');
 b8d4_assert((int)$pdo->query("SELECT COUNT(*) FROM schedule_shifts WHERE organization_id=".$org)->fetchColumn()===$original,
     'revoked confirmation makes no write');
-$confirmed=fm8d4_confirm_pending($pdo,$manager,[['role'=>'user','content'=>'Confirm']],
+b8d4_assert((sac_pending_get($org,$managerId)['id']??null)===$pending['id'],
+    'revoked confirmation does not consume the reviewed proposal');
+$confirmInput=hac_test_input($pdo,$manager,'scheduling',['message'=>'Confirm']+$review);
+$confirmed=fm8d4_confirm_pending($pdo,$manager,[['role'=>'user','content'=>$confirmInput['message']]],
     static fn():array=>$manager);
 b8d4_assert(($confirmed['skill']??'')==='schedule.action_confirmed','explicit human approval executes');
 $shiftId=(string)($confirmed['data']['shiftId']??'');

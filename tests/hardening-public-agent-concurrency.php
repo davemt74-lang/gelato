@@ -30,6 +30,7 @@ $cases=[
     ['provider','organization_requests',['organization_concurrent_requests'=>32,'organization_requests_per_10_minutes'=>2]],
     ['provider','organization_token_units',['organization_concurrent_requests'=>32,'organization_token_units_per_day'=>2*$units]],
 ];
+$completed=[];
 foreach($cases as [$mode,$reason,$overrides]){
     $pdo->prepare("INSERT INTO organizations(name,status,timezone) VALUES (?,'active','UTC')")->execute(['Public assistant concurrency '.$reason.' '.bin2hex(random_bytes(6))]);$org=(int)$pdo->lastInsertId();
     $workers=[];
@@ -79,7 +80,17 @@ foreach($cases as [$mode,$reason,$overrides]){
             foreach($worker['pipes'] as $pipe)if(is_resource($pipe))fclose($pipe);
             if(is_resource($worker['process']))proc_close($worker['process']);
         }
-        $pdo->prepare('DELETE FROM organizations WHERE id=?')->execute([$org]);
+        // Organization creation seeds operational roles and their permissions.
+        // These rows belong only to this case's newly created fixture tenant.
+        $pdo->beginTransaction();
+        try{
+            $pdo->prepare('DELETE rp FROM role_permissions rp JOIN roles r ON r.id=rp.role_id WHERE r.organization_id=?')->execute([$org]);
+            $pdo->prepare('DELETE FROM roles WHERE organization_id=?')->execute([$org]);
+            $pdo->prepare('DELETE FROM organizations WHERE id=?')->execute([$org]);
+            $pdo->commit();
+        }catch(Throwable $error){if($pdo->inTransaction())$pdo->rollBack();throw $error;}
     }
+    $completed[]=$reason;
 }
-echo "Public assistant concurrent admission: {$checks} checks passed.\n";
+hpac_check($completed===['network','concurrency','organization_requests','organization_token_units'],'All four concurrency boundaries and their fixture cleanup must complete.');
+echo "Public assistant concurrent admission: {$checks} checks passed across ".implode(', ',$completed).".\n";

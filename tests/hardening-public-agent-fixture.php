@@ -35,8 +35,15 @@ function hpaf_cleanup(PDO $pdo,array $state):void{
             $sets=implode(',',array_map(static fn(string $name):string=>'`'.$name.'`=?',array_keys($row)));
             $pdo->prepare('UPDATE public_agent_settings SET '.$sets.' WHERE id=?')->execute([...array_values($row),$id]);
         }else $pdo->prepare('DELETE FROM public_agent_settings WHERE organization_id=?')->execute([$org]);
-        if($state['created_org'])$pdo->prepare('DELETE FROM organizations WHERE id=?')->execute([$org]);
-        $pdo->prepare('DELETE FROM organizations WHERE id=?')->execute([(int)$state['other']]);
+        // Only newly created fixture tenants may have their seeded roles removed.
+        // The selected pre-existing public tenant retains its complete role state.
+        $createdOrganizations=[(int)$state['other']];
+        if($state['created_org'])$createdOrganizations[]=$org;
+        foreach($createdOrganizations as $createdOrganization){
+            $pdo->prepare('DELETE rp FROM role_permissions rp JOIN roles r ON r.id=rp.role_id WHERE r.organization_id=?')->execute([$createdOrganization]);
+            $pdo->prepare('DELETE FROM roles WHERE organization_id=?')->execute([$createdOrganization]);
+            $pdo->prepare('DELETE FROM organizations WHERE id=?')->execute([$createdOrganization]);
+        }
         $pdo->prepare('DELETE FROM users WHERE id=?')->execute([(int)$state['actor']]);
         $pdo->commit();
     }catch(Throwable $error){if($pdo->inTransaction())$pdo->rollBack();throw $error;}

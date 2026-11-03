@@ -79,7 +79,7 @@ node tests/hardening-legacy-voice.cjs --baseline /path/to/release-d-checkout
 
 Expected baseline failure: `FE-08: microphone onresult must preserve voice:true, never downgrade speech to a typed command.` Actual `false`, expected `true`. This reaches the actual shipped callback and transport; the failure is not a missing helper or bootstrap error.
 
-Local verification at implementation time: primary Node regression **48 assertions passed**; existing proactive listening, private-voice contract, and browser-review state runners passed; modified JavaScript parses and `git diff --check` passes. The implementation workspace has no PHP, MariaDB, or Chromium runtime. Their checks are CI gates, not locally claimed results.
+Local verification at implementation time: primary Node regression **48 assertions passed**; existing proactive listening, private-voice contract, and browser-review state runners passed; modified JavaScript parses and `git diff --check` passes. The affected static PHP contracts also passed after a local PHP 8.3.6 runtime was located. Native MariaDB, authenticated HTTP, and Chromium acceptance are recorded by the Release E CI gates; they are not claimed as local database/browser runs.
 
 ## Cache and operational notes
 
