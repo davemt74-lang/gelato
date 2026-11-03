@@ -21,6 +21,8 @@ on:
       - 'js/need-more-purchasing.js'
       - 'assets/css/need-more-purchasing.css'
       - 'tests/need-more-vendor-intelligence-contract.php'
+      - 'tests/deployed-test-entrypoints.cjs'
+      - 'tests/.htaccess'
       - 'tests/need-more-vendor-agent-contract.php'
       - 'tests/need-more-purchasing-ui.cjs'
       - 'tests/need-more-purchasing-browser.cjs'
@@ -68,6 +70,8 @@ on:
       - 'js/need-more-purchasing.js'
       - 'assets/css/need-more-purchasing.css'
       - 'tests/need-more-vendor-intelligence-contract.php'
+      - 'tests/deployed-test-entrypoints.cjs'
+      - 'tests/.htaccess'
       - 'tests/need-more-vendor-agent-contract.php'
       - 'tests/need-more-purchasing-ui.cjs'
       - 'tests/need-more-purchasing-browser.cjs'
@@ -146,6 +150,7 @@ jobs:
           node --check js/daily-prep.js
           node --check js/need-more-purchasing.js
           node tests/need-more-purchasing-ui.cjs
+          node tests/deployed-test-entrypoints.cjs
           node --check js/prep-intelligence.js
           node --check js/restaurant-agent-bridge.js
           node tests/prep-agent-bridge-routing.cjs

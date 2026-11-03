@@ -39,6 +39,7 @@ The Prep / Inventory Intelligence workflow runs the existing prep and quicklist 
 - `tests/need-more-vendor-intelligence-contract.php`
 - `tests/purchasing-vendor-integrity-contract.php`
 - `tests/need-more-vendor-agent-contract.php`
+- `tests/deployed-test-entrypoints.cjs` (real HTTP denial before configuration or database access)
 - `tests/need-more-purchasing-ui.cjs`
 - `tests/need-more-purchasing-browser.cjs` (Chromium at 1280, 390 and 360 pixels)
 
@@ -47,3 +48,5 @@ These check real MariaDB data, tenant and permission boundaries, exact supplier 
 ## Deployment
 
 Use the full deployment package generated from the merged commit. Its application files are at the ZIP root. Preserve the installation's existing configuration, database and uploaded files; upload/extract the deployment ZIP and run `upgrade.php` through the normal installation workflow. Production installation and supplier delivery testing are separate from repository CI certification.
+
+The full package retains repository tests. The three new database contract scripts reject every non-CLI entry before loading application configuration. The tests directory also contains the established Apache access-denial rules, protecting its contents on hosts that honor `.htaccess`.
