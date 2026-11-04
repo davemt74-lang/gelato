@@ -68,7 +68,8 @@ function kds_send_check(PDO $pdo,int $org,string $checkPublicId,int $userId,bool
     return kds_transaction($pdo,function()use($pdo,$org,$checkPublicId,$userId,$hold):array{
         $q=$pdo->prepare("SELECT id,location_id,status FROM pos_checks WHERE organization_id=? AND public_id=? LIMIT 1 FOR UPDATE");$q->execute([$org,$checkPublicId]);$check=$q->fetch();if(!$check)throw new InvalidArgumentException('POS check was not found.');if($check['status']!=='open')throw new InvalidArgumentException('Only an open POS check can send new items to the kitchen.');
         $q=$pdo->prepare("SELECT i.id,i.menu_item_id FROM pos_check_items i LEFT JOIN kds_order_items k ON k.organization_id=i.organization_id AND k.pos_check_item_id=i.id WHERE i.organization_id=? AND i.check_id=? AND i.status='active' AND k.id IS NULL ORDER BY i.id FOR UPDATE");$q->execute([$org,(int)$check['id']]);$lines=$q->fetchAll();if(!$lines)return kds_check_summary($pdo,$org,$checkPublicId);
-        $now=(new DateTimeImmutable())->format('Y-m-d H:i:s.u');foreach($lines as $line){$route=$pdo->prepare("SELECT r.station_id FROM kds_menu_routes r JOIN kds_stations s ON s.id=r.station_id AND s.organization_id=r.organization_id AND s.location_id=r.location_id AND s.status='active' WHERE r.organization_id=? AND r.location_id=? AND r.menu_item_id=? LIMIT 1");$route->execute([$org,(int)$check['location_id'],(int)$line['menu_item_id']]);$station=$route->fetchColumn();$status=$hold?'held':'queued';$fired=$hold?null:$now;$public=kds_public_id('kds-item');$pdo->prepare('INSERT INTO kds_order_items (organization_id,location_id,check_id,pos_check_item_id,station_id,public_id,status,sent_at,fired_at,last_action_by) VALUES (?,?,?,?,?,?,?,?,?,?)')->execute([$org,(int)$check['location_id'],(int)$check['id'],(int)$line['id'],$station!==false?(int)$station:null,$public,$status,$now,$fired,$userId]);$id=(int)$pdo->lastInsertId();kds_event($pdo,$org,$id,'sent',null,$status,$station===false?'No active station route was configured.':null,$userId);}
+        $now=(string)$pdo->query('SELECT NOW(6)')->fetchColumn();
+        foreach($lines as $line){$route=$pdo->prepare("SELECT r.station_id FROM kds_menu_routes r JOIN kds_stations s ON s.id=r.station_id AND s.organization_id=r.organization_id AND s.location_id=r.location_id AND s.status='active' WHERE r.organization_id=? AND r.location_id=? AND r.menu_item_id=? LIMIT 1");$route->execute([$org,(int)$check['location_id'],(int)$line['menu_item_id']]);$station=$route->fetchColumn();$status=$hold?'held':'queued';$fired=$hold?null:$now;$public=kds_public_id('kds-item');$pdo->prepare('INSERT INTO kds_order_items (organization_id,location_id,check_id,pos_check_item_id,station_id,public_id,status,sent_at,fired_at,last_action_by) VALUES (?,?,?,?,?,?,?,?,?,?)')->execute([$org,(int)$check['location_id'],(int)$check['id'],(int)$line['id'],$station!==false?(int)$station:null,$public,$status,$now,$fired,$userId]);$id=(int)$pdo->lastInsertId();kds_event($pdo,$org,$id,'sent',null,$status,$station===false?'No active station route was configured.':null,$userId);}
         return kds_check_summary($pdo,$org,$checkPublicId);
     });
 }
@@ -123,7 +124,27 @@ function kds_check_summary(PDO $pdo,int $org,string $checkPublicId): array
 function kds_board(PDO $pdo,int $org,int $locationId,?string $stationPublicId=null,bool $includeCompleted=false): array
 {
     kds_location($pdo,$org,$locationId);$where="k.organization_id=? AND k.location_id=?";$args=[$org,$locationId];if($stationPublicId==='unrouted')$where.=' AND k.station_id IS NULL';elseif($stationPublicId!==null&&$stationPublicId!==''){$where.=' AND s.public_id=?';$args[]=$stationPublicId;}if(!$includeCompleted)$where.=" AND k.status NOT IN ('completed','cancelled')";
-    $sql="SELECT k.public_id,k.status,k.sent_at,k.fired_at,k.started_at,k.ready_at,k.completed_at,k.cancelled_at,k.station_id,s.public_id station_public_id,s.name station_name,s.target_seconds,c.public_id check_public_id,c.check_number,c.business_date,c.service_mode,c.table_name,c.guest_count,c.status check_status,i.id pos_check_item_id,i.item_name_snapshot,i.option_name_snapshot,i.quantity,i.special_instructions,i.status pos_item_status FROM kds_order_items k JOIN pos_checks c ON c.id=k.check_id AND c.organization_id=k.organization_id JOIN pos_check_items i ON i.id=k.pos_check_item_id AND i.organization_id=k.organization_id LEFT JOIN kds_stations s ON s.id=k.station_id AND s.organization_id=k.organization_id WHERE {$where} ORDER BY CASE k.status WHEN 'ready' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'queued' THEN 2 WHEN 'held' THEN 3 ELSE 4 END,COALESCE(k.fired_at,k.sent_at),k.id";$q=$pdo->prepare($sql);$q->execute($args);$rows=$q->fetchAll();$now=microtime(true);foreach($rows as &$r){$anchor=$r['fired_at']?:$r['sent_at'];$age=max(0,$now-(strtotime((string)$anchor)?:time()));$r['ageSeconds']=(int)round($age);$target=(int)($r['target_seconds']??0);$r['late']=$target>0&&$r['status']!=='held'&&$age>$target;}unset($r);
+    $sql="SELECT k.public_id,k.status,k.sent_at,k.fired_at,k.started_at,k.ready_at,k.completed_at,k.cancelled_at,k.station_id,
+        TIMESTAMPDIFF(MICROSECOND,COALESCE(k.fired_at,k.sent_at),NOW(6)) elapsed_microseconds,
+        s.public_id station_public_id,s.name station_name,s.target_seconds,
+        c.public_id check_public_id,c.check_number,c.business_date,c.service_mode,c.table_name,c.guest_count,c.status check_status,
+        i.id pos_check_item_id,i.item_name_snapshot,i.option_name_snapshot,i.quantity,i.special_instructions,i.status pos_item_status
+        FROM kds_order_items k
+        JOIN pos_checks c ON c.id=k.check_id AND c.organization_id=k.organization_id
+        JOIN pos_check_items i ON i.id=k.pos_check_item_id AND i.organization_id=k.organization_id
+        LEFT JOIN kds_stations s ON s.id=k.station_id AND s.organization_id=k.organization_id
+        WHERE {$where}
+        ORDER BY CASE k.status WHEN 'ready' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'queued' THEN 2 WHEN 'held' THEN 3 ELSE 4 END,
+        COALESCE(k.fired_at,k.sent_at),k.id";
+    $q=$pdo->prepare($sql);$q->execute($args);$rows=$q->fetchAll();
+    foreach($rows as &$r){
+        $age=max(0.0,(float)$r['elapsed_microseconds']/1_000_000);
+        unset($r['elapsed_microseconds']);
+        $r['ageSeconds']=(int)round($age);
+        $target=(int)($r['target_seconds']??0);
+        $r['late']=$target>0&&$r['status']!=='held'&&$age>$target;
+    }
+    unset($r);
     return ['location'=>kds_location($pdo,$org,$locationId),'stations'=>kds_stations($pdo,$org,$locationId),'items'=>$rows,'unroutedCount'=>count(array_filter($rows,static fn(array $r):bool=>$r['station_id']===null))];
 }
 
