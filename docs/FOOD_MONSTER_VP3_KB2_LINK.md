@@ -10,6 +10,39 @@ database name, external registry, or account is hardcoded.
 
 KB2 is not yet OTRO's link UI. OTRO's multi-installation connector comes next.
 
+## Direct VP3 Cloud access
+
+The same owner approval page can issue a separate pairing code for VP3 Cloud.
+In `config.php`, set `food_monster.agent_name` to the private agent's installed
+name. The default is Food Monster. The private runtime and authenticated
+pairing response use this same identity. The connection label is for the owner's
+inventory of links.
+
+On `/vp3-connections.php`, the owner can approve any combination of menu,
+recipes and three operational scopes. An operational grant requires one active
+location. The authenticated exchange adds the installed `agentName` and the
+approved location's ID, name and POS business timezone in `locations`.
+Menu and recipe grants retain their existing organization scope.
+
+| Scope and bearer POST action | Read |
+| --- | --- |
+| `orders.read` | Active online pickup orders, fulfillment status, payment state and promised pickup time |
+| `tickets.open.read` | Open POS checks ordered from oldest to newest, canonical table name when assigned, and kitchen counts including unsent items |
+| `sales.daily.read` | One location's published daily totals from its restaurant's primary sales provider |
+
+Each action requires `locationId` as a positive JSON integer matching the
+approved location. Orders and tickets support a `limit` of 1–50 and indicate
+when more results exist. Sales supports `businessDate` in `YYYY-MM-DD` format
+and defaults to the POS business date. An absent daily record returns
+`available: false` and `totals: null`. The native POS result reports currency
+only when matching paid checks establish it. Imported totals can have an
+unknown currency. The reporting source and read timestamp accompany each
+result, and sales also includes the source record's update timestamp.
+
+The API returns bounded read-only projections. The grant can be revoked from
+Gelato or by the bearer holder. A revoked credential, inactive owner or
+unavailable approved location prevents subsequent operational reads.
+
 ## Installation
 
 Deploy the merged Gelato package then run the protected `upgrade.php`

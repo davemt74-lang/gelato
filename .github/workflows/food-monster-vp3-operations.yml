@@ -1,0 +1,113 @@
+name: Food Monster VP3 Operations
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/food-monster-vp3-operations.yml'
+      - 'api/food-monster-vp3.php'
+      - 'config-example.php'
+      - 'database/*food_monster_vp3*.sql'
+      - 'includes/food-monster-agent-identity.php'
+      - 'includes/food-monster-knowledge-api.php'
+      - 'includes/food-monster-llm.php'
+      - 'includes/food-monster-vp3-*.php'
+      - 'includes/kds-production.php'
+      - 'includes/online-order-agent-core.php'
+      - 'includes/pos-core.php'
+      - 'includes/sales-intelligence-core.php'
+      - 'tests/food-monster-kb1-api.php'
+      - 'tests/food-monster-kb2-link.php'
+      - 'tests/food-monster-vp3-operations-contract.php'
+      - 'vp3-connections.php'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/food-monster-vp3-operations.yml'
+      - 'api/food-monster-vp3.php'
+      - 'config-example.php'
+      - 'database/*food_monster_vp3*.sql'
+      - 'includes/food-monster-agent-identity.php'
+      - 'includes/food-monster-knowledge-api.php'
+      - 'includes/food-monster-llm.php'
+      - 'includes/food-monster-vp3-*.php'
+      - 'includes/kds-production.php'
+      - 'includes/online-order-agent-core.php'
+      - 'includes/pos-core.php'
+      - 'includes/sales-intelligence-core.php'
+      - 'tests/food-monster-kb1-api.php'
+      - 'tests/food-monster-kb2-link.php'
+      - 'tests/food-monster-vp3-operations-contract.php'
+      - 'vp3-connections.php'
+
+permissions:
+  contents: read
+
+jobs:
+  vp3-operations:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - name: Create an isolated fixture database
+        run: |
+          export MARIADB_ROOT_PASSWORD="$(openssl rand -hex 24)"
+          export MARIADB_PASSWORD="$(openssl rand -hex 24)"
+          echo "::add-mask::$MARIADB_ROOT_PASSWORD"
+          echo "::add-mask::$MARIADB_PASSWORD"
+          docker run -d --name gelato-vp3-operations-ci -p 127.0.0.1::3306 \
+            --env MARIADB_ROOT_PASSWORD --env MARIADB_PASSWORD \
+            --env MARIADB_DATABASE=gelato_vp3_operations_ci --env MARIADB_USER=gelato_vp3_operations_ci mariadb:10.11
+          export MYSQL_PWD="$MARIADB_PASSWORD"
+          db() {
+            docker exec -i --env MYSQL_PWD gelato-vp3-operations-ci mariadb \
+              --protocol=tcp --host=127.0.0.1 --user=gelato_vp3_operations_ci gelato_vp3_operations_ci "$@"
+          }
+          for attempt in $(seq 1 60); do
+            if db -e 'SELECT 1' >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          db < database/install.sql
+          port="$(docker port gelato-vp3-operations-ci 3306/tcp | sed -n 's/^127\.0\.0\.1://p')"
+          [[ "$port" =~ ^[0-9]+$ ]]
+          {
+            echo "GELATO_VP3_OPERATIONS_CI_DB_PORT=$port"
+            echo "GELATO_VP3_OPERATIONS_CI_DB_PASSWORD=$MARIADB_PASSWORD"
+          } >> "$GITHUB_ENV"
+      - name: Apply application migrations
+        run: |
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato VP3 Operations CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix'],
+            'food_monster'=>['agent_name'=>'Cinder Kitchen'],
+            'database'=>['host'=>'127.0.0.1','port'=>(int)getenv('GELATO_VP3_OPERATIONS_CI_DB_PORT'),
+              'name'=>'gelato_vp3_operations_ci','username'=>'gelato_vp3_operations_ci',
+              'password'=>getenv('GELATO_VP3_OPERATIONS_CI_DB_PASSWORD'),'charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_vp3_operations_ci','cookie_secure'=>false],
+            'storage'=>['private_root'=>getenv('RUNNER_TEMP').'/gelato-vp3-operations-private'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $upgrade=new UpgradeService(app_pdo(),__DIR__);
+          $upgrade->ensureTrackingTables();
+          $upgrade->bootstrapLegacyHistory(null);
+          $upgrade->applyPending(null);
+          if($upgrade->pendingMigrations())exit(1);
+          PHP
+      - name: Verify named pairing, location scope and live operations
+        env:
+          FM_VP3_OPERATIONS_TEST: '1'
+        run: |
+          php tests/food-monster-kb1-api.php
+          php tests/food-monster-kb2-link.php
+          php tests/food-monster-vp3-operations-contract.php
+      - name: Remove the fixture database
+        if: always()
+        run: docker rm -f gelato-vp3-operations-ci >/dev/null 2>&1 || true
