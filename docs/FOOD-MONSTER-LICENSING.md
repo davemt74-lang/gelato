@@ -12,4 +12,22 @@ The central automatic-update setting records a preference. The current integrati
 
 For new Food Monster Cloud installations, use the `gelato-hosted.zip` from **Full Deploy Package**. Its private provisioning command seeds the Gelato schema and first Super Admin from the customer’s Food Monster setup, and writes the scoped license connection to private storage. Managed installations close the public first-user route. Self-hosted deployments still use Gelato's usual installation workflow.
 
-Food Monster requires a detached Ed25519 signature for hosted provisioning. The protected main-branch package workflow can sign with the optional `GELATO_HOSTED_SIGNING_KEY` secret. An operator can also sign the verified main-branch artifact offline by passing the ZIP path to `php scripts/sign-hosted-release.php` with the base64 secret key in that command's environment. Keep the secret out of both web deployments. Configure the corresponding public key, explicit version and signature in Food Monster's private hosting settings.
+## Build a signed Food Monster release
+
+Food Monster requires an Ed25519 signature over the stable version and SHA-256 of the exact hosted ZIP. Choose a new stable `GELATO_VERSION.txt` for each release you intend to publish.
+
+1. Create the GitHub Actions environment `hosted-release` in the Gelato repository and restrict deployment to the `main` branch. Enable required reviewers when available. Put the base64 Ed25519 secret key in the environment secret `GELATO_HOSTED_SIGNING_KEY`. If you previously configured a repository-wide copy of this secret, remove that copy. Keep the private key out of Git and both web deployments.
+2. In **Actions → Full Deploy Package → Run workflow**, select `main`, enable **Build a signed Food Monster release from main**, and enter the exact version and release notes. The signing job uses the tested ZIP from that run. It checks the version and commit inside the archive and stops if the key or release details are missing. Regular runs produce the unsigned hosted ZIP.
+3. Download the `gelato-hosted-release-VERSION` artifact. It contains the deployable `gelato-hosted.zip`, `gelato-hosted.sha256`, `gelato-hosted.sig`, `release-notes.txt`, and `release.json`. The manifest lists the source commit, version, ZIP checksum, and public key fingerprint. Compare the checksum against the ZIP before upload.
+4. In Food Monster, add the detached signature for that version to `hosting.release_signatures` in the private configuration. Use the trusted public key obtained from your own signing key setup. Upload the inner ZIP as a stable draft under **Admin → Releases**, paste the notes, and review the version, checksum, and deployment flags before publishing. Choose the provisioning version separately in `hosting.release_version`. Set file-update compatibility only when the release requires no migrations and the database files match the supported installed version.
+
+The artifact does not publish or deploy a release. Food Monster's existing admin publishing and owner approval steps control rollout. The detached signature authenticates the ZIP and version. The admin reviews the separate release notes.
+
+For offline signing, download the verified `gelato-hosted` artifact from the chosen main-branch run and check its SHA-256. Supply the operator's base64 secret through the command environment and run:
+
+```bash
+php scripts/sign-hosted-release.php /path/to/gelato-hosted.zip \
+  --bundle /path/to/new-output-dir "$RELEASE_VERSION" /path/to/release-notes.txt "$SOURCE_COMMIT"
+```
+
+`SOURCE_COMMIT` is the full commit shown by the trusted workflow run. To generate only the detached signature, pass just the ZIP path.
