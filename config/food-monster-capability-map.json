@@ -860,7 +860,7 @@
     {
       "path": "api/food-monster-vp3.php",
       "feature": "food_monster",
-      "sourceBlob": "855f5398ff1c9e8aee9a6bbcd84bb64f6c56e2e7",
+      "sourceBlob": "06555cc2945bd1bba3ee68a99412ed50ff867dc0",
       "discoveredActions": [
         "exchange",
         "manifest",

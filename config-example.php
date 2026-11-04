@@ -21,6 +21,11 @@ return [
         'debug' => false,
     ],
 
+    'food_monster' => [
+        // This is the agent's name in its private runtime and paired VP3 Chat.
+        'agent_name' => 'Food Monster',
+    ],
+
     'database' => [
         'host' => '127.0.0.1',
         'port' => 3306,

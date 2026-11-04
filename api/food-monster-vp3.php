@@ -15,9 +15,12 @@ if($method==='GET'){
     // Public discovery discloses ONLY the local installation identity and
     // protocol. It does not grant knowledge access or expose service URLs.
     try{
+        $pdo=app_pdo();
+        $capabilities=['knowledge.search','knowledge.manifest'];
+        if(fm_vp3_operations_ready($pdo))$capabilities=array_merge($capabilities,FM_VP3_OPERATION_SCOPES);
         app_json_response(['ok'=>true,'schema'=>'food-monster-vp3-v1',
-            'instanceId'=>fm_kb2_instance(app_pdo()),
-            'capabilities'=>['knowledge.search','knowledge.manifest'],
+            'instanceId'=>fm_kb2_instance($pdo),
+            'capabilities'=>$capabilities,
             'pairing'=>'admin-issued-one-time-code',
             'authentication'=>'bearer']);
     }catch(Throwable $e){
@@ -75,6 +78,16 @@ try{
             'vp3_connection',$grant['connectionId'],null,
             ['collection'=>$result['collection'],'count'=>$result['count'],
              'complete'=>$result['complete']]);
+        app_json_response($result);
+    }
+    if(in_array($action,FM_VP3_OPERATION_SCOPES,true)){
+        require_once __DIR__.'/../includes/food-monster-vp3-operations.php';
+        $pdo=app_pdo();
+        $grant=fm_kb2_grant($pdo,fm_kb2_bearer($_SERVER));
+        $result=fm_vp3_operation($pdo,$grant,$action,$input);
+        app_audit($pdo,(int)$grant['user']['organization_id'],(int)$grant['user']['id'],
+            'vp3.operations_read','vp3_connection',$grant['connectionId'],null,
+            ['capability'=>$action,'locationId'=>$result['location']['id']]);
         app_json_response($result);
     }
     throw new InvalidArgumentException('Unknown connector action.');

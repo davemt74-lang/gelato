@@ -2,10 +2,14 @@
 declare(strict_types=1);
 
 /**
- * FM-KB2: explicit protected-owner approval for one HomeServer connection.
+ * FM-KB2: explicit protected-owner approval for one private VP3 connection.
  * No fixed domain, shared master token, browser cookie reuse or remote database.
  */
 require_once __DIR__.'/food-monster-knowledge-api.php';
+require_once __DIR__.'/food-monster-agent-identity.php';
+
+const FM_VP3_KNOWLEDGE_SCOPES=['menu','recipe'];
+const FM_VP3_OPERATION_SCOPES=['orders.read','tickets.open.read','sales.daily.read'];
 
 function fm_kb2_owner(array $user): bool
 {
@@ -23,17 +27,28 @@ function fm_kb2_hash(string $secret): string
     return hash('sha256',$secret);
 }
 
+function fm_vp3_allowed_scopes(array $user): array
+{
+    $allowed=fm_kb1_allowed_types($user);
+    if(app_has_permission('online_orders.fulfill',$user)||app_has_permission('pos.manage',$user)
+        ||app_has_permission('pos.use',$user))$allowed[]='orders.read';
+    if(app_has_permission('pos.manage',$user)||app_has_permission('pos.use',$user))$allowed[]='tickets.open.read';
+    if(app_has_permission('sales.view',$user))$allowed[]='sales.daily.read';
+    return $allowed;
+}
+
 function fm_kb2_scopes(array $user,array $requested): array
 {
     if(!fm_kb2_owner($user))throw new DomainException('Food Monster owner approval is required.');
-    if(!$requested||count($requested)>2)throw new InvalidArgumentException('Select at least one knowledge category.');
-    $authorized=fm_kb1_allowed_types($user);
+    $known=array_merge(FM_VP3_KNOWLEDGE_SCOPES,FM_VP3_OPERATION_SCOPES);
+    if(!$requested||count($requested)>count($known))throw new InvalidArgumentException('Select the read permissions to approve.');
+    $authorized=fm_vp3_allowed_scopes($user);
     $scopes=[];
     foreach($requested as $value){
-        if(!is_string($value)||!in_array($value,['menu','recipe'],true))
-            throw new InvalidArgumentException('Invalid knowledge category.');
-        if(!in_array($value,$authorized,true))throw new DomainException('Knowledge category not permitted.');
-        if(in_array($value,$scopes,true))throw new InvalidArgumentException('Duplicate knowledge category.');
+        if(!is_string($value)||!in_array($value,$known,true))
+            throw new InvalidArgumentException('Invalid connection permission.');
+        if(!in_array($value,$authorized,true))throw new DomainException('Connection permission not allowed.');
+        if(in_array($value,$scopes,true))throw new InvalidArgumentException('Duplicate connection permission.');
         $scopes[]=$value;
     }
     sort($scopes,SORT_STRING);
@@ -54,21 +69,52 @@ function fm_kb2_instance(PDO $pdo): string
     return strtolower($id);
 }
 
-function fm_kb2_create(PDO $pdo,array $owner,string $label,array $requested): array
+function fm_vp3_operations_ready(PDO $pdo): bool
+{
+    $q=$pdo->query("SELECT 1 FROM information_schema.columns WHERE table_schema=DATABASE()
+        AND table_name='fm_vp3_connections' AND column_name='location_id'");
+    return (bool)$q->fetchColumn();
+}
+
+function fm_vp3_location(PDO $pdo,int $org,int $locationId): array
+{
+    $q=$pdo->prepare("SELECT l.id,l.name,o.timezone FROM locations l
+        JOIN organizations o ON o.id=l.organization_id AND o.status='active'
+        WHERE l.organization_id=? AND l.id=? AND l.status='active'");
+    $q->execute([$org,$locationId]);
+    $row=$q->fetch(PDO::FETCH_ASSOC);
+    if(!$row)throw new DomainException('The approved location is unavailable.');
+    try{$timezone=new DateTimeZone((string)$row['timezone']);}
+    catch(Exception){$timezone=new DateTimeZone('America/Phoenix');}
+    return ['id'=>(int)$row['id'],'name'=>(string)$row['name'],'timezone'=>$timezone->getName()];
+}
+
+function fm_kb2_create(PDO $pdo,array $owner,string $label,array $requested,?int $locationId=null): array
 {
     $scopes=fm_kb2_scopes($owner,$requested);
+    $operational=(bool)array_intersect($scopes,FM_VP3_OPERATION_SCOPES);
+    $org=(int)$owner['organization_id'];
+    $location=null;
+    if($operational){
+        if($locationId===null||$locationId<1)
+            throw new InvalidArgumentException('Choose one restaurant location for operational reads.');
+        if(!fm_vp3_operations_ready($pdo))throw new RuntimeException('Upgrade before authorizing operational reads.');
+        $location=fm_vp3_location($pdo,$org,$locationId);
+    }
     $label=trim($label);
     if($label===''||mb_strlen($label,'UTF-8')>80)
         throw new InvalidArgumentException('Give the connection a label of 1–80 characters.');
     $id=bin2hex(random_bytes(16));
     $code=fm_kb2_secret('fmlink_');
-    $sql="INSERT INTO fm_vp3_connections
-      (public_id,organization_id,owner_user_id,label,scopes_json,pairing_code_sha256,status,code_expires_at)
-      VALUES (?,?,?,?,?,?,'pending',DATE_ADD(NOW(6), INTERVAL 10 MINUTE))";
-    $stmt=$pdo->prepare($sql);
-    $stmt->execute([$id,(int)$owner['organization_id'],(int)$owner['id'],$label,
-        json_encode($scopes,JSON_THROW_ON_ERROR),fm_kb2_hash($code)]);
-    return ['id'=>$id,'pairingCode'=>$code,'label'=>$label,'scopes'=>$scopes,'expiresInSeconds'=>600];
+    $locationColumn=$operational?',location_id':'';
+    $locationPlaceholder=$operational?',?':'';
+    $stmt=$pdo->prepare("INSERT INTO fm_vp3_connections
+      (public_id,organization_id,owner_user_id,label,scopes_json,pairing_code_sha256,status,code_expires_at{$locationColumn})
+      VALUES (?,?,?,?,?,?,'pending',DATE_ADD(NOW(6), INTERVAL 10 MINUTE){$locationPlaceholder})");
+    $args=[$id,$org,(int)$owner['id'],$label,json_encode($scopes,JSON_THROW_ON_ERROR),fm_kb2_hash($code)];
+    if($operational)$args[]=$locationId;
+    $stmt->execute($args);
+    return ['id'=>$id,'pairingCode'=>$code,'label'=>$label,'scopes'=>$scopes,'location'=>$location,'expiresInSeconds'=>600];
 }
 
 function fm_kb2_redeem(PDO $pdo,string $code): array
@@ -84,6 +130,11 @@ function fm_kb2_redeem(PDO $pdo,string $code): array
         $row=$q->fetch(PDO::FETCH_ASSOC);
         if(!$row || !fm_kb2_active_owner($pdo,(int)$row['organization_id'],(int)$row['owner_user_id']))
             throw new DomainException('Invalid or expired pairing authorization.');
+        $scopes=fm_vp3_stored_scopes($row);
+        $locations=array_intersect($scopes,FM_VP3_OPERATION_SCOPES)
+            ? [fm_vp3_location($pdo,(int)$row['organization_id'],(int)($row['location_id']??0))]
+            : [];
+        $agentName=food_monster_agent_name();
         $token=fm_kb2_secret('fm2_');
         $update=$pdo->prepare("UPDATE fm_vp3_connections
             SET pairing_code_sha256=NULL,access_token_sha256=?,status='active',activated_at=NOW(6)
@@ -95,7 +146,7 @@ function fm_kb2_redeem(PDO $pdo,string $code): array
         return ['ok'=>true,'schema'=>'food-monster-vp3-v1',
             'instanceId'=>$instance,'connectionId'=>(string)$row['public_id'],
             'tokenType'=>'Bearer','accessToken'=>$token,
-            'scopes'=>json_decode((string)$row['scopes_json'],true,512,JSON_THROW_ON_ERROR)];
+            'scopes'=>$scopes,'agentName'=>$agentName,'locations'=>$locations];
     }catch(Throwable $e){
         if($pdo->inTransaction())$pdo->rollBack();
         throw $e;
@@ -121,24 +172,35 @@ function fm_kb2_bearer(array $server): string
 {
     $header=trim((string)($server['HTTP_AUTHORIZATION']??$server['REDIRECT_HTTP_AUTHORIZATION']??''));
     if(!preg_match('/^Bearer (fm2_[A-Za-z0-9_-]{43})$/iD',$header,$matches))
-        throw new DomainException('A valid HomeServer bearer credential is required.');
+        throw new DomainException('A valid VP3 bearer credential is required.');
     return $matches[1];
+}
+
+function fm_vp3_stored_scopes(array $row): array
+{
+    $scopes=json_decode((string)$row['scopes_json'],true);
+    if(!is_array($scopes)||!array_is_list($scopes)||!$scopes)
+        throw new DomainException('Invalid stored scopes.');
+    $known=array_merge(FM_VP3_KNOWLEDGE_SCOPES,FM_VP3_OPERATION_SCOPES);
+    foreach($scopes as $scope){
+        if(!is_string($scope)||!in_array($scope,$known,true))
+            throw new DomainException('Invalid stored scopes.');
+    }
+    return $scopes;
 }
 
 function fm_kb2_grant(PDO $pdo,string $token): array
 {
     if(!preg_match('/^fm2_[A-Za-z0-9_-]{43}$/D',$token))
         throw new DomainException('Invalid connection credential.');
-    $q=$pdo->prepare("SELECT id,public_id,organization_id,owner_user_id,scopes_json
+    $q=$pdo->prepare("SELECT *
         FROM fm_vp3_connections WHERE access_token_sha256=?
          AND status='active' AND revoked_at IS NULL LIMIT 1");
     $q->execute([fm_kb2_hash($token)]);
     $row=$q->fetch(PDO::FETCH_ASSOC);
     if(!$row||!fm_kb2_active_owner($pdo,(int)$row['organization_id'],(int)$row['owner_user_id']))
-        throw new DomainException('HomeServer access revoked or no longer authorized.');
-    $scopes=json_decode((string)$row['scopes_json'],true);
-    if(!is_array($scopes)||!$scopes||array_diff($scopes,['menu','recipe']))
-        throw new DomainException('Invalid stored scopes.');
+        throw new DomainException('VP3 access revoked or no longer authorized.');
+    $scopes=fm_vp3_stored_scopes($row);
     $permissions=[];
     if(in_array('menu',$scopes,true))$permissions[]='menu.view';
     if(in_array('recipe',$scopes,true))array_push($permissions,'recipes.view','recipes.agent');
@@ -147,14 +209,15 @@ function fm_kb2_grant(PDO $pdo,string $token): array
     return ['connectionId'=>(string)$row['public_id'],
        'user'=>['organization_id'=>(int)$row['organization_id'],
                 'id'=>(int)$row['owner_user_id'],'permissions'=>$permissions],
-       'scopes'=>$scopes];
+       'scopes'=>$scopes,'locationId'=>isset($row['location_id'])?(int)$row['location_id']:null];
 }
 
 function fm_kb2_connections(PDO $pdo,array $owner): array
 {
     if(!fm_kb2_owner($owner))throw new DomainException('Owner access required.');
-    $q=$pdo->prepare('SELECT public_id,label,scopes_json,status,created_at,code_expires_at,activated_at,revoked_at,last_used_at
-      FROM fm_vp3_connections WHERE organization_id=? AND owner_user_id=? ORDER BY created_at DESC LIMIT 100');
+    $location=fm_vp3_operations_ready($pdo)?',location_id':'';
+    $q=$pdo->prepare("SELECT public_id,label,scopes_json,status,created_at,code_expires_at,activated_at,revoked_at,last_used_at{$location}
+      FROM fm_vp3_connections WHERE organization_id=? AND owner_user_id=? ORDER BY created_at DESC LIMIT 100");
     $q->execute([(int)$owner['organization_id'],(int)$owner['id']]);
     $rows=$q->fetchAll(PDO::FETCH_ASSOC);
     return array_map(static function(array $row):array{
