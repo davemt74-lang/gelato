@@ -1,0 +1,140 @@
+name: POS to Expo Release Journey
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/pos-to-expo-release.yml'
+      - 'api/floor-plans.php'
+      - 'api/glasses-admin.php'
+      - 'api/glasses-device.php'
+      - 'api/glasses-simulator.php'
+      - 'api/kds.php'
+      - 'api/pos.php'
+      - 'api/table-service.php'
+      - 'database/install.sql'
+      - 'database/*floor*.sql'
+      - 'database/*glasses*.sql'
+      - 'database/*kds*.sql'
+      - 'database/*kitchen*.sql'
+      - 'database/*menu_manager*.sql'
+      - 'database/*pos*.sql'
+      - 'database/*vision*.sql'
+      - 'database/*table_service*.sql'
+      - 'database/*expo*.sql'
+      - 'floor-plan-api.php'
+      - 'includes/bootstrap.php'
+      - 'includes/floor-plan-*.php'
+      - 'includes/glasses-*.php'
+      - 'includes/kds-*.php'
+      - 'includes/menu-manager-core.php'
+      - 'includes/pos-*.php'
+      - 'includes/service-ops-*.php'
+      - 'includes/table-service-*.php'
+      - 'tests/hardening-native-pdo-fixture.php'
+      - 'tests/kds-timing-audit-contract.php'
+      - 'tests/pos-to-expo-release-*'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/pos-to-expo-release.yml'
+      - 'api/floor-plans.php'
+      - 'api/glasses-admin.php'
+      - 'api/glasses-device.php'
+      - 'api/glasses-simulator.php'
+      - 'api/kds.php'
+      - 'api/pos.php'
+      - 'api/table-service.php'
+      - 'database/install.sql'
+      - 'database/*floor*.sql'
+      - 'database/*glasses*.sql'
+      - 'database/*kds*.sql'
+      - 'database/*kitchen*.sql'
+      - 'database/*menu_manager*.sql'
+      - 'database/*pos*.sql'
+      - 'database/*vision*.sql'
+      - 'database/*table_service*.sql'
+      - 'database/*expo*.sql'
+      - 'floor-plan-api.php'
+      - 'includes/bootstrap.php'
+      - 'includes/floor-plan-*.php'
+      - 'includes/glasses-*.php'
+      - 'includes/kds-*.php'
+      - 'includes/menu-manager-core.php'
+      - 'includes/pos-*.php'
+      - 'includes/service-ops-*.php'
+      - 'includes/table-service-*.php'
+      - 'tests/hardening-native-pdo-fixture.php'
+      - 'tests/kds-timing-audit-contract.php'
+      - 'tests/pos-to-expo-release-*'
+
+permissions:
+  contents: read
+
+jobs:
+  pos-to-expo:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, mbstring, curl, fileinfo, sodium
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Create an isolated fixture database
+        run: |
+          export MARIADB_ROOT_PASSWORD="$(openssl rand -hex 24)"
+          export MARIADB_PASSWORD="$(openssl rand -hex 24)"
+          echo "::add-mask::$MARIADB_ROOT_PASSWORD"
+          echo "::add-mask::$MARIADB_PASSWORD"
+          docker run -d --name gelato-expo-ci -p 127.0.0.1::3306 \
+            --env MARIADB_ROOT_PASSWORD --env MARIADB_PASSWORD \
+            --env MARIADB_DATABASE=gelato_expo_ci --env MARIADB_USER=gelato_expo_ci mariadb:10.11 --default-time-zone=+11:00
+          export MYSQL_PWD="$MARIADB_PASSWORD"
+          db() {
+            docker exec -i --env MYSQL_PWD gelato-expo-ci mariadb \
+              --protocol=tcp --host=127.0.0.1 --user=gelato_expo_ci gelato_expo_ci "$@"
+          }
+          for attempt in $(seq 1 60); do
+            if db -e 'SELECT 1' >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          db < database/install.sql
+          port="$(docker port gelato-expo-ci 3306/tcp | sed -n 's/^127\.0\.0\.1://p')"
+          [[ "$port" =~ ^[0-9]+$ ]]
+          {
+            echo "GELATO_EXPO_CI_DB_PORT=$port"
+            echo "GELATO_EXPO_CI_DB_PASSWORD=$MARIADB_PASSWORD"
+          } >> "$GITHUB_ENV"
+      - name: Apply application migrations
+        run: |
+          cat > config.php <<'PHP'
+          <?php
+          return [
+            'app'=>['name'=>'Gelato Expo CI','url'=>'http://127.0.0.1','timezone'=>'America/Phoenix'],
+            'database'=>['host'=>'127.0.0.1','port'=>(int)getenv('GELATO_EXPO_CI_DB_PORT'),
+              'name'=>'gelato_expo_ci','username'=>'gelato_expo_ci',
+              'password'=>getenv('GELATO_EXPO_CI_DB_PASSWORD'),'charset'=>'utf8mb4'],
+            'security'=>['session_name'=>'gelato_expo_ci','cookie_secure'=>false],
+            'storage'=>['private_root'=>getenv('RUNNER_TEMP').'/gelato-expo-private'],
+          ];
+          PHP
+          php <<'PHP'
+          <?php
+          require 'includes/bootstrap.php';
+          require 'includes/UpgradeService.php';
+          $upgrade=new UpgradeService(app_pdo(),__DIR__);
+          $upgrade->ensureTrackingTables();
+          $upgrade->bootstrapLegacyHistory(null);
+          $upgrade->applyPending(null);
+          if($upgrade->pendingMigrations())exit(1);
+          PHP
+      - name: Verify KDS age across application and database timezones
+        run: php tests/kds-timing-audit-contract.php
+      - name: Exercise the POS, kitchen and Expo HTTP journey
+        run: node tests/pos-to-expo-release-http.cjs
+      - name: Remove the fixture database
+        if: always()
+        run: docker rm -f gelato-expo-ci >/dev/null 2>&1 || true
